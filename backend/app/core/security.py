@@ -23,13 +23,15 @@ def create_access_token(
     subject: str,
     tenant_id: str,
     role: str = "member",
-    expires_delta: timedelta | None = None
+    expires_delta: timedelta | None = None,
 ) -> str:
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(UTC) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+
     to_encode: dict[str, Any] = {
         "sub": subject,
         "tenant_id": tenant_id,
@@ -37,13 +39,17 @@ def create_access_token(
         "exp": expire,
         "iat": datetime.now(UTC),
     }
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
     return encoded_jwt
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         return payload
     except jwt.PyJWTError:
         return {}

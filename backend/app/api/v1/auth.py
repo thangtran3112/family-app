@@ -35,15 +35,15 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email already exists",
         )
-    
+
     # Resolve or create tenant
     tenant_name = user_in.tenant_name or "Family"
     tenant_slug = slugify(tenant_name)
-    
+
     stmt = select(Tenant).where(Tenant.slug == tenant_slug)
     result = await db.execute(stmt)
     tenant = result.scalar_one_or_none()
-    
+
     if not tenant:
         tenant = Tenant(
             name=tenant_name,
@@ -51,7 +51,7 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
         )
         db.add(tenant)
         await db.flush()  # assign tenant.id
-        
+
     # Create user
     user = User(
         tenant_id=tenant.id,
@@ -64,13 +64,13 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
     await db.refresh(tenant)
-    
+
     access_token = create_access_token(
         subject=str(user.id),
         tenant_id=str(tenant.id),
         role=user.role,
     )
-    
+
     return Token(
         access_token=access_token,
         token_type="bearer",
@@ -84,27 +84,27 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     stmt = select(User).where(User.email == credentials.email)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    
+
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     stmt = select(Tenant).where(Tenant.id == user.tenant_id)
     result = await db.execute(stmt)
     tenant = result.scalar_one_or_none()
-    
+
     if not tenant:
         raise HTTPException(status_code=500, detail="Tenant data missing for user")
-        
+
     access_token = create_access_token(
         subject=str(user.id),
         tenant_id=str(tenant.id),
         role=user.role,
     )
-    
+
     return Token(
         access_token=access_token,
         token_type="bearer",

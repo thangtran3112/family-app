@@ -11,6 +11,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.category import Category
+    from app.models.expense import Expense
+    from app.models.project import Project
+    from app.models.tag import Tag
     from app.models.user import User
 
 
@@ -19,7 +23,9 @@ class Tenant(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    slug: Mapped[str] = mapped_column(
+        String(100), unique=True, index=True, nullable=False
+    )
 
     # LLM Monthly Budget Cap (USD)
     llm_monthly_budget: Mapped[Decimal | None] = mapped_column(
@@ -43,4 +49,18 @@ class Tenant(Base):
     )
 
     # Relationships
-    users: Mapped[list[User]] = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    users: Mapped[list[User]] = relationship(
+        "User", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    categories: Mapped[list[Category]] = relationship(
+        "Category", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    projects: Mapped[list[Project]] = relationship(
+        "Project", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    tags: Mapped[list[Tag]] = relationship(
+        "Tag", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    expenses: Mapped[list[Expense]] = relationship(
+        "Expense", back_populates="tenant", cascade="all, delete-orphan"
+    )

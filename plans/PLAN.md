@@ -80,8 +80,8 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
 | **1A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-1a-project-setup.md](sub-plans/phase-1a-project-setup.md) |
-| **1B** | Core Data Model & Database | 🟡 Current Focus | [phase-1b-data-model.md](sub-plans/phase-1b-data-model.md) |
-| **1C** | Receipt Upload & OCR Pipeline | ⚪ Planned | [phase-1c-ocr-pipeline.md](sub-plans/phase-1c-ocr-pipeline.md) |
+| **1B** | Core Data Model & Database | ✅ Complete | [phase-1b-data-model.md](sub-plans/phase-1b-data-model.md) |
+| **1C** | Receipt Upload & OCR Pipeline | 🟡 Current Focus | [phase-1c-ocr-pipeline.md](sub-plans/phase-1c-ocr-pipeline.md) |
 | **1D** | Google Cloud Storage Integration | ⚪ Planned | [phase-1d-cloud-storage.md](sub-plans/phase-1d-cloud-storage.md) |
 | **1E** | Project & Tax Deduction Management | ⚪ Planned | [phase-1e-project-tax.md](sub-plans/phase-1e-project-tax.md) |
 | **1F** | Web App UI (Mobile-First) | ⚪ Planned | [phase-1f-web-ui.md](sub-plans/phase-1f-web-ui.md) |

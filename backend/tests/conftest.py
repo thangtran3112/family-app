@@ -24,7 +24,7 @@ TestingSessionLocal = async_sessionmaker(
 async def db_session() -> AsyncGenerator[AsyncSession]:
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     async with TestingSessionLocal() as session:
         yield session
         await session.rollback()

@@ -36,6 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Health check
 @app.get("/health", tags=["system"])
 async def health_check():
