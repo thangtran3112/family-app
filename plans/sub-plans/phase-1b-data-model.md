@@ -14,248 +14,240 @@ Design and implement the core data model for the expense management system using
 
 ## Data Model Design
 
-### Core Conceptual Entities (Implemented in `backend/app/models/` via SQLAlchemy 2.0 / SQLModel)
+### Core Entities (Implemented in `backend/app/models/` via SQLAlchemy 2.0 DeclarativeBase)
 
-```prisma
-// ─── Tenant (multi-tenancy from day one) ───
-model Tenant {
-  id                  String         @id @default(uuid()) @db.Uuid
-  name                String         // e.g., "Family", "My LLC"
-  slug                String         @unique // URL-safe identifier
-  users               User[]
-  expenses            Expense[]
-  categories          Category[]
-  projects            Project[]
-  tags                Tag[]
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+```python
+import enum
+import uuid
+from datetime import datetime
+from decimal import Decimal
+from typing import List, Optional
+from sqlalchemy import (
+    String, Boolean, DateTime, Numeric, ForeignKey, Integer, Float,
+    Enum as SQLEnum, Index, UniqueConstraint, func
+)
+from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
-  // LLM budget management
-  llmMonthlyBudget    Decimal?       @db.Decimal(10, 2) // Monthly LLM spending cap (USD)
-  llmMonthlyUsed      Decimal        @default(0) @db.Decimal(10, 2) // Current month usage (USD)
-  llmBudgetResetAt    DateTime?      // When to reset the counter (1st of month)
-  llmUsageLogs        LlmUsageLog[]
+class Base(DeclarativeBase):
+    pass
 
-  @@map("tenants")
-}
+class ExpenseSource(str, enum.Enum):
+    MANUAL = "MANUAL"
+    EMAIL = "EMAIL"
+    MANUAL_AND_EMAIL = "MANUAL_AND_EMAIL"
 
-// ─── User ───
-model User {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  email               String         @unique
-  name                String
-  avatar              String?
-  settings            Setting[]
-  categories          Category[]
-  projects            Project[]
-  fields              Field[]
-  expenses            Expense[]
-  tags                Tag[]
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+class ExpenseStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    REVIEW = "REVIEW"
+    COMPLETED = "COMPLETED"
+    DUPLICATE = "DUPLICATE"
+    ERROR = "ERROR"
 
-  @@index([tenantId])
-  @@map("users")
-}
+class Tenant(Base):
+    __tablename__ = "tenants"
 
-// ─── Expense (was "Transaction" in TaxHacker) ───
-model Expense {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  userId              String         @db.Uuid
-  user                User           @relation(fields: [userId], references: [id])
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-  // Ingestion Source
-  source              ExpenseSource  @default(MANUAL) // MANUAL, EMAIL, MANUAL_AND_EMAIL
+    # LLM Budget Tracking
+    llm_monthly_budget: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    llm_monthly_used: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    llm_budget_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-  // Core fields
-  title               String?        // AI-extracted or user-provided
-  description         String?        // Full OCR text content
-  merchant            String?        // Store/vendor name
-  amount              Decimal        @db.Decimal(12, 2)
-  currency            String         @default("USD")
-  convertedAmount     Decimal?       @db.Decimal(12, 2)
-  baseCurrency        String         @default("USD")
-  date                DateTime       // Transaction date
-  
-  // Classification
-  categoryId          String?        @db.Uuid
-  category            Category?      @relation(fields: [categoryId], references: [id])
-  projectId           String?        @db.Uuid
-  project             Project?       @relation(fields: [projectId], references: [id])
-  
-  // Tax deduction
-  isTaxDeductible     Boolean        @default(false)
-  taxDeductionType    String?        // e.g., "business_expense", "home_office", "travel"
-  taxDeductionPercent Decimal?       @db.Decimal(5, 2) // % deductible (0-100)
-  
-  // Tags & Labels
-  tags                ExpenseTag[]
-  
-  // Files
-  files               ExpenseFile[]
-  
-  // AI/OCR metadata
-  ocrRawText          String?        // Raw OCR output
-  ocrConfidence       Float?         // OCR confidence score
-  aiExtractedData     Json?          // Full AI extraction JSON
-  lineItems           Json?          // Individual items array
-  
-  // Processing status
-  status              ExpenseStatus  @default(PENDING)
-  processedAt         DateTime?
-  
-  // Search
-  embedding           Unsupported("vector(1536)")? // pgvector for semantic search
-  searchVector        Unsupported("tsvector")?      // PostgreSQL FTS
-  
-  // Graph reference
-  graphNodeId         String?        // Reference to Neo4j node ID
-  
-  // Deduplication
-  contentHash         String?        // Hash for duplicate detection (tenant-scoped)
-  
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+    users: Mapped[List["User"]] = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="tenant")
+    categories: Mapped[List["Category"]] = relationship("Category", back_populates="tenant")
+    projects: Mapped[List["Project"]] = relationship("Project", back_populates="tenant")
+    tags: Mapped[List["Tag"]] = relationship("Tag", back_populates="tenant")
+    llm_usage_logs: Mapped[List["LlmUsageLog"]] = relationship("LlmUsageLog", back_populates="tenant")
 
-  @@index([tenantId, date])
-  @@index([tenantId, categoryId])
-  @@index([tenantId, projectId])
-  @@index([userId, date])
-  @@index([contentHash])
-  @@map("expenses")
-}
+class User(Base):
+    __tablename__ = "users"
 
-enum ExpenseStatus {
-  PENDING       // Uploaded, not yet processed
-  PROCESSING    // OCR/AI extraction in progress
-  REVIEW        // Needs user review
-  COMPLETED     // Fully processed
-  DUPLICATE     // Marked as duplicate
-  ERROR         // Processing failed
-}
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    avatar: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-enum ExpenseSource {
-  MANUAL            // Uploaded via web camera / file picker
-  EMAIL             // Ingested via daily Gmail scan
-  MANUAL_AND_EMAIL  // Merged: manual scan enriched with email data
-}
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="user")
 
-// ─── Files (receipts, invoices) ───
-model ExpenseFile {
-  id                  String         @id @default(uuid()) @db.Uuid
-  expenseId           String?        @db.Uuid
-  expense             Expense?       @relation(fields: [expenseId], references: [id])
-  userId              String         @db.Uuid
+class Expense(Base):
+    __tablename__ = "expenses"
 
-  originalFilename    String
-  mimeType            String         // image/jpeg, application/pdf, etc.
-  fileSize            Int            // bytes
-  
-  // Storage
-  localPath           String?        // Temporary local path
-  cloudStorageUrl     String?        // GCS URL: gs://bucket/path
-  cloudStorageKey     String?        // GCS object key
-  thumbnailUrl        String?        // Generated thumbnail URL
-  
-  // Processing
-  ocrText             String?        // Extracted text from this file
-  
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
-  @@index([expenseId])
-  @@index([userId])
-  @@map("expense_files")
-}
+    source: Mapped[ExpenseSource] = mapped_column(SQLEnum(ExpenseSource), default=ExpenseSource.MANUAL, nullable=False)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    merchant: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    converted_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    base_currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
-// ─── Category ───
-model Category {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  userId              String         @db.Uuid
-  user                User           @relation(fields: [userId], references: [id])
-  name                String
-  color               String?
-  icon                String?
-  aiPrompt            String?        // Custom AI prompt for categorization
-  isDefault           Boolean        @default(false)
-  expenses            Expense[]
-  createdAt           DateTime       @default(now())
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
 
-  @@unique([tenantId, name])
-  @@map("categories")
-}
+    is_tax_deductible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    tax_deduction_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tax_deduction_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
 
-// ─── Project (for tax deduction grouping) ───
-model Project {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  userId              String         @db.Uuid
-  user                User           @relation(fields: [userId], references: [id])
-  name                String
-  description         String?
-  color               String?
-  businessType        String?        // e.g., "LLC", "sole_proprietorship"
-  taxYear             Int?
-  isActive            Boolean        @default(true)
-  aiPrompt            String?        // Custom AI prompt for project attribution
-  expenses            Expense[]
-  createdAt           DateTime       @default(now())
+    ocr_raw_text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ocr_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ai_extracted_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    line_items: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
-  @@unique([tenantId, name])
-  @@map("projects")
-}
+    status: Mapped[ExpenseStatus] = mapped_column(SQLEnum(ExpenseStatus), default=ExpenseStatus.PENDING, nullable=False)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-// ─── Tag ───
-model Tag {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  userId              String         @db.Uuid
-  user                User           @relation(fields: [userId], references: [id])
-  name                String
-  isAutoGenerated     Boolean        @default(false) // AI-generated vs user-created
-  expenses            ExpenseTag[]
-  createdAt           DateTime       @default(now())
+    # Search & Graph
+    embedding = mapped_column(Vector(1536), nullable=True)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
+    graph_node_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-  @@unique([tenantId, name])
-  @@map("tags")
-}
+    # Deduplication Hash (tenant-scoped)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
-model ExpenseTag {
-  expenseId           String         @db.Uuid
-  expense             Expense        @relation(fields: [expenseId], references: [id])
-  tagId               String         @db.Uuid
-  tag                 Tag            @relation(fields: [tagId], references: [id])
-  confidence          Float?         // AI confidence for auto-tags
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-  @@id([expenseId, tagId])
-  @@map("expense_tags")
-}
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="expenses")
+    user: Mapped["User"] = relationship("User", back_populates="expenses")
+    category: Mapped[Optional["Category"]] = relationship("Category", back_populates="expenses")
+    project: Mapped[Optional["Project"]] = relationship("Project", back_populates="expenses")
+    files: Mapped[List["ExpenseFile"]] = relationship("ExpenseFile", back_populates="expense", cascade="all, delete-orphan")
+    tags: Mapped[List["ExpenseTag"]] = relationship("ExpenseTag", back_populates="expense", cascade="all, delete-orphan")
 
-// ─── LLM Usage Log (Budget tracking & audit) ───
-model LlmUsageLog {
-  id                  String         @id @default(uuid()) @db.Uuid
-  tenantId            String         @db.Uuid
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  userId              String?        @db.Uuid
-  provider            String         // "openrouter", "openai", "paddleocr"
-  model               String         // e.g. "gpt-4o-mini", "anthropic/claude-3.5-haiku"
-  promptTokens        Int            @default(0)
-  completionTokens    Int            @default(0)
-  totalCostUsd        Decimal        @db.Decimal(10, 4)
-  operation           String         // "ocr_extraction", "auto_tag", "ai_query", "email_classify"
-  createdAt           DateTime       @default(now())
+    __table_args__ = (
+        Index("ix_expenses_tenant_date", "tenant_id", "date"),
+        Index("ix_expenses_tenant_category", "tenant_id", "category_id"),
+        Index("ix_expenses_tenant_project", "tenant_id", "project_id"),
+        Index("ix_expenses_tenant_content_hash", "tenant_id", "content_hash"),
+    )
 
-  @@index([tenantId, createdAt])
-  @@map("llm_usage_logs")
-}
+class ExpenseFile(Base):
+    __tablename__ = "expense_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    expense_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    local_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    cloud_storage_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    cloud_storage_key: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    thumbnail_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+
+    ocr_text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    expense: Mapped[Optional["Expense"]] = relationship("Expense", back_populates="files")
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    color: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    ai_prompt: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="categories")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="category")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_categories_tenant_name"),)
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    color: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    business_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tax_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ai_prompt: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="projects")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="project")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_projects_tenant_name"),)
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_auto_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="tags")
+    expense_tags: Mapped[List["ExpenseTag"]] = relationship("ExpenseTag", back_populates="tag", cascade="all, delete-orphan")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_tags_tenant_name"),)
+
+class ExpenseTag(Base):
+    __tablename__ = "expense_tags"
+
+    expense_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    expense: Mapped["Expense"] = relationship("Expense", back_populates="tags")
+    tag: Mapped["Tag"] = relationship("Tag", back_populates="expense_tags")
+
+class LlmUsageLog(Base):
+    __tablename__ = "llm_usage_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    operation: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_usage_logs")
+
+class DuplicateMatch(Base):
+    __tablename__ = "duplicate_matches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    existing_expense_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id", ondelete="CASCADE"), nullable=False)
+    candidate_expense_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id", ondelete="CASCADE"), nullable=False)
+    match_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "content_hash", "phash", "semantic", "order_number"
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    resolution: Mapped[str] = mapped_column(String(50), default="PENDING")  # "PENDING", "MERGED", "KEPT_BOTH", "DISCARDED"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 ```
 
 ---

@@ -16,10 +16,10 @@ Enable users to create business projects and attribute expenses for tax deductio
 
 ### 1. Project CRUD
 
-- [ ] Create `POST /api/projects` — create a new project
-- [ ] Create `GET /api/projects` — list projects scoped to tenant
-- [ ] Create `PATCH /api/projects/:id` — update project
-- [ ] Create `DELETE /api/projects/:id` — soft-delete project
+- [ ] Create `POST /api/v1/projects` — create a new project
+- [ ] Create `GET /api/v1/projects` — list projects scoped to tenant
+- [ ] Create `PATCH /api/v1/projects/{id}` — update project
+- [ ] Create `DELETE /api/v1/projects/{id}` — soft-delete project
 - [ ] Project fields:
   - Name, description, color, icon
   - Business type (LLC, S-Corp, Sole Proprietorship, etc.)
@@ -65,26 +65,31 @@ Enable users to create business projects and attribute expenses for tax deductio
 
 ### 5. Tax Report / Summary
 
-- [ ] Create `GET /api/projects/:id/tax-summary` endpoint:
-  ```typescript
-  interface TaxSummary {
-    projectId: string;
-    projectName: string;
-    taxYear: number;
-    totalExpenses: number;
-    totalDeductible: number;
-    categorySummary: {
-      categoryName: string;
-      totalAmount: number;
-      deductibleAmount: number;
-      expenseCount: number;
-    }[];
-    monthlySummary: {
-      month: string; // "2025-01"
-      totalAmount: number;
-      deductibleAmount: number;
-    }[];
-  }
+- [ ] Create `GET /api/v1/projects/{id}/tax-summary` endpoint:
+  ```python
+  from decimal import Decimal
+  from typing import List
+  from pydantic import BaseModel
+
+  class CategoryDeductionSummary(BaseModel):
+      category_name: str
+      total_amount: Decimal
+      deductible_amount: Decimal
+      expense_count: int
+
+  class MonthlyDeductionSummary(BaseModel):
+      month: str  # "2025-01"
+      total_amount: Decimal
+      deductible_amount: Decimal
+
+  class TaxSummaryResponse(BaseModel):
+      project_id: str
+      project_name: str
+      tax_year: int
+      total_expenses: Decimal
+      total_deductible: Decimal
+      category_summary: List[CategoryDeductionSummary]
+      monthly_summary: List[MonthlyDeductionSummary]
   ```
 - [ ] Export tax summary as CSV/PDF
 - [ ] Support date range filtering (tax year, quarterly)
@@ -95,17 +100,17 @@ Enable users to create business projects and attribute expenses for tax deductio
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/projects` | Create project |
-| `GET` | `/api/projects` | List projects |
-| `GET` | `/api/projects/:id` | Get project details |
-| `PATCH` | `/api/projects/:id` | Update project |
-| `DELETE` | `/api/projects/:id` | Delete project |
-| `GET` | `/api/projects/:id/tax-summary` | Tax deduction summary |
-| `POST` | `/api/projects/:id/export` | Export project data |
-| `POST` | `/api/categories` | Create category |
-| `GET` | `/api/categories` | List categories |
-| `PATCH` | `/api/categories/:id` | Update category |
-| `DELETE` | `/api/categories/:id` | Delete category |
+| `POST` | `/api/v1/projects` | Create project |
+| `GET` | `/api/v1/projects` | List projects |
+| `GET` | `/api/v1/projects/{id}` | Get project details |
+| `PATCH` | `/api/v1/projects/{id}` | Update project |
+| `DELETE` | `/api/v1/projects/{id}` | Delete project |
+| `GET` | `/api/v1/projects/{id}/tax-summary` | Tax deduction summary |
+| `POST` | `/api/v1/projects/{id}/export` | Export project data |
+| `POST` | `/api/v1/categories` | Create category |
+| `GET` | `/api/v1/categories` | List categories |
+| `PATCH` | `/api/v1/categories/{id}` | Update category |
+| `DELETE` | `/api/v1/categories/{id}` | Delete category |
 
 ---
 

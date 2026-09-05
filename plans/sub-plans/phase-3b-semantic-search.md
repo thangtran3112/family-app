@@ -62,13 +62,23 @@ User query: "supplies for my home office"
 
 ### 3. Search API
 
-- [ ] Create `POST /api/expenses/semantic-search` endpoint:
-  ```typescript
-  // Input
-  { query: string; limit?: number; filters?: StructuredFilters }
-  
-  // Output
-  { results: { expense: Expense; similarity: number }[] }
+- [ ] Create `POST /api/v1/expenses/semantic-search` endpoint:
+  ```python
+  from typing import List, Optional
+  from pydantic import BaseModel
+  from app.schemas.expense import ExpenseResponse
+
+  class SemanticSearchRequest(BaseModel):
+      query: str
+      limit: Optional[int] = 20
+      filters: Optional[dict] = None
+
+  class SemanticSearchResult(BaseModel):
+      expense: ExpenseResponse
+      similarity: float
+
+  class SemanticSearchResponse(BaseModel):
+      results: List[SemanticSearchResult]
   ```
 - [ ] Combine semantic results with SQL filters (WHERE clause + vector ORDER BY)
 - [ ] Implement hybrid scoring: `final_score = α * semantic_score + β * text_score`

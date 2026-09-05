@@ -16,7 +16,7 @@ Implement robust exact-match filtering and PostgreSQL full-text search for struc
 
 ### 1. Structured Filters
 
-- [ ] Implement filter API: `GET /api/expenses?filters=...` (strictly scoped to user's `tenantId`)
+- [ ] Implement filter API: `GET /api/v1/expenses?filters=...` (strictly scoped to user's `tenantId`)
 - [ ] Supported filters:
   | Filter | Type | Example |
   |--------|------|---------|
@@ -40,7 +40,7 @@ Implement robust exact-match filtering and PostgreSQL full-text search for struc
 - [ ] Build search vector from: `title + description + merchant + ocrRawText + tags`
 - [ ] Create GIN index on search vector
 - [ ] Implement trigger to auto-update tsvector on insert/update
-- [ ] Create search API: `GET /api/expenses/search?q=...`
+- [ ] Create search API: `GET /api/v1/expenses/search?q=...`
 - [ ] Support `ts_rank` for relevance scoring
 - [ ] Support phrase search with `phraseto_tsquery`
 

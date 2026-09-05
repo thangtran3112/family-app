@@ -41,7 +41,7 @@ Build an intelligent auto-tagging and categorization system that enriches expens
 
 - [ ] Implement rule-based tagger (fast, runs on every expense, zero LLM cost)
 - [ ] Implement LLM-based tagger (runs as Temporal activity with monthly budget check & `LlmUsageLog` audit)
-- [ ] Create tag suggestion API: `GET /api/expenses/:id/suggested-tags` (tenant-scoped)
+- [ ] Create tag suggestion API: `GET /api/v1/expenses/{id}/suggested-tags` (tenant-scoped)
 - [ ] Build tag management UI (create, rename, merge, delete tags per tenant)
 - [ ] Implement tag autocomplete in expense edit form
 - [ ] Track tag sources (manual, rule-based, ai-generated) with confidence scores

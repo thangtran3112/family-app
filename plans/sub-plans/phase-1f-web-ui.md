@@ -50,7 +50,7 @@ Build a mobile-first responsive web app with all MVP features accessible and usa
 - [ ] **Sort Options**: Date, amount, merchant, status
 - [ ] **Infinite Scroll / Pagination**: Efficient loading for large datasets
 
-### 5. Expense Detail (`/expenses/:id`)
+### 5. Expense Detail (`/expenses/[id]`)
 - [ ] **Receipt Viewer**: Pinch-to-zoom image viewer, PDF viewer
 - [ ] **Extracted Data**: Editable fields (merchant, amount, date, items)
 - [ ] **Category & Project**: Dropdowns for assignment
@@ -62,7 +62,7 @@ Build a mobile-first responsive web app with all MVP features accessible and usa
 
 ### 6. Projects (`/projects`)
 - [ ] **Project List**: Cards with expense count and total
-- [ ] **Project Detail** (`/projects/:id`): Expense list filtered by project
+- [ ] **Project Detail** (`/projects/[id]`): Expense list filtered by project
 - [ ] **Tax Summary**: Deduction breakdown by category and month
 - [ ] **Create/Edit Project**: Form with all project fields
 - [ ] **Export**: Download CSV/PDF report

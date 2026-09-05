@@ -50,17 +50,17 @@ Detect and handle duplicate receipts during ingestion to prevent double-counting
 ## Tasks
 
 ### Core Deduplication
-- [ ] Implement content hash computation in `checkDuplicate` activity
-- [ ] Implement perceptual image hashing using `sharp` + custom phash
+- [ ] Implement content hash computation in `check_duplicate` Temporal activity
+- [ ] Implement perceptual image hashing using Python `imagehash` + `Pillow` (dhash/phash)
 - [ ] Implement embedding similarity check via pgvector
-- [ ] Create `DuplicateMatch` table to record matches and user decisions
+- [ ] Create `DuplicateMatch` table in PostgreSQL to record matches and user decisions
 
 ### Cross-Channel Deduplication (Phase 2D dependency)
-- [ ] Implement `crossChannelDeduplicate` activity:
+- [ ] Implement `cross_channel_deduplicate` Temporal activity:
   - Compare incoming email expense against all manual-scan expenses (and vice versa)
   - Use content hash as primary, fuzzy match as secondary
   - Extract order/receipt numbers for matching
-- [ ] Track expense `source` field: `manual`, `email`, `manual+email` (merged)
+- [ ] Track expense `source` field: `MANUAL`, `EMAIL`, `MANUAL_AND_EMAIL` (merged)
 - [ ] Implement expense enrichment: merge email data into existing manual-scan expense
 - [ ] Handle bidirectional: manual-scan-first and email-first scenarios
 - [ ] Log all cross-channel matches with confidence scores

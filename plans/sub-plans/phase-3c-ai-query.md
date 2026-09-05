@@ -58,27 +58,35 @@ User: "What were my top 5 largest business expenses in Q2 2025?"
 ### 1. Query Planner (LLM with Function Calling)
 
 - [ ] Design function schema for search dispatch:
-  ```typescript
-  interface QueryPlan {
-    sqlFilters?: {
-      dateFrom?: string;
-      dateTo?: string;
-      amountMin?: number;
-      amountMax?: number;
-      categoryIds?: string[];
-      projectIds?: string[];
-      tags?: string[];
-      merchant?: string;
-      isTaxDeductible?: boolean;
-    };
-    textSearch?: string;          // Full-text search query
-    semanticQuery?: string;        // Semantic similarity query
-    graphQuery?: string;           // Natural language for graph search
-    sort?: { field: string; order: 'asc' | 'desc' };
-    limit?: number;
-    aggregation?: 'sum' | 'count' | 'avg' | 'max' | 'min';
-    groupBy?: 'category' | 'project' | 'month' | 'merchant';
-  }
+  ```python
+  from decimal import Decimal
+  from typing import List, Optional, Literal
+  from pydantic import BaseModel
+
+  class SqlFilters(BaseModel):
+      date_from: Optional[str] = None
+      date_to: Optional[str] = None
+      amount_min: Optional[Decimal] = None
+      amount_max: Optional[Decimal] = None
+      category_ids: Optional[List[str]] = None
+      project_ids: Optional[List[str]] = None
+      tags: Optional[List[str]] = None
+      merchant: Optional[str] = None
+      is_tax_deductible: Optional[bool] = None
+
+  class SortOption(BaseModel):
+      field: str
+      order: Literal["asc", "desc"] = "desc"
+
+  class QueryPlan(BaseModel):
+      sql_filters: Optional[SqlFilters] = None
+      text_search: Optional[str] = None       # Full-text search query
+      semantic_query: Optional[str] = None    # Semantic similarity query
+      graph_query: Optional[str] = None       # Natural language for graph search
+      sort: Optional[SortOption] = None
+      limit: Optional[int] = 10
+      aggregation: Optional[Literal["sum", "count", "avg", "max", "min"]] = None
+      group_by: Optional[Literal["category", "project", "month", "merchant"]] = None
   ```
 - [ ] LLM system prompt with available categories, projects, and tag vocabulary
 - [ ] Implement **Monthly LLM Budget Guard**: Check tenant's current month spend before calling model; if limit reached, fallback cleanly to standard SQL/text filter with clear UI notification

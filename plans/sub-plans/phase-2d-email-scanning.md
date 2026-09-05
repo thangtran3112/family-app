@@ -90,105 +90,109 @@ Users shouldn't have to manually forward or scan these — the system should fin
 
 ### 2. Email Settings & Configuration (DB Model)
 
-- [ ] Add `EmailConfig` model to Prisma schema:
-  ```prisma
-  # SQLAlchemy 2.0 / SQLModel EmailConfig model
-# class EmailConfig(SQLModel, table=True):
-    id                String    @id @default(uuid()) @db.Uuid
-    tenantId          String    @db.Uuid
-    tenant            Tenant    @relation(fields: [tenantId], references: [id])
-    userId            String    @unique @db.Uuid
-    user              User      @relation(fields: [userId], references: [id])
-    
-    // Gmail OAuth
-    provider          String    @default("gmail")  // Future: outlook, etc.
-    email             String                        // user@gmail.com
-    accessToken       String                        // Encrypted
-    refreshToken      String                        // Encrypted
-    tokenExpiresAt    DateTime?
-    
-    // Scan settings
-    isEnabled         Boolean   @default(true)
-    scanFrequency     String    @default("daily")   // "daily", "hourly", "manual"
-    scanTime          String?   @default("02:00")   // Preferred scan time (HH:mm)
-    timezone          String    @default("America/Chicago")
-    lastScanAt        DateTime?
-    lastScanMessageId String?                       // Gmail message ID watermark
-    initialScanDays   Int       @default(30)        // Initial scan depth (default 30, max 90)
-    
-    // Filtering
-    senderWhitelist   String[]  @default([])        // Only scan from these senders
-    senderBlacklist   String[]  @default([])        // Skip these senders
-    labelFilter       String?                       // Gmail label to scan (e.g., "Receipts")
-    minAmount         Decimal?  @db.Decimal(12, 2)  // Skip receipts below this amount
-    
-    createdAt         DateTime  @default(now())
-    updatedAt         DateTime  @updatedAt
+- [ ] Add `EmailConfig` and `ProcessedEmail` models to SQLAlchemy:
+  ```python
+  from datetime import datetime
+  from decimal import Decimal
+  from typing import List, Optional
+  import uuid
+  from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, Integer, func, UniqueConstraint
+  from sqlalchemy.dialects.postgresql import UUID, ARRAY
+  from sqlalchemy.orm import Mapped, mapped_column, relationship
+  from app.models.base import Base
 
-    @@index([tenantId])
-    @@map("email_configs")
-  }
+  class EmailConfig(Base):
+      __tablename__ = "email_configs"
 
-  model ProcessedEmail {
-    id                String    @id @default(uuid()) @db.Uuid
-    userId            String    @db.Uuid
-    emailConfigId     String    @db.Uuid
-    
-    gmailMessageId    String    // Gmail's unique message ID
-    threadId          String?   // Gmail thread ID
-    subject           String?
-    sender            String?
-    receivedAt        DateTime?
-    
-    // Processing result
-    isReceipt         Boolean   @default(false)     // Was this classified as a receipt?
-    expenseId         String?   @db.Uuid            // Linked expense if created
-    processingStatus  String    @default("pending")  // pending, processed, skipped, error
-    skipReason        String?                        // Why it was skipped (not a receipt, duplicate, etc.)
-    
-    createdAt         DateTime  @default(now())
+      id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+      tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+      user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
 
-    @@unique([userId, gmailMessageId])
-    @@index([userId, processingStatus])
-    @@map("processed_emails")
-  }
+      # Gmail OAuth
+      provider: Mapped[str] = mapped_column(String(50), default="gmail", nullable=False)
+      email: Mapped[str] = mapped_column(String(255), nullable=False)
+      access_token: Mapped[str] = mapped_column(String, nullable=False)   # Encrypted
+      refresh_token: Mapped[str] = mapped_column(String, nullable=False)  # Encrypted
+      token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+      # Scan settings
+      is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+      scan_frequency: Mapped[str] = mapped_column(String(20), default="daily", nullable=False)  # "daily", "hourly", "manual"
+      scan_time: Mapped[Optional[str]] = mapped_column(String(5), default="02:00", nullable=True)  # Preferred scan time (HH:mm)
+      timezone: Mapped[str] = mapped_column(String(50), default="America/Chicago", nullable=False)
+      last_scan_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+      last_scan_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+      initial_scan_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+
+      # Filtering
+      sender_whitelist: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+      sender_blacklist: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+      label_filter: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+      min_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+
+      created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+      updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+  class ProcessedEmail(Base):
+      __tablename__ = "processed_emails"
+
+      id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+      user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+      email_config_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("email_configs.id", ondelete="CASCADE"), nullable=False)
+
+      gmail_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+      thread_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+      subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+      sender: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+      received_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+      # Processing result
+      is_receipt: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+      expense_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id", ondelete="SET NULL"), nullable=True)
+      processing_status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)  # pending, processed, skipped, error
+      skip_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+      created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+      __table_args__ = (
+          UniqueConstraint("user_id", "gmail_message_id", name="uq_user_gmail_message"),
+      )
   ```
 
 ### 3. Email Discovery & Filtering
 
-- [ ] Implement Gmail API query builder:
-  ```typescript
-  // Build Gmail search query
-  function buildGmailQuery(config: EmailConfig): string {
-    const parts: string[] = [];
-    
-    // Time filter: only emails since last scan, or initial scan window (default 30d, max 90d)
-    if (config.lastScanAt) {
-      parts.push(`after:${formatGmailDate(config.lastScanAt)}`);
-    } else {
-      const scanDays = Math.min(config.initialScanDays || 30, 90);
-      const initialDate = new Date(Date.now() - scanDays * 24 * 60 * 60 * 1000);
-      parts.push(`after:${formatGmailDate(initialDate)}`);
-    }
-    
-    // Receipt keywords (subject/body)
-    const keywords = [
-      'receipt', 'invoice', 'order confirmation', 'payment confirmation',
-      'purchase', 'transaction', 'billing statement', 'subscription',
-      'your order', 'order shipped', 'payment received'
-    ];
-    parts.push(`(${keywords.map(k => `"${k}"`).join(' OR ')})`);
-    
-    // Sender whitelist (if configured)
-    if (config.senderWhitelist.length > 0) {
-      parts.push(`(${config.senderWhitelist.map(s => `from:${s}`).join(' OR ')})`);
-    }
-    
-    // Exclude blacklisted senders
-    config.senderBlacklist.forEach(s => parts.push(`-from:${s}`));
-    
-    return parts.join(' ');
-  }
+- [ ] Implement Gmail API query builder in Python:
+  ```python
+  from datetime import datetime, timedelta
+
+  def build_gmail_query(config: EmailConfig) -> str:
+      parts = []
+      
+      # Time filter: only emails since last scan, or initial scan window (default 30d, max 90d)
+      if config.last_scan_at:
+          parts.append(f"after:{int(config.last_scan_at.timestamp())}")
+      else:
+          scan_days = min(config.initial_scan_days or 30, 90)
+          initial_date = datetime.utcnow() - timedelta(days=scan_days)
+          parts.append(f"after:{int(initial_date.timestamp())}")
+      
+      # Receipt keywords
+      keywords = [
+          "receipt", "invoice", "order confirmation", "payment confirmation",
+          "purchase", "transaction", "billing statement", "subscription",
+          "your order", "order shipped", "payment received"
+      ]
+      parts.append(f"({' OR '.join(f'\"{k}\"' for k in keywords)})")
+      
+      # Sender whitelist
+      if config.sender_whitelist:
+          parts.append(f"({' OR '.join(f'from:{s}' for s in config.sender_whitelist)})")
+      
+      # Exclude blacklisted senders
+      for s in config.sender_blacklist:
+          parts.append(f"-from:{s}")
+          
+      return " ".join(parts)
   ```
 
 - [ ] Known receipt sender patterns (pre-configured):
@@ -215,7 +219,7 @@ Users shouldn't have to manually forward or scan these — the system should fin
   confidence: number, reason: string }"
   ```
 - [ ] Extract from email:
-  - **HTML body** → parse to plain text (use `cheerio` or `html-to-text`)
+  - **HTML body** → parse to plain text (use `beautifulsoup4` or `html2text`)
   - **Attachments** → download PDF/image attachments
   - **Inline images** → extract embedded receipt images
 - [ ] Confidence threshold: only process if confidence > 0.7
@@ -228,8 +232,8 @@ Users shouldn't have to manually forward or scan these — the system should fin
   - If email is HTML receipt → extract data directly from HTML structure
   - If email has embedded image → process image through OCR
   - If email is text-only → extract data from email body via LLM
-- [ ] Map extracted data to same `ExtractedExpenseData` interface (Phase 1C)
-- [ ] Set `source: 'email'` on the created expense for tracking
+- [ ] Map extracted data to same `ExtractedExpenseData` schema (Phase 1C)
+- [ ] Set `source: 'EMAIL'` on the created expense for tracking
 - [ ] Store original email metadata (sender, subject, date, messageId)
 
 ### 6. Cross-Channel Deduplication
@@ -243,77 +247,113 @@ Users shouldn't have to manually forward or scan these — the system should fin
   - Enrich existing expense with email data if it has more details
   - Don't create duplicate expense
 - [ ] If no duplicate:
-  - Create new expense with `source: 'email'`
+  - Create new expense with `source: 'EMAIL'`
   - Tag with `auto:email-scan`, `auto:{sender-domain}`
 
-### 7. Temporal Scheduled Workflow
+### 7. Temporal Scheduled Workflow (Python)
 
-- [ ] Create `emailScanWorkflow` as a Temporal scheduled workflow:
-  ```typescript
-  // Temporal Schedule (cron-style)
-  async function emailScanWorkflow(input: { userId: string }) {
-    // Step 1: Load email config
-    const config = await loadEmailConfig(input.userId);
-    if (!config.isEnabled) return { status: 'disabled' };
-    
-    // Step 2: Refresh OAuth token if needed
-    await refreshTokenIfNeeded(config);
-    
-    // Step 3: Query Gmail for new receipt emails
-    const emails = await discoverReceiptEmails(config);
-    
-    // Step 4: Process each email
-    const results = [];
-    for (const email of emails) {
-      // Step 4a: Classify
-      const classification = await classifyEmail(email);
-      if (!classification.isReceipt) {
-        await markEmailProcessed(email.id, 'skipped', 'not_a_receipt');
-        continue;
-      }
-      
-      // Step 4b: Extract receipt data
-      const extracted = await extractEmailReceipt(email);
-      
-      // Step 4c: Cross-channel dedup
-      const duplicate = await crossChannelDeduplicate(extracted, input.userId);
-      if (duplicate) {
-        await linkEmailToExpense(email.id, duplicate.expenseId);
-        await markEmailProcessed(email.id, 'duplicate', duplicate.expenseId);
-        continue;
-      }
-      
-      // Step 4d: Create expense via standard pipeline
-      const expense = await createExpenseFromEmail(extracted, email);
-      await markEmailProcessed(email.id, 'processed', expense.id);
-      results.push(expense);
-    }
-    
-    // Step 5: Update last scan timestamp
-    await updateLastScanTimestamp(config.id);
-    
-    return { processedCount: results.length, totalScanned: emails.length };
-  }
+- [ ] Create `EmailScanWorkflow` as a Temporal scheduled workflow:
+  ```python
+  from datetime import timedelta
+  from temporalio import workflow
+  from temporalio.common import RetryPolicy
+
+  with workflow.unsafe.imports_passed_through():
+      from backend.workers.activities.email import (
+          load_email_config, refresh_token_if_needed, discover_receipt_emails,
+          classify_email, extract_email_receipt, cross_channel_deduplicate,
+          create_expense_from_email, mark_email_processed, update_last_scan_timestamp
+      )
+
+  @workflow.defn
+  class EmailScanWorkflow:
+      @workflow.run
+      async def run(self, user_id: str) -> dict:
+          config = await workflow.execute_activity(
+              load_email_config, user_id,
+              start_to_close_timeout=timedelta(seconds=10)
+          )
+          if not config.get("is_enabled"):
+              return {"status": "disabled"}
+
+          await workflow.execute_activity(
+              refresh_token_if_needed, config,
+              start_to_close_timeout=timedelta(seconds=30)
+          )
+
+          emails = await workflow.execute_activity(
+              discover_receipt_emails, config,
+              start_to_close_timeout=timedelta(minutes=2)
+          )
+
+          results = []
+          for email in emails:
+              classification = await workflow.execute_activity(
+                  classify_email, email,
+                  start_to_close_timeout=timedelta(seconds=30)
+              )
+              if not classification.get("is_receipt"):
+                  await workflow.execute_activity(
+                      mark_email_processed, (email["id"], "skipped", "not_a_receipt"),
+                      start_to_close_timeout=timedelta(seconds=10)
+                  )
+                  continue
+
+              extracted = await workflow.execute_activity(
+                  extract_email_receipt, email,
+                  start_to_close_timeout=timedelta(minutes=1)
+              )
+
+              duplicate = await workflow.execute_activity(
+                  cross_channel_deduplicate, (extracted, user_id),
+                  start_to_close_timeout=timedelta(seconds=15)
+              )
+              if duplicate:
+                  await workflow.execute_activity(
+                      mark_email_processed, (email["id"], "duplicate", duplicate["expense_id"]),
+                      start_to_close_timeout=timedelta(seconds=10)
+                  )
+                  continue
+
+              expense = await workflow.execute_activity(
+                  create_expense_from_email, (extracted, email),
+                  start_to_close_timeout=timedelta(seconds=30)
+              )
+              await workflow.execute_activity(
+                  mark_email_processed, (email["id"], "processed", expense["id"]),
+                  start_to_close_timeout=timedelta(seconds=10)
+              )
+              results.append(expense)
+
+          await workflow.execute_activity(
+              update_last_scan_timestamp, config["id"],
+              start_to_close_timeout=timedelta(seconds=10)
+          )
+          return {"processed_count": len(results), "total_scanned": len(emails)}
   ```
 
-- [ ] Register Temporal schedule:
-  ```typescript
-  // Schedule: run daily at user's preferred time
-  await temporalClient.schedule.create({
-    scheduleId: `email-scan-${userId}`,
-    spec: {
-      calendars: [{
-        hour: scanHour,
-        minute: scanMinute,
-      }],
-    },
-    action: {
-      type: 'startWorkflow',
-      workflowType: 'emailScanWorkflow',
-      args: [{ userId }],
-      taskQueue: 'email-processing',
-    },
-  });
+- [ ] Register Temporal schedule in Python:
+  ```python
+  from temporalio.client import (
+      Client, Schedule, ScheduleActionStartWorkflow,
+      ScheduleIntervalSpec, ScheduleSpec, ScheduleCalendarSpec
+  )
+
+  async def register_daily_email_scan(client: Client, user_id: str, hour: int = 2, minute: int = 0):
+      await client.create_schedule(
+          id=f"email-scan-{user_id}",
+          schedule=Schedule(
+              action=ScheduleActionStartWorkflow(
+                  EmailScanWorkflow.run,
+                  user_id,
+                  id=f"email-scan-run-{user_id}",
+                  task_queue="email-processing",
+              ),
+              spec=ScheduleSpec(
+                  calendars=[ScheduleCalendarSpec(hour={hour}, minute={minute})]
+              ),
+          ),
+      )
   ```
 
 ### 8. Settings UI
@@ -345,16 +385,16 @@ Users shouldn't have to manually forward or scan these — the system should fin
 2. Enable **Gmail API**
 3. Configure **OAuth consent screen** (External or Internal)
 4. Create **OAuth 2.0 Client ID** (Web application)
-5. Set authorized redirect URI: `{BASE_URL}/api/auth/gmail/callback`
+5. Set authorized redirect URI: `{BASE_URL}/api/v1/auth/gmail/callback`
 6. Download client credentials
 
 ### Required Scopes
 
 | Scope | Purpose |
 |-------|---------|
-| `https://www.google-api-python-client.com/auth/gmail.readonly` | Read emails and attachments |
-| `https://www.google-api-python-client.com/auth/gmail.labels` | (Optional) Read/create labels |
-| `https://www.google-api-python-client.com/auth/gmail.modify` | (Optional) Mark processed emails |
+| `https://www.googleapis.com/auth/gmail.readonly` | Read emails and attachments |
+| `https://www.googleapis.com/auth/gmail.labels` | (Optional) Read/create labels |
+| `https://www.googleapis.com/auth/gmail.modify` | (Optional) Mark processed emails |
 
 ### Environment Variables
 
@@ -362,7 +402,7 @@ Users shouldn't have to manually forward or scan these — the system should fin
 # Gmail API
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:7331/api/auth/gmail/callback
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/gmail/callback
 ```
 
 ---

@@ -35,31 +35,36 @@ _"Expenses related to my home office setup"_ → Graph traversal from "home offi
 
 ### 1. Graph Search API
 
-- [ ] Create `POST /api/search/graph` endpoint:
-  ```typescript
-  interface GraphSearchRequest {
-    query: string;           // Natural language query
-    limit?: number;
-    filters?: {
-      dateFrom?: string;
-      dateTo?: string;
-      projectId?: string;
-    };
-    searchType?: 'hybrid' | 'semantic' | 'keyword' | 'traversal';
-  }
-  
-  interface GraphSearchResponse {
-    results: {
-      expense: Expense;        // SQL record
-      graphScore: number;      // Relevance from graph
-      graphContext: {           // Why this was returned
-        matchedEntities: string[];
-        relationships: string[];
-        path: string;          // Human-readable traversal path
-      };
-    }[];
-    relatedEntities: GraphEntity[];  // Suggested related entities
-  }
+- [ ] Create `POST /api/v1/search/graph` endpoint:
+  ```python
+  from typing import List, Optional, Literal
+  from pydantic import BaseModel
+  from app.schemas.expense import ExpenseResponse
+
+  class GraphSearchFilters(BaseModel):
+      date_from: Optional[str] = None
+      date_to: Optional[str] = None
+      project_id: Optional[str] = None
+
+  class GraphSearchRequest(BaseModel):
+      query: str                                 # Natural language query
+      limit: Optional[int] = 10
+      filters: Optional[GraphSearchFilters] = None
+      search_type: Optional[Literal["hybrid", "semantic", "keyword", "traversal"]] = "hybrid"
+
+  class GraphContext(BaseModel):
+      matched_entities: List[str]
+      relationships: List[str]
+      path: str                                  # Human-readable traversal path
+
+  class GraphSearchResultItem(BaseModel):
+      expense: ExpenseResponse                   # SQL record
+      graph_score: float                         # Relevance from graph
+      graph_context: GraphContext                # Why this was returned
+
+  class GraphSearchResponse(BaseModel):
+      results: List[GraphSearchResultItem]
+      related_entities: List[dict]               # Suggested related entities
   ```
 
 ### 2. Graphiti Hybrid Search Integration
