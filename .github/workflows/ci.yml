@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev, "feat/**"]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  backend-test:
+    name: Backend Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: uv sync --all-extras --dev
+
+      - name: Lint with Ruff
+        working-directory: ./backend
+        run: uv run ruff check app tests
+
+      - name: Run Pytest Suite
+        working-directory: ./backend
+        run: uv run pytest
+
+  web-build:
+    name: Web Client Build & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Next.js 16 Web App
+        run: pnpm --filter web build

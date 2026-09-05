@@ -1,0 +1,47 @@
+[project]
+name = "expense-tax-backend"
+version = "0.1.0"
+description = "Expense and Tax Management FastAPI Backend"
+readme = "README.md"
+authors = [
+    { name = "Toby Tran", email = "toby.tran@archerirm.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "email-validator>=2.2.0",
+    "fastapi>=0.120.0",
+    "httpx>=0.28.0",
+    "pgvector>=0.3.6",
+    "pwdlib[argon2]>=0.2.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "pyjwt>=2.10.0",
+    "python-multipart>=0.0.20",
+    "sqlalchemy[asyncio]>=2.0.38",
+    "uvicorn[standard]>=0.35.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.9.0",
+]
+
+[tool.ruff.lint]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

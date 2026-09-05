@@ -216,3 +216,30 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+.pnpm-store/
+
+# PWA / Serwist
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/swe-worker-*.js
+
+# Environment variables
+.env
+.env*.local
+!.env.example
+
+# IDEs and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
