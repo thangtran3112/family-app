@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "build:web": "pnpm --filter web build",
-    "lint:web": "pnpm --filter web lint",
+    "dev:frontend": "pnpm --filter web dev",
+    "build:frontend": "pnpm --filter web build",
+    "lint:frontend": "pnpm --filter web lint",
     "gen:api": "pnpm --filter web gen:api",
-    "backend:dev": "cd backend && uv run uvicorn app.main:app --reload --port 8000",
-    "backend:test": "cd backend && uv run pytest",
+    "expense-service:dev": "cd expense-service && uv run uvicorn app.main:app --reload --port 8000",
+    "expense-service:test": "cd expense-service && uv run pytest",
     "docker:up": "docker compose -f infrastructure/docker-compose.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker-compose.yml down"
   },

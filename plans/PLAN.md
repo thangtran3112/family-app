@@ -86,6 +86,7 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
 | **0D** | Google Cloud Storage Integration | ⚪ Planned | [phase-0d-cloud-storage.md](sub-plans/phase-0d-cloud-storage.md) |
 | **0E** | Project & Tax Deduction Management | ⚪ Planned | [phase-0e-project-tax.md](sub-plans/phase-0e-project-tax.md) |
 | **0F** | Web App UI (Mobile-First) | ⚪ Planned | [phase-0f-web-ui.md](sub-plans/phase-0f-web-ui.md) |
+| **0G** | Repository Structure & Shared Python Contracts | 🟡 In Progress | [phase-0g-repository-structure-shared-contracts.md](sub-plans/phase-0g-repository-structure-shared-contracts.md) |
 
 ---
 
