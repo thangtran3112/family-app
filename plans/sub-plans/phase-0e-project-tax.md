@@ -1,7 +1,7 @@
-# Phase 1E — Project & Tax Deduction Management
+# Phase 0E — Project & Tax Deduction Management
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 1B (Data Model)
+> **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 2-3 days
 
 ---

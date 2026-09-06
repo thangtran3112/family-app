@@ -1,7 +1,7 @@
-# Phase 5C — Mobile API Sync & Offline Mode
+# Phase 12C — Mobile API Sync & Offline Mode
 
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
-> **Dependencies**: Phase 5B (Mobile Camera Capture)
+> **Dependencies**: Phase 12B (Mobile Camera Capture)
 > **Estimated Effort**: 3-4 days
 
 ---

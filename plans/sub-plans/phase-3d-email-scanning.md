@@ -1,7 +1,7 @@
-# Phase 2D — Automated Email Receipt Scanning (Gmail)
+# Phase 3D — Automated Email Receipt Scanning (Gmail)
 
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
-> **Dependencies**: Phase 2A (Temporal Setup), Phase 2B (Deduplication)
+> **Dependencies**: Phase 3A (Temporal Setup), Phase 3B (Deduplication)
 > **Estimated Effort**: 4-5 days
 
 ---
@@ -63,7 +63,7 @@ Users shouldn't have to manually forward or scan these — the system should fin
 │  ┌────────────────────┐                                          │
 │  │  Cross-Channel      │  Check if this expense was already      │
 │  │  Deduplication      │  scanned manually (content hash,        │
-│  │  (Phase 2B)         │  amount+date+merchant match)            │
+│  │  (Phase 3B)         │  amount+date+merchant match)            │
 │  └────────┬───────────┘                                          │
 │           │                                                       │
 │           ▼                                                       │
@@ -232,7 +232,7 @@ Users shouldn't have to manually forward or scan these — the system should fin
   - If email is HTML receipt → extract data directly from HTML structure
   - If email has embedded image → process image through OCR
   - If email is text-only → extract data from email body via LLM
-- [ ] Map extracted data to same `ExtractedExpenseData` schema (Phase 1C)
+- [ ] Map extracted data to same `ExtractedExpenseData` schema (Phase 0C)
 - [ ] Set `source: 'EMAIL'` on the created expense for tracking
 - [ ] Store original email metadata (sender, subject, date, messageId)
 

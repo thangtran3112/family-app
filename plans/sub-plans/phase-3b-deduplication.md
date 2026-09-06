@@ -1,7 +1,7 @@
-# Phase 2B — Deduplication & Conflict Resolution
+# Phase 3B — Deduplication & Conflict Resolution
 
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
-> **Dependencies**: Phase 2A (Temporal Setup)
+> **Dependencies**: Phase 3A (Temporal Setup)
 > **Estimated Effort**: 2-3 days
 
 ---
@@ -55,7 +55,7 @@ Detect and handle duplicate receipts during ingestion to prevent double-counting
 - [ ] Implement embedding similarity check via pgvector
 - [ ] Create `DuplicateMatch` table in PostgreSQL to record matches and user decisions
 
-### Cross-Channel Deduplication (Phase 2D dependency)
+### Cross-Channel Deduplication (Phase 3D dependency)
 - [ ] Implement `cross_channel_deduplicate` Temporal activity:
   - Compare incoming email expense against all manual-scan expenses (and vice versa)
   - Use content hash as primary, fuzzy match as secondary
@@ -89,6 +89,6 @@ Detect and handle duplicate receipts during ingestion to prevent double-counting
 
 ## Notes
 
-- Cross-channel dedup is critical for Phase 2D (Email Scanning) to avoid inflating expense totals
+- Cross-channel dedup is critical for Phase 3D (Email Scanning) to avoid inflating expense totals
 - The `source` field on expenses enables filtering: "Show only email-sourced expenses"
 - Order number extraction varies by merchant — start with top 20 merchants (Amazon, Costco, IKEA, etc.) and expand

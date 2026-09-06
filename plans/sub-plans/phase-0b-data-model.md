@@ -1,7 +1,7 @@
-# Phase 1B — Core Data Model & Database
+# Phase 0B — Core Data Model & Database
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 1A (Project Setup)
+> **Dependencies**: Phase 0A (Project Setup)
 > **Estimated Effort**: 3-4 days
 
 ---

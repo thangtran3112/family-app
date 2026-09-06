@@ -1,7 +1,7 @@
-# Phase 3C — AI Query Interface (LLM-Powered)
+# Phase 6C — AI Query Interface (LLM-Powered)
 
 > **Milestone**: 3 (Search & AI Query)
-> **Dependencies**: Phase 3A (SQL), 3B (Semantic)
+> **Dependencies**: Phase 6A (SQL), 3B (Semantic)
 > **Estimated Effort**: 3-4 days
 
 ---

@@ -33,11 +33,12 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
                   │                               │
                   ▼                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                 INGRESS & GATEWAY (Nginx 1.27+)                 │
+│                 INGRESS & GATEWAY (Traefik v3.3+)                │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Nginx Reverse Proxy                                      │  │
+│  │  Traefik API Gateway                                       │  │
 │  │  ├─ Route `/` → Next.js PWA                               │  │
-│  │  └─ Route `/api/` → FastAPI Python Backend                │  │
+│  │  ├─ Route `/api/` → FastAPI Python Backend                │  │
+│  │  └─ ForwardAuth → JWT Validation → Identity Headers       │  │
 │  └──────────────────────────────┬────────────────────────────┘  │
 └─────────────────────────────────┼───────────────────────────────┘
                                   │
@@ -74,62 +75,73 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
 
 ## 🗂️ Milestones & Phases
 
-### Milestone 1 — Core Expense Management (MVP) ⬅️ **CURRENT FOCUS**
+### Milestone 0 — Core Expense Management (MVP) ⬅️ **CURRENT FOCUS**
 > **Goal**: Get a working web app that can scan receipts, extract data, store files, and attribute expenses to projects.
 
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
-| **1A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-1a-project-setup.md](sub-plans/phase-1a-project-setup.md) |
-| **1B** | Core Data Model & Database | ✅ Complete | [phase-1b-data-model.md](sub-plans/phase-1b-data-model.md) |
-| **1C** | Receipt Upload & OCR Pipeline | 🟡 Current Focus | [phase-1c-ocr-pipeline.md](sub-plans/phase-1c-ocr-pipeline.md) |
-| **1D** | Google Cloud Storage Integration | ⚪ Planned | [phase-1d-cloud-storage.md](sub-plans/phase-1d-cloud-storage.md) |
-| **1E** | Project & Tax Deduction Management | ⚪ Planned | [phase-1e-project-tax.md](sub-plans/phase-1e-project-tax.md) |
-| **1F** | Web App UI (Mobile-First) | ⚪ Planned | [phase-1f-web-ui.md](sub-plans/phase-1f-web-ui.md) |
+| **0A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-0a-project-setup.md](sub-plans/phase-0a-project-setup.md) |
+| **0B** | Core Data Model & Database | ✅ Complete | [phase-0b-data-model.md](sub-plans/phase-0b-data-model.md) |
+| **0C** | Receipt Upload & OCR Pipeline | 🟡 Current Focus | [phase-0c-ocr-pipeline.md](sub-plans/phase-0c-ocr-pipeline.md) |
+| **0D** | Google Cloud Storage Integration | ⚪ Planned | [phase-0d-cloud-storage.md](sub-plans/phase-0d-cloud-storage.md) |
+| **0E** | Project & Tax Deduction Management | ⚪ Planned | [phase-0e-project-tax.md](sub-plans/phase-0e-project-tax.md) |
+| **0F** | Web App UI (Mobile-First) | ⚪ Planned | [phase-0f-web-ui.md](sub-plans/phase-0f-web-ui.md) |
 
 ---
 
-### Milestone 2 — Ingestion Pipeline, Email Scanning & Auto-Tagging
+### Milestone 1 — CI/CD, Deployment & API Gateway
+> **Goal**: Automated CI/CD pipeline, reproducible VPS deployment via IaC, and centralized gateway-level AuthN/AuthZ with Traefik so all downstream services inherit security without custom auth code.
+
+| Phase | Description | Status | Sub-Plan |
+|-------|-------------|--------|----------|
+| **1A** | GitHub Actions CI/CD Pipeline | ⚪ Planned | [phase-1a-cicd-pipeline.md](sub-plans/phase-1a-cicd-pipeline.md) |
+| **1B** | Production VPS Deployment (Docker Compose + Traefik) | ⚪ Planned | [phase-1b-vps-deployment.md](sub-plans/phase-1b-vps-deployment.md) |
+| **1C** | Gateway AuthN/AuthZ (Traefik ForwardAuth + JWT) | ⚪ Planned | [phase-1c-gateway-auth.md](sub-plans/phase-1c-gateway-auth.md) |
+
+---
+
+### Milestone 3 — Ingestion Pipeline, Email Scanning & Auto-Tagging
 > **Goal**: Robust async ingestion with automated email receipt scanning, cross-channel deduplication, auto-tagging, and enrichment.
 
 | Phase | Description | Sub-Plan |
 |-------|-------------|----------|
-| **2A** | Temporal Workflow Setup | [phase-2a-temporal-setup.md](sub-plans/phase-2a-temporal-setup.md) |
-| **2B** | Deduplication & Conflict Resolution | [phase-2b-deduplication.md](sub-plans/phase-2b-deduplication.md) |
-| **2C** | Auto-Tagging & Categorization Pipeline | [phase-2c-auto-tagging.md](sub-plans/phase-2c-auto-tagging.md) |
-| **2D** | Automated Email Receipt Scanning (Gmail) | [phase-2d-email-scanning.md](sub-plans/phase-2d-email-scanning.md) |
+| **3A** | Temporal Workflow Setup | [phase-3a-temporal-setup.md](sub-plans/phase-3a-temporal-setup.md) |
+| **3B** | Deduplication & Conflict Resolution | [phase-3b-deduplication.md](sub-plans/phase-3b-deduplication.md) |
+| **3C** | Auto-Tagging & Categorization Pipeline | [phase-3c-auto-tagging.md](sub-plans/phase-3c-auto-tagging.md) |
+| **3D** | Automated Email Receipt Scanning (Gmail) | [phase-3d-email-scanning.md](sub-plans/phase-3d-email-scanning.md) |
 
 ---
 
-### Milestone 3 — Search & AI Query
+### Milestone 6 — Search & AI Query
 > **Goal**: Multi-modal search — exact filters, full-text, semantic (vector), and AI natural-language queries.
 
 | Phase | Description | Sub-Plan |
 |-------|-------------|----------|
-| **3A** | SQL Filtering & Full-Text Search | [phase-3a-sql-search.md](sub-plans/phase-3a-sql-search.md) |
-| **3B** | Semantic Search (pgvector) | [phase-3b-semantic-search.md](sub-plans/phase-3b-semantic-search.md) |
-| **3C** | AI Query Interface (LLM-powered) | [phase-3c-ai-query.md](sub-plans/phase-3c-ai-query.md) |
+| **6A** | SQL Filtering & Full-Text Search | [phase-6a-sql-search.md](sub-plans/phase-6a-sql-search.md) |
+| **6B** | Semantic Search (pgvector) | [phase-6b-semantic-search.md](sub-plans/phase-6b-semantic-search.md) |
+| **6C** | AI Query Interface (LLM-powered) | [phase-6c-ai-query.md](sub-plans/phase-6c-ai-query.md) |
 
 ---
 
-### Milestone 4 — Graph RAG & Knowledge Graph
+### Milestone 9 — Graph RAG & Knowledge Graph
 > **Goal**: Build a temporal knowledge graph of expenses for relational, contextual queries.
 
 | Phase | Description | Sub-Plan |
 |-------|-------------|----------|
-| **4A** | Neo4j + Graphiti Setup | [phase-4a-graph-setup.md](sub-plans/phase-4a-graph-setup.md) |
-| **4B** | Expense Graph Ingestion | [phase-4b-graph-ingestion.md](sub-plans/phase-4b-graph-ingestion.md) |
-| **4C** | Graph Search & Query API | [phase-4c-graph-search.md](sub-plans/phase-4c-graph-search.md) |
+| **9A** | Neo4j + Graphiti Setup | [phase-9a-graph-setup.md](sub-plans/phase-9a-graph-setup.md) |
+| **9B** | Expense Graph Ingestion | [phase-9b-graph-ingestion.md](sub-plans/phase-9b-graph-ingestion.md) |
+| **9C** | Graph Search & Query API | [phase-9c-graph-search.md](sub-plans/phase-9c-graph-search.md) |
 
 ---
 
-### Milestone 5 — Mobile App (Deferred — PWA First)
-> **Goal**: Dedicated mobile app targeting Android (and iOS). We may use Flutter for the Android app; we are not decided yet and it may not be Expo React Native. PWA in Phase 1F covers mobile scanning initially.
+### Milestone 12 — Mobile App (Deferred — PWA First)
+> **Goal**: Dedicated mobile app targeting Android (and iOS). We may use Flutter for the Android app; we are not decided yet and it may not be Expo React Native. PWA in Phase 0F covers mobile scanning initially.
 
 | Phase | Description | Sub-Plan |
 |-------|-------------|----------|
-| **5A** | Mobile App Architecture & Setup (Flutter evaluation for Android) | [phase-5a-android-setup.md](sub-plans/phase-5a-android-setup.md) |
-| **5B** | Mobile Camera & Receipt Capture | [phase-5b-android-camera.md](sub-plans/phase-5b-android-camera.md) |
-| **5C** | Mobile API Sync & Offline Mode | [phase-5c-android-sync.md](sub-plans/phase-5c-android-sync.md) |
+| **12A** | Mobile App Architecture & Setup (Flutter evaluation for Android) | [phase-12a-android-setup.md](sub-plans/phase-12a-android-setup.md) |
+| **12B** | Mobile Camera & Receipt Capture | [phase-12b-android-camera.md](sub-plans/phase-12b-android-camera.md) |
+| **12C** | Mobile API Sync & Offline Mode | [phase-12c-android-sync.md](sub-plans/phase-12c-android-sync.md) |
 
 ---
 
@@ -153,7 +165,7 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
 | **Email Scanning** | Gmail API (`google-api-python-client`) | Latest | Automated daily background scans with Google OAuth2 verification |
 | **File Storage** | Google Cloud Storage (`google-cloud-storage`) | **2.19+** | Scalable object storage, tenant-prefixed hierarchy, signed URLs |
 | **Image Processing** | Pillow / OpenCV | Latest | In-process receipt deskewing, edge detection, and compression |
-| **Gateway / Ingress** | Nginx | **1.27+** (mainline) | Reverse proxy routing `/` to Next.js PWA and `/api` to FastAPI |
+| **Gateway / Ingress** | Traefik | **v3.3+** | Docker-native API gateway with automatic HTTPS, ForwardAuth middleware for centralized AuthN/AuthZ, rate limiting, and zero-config service discovery via Docker labels |
 | **Containerization** | Docker + Docker Compose | **Compose v2.33+** | Dev on macOS, Prod on Ubuntu self-hosted |
 | **Future Mobile** | Flutter (Dart) | **3.27+** | Prime candidate for future Android app (single codebase for Android & iOS, native camera, undecided yet and may not be Expo React Native) |
 
@@ -192,10 +204,11 @@ expense-tax-management/
 │   ├── pyproject.toml              # Dependencies (FastAPI, Temporal, Graphiti, etc.)
 │   └── Dockerfile                  # Python backend container
 ├── infrastructure/
-│   ├── docker-compose.yml          # Local dev: PostgreSQL, Neo4j, Temporal, FastAPI, Next.js, Nginx
-│   ├── docker-compose.prod.yml     # Production (Ubuntu self-hosted)
-│   ├── nginx/                      # Nginx gateway config
-│   │   └── nginx.conf              # Reverse proxy routing
+│   ├── docker-compose.yml          # Local dev: PostgreSQL, FalkorDB, Temporal, FastAPI, Next.js, Traefik
+│   ├── docker-compose.prod.yml     # Production (Ubuntu VPS)
+│   ├── traefik/                    # Traefik gateway config
+│   │   ├── traefik.yml              # Static config (ACME, Docker provider, dashboard)
+│   │   └── dynamic/                 # Dynamic middleware definitions
 │   └── scripts/                    # Deployment scripts for Ubuntu host
 ├── docs/                           # Architecture docs, ADRs
 └── README.md
@@ -241,15 +254,15 @@ expense-tax-management/
 
 ### 7. Multi-Tenancy from Day One
 - **Decision**: Build as multi-tenant from the start, with tenant isolation at the data layer. First tenant: family account.
-- **Rationale**: Avoids costly refactor later. Nginx gateway + Docker Compose architecture is already microservice-ready.
+- **Rationale**: Avoids costly refactor later. Traefik gateway + Docker Compose architecture is already microservice-ready.
 - **Implementation**: Each user belongs to a `tenant`. Data queries are always tenant-scoped. Auth includes tenant context.
 - **Future**: If commercialized, add tenant management, billing, and per-tenant resource limits.
 
 ### 8. Deployment: Ubuntu Self-Hosted + Docker
-- **Decision**: All services (Next.js, PostgreSQL, Neo4j/FalkorDB, Temporal, Graphiti, Nginx) run via Docker Compose on an Ubuntu host.
+- **Decision**: All services (Next.js, PostgreSQL, FalkorDB, Temporal, Graphiti, Traefik) run via Docker Compose on an Ubuntu VPS.
 - **Dev**: macOS (this MacBook) with Docker Desktop
-- **Prod**: Ubuntu laptop initially, portable to GCP VM (on-demand) later. No fixed cloud costs.
-- **Gateway**: Nginx reverse proxy in front of all services for routing, SSL termination, and future microservice expansion.
+- **Prod**: OVH VPS (12 GB RAM), portable to any VPS provider via IaC (see [ROADMAP.md](ROADMAP.md)). No fixed cloud costs.
+- **Gateway**: Traefik API gateway in front of all services for routing, automatic TLS, gateway-level AuthN/AuthZ (ForwardAuth), rate limiting, and zero-config Docker service discovery.
 
 ### 9. OCR/LLM Strategy
 - **Decision**: Always use LLM for OCR extraction (no Tesseract fallback). Provider TBD between OpenRouter, OpenAI, and PaddleOCR.
@@ -257,13 +270,13 @@ expense-tax-management/
 - **Not using**: Gemini Flash. Final model provider decision deferred to implementation.
 
 ### 10. Mobile Strategy: Next.js PWA First, Flutter Candidate for Future Android App
-- **Decision**: Build the web app as a client-side **PWA (Progressive Web App)** with camera access for receipt scanning on mobile. In the future (Milestone 5), for a dedicated mobile app, we **may use Flutter for the Android app (and may not be Expo React Native, as we are not decided yet)**.
+- **Decision**: Build the web app as a client-side **PWA (Progressive Web App)** with camera access for receipt scanning on mobile. In the future (Milestone 12), for a dedicated mobile app, we **may use Flutter for the Android app (and may not be Expo React Native, as we are not decided yet)**.
 - **PWA capabilities**: HTML5 camera capture (`getUserMedia` and `<input capture="environment">`), offline indicator, home screen install, push notifications.
-- **Flutter consideration**: Because our backend is Python, React Native lacks its traditional benefit of sharing TypeScript code with the backend. Flutter provides high-performance 60/120fps rendering, first-class camera/document-scanning plugins (e.g., `google_mlkit_document_scanner`), cross-platform support from a single Dart codebase, and robust offline caching via `sqflite`/`isar`. The final framework choice remains open until Milestone 5 begins, but Flutter is positioned as the primary candidate.
+- **Flutter consideration**: Because our backend is Python, React Native lacks its traditional benefit of sharing TypeScript code with the backend. Flutter provides high-performance 60/120fps rendering, first-class camera/document-scanning plugins (e.g., `google_mlkit_document_scanner`), cross-platform support from a single Dart codebase, and robust offline caching via `sqflite`/`isar`. The final framework choice remains open until Milestone 12 begins, but Flutter is positioned as the primary candidate.
 
 ### 11. Gmail OAuth: Full Verification
 - **Decision**: Pursue full Google OAuth verification from the start. Existing GCP project and OAuth client already set up.
-- **Timeline**: Verification takes 2-6 weeks; start the process during Milestone 2 development.
+- **Timeline**: Verification takes 2-6 weeks; start the process during Milestone 3 development.
 
 ### 12. Email Scan Depth
 - **Decision**: Default to **last 30 days** on first connect. User can choose a custom range, capped at **90 days maximum**.
@@ -279,7 +292,7 @@ expense-tax-management/
 | 2 | Temporal hosting & SDK | **Temporal Python SDK** (`temporalio`) self-hosted via Docker on Ubuntu. |
 | 3 | LLM/OCR strategy | **Always LLM or native PaddleOCR** (OpenRouter / OpenAI / PaddleOCR). No Gemini Flash. Monthly LLM budget cap per tenant. |
 | 4 | Multi-tenancy | **Multi-tenant from day one**. Tenant-scoped data isolation via FastAPI middleware & SQLAlchemy. First tenant: family. |
-| 5 | Mobile strategy | **Next.js PWA first**; future mobile app (M5) evaluating **Flutter** for Android (may not be Expo React Native, undecided). |
+| 5 | Mobile strategy | **Next.js PWA first**; future mobile app (M12) evaluating **Flutter** for Android (may not be Expo React Native, undecided). |
 | 6 | Gmail OAuth | **Full Google OAuth verification** using Google API Python SDK. Existing GCP project & OAuth client already configured. |
 | 7 | Email scan depth | **Default 30 days**, user-choosable, **max 90 days**. Balances coverage vs. LLM classification cost. |
 
@@ -295,29 +308,33 @@ expense-tax-management/
 
 ```mermaid
 graph TD
-    A[1A: Project Setup] --> B[1B: Data Model]
-    B --> C[1C: OCR Pipeline]
-    B --> D[1D: Cloud Storage]
-    B --> E[1E: Project/Tax]
-    C --> F[1F: Web UI]
+    A[0A: Project Setup] --> B[0B: Data Model]
+    B --> C[0C: OCR Pipeline]
+    B --> D[0D: Cloud Storage]
+    B --> E[0E: Project/Tax]
+    C --> F[0F: Web UI]
     D --> F
     E --> F
-    F --> G[2A: Temporal Setup]
-    G --> H[2B: Deduplication]
-    G --> I[2C: Auto-Tagging]
-    G --> T[2D: Email Scanning]
+    B --> CI[1A: CI/CD Pipeline]
+    CI --> VPS[1B: VPS Deployment + Traefik]
+    VPS --> GW[1C: Gateway AuthN/AuthZ]
+    GW --> F
+    F --> G[3A: Temporal Setup]
+    G --> H[3B: Deduplication]
+    G --> I[3C: Auto-Tagging]
+    G --> T[3D: Email Scanning]
     H --> T
-    F --> J[3A: SQL Search]
-    J --> K[3B: Semantic Search]
-    K --> L[3C: AI Query]
-    F --> M[4A: Graph Setup]
-    M --> N[4B: Graph Ingestion]
-    N --> O[4C: Graph Search]
+    F --> J[6A: SQL Search]
+    J --> K[6B: Semantic Search]
+    K --> L[6C: AI Query]
+    F --> M[9A: Graph Setup]
+    M --> N[9B: Graph Ingestion]
+    N --> O[9C: Graph Search]
     L --> P[Unified Search API]
     O --> P
-    F --> Q[5A: Android Setup]
-    Q --> R[5B: Android Camera]
-    R --> S[5C: Android Sync]
+    F --> Q[12A: Android Setup]
+    Q --> R[12B: Android Camera]
+    R --> S[12C: Android Sync]
 ```
 
 ---

@@ -1,7 +1,7 @@
-# Phase 2C — Auto-Tagging & Categorization Pipeline
+# Phase 3C — Auto-Tagging & Categorization Pipeline
 
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
-> **Dependencies**: Phase 2A (Temporal Setup)
+> **Dependencies**: Phase 3A (Temporal Setup)
 > **Estimated Effort**: 3-4 days
 
 ---

@@ -1,7 +1,7 @@
-# Phase 2A — Temporal Workflow Setup (Python SDK)
+# Phase 3A — Temporal Workflow Setup (Python SDK)
 
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
-> **Dependencies**: Milestone 1 (MVP complete)
+> **Dependencies**: Milestone 0 (MVP complete)
 > **Estimated Effort**: 3-4 days
 
 ---

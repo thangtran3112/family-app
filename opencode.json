@@ -1,0 +1,60 @@
+{
+  "projectRoot": "/Users/toby.tran/personal/expense-tax-management",
+  "frontend": {
+    "appDir": "apps/web",
+    "packageManager": "pnpm",
+    "buildCommand": "pnpm run build",
+    "lintCommand": "pnpm run lint",
+    "openApiPath": "openapi.json",
+    "strict": true
+  },
+  "backend": {
+    "appDir": "backend",
+    "packageManager": "uv",
+    "lintCommand": "uv run ruff check app tests",
+    "formatCommand": "uv run ruff format app tests",
+    "testCommand": "uv run pytest tests/ -v --tb=short",
+    "apiPrefix": "/api/v1",
+    "strict": true
+  },
+  "conventions": {
+    "multiTenancy": true,
+    "tenantIdScoping": true,
+    "llmBudgetCheck": true,
+    "absoluteImports": true,
+    "asyncEndpoints": true,
+    "openApiClient": true,
+    "tailwindcss": true,
+    "radixUi": true,
+    "reactVersion": "19"
+  },
+  "paths": {
+    "backendApp": "backend/app",
+    "backendModels": "backend/app/models",
+    "backendSchemas": "backend/app/schemas",
+    "backendServices": "backend/app/services",
+    "backendCore": "backend/app/core",
+    "frontendSrc": "apps/web/src",
+    "frontendComponents": "apps/web/src/components",
+    "frontendPages": "apps/web/src/pages",
+    "infraConfig": "infrastructure",
+    "plans": "plans"
+  },
+  "tools": {
+    "ruff": {
+      "enabled": true,
+      "check": "app tests",
+      "format": "app tests"
+    },
+    "pytest": {
+      "enabled": true,
+      "path": "tests",
+      "flags": ["-v", "--tb=short"]
+    },
+    "next": {
+      "enabled": true,
+      "build": "pnpm run build",
+      "lint": "pnpm run lint"
+    }
+  }
+}
