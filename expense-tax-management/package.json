@@ -1,0 +1,16 @@
+{
+  "name": "expense-tax-management",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "pnpm --filter web dev",
+    "build:frontend": "pnpm --filter web build",
+    "lint:frontend": "pnpm --filter web lint",
+    "gen:api": "pnpm --filter web gen:api",
+    "expense-service:dev": "cd expense-service && uv run uvicorn app.main:app --reload --port 8000",
+    "expense-service:test": "cd expense-service && uv run python -m pytest",
+    "docker:up": "docker compose -f ../infrastructure/docker-compose.common.yml -f docker-compose.yml up -d",
+    "docker:down": "docker compose -f ../infrastructure/docker-compose.common.yml -f docker-compose.yml down"
+  },
+  "packageManager": "pnpm@11.9.0"
+}

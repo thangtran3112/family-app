@@ -1,0 +1,89 @@
+services:
+  # ─── 1. Primary Relational & Vector DB (PostgreSQL 17 + pgvector) ───
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: expense-tax-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: expense_tax_db
+      # For multi-app: create additional DBs via init script
+      POSTGRES_MULTIPLE_DATABASES: expense_tax_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d expense_tax_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── 2. Temporal Knowledge Graph DB (Neo4j Community 5.26+) ───
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: expense-tax-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # Browser UI
+      - "7687:7687"  # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/password123
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── 3. Temporal Workflow Engine Server ───
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: expense-tax-temporal
+    restart: unless-stopped
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgrespassword
+      - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── 4. Temporal Web Admin UI ───
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: expense-tax-temporal-ui
+    restart: unless-stopped
+    ports:
+      - "8233:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8233
+    depends_on:
+      - temporal
+
+  # ─── 5. Gateway Ingress (Nginx 1.27+) ───
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: expense-tax-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  neo4j_data:

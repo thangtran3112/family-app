@@ -1,0 +1,33 @@
+# Expense Service Development Rules (Python/FastAPI)
+
+## Import Conventions
+- Use absolute imports: `from app.models.expense import Expense`
+- Avoid relative imports within the `app` package
+
+## Multi-tenancy
+- Every database query MUST be scoped by `tenant_id`
+- Check `tenant.llm_monthly_used < tenant.llm_monthly_budget` before LLM API calls
+- All API endpoints must respect tenant isolation
+
+## API Routes
+- All routes must use `/api/v1/...` prefix
+- Use `async def` for all API endpoints
+- Response models must be Pydantic v2 `BaseModel`
+
+## Linting & Formatting
+- Run from `expense-service/`: `uv run ruff check .` before commits
+- Run from `expense-service/`: `uv run ruff format .` to format
+- Fix all Ruff issues before claiming work complete
+
+## Testing
+- Run from `expense-service/`: `uv run python -m pytest tests/ -v --tb=short`
+- SQLite used for in-memory unit tests
+- PostgreSQL-specific features have SQLite compile-time stubs
+
+## Docstrings
+- Preserve all existing docstrings and comments
+- Do not remove comments unless explicitly asked
+
+## Shared Contracts
+- Reuse Pydantic DTOs and transport-safe enums from `common/python/expense-contracts`
+- Keep SQLAlchemy models, migrations, and database metadata inside `expense-service`

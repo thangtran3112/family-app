@@ -1,0 +1,50 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "projectRoot": "/Users/toby.tran/personal/family-app/expense-tax-management",
+  "frontend": {
+    "appDir": "frontend/web",
+    "packageManager": "pnpm",
+    "buildCommand": "pnpm run build",
+    "lintCommand": "pnpm run lint",
+    "openApiPath": "openapi.json",
+    "strict": true
+  },
+  "expenseService": {
+    "appDir": "expense-service",
+    "packageManager": "uv",
+    "lintCommand": "uv run ruff check .",
+    "formatCommand": "uv run ruff format .",
+    "testCommand": "uv run python -m pytest tests/ -v --tb=short",
+    "apiPrefix": "/api/v1",
+    "strict": true
+  },
+  "conventions": {
+    "multiTenancy": true,
+    "tenantIdScoping": true,
+    "llmBudgetCheck": true,
+    "absoluteImports": true,
+    "asyncEndpoints": true,
+    "openApiClient": true,
+    "tailwindcss": true,
+    "radixUi": true,
+    "reactVersion": "19"
+  },
+  "paths": {
+    "expenseServiceApp": "expense-service/app",
+    "expenseServiceModels": "expense-service/app/models",
+    "expenseServiceSchemas": "expense-service/app/schemas",
+    "expenseServiceServices": "expense-service/app/services",
+    "expenseServiceCore": "expense-service/app/core",
+    "frontendSrc": "frontend/web/src",
+    "frontendComponents": "frontend/web/src/components",
+    "frontendPages": "frontend/web/src/pages",
+    "sharedExpenseContracts": "common/python/expense-contracts",
+    "infraConfig": "../infrastructure",
+    "plans": "plans"
+  },
+  "tools": {
+    "ruff": true,
+    "pytest": true,
+    "next": true
+  }
+}

@@ -1,0 +1,33 @@
+services:
+  # Expense Service — app-specific overlay, include common stack
+  expense-service:
+    build:
+      context: ./expense-service
+      dockerfile: Dockerfile
+    container_name: expense-tax-expense-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres:5432/expense_tax_db
+      SECRET_KEY: dev-secret-key-change-in-production-expense-tax-2026
+      TEMPORAL_HOST: temporal:7233
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+      STORAGE_BACKEND: local
+    volumes:
+      - ./expense-service:/app
+      - expense_service_storage:/tmp/expense_tax_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
+volumes:
+  expense_service_storage:
+
+networks:
+  default:
+    name: family-infra_default
