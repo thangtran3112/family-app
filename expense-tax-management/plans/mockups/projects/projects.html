@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects — Mockup (0F0)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.grid{display:grid!important;grid-template-columns:repeat(3,1fr);gap:14px}.split{display:grid!important;grid-template-columns:1.2fr 1fr;gap:18px}}
+h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}
+.grid{display:flex;flex-direction:column;gap:12px}.split{display:flex;flex-direction:column;gap:14px}
+.pcard{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px}.pcard.hot{border-color:#10b981}.pcard b{font-size:15px}.bar{height:8px;background:#27272a;border-radius:99px;margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#10b981,#34d399)}.mut{color:#a1a1aa;font-size:12px}
+.tax{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px;margin-top:4px}.tax h3{font-size:14px;margin-bottom:12px}
+.crow{display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;font-size:12px;margin:8px 0}.cbar{height:10px;background:#27272a;border-radius:99px;overflow:hidden}.cbar i{display:block;height:100%;border-radius:99px}
+.btn{background:#10b981;border:0;color:#052e22;font-weight:700;padding:12px;border-radius:10px;font-size:14px;width:100%;margin-top:10px}.ghost{background:transparent;border:1px solid #3f3f46;color:#e4e4e7;padding:11px;border-radius:10px;font-size:13px;font-weight:600}
+label{font-size:12px;color:#a1a1aa;display:block;margin:10px 0 5px}input{width:100%;background:#1b1b21;border:1px solid #34343a;color:#fff;border-radius:10px;padding:11px;font-size:14px}
+.exp{display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-top:1px solid #27272a}
+</style></head>
+<body><div class="app"><h1>📁 Projects</h1><p class="sub">Group expenses · track budgets · export tax reports</p>
+<div class="split"><div>
+<div class="grid">
+<div class="pcard hot"><b>🏠 Kitchen Reno</b><div class="mut">23 expenses · $4,120 / $6,000</div><div class="bar"><i style="width:68%"></i></div><div class="mut">💰 $1,940 deductible</div></div>
+<div class="pcard"><b>📑 2026 Taxes</b><div class="mut">141 expenses · deductible $862</div><div class="bar"><i style="width:34%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></i></div><div class="mut">34 categories tracked</div></div>
+<div class="pcard"><b>🚗 Car &amp; Travel</b><div class="mut">38 expenses · $2,310 total</div><div class="bar"><i style="width:51%;background:linear-gradient(90deg,#3b82f6,#60a5fa)"></i></div><div class="mut">Mileage log attached</div></div>
+</div>
+<div class="tax"><h3>📊 Tax summary — Kitchen Reno (deduction by category)</h3>
+<div class="crow"><span>🔨 Materials</span><div class="cbar"><i style="width:82%;background:#10b981"></i></div><b>$1,120</b></div>
+<div class="crow"><span>🧰 Labor</span><div class="cbar"><i style="width:54%;background:#3b82f6"></i></div><b>$640</b></div>
+<div class="crow"><span>🍔 Meals 50%</span><div class="cbar"><i style="width:26%;background:#f59e0b"></i></div><b>$180</b></div>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="ghost" style="flex:1">⬇ CSV</button><button class="ghost" style="flex:1">⬇ PDF report</button></div>
+</div></div>
+<div><div class="tax"><h3>Project detail — Kitchen Reno</h3>
+<div class="exp"><span>🛒 Whole Foods (materials run)</span><b>$84.32</b></div>
+<div class="exp"><span>🏢 Office Depot (paint)</span><b>$129.99</b></div>
+<div class="exp"><span>🔨 Hardware store</span><b>$212.40</b></div>
+<div class="mut" style="margin-top:8px">Showing 3 of 23 · filtered by project</div></div>
+<div class="tax" style="margin-top:12px"><h3>＋ New project</h3><label>Name</label><input placeholder="e.g. Bathroom Refresh"><label>Budget (optional)</label><input placeholder="$2,000"><button class="btn">Create project</button></div>
+</div></div></div></body></html>

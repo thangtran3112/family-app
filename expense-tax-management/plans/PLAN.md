@@ -85,7 +85,8 @@ A self-hosted, AI-powered expense management system for freelancers and small bu
 | **0C** | Receipt Upload & OCR Pipeline | 🟡 Current Focus | [phase-0c-ocr-pipeline.md](sub-plans/phase-0c-ocr-pipeline.md) |
 | **0D** | Google Cloud Storage Integration | ⚪ Planned | [phase-0d-cloud-storage.md](sub-plans/phase-0d-cloud-storage.md) |
 | **0E** | Project & Tax Deduction Management | ⚪ Planned | [phase-0e-project-tax.md](sub-plans/phase-0e-project-tax.md) |
-| **0F** | Web App UI (Mobile-First) | ⚪ Planned | [phase-0f-web-ui.md](sub-plans/phase-0f-web-ui.md) |
+| **0F0** | Web UI Mockup Preflight (gate for 0F) — 10 HTML + 20 PNG drafted, awaiting human review | 🟡 Awaiting Review | [phase-0f0-web-ui-mockups.md](sub-plans/phase-0f0-web-ui-mockups.md) |
+| **0F** | Web App UI (Mobile-First) — blocked until 0F0 mockups approved | ⚪ Planned | [phase-0f-web-ui.md](sub-plans/phase-0f-web-ui.md) |
 | **0G** | Repository Structure & Shared Python Contracts | ✅ Complete | [phase-0g-repository-structure-shared-contracts.md](sub-plans/phase-0g-repository-structure-shared-contracts.md) |
 | **0H** | Family-App Monorepo & Shared Infrastructure | ✅ Complete | [phase-0h-family-infra-split.md](sub-plans/phase-0h-family-infra-split.md) |
 

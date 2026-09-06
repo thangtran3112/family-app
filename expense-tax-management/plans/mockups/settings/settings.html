@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings — Mockup (0F0)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1000px}.cols{display:grid!important;grid-template-columns:1fr 1fr;gap:18px}}
+h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}.cols{display:flex;flex-direction:column;gap:14px}
+.card{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px;margin-bottom:0}.card h3{font-size:14px;margin-bottom:8px}
+label{font-size:12px;color:#a1a1aa;display:block;margin:10px 0 5px}input,select,textarea{width:100%;background:#1b1b21;border:1px solid #34343a;color:#fff;border-radius:10px;padding:11px;font-size:14px}
+.mem{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #27272a;font-size:13px}.av{width:34px;height:34px;border-radius:99px;background:#27272a;display:flex;align-items:center;justify-content:center;flex:none}.role{margin-left:auto;font-size:11px;background:#1b1b21;border:1px solid #3f3f46;padding:4px 10px;border-radius:99px;color:#d4d4d8}
+.budget{background:#1b1b21;border-radius:12px;padding:12px;margin-top:10px}.bbar{height:10px;background:#34343a;border-radius:99px;overflow:hidden;margin:8px 0}.bbar i{display:block;height:100%;border-radius:99px}.warn{background:#2b220c;border:1px solid #92600e;color:#fcd34d;font-size:12px;border-radius:10px;padding:9px 12px;margin-top:10px}.crit{background:#3b1116;border:1px solid #7f1d1d;color:#fca5a5;font-size:12px;border-radius:10px;padding:9px 12px;margin-top:10px}
+.prov{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}.prov div{border:1px solid #34343a;border-radius:10px;padding:10px;text-align:center;font-size:12px}.prov div.on{border-color:#10b981;background:#0c1f18;font-weight:700}
+.ghost{background:transparent;border:1px solid #3f3f46;color:#e4e4e7;padding:11px;border-radius:10px;font-size:13px;font-weight:600;width:100%;margin-top:8px}
+.usage{font-size:12px;color:#a1a1aa}
+</style></head>
+<body><div class="app"><h1>⚙ Settings</h1><p class="sub">Profile · tenant · LLM budget · storage · export</p>
+<div class="cols"><div>
+<div class="card"><h3>👤 Profile</h3><label>Name</label><input value="Toby Tran"><label>Email</label><input value="toby@family.app"><label>Default currency</label><select><option>USD — US Dollar</option><option>VND — Đồng</option></select></div>
+<div class="card" style="margin-top:12px"><h3>👨‍👩‍👧 Tenant — Family</h3><div class="mem"><div class="av">TT</div><div><b>Toby Tran</b><br><small style="color:#a1a1aa">toby@family.app</small></div><span class="role">owner</span></div><div class="mem"><div class="av">LT</div><div><b>Linh Tran</b><br><small style="color:#a1a1aa">linh@family.app</small></div><span class="role">member</span></div><button class="ghost">＋ Invite member (copy link)</button></div>
+<div class="card" style="margin-top:12px"><h3>💾 Storage &amp; export</h3><p class="usage">GCS bucket <b style="color:#fff">family-receipts</b> · 1.2 GB / 5 GB free tier</p><button class="ghost">⬇ Export all data (CSV + files ZIP)</button></div>
+</div><div>
+<div class="card"><h3>🤖 LLM configuration</h3><label>Provider</label><div class="prov"><div class="on">OpenRouter</div><div>OpenAI</div><div>PaddleOCR<br><small>local</small></div></div><label>API key</label><input value="sk-or-••••••••••••3f2a"><label>Model</label><select><option>gpt-4o-mini (cheap, accurate)</option><option>claude-haiku</option></select></div>
+<div class="card" style="margin-top:12px"><h3>💳 Monthly LLM budget</h3><div class="budget"><div style="display:flex;justify-content:space-between;font-size:13px"><b>$6.40 spent</b><span style="color:#a1a1aa">of $10.00 cap</span></div><div class="bbar"><i style="width:64%;background:linear-gradient(90deg,#10b981,#34d399)"></i></div><small style="color:#a1a1aa">OCR $2.10 · tagging $1.80 · queries $2.50 · alerts at 80% + 100%</small></div><div class="warn">⚠ Demo of 80% alert: $8.00 / $10.00 — email notification sent.</div><div class="crit">⛔ Demo of 100% cap: LLM calls paused, PaddleOCR-local fallback active.</div></div>
+<div class="card" style="margin-top:12px"><h3>✏ Custom prompts</h3><label>Receipt extraction system prompt</label><textarea rows="3">Extract merchant, date, totals, line items. Return JSON…</textarea></div>
+</div></div></div></body></html>

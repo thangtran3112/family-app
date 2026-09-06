@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — Mockup (0F0)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;padding-bottom:96px}@media(min-width:1024px){.app{max-width:1200px;display:grid;grid-template-columns:220px 1fr;gap:0}.side{display:flex!important}.bottomnav{display:none!important}.main{padding:28px!important}}
+.side{display:none;flex-direction:column;gap:4px;background:#0e0e11;border-right:1px solid #27272a;padding:20px 12px;min-height:100vh}.side a{color:#a1a1aa;text-decoration:none;font-size:14px;padding:10px 12px;border-radius:10px}.side a.on{background:#1b1b21;color:#fff;font-weight:600}
+.main{padding:16px 16px 0}.hello{font-size:13px;color:#a1a1aa}.hello b{color:#fff;font-size:20px;display:block;margin-top:2px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:14px 0}@media(min-width:1024px){.stats{grid-template-columns:repeat(4,1fr)}}
+.stat{background:#131318;border:1px solid #27272a;border-radius:14px;padding:12px}.stat small{color:#a1a1aa;font-size:11px}.stat b{font-size:19px;display:block;margin-top:2px}.green{color:#34d399}.amber{color:#fbbf24}
+.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:6px 0 16px}.act{background:#131318;border:1px solid #27272a;border-radius:14px;padding:14px 8px;text-align:center;font-size:12px;color:#d4d4d8}.act span{font-size:24px;display:block;margin-bottom:6px}.act.hot{border-color:#10b981;background:#0c1f18}
+.sec{font-size:14px;font-weight:700;margin:16px 0 10px;display:flex;justify-content:space-between;align-items:center}.sec a{font-size:12px;color:#34d399;text-decoration:none;font-weight:500}
+.exp{display:flex;gap:12px;background:#131318;border:1px solid #27272a;border-radius:14px;padding:12px;margin-bottom:10px;align-items:center}.thumb{width:48px;height:48px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;background:#1b1b21;border:1px solid #34343a}.exp .m{flex:1;min-width:0}.exp .m b{font-size:14px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.exp .m small{color:#a1a1aa;font-size:12px}.amt{text-align:right}.amt b{font-size:15px}.badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;display:inline-block;margin-top:4px}.ok{background:#0c2b21;color:#34d399}.pend{background:#2b220c;color:#fbbf24}.dup{background:#3b1116;color:#fca5a5}
+.proj{background:#131318;border:1px solid #27272a;border-radius:14px;padding:14px;margin-bottom:10px}.bar{height:8px;background:#27272a;border-radius:99px;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#10b981,#34d399);border-radius:99px}
+.skel{background:linear-gradient(90deg,#1b1b21,#27272a,#1b1b21);border-radius:14px;height:72px;margin-bottom:10px}
+.bottomnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#0e0e11f2;border-top:1px solid #27272a;display:flex;padding:8px 4px calc(10px + env(safe-area-inset-bottom));backdrop-filter:blur(12px)}.bottomnav div{flex:1;text-align:center;font-size:10px;color:#71717a}.bottomnav div.on{color:#34d399}.bottomnav span{font-size:22px;display:block}.fab{width:56px;height:56px;border-radius:99px;background:#10b981;color:#052e22;font-size:28px;font-weight:800;border:0;margin-top:-26px;box-shadow:0 8px 24px #10b98166}
+</style></head>
+<body><div class="app">
+<nav class="side"><b style="padding:8px 12px 16px">₿ ExpenseTax</b><a class="on" href="#">◇ Dashboard</a><a href="#">⤒ Upload</a><a href="#">🧾 Expenses</a><a href="#">📁 Projects</a><a href="#">🏷 Categories</a><a href="#">⚙ Settings</a></nav>
+<div class="main"><p class="hello">September 2026<b>Good evening, Toby 👋</b></p>
+<div class="stats"><div class="stat"><small>September spend</small><b>$1,284.56</b></div><div class="stat"><small>Top category</small><b>🍔 Dining</b></div><div class="stat"><small>Deductible</small><b class="green">$862.10</b></div></div>
+<div class="actions"><div class="act hot"><span>📸</span>Scan receipt</div><div class="act"><span>📁</span>Upload file</div><div class="act"><span>✏️</span>Manual entry</div></div>
+<div class="sec">Recent expenses <a href="#">View all →</a></div>
+<div class="exp"><div class="thumb">🛒</div><div class="m"><b>Whole Foods Market</b><small>Today · Groceries · Kitchen Reno</small></div><div class="amt"><b>$84.32</b><br><span class="badge ok">✓ done</span></div></div>
+<div class="exp"><div class="thumb">⛽</div><div class="m"><b>Shell Station #4421</b><small>Yesterday · Transport</small></div><div class="amt"><b>$45.00</b><br><span class="badge ok">✓ done</span></div></div>
+<div class="exp"><div class="thumb">🍜</div><div class="m"><b>Pho Saigon — client lunch</b><small>Sep 4 · Dining · 80% deductible</small></div><div class="amt"><b>$62.40</b><br><span class="badge pend">◷ ocr</span></div></div>
+<div class="exp"><div class="thumb">🧾</div><div class="m"><b>Office Depot (possible duplicate)</b><small>Sep 3 · Office</small></div><div class="amt"><b>$129.99</b><br><span class="badge dup">⚠ dup?</span></div></div>
+<div class="sec">Projects <a href="#">Manage →</a></div>
+<div class="proj"><b>🏠 Kitchen Reno</b> <small style="color:#a1a1aa">· 23 expenses</small><div class="bar"><i style="width:68%"></i></div><small style="color:#a1a1aa">$4,120 of $6,000 budget</small></div>
+<div class="proj"><b>📑 2026 Taxes</b> <small style="color:#a1a1aa">· 141 expenses</small><div class="bar"><i style="width:34%"></i></div><small style="color:#34d399">$862 deductible so far</small></div>
+<div class="sec">Loading state (skeleton)</div><div class="skel"></div>
+</div></div>
+<nav class="bottomnav"><div class="on"><span>◇</span>Home</div><div><span>⤒</span>Upload</div><div><button class="fab">+</button></div><div><span>🧾</span>Bills</div><div><span>⚙</span>More</div></nav>
+</body></html>

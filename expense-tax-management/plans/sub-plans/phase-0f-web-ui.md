@@ -1,14 +1,16 @@
 # Phase 0F — Web App UI (Mobile-First)
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 0C (OCR), 1D (Cloud Storage), 1E (Projects/Tax)
-> **Estimated Effort**: 5-7 days
+> **Dependencies**: Phase 0F0 (mockups in `plans/mockups/` reviewed + approved — NO frontend code before this gate), Phase 0C (OCR), 1D (Cloud Storage), 1E (Projects/Tax)
+> **Estimated Effort**: 5-7 days (excludes 0F0 preflight)
 
 ---
 
 ## Objective
 
 Build a mobile-first responsive web app with all MVP features accessible and usable on phone screens, following TaxHacker's UI patterns with our enhancements.
+
+> **Preflight gate**: implement strictly from approved `plans/mockups/` (Phase 0F0). No new screens, routes, or component variants beyond what 0F0 approved — changes require a mockup update + re-review first.
 
 ---
 

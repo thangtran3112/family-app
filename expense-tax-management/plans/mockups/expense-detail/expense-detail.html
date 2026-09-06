@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Detail — Mockup (0F0)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.cols{display:grid!important;grid-template-columns:1fr 1.1fr;gap:20px}}
+.back{color:#34d399;font-size:13px;text-decoration:none}.cols{display:flex;flex-direction:column;gap:14px;margin-top:10px}
+.receipt{background:#000;border:1px solid #27272a;border-radius:16px;min-height:340px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#a1a1aa;position:relative;padding:30px}.zoom{position:absolute;bottom:12px;display:flex;gap:8px}.zoom button{background:#1b1b21ee;border:1px solid #52525b;color:#fff;border-radius:8px;padding:7px 12px;font-size:13px}
+.paper{background:#fafafa;color:#18181b;border-radius:6px;padding:22px 20px;width:230px;font-size:12px;font-family:ui-monospace,Menlo,monospace}.paper h4{text-align:center;font-size:13px}.paper table{width:100%;margin:10px 0;font-size:11.5px}.paper td:last-child{text-align:right}
+.card{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px}.card h3{font-size:14px;margin-bottom:6px}
+label{font-size:12px;color:#a1a1aa;display:block;margin:10px 0 5px}input,select{width:100%;background:#1b1b21;border:1px solid #34343a;color:#fff;border-radius:10px;padding:11px;font-size:14px}.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tag{font-size:12px;background:#1b1b21;border:1px solid #3f3f46;padding:6px 12px;border-radius:99px}.tag.add{border-style:dashed;color:#34d399}
+.switch{display:flex;justify-content:space-between;align-items:center;background:#0c1f18;border:1px solid #10b98155;border-radius:12px;padding:12px;margin-top:12px}.tog{width:48px;height:28px;border-radius:99px;background:#10b981;position:relative}.tog:after{content:"";position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:99px;background:#fff}
+input[type=range]{accent-color:#10b981;padding:0}.li{border-top:1px solid #27272a;padding:10px 0;font-size:13px;display:flex;justify-content:space-between}.hist{font-size:12px;color:#a1a1aa;border-left:2px solid #34343a;margin:8px 0 0 6px;padding-left:12px;display:flex;flex-direction:column;gap:8px}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:#0c2b21;color:#34d399}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.p{background:#10b981;border:0;color:#052e22;font-weight:700;padding:13px;border-radius:10px;font-size:14px}.d{background:transparent;border:1px solid #7f1d1d;color:#fca5a5;padding:13px;border-radius:10px;font-size:14px}
+</style></head>
+<body><div class="app"><a class="back" href="#">← Expenses</a>
+<div class="cols"><div><div class="receipt"><div class="paper"><h4>WHOLE FOODS</h4><p style="text-align:center">Market · Sep 6, 2026</p><table><tr><td>Organic milk ×2</td><td>9.98</td></tr><tr><td>Sourdough</td><td>6.50</td></tr><tr><td>Salmon 1.2lb</td><td>21.84</td></tr><tr><td>Avocados ×4</td><td>7.00</td></tr></table><p style="text-align:center"><b>TOTAL $84.32</b></p></div><small>wholefoods-sep6.jpg · pinch-to-zoom · PDF supported</small><div class="zoom"><button>−</button><button>100%</button><button>+</button><button>⛶</button></div></div></div>
+<div class="card"><h3>Whole Foods Market <span class="badge">✓ done</span></h3>
+<label>Merchant</label><input value="Whole Foods Market"><div class="r2"><div><label>Amount</label><input value="$84.32"></div><div><label>Date</label><input value="2026-09-06"></div></div>
+<div class="r2"><div><label>Category</label><select><option>🍔 Groceries</option></select></div><div><label>Project</label><select><option>Kitchen Reno</option></select></div></div>
+<label>Tags</label><div class="tags"><span class="tag">household ×</span><span class="tag">weekly-shop ×</span><span class="tag add">+ Add</span></div>
+<div class="switch"><div><b style="font-size:14px">💰 Tax deductible</b><br><small style="color:#a1a1aa">Groceries · partial 40%</small></div><div class="tog"></div></div>
+<label>Deductible % — <b style="color:#34d399">40%</b></label><input type="range" value="40">
+<label>Line items (4) — expandable</label><div class="li"><span>🥛 Organic milk ×2</span><b>$9.98</b></div><div class="li"><span>🍞 Sourdough</span><b>$6.50</b></div><div class="li"><span>🐟 Salmon 1.2lb</span><b>$21.84</b></div>
+<label>History</label><div class="hist"><span>✓ Sep 6, 21:04 — OCR completed (96%)</span><span>✓ Sep 6, 21:05 — Auto-tagged “household”</span><span>✏ Sep 6, 21:07 — Toby changed category → Groceries</span></div>
+<div class="btns"><button class="p">Save changes</button><button class="d">Delete</button></div>
+</div></div></div></body></html>

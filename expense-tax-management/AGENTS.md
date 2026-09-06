@@ -54,6 +54,7 @@ See [`plans/ROADMAP.md`](plans/ROADMAP.md) for infrastructure and deployment str
 - **Components**: React 19+ with Radix UI primitives
 - **API client**: Typed OpenAPI client generated from FastAPI's `/openapi.json`
 - **Role**: Strictly client-side presentation. NO direct database connections, NO ORM, NO backend workers
+- **Mockup preflight (mandatory)**: every frontend phase/task/sub-plan requires a preflight producing reviewed mockups in `plans/mockups/` first (see `plans/sub-plans/phase-0f0-web-ui-mockups.md` for the 0F gate). No `frontend/web` implementation starts until its preflight is ✅ Complete.
 
 ### General
 

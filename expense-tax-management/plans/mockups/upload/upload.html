@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload — Mockup (0F0)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.cols{display:grid!important;grid-template-columns:1.1fr 1fr;gap:20px}.viewfinder{height:420px!important}}
+h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}.cols{display:flex;flex-direction:column;gap:14px}
+.viewfinder{position:relative;background:#000;border:1px solid #27272a;border-radius:16px;height:300px;overflow:hidden;background-image:repeating-linear-gradient(0deg,transparent,transparent 34px,#ffffff08 35px),repeating-linear-gradient(90deg,transparent,transparent 34px,#ffffff08 35px)}.guide{position:absolute;inset:36px 28px;border:2px dashed #34d399;border-radius:12px}.guide:before{content:"Align receipt inside frame";position:absolute;top:-26px;left:0;right:0;text-align:center;font-size:12px;color:#34d399}.shutter{position:absolute;bottom:14px;left:0;right:0;display:flex;justify-content:center;gap:18px;align-items:center}.shut{width:64px;height:64px;border-radius:99px;background:#fff;border:5px solid #71717a}.ghost{width:44px;height:44px;border-radius:99px;background:#27272acc;border:1px solid #52525b;color:#fff;font-size:18px}
+.card{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px}.card h3{font-size:14px;margin-bottom:10px}
+.drop{border:2px dashed #3f3f46;border-radius:12px;padding:22px;text-align:center;color:#a1a1aa;font-size:13px}.drop b{color:#34d399}
+.job{display:flex;gap:10px;align-items:center;background:#1b1b21;border:1px solid #34343a;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px}.job .t{flex:1}.steps{display:flex;gap:4px;margin-top:6px}.steps i{flex:1;height:5px;border-radius:99px;background:#34343a}.steps i.done{background:#10b981}.steps i.run{background:linear-gradient(90deg,#10b981 50%,#34343a 50%)}
+.pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}.ok{background:#0c2b21;color:#34d399}.run2{background:#2b220c;color:#fbbf24}
+label{font-size:12px;color:#a1a1aa;display:block;margin:10px 0 5px}input,select{width:100%;background:#1b1b21;border:1px solid #34343a;color:#fff;border-radius:10px;padding:11px;font-size:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary{width:100%;margin-top:14px;background:#10b981;border:0;color:#052e22;font-weight:700;font-size:15px;padding:13px;border-radius:10px}.sec2{width:100%;margin-top:8px;background:transparent;border:1px solid #3f3f46;color:#e4e4e7;font-weight:600;font-size:14px;padding:12px;border-radius:10px}
+.conf{font-size:11px;color:#34d399;margin-left:6px}
+</style></head>
+<body><div class="app"><h1>⤒ Upload receipt</h1><p class="sub">Camera-first · batch supported · OCR → extract → review</p>
+<div class="cols"><div>
+<div class="viewfinder"><div class="guide"></div><div class="shutter"><button class="ghost">🖼</button><button class="shut"></button><button class="ghost">⚡</button></div></div>
+<div class="card" style="margin-top:12px"><h3>Or pick files</h3><div class="drop">Drag &amp; drop here, or <b>browse files</b><br><small>PNG · JPG · PDF · up to 10 at once</small></div></div>
+</div><div>
+<div class="card"><h3>Batch — 3 files</h3>
+<div class="job"><span>🧾</span><div class="t"><b>wholefoods-sep6.jpg</b><div class="steps"><i class="done"></i><i class="done"></i><i class="done"></i></div><small style="color:#a1a1aa">OCR ✓ · Extract ✓ · Ready to review</small></div><span class="pill ok">review</span></div>
+<div class="job"><span>🧾</span><div class="t"><b>shell-fuel.pdf</b><div class="steps"><i class="done"></i><i class="run"></i><i></i></div><small style="color:#a1a1aa">Extracting line items… 60%</small></div><span class="pill run2">◷ ocr</span></div>
+<div class="job"><span>🧾</span><div class="t"><b>pho-receipt.jpg</b><div class="steps"><i class="run"></i><i></i><i></i></div><small style="color:#a1a1aa">Uploading… 35%</small></div><span class="pill run2">◷ up</span></div>
+</div>
+<div class="card" style="margin-top:12px"><h3>Review &amp; confirm <span class="conf">✓ AI 96% confident</span></h3>
+<label>Merchant</label><input value="Whole Foods Market"><div class="row2"><div><label>Amount</label><input value="$84.32"></div><div><label>Date</label><input value="2026-09-06"></div></div>
+<div class="row2"><div><label>Category</label><select><option>🍔 Groceries</option><option>Dining</option><option>Transport</option></select></div><div><label>Project</label><select><option>Kitchen Reno</option><option>2026 Taxes</option><option>— none —</option></select></div></div>
+<button class="primary">Save expense ✓</button><button class="sec2">Edit line items (4)</button>
+</div></div></div></div></body></html>
