@@ -1,7 +1,7 @@
-# Phase 4B — Expense Graph Ingestion
+# Phase 9B — Expense Graph Ingestion
 
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
-> **Dependencies**: Phase 4A (Graph Setup), Phase 2A (Temporal)
+> **Dependencies**: Phase 9A (Graph Setup), Phase 3A (Temporal)
 > **Estimated Effort**: 3-4 days
 
 ---

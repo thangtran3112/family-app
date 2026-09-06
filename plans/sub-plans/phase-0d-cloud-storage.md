@@ -1,7 +1,7 @@
-# Phase 1D — Google Cloud Storage Integration
+# Phase 0D — Google Cloud Storage Integration
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 1B (Data Model)
+> **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 2-3 days
 
 ---

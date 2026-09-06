@@ -1,7 +1,7 @@
-# Phase 1C — Receipt Upload & OCR Pipeline
+# Phase 0C — Receipt Upload & OCR Pipeline
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 1B (Data Model)
+> **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 4-5 days
 
 ---
@@ -21,7 +21,7 @@ User uploads receipt via Next.js PWA (image/PDF)
 ┌─────────────────────┐
 │  Upload API Route   │   POST /api/v1/expenses/upload (FastAPI)
 │  (backend/app/api)  │   - Validate file type/size (UploadFile)
-│  ├─ Temp local save │   - Save to temp storage (GCS in Phase 1D)
+│  ├─ Temp local save │   - Save to temp storage (GCS in Phase 0D)
 │  └─ Create Expense  │   - Create DB record via SQLAlchemy (status: PENDING)
 └────────┬────────────┘
          │
@@ -53,7 +53,7 @@ User uploads receipt via Next.js PWA (image/PDF)
   - Accept `multipart/form-data` via `UploadFile` (JPEG, PNG, HEIC, WebP, PDF)
   - Validate file size (max 20MB) and mime type
   - Generate unique filename with UUID & timestamp
-  - Save to temp local directory initially (GCS in Phase 1D)
+  - Save to temp local directory initially (GCS in Phase 0D)
   - Create `Expense` record in PostgreSQL with status `PENDING`
   - Create `ExpenseFile` record linked to expense
   - Return expense ID and initial status for client polling

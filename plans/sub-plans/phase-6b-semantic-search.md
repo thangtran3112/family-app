@@ -1,7 +1,7 @@
-# Phase 3B — Semantic Search (pgvector)
+# Phase 6B — Semantic Search (pgvector)
 
 > **Milestone**: 3 (Search & AI Query)
-> **Dependencies**: Phase 3A (SQL Search)
+> **Dependencies**: Phase 6A (SQL Search)
 > **Estimated Effort**: 2-3 days
 
 ---

@@ -1,7 +1,7 @@
-# Phase 5B — Mobile Camera & Receipt Capture
+# Phase 12B — Mobile Camera & Receipt Capture
 
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
-> **Dependencies**: Phase 5A (Mobile App Setup)
+> **Dependencies**: Phase 12A (Mobile App Setup)
 > **Estimated Effort**: 3-4 days
 
 ---

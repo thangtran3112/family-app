@@ -1,0 +1,30 @@
+# Frontend Development Rules (Next.js 16 + Tailwind CSS v4)
+
+## Package Manager
+- Use `pnpm` (not npm, not yarn)
+
+## Build & Lint
+- Build: `pnpm run build`
+- Lint: `pnpm run lint`
+- Fix all lint errors before claiming work complete
+
+## Styling
+- Use Tailwind CSS v4 with `@theme` engine
+- All components must be presentation-layer only
+- NO direct database connections, NO ORM, NO backend workers
+
+## Components
+- Use React 19+ with Radix UI primitives
+- All components must be strictly client-side presentation
+- No backend logic in frontend code
+
+## API Client
+- Use typed OpenAPI client generated from FastAPI's `/openapi.json`
+- All API calls must go through the generated client
+- No manual fetch calls or direct API access
+
+## Conventions
+- No backend logic, ORM, or direct DB connections
+- Presentation layer only - styling, components, UI logic
+- Follow Tailwind CSS v4 patterns
+- Use Radix UI primitives for accessibility

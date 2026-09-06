@@ -1,7 +1,7 @@
-# Phase 3A — SQL Filtering & Full-Text Search
+# Phase 6A — SQL Filtering & Full-Text Search
 
 > **Milestone**: 3 (Search & AI Query)
-> **Dependencies**: Milestone 1 (MVP)
+> **Dependencies**: Milestone 0 (MVP)
 > **Estimated Effort**: 2-3 days
 
 ---

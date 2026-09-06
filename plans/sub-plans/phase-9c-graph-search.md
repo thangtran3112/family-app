@@ -1,7 +1,7 @@
-# Phase 4C — Graph Search & Query API
+# Phase 9C — Graph Search & Query API
 
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
-> **Dependencies**: Phase 4B (Graph Ingestion)
+> **Dependencies**: Phase 9B (Graph Ingestion)
 > **Estimated Effort**: 3-4 days
 
 ---
@@ -104,7 +104,7 @@ _"Expenses related to my home office setup"_ → Graph traversal from "home offi
      ├─ SQL filters (Phase 3A) → exact matches
      ├─ Full-text search (Phase 3A) → keyword matches
      ├─ Semantic search (Phase 3B) → meaning matches
-     └─ Graph search (Phase 4C) → relational matches
+     └─ Graph search (Phase 9C) → relational matches
   3. Merge & rank results
   4. Format response
   ```

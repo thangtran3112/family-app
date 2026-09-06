@@ -1,7 +1,7 @@
-# Phase 5A — Mobile App Architecture & Setup (Flutter Candidate for Android)
+# Phase 12A — Mobile App Architecture & Setup (Flutter Candidate for Android)
 
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
-> **Dependencies**: Milestone 1 (Web MVP with PWA), Milestone 2 (Ingestion API)
+> **Dependencies**: Milestone 0 (Web MVP with PWA), Milestone 3 (Ingestion API)
 > **Estimated Effort**: 3-5 days
 
 ---
@@ -9,7 +9,7 @@
 ## Objective
 
 Evaluate and bootstrap the dedicated mobile application.
-- **Immediate mobile scanning**: Fulfilled by the Next.js 16 client-side PWA (Phase 1F).
+- **Immediate mobile scanning**: Fulfilled by the Next.js 16 client-side PWA (Phase 0F).
 - **Future mobile app**: Planned primarily for Android (with cross-platform iOS compatibility). We **may use Flutter** for the Android app; we are **undecided yet and it may not be Expo React Native**.
 
 ---
@@ -25,13 +25,13 @@ Evaluate and bootstrap the dedicated mobile application.
 | **Language** | Dart — statically typed, sound null safety, compiles to ARM native code. | TypeScript / JavaScript. |
 
 > [!NOTE]
-> The final framework decision will be confirmed at the kickoff of Milestone 5. However, the plan is pre-architected around Flutter as the leading candidate for the Android app.
+> The final framework decision will be confirmed at the kickoff of Milestone 12. However, the plan is pre-architected around Flutter as the leading candidate for the Android app.
 
 ---
 
 ## Tasks
 
-### 1. Framework Evaluation Benchmark (Kickoff Milestone 5)
+### 1. Framework Evaluation Benchmark (Kickoff Milestone 12)
 - [ ] Benchmark Flutter camera document scanner vs. PWA camera on target Android hardware
 - [ ] Confirm decision: Proceed with Flutter in `apps/mobile/` (or alternative if requirements shift)
 
@@ -40,7 +40,7 @@ Evaluate and bootstrap the dedicated mobile application.
 - [ ] Configure Material 3 theme matching Next.js dark mode design tokens
 - [ ] Set up state management (Riverpod or Bloc)
 - [ ] Setup API client with `dio`:
-  - Base URL pointing to Nginx gateway (`/api/v1`)
+  - Base URL pointing to Traefik gateway (`/api/v1`)
   - Auto-attach JWT auth header
   - Auto-refresh expired access tokens
 - [ ] Configure `flutter_secure_storage` for encrypted storage of JWT and tenant credentials

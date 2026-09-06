@@ -1,7 +1,7 @@
-# Phase 4A — Neo4j + Graphiti Setup (Native Python)
+# Phase 9A — Neo4j + Graphiti Setup (Native Python)
 
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
-> **Dependencies**: Milestone 1 (MVP), Phase 2A (Temporal Python)
+> **Dependencies**: Milestone 0 (MVP), Phase 3A (Temporal Python)
 > **Estimated Effort**: 3-4 days
 
 ---

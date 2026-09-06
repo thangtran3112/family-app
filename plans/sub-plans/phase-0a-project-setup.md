@@ -1,4 +1,4 @@
-# Phase 1A — Project Bootstrap & Monorepo Setup
+# Phase 0A — Project Bootstrap & Monorepo Setup
 
 > **Milestone**: 1 (Core Expense Management MVP)
 > **Dependencies**: None (first phase)
@@ -27,9 +27,9 @@ Set up the monorepo structure, tooling, and development environment so all subse
   ├── alembic/               — Database migrations
   └── pyproject.toml         — Python dependencies (FastAPI, SQLAlchemy, Temporal, Graphiti)
   infrastructure/
-  ├── docker-compose.yml     — Local dev (macOS): Postgres, Neo4j, Temporal, FastAPI, Nginx
+  ├── docker-compose.yml     — Local dev (macOS): Postgres, FalkorDB, Temporal, FastAPI, Traefik
   ├── docker-compose.prod.yml— Production (Ubuntu self-hosted)
-  └── nginx/                 — Nginx gateway reverse proxy
+  └── traefik/                 — Traefik gateway config
   ```
 
 ### 2. Bootstrap Next.js Client Web App (`apps/web/`)
@@ -59,9 +59,9 @@ Set up the monorepo structure, tooling, and development environment so all subse
   - Neo4j 5.26+ Community (or FalkorDB)
   - Temporal server (`temporalio/auto-setup`)
   - FastAPI backend container
-  - Nginx reverse proxy (gateway)
+  - Traefik API gateway
 - [ ] Create `infrastructure/docker-compose.prod.yml` for Ubuntu self-hosted
-- [x] Create `infrastructure/nginx/nginx.conf`:
+- [x] Create `infrastructure/traefik/traefik.yml`:
   - Route `/` → Next.js PWA (port 7331)
   - Route `/api/` → FastAPI Backend (port 8000)
   - Route `/temporal/` → Temporal Web UI (port 8233)
@@ -107,7 +107,7 @@ Set up the monorepo structure, tooling, and development environment so all subse
 | Migrations | Alembic | Industry standard for Python schema versioning |
 | Mobile Future | Flutter (Candidate) | Prime candidate for future Android app (single codebase, native camera; undecided, may not be Expo React Native) |
 | Multi-tenancy | Yes, from day one | Tenant-scoped data isolation; first tenant = family |
-| Gateway | Nginx 1.27+ | Reverse proxy routing `/` to Next.js PWA and `/api` to FastAPI |
+| Gateway | Traefik v3.3+ | Docker-native API gateway with automatic HTTPS, ForwardAuth, and service discovery |
 
 ---
 

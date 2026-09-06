@@ -1,7 +1,7 @@
-# Phase 1F — Web App UI (Mobile-First)
+# Phase 0F — Web App UI (Mobile-First)
 
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 1C (OCR), 1D (Cloud Storage), 1E (Projects/Tax)
+> **Dependencies**: Phase 0C (OCR), 1D (Cloud Storage), 1E (Projects/Tax)
 > **Estimated Effort**: 5-7 days
 
 ---
