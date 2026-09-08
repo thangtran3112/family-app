@@ -1,5 +1,7 @@
 # Phase 3C — Auto-Tagging & Categorization Pipeline
 
+> **Replan required (2026-09-07)**: Python may infer tags and spending/tax-category candidates but writes no customer tables. App API validates and applies versioned suggestions. Spending categories and platform-versioned tax categories remain separate; AI calls require Foundry route/quota handling.
+
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
 > **Dependencies**: Phase 3A (Temporal Setup)
 > **Estimated Effort**: 3-4 days

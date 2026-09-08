@@ -1,23 +1,24 @@
-# opencode Initialization for expense-tax-management
+# opencode Project Context
 
-This directory contains project-specific rules and configurations for the opencode AI agent.
+This directory contains project-specific rules and agents for opencode.
 
-## Structure
-- `rules/` - Domain-specific development rules
-  - `expense-service.rules` - Python/FastAPI service conventions
-  - `frontend.rules` - Next.js/Tailwind conventions
+## Current Architecture
 
-## Key Project Conventions (from AGENTS.md)
-- **Multi-tenancy**: All queries scoped by `tenant_id`
-- **LLM budget check**: Verify `tenant.llm_monthly_used < tenant.llm_monthly_budget` before API calls
-- **API prefix**: `/api/v1/...` for all expense-service routes
-- **Package managers**: `uv` (expense-service), `pnpm` (frontend)
-- **Shared contracts**: Pydantic DTOs/enums live in `common/python/expense-contracts`; SQLAlchemy models remain service-owned
-- **Linting**: `ruff check/format` for Python, `eslint` for frontend
-- **Testing**: `pytest` for expense-service, component tests for frontend
-- **Imports**: Absolute imports preferred (`from app.models.x import X`)
-- **Async**: `async def` for all API endpoints and DB operations
-- **Frontend**: Strictly presentation layer, no backend logic
+- App API and Foundry are Fastify/Zod/Kysely services.
+- Python is worker-only and cannot access App/Foundry PostgreSQL.
+- Zod contracts are canonical; generated files are read-only.
+- Every customer resource requires explicit Personal/business scope authorization; tenant role alone never grants profile access.
+- Foundry tenant tokens are always invalid.
+- Runtime and migration database credentials are separate.
+- Transitional `expense-service` and `frontend/web` remain untouched until their owning cutover phases.
+- Frontend mockup gates remain application-specific.
+
+## Files
+
+- `agents/phase-0i-builder.md` - project-defined Phase 0I builder
+- `rules/expense-service.rules` - transitional Python worker and legacy service boundaries
+- `rules/frontend.rules` - transitional frontend boundaries and application-specific mockup gates
 
 ## Usage
-The opencode agent will automatically load rules from this directory and apply them to code suggestions, edits, and reviews.
+
+opencode loads `AGENTS.md` and `.opencode/rules/*.rules` through project configuration. Agent and rule changes require restarting opencode before use.

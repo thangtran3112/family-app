@@ -1,5 +1,7 @@
 # Phase 9B — Expense Graph Ingestion
 
+> **Replan required (2026-09-07)**: App API emits explicitly authorized Personal/business-scoped outbox events. Python worker ingests only bounded event snapshots into graph storage and acknowledges idempotently; it never scans or mutates App API tables directly.
+
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
 > **Dependencies**: Phase 9A (Graph Setup), Phase 3A (Temporal)
 > **Estimated Effort**: 3-4 days

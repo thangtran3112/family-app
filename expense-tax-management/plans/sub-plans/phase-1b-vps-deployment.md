@@ -1,5 +1,7 @@
 # Phase 1B — Production VPS Deployment (Docker Compose + Traefik)
 
+> **Replan required (2026-09-07)**: Deployment must package three Next.js clients, App API, Foundry Service, Python worker, separate schema migration jobs, and shared family infrastructure. Graphiti is not a service. Preserve portable containers and add serverless-container adapters later; do not deploy the legacy FastAPI topology below.
+
 > **Milestone**: 1 (CI/CD, Deployment & API Gateway)
 > **Dependencies**: Phase 0A (Project Bootstrap)
 > **Estimated Effort**: 2–3 days

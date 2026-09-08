@@ -1,5 +1,7 @@
 # Phase 3A — Temporal Workflow Setup (Python SDK)
 
+> **Scope moved forward (2026-09-07)**: Core Temporal server/client/worker setup moves into Phase 0L before OCR. App API uses the TypeScript Temporal client; Python workers use dedicated task queues and service APIs rather than direct customer-table access. Retain Phase 3A only for later advanced workflow expansion. See [Phase 0I sections 4.3 and 20](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
 > **Dependencies**: Milestone 0 (MVP complete)
 > **Estimated Effort**: 3-4 days

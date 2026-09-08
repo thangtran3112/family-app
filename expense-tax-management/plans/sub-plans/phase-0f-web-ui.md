@@ -1,7 +1,9 @@
 # Phase 0F — Web App UI (Mobile-First)
 
+> **Replan required (2026-09-07)**: Phase 0F now implements Capture PWA only. Laptop dashboard, ledger, business/tax analysis, exports, and premium AI search move to Phase 0M Office Web. Provider/model/quota administration moves to Phase 0N Foundry Web. The legacy combined-app body below, including provider keys, prompt controls, and laptop tax workflows, is historical and non-executable. See [Phase 0I section 15](phase-0i-polyglot-platform-rebaseline-design.md#15-frontend-boundaries).
+
 > **Milestone**: 1 (Core Expense Management MVP)
-> **Dependencies**: Phase 0F0 (mockups in `plans/mockups/` reviewed + approved — NO frontend code before this gate), Phase 0C (OCR), 1D (Cloud Storage), 1E (Projects/Tax)
+> **Dependencies**: Phase 0F0 Capture gate, revised Phase 0C, and Phase 0P
 > **Estimated Effort**: 5-7 days (excludes 0F0 preflight)
 
 ---
@@ -130,6 +132,16 @@ Build a mobile-first responsive web app with all MVP features accessible and usa
 | `< 640px` | Mobile | Single column, bottom nav, touch-optimized |
 | `640-1024px` | Tablet | Two-column on some views, sidebar nav |
 | `> 1024px` | Desktop | Full sidebar, multi-column layouts |
+
+## Viewport Usage Plan
+
+| Viewport | User context | UI priority |
+|---|---|---|
+| Mobile 375px | Walking up to a receipt or capturing immediately | Camera/FAB, one-column upload queue, offline capture, quick correction |
+| Tablet 768px | Capturing and reviewing a batch nearby | Camera plus two-column review, large touch targets, bottom navigation, landscape-safe layout |
+| Laptop 1440px | Looking up warranty receipts, preparing taxes, reviewing expenses, exporting | Sidebar navigation, dense list/table, category/month tax summaries, CSV/PDF actions |
+
+Implementation must preserve these priorities. Do not move laptop-only reporting density into the capture-first mobile flow, and do not make camera capture depend on laptop-only controls.
 
 ---
 

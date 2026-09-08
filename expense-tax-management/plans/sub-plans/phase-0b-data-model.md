@@ -1,5 +1,7 @@
 # Phase 0B — Core Data Model & Database
 
+> **Rebaseline notice (2026-09-07)**: Phase 0B remains completed prototype history, but its target schema is superseded by [Phase 0I](phase-0i-polyglot-platform-rebaseline-design.md). Do not extend project tax fields, tenant dollar-budget fields, SQLAlchemy ownership, or the current Alembic baseline. Phase 0J creates a resettable TypeScript-owned schema with explicit `PersonalProfile`/`PersonalMembership` and `SmallBusiness`/`BusinessMembership` scopes, separate spending/tax categories, and business tax treatments.
+
 > **Milestone**: 1 (Core Expense Management MVP)
 > **Dependencies**: Phase 0A (Project Setup)
 > **Estimated Effort**: 3-4 days

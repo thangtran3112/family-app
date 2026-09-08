@@ -1,5 +1,7 @@
 # Phase 12C — Mobile API Sync & Offline Mode
 
+> **Replan required before execution (2026-09-07)**: Sync against generated App API clients, explicit Personal/business scope IDs, signed uploads, deterministic idempotency keys, and asynchronous workflow status. Do not target legacy FastAPI polling contracts.
+
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
 > **Dependencies**: Phase 12B (Mobile Camera Capture)
 > **Estimated Effort**: 3-4 days

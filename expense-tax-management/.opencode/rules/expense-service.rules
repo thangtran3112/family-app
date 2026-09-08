@@ -1,33 +1,26 @@
-# Expense Service Development Rules (Python/FastAPI)
+# Transitional expense-service Rules
 
-## Import Conventions
-- Use absolute imports: `from app.models.expense import Expense`
-- Avoid relative imports within the `app` package
+## Ownership
 
-## Multi-tenancy
-- Every database query MUST be scoped by `tenant_id`
-- Check `tenant.llm_monthly_used < tenant.llm_monthly_budget` before LLM API calls
-- All API endpoints must respect tenant isolation
+- `expense-service` is transitional and remains untouched until its owning cutover phase.
+- It is not the current App API or Foundry implementation.
+- App API and Foundry are Fastify/Zod/Kysely services.
 
-## API Routes
-- All routes must use `/api/v1/...` prefix
-- Use `async def` for all API endpoints
-- Response models must be Pydantic v2 `BaseModel`
+## Python Boundary
 
-## Linting & Formatting
-- Run from `expense-service/`: `uv run ruff check .` before commits
-- Run from `expense-service/`: `uv run ruff format .` to format
-- Fix all Ruff issues before claiming work complete
+- Python is worker-only and cannot access App/Foundry PostgreSQL.
+- Do not add App API or Foundry database clients, models, migrations, or queries to Python workers.
 
-## Testing
-- Run from `expense-service/`: `uv run python -m pytest tests/ -v --tb=short`
-- SQLite used for in-memory unit tests
-- PostgreSQL-specific features have SQLite compile-time stubs
+## Contracts and Authorization
 
-## Docstrings
-- Preserve all existing docstrings and comments
-- Do not remove comments unless explicitly asked
+- Zod contracts are canonical; generated files are read-only.
+- Every customer resource requires explicit Personal/business scope authorization; tenant role alone never grants profile access.
+- Foundry tenant tokens are always invalid.
+- Runtime and migration database credentials are separate.
 
-## Shared Contracts
-- Reuse Pydantic DTOs and transport-safe enums from `common/python/expense-contracts`
-- Keep SQLAlchemy models, migrations, and database metadata inside `expense-service`
+## Change Safety
+
+- Preserve every unrelated worktree change.
+- Use smallest correct diff.
+- Preserve existing docstrings and comments unless task explicitly requests changes.
+- Never inspect, print, commit, or expose environment/provider configuration or secrets.

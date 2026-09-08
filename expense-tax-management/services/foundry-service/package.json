@@ -1,0 +1,31 @@
+{
+  "name": "@expense-tax/foundry-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "db:migrate": "tsx src/database/migrate.ts",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "test": "FOUNDRY_PLATFORM_TOKEN_ISSUER=https://identity.test FOUNDRY_PLATFORM_TOKEN_AUDIENCE=expense-foundry-platform FOUNDRY_PLATFORM_JWKS_URL=https://identity.test/.well-known/jwks.json FOUNDRY_SERVICE_TOKEN_ISSUER=https://services.test FOUNDRY_SERVICE_TOKEN_AUDIENCE=expense-foundry-internal FOUNDRY_SERVICE_JWKS_URL=https://services.test/.well-known/jwks.json FOUNDRY_DATABASE_URL=postgresql://foundry-runtime.test/foundry FOUNDRY_MIGRATION_DATABASE_URL=postgresql://foundry-migrator.test/foundry vitest run --dir test",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@expense-tax/contracts": "workspace:*",
+    "@fastify/swagger": "^9.8.1",
+    "fastify": "^5.12.3",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jose": "^6.2.12",
+    "kysely": "^0.29.5",
+    "pg": "^8.23.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

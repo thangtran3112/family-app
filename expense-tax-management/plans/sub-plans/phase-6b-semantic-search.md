@@ -1,7 +1,9 @@
 # Phase 6B — Semantic Search (pgvector)
 
+> **Replan required (2026-09-07)**: Semantic receipt search requires tenant `ai_search` entitlement and Foundry `AI_SEARCH` quota. Basic SQL/full-text search remains available through Phase 6A. One provider-accepted user query consumes at most one product credit regardless of internal embedding/reranking calls. The fixed OpenAI route, direct Python database writes, and manual contracts in the legacy body below are historical and non-executable. See [Phase 0I sections 10-11 and 14](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 3 (Search & AI Query)
-> **Dependencies**: Phase 6A (SQL Search)
+> **Dependencies**: Phase 0K, 0L, and revised Phase 6A
 > **Estimated Effort**: 2-3 days
 
 ---

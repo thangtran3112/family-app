@@ -1,5 +1,7 @@
 # Phase 12B — Mobile Camera & Receipt Capture
 
+> **Replan required before execution (2026-09-07)**: Upload through App API-issued signed sessions directly to GCS, then start the standard outbox/Temporal/Foundry OCR flow. Do not send multipart receipt payloads to legacy FastAPI routes.
+
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
 > **Dependencies**: Phase 12A (Mobile App Setup)
 > **Estimated Effort**: 3-4 days

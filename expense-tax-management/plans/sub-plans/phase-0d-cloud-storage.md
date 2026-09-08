@@ -1,5 +1,7 @@
 # Phase 0D — Google Cloud Storage Integration
 
+> **Replan required (2026-09-07)**: Do not implement upload-through-FastAPI or Python ownership below. Revised Phase 0D uses App API-issued signed upload sessions, direct client-to-GCS transfer, App API file metadata, and Python worker read access. See [Phase 0I implementation order](phase-0i-polyglot-platform-rebaseline-design.md#20-implementation-order).
+
 > **Milestone**: 1 (Core Expense Management MVP)
 > **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 2-3 days

@@ -1,5 +1,7 @@
 # Phase 9C — Graph Search & Query API
 
+> **Replan required (2026-09-07)**: Office Web queries App API only. App API authorizes tenant/business scope, Python worker executes bounded graph plans, and App API returns filtered results. Foundry handles any AI quota/model operation but never receives receipt or tax content.
+
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
 > **Dependencies**: Phase 9B (Graph Ingestion)
 > **Estimated Effort**: 3-4 days

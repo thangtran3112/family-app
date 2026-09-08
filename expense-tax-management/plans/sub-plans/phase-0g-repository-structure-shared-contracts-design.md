@@ -1,5 +1,7 @@
 # Repository Structure and Shared Contracts Design
 
+> **Historical decision update (2026-09-07)**: Phase 0G directory migration remains complete. Python-first contract ownership is superseded by [Phase 0I](phase-0i-polyglot-platform-rebaseline-design.md): Zod schemas become canonical and generate OpenAPI, frontend clients, JSON Schema, and Pydantic worker DTOs. SQLAlchemy/FastAPI ownership remains historical until TypeScript cutover.
+
 **Date:** 2026-09-05
 
 ## Goal

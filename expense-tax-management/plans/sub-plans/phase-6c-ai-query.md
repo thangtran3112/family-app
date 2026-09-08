@@ -1,7 +1,9 @@
 # Phase 6C — AI Query Interface (LLM-Powered)
 
+> **Replan required (2026-09-07)**: Natural-language receipt search lives in Office Web, requires tenant `ai_search` entitlement, and uses Foundry `AI_SEARCH` reservations. Trial tenants share 20 consumed searches per calendar month. App API executes validated query plans; models never submit raw SQL. The dollar-budget guard, direct backend calls, and manual contracts in the legacy body below are historical and non-executable. See [Phase 0I section 14](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 3 (Search & AI Query)
-> **Dependencies**: Phase 6A (SQL), 3B (Semantic)
+> **Dependencies**: Phase 0J1, 0K, 0L, and revised Phase 6A; Phase 6B semantic search is optional
 > **Estimated Effort**: 3-4 days
 
 ---

@@ -249,3 +249,4 @@ public/swe-worker-*.js
 # Local agent planning and code graph state
 /docs/superpowers/
 .codegraph/
+.superpowers/

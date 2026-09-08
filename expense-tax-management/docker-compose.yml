@@ -2,7 +2,7 @@ services:
   # Expense Service — app-specific overlay, include common stack
   expense-service:
     build:
-      context: ./expense-service
+      context: ../expense-tax-management/expense-service
       dockerfile: Dockerfile
     container_name: expense-tax-expense-service
     restart: unless-stopped
@@ -17,8 +17,108 @@ services:
       NEO4J_PASSWORD: password123
       STORAGE_BACKEND: local
     volumes:
-      - ./expense-service:/app
+      - ../expense-tax-management/expense-service:/app
       - expense_service_storage:/tmp/expense_tax_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
+  postgres:
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_MIGRATOR_DB_PASSWORD: ${APP_MIGRATOR_DB_PASSWORD:?APP_MIGRATOR_DB_PASSWORD is required}
+      APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?APP_RUNTIME_DB_PASSWORD is required}
+      FOUNDRY_MIGRATOR_DB_PASSWORD: ${FOUNDRY_MIGRATOR_DB_PASSWORD:?FOUNDRY_MIGRATOR_DB_PASSWORD is required}
+      FOUNDRY_RUNTIME_DB_PASSWORD: ${FOUNDRY_RUNTIME_DB_PASSWORD:?FOUNDRY_RUNTIME_DB_PASSWORD is required}
+    volumes:
+      - ../expense-tax-management/docker/postgres/zz-20-expense-tax-roles.sh:/docker-entrypoint-initdb.d/zz-20-expense-tax-roles.sh:ro
+
+  app-api:
+    build:
+      context: ../expense-tax-management
+      dockerfile: services/app-api/Dockerfile
+    container_name: expense-tax-app-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      PORT: "8100"
+      APP_VERSION: ${VERSION:-0.1.0}
+      APP_TENANT_TOKEN_ISSUER: ${APP_TENANT_TOKEN_ISSUER:-https://identity.expense-tax.local}
+      APP_TENANT_TOKEN_AUDIENCE: ${APP_TENANT_TOKEN_AUDIENCE:-expense-app}
+      APP_TENANT_JWKS_URL: ${APP_TENANT_JWKS_URL:-https://identity.expense-tax.local/.well-known/jwks.json}
+      APP_SERVICE_TOKEN_ISSUER: ${APP_SERVICE_TOKEN_ISSUER:-https://services.expense-tax.local}
+      APP_SERVICE_TOKEN_AUDIENCE: ${APP_SERVICE_TOKEN_AUDIENCE:-expense-app-internal}
+      APP_SERVICE_JWKS_URL: ${APP_SERVICE_JWKS_URL:-https://services.expense-tax.local/.well-known/jwks.json}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8100/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+  app-api-migrate:
+    profiles:
+      - phase-0i-migrations
+    build:
+      context: ../expense-tax-management
+      dockerfile: services/app-api/Dockerfile
+    restart: "no"
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      APP_MIGRATION_DATABASE_URL: ${APP_MIGRATION_DATABASE_URL:?APP_MIGRATION_DATABASE_URL is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
+  foundry-service:
+    build:
+      context: ../expense-tax-management
+      dockerfile: services/foundry-service/Dockerfile
+    container_name: expense-tax-foundry-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      PORT: "8200"
+      APP_VERSION: ${VERSION:-0.1.0}
+      FOUNDRY_PLATFORM_TOKEN_ISSUER: ${FOUNDRY_PLATFORM_TOKEN_ISSUER:-https://identity.expense-tax.local}
+      FOUNDRY_PLATFORM_TOKEN_AUDIENCE: ${FOUNDRY_PLATFORM_TOKEN_AUDIENCE:-expense-foundry-platform}
+      FOUNDRY_PLATFORM_JWKS_URL: ${FOUNDRY_PLATFORM_JWKS_URL:-https://identity.expense-tax.local/.well-known/jwks.json}
+      FOUNDRY_SERVICE_TOKEN_ISSUER: ${FOUNDRY_SERVICE_TOKEN_ISSUER:-https://services.expense-tax.local}
+      FOUNDRY_SERVICE_TOKEN_AUDIENCE: ${FOUNDRY_SERVICE_TOKEN_AUDIENCE:-expense-foundry-internal}
+      FOUNDRY_SERVICE_JWKS_URL: ${FOUNDRY_SERVICE_JWKS_URL:-https://services.expense-tax.local/.well-known/jwks.json}
+      FOUNDRY_DATABASE_URL: ${FOUNDRY_DATABASE_URL:?FOUNDRY_DATABASE_URL is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+  foundry-service-migrate:
+    profiles:
+      - phase-0i-migrations
+    build:
+      context: ../expense-tax-management
+      dockerfile: services/foundry-service/Dockerfile
+    restart: "no"
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      FOUNDRY_MIGRATION_DATABASE_URL: ${FOUNDRY_MIGRATION_DATABASE_URL:?FOUNDRY_MIGRATION_DATABASE_URL is required}
     depends_on:
       postgres:
         condition: service_healthy

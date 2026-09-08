@@ -1,5 +1,7 @@
 # Phase 3B — Deduplication & Conflict Resolution
 
+> **Replan required (2026-09-07)**: Deduplication must span Capture, secure forwarding, and premium mailbox sources. Python computes evidence; App API alone mutates customer records through versioned idempotent callbacks. Scope hashes and matches to explicit Personal/business authorization and retain reviewable provenance.
+
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
 > **Dependencies**: Phase 3A (Temporal Setup)
 > **Estimated Effort**: 2-3 days

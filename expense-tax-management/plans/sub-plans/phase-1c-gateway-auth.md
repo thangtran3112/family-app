@@ -1,7 +1,9 @@
 # Phase 1C — Gateway AuthN/AuthZ (Traefik ForwardAuth)
 
+> **Replan required (2026-09-07)**: Gateway authentication is defense in depth, not authorization replacement. App API must validate tenant audience and resource/profile membership; Foundry must validate a separate platform audience/operator role; service calls use service identity. Never trust forwarded user/tenant headers without signed identity validation. The legacy body below is historical and non-executable. See [Phase 0I section 17](phase-0i-polyglot-platform-rebaseline-design.md#17-authentication-and-authorization).
+
 > **Milestone**: 1 (CI/CD, Deployment & API Gateway)
-> **Dependencies**: Phase 1B (VPS Deployment with Traefik)
+> **Dependencies**: Phase 0I, 0K, 0F, 0M, and 0N; revised Phase 1C blocks production deployment in Phase 1B
 > **Estimated Effort**: 3 days
 
 ---

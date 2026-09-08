@@ -1,5 +1,7 @@
 # Phase 6A — SQL Filtering & Full-Text Search
 
+> **Replan required (2026-09-07)**: Phase 0J now owns baseline ledger exact filters, sorting, and cursor pagination. Revised Phase 6A adds full-text and advanced non-AI App API search independently from `ai_search`. Replace FastAPI/SQLAlchemy details with the selected TypeScript data layer, enforce explicit Personal/business membership, and exclude Foundry/Python from direct customer-database search. The legacy body below is historical and non-executable.
+
 > **Milestone**: 3 (Search & AI Query)
 > **Dependencies**: Milestone 0 (MVP)
 > **Estimated Effort**: 2-3 days

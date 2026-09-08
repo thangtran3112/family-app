@@ -1,5 +1,7 @@
 # Phase 0E — Project & Tax Deduction Management
 
+> **Replan required (2026-09-07)**: Project is no longer a tax entity. Revised Phase 0E reports and exports by small business and tax year; projects only group client/job costs. Spending categories and platform-versioned US tax categories are separate. Product is preparation/export aid and never files taxes. See [Phase 0I sections 8-9](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 1 (Core Expense Management MVP)
 > **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 2-3 days

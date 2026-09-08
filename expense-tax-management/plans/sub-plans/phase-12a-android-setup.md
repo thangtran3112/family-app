@@ -1,5 +1,7 @@
 # Phase 12A — Mobile App Architecture & Setup (Flutter Candidate for Android)
 
+> **Replan required before execution (2026-09-07)**: Future mobile client consumes generated App API OpenAPI contracts and must preserve Capture PWA boundaries. Backend is TypeScript App API plus Python workers, not FastAPI. Flutter remains a candidate, not an approved framework choice.
+
 > **Milestone**: 5 (Mobile App — Deferred post-PWA)
 > **Dependencies**: Milestone 0 (Web MVP with PWA), Milestone 3 (Ingestion API)
 > **Estimated Effort**: 3-5 days

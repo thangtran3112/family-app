@@ -1,9 +1,19 @@
+import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from expense_contracts import ExpenseCreate, ExpenseResponse, TaxDeductionType
+from expense_contracts.generated.internal_messages import JobReferenceV1
+
+JOB_REFERENCE_FIXTURE = json.loads(
+    (
+        Path(__file__).resolve().parents[4]
+        / "packages/contracts/fixtures/job-reference-v1.json"
+    ).read_text()
+)
 
 
 def test_expense_create_accepts_transport_payload():
@@ -49,3 +59,17 @@ def test_expense_response_supports_from_attributes():
     )
 
     assert response.id == "expense-1"
+
+
+def test_generated_job_reference_accepts_canonical_fixture():
+    model = JobReferenceV1.model_validate(JOB_REFERENCE_FIXTURE)
+
+    assert model.model_dump(mode="json") == JOB_REFERENCE_FIXTURE
+
+
+def test_generated_job_reference_rejects_extra_keys_and_malformed_uuid():
+    with pytest.raises(ValidationError):
+        JobReferenceV1.model_validate({**JOB_REFERENCE_FIXTURE, "extra": True})
+
+    with pytest.raises(ValidationError):
+        JobReferenceV1.model_validate({**JOB_REFERENCE_FIXTURE, "jobId": "invalid"})

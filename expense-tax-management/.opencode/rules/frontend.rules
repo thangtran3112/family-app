@@ -1,30 +1,23 @@
-# Frontend Development Rules (Next.js 16 + Tailwind CSS v4)
+# Transitional frontend/web Rules
 
-## Package Manager
-- Use `pnpm` (not npm, not yarn)
+## Ownership
 
-## Build & Lint
-- Build: `pnpm run build`
-- Lint: `pnpm run lint`
-- Fix all lint errors before claiming work complete
+- `frontend/web` is transitional and remains untouched until its owning cutover phase.
+- Do not extend or migrate it as part of current frontend work.
 
-## Styling
-- Use Tailwind CSS v4 with `@theme` engine
-- All components must be presentation-layer only
-- NO direct database connections, NO ORM, NO expense-service workers
+## Contracts and Authorization
 
-## Components
-- Use React 19+ with Radix UI primitives
-- All components must be strictly client-side presentation
-- No backend logic in frontend code
+- Zod contracts are canonical; generated files are read-only.
+- Every customer resource requires explicit Personal/business scope authorization; tenant role alone never grants profile access.
+- Foundry tenant tokens are always invalid.
 
-## API Client
-- Use typed OpenAPI client generated from FastAPI's `/openapi.json`
-- All API calls must go through the generated client
-- No manual fetch calls or direct API access
+## Mockup Gates
 
-## Conventions
-- No expense-service logic, ORM, or direct DB connections
-- Presentation layer only - styling, components, UI logic
-- Follow Tailwind CSS v4 patterns
-- Use Radix UI primitives for accessibility
+- Frontend mockup gates remain application-specific.
+- Complete applicable mockup preflight before implementing a frontend application. Do not apply one application's gate blindly to another.
+
+## Change Safety
+
+- Preserve every unrelated worktree change.
+- Use smallest correct diff.
+- Never inspect, print, commit, or expose environment/provider configuration or secrets.

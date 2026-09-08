@@ -1,5 +1,7 @@
 # Phase 0C — Receipt Upload & OCR Pipeline
 
+> **Replan required (2026-09-07)**: Do not implement the legacy synchronous FastAPI flow below. Revised Phase 0C depends on 0K, 0L, and revised 0D: App API creates an outbox-backed job, Foundry reserves a curated model quota, Python Temporal worker performs extraction, and App API accepts an idempotent result. See [Phase 0I sections 11 and 18-20](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 1 (Core Expense Management MVP)
 > **Dependencies**: Phase 0B (Data Model)
 > **Estimated Effort**: 4-5 days

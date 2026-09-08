@@ -1,0 +1,31 @@
+{
+  "name": "@expense-tax/app-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "test": "APP_TENANT_TOKEN_ISSUER=https://identity.test APP_TENANT_TOKEN_AUDIENCE=expense-app APP_TENANT_JWKS_URL=https://identity.test/.well-known/jwks.json APP_SERVICE_TOKEN_ISSUER=https://services.test APP_SERVICE_TOKEN_AUDIENCE=expense-app-internal APP_SERVICE_JWKS_URL=https://services.test/.well-known/jwks.json APP_DATABASE_URL=postgresql://app-runtime.test/app APP_MIGRATION_DATABASE_URL=postgresql://app-migrator.test/app vitest run --dir test",
+    "db:migrate": "tsx src/database/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@expense-tax/contracts": "workspace:*",
+    "@fastify/swagger": "^9.8.1",
+    "fastify": "^5.12.3",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jose": "^6.2.12",
+    "kysely": "^0.29.5",
+    "pg": "^8.23.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

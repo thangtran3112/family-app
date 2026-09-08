@@ -1,5 +1,7 @@
 # Phase 1A — GitHub Actions CI/CD Pipeline
 
+> **Replan required (2026-09-07)**: Keep useful GitHub Actions patterns below, but replace single FastAPI/Next.js jobs with a polyglot matrix for App API, Foundry Service, Python worker, three clients, generated-contract drift, migrations, service authorization, and fake-provider integration. Begin revised CI immediately after Phase 0I and extend it at each later phase boundary.
+
 > **Milestone**: 1 (CI/CD, Deployment & API Gateway)
 > **Dependencies**: Phase 0A (Project Bootstrap), Phase 0B (Data Model)
 > **Estimated Effort**: 2 days

@@ -1,7 +1,9 @@
 # Phase 3D — Automated Email Receipt Scanning (Gmail)
 
+> **Replan required (2026-09-07)**: Phase 3D is connected Gmail/Outlook scanning for Team/Enterprise tenants or tenants with the mailbox-scan add-on. Secure manual forwarding is a base-plan feature in Phase 0P and uses one physical inbound route with opaque profile-bound tokens. OAuth/token metadata belongs to App API, secret values belong to Secret Manager, and Python Temporal schedules re-check entitlement before each run. Never store OAuth token values in App PostgreSQL. The legacy body below is historical and non-executable. See [Phase 0I sections 12-13](phase-0i-polyglot-platform-rebaseline-design.md).
+
 > **Milestone**: 2 (Ingestion Pipeline & Auto-Tagging)
-> **Dependencies**: Phase 3A (Temporal Setup), Phase 3B (Deduplication)
+> **Dependencies**: Phase 0J1, 0L, 0P, and revised Phase 3B
 > **Estimated Effort**: 4-5 days
 
 ---

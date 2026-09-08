@@ -1,5 +1,7 @@
 # Phase 9A — Neo4j + Graphiti Setup (Native Python)
 
+> **Replan required (2026-09-07)**: Graphiti runs only in isolated Python worker activities, not a FastAPI backend. App API owns customer access and persistence; graph ingestion/query uses versioned messages and callbacks. Preserve receipt-content isolation from Foundry.
+
 > **Milestone**: 4 (Graph RAG & Knowledge Graph)
 > **Dependencies**: Milestone 0 (MVP), Phase 3A (Temporal Python)
 > **Estimated Effort**: 3-4 days

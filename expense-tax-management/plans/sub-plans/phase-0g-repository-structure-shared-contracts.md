@@ -1,5 +1,7 @@
 # Repository Structure and Shared Contracts Implementation Plan
 
+> **Historical plan update (2026-09-07)**: This completed migration documents current paths. Do not repeat its Python-first contract tasks. Phase 0I replaces manual Pydantic source ownership with Zod-generated transport artifacts and introduces `services/app-api`, `services/foundry-service`, and `services/ai-worker`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rename the monorepo application directories and establish an installable shared Python expense-contracts package while keeping SQLAlchemy models owned by `expense-service`.
