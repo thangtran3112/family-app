@@ -115,6 +115,15 @@ describe("generated API artifacts", () => {
       "/internal/v1/ai-models",
       "/internal/v1/ai-modes",
       "/internal/v1/ai-modes/{aiModeId}/route-versions",
+      "/internal/v1/tenant-ai-quotas",
+      "/internal/v1/ai-quota-reservations",
+      "/internal/v1/ai-quota-reservations/{id}/call-started",
+      "/internal/v1/ai-quota-reservations/{id}/attempts/{attemptNumber}/outcome",
+      "/internal/v1/ai-quota-reservations/{id}/reconciliation-required",
+      "/internal/v1/ai-quota-reservations/{id}/release",
+      "/internal/v1/ai-quota-reservations/{id}/resolve",
+      "/internal/v1/entitlement-sync",
+      "/internal/v1/quota-status",
     ]) {
       expect(foundryDocument.paths).toHaveProperty(path);
       expect(appDocument.paths).not.toHaveProperty(path);
