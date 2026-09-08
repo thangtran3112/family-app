@@ -23,6 +23,7 @@
     "verify:phase-0j:wave1": "node scripts/verify-phase-0j-wave1.mjs",
     "verify:phase-0j:wave2": "node scripts/verify-phase-0j-wave2.mjs",
     "verify:phase-0j:wave4": "node scripts/verify-phase-0j-wave4.mjs",
+    "verify:phase-0j1": "node scripts/verify-phase-0j1.mjs",
     "legacy:frontend:dev": "pnpm --filter web dev",
     "legacy:frontend:build": "pnpm --filter web build",
     "legacy:frontend:lint": "pnpm --filter web lint",

@@ -85,6 +85,15 @@ describe("generated API artifacts", () => {
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-profiles",
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-profiles/{taxYear}",
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/tax-treatment",
+      "/api/v1/plans",
+      "/api/v1/tenants/{tenantId}/subscription",
+      "/api/v1/tenants/{tenantId}/addons",
+      "/api/v1/tenants/{tenantId}/addons/{featureKey}",
+      "/api/v1/tenants/{tenantId}/entitlements",
+      "/internal/v1/plans",
+      "/internal/v1/plans/{planId}/versions",
+      "/internal/v1/feature-definitions",
+      "/internal/v1/entitlement-snapshots",
     ]) {
       expect(appDocument.paths).toHaveProperty(path);
       expect(foundryDocument.paths).not.toHaveProperty(path);
