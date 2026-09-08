@@ -296,7 +296,16 @@ export function createQuotasDomain(database: Kysely<FoundryDatabase>): QuotasDom
     async recordCallAttempt(input) {
       return database.transaction().execute(async (transaction) => {
         const reservation = await requireReservation(transaction, input.reservationId);
-        if (reservation.status !== "RESERVED" && reservation.status !== "CALL_STARTED") {
+        // CONSUMED stays loggable: supplementary calls after acceptance are
+        // telemetry-only (design doc), so a worker retrying/logging extra
+        // attempts post-acceptance must not be rejected. RELEASED and
+        // RECONCILIATION_REQUIRED are the true terminal states -- no new
+        // provider call should start once either applies.
+        if (
+          reservation.status !== "RESERVED" &&
+          reservation.status !== "CALL_STARTED" &&
+          reservation.status !== "CONSUMED"
+        ) {
           throw DomainError.conflict();
         }
 
