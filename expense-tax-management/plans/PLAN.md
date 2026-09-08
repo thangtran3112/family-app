@@ -2,8 +2,8 @@
 
 > **Project**: Expense Tax Management System (monorepo)
 > **Inspired by**: [TaxHacker](https://github.com/vas3k/TaxHacker) (v0.8.5, Next.js + Prisma + PostgreSQL)
-> **Status**: Architecture approved; Phase 0I implementation in progress
-> **Last Updated**: 2026-09-07
+> **Status**: Architecture approved; Phase 0J implementation in progress
+> **Last Updated**: 2026-09-08
 
 ---
 
@@ -45,7 +45,7 @@ Foundry Web ----------------> Foundry Service (TypeScript, Fastify, Zod)
 
 Capture, Office, and Foundry are separate Next.js applications. App API owns customer-domain persistence. Foundry owns AI catalog, routing, quotas, and telemetry. Python workers own durable workflow execution and AI/data processing, but do not mutate service-owned tables directly.
 
-Approved architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md). Execution plan: [Phase 0I Implementation Plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md).
+Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md). Phase 0J domain architecture: [Personal, Business, Project, and Tax Domain Design](sub-plans/phase-0j-personal-business-tax-domain-design.md). All four Phase 0J local waves are complete; infrastructure gate remains.
 
 ---
 
@@ -58,8 +58,8 @@ Approved architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plans/phase-0
 |-------|-------------|--------|----------|
 | **0A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-0a-project-setup.md](sub-plans/phase-0a-project-setup.md) |
 | **0B** | Prototype Core Data Model & Database | ✅ Complete (historical baseline) | [phase-0b-data-model.md](sub-plans/phase-0b-data-model.md) |
-| **0I** | TypeScript APIs & Polyglot Contract Rebaseline | 🟡 In Progress | [design](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md) · [execution plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md) |
-| **0J** | Personal, Small Business, Project & Tax Domain Reframe | ⚪ Planned after 0I | [0I design section 8](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#8-customer-domain) |
+| **0I** | TypeScript APIs & Polyglot Contract Rebaseline | ✅ Complete | [design](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md) · [execution plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md) |
+| **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [Wave 3-4 execution](../docs/superpowers/plans/2026-09-08-phase-0j-waves-3-4-implementation.md) |
 | **0J1** | Tenant Plans, Add-ons & Entitlements | ⚪ Planned after 0J | [0I design section 10](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#10-plans-entitlements-and-usage) |
 | **0K** | AI Foundry Service & Runtime Quotas | ⚪ Planned after 0J1 | [0I design section 11](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#11-foundry-catalog-and-quotas) |
 | **0L** | Python Temporal AI Worker Foundation | ⚪ Planned after 0I/0J | [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |

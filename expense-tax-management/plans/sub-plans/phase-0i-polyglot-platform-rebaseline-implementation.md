@@ -1,7 +1,7 @@
 # Phase 0I - Polyglot Platform Rebaseline Implementation Plan
 
 > **Date**: 2026-09-07
-> **Status**: In progress
+> **Status**: Complete
 > **Approved design**: [Phase 0I Polyglot Platform Rebaseline Design](phase-0i-polyglot-platform-rebaseline-design.md)
 > **Scope**: TypeScript workspace, canonical contracts, App API and Foundry skeletons, service authentication, database ownership, generated Python DTOs, local containers, and verification harness
 > **Execution model**: GPT-5.6 Sol orchestrates and reviews; OpenCode GPT-5.6 Luna with `xhigh` thinking implements one task at a time
@@ -1245,3 +1245,14 @@ Before traffic cutover, rollback is simple:
 - Revert Phase 0I files only through normal user-controlled Git operations; never reset unrelated worktree changes.
 
 No customer or production data migration occurs in this phase.
+
+## 12. Completion Evidence
+
+**Date**: 2026-09-07
+
+- `PHASE_0I_INTEGRATION=1 pnpm verify:phase-0i`: PASS with zero required checks skipped.
+- Essential tests: 9 contracts, 39 App API, 51 Foundry, 5 Python contracts, 3 static Compose boundaries, and 4 PostgreSQL boundaries passed.
+- Seven tracked generated artifacts passed deterministic drift verification: one JSON Schema, two OpenAPI documents, two TypeScript client definitions, and two generated Python package files.
+- `expense-tax-app-api:phase-0i` and `expense-tax-foundry:phase-0i` Docker image builds: PASS.
+- `./scripts/compose.sh config --quiet`, redacted credential audit, manual-contract import scan, whitespace check, and unmerged-file check: PASS.
+- App API and Foundry readiness checks against local PostgreSQL returned HTTP 200 after separate migrations.

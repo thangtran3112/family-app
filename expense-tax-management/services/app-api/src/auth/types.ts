@@ -11,6 +11,9 @@ export interface AuthPrincipal {
   readonly roles: readonly string[];
   readonly scopes: readonly string[];
   readonly tokenId: string;
+  readonly email: string | null;
+  readonly emailVerified: boolean | null;
+  readonly displayName: string | null;
 }
 
 export interface TokenVerifier {

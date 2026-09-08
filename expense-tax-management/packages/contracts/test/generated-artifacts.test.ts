@@ -51,11 +51,53 @@ describe("generated API artifacts", () => {
     expect(appDocument.openapi).toBe("3.1.0");
     expect(appDocument.info).toMatchObject({ title: "Expense Tax App API" });
     expect(appDocument.paths).toHaveProperty("/health/live");
+    expect(appDocument.paths).toHaveProperty(
+      "/internal/v1/identity-provisionings",
+    );
+    expect(appDocument.paths).toHaveProperty("/api/v1/users/me");
+    expect(appDocument.paths).toHaveProperty("/api/v1/tenants");
+    expect(appDocument.paths).toHaveProperty(
+      "/api/v1/tenants/{tenantId}/invitations",
+    );
+    expect(appDocument.paths).toHaveProperty("/api/v1/invitations/accept");
+    expect(appDocument.paths).toHaveProperty(
+      "/api/v1/tenants/{tenantId}/memberships/{userId}",
+    );
+    expect(appDocument.paths).toHaveProperty(
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/memberships/{userId}",
+    );
+    for (const path of [
+      "/api/v1/business-industries",
+      "/api/v1/tenants/{tenantId}/businesses",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/memberships",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/memberships/{userId}",
+      "/api/v1/tenants/{tenantId}/spending-categories",
+      "/api/v1/tenants/{tenantId}/spending-categories/{categoryId}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/projects",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/projects/{projectId}",
+      "/api/v1/taxonomies",
+      "/api/v1/taxonomies/{taxonomyVersionId}/categories",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-profiles",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-profiles/{taxYear}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/tax-treatment",
+    ]) {
+      expect(appDocument.paths).toHaveProperty(path);
+      expect(foundryDocument.paths).not.toHaveProperty(path);
+    }
     expect(JSON.stringify(appDocument)).not.toContain("Foundry");
 
     expect(foundryDocument.openapi).toBe("3.1.0");
     expect(foundryDocument.info).toMatchObject({ title: "Expense Tax Foundry Service" });
     expect(foundryDocument.paths).toHaveProperty("/health/live");
+    expect(foundryDocument.paths).not.toHaveProperty("/api/v1/tenants");
+    expect(foundryDocument.paths).not.toHaveProperty(
+      "/internal/v1/identity-provisionings",
+    );
     expect(JSON.stringify(foundryDocument)).not.toContain("App API");
   });
 
@@ -73,9 +115,35 @@ describe("generated API artifacts", () => {
     type AppHasLivePath = "/health/live" extends keyof AppApiPaths ? true : false;
     type FoundryHasLivePath =
       "/health/live" extends keyof FoundryServicePaths ? true : false;
+    type AppHasTenantPath =
+      "/api/v1/tenants" extends keyof AppApiPaths ? true : false;
+    type FoundryHasTenantPath =
+      "/api/v1/tenants" extends keyof FoundryServicePaths ? true : false;
+    type AppHasBusinessPath =
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}" extends keyof AppApiPaths
+        ? true
+        : false;
+    type FoundryHasBusinessPath =
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}" extends keyof FoundryServicePaths
+        ? true
+        : false;
+    type AppHasExpensePath =
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses" extends keyof AppApiPaths
+        ? true
+        : false;
+    type FoundryHasExpensePath =
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses" extends keyof FoundryServicePaths
+        ? true
+        : false;
 
     expectTypeOf<AppHasLivePath>().toEqualTypeOf<true>();
     expectTypeOf<FoundryHasLivePath>().toEqualTypeOf<true>();
+    expectTypeOf<AppHasTenantPath>().toEqualTypeOf<true>();
+    expectTypeOf<FoundryHasTenantPath>().toEqualTypeOf<false>();
+    expectTypeOf<AppHasBusinessPath>().toEqualTypeOf<true>();
+    expectTypeOf<FoundryHasBusinessPath>().toEqualTypeOf<false>();
+    expectTypeOf<AppHasExpensePath>().toEqualTypeOf<true>();
+    expectTypeOf<FoundryHasExpensePath>().toEqualTypeOf<false>();
     expectTypeOf(createAppApiClient("https://app.test")).toHaveProperty("GET");
     expectTypeOf(createFoundryServiceClient("https://foundry.test")).toHaveProperty(
       "GET",

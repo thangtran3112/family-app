@@ -24,7 +24,14 @@ const REQUIRED_AUTH_ENV_KEYS = Object.keys(AUTH_ENV) as Array<
 >;
 
 type KeyPair = Awaited<ReturnType<typeof generateKeyPair>>;
-type RequiredClaim = "sub" | "jti" | "iat" | "exp";
+type RequiredClaim =
+  | "sub"
+  | "jti"
+  | "iat"
+  | "exp"
+  | "email"
+  | "email_verified"
+  | "display_name";
 
 interface SignTokenOptions {
   readonly key?: KeyPair["privateKey"];
@@ -64,7 +71,16 @@ describe("App API authentication", () => {
   async function signToken(options: SignTokenOptions = {}): Promise<string> {
     const now = Math.floor(Date.now() / 1_000);
     const omitted = new Set(options.omit);
-    let token = new SignJWT(options.claims ?? {}).setProtectedHeader({
+    const claims: Record<string, unknown> = {
+      email: "person@example.test",
+      email_verified: true,
+      display_name: "Person Name",
+      ...options.claims,
+    };
+    for (const claim of omitted) {
+      delete claims[claim];
+    }
+    let token = new SignJWT(claims).setProtectedHeader({
       alg: options.algorithm ?? "RS256",
       kid: "test-key",
     });
@@ -118,7 +134,10 @@ describe("App API authentication", () => {
     app.get(
       "/_test/private/tenant",
       { preHandler: tenantGuard },
-      async (request) => ({ principal: request.authPrincipal }),
+      async (request) => ({
+        principal: request.authPrincipal,
+        verifiedIdentity: request.verifiedIdentity,
+      }),
     );
     app.get(
       "/_test/private/service",
@@ -158,8 +177,8 @@ describe("App API authentication", () => {
     expect(response.statusCode).toBe(statusCode);
     expect(response.json()).toMatchObject({
       error: {
-        code: "REQUEST_ERROR",
-        message: "Request failed",
+        code: statusCode === 401 ? "UNAUTHENTICATED" : "FORBIDDEN",
+        message: statusCode === 401 ? "Authentication required" : "Access denied",
         requestId: expect.any(String),
       },
     });
@@ -183,6 +202,13 @@ describe("App API authentication", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
+      verifiedIdentity: {
+        issuer: TENANT_ISSUER,
+        subject: "account-123",
+        verifiedEmail: "person@example.test",
+        displayName: "Person Name",
+        tokenId: "token-123",
+      },
       principal: {
         tokenType: "tenant",
         subject: "account-123",
@@ -192,6 +218,9 @@ describe("App API authentication", () => {
         roles: [],
         scopes: [],
         tokenId: "token-123",
+        email: "person@example.test",
+        emailVerified: true,
+        displayName: "Person Name",
       },
     });
   });
@@ -230,7 +259,15 @@ describe("App API authentication", () => {
     expectGenericError(await requestTenant(`Bearer ${token}`), 401);
   });
 
-  it.each(["sub", "jti", "iat", "exp"] as const)(
+  it.each([
+    "sub",
+    "jti",
+    "iat",
+    "exp",
+    "email",
+    "email_verified",
+    "display_name",
+  ] as const)(
     "rejects a tenant token missing %s",
     async (claim) => {
       const token = await signToken({ omit: [claim] });
@@ -297,6 +334,9 @@ describe("App API authentication", () => {
         roles: [],
         scopes: ["expenses:write", "expenses:extract", "unused:scope"],
         tokenId: "token-123",
+        email: null,
+        emailVerified: null,
+        displayName: null,
       },
     });
   });

@@ -59,6 +59,25 @@ function parseScopes(value: unknown): readonly string[] {
   return value.split(" ").filter((scope) => scope.length > 0);
 }
 
+function tenantIdentityClaims(
+  tokenType: AppTokenType,
+  payload: Record<string, unknown>,
+): Pick<AuthPrincipal, "displayName" | "email" | "emailVerified"> {
+  if (tokenType === "service") {
+    return { displayName: null, email: null, emailVerified: null };
+  }
+
+  if (payload.email_verified !== true) {
+    throw new Error("Invalid token claim");
+  }
+
+  return {
+    displayName: requiredNonEmptyString(payload.display_name),
+    email: requiredNonEmptyString(payload.email),
+    emailVerified: true,
+  };
+}
+
 export function createTokenVerifier(
   options: CreateTokenVerifierOptions,
 ): TokenVerifier {
@@ -102,6 +121,7 @@ export function createTokenVerifier(
           roles: parseStringArray(payload.roles),
           scopes: parseScopes(payload.scope),
           tokenId,
+          ...tenantIdentityClaims(options.tokenType, payload),
         };
       } catch {
         throw new Error("Token verification failed");

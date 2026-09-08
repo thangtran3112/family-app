@@ -4,6 +4,13 @@ import type {
   AuthVerifiers,
   TokenVerifier,
 } from "../auth/types.js";
+import {
+  type IdentityResolver,
+  verifiedIdentityFromPrincipal,
+  type AuthenticatedUserContext,
+  type VerifiedIdentity,
+} from "../domain/authenticated-user.js";
+import { DomainError } from "../errors.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -12,6 +19,8 @@ declare module "fastify" {
 
   interface FastifyRequest {
     authPrincipal: AuthPrincipal | null;
+    authenticatedUser: AuthenticatedUserContext | null;
+    verifiedIdentity: VerifiedIdentity | null;
   }
 }
 
@@ -21,8 +30,10 @@ export interface AuthPluginOptions {
 
 type AuthGuard = (request: FastifyRequest) => Promise<void>;
 
-function requestError(statusCode: 401 | 403): Error & { statusCode: number } {
-  return Object.assign(new Error("Authentication failed"), { statusCode });
+function requestError(statusCode: 401 | 403): DomainError {
+  return statusCode === 401
+    ? DomainError.unauthenticated()
+    : DomainError.forbidden();
 }
 
 function bearerToken(request: FastifyRequest): string {
@@ -56,14 +67,37 @@ export function registerAuthPlugin(
 ): void {
   app.decorate("authVerifiers", options.authVerifiers);
   app.decorateRequest("authPrincipal", null);
+  app.decorateRequest("authenticatedUser", null);
+  app.decorateRequest("verifiedIdentity", null);
 }
 
 export const tenantGuard: AuthGuard = async (request) => {
-  request.authPrincipal = await verifyRequest(
+  const principal = await verifyRequest(
     request,
     request.server.authVerifiers.tenant,
   );
+  request.authPrincipal = principal;
+  request.verifiedIdentity = verifiedIdentityFromPrincipal(principal);
 };
+
+export function authenticatedUserGuard(identityResolver: IdentityResolver): AuthGuard {
+  return async (request) => {
+    const identity = request.verifiedIdentity;
+    if (identity === null) {
+      throw DomainError.unauthenticated();
+    }
+
+    const user = await identityResolver.resolve(identity.issuer, identity.subject);
+    if (user === null) {
+      throw DomainError.unauthenticated();
+    }
+    if (user.status !== "active") {
+      throw DomainError.forbidden();
+    }
+
+    request.authenticatedUser = user;
+  };
+}
 
 export function serviceGuard(
   allowedPrincipal: string,
