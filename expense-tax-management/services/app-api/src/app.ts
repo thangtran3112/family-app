@@ -33,6 +33,7 @@ import {
   type MembershipDomain,
 } from "./domain/memberships.js";
 import { createTenantDomain, type TenantDomain } from "./domain/tenants.js";
+import { createPlansDomain, type PlansDomain } from "./domain/plans.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
 import {
@@ -48,6 +49,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerExpenseRoutes } from "./routes/expenses.js";
 import { registerTaxRoutes } from "./routes/tax.js";
 import { registerTenantRoutes } from "./routes/tenants.js";
+import { registerPlanRoutes } from "./routes/plans.js";
 import type { Kysely } from "kysely";
 
 const SENSITIVE_FIELD_NAMES = [
@@ -120,6 +122,7 @@ export interface BuildAppOptions {
   readonly projectDomain?: ProjectDomain;
   readonly expenseDomain?: ExpenseDomain;
   readonly taxDomain?: TaxDomain;
+  readonly plansDomain?: PlansDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -152,6 +155,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const projectDomain = options.projectDomain ?? createProjectDomain(database);
   const expenseDomain = options.expenseDomain ?? createExpenseDomain(database);
   const taxDomain = options.taxDomain ?? createTaxDomain(database);
+  const plansDomain = options.plansDomain ?? createPlansDomain(database);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -226,6 +230,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerTaxRoutes, {
     identityResolver: identityDomain,
     taxDomain,
+  });
+  app.register(registerPlanRoutes, {
+    identityResolver: identityDomain,
+    plansDomain,
   });
 
   return app;
