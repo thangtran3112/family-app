@@ -13,12 +13,15 @@ import type { AuthVerifiers } from "./auth/types.js";
 import type { FoundryConfig } from "./config.js";
 import { createFoundryDatabase } from "./database/client.js";
 import type { FoundryDatabase } from "./database/types.js";
+import { createCatalogDomain, type CatalogDomain } from "./domain/catalog.js";
+import { createPostgresSecretStore, type SecretStore } from "./domain/secrets.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
 import {
   registerDatabasePlugin,
   type DatabaseReadinessProbe,
 } from "./plugins/database.js";
+import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import type { Kysely } from "kysely";
 
@@ -92,6 +95,8 @@ export interface BuildAppOptions {
   readonly authVerifiers?: AuthVerifiers;
   readonly database?: Kysely<FoundryDatabase>;
   readonly readinessProbe?: DatabaseReadinessProbe;
+  readonly secretStore?: SecretStore;
+  readonly catalogDomain?: CatalogDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -115,6 +120,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
   const database =
     options.database ?? createFoundryDatabase(options.config.databaseUrl);
+  const secretStore = options.secretStore ?? createPostgresSecretStore(database);
+  const catalogDomain =
+    options.catalogDomain ?? createCatalogDomain(database, secretStore);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -161,6 +169,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     config: options.config,
     readinessProbe: app.databaseReadinessProbe,
   });
+  app.register(registerCatalogRoutes, { catalogDomain });
 
   return app;
 }
