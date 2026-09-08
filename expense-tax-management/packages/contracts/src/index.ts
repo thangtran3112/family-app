@@ -15,6 +15,18 @@ export {
   type JobReferenceV1,
 } from "./internal/job-reference-v1.js";
 export {
+  JobStatusUpdateRequestV1Schema,
+  type JobStatusUpdateRequestV1,
+} from "./internal/job-status-update-v1.js";
+export {
+  JobResultSubmitRequestV1Schema,
+  type JobResultSubmitRequestV1,
+} from "./internal/job-result-submit-v1.js";
+export {
+  AI_WORKER_TASK_QUEUE,
+  FOUNDATION_ECHO_WORKFLOW_TYPE,
+} from "./internal/task-queues.js";
+export {
   AuthenticatedUserSchema,
   CurrentUserResponseSchema,
   IdentityProvisioningRequestSchema,
@@ -91,6 +103,7 @@ export * from "./ledger.js";
 export * from "./plans.js";
 export * from "./foundry-catalog.js";
 export * from "./foundry-quotas.js";
+export * from "./processing-jobs.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,

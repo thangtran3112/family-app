@@ -1,7 +1,36 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { JobReferenceV1Schema } from "../src/index.js";
+import type { z } from "zod";
+import {
+  JobReferenceV1Schema,
+  JobResultSubmitRequestV1Schema,
+  JobStatusUpdateRequestV1Schema,
+} from "../src/index.js";
+
+interface InternalMessageSchema {
+  readonly schema: z.ZodType;
+  readonly title: string;
+  readonly fileName: string;
+}
+
+const INTERNAL_MESSAGE_SCHEMAS: readonly InternalMessageSchema[] = [
+  {
+    schema: JobReferenceV1Schema,
+    title: "JobReferenceV1",
+    fileName: "internal-messages.schema.json",
+  },
+  {
+    schema: JobStatusUpdateRequestV1Schema,
+    title: "JobStatusUpdateRequestV1",
+    fileName: "job-status-update-v1.schema.json",
+  },
+  {
+    schema: JobResultSubmitRequestV1Schema,
+    title: "JobResultSubmitRequestV1",
+    fileName: "job-result-submit-v1.schema.json",
+  },
+];
 
 function sortJson(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -24,25 +53,24 @@ function generatedRoot(): string {
 }
 
 export async function generateJsonSchema(outputRoot = generatedRoot()): Promise<void> {
-  const schema = {
-    ...JobReferenceV1Schema.toJSONSchema({
-      target: "draft-2020-12",
-      io: "input",
-    }),
-    title: "JobReferenceV1",
-  };
-  const outputPath = path.join(
-    outputRoot,
-    "json-schema",
-    "internal-messages.schema.json",
-  );
+  const jsonSchemaDir = path.join(outputRoot, "json-schema");
+  await mkdir(jsonSchemaDir, { recursive: true });
 
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(
-    outputPath,
-    `${JSON.stringify(sortJson(schema), null, 2)}\n`,
-    "utf8",
-  );
+  for (const entry of INTERNAL_MESSAGE_SCHEMAS) {
+    const schema = {
+      ...entry.schema.toJSONSchema({
+        target: "draft-2020-12",
+        io: "input",
+      }),
+      title: entry.title,
+    };
+    const outputPath = path.join(jsonSchemaDir, entry.fileName);
+    await writeFile(
+      outputPath,
+      `${JSON.stringify(sortJson(schema), null, 2)}\n`,
+      "utf8",
+    );
+  }
 }
 
 async function main(): Promise<void> {
