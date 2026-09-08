@@ -89,6 +89,7 @@ export * from "./tax-profiles.js";
 export * from "./tax-treatments.js";
 export * from "./ledger.js";
 export * from "./plans.js";
+export * from "./foundry-catalog.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,
