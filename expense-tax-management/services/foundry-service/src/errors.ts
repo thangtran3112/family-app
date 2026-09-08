@@ -1,5 +1,47 @@
 import type { FastifyError, FastifyInstance } from "fastify";
 
+export type DomainErrorCode =
+  | "CONFLICT"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "UNAUTHENTICATED"
+  | "VALIDATION_ERROR";
+
+export class DomainError extends Error {
+  private constructor(
+    readonly code: DomainErrorCode,
+    readonly statusCode: 400 | 401 | 403 | 404 | 409,
+    message: string,
+  ) {
+    super(message);
+    this.name = "DomainError";
+  }
+
+  static unauthenticated(): DomainError {
+    return new DomainError("UNAUTHENTICATED", 401, "Authentication required");
+  }
+
+  static forbidden(): DomainError {
+    return new DomainError("FORBIDDEN", 403, "Access denied");
+  }
+
+  static notFound(): DomainError {
+    return new DomainError("NOT_FOUND", 404, "Resource not found");
+  }
+
+  static conflict(): DomainError {
+    return new DomainError(
+      "CONFLICT",
+      409,
+      "Request conflicts with current state",
+    );
+  }
+
+  static validation(): DomainError {
+    return new DomainError("VALIDATION_ERROR", 400, "Request validation failed");
+  }
+}
+
 interface ErrorEnvelope {
   readonly error: {
     readonly code: string;
@@ -30,6 +72,21 @@ export function registerErrorHandlers(app: FastifyInstance): void {
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof DomainError) {
+      request.log.info(
+        {
+          code: error.code,
+          requestId: request.id,
+          statusCode: error.statusCode,
+        },
+        "domain request rejected",
+      );
+      reply
+        .code(error.statusCode)
+        .send(errorEnvelope(error.code, error.message, request.id));
+      return;
+    }
+
     const statusCode =
       error.validation || error.statusCode === 400
         ? 400
