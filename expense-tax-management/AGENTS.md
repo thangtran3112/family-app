@@ -17,9 +17,10 @@
 
 - Phase 0I complete: TypeScript App/Foundry baseline, canonical contracts, isolated PostgreSQL ownership, auth boundaries, generated artifacts, and local Compose verification.
 - Phase 0J Waves 1-4 complete locally: identity/tenants/memberships, industry-specific businesses/categories/projects, expenses, 2025 Schedule C taxonomy, tax profiles/treatments, and cursor-paginated ledgers.
-- App API migrations `002_identity_memberships` through `006_tax_profiles_treatments` are applied and verified locally.
-- Final local gate: `PHASE_0I_INTEGRATION=1 PHASE_0J_INTEGRATION=1 PHASE_0J_WAVE2_INTEGRATION=1 PHASE_0J_WAVE3_INTEGRATION=1 PHASE_0J_WAVE4_INTEGRATION=1 pnpm verify:phase-0j:wave4`.
-- Final evidence: `.superpowers/sdd/phase-0j-waves-3-4/task-report.md`.
+- Phase 0J1 complete locally: Plan/PlanVersion/FeatureDefinition/PlanEntitlement (platform-operator CRUD via service scope `plans:manage`, principal `platform-admin`), TenantSubscription/TenantAddon (tenant owner self-service), effective-entitlement precedence resolution (override > addon > plan), and an entitlement-snapshot outbox polled by Foundry (`foundry-service` principal, `entitlements:read` scope) — see `plans/sub-plans/phase-0j1-plans-entitlements-implementation.md`.
+- App API migrations `002_identity_memberships` through `007_plans_entitlements` are applied and verified locally.
+- Final local gate: `PHASE_0I_INTEGRATION=1 PHASE_0J_INTEGRATION=1 PHASE_0J_WAVE2_INTEGRATION=1 PHASE_0J_WAVE3_INTEGRATION=1 PHASE_0J_WAVE4_INTEGRATION=1 PHASE_0J1_INTEGRATION=1 pnpm verify:phase-0j1`.
+- Final evidence: `.superpowers/sdd/phase-0j-waves-3-4/task-report.md` (Waves 1-4); 0J1 verified fresh this session (zero skips).
 
 ## Change Boundaries
 
@@ -69,7 +70,6 @@
 
 ## Remaining Pre-Infrastructure Work
 
-- `0J1`: tenant plans, add-ons, entitlements, effective feature snapshots, and usage accounting.
 - `0K`: Foundry provider/model catalog, curated AI modes, quotas, reservations, telemetry, and reconciliation.
 - `0L`: Python Temporal worker foundation and durable OCR/AI workflow handoff.
 - `0D`: App-owned signed upload sessions and local/GCS storage adapter boundary.

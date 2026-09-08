@@ -60,7 +60,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 | **0B** | Prototype Core Data Model & Database | ✅ Complete (historical baseline) | [phase-0b-data-model.md](sub-plans/phase-0b-data-model.md) |
 | **0I** | TypeScript APIs & Polyglot Contract Rebaseline | ✅ Complete | [design](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md) · [execution plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md) |
 | **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [agent rules](../AGENTS.md) |
-| **0J1** | Tenant Plans, Add-ons & Entitlements | ⚪ Planned after 0J | [0I design section 10](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#10-plans-entitlements-and-usage) |
+| **0J1** | Tenant Plans, Add-ons & Entitlements | ✅ Local implementation complete; infrastructure gate | [implementation](sub-plans/phase-0j1-plans-entitlements-implementation.md) |
 | **0K** | AI Foundry Service & Runtime Quotas | ⚪ Planned after 0J1 | [0I design section 11](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#11-foundry-catalog-and-quotas) |
 | **0L** | Python Temporal AI Worker Foundation | ⚪ Planned after 0I/0J | [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |
 | **0D** | Direct Cloud Storage & Signed Uploads (revised) | ⚪ Replan after 0I/0J | [phase-0d-cloud-storage.md](sub-plans/phase-0d-cloud-storage.md) |
