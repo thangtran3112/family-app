@@ -306,6 +306,92 @@ export interface IdempotencyRecordTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface PlanTable {
+  readonly id: string;
+  readonly key: string;
+  name: string;
+  description: NullableText;
+  is_active: Generated<boolean>;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface PlanVersionTable {
+  readonly id: string;
+  readonly plan_id: string;
+  readonly version_number: number;
+  effective_at: GeneratedTimestamp;
+  is_current: Generated<boolean>;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface FeatureDefinitionTable {
+  readonly id: string;
+  readonly key: string;
+  name: string;
+  description: NullableText;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface PlanEntitlementTable {
+  readonly plan_version_id: string;
+  readonly feature_definition_id: string;
+  is_enabled: boolean;
+  limit_value: number | null;
+  limit_period: "monthly" | "unlimited" | null;
+}
+
+export interface TenantSubscriptionTable {
+  readonly tenant_id: string;
+  plan_version_id: string;
+  status: "trialing" | "active" | "canceled";
+  current_entitlement_version: Generated<number>;
+  readonly started_at: GeneratedTimestamp;
+  version: Generated<number>;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface TenantAddonTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly feature_definition_id: string;
+  enabled: Generated<boolean>;
+  granted_by: string;
+  expires_at: NullableTimestamp;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface TenantFeatureOverrideTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly feature_definition_id: string;
+  override_enabled: boolean;
+  reason: string;
+  granted_by: string;
+  expires_at: NullableTimestamp;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface FeatureUsageEventTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly feature_definition_id: string;
+  readonly initiating_user_id: string;
+  occurred_at: GeneratedTimestamp;
+  quantity: Generated<number>;
+  metadata: JsonValue | null;
+}
+
+export interface EntitlementSnapshotOutboxTable {
+  readonly outbox_sequence: Generated<string>;
+  readonly tenant_id: string;
+  readonly entitlement_version: number;
+  readonly payload: JsonValue;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface AppDatabase {
   readonly "app.service_metadata": ServiceMetadataTable;
   readonly "app.users": UserTable;
@@ -329,4 +415,13 @@ export interface AppDatabase {
   readonly "app.expense_tax_treatments": ExpenseTaxTreatmentTable;
   readonly "app.app_audit_events": AppAuditEventTable;
   readonly "app.idempotency_records": IdempotencyRecordTable;
+  readonly "app.plans": PlanTable;
+  readonly "app.plan_versions": PlanVersionTable;
+  readonly "app.feature_definitions": FeatureDefinitionTable;
+  readonly "app.plan_entitlements": PlanEntitlementTable;
+  readonly "app.tenant_subscriptions": TenantSubscriptionTable;
+  readonly "app.tenant_addons": TenantAddonTable;
+  readonly "app.tenant_feature_overrides": TenantFeatureOverrideTable;
+  readonly "app.feature_usage_events": FeatureUsageEventTable;
+  readonly "app.entitlement_snapshot_outbox": EntitlementSnapshotOutboxTable;
 }
