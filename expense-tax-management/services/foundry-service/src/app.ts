@@ -14,7 +14,7 @@ import type { FoundryConfig } from "./config.js";
 import { createFoundryDatabase } from "./database/client.js";
 import type { FoundryDatabase } from "./database/types.js";
 import { createCatalogDomain, type CatalogDomain } from "./domain/catalog.js";
-import { createPostgresSecretStore, type SecretStore } from "./domain/secrets.js";
+import { createPostgresSecretStore, type SecretStore } from "./domain/vault.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
 import {

@@ -16,7 +16,7 @@ import type { Kysely, Selectable } from "kysely";
 import type { FoundryDatabase } from "../database/types.js";
 import { DomainError } from "../errors.js";
 import { recordAuditEvent } from "./audit.js";
-import type { SecretStore } from "./secrets.js";
+import type { SecretStore } from "./vault.js";
 
 interface ActorContext {
   readonly actorPlatformSubject: string;

@@ -108,6 +108,17 @@ describe("generated API artifacts", () => {
       "/internal/v1/identity-provisionings",
     );
     expect(JSON.stringify(foundryDocument)).not.toContain("App API");
+
+    for (const path of [
+      "/internal/v1/provider-connections",
+      "/internal/v1/provider-connections/{id}",
+      "/internal/v1/ai-models",
+      "/internal/v1/ai-modes",
+      "/internal/v1/ai-modes/{aiModeId}/route-versions",
+    ]) {
+      expect(foundryDocument.paths).toHaveProperty(path);
+      expect(appDocument.paths).not.toHaveProperty(path);
+    }
   });
 
   it("publishes JSON Schema from the canonical internal contract", () => {

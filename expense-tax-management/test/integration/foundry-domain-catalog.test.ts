@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFoundryDatabase } from "../../services/foundry-service/src/database/client.js";
 import type { FoundryDatabase } from "../../services/foundry-service/src/database/types.js";
 import { createCatalogDomain } from "../../services/foundry-service/src/domain/catalog.js";
-import { createPostgresSecretStore } from "../../services/foundry-service/src/domain/secrets.js";
+import { createPostgresSecretStore } from "../../services/foundry-service/src/domain/vault.js";
 import { DomainError } from "../../services/foundry-service/src/errors.js";
 import type { Kysely } from "kysely";
 
