@@ -1,8 +1,7 @@
 ---
 description: Executes one approved Phase 0I implementation-plan task with TDD and minimal diffs.
 mode: subagent
-model: openai/gpt-5.6-luna
-variant: xhigh
+model: opencode/muse-spark-1.3
 temperature: 0.1
 permission:
   read:

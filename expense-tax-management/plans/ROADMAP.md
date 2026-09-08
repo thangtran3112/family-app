@@ -10,10 +10,12 @@
 
 | Asset | Details |
 | :--- | :--- |
-| **VPS** | OVH, 12 GB RAM, available until **Feb 2027** (currently unused) |
+| **VPS** | OVH, 12 GB RAM, available until **Feb 2027**. PostgreSQL 17 + pgvector now live (Postgres-only; App API/Foundry still run locally against it over an SSH tunnel) |
 | **Risk** | OVH raising rates in 2027; need portability to alternative VPS providers (Database Mart, Hetzner, etc.) |
 | **GCP** | Existing project with OAuth client configured; free-tier resources available |
 | **Timeline** | Personal project for ~1 year; commercialization is possible but not certain |
+
+> **Status note (2026-09-08)**: This document predates the Phase 0I TypeScript rebaseline (App API/Foundry on Fastify/Kysely) and still describes the earlier FastAPI/Alembic/Next.js target architecture below — treat the component list as directional, not literal, until it is replanned for the current stack. VPS SSH access is on port **2222** (not 22; hardened during a prior box setup), key-only auth. Postgres is bound to the VPS's own `127.0.0.1:5432` only — never exposed publicly — and reached from local dev machines via SSH tunnel. Reusable IaC now lives at `infrastructure/vps/` (bash, run from the operator machine): SSH hardening, firewall, Docker, and a shared-Postgres-cluster bootstrap script, shared across expense-tax-management and future family apps — see `infrastructure/vps/README.md` for usage and current tested-vs-designed-only status ahead of the Feb 2027 provider switch.
 
 ### Guiding Principles
 
