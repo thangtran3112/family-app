@@ -18,6 +18,11 @@ type NullableText = ColumnType<
   string | null | undefined,
   string | null
 >;
+type NullableTimestamp = ColumnType<
+  Date | null,
+  Date | string | null | undefined,
+  Date | string | null
+>;
 
 export interface ServiceMetadataTable {
   readonly key: string;
@@ -83,6 +88,65 @@ export interface FoundryAuditEventTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface TenantAiQuotaTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly operation: "RECEIPT_OCR" | "AI_SEARCH";
+  readonly ai_model_id: string | null;
+  period_type: "monthly" | "unlimited";
+  max_jobs: number | null;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface AiQuotaPeriodTable {
+  readonly id: string;
+  readonly tenant_ai_quota_id: string;
+  readonly period_key: string;
+  consumed_jobs: Generated<number>;
+  reserved_jobs: Generated<number>;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface AiQuotaReservationTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly operation: "RECEIPT_OCR" | "AI_SEARCH";
+  readonly ai_model_id: string;
+  readonly idempotency_key: string;
+  status: Generated<
+    "RESERVED" | "CALL_STARTED" | "CONSUMED" | "RELEASED" | "RECONCILIATION_REQUIRED"
+  >;
+  aggregate_period_id: string | null;
+  model_period_id: string | null;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+  call_started_at: NullableTimestamp;
+  resolved_at: NullableTimestamp;
+}
+
+export interface ProviderCallLogTable {
+  readonly id: string;
+  readonly reservation_id: string;
+  readonly attempt_number: number;
+  provider_idempotency_key: NullableText;
+  outcome: Generated<"accepted" | "failed" | "pending">;
+  latency_ms: number | null;
+  cost_usd: string | null;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface AiQuotaReservationResolutionTable {
+  readonly id: string;
+  readonly reservation_id: string;
+  readonly decision: "consumed" | "released";
+  readonly reason: string;
+  readonly evidence: JsonValue | null;
+  readonly resolved_by_subject: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface FoundryDatabase {
   readonly "foundry.service_metadata": ServiceMetadataTable;
   readonly "foundry.provider_secrets": ProviderSecretTable;
@@ -91,4 +155,9 @@ export interface FoundryDatabase {
   readonly "foundry.ai_modes": AiModeTable;
   readonly "foundry.ai_mode_route_versions": AiModeRouteVersionTable;
   readonly "foundry.foundry_audit_events": FoundryAuditEventTable;
+  readonly "foundry.tenant_ai_quotas": TenantAiQuotaTable;
+  readonly "foundry.ai_quota_periods": AiQuotaPeriodTable;
+  readonly "foundry.ai_quota_reservations": AiQuotaReservationTable;
+  readonly "foundry.provider_call_logs": ProviderCallLogTable;
+  readonly "foundry.ai_quota_reservation_resolutions": AiQuotaReservationResolutionTable;
 }
