@@ -59,7 +59,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 | **0A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-0a-project-setup.md](sub-plans/phase-0a-project-setup.md) |
 | **0B** | Prototype Core Data Model & Database | ✅ Complete (historical baseline) | [phase-0b-data-model.md](sub-plans/phase-0b-data-model.md) |
 | **0I** | TypeScript APIs & Polyglot Contract Rebaseline | ✅ Complete | [design](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md) · [execution plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md) |
-| **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [Wave 3-4 execution](../docs/superpowers/plans/2026-09-08-phase-0j-waves-3-4-implementation.md) |
+| **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [agent rules](../AGENTS.md) |
 | **0J1** | Tenant Plans, Add-ons & Entitlements | ⚪ Planned after 0J | [0I design section 10](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#10-plans-entitlements-and-usage) |
 | **0K** | AI Foundry Service & Runtime Quotas | ⚪ Planned after 0J1 | [0I design section 11](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#11-foundry-catalog-and-quotas) |
 | **0L** | Python Temporal AI Worker Foundation | ⚪ Planned after 0I/0J | [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |
