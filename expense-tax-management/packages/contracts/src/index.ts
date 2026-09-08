@@ -88,6 +88,7 @@ export * from "./taxonomies.js";
 export * from "./tax-profiles.js";
 export * from "./tax-treatments.js";
 export * from "./ledger.js";
+export * from "./plans.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,
