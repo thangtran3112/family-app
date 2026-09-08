@@ -124,6 +124,13 @@ export const QuotaStatusResponseSchema = z.strictObject({
 });
 export type QuotaStatusResponse = z.infer<typeof QuotaStatusResponseSchema>;
 
+export const EntitlementSyncRequestSchema = z.strictObject({
+  appApiBaseUrl: z.url(),
+  appApiServiceToken: z.string().min(1),
+  limit: z.number().int().positive().max(500).optional(),
+});
+export type EntitlementSyncRequest = z.infer<typeof EntitlementSyncRequestSchema>;
+
 export const EntitlementSyncResponseSchema = z.strictObject({
   syncedCount: z.number().int().nonnegative(),
   nextAfterSequence: z.number().int().nonnegative().nullable(),

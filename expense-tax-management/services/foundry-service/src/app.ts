@@ -14,6 +14,7 @@ import type { FoundryConfig } from "./config.js";
 import { createFoundryDatabase } from "./database/client.js";
 import type { FoundryDatabase } from "./database/types.js";
 import { createCatalogDomain, type CatalogDomain } from "./domain/catalog.js";
+import { createQuotasDomain, type QuotasDomain } from "./domain/quotas.js";
 import { createPostgresSecretStore, type SecretStore } from "./domain/vault.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
@@ -23,6 +24,7 @@ import {
 } from "./plugins/database.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerQuotaRoutes } from "./routes/quotas.js";
 import type { Kysely } from "kysely";
 
 const SENSITIVE_FIELD_NAMES = [
@@ -97,6 +99,7 @@ export interface BuildAppOptions {
   readonly readinessProbe?: DatabaseReadinessProbe;
   readonly secretStore?: SecretStore;
   readonly catalogDomain?: CatalogDomain;
+  readonly quotasDomain?: QuotasDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -123,6 +126,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const secretStore = options.secretStore ?? createPostgresSecretStore(database);
   const catalogDomain =
     options.catalogDomain ?? createCatalogDomain(database, secretStore);
+  const quotasDomain = options.quotasDomain ?? createQuotasDomain(database);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -170,6 +174,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     readinessProbe: app.databaseReadinessProbe,
   });
   app.register(registerCatalogRoutes, { catalogDomain });
+  app.register(registerQuotaRoutes, { quotasDomain, database });
 
   return app;
 }
