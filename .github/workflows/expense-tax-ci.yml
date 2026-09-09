@@ -91,6 +91,8 @@ jobs:
           pnpm install --frozen-lockfile
           uv sync --frozen --project common/python/expense-contracts
           uv sync --frozen --project services/ai-worker
+      - name: Start Docker-local PostgreSQL
+        run: ./scripts/compose.sh up -d --wait postgres
       - name: Full zero-skip phase chain
         env:
           PHASE_0I_INTEGRATION: "1"

@@ -21,6 +21,7 @@ for (const required of [
   "pnpm ci:python:lint",
   "pnpm ci:python:test",
   "pnpm verify:phase-0n",
+  "./scripts/compose.sh up -d --wait postgres",
   "PHASE_0N_INTEGRATION",
   "uv sync --frozen",
   "permissions:\n  contents: read",
