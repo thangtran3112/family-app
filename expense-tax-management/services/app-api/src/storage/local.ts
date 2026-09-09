@@ -12,8 +12,17 @@ import type {
 
 export interface LocalStorageConfig {
   readonly rootDir: string;
-  readonly baseUrl: string;
+  /**
+   * Base URL stamped into bearer-free content URLs. A thunk when the
+   * address isn't known at construction (ephemeral test listeners);
+   * production always passes a plain string.
+   */
+  readonly baseUrl: string | (() => string);
   readonly signingKey: string;
+}
+
+function resolveBaseUrl(baseUrl: string | (() => string)): string {
+  return (typeof baseUrl === "function" ? baseUrl() : baseUrl).replace(/\/$/, "");
 }
 
 function resolveObjectPath(rootDir: string, storageKey: string): string {
@@ -29,7 +38,7 @@ function resolveObjectPath(rootDir: string, storageKey: string): string {
 }
 
 function contentUrl(
-  baseUrl: string,
+  baseUrl: string | (() => string),
   signingKey: string,
   method: "PUT" | "GET",
   fileId: string,
@@ -42,7 +51,7 @@ function contentUrl(
     fileId,
     expiresEpochSec,
   });
-  return `${baseUrl.replace(/\/$/, "")}/api/v1/file-content/${fileId}?expires=${expiresEpochSec}&signature=${signature}`;
+  return `${resolveBaseUrl(baseUrl)}/api/v1/file-content/${fileId}?expires=${expiresEpochSec}&signature=${signature}`;
 }
 
 export function createLocalStorageAdapter(

@@ -167,6 +167,30 @@ describe("local storage adapter", () => {
   });
 });
 
+describe("local adapter base URL", () => {
+  it("resolves a thunk base URL per issuance (ephemeral listeners)", async () => {
+    let port = 8100;
+    const adapter = createLocalStorageAdapter({
+      rootDir: "/tmp/x",
+      baseUrl: () => `http://127.0.0.1:${port}`,
+      signingKey: SIGNING_KEY,
+    });
+    const first = await adapter.issueReadUrl({
+      fileId: FILE_ID,
+      storageKey: "k",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(first.url).toContain("http://127.0.0.1:8100/");
+    port = 8199;
+    const second = await adapter.issueReadUrl({
+      fileId: FILE_ID,
+      storageKey: "k",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(second.url).toContain("http://127.0.0.1:8199/");
+  });
+});
+
 describe("storage factory", () => {
   it("builds the local adapter and refuses GCS until the infrastructure gate", () => {
     const local = createStorageAdapter({
