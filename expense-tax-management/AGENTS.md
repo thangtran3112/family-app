@@ -41,6 +41,10 @@
 - Phase 0P complete locally: one provider-neutral raw-byte webhook, HMAC-derived virtual Personal/business addresses, hash-only sender challenges/tokens, auth/sender/scope/entitlement/rate/size/MIME+magic/EICAR/dedupe checks before 0D/0C, closed-reason quarantine + dismiss-only. Trusted attachments create READY files and `ForwardedReceiptWorkflow`; applied expenses keep `source=forwarded_email`. See `plans/sub-plans/phase-0p-forwarded-intake-implementation.md`.
   - Deferred: full AV, real verification-email/inbound-provider adapters (credentials/provider choice), raw MIME parser/storage (normalized content is sanitized then discarded), quarantine-release policy, scheduled retention cleanup.
   - Review fixes: accepted-content dedupe index is UNIQUE under races; sender lookup is scope-qualified (same email may be verified in multiple profiles); notifier failure revokes unusable challenge; signed unsupported MIME becomes audited quarantine rather than malformed JSON.
+- Phase 0F0 complete (human-approved 2026-09-09): isolated `plans/mockups/rebaseline/` three-product contract; legacy dirty mockups remain untouched. Capture 375/768, Office 1024/1440, Foundry 1024/1440; approved shells, onboarding/auth split, populated review PNGs + Storybook/state-fixture strategy.
+- Phase 0F complete locally: standalone `frontend/capture-web` Next 16/React 19 PWA, approved 375/768 shell, camera/file capture, 25MB/type guard, IndexedDB Blob queue/retry/remove/progress, offline indicator, typed generated App API direct-upload→confirm→OCR path, forwarding UI, manifest/service worker, standalone Docker/compose. Real IdP callback is credential/deployment-gated; no bearer token compiled. `verify:phase-0f` = 240 PASS.
+- Phase 0M complete locally: standalone `frontend/office-web` Next 16/React 19, approved ≥1024 shell + small-screen Capture handoff, dashboard, exact visible ledger filtering, business/role boundaries, project costs (not tax identity), tax preparation (never filing), immutable exports, forwarding/quarantine, tenant/plan settings with provider controls forbidden. Typed client covers ledger/tax report/export; identity remains deployment-gated. Docker/compose port 7302. `verify:phase-0m` = 248 PASS.
+  - 0M cascade caught a verifier race: Compose `up` returned before frontend HTTP accepted connections. 0F/0M verifiers now bounded-poll endpoints instead of one immediate curl.
 - App API migrations `002_identity_memberships` through `012_inbound_email` are applied and verified locally AND on VPS (012 migrated 2026-09-09; VPS datasets still empty). Foundry migrations `001_service_metadata` through `004_fake_ocr_provider` likewise.
 - Rebuild contracts dist after editing contracts src: app tests resolve workspace `dist`, not `src` (`pnpm --filter @expense-tax/contracts run build`) — stale dist fails in confusing ways (e.g. a just-added `z.coerce` parsing as plain `z.number`).
 - Artifacts hermeticity rule bans `generatedAt|timestamp` in checked-in files — manifest clock field is `createdAt`.
@@ -95,7 +99,7 @@
 - Restart opencode after changing project configuration, agents, or rules so changes load in a new process.
 
 ## Remaining Pre-Infrastructure Work
-- `0M`, `0N`: Office/Foundry frontends.
+- `0N`: Foundry frontend.
 - `1A`: CI/CD source and verification work may proceed; `1B` VPS deployment and `1C` production gateway hardening wait for infrastructure approval.
 - Later search, graph, premium mailbox, and mobile phases remain after core pre-infrastructure capabilities.
 

@@ -32,7 +32,14 @@ for (const [label, script] of [
 ]) run(label, "pnpm", ["--filter", "@expense-tax/capture-web", script]);
 run("Capture Docker build", compose, ["build", "capture-web"]);
 run("Capture readiness", compose, ["up", "-d", "capture-web"]);
-const ready = spawnSync("curl", ["--fail", "--silent", "http://127.0.0.1:7301/capture"]);
-if (ready.status !== 0) process.exit(1);
+let ready = false;
+for (let attempt = 0; attempt < 30; attempt += 1) {
+  if (spawnSync("curl", ["--fail", "--silent", "http://127.0.0.1:7301/capture"]).status === 0) {
+    ready = true;
+    break;
+  }
+  spawnSync("sleep", ["1"]);
+}
+if (!ready) process.exit(1);
 console.log("PASS Capture browser endpoint");
 console.log("\nPASS Phase 0F aggregate verification: zero required checks skipped");

@@ -191,6 +191,28 @@ services:
     networks:
       - default
 
+  office-web:
+    build:
+      context: ../expense-tax-management
+      dockerfile: frontend/office-web/Dockerfile
+    container_name: expense-tax-office-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7302:7302"
+    environment:
+      PORT: "7302"
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      app-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7302/dashboard >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
 volumes:
   expense_service_storage:
   expense_tax_storage:
