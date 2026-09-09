@@ -9,7 +9,7 @@ import type {
 } from "@expense-tax/contracts";
 import { type Kysely, type Selectable, type Transaction } from "kysely";
 
-import type { AppDatabase, JsonValue } from "../database/types.js";
+import type { AppDatabase } from "../database/types.js";
 import type { TemporalWorkflowStarter } from "../temporal/client.js";
 import { DomainError } from "../errors.js";
 import { recordAuditEvent } from "./audit.js";
