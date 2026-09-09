@@ -12,6 +12,12 @@
     "typecheck": "pnpm --filter @expense-tax/contracts --fail-if-no-match run typecheck && pnpm --filter @expense-tax/app-api --fail-if-no-match run typecheck && pnpm --filter @expense-tax/foundry-service --fail-if-no-match run typecheck",
     "test": "pnpm --filter @expense-tax/contracts --fail-if-no-match run test && pnpm --filter @expense-tax/app-api --fail-if-no-match run test && pnpm --filter @expense-tax/foundry-service --fail-if-no-match run test",
     "build": "pnpm --filter @expense-tax/contracts --fail-if-no-match run build && pnpm --filter @expense-tax/app-api --fail-if-no-match run build && pnpm --filter @expense-tax/foundry-service --fail-if-no-match run build",
+    "ci:lint": "pnpm --filter @expense-tax/contracts --filter @expense-tax/app-api --filter @expense-tax/foundry-service --filter @expense-tax/capture-web --filter @expense-tax/office-web --filter @expense-tax/foundry-web run lint",
+    "ci:typecheck": "pnpm --filter @expense-tax/contracts --filter @expense-tax/app-api --filter @expense-tax/foundry-service --filter @expense-tax/capture-web --filter @expense-tax/office-web --filter @expense-tax/foundry-web run typecheck",
+    "ci:test": "pnpm --filter @expense-tax/contracts --filter @expense-tax/app-api --filter @expense-tax/foundry-service --filter @expense-tax/capture-web --filter @expense-tax/office-web --filter @expense-tax/foundry-web run test",
+    "ci:build": "pnpm --filter @expense-tax/contracts build && pnpm --filter @expense-tax/app-api --filter @expense-tax/foundry-service --filter @expense-tax/capture-web --filter @expense-tax/office-web --filter @expense-tax/foundry-web run build",
+    "ci:python:lint": "uv --directory common/python/expense-contracts run ruff check src tests && uv --directory common/python/expense-contracts run ruff format --check src tests && uv --directory services/ai-worker run ruff check src tests && uv --directory services/ai-worker run ruff format --check src tests",
+    "ci:python:test": "uv --directory common/python/expense-contracts run pytest && uv --directory services/ai-worker run pytest",
     "contracts:generate": "pnpm --filter @expense-tax/contracts --fail-if-no-match run generate:json-schema && pnpm --filter @expense-tax/app-api --fail-if-no-match run generate:openapi && pnpm --filter @expense-tax/foundry-service --fail-if-no-match run generate:openapi && pnpm --filter @expense-tax/contracts --fail-if-no-match run generate:typescript-clients && pnpm --filter @expense-tax/contracts --fail-if-no-match run generate:python",
     "contracts:check": "pnpm --filter @expense-tax/contracts --fail-if-no-match run check-generated",
     "compose:up": "./scripts/compose.sh up -d",
@@ -34,6 +40,7 @@
     "verify:phase-0f": "node scripts/verify-phase-0f.mjs",
     "verify:phase-0m": "node scripts/verify-phase-0m.mjs",
     "verify:phase-0n": "node scripts/verify-phase-0n.mjs",
+    "verify:phase-1a": "node scripts/verify-phase-1a.mjs",
     "legacy:frontend:dev": "pnpm --filter web dev",
     "legacy:frontend:build": "pnpm --filter web build",
     "legacy:frontend:lint": "pnpm --filter web lint",
@@ -50,6 +57,7 @@
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.69.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "yaml": "^2.8.1"
   }
 }

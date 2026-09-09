@@ -2,8 +2,8 @@
 
 > **Project**: Expense Tax Management System (monorepo)
 > **Inspired by**: [TaxHacker](https://github.com/vas3k/TaxHacker) (v0.8.5, Next.js + Prisma + PostgreSQL)
-> **Status**: Architecture approved; Phase 0J implementation in progress
-> **Last Updated**: 2026-09-08
+> **Status**: Pre-infrastructure source phases and Phase 1A CI complete; deployment gate closed
+> **Last Updated**: 2026-09-09
 
 ---
 
@@ -81,7 +81,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
-| **1A** | Polyglot GitHub Actions CI/CD Pipeline (revised) | ⚪ Replan after 0I; continuous gate | [phase-1a-cicd-pipeline.md](sub-plans/phase-1a-cicd-pipeline.md) |
+| **1A** | Polyglot GitHub Actions CI (revised) | ✅ Complete; continuous gate | [implementation](sub-plans/phase-1a-polyglot-ci-implementation.md) (replaces [stale plan](sub-plans/phase-1a-cicd-pipeline.md)) |
 | **1B** | Production Container Deployment (revised) | ⏸️ After clients and gateway integration | [phase-1b-vps-deployment.md](sub-plans/phase-1b-vps-deployment.md) |
 | **1C** | Defense-in-Depth Gateway Authentication (revised) | ⚪ Replan after 0I; release gate | [phase-1c-gateway-auth.md](sub-plans/phase-1c-gateway-auth.md) |
 

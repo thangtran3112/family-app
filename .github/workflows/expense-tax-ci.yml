@@ -1,0 +1,127 @@
+name: Expense Tax CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "expense-tax-management/**"
+      - "infrastructure/docker-compose.common.yml"
+      - ".github/workflows/expense-tax-ci.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "expense-tax-management/**"
+      - "infrastructure/docker-compose.common.yml"
+      - ".github/workflows/expense-tax-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: expense-tax-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: expense-tax-management
+
+jobs:
+  quality:
+    name: Contracts, services, workers, frontends
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: expense-tax-management/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Frozen Node install
+        run: pnpm install --frozen-lockfile
+      - name: Frozen Python installs
+        run: |
+          uv sync --frozen --project common/python/expense-contracts
+          uv sync --frozen --project services/ai-worker
+      - name: Generated contract drift
+        run: pnpm contracts:check
+      - name: TypeScript lint
+        run: pnpm ci:lint
+      - name: TypeScript typecheck
+        run: pnpm ci:typecheck
+      - name: Unit tests
+        run: pnpm ci:test
+      - name: Production builds
+        run: pnpm ci:build
+      - name: Python lint and format
+        run: pnpm ci:python:lint
+      - name: Python tests
+        run: pnpm ci:python:test
+
+  integration:
+    name: Postgres, Temporal, cross-language, Docker
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: expense-tax-management/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install toolchains
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --frozen --project common/python/expense-contracts
+          uv sync --frozen --project services/ai-worker
+      - name: Full zero-skip phase chain
+        env:
+          PHASE_0I_INTEGRATION: "1"
+          PHASE_0J_INTEGRATION: "1"
+          PHASE_0J_WAVE2_INTEGRATION: "1"
+          PHASE_0J_WAVE3_INTEGRATION: "1"
+          PHASE_0J_WAVE4_INTEGRATION: "1"
+          PHASE_0J1_INTEGRATION: "1"
+          PHASE_0K_WAVE_A_INTEGRATION: "1"
+          PHASE_0K_WAVE_B_INTEGRATION: "1"
+          PHASE_0L_INTEGRATION: "1"
+          PHASE_0L_WORKER_LOOP: "1"
+          PHASE_0D_INTEGRATION: "1"
+          PHASE_0C_INTEGRATION: "1"
+          PHASE_0C_OCR_LOOP: "1"
+          PHASE_0E_INTEGRATION: "1"
+          PHASE_0P_INTEGRATION: "1"
+          PHASE_0N_INTEGRATION: "1"
+        run: pnpm verify:phase-0n
+      - name: Capture compose diagnostics
+        if: failure()
+        run: ./scripts/compose.sh logs --no-color > ci-compose.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: expense-tax-compose-diagnostics
+          path: expense-tax-management/ci-compose.log
+          retention-days: 7
+
+  no-deploy:
+    name: Deployment gate remains closed
+    needs: [quality, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CI verified. No deployment action is configured; 1B/1C require explicit approval."
+        working-directory: .
