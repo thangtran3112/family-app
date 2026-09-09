@@ -3,6 +3,7 @@ import type { FastifyError, FastifyInstance } from "fastify";
 export type DomainErrorCode =
   | "CONFLICT"
   | "FORBIDDEN"
+  | "GONE"
   | "IDEMPOTENCY_CONFLICT"
   | "NOT_FOUND"
   | "PRECONDITION_FAILED"
@@ -12,7 +13,7 @@ export type DomainErrorCode =
 export class DomainError extends Error {
   private constructor(
     readonly code: DomainErrorCode,
-    readonly statusCode: 400 | 401 | 403 | 404 | 409 | 412,
+    readonly statusCode: 400 | 401 | 403 | 404 | 409 | 410 | 412,
     message: string,
   ) {
     super(message);
@@ -41,6 +42,10 @@ export class DomainError extends Error {
 
   static validation(): DomainError {
     return new DomainError("VALIDATION_ERROR", 400, "Request validation failed");
+  }
+
+  static gone(message = "Resource is no longer available"): DomainError {
+    return new DomainError("GONE", 410, message);
   }
 
   static preconditionFailed(): DomainError {

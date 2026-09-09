@@ -141,6 +141,7 @@ export type BusinessUploadSessionParams = z.infer<
 
 export const FileListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().min(1).optional(),
 });
 export type FileListQuery = z.infer<typeof FileListQuerySchema>;
 
