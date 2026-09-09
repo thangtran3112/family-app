@@ -5,11 +5,19 @@ export interface AppConfig {
   readonly databaseUrl: string;
   readonly auth: AppAuthConfig;
   readonly temporal: TemporalConnectionConfig;
+  readonly storage: StorageConnectionConfig;
 }
 
 export interface TemporalConnectionConfig {
   readonly address: string;
   readonly namespace: string;
+}
+
+export interface StorageConnectionConfig {
+  readonly backend: string;
+  readonly localDir: string;
+  readonly baseUrl: string;
+  readonly urlSigningKey: string;
 }
 
 export interface TokenAuthorityConfig {
@@ -69,6 +77,13 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
     options.env?.TEMPORAL_NAMESPACE === undefined
       ? process.env
       : env;
+  const storageEnv =
+    options.env?.STORAGE_BACKEND === undefined &&
+    options.env?.LOCAL_STORAGE_DIR === undefined &&
+    options.env?.STORAGE_URL_SIGNING_KEY === undefined &&
+    options.env?.STORAGE_LOCAL_BASE_URL === undefined
+      ? process.env
+      : env;
 
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("Invalid application port");
@@ -96,6 +111,15 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
     temporal: {
       address: requiredEnvironmentValue(temporalEnv, "TEMPORAL_HOST"),
       namespace: requiredEnvironmentValue(temporalEnv, "TEMPORAL_NAMESPACE"),
+    },
+    storage: {
+      backend: requiredEnvironmentValue(storageEnv, "STORAGE_BACKEND"),
+      localDir: requiredEnvironmentValue(storageEnv, "LOCAL_STORAGE_DIR"),
+      baseUrl: requiredEnvironmentValue(storageEnv, "STORAGE_LOCAL_BASE_URL"),
+      urlSigningKey: requiredEnvironmentValue(
+        storageEnv,
+        "STORAGE_URL_SIGNING_KEY",
+      ),
     },
   };
 }

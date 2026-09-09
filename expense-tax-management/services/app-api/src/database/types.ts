@@ -418,6 +418,34 @@ export interface ProcessingJobDispatchOutboxTable {
   dispatched_at: NullableTimestamp;
 }
 
+export interface ExpenseFileTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  personal_profile_id: NullableText;
+  business_id: NullableText;
+  expense_id: NullableText;
+  original_filename: string;
+  content_type: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+  size_bytes: ColumnType<number | null, number | null | undefined, number | null>;
+  sha256_hex: NullableText;
+  readonly storage_key: string;
+  thumbnail_storage_key: NullableText;
+  thumbnail_status: "pending" | "ready" | "skipped" | "failed";
+  status: "PENDING" | "READY" | "FAILED" | "DELETED";
+  version: Generated<number>;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface UploadSessionTable {
+  readonly id: string;
+  readonly expense_file_id: string;
+  status: "PENDING" | "CONFIRMED" | "EXPIRED";
+  expires_at: Timestamp;
+  confirmed_at: NullableTimestamp;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface EntitlementSnapshotOutboxTable {
   readonly outbox_sequence: Generated<string>;
   readonly tenant_id: string;
@@ -460,4 +488,6 @@ export interface AppDatabase {
   readonly "app.entitlement_snapshot_outbox": EntitlementSnapshotOutboxTable;
   readonly "app.processing_jobs": ProcessingJobTable;
   readonly "app.processing_job_dispatch_outbox": ProcessingJobDispatchOutboxTable;
+  readonly "app.expense_files": ExpenseFileTable;
+  readonly "app.upload_sessions": UploadSessionTable;
 }

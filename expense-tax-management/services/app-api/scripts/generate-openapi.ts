@@ -45,6 +45,12 @@ const config: AppConfig = {
     address: "generator.invalid:7233",
     namespace: "generator-invalid",
   },
+  storage: {
+    backend: "local",
+    localDir: "/tmp/expense-tax-generator-storage",
+    baseUrl: "https://generator.invalid",
+    urlSigningKey: "generator-signing-key",
+  },
 };
 
 const outputPath = process.env.OPENAPI_OUTPUT_PATH

@@ -99,6 +99,8 @@ const SENSITIVE_FIELD_NAMES = [
   "secret_key",
   "signing_key",
   "encryption_key",
+  "urlSigningKey",
+  "url_signing_key",
 ];
 
 const SENSITIVE_LOG_PATHS = [
