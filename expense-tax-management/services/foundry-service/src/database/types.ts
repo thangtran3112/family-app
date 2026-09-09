@@ -39,7 +39,13 @@ export interface ProviderSecretTable {
 export interface ProviderConnectionTable {
   readonly id: string;
   readonly key: string;
-  provider_kind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr";
+  provider_kind:
+    | "openai"
+    | "openrouter"
+    | "anthropic"
+    | "google"
+    | "paddleocr"
+    | "fake";
   display_name: string;
   secret_reference: string;
   status: Generated<"active" | "disabled">;

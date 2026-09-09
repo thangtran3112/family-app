@@ -1,6 +1,8 @@
 import {
   AiQuotaReservationCreateRequestSchema,
   AiQuotaReservationSchema,
+  EffectiveRouteQuerySchema,
+  EffectiveRouteResponseSchema,
   EntitlementSyncRequestSchema,
   EntitlementSyncResponseSchema,
   ErrorResponseSchema,
@@ -22,11 +24,13 @@ import type { Kysely } from "kysely";
 import type { FoundryDatabase } from "../database/types.js";
 import { syncEntitlementsFromOutbox } from "../domain/entitlement-sync.js";
 import type { QuotasDomain } from "../domain/quotas.js";
+import type { RoutesDomain } from "../domain/routes.js";
 import { DomainError } from "../errors.js";
 import { platformGuard, serviceGuard } from "../plugins/auth.js";
 
 export interface QuotaRouteOptions {
   readonly quotasDomain: QuotasDomain;
+  readonly routesDomain: RoutesDomain;
   readonly database: Kysely<FoundryDatabase>;
 }
 
@@ -52,6 +56,7 @@ export async function registerQuotaRoutes(
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
   const catalogManagerGuard = [platformGuard("catalog_manager")];
   const workerGuard = [serviceGuard("ai-worker", ["reservations:write"])];
+  const routeReaderGuard = [serviceGuard("ai-worker", ["routes:read"])];
   const reconcilerGuard = [platformGuard("quota_reconciler")];
   const appApiGuard = [serviceGuard("app-api", ["quota-status:read"])];
 
@@ -233,6 +238,23 @@ export async function registerQuotaRoutes(
       options.quotasDomain.getQuotaStatus({
         tenantId: request.query.tenantId,
         operation: request.query.operation,
+      }),
+  );
+
+  typedApp.get(
+    "/internal/v1/effective-route",
+    {
+      preHandler: routeReaderGuard,
+      schema: {
+        querystring: EffectiveRouteQuerySchema,
+        security: [{ serviceBearer: [] }],
+        response: { 200: EffectiveRouteResponseSchema, ...errors },
+      },
+    },
+    async (request) =>
+      options.routesDomain.resolveEffectiveRoute({
+        operation: request.query.operation,
+        modeKey: request.query.modeKey,
       }),
   );
 }
