@@ -51,6 +51,8 @@ jobs:
         run: |
           uv sync --frozen --project common/python/expense-contracts
           uv sync --frozen --project services/ai-worker
+      - name: Build contract runtime
+        run: pnpm --filter @expense-tax/contracts build
       - name: Generated contract drift
         run: pnpm contracts:check
       - name: TypeScript lint

@@ -6,8 +6,8 @@ Workflow: `.github/workflows/expense-tax-ci.yml`, push/PR on main/master +
 manual dispatch, app/infrastructure path filter, contents-read only,
 branch-safe concurrency.
 
-- Quality: frozen pnpm/uv, generated drift, all TypeScript lint/typecheck/
-  tests/builds, plus Python lint/format/tests.
+- Quality: frozen pnpm/uv, contract runtime build before generated drift,
+  all TypeScript lint/typecheck/tests/builds, plus Python lint/format/tests.
 - Integration: full zero-skip `verify:phase-0n` with Docker-local Postgres
   on host 5433, Temporal, real cross-process Python loops, migrations,
   Docker images/readiness. Compose diagnostics uploaded only on failure.

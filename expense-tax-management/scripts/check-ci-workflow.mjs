@@ -13,6 +13,7 @@ for (const job of ["quality", "integration", "no-deploy"]) {
 }
 for (const required of [
   "pnpm contracts:check",
+  "pnpm --filter @expense-tax/contracts build",
   "pnpm ci:lint",
   "pnpm ci:typecheck",
   "pnpm ci:test",
