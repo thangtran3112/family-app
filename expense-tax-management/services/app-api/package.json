@@ -9,7 +9,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "generate:openapi": "tsx scripts/generate-openapi.ts",
-    "test": "APP_TENANT_TOKEN_ISSUER=https://identity.test APP_TENANT_TOKEN_AUDIENCE=expense-app APP_TENANT_JWKS_URL=https://identity.test/.well-known/jwks.json APP_SERVICE_TOKEN_ISSUER=https://services.test APP_SERVICE_TOKEN_AUDIENCE=expense-app-internal APP_SERVICE_JWKS_URL=https://services.test/.well-known/jwks.json APP_DATABASE_URL=postgresql://app-runtime.test/app APP_MIGRATION_DATABASE_URL=postgresql://app-migrator.test/app vitest run --dir test",
+    "test": "APP_TENANT_TOKEN_ISSUER=https://identity.test APP_TENANT_TOKEN_AUDIENCE=expense-app APP_TENANT_JWKS_URL=https://identity.test/.well-known/jwks.json APP_SERVICE_TOKEN_ISSUER=https://services.test APP_SERVICE_TOKEN_AUDIENCE=expense-app-internal APP_SERVICE_JWKS_URL=https://services.test/.well-known/jwks.json APP_DATABASE_URL=postgresql://app-runtime.test/app APP_MIGRATION_DATABASE_URL=postgresql://app-migrator.test/app TEMPORAL_HOST=127.0.0.1:7233 TEMPORAL_NAMESPACE=default vitest run --dir test",
     "db:migrate": "tsx src/database/migrate.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
@@ -18,6 +18,7 @@
   "dependencies": {
     "@expense-tax/contracts": "workspace:*",
     "@fastify/swagger": "^9.8.1",
+    "@temporalio/client": "^1.23.0",
     "fastify": "^5.12.3",
     "fastify-type-provider-zod": "^7.0.0",
     "jose": "^6.2.12",

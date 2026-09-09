@@ -384,6 +384,40 @@ export interface FeatureUsageEventTable {
   metadata: JsonValue | null;
 }
 
+export interface ProcessingJobTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  personal_profile_id: NullableText;
+  business_id: NullableText;
+  workflow_type: string;
+  readonly workflow_id: string;
+  task_queue: string;
+  run_id: NullableText;
+  status: "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  target_aggregate_type: NullableText;
+  target_aggregate_id: NullableText;
+  expected_aggregate_version: ColumnType<number | null, number | null | undefined, number | null>;
+  allowed_result_schema_version: string;
+  result: ColumnType<JsonValue | null, JsonValue | null | undefined, JsonValue | null>;
+  error_message: NullableText;
+  version: Generated<number>;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+  dispatched_at: NullableTimestamp;
+  completed_at: NullableTimestamp;
+}
+
+export interface ProcessingJobDispatchOutboxTable {
+  readonly id: string;
+  readonly processing_job_id: string;
+  readonly job_reference: JsonValue;
+  status: "PENDING" | "DISPATCHED" | "FAILED";
+  attempts: Generated<number>;
+  last_error: NullableText;
+  readonly created_at: GeneratedTimestamp;
+  dispatched_at: NullableTimestamp;
+}
+
 export interface EntitlementSnapshotOutboxTable {
   readonly outbox_sequence: Generated<string>;
   readonly tenant_id: string;
@@ -424,4 +458,6 @@ export interface AppDatabase {
   readonly "app.tenant_feature_overrides": TenantFeatureOverrideTable;
   readonly "app.feature_usage_events": FeatureUsageEventTable;
   readonly "app.entitlement_snapshot_outbox": EntitlementSnapshotOutboxTable;
+  readonly "app.processing_jobs": ProcessingJobTable;
+  readonly "app.processing_job_dispatch_outbox": ProcessingJobDispatchOutboxTable;
 }

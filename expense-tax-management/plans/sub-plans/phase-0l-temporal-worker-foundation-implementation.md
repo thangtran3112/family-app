@@ -136,14 +136,21 @@ Migration `008_processing_jobs.ts`:
   `processing_job_id`, `job_reference` (jsonb, the literal `JobReferenceV1`
   payload), `status` (`PENDING`/`DISPATCHED`/`FAILED`), `attempts`,
   `last_error`, timestamps.
-- `app.processing_job_callback_receipts`: `id`, `processing_job_id`,
-  `idempotency_key`, `response_status`, `created_at`, `UNIQUE
-  (processing_job_id, idempotency_key)`. Mirrors 0K Wave B's
-  idempotency-key-uniqueness-with-409-on-replay convention exactly (insert
-  first, `23505` -> `DomainError.conflict()` via the same `runInsert`-style
-  wrapper) rather than a silent return-previous-result semantic -- this
-  codebase already chose "hard reject duplicates" as its idempotency
-  philosophy in Wave B and I am not re-litigating it here.
+- No new callback-idempotency table. App API already has a generic,
+  more capable mechanism (`domain/idempotency.ts`'s
+  `executeIdempotentMutation`, backed by `app.idempotency_records`, already
+  used by `tenants.ts`/`businesses.ts`) that does true replay-on-match:
+  a repeated `(actorKey, operationKey, idempotencyKey)` with an identical
+  request body replays the cached response instead of erroring; the same
+  key with a *different* body correctly conflicts. This supersedes both my
+  original plan (a bespoke uniqueness table, 0K-Wave-B-style hard-reject) and
+  the naming confusion it would have caused -- reusing existing
+  infrastructure instead of re-litigating an already-settled idempotency
+  philosophy. `actorKey = "service:ai-worker"`, `operationKey =
+  "processing-job.status-update"` / `"processing-job.result-submit"`; the
+  worker embeds the job ID directly in its own `idempotencyKey` string
+  (e.g. `"{jobId}:status:running"`) so uniqueness is effectively per-job
+  without needing a job-scoped column.
 
 `src/temporal/client.ts`: `createTemporalWorkflowStarter(config)` returns a
 narrow injectable interface (`start(workflowType, { workflowId, taskQueue,

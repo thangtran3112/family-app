@@ -39,7 +39,7 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function toJsonValue(value: unknown): JsonValue {
+export function toJsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 

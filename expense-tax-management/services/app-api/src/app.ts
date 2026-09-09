@@ -34,6 +34,10 @@ import {
 } from "./domain/memberships.js";
 import { createTenantDomain, type TenantDomain } from "./domain/tenants.js";
 import { createPlansDomain, type PlansDomain } from "./domain/plans.js";
+import {
+  createProcessingJobsDomain,
+  type ProcessingJobsDomain,
+} from "./domain/processing-jobs.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
 import {
@@ -50,6 +54,11 @@ import { registerExpenseRoutes } from "./routes/expenses.js";
 import { registerTaxRoutes } from "./routes/tax.js";
 import { registerTenantRoutes } from "./routes/tenants.js";
 import { registerPlanRoutes } from "./routes/plans.js";
+import { registerJobRoutes } from "./routes/jobs.js";
+import {
+  createTemporalWorkflowStarter,
+  type TemporalWorkflowStarter,
+} from "./temporal/client.js";
 import type { Kysely } from "kysely";
 
 const SENSITIVE_FIELD_NAMES = [
@@ -123,6 +132,8 @@ export interface BuildAppOptions {
   readonly expenseDomain?: ExpenseDomain;
   readonly taxDomain?: TaxDomain;
   readonly plansDomain?: PlansDomain;
+  readonly temporalStarter?: TemporalWorkflowStarter;
+  readonly processingJobsDomain?: ProcessingJobsDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -156,6 +167,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const expenseDomain = options.expenseDomain ?? createExpenseDomain(database);
   const taxDomain = options.taxDomain ?? createTaxDomain(database);
   const plansDomain = options.plansDomain ?? createPlansDomain(database);
+  const temporalStarter =
+    options.temporalStarter ?? createTemporalWorkflowStarter(options.config.temporal);
+  const processingJobsDomain =
+    options.processingJobsDomain ??
+    createProcessingJobsDomain(database, temporalStarter);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -235,6 +251,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     identityResolver: identityDomain,
     plansDomain,
   });
+  app.register(registerJobRoutes, { processingJobsDomain });
+
+  if (options.temporalStarter === undefined) {
+    app.addHook("onClose", async () => {
+      await temporalStarter.close();
+    });
+  }
 
   return app;
 }

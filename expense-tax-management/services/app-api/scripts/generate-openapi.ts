@@ -41,6 +41,10 @@ const config: AppConfig = {
       jwksUrl: "https://services.generator.invalid/jwks",
     },
   },
+  temporal: {
+    address: "generator.invalid:7233",
+    namespace: "generator-invalid",
+  },
 };
 
 const outputPath = process.env.OPENAPI_OUTPUT_PATH

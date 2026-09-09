@@ -4,6 +4,12 @@ export interface AppConfig {
   readonly port: number;
   readonly databaseUrl: string;
   readonly auth: AppAuthConfig;
+  readonly temporal: TemporalConnectionConfig;
+}
+
+export interface TemporalConnectionConfig {
+  readonly address: string;
+  readonly namespace: string;
 }
 
 export interface TokenAuthorityConfig {
@@ -58,6 +64,11 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
     options.env?.APP_MIGRATION_DATABASE_URL === undefined
       ? process.env
       : env;
+  const temporalEnv =
+    options.env?.TEMPORAL_HOST === undefined &&
+    options.env?.TEMPORAL_NAMESPACE === undefined
+      ? process.env
+      : env;
 
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("Invalid application port");
@@ -81,6 +92,10 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
         audience: requiredEnvironmentValue(env, "APP_SERVICE_TOKEN_AUDIENCE"),
         jwksUrl: jwksUrl(env, "APP_SERVICE_JWKS_URL"),
       },
+    },
+    temporal: {
+      address: requiredEnvironmentValue(temporalEnv, "TEMPORAL_HOST"),
+      namespace: requiredEnvironmentValue(temporalEnv, "TEMPORAL_NAMESPACE"),
     },
   };
 }
