@@ -104,6 +104,7 @@ export * from "./plans.js";
 export * from "./foundry-catalog.js";
 export * from "./foundry-quotas.js";
 export * from "./processing-jobs.js";
+export * from "./files.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,
