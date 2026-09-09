@@ -2488,7 +2488,7 @@ export interface paths {
                                 personalProfileId: string | null;
                                 projectId: string | null;
                                 /** @enum {string} */
-                                source: "manual";
+                                source: "manual" | "ocr";
                                 spendingCategoryId: string | null;
                                 /** @enum {string} */
                                 status: "draft" | "ready" | "archived";
@@ -2646,7 +2646,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -2800,7 +2800,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -3079,7 +3079,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -7093,7 +7093,7 @@ export interface paths {
                                 personalProfileId: string | null;
                                 projectId: string | null;
                                 /** @enum {string} */
-                                source: "manual";
+                                source: "manual" | "ocr";
                                 spendingCategoryId: string | null;
                                 /** @enum {string} */
                                 status: "draft" | "ready" | "archived";
@@ -7251,7 +7251,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -7405,7 +7405,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -7684,7 +7684,7 @@ export interface paths {
                             personalProfileId: string | null;
                             projectId: string | null;
                             /** @enum {string} */
-                            source: "manual";
+                            source: "manual" | "ocr";
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
@@ -10981,6 +10981,9 @@ export interface paths {
                             expectedAggregateVersion: number | null;
                             /** Format: uuid */
                             id: string;
+                            inputParams: {
+                                [key: string]: unknown;
+                            };
                             personalProfileId: string | null;
                             result: {
                                 [key: string]: unknown;
@@ -11169,6 +11172,9 @@ export interface paths {
                             expectedAggregateVersion: number | null;
                             /** Format: uuid */
                             id: string;
+                            inputParams: {
+                                [key: string]: unknown;
+                            };
                             personalProfileId: string | null;
                             result: {
                                 [key: string]: unknown;
@@ -11351,6 +11357,9 @@ export interface paths {
                             expectedAggregateVersion: number | null;
                             /** Format: uuid */
                             id: string;
+                            inputParams: {
+                                [key: string]: unknown;
+                            };
                             personalProfileId: string | null;
                             result: {
                                 [key: string]: unknown;
@@ -11672,6 +11681,9 @@ export interface paths {
                             expectedAggregateVersion: number | null;
                             /** Format: uuid */
                             id: string;
+                            inputParams: {
+                                [key: string]: unknown;
+                            };
                             personalProfileId: string | null;
                             result: {
                                 [key: string]: unknown;

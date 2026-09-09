@@ -6064,7 +6064,8 @@
                           },
                           "source": {
                             "enum": [
-                              "manual"
+                              "manual",
+                              "ocr"
                             ],
                             "type": "string"
                           },
@@ -6581,7 +6582,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -7280,7 +7282,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -7777,7 +7780,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -18170,7 +18174,8 @@
                           },
                           "source": {
                             "enum": [
-                              "manual"
+                              "manual",
+                              "ocr"
                             ],
                             "type": "string"
                           },
@@ -18687,7 +18692,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -19386,7 +19392,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -19883,7 +19890,8 @@
                     },
                     "source": {
                       "enum": [
-                        "manual"
+                        "manual",
+                        "ocr"
                       ],
                       "type": "string"
                     },
@@ -27917,6 +27925,13 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
                     },
+                    "inputParams": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
                     "personalProfileId": {
                       "anyOf": [
                         {
@@ -28028,6 +28043,7 @@
                     "targetAggregateType",
                     "targetAggregateId",
                     "expectedAggregateVersion",
+                    "inputParams",
                     "allowedResultSchemaVersion",
                     "result",
                     "errorMessage",
@@ -28450,6 +28466,13 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
                     },
+                    "inputParams": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
                     "personalProfileId": {
                       "anyOf": [
                         {
@@ -28561,6 +28584,7 @@
                     "targetAggregateType",
                     "targetAggregateId",
                     "expectedAggregateVersion",
+                    "inputParams",
                     "allowedResultSchemaVersion",
                     "result",
                     "errorMessage",
@@ -28970,6 +28994,13 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
                     },
+                    "inputParams": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
                     "personalProfileId": {
                       "anyOf": [
                         {
@@ -29081,6 +29112,7 @@
                     "targetAggregateType",
                     "targetAggregateId",
                     "expectedAggregateVersion",
+                    "inputParams",
                     "allowedResultSchemaVersion",
                     "result",
                     "errorMessage",
@@ -29748,6 +29780,13 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
                     },
+                    "inputParams": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
                     "personalProfileId": {
                       "anyOf": [
                         {
@@ -29859,6 +29898,7 @@
                     "targetAggregateType",
                     "targetAggregateId",
                     "expectedAggregateVersion",
+                    "inputParams",
                     "allowedResultSchemaVersion",
                     "result",
                     "errorMessage",

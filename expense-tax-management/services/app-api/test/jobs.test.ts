@@ -34,6 +34,7 @@ const JOB = {
   targetAggregateType: null,
   targetAggregateId: null,
   expectedAggregateVersion: null,
+  inputParams: {},
   allowedResultSchemaVersion: "foundation-echo-v1",
   result: null,
   errorMessage: null,

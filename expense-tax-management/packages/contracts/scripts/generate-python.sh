@@ -14,16 +14,22 @@ schema_files=(
   "internal-messages.schema.json"
   "job-status-update-v1.schema.json"
   "job-result-submit-v1.schema.json"
+  "ocr-extraction-result-v1.schema.json"
+  "ocr-job-input-v1.schema.json"
 )
 class_names=(
   "JobReferenceV1"
   "JobStatusUpdateRequestV1"
   "JobResultSubmitRequestV1"
+  "OcrExtractionResultV1"
+  "OcrJobInputV1"
 )
 output_files=(
   "internal_messages.py"
   "job_status_update_v1.py"
   "job_result_submit_v1.py"
+  "ocr_extraction_result_v1.py"
+  "ocr_job_input_v1.py"
 )
 
 for i in "${!schema_files[@]}"; do

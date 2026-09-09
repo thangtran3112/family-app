@@ -1853,7 +1853,7 @@ export interface paths {
                                 id: string;
                                 key: string;
                                 /** @enum {string} */
-                                providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr";
+                                providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr" | "fake";
                                 /** Format: uuid */
                                 secretReference: string;
                                 /** @enum {string} */
@@ -1970,7 +1970,7 @@ export interface paths {
                         displayName: string;
                         key: string;
                         /** @enum {string} */
-                        providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr";
+                        providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr" | "fake";
                         secretValue: string;
                     };
                 };
@@ -1990,7 +1990,7 @@ export interface paths {
                             id: string;
                             key: string;
                             /** @enum {string} */
-                            providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr";
+                            providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr" | "fake";
                             /** Format: uuid */
                             secretReference: string;
                             /** @enum {string} */
@@ -2145,7 +2145,7 @@ export interface paths {
                             id: string;
                             key: string;
                             /** @enum {string} */
-                            providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr";
+                            providerKind: "openai" | "openrouter" | "anthropic" | "google" | "paddleocr" | "fake";
                             /** Format: uuid */
                             secretReference: string;
                             /** @enum {string} */

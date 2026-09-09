@@ -24,6 +24,7 @@ export const ProcessingJobSchema = z.strictObject({
   targetAggregateType: z.string().min(1).nullable(),
   targetAggregateId: z.uuid().nullable(),
   expectedAggregateVersion: z.int().nullable(),
+  inputParams: z.record(z.string(), z.unknown()),
   allowedResultSchemaVersion: z.string().min(1),
   result: z.record(z.string(), z.unknown()).nullable(),
   errorMessage: z.string().nullable(),

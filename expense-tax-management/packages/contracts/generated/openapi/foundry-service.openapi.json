@@ -4186,7 +4186,8 @@
                               "openrouter",
                               "anthropic",
                               "google",
-                              "paddleocr"
+                              "paddleocr",
+                              "fake"
                             ],
                             "type": "string"
                           },
@@ -4477,7 +4478,8 @@
                       "openrouter",
                       "anthropic",
                       "google",
-                      "paddleocr"
+                      "paddleocr",
+                      "fake"
                     ],
                     "type": "string"
                   },
@@ -4530,7 +4532,8 @@
                         "openrouter",
                         "anthropic",
                         "google",
-                        "paddleocr"
+                        "paddleocr",
+                        "fake"
                       ],
                       "type": "string"
                     },
@@ -4867,7 +4870,8 @@
                         "openrouter",
                         "anthropic",
                         "google",
-                        "paddleocr"
+                        "paddleocr",
+                        "fake"
                       ],
                       "type": "string"
                     },

@@ -11,3 +11,5 @@
  */
 export const AI_WORKER_TASK_QUEUE = "expense-tax-ai-worker";
 export const FOUNDATION_ECHO_WORKFLOW_TYPE = "FoundationEchoWorkflow";
+export const OCR_RECEIPT_WORKFLOW_TYPE = "OcrReceiptWorkflow";
+export const OCR_EXTRACTION_RESULT_SCHEMA_VERSION = "ocr-extraction-v1";

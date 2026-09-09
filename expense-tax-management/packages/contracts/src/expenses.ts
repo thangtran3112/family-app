@@ -13,7 +13,7 @@ export const DecimalMoneySchema = z
 export const ExpenseStatusSchema = z.enum(["draft", "ready", "archived"]);
 export type ExpenseStatus = z.infer<typeof ExpenseStatusSchema>;
 
-export const ExpenseSourceSchema = z.literal("manual");
+export const ExpenseSourceSchema = z.enum(["manual", "ocr"]);
 export type ExpenseSource = z.infer<typeof ExpenseSourceSchema>;
 
 const ExpenseScopeFields = {

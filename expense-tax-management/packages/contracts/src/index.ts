@@ -25,6 +25,8 @@ export {
 export {
   AI_WORKER_TASK_QUEUE,
   FOUNDATION_ECHO_WORKFLOW_TYPE,
+  OCR_RECEIPT_WORKFLOW_TYPE,
+  OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
 } from "./internal/task-queues.js";
 export {
   AuthenticatedUserSchema,
@@ -105,6 +107,7 @@ export * from "./foundry-catalog.js";
 export * from "./foundry-quotas.js";
 export * from "./processing-jobs.js";
 export * from "./files.js";
+export * from "./ocr.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,

@@ -60,6 +60,14 @@ try {
       path.join(temporaryContractsRoot, "json-schema", "job-result-submit-v1.schema.json"),
     ],
     [
+      "packages/contracts/generated/json-schema/ocr-extraction-result-v1.schema.json",
+      path.join(temporaryContractsRoot, "json-schema", "ocr-extraction-result-v1.schema.json"),
+    ],
+    [
+      "packages/contracts/generated/json-schema/ocr-job-input-v1.schema.json",
+      path.join(temporaryContractsRoot, "json-schema", "ocr-job-input-v1.schema.json"),
+    ],
+    [
       "packages/contracts/generated/openapi/app-api.openapi.json",
       path.join(temporaryContractsRoot, "openapi", "app-api.openapi.json"),
     ],
@@ -86,6 +94,14 @@ try {
     [
       "common/python/expense-contracts/src/expense_contracts/generated/job_result_submit_v1.py",
       path.join(temporaryPythonRoot, "job_result_submit_v1.py"),
+    ],
+    [
+      "common/python/expense-contracts/src/expense_contracts/generated/ocr_extraction_result_v1.py",
+      path.join(temporaryPythonRoot, "ocr_extraction_result_v1.py"),
+    ],
+    [
+      "common/python/expense-contracts/src/expense_contracts/generated/ocr_job_input_v1.py",
+      path.join(temporaryPythonRoot, "ocr_job_input_v1.py"),
     ],
   ];
 

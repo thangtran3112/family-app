@@ -8,6 +8,7 @@ export const ProviderKindSchema = z.enum([
   "anthropic",
   "google",
   "paddleocr",
+  "fake",
 ]);
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;
 
@@ -141,3 +142,19 @@ export const AiModeRouteVersionCreateRequestSchema = z.strictObject({
 export type AiModeRouteVersionCreateRequest = z.infer<
   typeof AiModeRouteVersionCreateRequestSchema
 >;
+
+export const EffectiveRouteQuerySchema = z.strictObject({
+  operation: AiOperationSchema,
+  modeKey: CatalogKeySchema,
+});
+export type EffectiveRouteQuery = z.infer<typeof EffectiveRouteQuerySchema>;
+
+export const EffectiveRouteResponseSchema = z.strictObject({
+  aiModeId: z.uuid(),
+  routeVersionId: z.uuid(),
+  routeVersionNumber: z.number().int().positive(),
+  aiModelId: z.uuid(),
+  providerKind: ProviderKindSchema,
+  providerModelId: z.string().min(1).max(200),
+});
+export type EffectiveRouteResponse = z.infer<typeof EffectiveRouteResponseSchema>;
