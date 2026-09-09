@@ -1,0 +1,31 @@
+{
+  "name": "@expense-tax/capture-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 7301",
+    "build": "next build",
+    "start": "next start -p 7301",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@expense-tax/contracts": "workspace:*",
+    "idb": "^8.0.3",
+    "lucide-react": "^0.544.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.4",
+    "fake-indexeddb": "^6.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

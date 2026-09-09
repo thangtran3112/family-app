@@ -1,0 +1,3 @@
+import Link from "next/link";
+
+export default function Login() { return <main className="auth"><div className="auth-card"><p className="kicker">ExpenseTax Capture</p><h1>Welcome back.</h1><label>Email<input type="email" autoComplete="email" /></label><label>Password<input type="password" autoComplete="current-password" /></label><button className="primary" type="button">Continue with identity provider</button><p>Identity provider wiring requires deployment credentials; no password is handled by this frontend.</p><div><Link href="/forgot-password">Forgot password?</Link> · <Link href="/signup">Create account</Link></div></div></main>; }

@@ -169,6 +169,28 @@ services:
     networks:
       - default
 
+  capture-web:
+    build:
+      context: ../expense-tax-management
+      dockerfile: frontend/capture-web/Dockerfile
+    container_name: expense-tax-capture-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7301:7301"
+    environment:
+      PORT: "7301"
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      app-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7301/capture >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
 volumes:
   expense_service_storage:
   expense_tax_storage:

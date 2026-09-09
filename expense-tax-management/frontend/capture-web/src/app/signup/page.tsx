@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function Signup() { return <main className="auth"><div className="auth-card"><p className="kicker">New workspace</p><h1>Create tenant + Personal profile.</h1><label>Name<input autoComplete="name" /></label><label>Email<input type="email" autoComplete="email" /></label><button className="primary" type="button">Continue with identity provider</button><p>Invitations join existing tenant/profile scopes instead of creating another tenant.</p><Link href="/login">Back to login</Link></div></main>; }

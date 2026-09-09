@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function ForgotPassword() { return <main className="auth"><div className="auth-card"><p className="kicker">Account recovery</p><h1>Reset access.</h1><label>Email<input type="email" autoComplete="email" /></label><button className="primary" type="button">Send reset link</button><p>Recovery is delivered by the configured identity provider.</p><Link href="/login">Back to login</Link></div></main>; }
