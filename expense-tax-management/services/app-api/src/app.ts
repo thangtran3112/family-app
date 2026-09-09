@@ -57,6 +57,8 @@ import { registerPlanRoutes } from "./routes/plans.js";
 import { registerJobRoutes } from "./routes/jobs.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { createFilesDomain, type FilesDomain } from "./domain/files.js";
+import { registerOcrRoutes } from "./routes/ocr.js";
+import { createOcrJobsDomain, type OcrJobsDomain } from "./domain/ocr.js";
 import {
   createStorageAdapter,
   type StorageAdapter,
@@ -144,6 +146,7 @@ export interface BuildAppOptions {
   readonly processingJobsDomain?: ProcessingJobsDomain;
   readonly storageAdapter?: StorageAdapter;
   readonly filesDomain?: FilesDomain;
+  readonly ocrJobsDomain?: OcrJobsDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -276,6 +279,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     identityResolver: identityDomain,
     filesDomain,
     contentSigningKey: options.config.storage.urlSigningKey,
+  });
+  const ocrJobsDomain =
+    options.ocrJobsDomain ??
+    createOcrJobsDomain(database, { plansDomain, filesDomain });
+  app.register(registerOcrRoutes, {
+    identityResolver: identityDomain,
+    ocrJobsDomain,
   });
 
   if (options.temporalStarter === undefined) {

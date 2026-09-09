@@ -238,7 +238,7 @@ export interface ExpenseTable {
   currency: string;
   incurred_on: NullableDate;
   readonly tax_year: Generated<number>;
-  source: "manual";
+  source: "manual" | "ocr";
   status: "draft" | "ready" | "archived";
   version: Generated<number>;
   readonly created_at: GeneratedTimestamp;
@@ -397,6 +397,9 @@ export interface ProcessingJobTable {
   target_aggregate_type: NullableText;
   target_aggregate_id: NullableText;
   expected_aggregate_version: ColumnType<number | null, number | null | undefined, number | null>;
+  requested_by_user_id: NullableText;
+  source_file_id: NullableText;
+  input_params: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
   allowed_result_schema_version: string;
   result: ColumnType<JsonValue | null, JsonValue | null | undefined, JsonValue | null>;
   error_message: NullableText;

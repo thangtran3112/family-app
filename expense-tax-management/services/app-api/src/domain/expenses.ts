@@ -190,7 +190,7 @@ function assertRequestScope(request: ExpenseCreateRequest, scope: Scope): void {
   }
 }
 
-async function insertExpense(
+export async function insertExpenseInTransaction(
   transaction: Transaction<AppDatabase>,
   input: {
     actorUserId: string;
@@ -198,6 +198,8 @@ async function insertExpense(
     request: ExpenseCreateRequest;
     requestId: string;
     scope: Scope;
+    source?: "manual" | "ocr";
+    initialStatus?: "draft" | "ready";
   },
 ): Promise<Expense> {
   const now = new Date();
@@ -216,8 +218,8 @@ async function insertExpense(
       amount: input.request.amount,
       currency: input.request.currency,
       incurred_on: input.request.incurredOn,
-      source: "manual",
-      status: "draft",
+      source: input.source ?? "manual",
+      status: input.initialStatus ?? "draft",
       version: 1,
       created_at: now,
       updated_at: now,
@@ -485,7 +487,7 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
       const role = await personalRole(database, input);
       if (!canWrite(role)) throw DomainError.forbidden();
       return database.transaction().execute((transaction) =>
-        insertExpense(transaction, {
+        insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "personal", profileId: input.profileId },
         }),
@@ -496,7 +498,7 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
       const role = await businessRole(database, input);
       if (!canWrite(role)) throw DomainError.forbidden();
       return database.transaction().execute((transaction) =>
-        insertExpense(transaction, {
+        insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "business", businessId: input.businessId },
         }),

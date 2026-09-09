@@ -93,6 +93,7 @@ describe("Phase 0L internal message contracts", () => {
       targetAggregateType: null,
       targetAggregateId: null,
       expectedAggregateVersion: null,
+      inputParams: {},
       allowedResultSchemaVersion: "foundation-echo-v1",
       result: null,
       errorMessage: null,
