@@ -7,6 +7,7 @@ const infrastructureDir = join(scriptDir, "../infrastructure/gcp/expense-tax");
 const bootstrap = readFileSync(join(infrastructureDir, "bootstrap.sh"), "utf8");
 const sync = readFileSync(join(infrastructureDir, "sync-production-secret.sh"), "utf8");
 const readme = readFileSync(join(infrastructureDir, "README.md"), "utf8");
+const agents = readFileSync(join(scriptDir, "../AGENTS.md"), "utf8");
 
 const failures = [];
 function assertIncludes(source, expected, label = expected) {
@@ -22,7 +23,8 @@ function assertBefore(source, first, second, label = `${first} before ${second}`
 }
 
 assertIncludes(bootstrap, 'PROJECT_ID="expense-tax-tobytran-2026"');
-assertIncludes(bootstrap, 'BILLING_ACCOUNT="013C6D-EEE26-EAA1A1"');
+assertIncludes(bootstrap, 'BILLING_ACCOUNT="013C6D-EEE26E-EAA1A1"');
+assertExcludes(bootstrap, "013C6D-EEE26-EAA1A1", "invalid billing account typo");
 assertIncludes(bootstrap, 'SECRET_ID="expense-tax-production-env"');
 assertIncludes(bootstrap, 'SERVICE_ACCOUNT_ID="expense-tax-github-deploy"');
 assertIncludes(bootstrap, 'POOL_ID="expense-tax-github"');
@@ -43,6 +45,8 @@ assertIncludes(bootstrap, "assertion.repository=='thangtran3112/family-app'");
 assertIncludes(bootstrap, "attributeMapping");
 assertIncludes(bootstrap, 'provider.attributeMapping?.["google.subject"]');
 assertIncludes(bootstrap, 'provider.attributeMapping?.["attribute.repository"]');
+assertIncludes(bootstrap, "provider.oidc?.issuerUri");
+assertExcludes(bootstrap, "issuerUri: provider.issuerUri", "incorrect gcloud provider issuer path");
 assertIncludes(bootstrap, "issuerUri");
 assertIncludes(bootstrap, "attributeCondition");
 assertIncludes(bootstrap, "roles/iam.workloadIdentityUser");
@@ -78,8 +82,12 @@ assertIncludes(sync, 'rm -f "$BUNDLE_FILE" "$CURRENT_FILE" "$VERSIONS_FILE" "$VE
 assertIncludes(sync, ".keys/ovh/postgres-vps.env");
 assertIncludes(readme, "expense-tax-tobytran-2026");
 assertIncludes(readme, "expense-tax-production-env");
+assertIncludes(readme, "013C6D-EEE26E-EAA1A1");
+assertExcludes(readme, "013C6D-EEE26-EAA1A1", "invalid billing account typo");
 assertIncludes(readme, "one non-destroyed version");
 assertIncludes(bootstrap, ".keys/gcp/expense-tax-bootstrap-outputs.json");
+assertIncludes(agents, "013C6D-EEE26E-EAA1A1");
+assertExcludes(agents, "013C6D-EEE26-EAA1A1", "invalid billing account typo");
 
 if (failures.length > 0) {
   console.error(failures.map((failure) => `FAIL ${failure}`).join("\n"));

@@ -10,6 +10,10 @@ const syncScript = join(
   projectRoot,
   "infrastructure/gcp/expense-tax/sync-production-secret.sh",
 );
+const bootstrapScript = join(
+  projectRoot,
+  "infrastructure/gcp/expense-tax/bootstrap.sh",
+);
 
 const mockGcloud = `#!/usr/bin/env bash
 set -eu
@@ -99,6 +103,20 @@ async function fixture(mode) {
 }
 
 describe("production secret sync behavior", () => {
+  it("uses valid billing account identifier and rejects known typo", async () => {
+    const bootstrap = await readFile(bootstrapScript, "utf8");
+
+    expect(bootstrap).toContain('BILLING_ACCOUNT="013C6D-EEE26E-EAA1A1"');
+    expect(bootstrap).not.toContain("013C6D-EEE26-EAA1A1");
+  });
+
+  it("validates WIF issuer at current gcloud provider schema path", async () => {
+    const bootstrap = await readFile(bootstrapScript, "utf8");
+
+    expect(bootstrap).toContain("provider.oidc?.issuerUri");
+    expect(bootstrap).not.toContain("issuerUri: provider.issuerUri");
+  });
+
   it("does not leak startup output or API-key values", async () => {
     const test = await fixture("success");
     const result = await runSync(test.env);

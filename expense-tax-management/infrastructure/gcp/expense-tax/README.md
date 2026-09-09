@@ -7,7 +7,7 @@ keys, and never put secret payloads in command arguments or logs.
 ## Fixed resources
 
 - Project: `expense-tax-tobytran-2026`
-- Billing account: `013C6D-EEE26-EAA1A1`
+- Billing account: `013C6D-EEE26E-EAA1A1`
 - Secret: `expense-tax-production-env`
 - GitHub repository condition: `thangtran3112/family-app`
 - Deploy service account: `expense-tax-github-deploy`

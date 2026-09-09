@@ -4,7 +4,7 @@ umask 077
 
 PROJECT_ID="expense-tax-tobytran-2026"
 ORGANIZATION_ID="177410718350"
-BILLING_ACCOUNT="013C6D-EEE26-EAA1A1"
+BILLING_ACCOUNT="013C6D-EEE26E-EAA1A1"
 SECRET_ID="expense-tax-production-env"
 SERVICE_ACCOUNT_ID="expense-tax-github-deploy"
 POOL_ID="expense-tax-github"
@@ -100,7 +100,7 @@ const expected = {
   attributeCondition: "assertion.repository=='thangtran3112/family-app'",
 };
 const actual = {
-  issuerUri: provider.issuerUri,
+  issuerUri: provider.oidc?.issuerUri,
   "google.subject": provider.attributeMapping?.["google.subject"],
   "attribute.repository": provider.attributeMapping?.["attribute.repository"],
   attributeCondition: provider.attributeCondition,
