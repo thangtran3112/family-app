@@ -111,6 +111,9 @@ describe("generated API artifacts", () => {
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/{fileId}/read-url",
       "/api/v1/file-content/{fileId}",
       "/internal/v1/files/{fileId}/read-url",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/{fileId}/ocr-jobs",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/{fileId}/ocr-jobs",
+      "/internal/v1/jobs/{jobId}/ocr-input",
     ]) {
       expect(appDocument.paths).toHaveProperty(path);
       expect(foundryDocument.paths).not.toHaveProperty(path);
@@ -141,6 +144,7 @@ describe("generated API artifacts", () => {
       "/internal/v1/ai-quota-reservations/{id}/resolve",
       "/internal/v1/entitlement-sync",
       "/internal/v1/quota-status",
+      "/internal/v1/effective-route",
     ]) {
       expect(foundryDocument.paths).toHaveProperty(path);
       expect(appDocument.paths).not.toHaveProperty(path);
