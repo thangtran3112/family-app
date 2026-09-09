@@ -61,7 +61,7 @@ const BUNDLE = {
     profile: { id: PROFILE_ID, status: "active" },
     baseCurrency: "USD",
     filters: { includeUnresolved: false },
-    generatedAt: TIMESTAMP,
+    createdAt: TIMESTAMP,
     appVersion: "test",
     counts: { expenses: 1, included: 1, excludedUnresolved: 0, foreignExcluded: 0 },
     totals: { grossTotal: "12.34", deductibleTotal: "12.34" },

@@ -114,6 +114,10 @@ describe("generated API artifacts", () => {
       "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/{fileId}/ocr-jobs",
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/{fileId}/ocr-jobs",
       "/internal/v1/jobs/{jobId}/ocr-input",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-reports/{taxYear}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/projects/{projectId}/cost-report",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports/{exportId}",
     ]) {
       expect(appDocument.paths).toHaveProperty(path);
       expect(foundryDocument.paths).not.toHaveProperty(path);

@@ -143,7 +143,7 @@ export const ExportManifestSchema = z.strictObject({
   }),
   baseCurrency: z.string().regex(/^[A-Z]{3}$/),
   filters: z.strictObject({ includeUnresolved: z.boolean() }),
-  generatedAt: TimestampSchema,
+  createdAt: TimestampSchema,
   appVersion: z.string().min(1),
   counts: z.strictObject({
     expenses: z.int().nonnegative(),

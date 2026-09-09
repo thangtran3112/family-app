@@ -670,7 +670,7 @@ export function createExportsDomain(
             profile: { id: profile.id, status: profile.status },
             baseCurrency,
             includeUnresolved,
-            generatedAt: now.toISOString(),
+            createdAt: now.toISOString(),
             appVersion: options.appVersion,
             counts: {
               expenses: rows.length,

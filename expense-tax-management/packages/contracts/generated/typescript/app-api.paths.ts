@@ -3608,6 +3608,633 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    businessId: string;
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                /** Format: uuid */
+                                businessId: string;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: uuid */
+                                createdByUserId: string;
+                                expenseCount: number;
+                                files: {
+                                    bytes: number;
+                                    downloadUrl: string;
+                                    path: string;
+                                    sha256Hex: string;
+                                    /** Format: date-time */
+                                    urlExpiresAt: string;
+                                }[];
+                                filters: {
+                                    includeUnresolved: boolean;
+                                };
+                                /** Format: uuid */
+                                id: string;
+                                manifest: {
+                                    appVersion: string;
+                                    baseCurrency: string;
+                                    /** Format: uuid */
+                                    bundleId: string;
+                                    /** Format: uuid */
+                                    businessId: string;
+                                    counts: {
+                                        excludedUnresolved: number;
+                                        expenses: number;
+                                        foreignExcluded: number;
+                                        included: number;
+                                    };
+                                    /** Format: date-time */
+                                    createdAt: string;
+                                    files: {
+                                        bytes: number;
+                                        path: string;
+                                        sha256Hex: string;
+                                    }[];
+                                    filters: {
+                                        includeUnresolved: boolean;
+                                    };
+                                    foreignSummary: {
+                                        currencies: string[];
+                                        excludedCount: number;
+                                    };
+                                    profile: {
+                                        /** Format: uuid */
+                                        id: string;
+                                        status: string;
+                                    };
+                                    review: {
+                                        excluded: number;
+                                        missingTreatment: number;
+                                        reviewed: number;
+                                        total: number;
+                                        treated: number;
+                                        unreviewed: number;
+                                    };
+                                    taxonomy: {
+                                        code: string;
+                                        name: string;
+                                        /** Format: uuid */
+                                        versionId: string;
+                                    };
+                                    taxYear: number;
+                                    totals: {
+                                        deductibleTotal: string;
+                                        grossTotal: string;
+                                    };
+                                };
+                                /** Format: uuid */
+                                profileId: string;
+                                profileStatus: string;
+                                /** Format: uuid */
+                                taxonomyVersionId: string;
+                                taxYear: number;
+                                /** Format: uuid */
+                                tenantId: string;
+                            }[];
+                            nextCursor: string | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "idempotency-key": string;
+                };
+                path: {
+                    businessId: string;
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        includeUnresolved?: boolean;
+                        taxYear: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            businessId: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: uuid */
+                            createdByUserId: string;
+                            expenseCount: number;
+                            files: {
+                                bytes: number;
+                                downloadUrl: string;
+                                path: string;
+                                sha256Hex: string;
+                                /** Format: date-time */
+                                urlExpiresAt: string;
+                            }[];
+                            filters: {
+                                includeUnresolved: boolean;
+                            };
+                            /** Format: uuid */
+                            id: string;
+                            manifest: {
+                                appVersion: string;
+                                baseCurrency: string;
+                                /** Format: uuid */
+                                bundleId: string;
+                                /** Format: uuid */
+                                businessId: string;
+                                counts: {
+                                    excludedUnresolved: number;
+                                    expenses: number;
+                                    foreignExcluded: number;
+                                    included: number;
+                                };
+                                /** Format: date-time */
+                                createdAt: string;
+                                files: {
+                                    bytes: number;
+                                    path: string;
+                                    sha256Hex: string;
+                                }[];
+                                filters: {
+                                    includeUnresolved: boolean;
+                                };
+                                foreignSummary: {
+                                    currencies: string[];
+                                    excludedCount: number;
+                                };
+                                profile: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    status: string;
+                                };
+                                review: {
+                                    excluded: number;
+                                    missingTreatment: number;
+                                    reviewed: number;
+                                    total: number;
+                                    treated: number;
+                                    unreviewed: number;
+                                };
+                                taxonomy: {
+                                    code: string;
+                                    name: string;
+                                    /** Format: uuid */
+                                    versionId: string;
+                                };
+                                taxYear: number;
+                                totals: {
+                                    deductibleTotal: string;
+                                    grossTotal: string;
+                                };
+                            };
+                            /** Format: uuid */
+                            profileId: string;
+                            profileStatus: string;
+                            /** Format: uuid */
+                            taxonomyVersionId: string;
+                            taxYear: number;
+                            /** Format: uuid */
+                            tenantId: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports/{exportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    businessId: string;
+                    exportId: string;
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            businessId: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: uuid */
+                            createdByUserId: string;
+                            expenseCount: number;
+                            files: {
+                                bytes: number;
+                                downloadUrl: string;
+                                path: string;
+                                sha256Hex: string;
+                                /** Format: date-time */
+                                urlExpiresAt: string;
+                            }[];
+                            filters: {
+                                includeUnresolved: boolean;
+                            };
+                            /** Format: uuid */
+                            id: string;
+                            manifest: {
+                                appVersion: string;
+                                baseCurrency: string;
+                                /** Format: uuid */
+                                bundleId: string;
+                                /** Format: uuid */
+                                businessId: string;
+                                counts: {
+                                    excludedUnresolved: number;
+                                    expenses: number;
+                                    foreignExcluded: number;
+                                    included: number;
+                                };
+                                /** Format: date-time */
+                                createdAt: string;
+                                files: {
+                                    bytes: number;
+                                    path: string;
+                                    sha256Hex: string;
+                                }[];
+                                filters: {
+                                    includeUnresolved: boolean;
+                                };
+                                foreignSummary: {
+                                    currencies: string[];
+                                    excludedCount: number;
+                                };
+                                profile: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    status: string;
+                                };
+                                review: {
+                                    excluded: number;
+                                    missingTreatment: number;
+                                    reviewed: number;
+                                    total: number;
+                                    treated: number;
+                                    unreviewed: number;
+                                };
+                                taxonomy: {
+                                    code: string;
+                                    name: string;
+                                    /** Format: uuid */
+                                    versionId: string;
+                                };
+                                taxYear: number;
+                                totals: {
+                                    deductibleTotal: string;
+                                    grossTotal: string;
+                                };
+                            };
+                            /** Format: uuid */
+                            profileId: string;
+                            profileStatus: string;
+                            /** Format: uuid */
+                            taxonomyVersionId: string;
+                            taxYear: number;
+                            /** Format: uuid */
+                            tenantId: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants/{tenantId}/businesses/{businessId}/files": {
         parameters: {
             query?: never;
@@ -6190,6 +6817,170 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/tenants/{tenantId}/businesses/{businessId}/projects/{projectId}/cost-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    businessId: string;
+                    projectId: string;
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            baseCurrency: string;
+                            /** Format: uuid */
+                            businessId: string;
+                            byMonth: {
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                                month: string;
+                            }[];
+                            bySpendingCategory: {
+                                categoryId: string | null;
+                                categoryName: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            }[];
+                            foreignCurrencySummary: {
+                                currencies: string[];
+                                excludedCount: number;
+                            };
+                            /** Format: uuid */
+                            projectId: string;
+                            projectName: string;
+                            totals: {
+                                currency: string;
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            };
+                            totalsByCurrency: {
+                                currency: string;
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-profiles": {
         parameters: {
             query?: never;
@@ -6756,6 +7547,184 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/tenants/{tenantId}/businesses/{businessId}/tax-reports/{taxYear}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    businessId: string;
+                    taxYear: number;
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            baseCurrency: string;
+                            /** Format: uuid */
+                            businessId: string;
+                            byCategory: {
+                                categoryCode: string | null;
+                                categoryName: string;
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            }[];
+                            byMonth: {
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                                month: string;
+                            }[];
+                            foreignCurrencySummary: {
+                                currencies: string[];
+                                excludedCount: number;
+                            };
+                            profile: {
+                                /** Format: uuid */
+                                id: string;
+                                status: string;
+                                /** Format: uuid */
+                                taxonomyVersionId: string;
+                            } | null;
+                            review: {
+                                excluded: number;
+                                missingTreatment: number;
+                                reviewed: number;
+                                total: number;
+                                treated: number;
+                                unreviewed: number;
+                            };
+                            taxYear: number;
+                            totals: {
+                                currency: string;
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            };
+                            totalsByCurrency: {
+                                currency: string;
+                                deductibleTotal: string;
+                                expenseCount: number;
+                                grossTotal: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                code: string;
+                                message: string;
+                                requestId: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tenants/{tenantId}/entitlements": {

@@ -50,7 +50,7 @@ export interface ManifestInput {
   readonly profile: { readonly id: string; readonly status: string };
   readonly baseCurrency: string;
   readonly includeUnresolved: boolean;
-  readonly generatedAt: string;
+  readonly createdAt: string;
   readonly appVersion: string;
   readonly counts: ManifestCounts;
   readonly grossTotal: string;
@@ -164,7 +164,7 @@ export const CanonicalExportAdapter: ExportAdapter = {
       profile: { ...input.profile },
       baseCurrency: input.baseCurrency,
       filters: { includeUnresolved: input.includeUnresolved },
-      generatedAt: input.generatedAt,
+      createdAt: input.createdAt,
       appVersion: input.appVersion,
       counts: { ...input.counts },
       totals: {
