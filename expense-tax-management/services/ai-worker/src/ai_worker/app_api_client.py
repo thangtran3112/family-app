@@ -16,6 +16,7 @@ import httpx
 from expense_contracts.generated import (
     JobResultSubmitRequestV1,
     JobStatusUpdateRequestV1,
+    OcrJobInputV1,
 )
 
 
@@ -56,6 +57,39 @@ class AppApiClient:
             )
             response.raise_for_status()
             return int(response.json()["version"])
+
+    async def get_ocr_input(self, job_id: str) -> OcrJobInputV1:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._base_url}/internal/v1/jobs/{job_id}/ocr-input",
+                headers={"Authorization": f"Bearer {self._service_token}"},
+            )
+            response.raise_for_status()
+            return OcrJobInputV1(**response.json())
+
+    async def issue_file_read_url(self, file_id: str) -> str:
+        """Worker read-url route returns a bearer-free signed URL; the
+        caller GETs it separately (kept as two steps so tests can assert
+        each hop)."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self._base_url}/internal/v1/files/{file_id}/read-url",
+                headers={"Authorization": f"Bearer {self._service_token}"},
+            )
+            response.raise_for_status()
+            return str(response.json()["url"])
+
+    async def download_file(self, file_id: str) -> bytes:
+        """Resolve the worker read URL for a file, then fetch its bytes.
+
+        Callers pass the file id threaded out of the job-bound ocr-input
+        response (server-resolved binding), never a client-supplied value.
+        """
+        url = await self.issue_file_read_url(file_id)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.content
 
 
 def app_api_client_from_env() -> AppApiClient:
