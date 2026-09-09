@@ -93,6 +93,10 @@ jobs:
           uv sync --frozen --project services/ai-worker
       - name: Start Docker-local PostgreSQL
         run: ./scripts/compose.sh up -d --wait postgres
+      - name: Initialize service schemas
+        run: |
+          ./scripts/compose.sh run --rm app-api-migrate
+          ./scripts/compose.sh run --rm foundry-service-migrate
       - name: Full zero-skip phase chain
         env:
           PHASE_0I_INTEGRATION: "1"
