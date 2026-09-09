@@ -70,7 +70,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 | **0F0** | Three App-Specific UI Mockup Gates | ✅ Capture, Office, Foundry approved | [review](mockups/rebaseline/REVIEW.md), [plan](sub-plans/phase-0f0-web-ui-mockups.md) |
 | **0F** | Capture PWA (phone/tablet only) | ✅ Local implementation complete; identity/deployment gate | [implementation](sub-plans/phase-0f-capture-pwa-implementation.md) |
 | **0M** | Office Web (laptop reporting/tax/export) | ✅ Local implementation complete; identity/deployment gate | [implementation](sub-plans/phase-0m-office-web-implementation.md) |
-| **0N** | Foundry Web (authorized platform staff only) | ⚪ Ready | [0I design section 15.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#153-foundry-web) |
+| **0N** | Foundry Web (authorized platform staff only) | ✅ Local implementation complete; platform identity/deployment gate | [implementation](sub-plans/phase-0n-foundry-web-implementation.md) |
 | **0G** | Repository Structure & Prototype Python Contracts | ✅ Complete (contract ownership superseded) | [phase-0g-repository-structure-shared-contracts.md](sub-plans/phase-0g-repository-structure-shared-contracts.md) |
 | **0H** | Family-App Monorepo & Shared Infrastructure | ✅ Complete | [phase-0h-family-infra-split.md](sub-plans/phase-0h-family-infra-split.md) |
 

@@ -1,0 +1,1 @@
+export default function PlatformLogin(){return <main className="login"><section><p className="eyebrow">Platform staff only</p><h1>Foundry access.</h1><button>Continue with platform identity provider</button><p>Customer tokens are rejected. Catalog and reconciliation roles do not inherit each other.</p></section></main>}

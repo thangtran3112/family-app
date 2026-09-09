@@ -1961,6 +1961,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/foundry-audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                action: string;
+                                actorPlatformSubject: string | null;
+                                actorServicePrincipal: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                outcome: "success" | "denied" | "failure";
+                                requestId: string;
+                                resourceId: string | null;
+                                resourceType: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/provider-call-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                attemptNumber: number;
+                                costUsd: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: uuid */
+                                id: string;
+                                latencyMs: number | null;
+                                /** @enum {string} */
+                                outcome: "accepted" | "failed" | "pending";
+                                providerIdempotencyKey: string | null;
+                                /** Format: uuid */
+                                reservationId: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/provider-connections": {
         parameters: {
             query?: never;
@@ -2388,6 +2492,61 @@ export interface paths {
         };
         trace?: never;
     };
+    "/internal/v1/quota-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                aiModelId: string | null;
+                                consumedJobs: number;
+                                /** Format: uuid */
+                                id: string;
+                                maxJobs: number | null;
+                                /** @enum {string} */
+                                operation: "RECEIPT_OCR" | "AI_SEARCH";
+                                periodKey: string;
+                                reservedJobs: number;
+                                /** Format: uuid */
+                                tenantAiQuotaId: string;
+                                /** Format: uuid */
+                                tenantId: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/quota-status": {
         parameters: {
             query?: never;
@@ -2507,6 +2666,74 @@ export interface paths {
                                 message: string;
                                 requestId: string;
                             };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/reconciliation-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                /** Format: uuid */
+                                aiModelId: string;
+                                attempts: {
+                                    attemptNumber: number;
+                                    costUsd: string | null;
+                                    /** Format: date-time */
+                                    createdAt: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                    latencyMs: number | null;
+                                    /** @enum {string} */
+                                    outcome: "accepted" | "failed" | "pending";
+                                    providerIdempotencyKey: string | null;
+                                    /** Format: uuid */
+                                    reservationId: string;
+                                }[];
+                                callStartedAt: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** @enum {string} */
+                                operation: "RECEIPT_OCR" | "AI_SEARCH";
+                                releasedApprovalCount: number;
+                                /** Format: uuid */
+                                reservationId: string;
+                                /** @enum {string} */
+                                status: "RESERVED" | "CALL_STARTED" | "CONSUMED" | "RELEASED" | "RECONCILIATION_REQUIRED";
+                                /** Format: uuid */
+                                tenantId: string;
+                            }[];
                         };
                     };
                 };

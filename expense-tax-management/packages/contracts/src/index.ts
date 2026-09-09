@@ -106,6 +106,7 @@ export * from "./ledger.js";
 export * from "./plans.js";
 export * from "./foundry-catalog.js";
 export * from "./foundry-quotas.js";
+export * from "./foundry-operations.js";
 export * from "./processing-jobs.js";
 export * from "./exports.js";
 export * from "./inbound-email.js";

@@ -16,6 +16,8 @@ import type { FoundryDatabase } from "./database/types.js";
 import { createCatalogDomain, type CatalogDomain } from "./domain/catalog.js";
 import { createQuotasDomain, type QuotasDomain } from "./domain/quotas.js";
 import { createRoutesDomain, type RoutesDomain } from "./domain/routes.js";
+import { createOperationsDomain, type OperationsDomain } from "./domain/operations.js";
+import { registerOperationsRoutes } from "./routes/operations.js";
 import { createPostgresSecretStore, type SecretStore } from "./domain/vault.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
@@ -102,6 +104,7 @@ export interface BuildAppOptions {
   readonly catalogDomain?: CatalogDomain;
   readonly quotasDomain?: QuotasDomain;
   readonly routesDomain?: RoutesDomain;
+  readonly operationsDomain?: OperationsDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -130,6 +133,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.catalogDomain ?? createCatalogDomain(database, secretStore);
   const quotasDomain = options.quotasDomain ?? createQuotasDomain(database);
   const routesDomain = options.routesDomain ?? createRoutesDomain(database);
+  const operationsDomain = options.operationsDomain ?? createOperationsDomain(database);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -178,6 +182,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
   app.register(registerCatalogRoutes, { catalogDomain });
   app.register(registerQuotaRoutes, { quotasDomain, routesDomain, database });
+  app.register(registerOperationsRoutes, { operationsDomain });
 
   return app;
 }

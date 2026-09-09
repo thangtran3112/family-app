@@ -33,6 +33,7 @@
     "verify:phase-0p": "node scripts/verify-phase-0p.mjs",
     "verify:phase-0f": "node scripts/verify-phase-0f.mjs",
     "verify:phase-0m": "node scripts/verify-phase-0m.mjs",
+    "verify:phase-0n": "node scripts/verify-phase-0n.mjs",
     "legacy:frontend:dev": "pnpm --filter web dev",
     "legacy:frontend:build": "pnpm --filter web build",
     "legacy:frontend:lint": "pnpm --filter web lint",

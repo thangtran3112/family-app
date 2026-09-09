@@ -161,6 +161,10 @@ describe("generated API artifacts", () => {
       "/internal/v1/entitlement-sync",
       "/internal/v1/quota-status",
       "/internal/v1/effective-route",
+      "/internal/v1/provider-call-logs",
+      "/internal/v1/quota-periods",
+      "/internal/v1/reconciliation-queue",
+      "/internal/v1/foundry-audit-events",
     ]) {
       expect(foundryDocument.paths).toHaveProperty(path);
       expect(appDocument.paths).not.toHaveProperty(path);
