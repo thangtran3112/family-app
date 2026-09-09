@@ -108,6 +108,9 @@ re-OCR, attach-then-extract (0C futures), category suggestion (3C).
   missingTreatment }, files: [{ path, sha256Hex, bytes }] }`.
 - `ExportBundleListSchema { items: ExportBundle[], nextCursor: string|null }`,
   `ExportListQuerySchema { limit?, cursor? }` (files.ts pattern).
+- Manifest `review` describes the EXPORTED set (self-consistent with
+  `counts`), while the report `review` describes the whole year. The two
+  intentionally differ; each is documented at its call site.
 
 ## Tables (migration `011_export_bundles.ts`)
 
