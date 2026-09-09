@@ -1,0 +1,1 @@
+export type PlatformRole="catalog_manager"|"quota_reconciler"; export interface PlatformSession{baseUrl:string;token:string;role:PlatformRole} export function readPlatformSession():PlatformSession|null{if(typeof sessionStorage==="undefined")return null;try{return JSON.parse(sessionStorage.getItem("expense-tax-foundry-session")??"null") as PlatformSession|null}catch{return null}}

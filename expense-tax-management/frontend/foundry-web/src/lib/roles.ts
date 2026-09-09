@@ -1,0 +1,1 @@
+export type Capability="catalog"|"quota"|"reconcile"|"audit"; export function can(role:"catalog_manager"|"quota_reconciler",capability:Capability){return role==="catalog_manager"?capability==="catalog"||capability==="quota"||capability==="audit":capability==="reconcile"}

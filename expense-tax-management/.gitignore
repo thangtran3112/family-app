@@ -16,6 +16,13 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Product frontend source modules are not Python packaging output.
+!frontend/capture-web/src/lib/
+!frontend/capture-web/src/lib/**
+!frontend/office-web/src/lib/
+!frontend/office-web/src/lib/**
+!frontend/foundry-web/src/lib/
+!frontend/foundry-web/src/lib/**
 parts/
 sdist/
 var/

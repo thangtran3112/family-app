@@ -1,0 +1,1 @@
+import {describe,expect,it}from"vitest";import{can}from"./roles";describe("non-inheriting platform roles",()=>{it("separates catalog and reconciliation",()=>{expect(can("catalog_manager","catalog")).toBe(true);expect(can("catalog_manager","reconcile")).toBe(false);expect(can("quota_reconciler","reconcile")).toBe(true);expect(can("quota_reconciler","catalog")).toBe(false)})})
