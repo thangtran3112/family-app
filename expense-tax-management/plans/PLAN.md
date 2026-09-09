@@ -62,7 +62,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 | **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [agent rules](../AGENTS.md) |
 | **0J1** | Tenant Plans, Add-ons & Entitlements | ✅ Local implementation complete; infrastructure gate | [implementation](sub-plans/phase-0j1-plans-entitlements-implementation.md) |
 | **0K** | AI Foundry Service & Runtime Quotas | ✅ Local implementation complete (Waves A+B); infrastructure gate | [Wave A](sub-plans/phase-0k-wave-a-catalog-implementation.md), [Wave B](sub-plans/phase-0k-wave-b-quotas-reservations-implementation.md) |
-| **0L** | Python Temporal AI Worker Foundation | ⚪ Planned after 0I/0J | [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |
+| **0L** | Python Temporal AI Worker Foundation | ✅ Local implementation complete; infrastructure gate | [implementation plan](sub-plans/phase-0l-temporal-worker-foundation-implementation.md), [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |
 | **0D** | Direct Cloud Storage & Signed Uploads (revised) | ⚪ Replan after 0I/0J | [phase-0d-cloud-storage.md](sub-plans/phase-0d-cloud-storage.md) |
 | **0C** | Receipt Upload & OCR Pipeline (revised) | ⏸️ Blocked by 0K/0L/0D | [phase-0c-ocr-pipeline.md](sub-plans/phase-0c-ocr-pipeline.md) |
 | **0E** | Business Tax Preparation, Project Analysis & Export (revised) | ⚪ Planned after 0J/0D | [phase-0e-project-tax.md](sub-plans/phase-0e-project-tax.md) |
