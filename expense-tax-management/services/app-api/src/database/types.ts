@@ -449,6 +449,24 @@ export interface UploadSessionTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface ExportBundleTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly business_id: string;
+  readonly tax_year: number;
+  readonly taxonomy_version_id: string;
+  readonly profile_id: string;
+  readonly profile_status: string;
+  readonly filters: JsonValue;
+  readonly manifest: JsonValue;
+  readonly csv_storage_key: string;
+  readonly manifest_storage_key: string;
+  readonly mapping_storage_key: string;
+  readonly expense_count: number;
+  readonly created_by_user_id: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface EntitlementSnapshotOutboxTable {
   readonly outbox_sequence: Generated<string>;
   readonly tenant_id: string;
@@ -493,4 +511,5 @@ export interface AppDatabase {
   readonly "app.processing_job_dispatch_outbox": ProcessingJobDispatchOutboxTable;
   readonly "app.expense_files": ExpenseFileTable;
   readonly "app.upload_sessions": UploadSessionTable;
+  readonly "app.export_bundles": ExportBundleTable;
 }

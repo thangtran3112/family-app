@@ -55,6 +55,8 @@ import { registerTaxRoutes } from "./routes/tax.js";
 import { registerTenantRoutes } from "./routes/tenants.js";
 import { registerPlanRoutes } from "./routes/plans.js";
 import { registerJobRoutes } from "./routes/jobs.js";
+import { registerExportRoutes } from "./routes/exports.js";
+import { createExportsDomain, type ExportsDomain } from "./domain/exports.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { createFilesDomain, type FilesDomain } from "./domain/files.js";
 import { registerOcrRoutes } from "./routes/ocr.js";
@@ -146,6 +148,7 @@ export interface BuildAppOptions {
   readonly processingJobsDomain?: ProcessingJobsDomain;
   readonly storageAdapter?: StorageAdapter;
   readonly filesDomain?: FilesDomain;
+  readonly exportsDomain?: ExportsDomain;
   readonly ocrJobsDomain?: OcrJobsDomain;
 }
 
@@ -275,6 +278,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     plansDomain,
   });
   app.register(registerJobRoutes, { processingJobsDomain });
+  const exportsDomain =
+    options.exportsDomain ??
+    createExportsDomain(database, storageAdapter, {
+      appVersion: options.config.version,
+    });
+  app.register(registerExportRoutes, {
+    identityResolver: identityDomain,
+    exportsDomain,
+  });
   app.register(registerFileRoutes, {
     identityResolver: identityDomain,
     filesDomain,
