@@ -1,9 +1,10 @@
 # Phase 0F0 - Three-Application UI Mockup Preflight
 
-> **Status**: Reopened by Phase 0I architecture rebaseline; not ready to execute
+> **Status**: Approved 2026-09-09; all three application gates open
 > **Depends on**: Written approval of Phase 0I, then each application's implemented owning contracts
 > **Blocks**: Each gate blocks only its matching Phase 0F Capture, Phase 0M Office, or Phase 0N Foundry implementation
 > **Output**: Reviewed static mockups under `plans/mockups/rebaseline/`
+> **Approval**: Toby Tran approved the recommended split: Capture/Office/Foundry shells, signup+invite behavior, customer/platform auth split, and PNG + Storybook/state-fixture strategy.
 
 Gate dependencies:
 
@@ -131,31 +132,31 @@ These future gates extend Office Web after its core Phase 0M approval. They do n
 
 Shared checks apply to each application gate:
 
-- [ ] Role/capability frames prove business-only users cannot access Personal records.
-- [ ] Loading, first-run empty, validation error, unauthorized, service outage, and recovery states cover applicable screens.
-- [ ] UI exposes no control owned by another application/service boundary.
-- [ ] Keyboard focus, labels, touch targets, contrast, reduced motion, and screen-reader names are reviewed.
+- [x] Role/capability frames prove business-only users cannot access Personal records.
+- [x] Loading, first-run empty, validation error, unauthorized, service outage, and recovery states cover applicable screens.
+- [x] UI exposes no control owned by another application/service boundary.
+- [x] Keyboard focus, labels, touch targets, contrast, reduced motion, and screen-reader names are reviewed.
 
 Phase 0F Capture gate:
 
-- [ ] Capture PWA matrix reviewed at 375px and 768px.
-- [ ] Forwarding address, sender verification, intake history, quarantine, and token-rotation handoff are represented.
-- [ ] Offline queue, direct upload, quick review, quota exhaustion, alternatives, and manual fallback are represented.
-- [ ] Capture review record names reviewer, date, verdict, and remaining decisions.
+- [x] Capture PWA matrix reviewed at 375px and 768px.
+- [x] Forwarding address, sender verification, intake history, quarantine, and token-rotation handoff are represented.
+- [x] Offline queue, direct upload, quick review, quota exhaustion, alternatives, and manual fallback are represented.
+- [x] Capture review record names reviewer, date, verdict, and remaining decisions.
 
 Phase 0M Office core gate:
 
-- [ ] Office Web matrix reviewed at 1024px and 1440px, including small-screen handoff.
-- [ ] Spending and tax categories are visibly separate; projects never appear as tax entities.
-- [ ] Tenant settings contain no provider/model/prompt/operator controls.
-- [ ] Tax screens say preparation/export and contain no filing action or claim.
-- [ ] Office review record names reviewer, date, verdict, and remaining decisions.
+- [x] Office Web matrix reviewed at 1024px and 1440px, including small-screen handoff.
+- [x] Spending and tax categories are visibly separate; projects never appear as tax entities.
+- [x] Tenant settings contain no provider/model/prompt/operator controls.
+- [x] Tax screens say preparation/export and contain no filing action or claim.
+- [x] Office review record names reviewer, date, verdict, and remaining decisions.
 
 Phase 0N Foundry gate:
 
-- [ ] Foundry Web matrix reviewed at 1024px and 1440px.
-- [ ] Quota frames show tenant aggregate plus model ceilings and ambiguous-call reconciliation.
-- [ ] Receipt, MIME, OCR, search text, and tax content never appear.
-- [ ] Foundry review record names reviewer, date, verdict, and remaining decisions.
+- [x] Foundry Web matrix reviewed at 1024px and 1440px.
+- [x] Quota frames show tenant aggregate plus model ceilings and ambiguous-call reconciliation.
+- [x] Receipt, MIME, OCR, search text, and tax content never appear.
+- [x] Foundry review record names reviewer, date, verdict, and remaining decisions.
 
 Each application may be approved independently. Phase 0F requires Capture plus shared checks; Phase 0M requires Office plus shared checks; Phase 0N requires Foundry plus shared checks.

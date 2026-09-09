@@ -95,7 +95,7 @@
 - Restart opencode after changing project configuration, agents, or rules so changes load in a new process.
 
 ## Remaining Pre-Infrastructure Work
-- `0F0`, `0F`, `0M`, `0N`: application-specific mockup gates and Capture/Office/Foundry frontends.
+- `0F`, `0M`, `0N`: Capture/Office/Foundry frontends.
 - `1A`: CI/CD source and verification work may proceed; `1B` VPS deployment and `1C` production gateway hardening wait for infrastructure approval.
 - Later search, graph, premium mailbox, and mobile phases remain after core pre-infrastructure capabilities.
 
