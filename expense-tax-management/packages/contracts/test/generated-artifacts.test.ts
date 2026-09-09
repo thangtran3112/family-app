@@ -94,6 +94,23 @@ describe("generated API artifacts", () => {
       "/internal/v1/plans/{planId}/versions",
       "/internal/v1/feature-definitions",
       "/internal/v1/entitlement-snapshots",
+      "/internal/v1/jobs/foundation-echo",
+      "/internal/v1/jobs/dispatch",
+      "/internal/v1/jobs/{jobId}",
+      "/internal/v1/jobs/{jobId}/status",
+      "/internal/v1/jobs/{jobId}/result",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/upload-sessions",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/upload-sessions/{sessionId}/confirm",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/{fileId}",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/files/{fileId}/read-url",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/upload-sessions",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/upload-sessions/{sessionId}/confirm",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/{fileId}",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/files/{fileId}/read-url",
+      "/api/v1/file-content/{fileId}",
+      "/internal/v1/files/{fileId}/read-url",
     ]) {
       expect(appDocument.paths).toHaveProperty(path);
       expect(foundryDocument.paths).not.toHaveProperty(path);

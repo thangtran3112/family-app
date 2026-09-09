@@ -55,6 +55,12 @@ import { registerTaxRoutes } from "./routes/tax.js";
 import { registerTenantRoutes } from "./routes/tenants.js";
 import { registerPlanRoutes } from "./routes/plans.js";
 import { registerJobRoutes } from "./routes/jobs.js";
+import { registerFileRoutes } from "./routes/files.js";
+import { createFilesDomain, type FilesDomain } from "./domain/files.js";
+import {
+  createStorageAdapter,
+  type StorageAdapter,
+} from "./storage/factory.js";
 import {
   createTemporalWorkflowStarter,
   type TemporalWorkflowStarter,
@@ -136,6 +142,8 @@ export interface BuildAppOptions {
   readonly plansDomain?: PlansDomain;
   readonly temporalStarter?: TemporalWorkflowStarter;
   readonly processingJobsDomain?: ProcessingJobsDomain;
+  readonly storageAdapter?: StorageAdapter;
+  readonly filesDomain?: FilesDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -174,6 +182,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const processingJobsDomain =
     options.processingJobsDomain ??
     createProcessingJobsDomain(database, temporalStarter);
+  const storageAdapter =
+    options.storageAdapter ??
+    createStorageAdapter({
+      backend: options.config.storage.backend,
+      localDir: options.config.storage.localDir,
+      baseUrl: options.config.storage.baseUrl,
+      urlSigningKey: options.config.storage.urlSigningKey,
+    });
+  const filesDomain =
+    options.filesDomain ?? createFilesDomain(database, storageAdapter);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -254,6 +272,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     plansDomain,
   });
   app.register(registerJobRoutes, { processingJobsDomain });
+  app.register(registerFileRoutes, {
+    identityResolver: identityDomain,
+    filesDomain,
+    contentSigningKey: options.config.storage.urlSigningKey,
+  });
 
   if (options.temporalStarter === undefined) {
     app.addHook("onClose", async () => {

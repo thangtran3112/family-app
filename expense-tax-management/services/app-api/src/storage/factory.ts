@@ -1,6 +1,8 @@
 import { createLocalStorageAdapter } from "./local.js";
 import type { StorageAdapter } from "./types.js";
 
+export type { StorageAdapter };
+
 export interface StorageFactoryConfig {
   readonly backend: string;
   readonly localDir: string;

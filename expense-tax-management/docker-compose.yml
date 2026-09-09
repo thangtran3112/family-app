@@ -55,6 +55,15 @@ services:
       APP_DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
       TEMPORAL_HOST: temporal:7233
       TEMPORAL_NAMESPACE: default
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      LOCAL_STORAGE_DIR: /tmp/expense_tax_storage
+      # Content URLs leave the cluster (consumed by external clients via
+      # the published loopback port), so the loopback-published address is
+      # correct here -- unlike TEMPORAL_HOST, which is container-to-container.
+      STORAGE_LOCAL_BASE_URL: ${STORAGE_LOCAL_BASE_URL:-http://127.0.0.1:8100}
+      STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?STORAGE_URL_SIGNING_KEY is required}
+    volumes:
+      - expense_tax_storage:/tmp/expense_tax_storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,6 +163,7 @@ services:
 
 volumes:
   expense_service_storage:
+  expense_tax_storage:
 
 networks:
   default:
