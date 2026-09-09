@@ -8,8 +8,13 @@ const workflowPath = path.resolve(appRoot, "../.github/workflows/expense-tax-ci.
 const raw = await readFile(workflowPath, "utf8");
 const parsed = YAML.parse(raw);
 
+if (parsed.name !== "Expense Tax CI") throw new Error("Phase 1A workflow name changed");
+
 for (const job of ["quality", "integration", "no-deploy"]) {
   if (!parsed.jobs?.[job]) throw new Error(`Missing CI job: ${job}`);
+}
+if (parsed.jobs["no-deploy"].needs?.join?.(",") !== "quality,integration") {
+  throw new Error("Deployment gate no longer waits for all CI jobs");
 }
 for (const required of [
   "pnpm contracts:check",

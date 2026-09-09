@@ -23,7 +23,8 @@
 - Use GCP Functions by preference for future Lambda-like work; ask before Cloud Run placement; provision no GCP VM.
 - Preserve unrelated `plans/mockups/**` worktree changes and stage exact paths only.
 - Produce one final Phase 1B implementation commit after source verification;
-  track runtime deployment state in GitHub Actions and the VPS SHA file.
+  track runtime deployment state in GitHub Actions and the VPS SHA file. The
+  controller, not this task, creates that final source commit after review.
 
 ---
 
@@ -189,7 +190,7 @@ Checkout `github.event.workflow_run.head_sha`, use Buildx with registry cache, a
 
 - [ ] **Step 4: Implement deploy job**
 
-Require successful `main` CI, `needs: build`, GitHub environment `production`, and deployment concurrency. Grant `contents: read`, `packages: read`, and `id-token: write`. Authenticate through WIF, fetch secret payload to a mode-0600 file, install dedicated SSH key and pinned known-host entry, transfer Compose/scripts/env, use short-lived `GITHUB_TOKEN` for remote GHCR pull, run deployment, log out remotely, and clean runner temporary files with `if: always()`.
+Require successful `main` CI, `needs: build`, GitHub environment `production`, and deployment concurrency. Grant `contents: read`, `packages: read`, and `id-token: write`. Authenticate through WIF, fetch secret payload to a mode-0600 file, install dedicated SSH key and pinned known-host entry, transfer Compose/deploy/health scripts and env, use short-lived `GITHUB_TOKEN` for remote GHCR pull, run deployment, log out remotely, and clean runner temporary files with `if: always()`. Task 8 remains an explicit operator-only step and is not transferred by this workflow.
 
 - [ ] **Step 5: Run workflow and infrastructure checkers**
 
@@ -200,6 +201,10 @@ Run: `node scripts/check-ci-workflow.mjs`
 Expected: both PASS; Phase 1A CI remains unchanged and green.
 
 ### Task 5: Add Aggregate Verification and Update Durable Docs
+
+**Status:** Source complete and ready for review. Live deployment remains
+pending Tasks 7-9; no GCP, GitHub, GHCR, SSH, or VPS operation belongs in this
+offline source gate.
 
 **Files:**
 - Create: `scripts/verify-phase-1b.mjs`
@@ -212,21 +217,24 @@ Expected: both PASS; Phase 1A CI remains unchanged and green.
 - Consumes: focused tests/checkers and existing `verify:phase-1a` source gates.
 - Produces: `pnpm verify:phase-1b` and accurate deployment status/gates.
 
-- [ ] **Step 1: Implement aggregate verifier**
+- [x] **Step 1: Implement aggregate verifier**
 
 Run bundle tests, GCP static checker, production-boundary tests, deploy-workflow checker, Phase 1A workflow checker, TypeScript/Python quality gates, and Docker Compose production config with inert test environment values. Do not contact GCP or VPS from source verification.
 
-- [ ] **Step 2: Update durable state**
+- [x] **Step 2: Update durable state**
 
 Document GCP project/secret names, one-version destruction policy, compute-placement policy, external PostgreSQL network, live deployment paths, and remaining identity/DNS/storage/provider decisions. Mark Phase 1B source complete but live deployment pending until Tasks 7-9 finish.
 
-- [ ] **Step 3: Run source verification**
+- [x] **Step 3: Run source verification**
 
 Run: `pnpm verify:phase-1b`
 
 Expected: all required checks PASS with zero skipped source gates.
 
 - [ ] **Step 4: Commit exact Phase 1B source scope**
+
+Controller owns final commit after review; this task intentionally does not
+stage or commit.
 
 Stage only Phase 1B files, inspect cached diff, then commit:
 
@@ -284,7 +292,7 @@ Create environment `production`. Set `VPS_DEPLOY_SSH_KEY` and `VPS_DEPLOY_KNOWN_
 
 Use GitHub API/CLI to list environment variable and secret names, and confirm expected names exist without retrieving values.
 
-### Task 8: Bootstrap Temporal Databases on Live VPS
+### Task 8: Bootstrap Temporal Databases on Live VPS (operator-only)
 
 **Files:**
 - Runtime state only in existing PostgreSQL cluster.
@@ -294,6 +302,10 @@ Use GitHub API/CLI to list environment variable and secret names, and confirm ex
 - Produces: `expense_temporal` role and owned `temporal`/`temporal_visibility` databases.
 
 - [ ] **Step 1: Capture pre-change metadata**
+
+Task 8 remains outside normal workflow deployment. The operator must run the
+bootstrap explicitly before first application deployment; no GitHub Actions step
+transfers or installs `bootstrap-temporal-db.sh`.
 
 Over SSH, list database/role names and current PostgreSQL container health. Do not query user rows or print passwords.
 

@@ -1,0 +1,208 @@
+services:
+  app-api:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-app-api:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      PORT: "8100"
+      APP_VERSION: ${IMAGE_TAG:?IMAGE_TAG is required}
+      APP_TENANT_TOKEN_ISSUER: ${APP_TENANT_TOKEN_ISSUER:?APP_TENANT_TOKEN_ISSUER is required}
+      APP_TENANT_TOKEN_AUDIENCE: ${APP_TENANT_TOKEN_AUDIENCE:?APP_TENANT_TOKEN_AUDIENCE is required}
+      APP_TENANT_JWKS_URL: ${APP_TENANT_JWKS_URL:?APP_TENANT_JWKS_URL is required}
+      APP_SERVICE_TOKEN_ISSUER: ${APP_SERVICE_TOKEN_ISSUER:?APP_SERVICE_TOKEN_ISSUER is required}
+      APP_SERVICE_TOKEN_AUDIENCE: ${APP_SERVICE_TOKEN_AUDIENCE:?APP_SERVICE_TOKEN_AUDIENCE is required}
+      APP_SERVICE_JWKS_URL: ${APP_SERVICE_JWKS_URL:?APP_SERVICE_JWKS_URL is required}
+      # Phase 1B may use https://identity.not-configured.invalid and
+      # https://services.not-configured.invalid. These values are deliberately
+      # nonfunctional: JWKS cannot resolve and authenticated requests fail.
+      APP_DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      STORAGE_BACKEND: ${STORAGE_BACKEND:?STORAGE_BACKEND is required}
+      LOCAL_STORAGE_DIR: /tmp/expense_tax_storage
+      STORAGE_LOCAL_BASE_URL: ${STORAGE_LOCAL_BASE_URL:?STORAGE_LOCAL_BASE_URL is required}
+      STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?STORAGE_URL_SIGNING_KEY is required}
+      INBOUND_EMAIL_BASE_ADDRESS: ${INBOUND_EMAIL_BASE_ADDRESS:?INBOUND_EMAIL_BASE_ADDRESS is required}
+      INBOUND_WEBHOOK_SIGNING_KEY: ${INBOUND_WEBHOOK_SIGNING_KEY:?INBOUND_WEBHOOK_SIGNING_KEY is required}
+      INBOUND_ROUTING_TOKEN_SECRET: ${INBOUND_ROUTING_TOKEN_SECRET:?INBOUND_ROUTING_TOKEN_SECRET is required}
+      INBOUND_CHALLENGE_DIR: /tmp/expense_tax_inbound_challenges
+    volumes:
+      - expense_tax_production_storage:/tmp/expense_tax_storage
+      - expense_tax_production_inbound:/tmp/expense_tax_inbound_challenges
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8100/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [default, database]
+
+  app-api-migrate:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-app-api:${IMAGE_TAG}
+    restart: "no"
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      APP_MIGRATION_DATABASE_URL: ${APP_MIGRATION_DATABASE_URL:?APP_MIGRATION_DATABASE_URL is required}
+    networks: [default, database]
+
+  foundry-service:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-foundry-service:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      PORT: "8200"
+      APP_VERSION: ${IMAGE_TAG:?IMAGE_TAG is required}
+      FOUNDRY_PLATFORM_TOKEN_ISSUER: ${FOUNDRY_PLATFORM_TOKEN_ISSUER:?FOUNDRY_PLATFORM_TOKEN_ISSUER is required}
+      FOUNDRY_PLATFORM_TOKEN_AUDIENCE: ${FOUNDRY_PLATFORM_TOKEN_AUDIENCE:?FOUNDRY_PLATFORM_TOKEN_AUDIENCE is required}
+      FOUNDRY_PLATFORM_JWKS_URL: ${FOUNDRY_PLATFORM_JWKS_URL:?FOUNDRY_PLATFORM_JWKS_URL is required}
+      FOUNDRY_SERVICE_TOKEN_ISSUER: ${FOUNDRY_SERVICE_TOKEN_ISSUER:?FOUNDRY_SERVICE_TOKEN_ISSUER is required}
+      FOUNDRY_SERVICE_TOKEN_AUDIENCE: ${FOUNDRY_SERVICE_TOKEN_AUDIENCE:?FOUNDRY_SERVICE_TOKEN_AUDIENCE is required}
+      FOUNDRY_SERVICE_JWKS_URL: ${FOUNDRY_SERVICE_JWKS_URL:?FOUNDRY_SERVICE_JWKS_URL is required}
+      FOUNDRY_DATABASE_URL: ${FOUNDRY_DATABASE_URL:?FOUNDRY_DATABASE_URL is required}
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [default, database]
+
+  foundry-service-migrate:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-foundry-service:${IMAGE_TAG}
+    restart: "no"
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      FOUNDRY_MIGRATION_DATABASE_URL: ${FOUNDRY_MIGRATION_DATABASE_URL:?FOUNDRY_MIGRATION_DATABASE_URL is required}
+    networks: [default, database]
+
+  ai-worker:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-ai-worker:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    environment:
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      AI_WORKER_TASK_QUEUE: expense-tax-ai-worker
+      APP_API_BASE_URL: http://app-api:8100
+      APP_API_SERVICE_TOKEN: ${AI_WORKER_APP_API_SERVICE_TOKEN:?AI_WORKER_APP_API_SERVICE_TOKEN is required}
+      FOUNDRY_BASE_URL: http://foundry-service:8200
+      FOUNDRY_SERVICE_TOKEN: ${AI_WORKER_FOUNDRY_SERVICE_TOKEN:?AI_WORKER_FOUNDRY_SERVICE_TOKEN is required}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      app-api:
+        condition: service_healthy
+      foundry-service:
+        condition: service_healthy
+    networks: [default]
+
+  capture-web:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-capture-web:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 512M}
+    ports: ["127.0.0.1:7301:7301"]
+    environment:
+      PORT: "7301"
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      app-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7301/capture >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [default]
+
+  office-web:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-office-web:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 512M}
+    ports: ["127.0.0.1:7302:7302"]
+    environment:
+      PORT: "7302"
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      app-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7302/dashboard >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [default]
+
+  foundry-web:
+    image: ghcr.io/thangtran3112/family-app/expense-tax-foundry-web:${IMAGE_TAG}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 512M}
+    ports: ["127.0.0.1:7303:7303"]
+    environment:
+      PORT: "7303"
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      foundry-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7303/providers >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [default]
+
+  temporal:
+    image: temporalio/auto-setup:1.29.1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: expense_temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?TEMPORAL_DB_PASSWORD is required}
+      POSTGRES_SEEDS: postgres
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "temporal:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [default, database]
+
+networks:
+  default:
+    name: expense-tax-production_default
+  database:
+    external: true
+    name: postgres_default
+
+volumes:
+  expense_tax_production_storage:
+  expense_tax_production_inbound:
