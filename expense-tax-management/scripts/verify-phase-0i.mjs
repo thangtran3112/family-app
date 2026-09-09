@@ -23,6 +23,11 @@ const gates = [
     cwd: pythonContractsRoot,
   },
   {
+    label: "Contract runtime build",
+    command: "pnpm",
+    args: ["--filter", "@expense-tax/contracts", "build"],
+  },
+  {
     label: "TypeScript lint",
     command: "pnpm",
     args: ["lint"],

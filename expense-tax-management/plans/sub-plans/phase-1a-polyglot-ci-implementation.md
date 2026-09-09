@@ -10,7 +10,9 @@ branch-safe concurrency.
   all TypeScript lint/typecheck/tests/builds, plus Python lint/format/tests.
 - Integration: full zero-skip `verify:phase-0n` with Docker-local Postgres
   on host 5433, Temporal, real cross-process Python loops, migrations,
-  Docker images/readiness. Compose diagnostics uploaded only on failure.
+  Docker images/readiness. Foundational 0I verification builds the contract
+  runtime before dependent typechecks. Compose diagnostics upload only on
+  failure.
 - Explicit terminal `no-deploy` job. A local checker parses YAML and rejects
   auth/deploy/SSH/secret/registry-push primitives.
 
