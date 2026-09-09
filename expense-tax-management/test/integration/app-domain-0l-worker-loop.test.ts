@@ -182,6 +182,10 @@ describe.skipIf(!integrationEnabled)("Phase 0L real worker loop", () => {
           AI_WORKER_TASK_QUEUE: TASK_QUEUE,
           APP_API_BASE_URL: `http://127.0.0.1:${appPort}`,
           APP_API_SERVICE_TOKEN: WORKER_TOKEN,
+          // Echo jobs never touch Foundry, but run_worker constructs all
+          // clients at startup -- dummies satisfy construction only.
+          FOUNDRY_BASE_URL: "http://127.0.0.1:9",
+          FOUNDRY_SERVICE_TOKEN: "unused",
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
