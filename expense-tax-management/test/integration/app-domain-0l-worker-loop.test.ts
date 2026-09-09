@@ -124,7 +124,7 @@ describe.skipIf(!integrationEnabled)("Phase 0L real worker loop", () => {
       throw new Error("Phase 0L PostgreSQL prerequisites are missing");
     }
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
 
     const serviceVerifier: TokenVerifier = {

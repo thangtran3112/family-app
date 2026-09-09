@@ -1,0 +1,56 @@
+{
+  "files": [
+    {
+      "path": "expenses.csv",
+      "bytes": 510,
+      "sha256Hex": "063b3510878ce4ea9268f9462dde26ae752512a245fb37e6bb988f710a918937"
+    },
+    {
+      "path": "tax-category-mapping.csv",
+      "bytes": 1151,
+      "sha256Hex": "0cc9de616a3b918d83e4cb52b723584070dba8d03c6d458948896523b27aabef"
+    }
+  ],
+  "counts": {
+    "expenses": 2,
+    "included": 1,
+    "foreignExcluded": 1,
+    "excludedUnresolved": 0
+  },
+  "review": {
+    "total": 2,
+    "treated": 2,
+    "excluded": 0,
+    "reviewed": 2,
+    "unreviewed": 0,
+    "missingTreatment": 0
+  },
+  "totals": {
+    "grossTotal": "12.34",
+    "deductibleTotal": "6.17"
+  },
+  "filters": {
+    "includeUnresolved": false
+  },
+  "profile": {
+    "id": "0e000000-0000-4000-8000-000000000007",
+    "status": "active"
+  },
+  "taxYear": 2025,
+  "bundleId": "BUNDLE",
+  "taxonomy": {
+    "code": "schedule-c-2025",
+    "name": "2025 Schedule C",
+    "versionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+  },
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "appVersion": "0.1.0",
+  "businessId": "0e000000-0000-4000-8000-000000000004",
+  "baseCurrency": "USD",
+  "foreignSummary": {
+    "currencies": [
+      "EUR"
+    ],
+    "excludedCount": 1
+  }
+}

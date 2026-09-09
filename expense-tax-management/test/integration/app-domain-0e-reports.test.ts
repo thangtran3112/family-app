@@ -143,7 +143,7 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
       throw new Error("Phase 0E PostgreSQL prerequisites are missing");
     }
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
     storageRoot = await mkdtemp(path.join(tmpdir(), `expense-tax-0e-${runKey}-`));
   });
@@ -151,6 +151,9 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
   afterAll(async () => {
     if (postgresContainerId && runtimePassword) {
       executeSql(`DELETE FROM app.app_audit_events WHERE tenant_id = '${G.tenant}';`);
+      // Idempotency records outlive tenants (keyed by actor+op+key, no FK):
+      // without this, a rerun replays a bundle id whose row is gone.
+      executeSql(`DELETE FROM app.idempotency_records WHERE actor_key = 'user:${G.user}';`);
       executeSql(`DELETE FROM app.tenants WHERE id = '${G.tenant}';`);
       executeSql(`DELETE FROM app.users WHERE id = '${G.user}';`);
       for (const tenantId of knownTenantIds) {
@@ -185,12 +188,21 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
     const t = seedBusinessTenant(`0e-${runKey}`, ids);
     const { expenseDomain, taxDomain, exportsDomain } = domains();
 
-    const profile = await taxDomain.createProfile({
+    const draftProfile = await taxDomain.createProfile({
       actorUserId: t.userId,
       tenantId: t.tenantId,
       businessId: t.businessId,
       request: { taxYear: 2025, accountingMethod: "cash" },
       requestId: `0e-${runKey}-profile`,
+    });
+    // Treatments require an active profile (domain rule, not test setup).
+    const profile = await taxDomain.updateProfile({
+      actorUserId: t.userId,
+      tenantId: t.tenantId,
+      businessId: t.businessId,
+      taxYear: 2025,
+      request: { expectedVersion: draftProfile.version, status: "active" },
+      requestId: `0e-${runKey}-profile-activate`,
     });
 
     const e1 = await expenseDomain.createBusiness({
@@ -253,7 +265,9 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
     expect(report.baseCurrency).toBe("USD");
     expect(report.profile?.taxonomyVersionId).toBe(TAXONOMY_2025_ID);
     expect(report.totals).toMatchObject({
-      currency: "USD", grossTotal: "162.34", deductibleTotal: "6.17", expenseCount: 3,
+      // Sums ignore review state (review filtering is orthogonal):
+      // 6.17 (meals 50%) + 100.00 (advertising 100%, unreviewed) + 0.00 untreated.
+      currency: "USD", grossTotal: "162.34", deductibleTotal: "106.17", expenseCount: 3,
     });
     expect(report.totalsByCurrency).toHaveLength(2);
     expect(report.foreignCurrencySummary).toEqual({ excludedCount: 1, currencies: ["EUR"] });
@@ -340,28 +354,34 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
     expect(viewerReport.review.total).toBe(0);
   });
 
-  it("produces a byte-identical golden bundle from a fixed seed", async () => {
+  it("produces a byte-identical CSV + semantic manifest from a fixed seed", async () => {
     seedBusinessTenant("0e-golden", G);
-    const { taxDomain, exportsDomain, storage } = domains();
+    const { exportsDomain, storage } = domains();
 
-    const profile = await taxDomain.createProfile({
-      actorUserId: G.user, tenantId: G.tenant, businessId: G.business,
-      request: { taxYear: 2025, accountingMethod: "cash" },
-      requestId: "0e-golden-profile",
-    });
+    // Fixed profile ID via SQL: the domain mints random UUIDs, which would
+    // leak nondeterminism into the manifest. Status active directly (the
+    // draft->active promotion is covered by the domain-level tests above
+    // using random ids).
+    executeSql(`
+      INSERT INTO app.business_tax_profiles
+        (id, tenant_id, business_id, tax_year, taxonomy_version_id, accounting_method, status)
+      VALUES
+        ('${G.taxProfile}', '${G.tenant}', '${G.business}', 2025, '${TAXONOMY_2025_ID}', 'cash', 'active');
+    `);
+    const profile = { id: G.taxProfile, taxonomyVersionId: TAXONOMY_2025_ID };
     expect(profile.taxonomyVersionId).toBe(TAXONOMY_2025_ID);
 
     // Fixed expense IDs via direct SQL (the domain mints random UUIDs,
     // which would defeat byte-identical output).
     executeSql(`
       INSERT INTO app.expenses
-        (id, tenant_id, created_by_user_id, business_id, merchant, description, amount, currency, incurred_on, source, status)
+        (id, tenant_id, created_by_user_id, business_id, merchant, description, amount, currency, incurred_on, source, status, archived_at)
       VALUES
-        ('${G.e1}', '${G.tenant}', '${G.user}', '${G.business}', 'Corner Deli', 'Lunch', '12.34', 'USD', '2025-03-01', 'manual', 'ready'),
-        ('${G.e2}', '${G.tenant}', '${G.user}', '${G.business}', 'Staples', NULL, '100.00', 'USD', '2025-03-15', 'manual', 'draft'),
-        ('${G.e3}', '${G.tenant}', '${G.user}', '${G.business}', 'NoTreat Co', NULL, '50.00', 'USD', '2025-04-02', 'ocr', 'ready'),
-        ('${G.e4}', '${G.tenant}', '${G.user}', '${G.business}', 'Euro Supplier', NULL, '200.00', 'EUR', '2025-04-10', 'manual', 'ready'),
-        ('${G.e5}', '${G.tenant}', '${G.user}', '${G.business}', 'Old News', NULL, '999.99', 'USD', '2025-05-01', 'manual', 'archived');
+        ('${G.e1}', '${G.tenant}', '${G.user}', '${G.business}', 'Corner Deli', 'Lunch', '12.34', 'USD', '2025-03-01', 'manual', 'ready', NULL),
+        ('${G.e2}', '${G.tenant}', '${G.user}', '${G.business}', 'Staples', NULL, '100.00', 'USD', '2025-03-15', 'manual', 'draft', NULL),
+        ('${G.e3}', '${G.tenant}', '${G.user}', '${G.business}', 'NoTreat Co', NULL, '50.00', 'USD', '2025-04-02', 'ocr', 'ready', NULL),
+        ('${G.e4}', '${G.tenant}', '${G.user}', '${G.business}', 'Euro Supplier', NULL, '200.00', 'EUR', '2025-04-10', 'manual', 'ready', NULL),
+        ('${G.e5}', '${G.tenant}', '${G.user}', '${G.business}', 'Old News', NULL, '999.99', 'USD', '2025-05-01', 'manual', 'archived', '2025-06-01T00:00:00Z');
       UPDATE app.expenses SET project_id = '${G.project}', spending_category_id = '${G.category}' WHERE id = '${G.e1}';
       INSERT INTO app.expense_tax_treatments
         (expense_id, tenant_id, business_id, tax_year, business_tax_profile_id, taxonomy_version_id, tax_category_definition_id, deductible_percent, review_status, created_by_user_id, updated_by_user_id)
@@ -409,7 +429,23 @@ describe.skipIf(!integrationEnabled)("Phase 0E reports and exports", () => {
     const expectedManifest = JSON.parse(
       await readFile(new URL("../fixtures/tax-export-manifest.json", import.meta.url), "utf8"),
     );
-    expect({ ...(bundleRow.manifest as Record<string, unknown>), bundleId: "BUNDLE" }).toEqual({
+    const normalize = (manifest: unknown) => ({
+      ...(manifest as Record<string, unknown>),
+      bundleId: "BUNDLE",
+    });
+    expect(normalize(bundleRow.manifest)).toEqual({
+      ...expectedManifest,
+      bundleId: "BUNDLE",
+    });
+
+    // The stored manifest.json file must parse to the same semantic
+    // content (its byte order differs: Postgres jsonb normalizes object
+    // key order on read-back, so byte-identity is only claimed for the
+    // CSV — the money artifact).
+    const storedManifestBytes = await storage.readObject(
+      bundleRow.manifest_storage_key,
+    );
+    expect(normalize(JSON.parse(storedManifestBytes.toString("utf8")))).toEqual({
       ...expectedManifest,
       bundleId: "BUNDLE",
     });

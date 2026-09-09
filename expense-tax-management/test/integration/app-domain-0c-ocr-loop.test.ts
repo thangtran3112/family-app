@@ -209,10 +209,10 @@ describe.skipIf(!integrationEnabled)("Phase 0C real OCR loop", () => {
       throw new Error("Phase 0C PostgreSQL prerequisites are missing");
     }
     appDatabase = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(appRuntimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(appRuntimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
     foundryDatabase = createFoundryDatabase(
-      `postgresql://expense_foundry_runtime:${encodeURIComponent(foundryRuntimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_foundry_runtime:${encodeURIComponent(foundryRuntimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
     storageRoot = await mkdtemp(path.join(tmpdir(), `expense-tax-0c-loop-${runKey}-`));
 

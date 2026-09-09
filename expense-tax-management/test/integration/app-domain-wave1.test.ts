@@ -116,7 +116,7 @@ describe.skipIf(!integrationEnabled)("Phase 0J Wave 1 database schema", () => {
       throw new Error("Phase 0J PostgreSQL integration prerequisites are missing");
     }
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
   });
 

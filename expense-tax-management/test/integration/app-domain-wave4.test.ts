@@ -83,7 +83,7 @@ describe.skipIf(!integrationEnabled)("Phase 0J Wave 4 ledger queries", () => {
     runtimePassword =
       config.services.postgres?.environment?.APP_RUNTIME_DB_PASSWORD ?? "";
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
   });
 

@@ -113,7 +113,7 @@ describe.skipIf(!integrationEnabled)("Phase 0J Wave 3 database schema", () => {
       throw new Error("Phase 0J Wave 3 PostgreSQL prerequisites are missing");
     }
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
   });
 

@@ -5,7 +5,11 @@ services:
     container_name: expense-tax-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      # Mac-side published port deliberately NOT 5432: a persistent Homebrew
+      # postgres (user's other work) owns Mac localhost:5432, and the VPS
+      # tunnel already takes 15432. Container side stays 5432 (all
+      # container-network URLs unchanged); only host-side tools use 5433.
+      - "5433:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword

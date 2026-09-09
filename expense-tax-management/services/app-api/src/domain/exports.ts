@@ -404,7 +404,7 @@ export function createExportsDomain(
           sql<string>`to_char(e.incurred_on, 'YYYY-MM')`.as("month"),
           sql<string>`count(*)`.as("expense_count"),
           sql<string>`to_char(coalesce(sum(e.amount), 0), ${MONEY_FORMAT})`.as("gross_total"),
-          sql<string>`to_char('0.00')`.as("deductible_total"),
+          sql<string>`to_char(0.00, ${MONEY_FORMAT})`.as("deductible_total"),
         ])
         .where("e.tenant_id", "=", input.tenantId)
         .where("e.business_id", "=", input.businessId)
@@ -522,7 +522,7 @@ export function createExportsDomain(
                 "deductible_amount",
               ),
               "t.review_status as review_status",
-              sql<string | null>`(select min(f.id) from app.expense_files as f where f.expense_id = e.id)`.as(
+              sql<string | null>`(select f.id from app.expense_files as f where f.expense_id = e.id order by f.created_at asc, f.id asc limit 1)`.as(
                 "receipt_file_id",
               ),
             ])

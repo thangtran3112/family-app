@@ -1,0 +1,3 @@
+expense_id,incurred_on,merchant,description,amount,currency,included_in_totals,spending_category,project,tax_category_code,tax_category_name,deductible_percent,deductible_amount,review_status,receipt_file_id,source,status
+0e000000-0000-4000-8000-000000000010,2025-03-01,Corner Deli,Lunch,12.34,USD,true,Golden Supplies,Golden Client,meals,Meals,50.00,6.17,reviewed,,manual,ready
+0e000000-0000-4000-8000-000000000013,2025-04-10,Euro Supplier,,200.00,EUR,false,,,meals,Meals,100.00,200.00,reviewed,,manual,ready

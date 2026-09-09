@@ -104,7 +104,7 @@ describe.skipIf(!integrationEnabled)("Phase 0K Wave B quotas and reservations", 
       throw new Error("Phase 0K Wave B PostgreSQL prerequisites are missing");
     }
     database = createFoundryDatabase(
-      `postgresql://expense_foundry_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5432/expense_tax_db`,
+      `postgresql://expense_foundry_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
   });
 
