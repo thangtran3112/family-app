@@ -33,7 +33,13 @@ class AppApiClient:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self._base_url}/internal/v1/jobs/{job_id}/status",
-                json=request.model_dump(mode="json"),
+                # exclude_none: Pydantic serializes an unset Optional field as
+                # explicit JSON `null`; the Zod contract's `.optional()` only
+                # accepts an *absent* key, not `null` (it would need
+                # `.nullable()` too for that) -- omitting None fields entirely
+                # is what actually round-trips against a z.strictObject with
+                # plain `.optional()` fields.
+                json=request.model_dump(mode="json", exclude_none=True),
                 headers={"Authorization": f"Bearer {self._service_token}"},
             )
             response.raise_for_status()
@@ -45,7 +51,7 @@ class AppApiClient:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self._base_url}/internal/v1/jobs/{job_id}/result",
-                json=request.model_dump(mode="json"),
+                json=request.model_dump(mode="json", exclude_none=True),
                 headers={"Authorization": f"Bearer {self._service_token}"},
             )
             response.raise_for_status()

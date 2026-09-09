@@ -48,6 +48,13 @@ async def test_mark_running_posts_the_expected_status_update():
     assert b'"expectedJobVersion":2' in sent_body
     assert f'"idempotencyKey":"{JOB_ID}:status:running"'.encode() in sent_body
     assert route.calls[0].request.headers["authorization"] == "Bearer test-token"
+    # Regression guard: Pydantic serializes an unset Optional field as
+    # explicit JSON `null` by default, but the Zod contract's `.optional()`
+    # only accepts an *absent* key -- sending `"message": null` 400s against
+    # the real App API (caught by the worker-loop integration test, fixed by
+    # exclude_none=True in AppApiClient). "message" must be omitted entirely
+    # whenever it wasn't provided.
+    assert b'"message"' not in sent_body
 
 
 @respx.mock
@@ -74,3 +81,4 @@ async def test_submit_echo_result_posts_the_expected_result():
         in sent_body
     )
     assert f'"result":{{"echo":"{JOB_ID}"}}'.encode() in sent_body
+    assert b'"message"' not in sent_body
