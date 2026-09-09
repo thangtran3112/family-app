@@ -238,7 +238,7 @@ export interface ExpenseTable {
   currency: string;
   incurred_on: NullableDate;
   readonly tax_year: Generated<number>;
-  source: "manual" | "ocr";
+  source: "manual" | "ocr" | "forwarded_email";
   status: "draft" | "ready" | "archived";
   version: Generated<number>;
   readonly created_at: GeneratedTimestamp;
@@ -467,6 +467,72 @@ export interface ExportBundleTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface VerifiedEmailSenderTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly email: string;
+  status: "pending" | "verified" | "revoked";
+  challenge_hash: NullableText;
+  challenge_expires_at: NullableTimestamp;
+  verified_at: NullableTimestamp;
+  readonly created_by_user_id: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface InboundRoutingTokenTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly token_hash: string;
+  status: "active" | "revoked";
+  readonly created_by_user_id: string;
+  readonly created_at: GeneratedTimestamp;
+  revoked_at: NullableTimestamp;
+}
+
+export interface InboundEmailTable {
+  readonly id: string;
+  readonly tenant_id: string | null;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly routing_token_id: string | null;
+  readonly provider_message_id: string;
+  readonly sender_email: string;
+  readonly recipient_address: string;
+  readonly subject: string | null;
+  readonly content_hash: string;
+  readonly auth_results: JsonValue;
+  status: "ACCEPTED" | "QUARANTINED" | "DISMISSED";
+  quarantine_reason: string | null;
+  readonly attachment_count: number;
+  readonly total_bytes: number;
+  readonly created_at: GeneratedTimestamp;
+  processed_at: NullableTimestamp;
+}
+
+export interface InboundEmailAttachmentTable {
+  readonly id: string;
+  readonly inbound_email_id: string;
+  expense_file_id: NullableText;
+  readonly original_filename: string;
+  readonly content_type: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+  readonly size_bytes: number;
+  readonly sha256_hex: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface InboundEmailQuarantineEventTable {
+  readonly id: string;
+  readonly inbound_email_id: string;
+  readonly reason: string;
+  readonly actor_user_id: string | null;
+  readonly action: "QUARANTINED" | "DISMISSED";
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface EntitlementSnapshotOutboxTable {
   readonly outbox_sequence: Generated<string>;
   readonly tenant_id: string;
@@ -512,4 +578,9 @@ export interface AppDatabase {
   readonly "app.expense_files": ExpenseFileTable;
   readonly "app.upload_sessions": UploadSessionTable;
   readonly "app.export_bundles": ExportBundleTable;
+  readonly "app.verified_email_senders": VerifiedEmailSenderTable;
+  readonly "app.inbound_routing_tokens": InboundRoutingTokenTable;
+  readonly "app.inbound_emails": InboundEmailTable;
+  readonly "app.inbound_email_attachments": InboundEmailAttachmentTable;
+  readonly "app.inbound_email_quarantine_events": InboundEmailQuarantineEventTable;
 }

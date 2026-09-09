@@ -62,6 +62,10 @@ services:
       # correct here -- unlike TEMPORAL_HOST, which is container-to-container.
       STORAGE_LOCAL_BASE_URL: ${STORAGE_LOCAL_BASE_URL:-http://127.0.0.1:8100}
       STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?STORAGE_URL_SIGNING_KEY is required}
+      INBOUND_EMAIL_BASE_ADDRESS: ${INBOUND_EMAIL_BASE_ADDRESS:-receipts@inbound.expense-tax.local}
+      INBOUND_WEBHOOK_SIGNING_KEY: ${INBOUND_WEBHOOK_SIGNING_KEY:?INBOUND_WEBHOOK_SIGNING_KEY is required}
+      INBOUND_ROUTING_TOKEN_SECRET: ${INBOUND_ROUTING_TOKEN_SECRET:?INBOUND_ROUTING_TOKEN_SECRET is required}
+      INBOUND_CHALLENGE_DIR: /tmp/expense_tax_inbound_challenges
     volumes:
       - expense_tax_storage:/tmp/expense_tax_storage
     depends_on:

@@ -218,3 +218,14 @@ class OcrReceiptWorkflow:
                 pass
             await fail("OCR_FAILED: extraction pipeline error", version)
             return
+
+
+@workflow.defn(name="ForwardedReceiptWorkflow")
+class ForwardedReceiptWorkflow:
+    """Trusted forwarded attachments use the standard OCR pipeline after
+    App API trust validation. No raw MIME/provider secrets enter history;
+    only the opaque JobReferenceV1 does."""
+
+    @workflow.run
+    async def run(self, job_reference: JobReferenceV1) -> None:
+        await OcrReceiptWorkflow().run(job_reference)

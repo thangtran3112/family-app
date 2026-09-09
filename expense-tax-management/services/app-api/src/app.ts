@@ -62,6 +62,19 @@ import { createFilesDomain, type FilesDomain } from "./domain/files.js";
 import { registerOcrRoutes } from "./routes/ocr.js";
 import { createOcrJobsDomain, type OcrJobsDomain } from "./domain/ocr.js";
 import {
+  createInboundEmailDomain,
+  type InboundEmailDomain,
+} from "./domain/inbound-email.js";
+import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
+import {
+  createLocalVerificationNotifier,
+  type VerificationNotifier,
+} from "./inbound/notifier.js";
+import {
+  PatternMalwareScanner,
+  type MalwareScanner,
+} from "./inbound/security.js";
+import {
   createStorageAdapter,
   type StorageAdapter,
 } from "./storage/factory.js";
@@ -111,6 +124,8 @@ const SENSITIVE_FIELD_NAMES = [
   "encryption_key",
   "urlSigningKey",
   "url_signing_key",
+  "webhookSigningKey",
+  "routingTokenSecret",
 ];
 
 const SENSITIVE_LOG_PATHS = [
@@ -150,6 +165,9 @@ export interface BuildAppOptions {
   readonly filesDomain?: FilesDomain;
   readonly exportsDomain?: ExportsDomain;
   readonly ocrJobsDomain?: OcrJobsDomain;
+  readonly inboundEmailDomain?: InboundEmailDomain;
+  readonly verificationNotifier?: VerificationNotifier;
+  readonly malwareScanner?: MalwareScanner;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -298,6 +316,26 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerOcrRoutes, {
     identityResolver: identityDomain,
     ocrJobsDomain,
+  });
+  const inboundEmailDomain =
+    options.inboundEmailDomain ??
+    createInboundEmailDomain(database, {
+      filesDomain,
+      ocrJobsDomain,
+      plansDomain,
+      notifier:
+        options.verificationNotifier ??
+        createLocalVerificationNotifier(options.config.inboundEmail.challengeDir),
+      malwareScanner: options.malwareScanner ?? PatternMalwareScanner,
+      config: {
+        baseAddress: options.config.inboundEmail.baseAddress,
+        routingTokenSecret: options.config.inboundEmail.routingTokenSecret,
+      },
+    });
+  app.register(registerInboundEmailRoutes, {
+    identityResolver: identityDomain,
+    inboundEmailDomain,
+    webhookSigningKey: options.config.inboundEmail.webhookSigningKey,
   });
 
   if (options.temporalStarter === undefined) {

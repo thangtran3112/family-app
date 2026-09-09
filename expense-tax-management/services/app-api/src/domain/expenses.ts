@@ -198,7 +198,7 @@ export async function insertExpenseInTransaction(
     request: ExpenseCreateRequest;
     requestId: string;
     scope: Scope;
-    source?: "manual" | "ocr";
+    source?: "manual" | "ocr" | "forwarded_email";
     initialStatus?: "draft" | "ready";
   },
 ): Promise<Expense> {

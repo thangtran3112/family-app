@@ -122,7 +122,7 @@ async function businessRole(
   return access.role;
 }
 
-async function requireScopeRole(
+export async function requireScopeRole(
   database: Kysely<AppDatabase>,
   input: { actorUserId: string; tenantId: string; scope: FileScope },
 ): Promise<"owner" | "editor" | "viewer"> {

@@ -118,6 +118,18 @@ describe("generated API artifacts", () => {
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/projects/{projectId}/cost-report",
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports",
       "/api/v1/tenants/{tenantId}/businesses/{businessId}/exports/{exportId}",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/verified-senders",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/verified-senders/{senderId}",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/verified-senders/{senderId}/verify",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/routing-token",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/inbound-emails",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/quarantine",
+      "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/forwarding/quarantine/{inboundEmailId}/dismiss",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/forwarding/verified-senders",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/forwarding/routing-token",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/forwarding/inbound-emails",
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/forwarding/quarantine",
+      "/internal/v1/inbound-email/provider-webhook",
     ]) {
       expect(appDocument.paths).toHaveProperty(path);
       expect(foundryDocument.paths).not.toHaveProperty(path);

@@ -6,6 +6,14 @@ export interface AppConfig {
   readonly auth: AppAuthConfig;
   readonly temporal: TemporalConnectionConfig;
   readonly storage: StorageConnectionConfig;
+  readonly inboundEmail: InboundEmailConfig;
+}
+
+export interface InboundEmailConfig {
+  readonly baseAddress: string;
+  readonly webhookSigningKey: string;
+  readonly routingTokenSecret: string;
+  readonly challengeDir: string;
 }
 
 export interface TemporalConnectionConfig {
@@ -84,6 +92,13 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
     options.env?.STORAGE_LOCAL_BASE_URL === undefined
       ? process.env
       : env;
+  const inboundEnv =
+    options.env?.INBOUND_EMAIL_BASE_ADDRESS === undefined &&
+    options.env?.INBOUND_WEBHOOK_SIGNING_KEY === undefined &&
+    options.env?.INBOUND_ROUTING_TOKEN_SECRET === undefined &&
+    options.env?.INBOUND_CHALLENGE_DIR === undefined
+      ? process.env
+      : env;
 
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("Invalid application port");
@@ -119,6 +134,24 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
       urlSigningKey: requiredEnvironmentValue(
         storageEnv,
         "STORAGE_URL_SIGNING_KEY",
+      ),
+    },
+    inboundEmail: {
+      baseAddress: requiredEnvironmentValue(
+        inboundEnv,
+        "INBOUND_EMAIL_BASE_ADDRESS",
+      ),
+      webhookSigningKey: requiredEnvironmentValue(
+        inboundEnv,
+        "INBOUND_WEBHOOK_SIGNING_KEY",
+      ),
+      routingTokenSecret: requiredEnvironmentValue(
+        inboundEnv,
+        "INBOUND_ROUTING_TOKEN_SECRET",
+      ),
+      challengeDir: requiredEnvironmentValue(
+        inboundEnv,
+        "INBOUND_CHALLENGE_DIR",
       ),
     },
   };

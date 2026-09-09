@@ -1,5 +1,6 @@
 import {
   AI_WORKER_TASK_QUEUE,
+  FORWARDED_RECEIPT_WORKFLOW_TYPE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
   OCR_RECEIPT_WORKFLOW_TYPE,
   OcrModeKeySchema,
@@ -37,6 +38,7 @@ export interface OcrJobBinding {
   readonly business_id: string | null;
   readonly requested_by_user_id: string | null;
   readonly source_file_id: string | null;
+  readonly workflow_type: string;
 }
 
 export interface CreateOcrJobCommand {
@@ -47,6 +49,8 @@ export interface CreateOcrJobCommand {
   readonly modeKey: OcrModeKey;
   readonly idempotencyKey: string;
   readonly requestId: string;
+  readonly workflowType?: string;
+  readonly extraInputParams?: Readonly<Record<string, unknown>>;
 }
 
 export interface ListOcrJobsCommand {
@@ -136,7 +140,10 @@ export async function applyOcrExtraction(
       scope.kind === "personal"
         ? { kind: "personal", profileId: scope.profileId }
         : { kind: "business", businessId: scope.businessId },
-    source: "ocr",
+    source:
+      job.workflow_type === FORWARDED_RECEIPT_WORKFLOW_TYPE
+        ? "forwarded_email"
+        : "ocr",
     initialStatus: "ready",
   });
 
@@ -196,13 +203,13 @@ export function createOcrJobsDomain(
               input.scope.kind === "personal"
                 ? { personalProfileId: input.scope.profileId }
                 : { businessId: input.scope.businessId },
-            workflowType: OCR_RECEIPT_WORKFLOW_TYPE,
+            workflowType: input.workflowType ?? OCR_RECEIPT_WORKFLOW_TYPE,
             taskQueue: AI_WORKER_TASK_QUEUE,
             allowedResultSchemaVersion: OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
             targetAggregateType: "expense",
             requestedByUserId: input.actorUserId,
             sourceFileId: input.fileId,
-            inputParams: { modeKey: input.modeKey },
+            inputParams: { modeKey: input.modeKey, ...input.extraInputParams },
             actorUserId: input.actorUserId,
             requestId: input.requestId,
           }),
@@ -241,7 +248,12 @@ export function createOcrJobsDomain(
           .selectAll()
           .where("id", "=", input.jobId)
           .executeTakeFirst();
-        if (!job || job.workflow_type !== OCR_RECEIPT_WORKFLOW_TYPE) {
+        if (
+          !job ||
+          ![OCR_RECEIPT_WORKFLOW_TYPE, "ForwardedReceiptWorkflow"].includes(
+            job.workflow_type,
+          )
+        ) {
           throw DomainError.notFound();
         }
         if (

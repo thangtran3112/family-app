@@ -12,7 +12,11 @@ from ai_worker.app_api_client import app_api_client_from_env
 from ai_worker.constants import TASK_QUEUE
 from ai_worker.foundry_client import foundry_client_from_env
 from ai_worker.ocr_activities import OcrReceiptActivities
-from ai_worker.workflows import FoundationEchoWorkflow, OcrReceiptWorkflow
+from ai_worker.workflows import (
+    ForwardedReceiptWorkflow,
+    FoundationEchoWorkflow,
+    OcrReceiptWorkflow,
+)
 
 
 async def main() -> None:
@@ -31,7 +35,11 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=task_queue,
-        workflows=[FoundationEchoWorkflow, OcrReceiptWorkflow],
+        workflows=[
+            FoundationEchoWorkflow,
+            OcrReceiptWorkflow,
+            ForwardedReceiptWorkflow,
+        ],
         activities=[
             activities.mark_running,
             activities.submit_echo_result,

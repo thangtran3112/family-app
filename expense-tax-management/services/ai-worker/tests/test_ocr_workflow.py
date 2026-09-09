@@ -13,7 +13,7 @@ from ai_worker.app_api_client import AppApiClient
 from ai_worker.constants import TASK_QUEUE
 from ai_worker.foundry_client import FoundryClient
 from ai_worker.ocr_activities import OcrReceiptActivities
-from ai_worker.workflows import OcrReceiptWorkflow
+from ai_worker.workflows import ForwardedReceiptWorkflow, OcrReceiptWorkflow
 
 JOB_ID = uuid.UUID("77777777-7777-4777-8777-777777777777")
 TENANT_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
@@ -186,3 +186,52 @@ async def test_ocr_workflow_maps_quota_conflict_to_a_typed_failed_result():
     sent = result_route.calls[0].request.content
     assert b'"status":"FAILED"' in sent
     assert b"QUOTA_BLOCKED" in sent
+
+
+@respx.mock
+async def test_forwarded_receipt_workflow_enters_the_standard_ocr_pipeline():
+    _, result_route = mock_happy_path()
+    app_api = AppApiClient(base_url=APP_BASE, service_token="app-token")
+    ocr = OcrReceiptActivities(
+        app_api,
+        FoundryClient(base_url=FOUNDRY_BASE, service_token="foundry-token"),
+    )
+    echo = FoundationEchoActivities(app_api)
+    forwarded = JobReferenceV1(
+        schemaVersion=1,
+        jobId=JOB_ID,
+        workflowType="ForwardedReceiptWorkflow",
+        workflowId=f"forwarded-{JOB_ID}",
+    )
+    async with (
+        await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter,
+        ) as env,
+        Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[ForwardedReceiptWorkflow],
+            activities=[
+                echo.mark_running,
+                ocr.ocr_get_input,
+                ocr.ocr_download_receipt,
+                ocr.ocr_resolve_route,
+                ocr.ocr_reserve,
+                ocr.ocr_mark_call_started,
+                ocr.ocr_run_extraction,
+                ocr.ocr_record_accepted,
+                ocr.ocr_release,
+                ocr.ocr_submit_extraction,
+                ocr.ocr_submit_failed,
+                ocr.ocr_mark_failed,
+            ],
+        ),
+    ):
+        await env.client.execute_workflow(
+            ForwardedReceiptWorkflow.run,
+            forwarded,
+            id=f"forwarded-{JOB_ID}",
+            task_queue=TASK_QUEUE,
+        )
+    assert result_route.called
+    assert b'"status":"SUCCEEDED"' in result_route.calls[0].request.content

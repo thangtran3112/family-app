@@ -12,4 +12,5 @@ strand dispatched workflows with no worker ever polling them.
 TASK_QUEUE = "expense-tax-ai-worker"
 FOUNDATION_ECHO_WORKFLOW_TYPE = "FoundationEchoWorkflow"
 OCR_RECEIPT_WORKFLOW_TYPE = "OcrReceiptWorkflow"
+FORWARDED_RECEIPT_WORKFLOW_TYPE = "ForwardedReceiptWorkflow"
 OCR_EXTRACTION_RESULT_SCHEMA_VERSION = "ocr-extraction-v1"

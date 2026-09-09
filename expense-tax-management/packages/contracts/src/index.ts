@@ -26,6 +26,7 @@ export {
   AI_WORKER_TASK_QUEUE,
   FOUNDATION_ECHO_WORKFLOW_TYPE,
   OCR_RECEIPT_WORKFLOW_TYPE,
+  FORWARDED_RECEIPT_WORKFLOW_TYPE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
 } from "./internal/task-queues.js";
 export {
@@ -107,6 +108,7 @@ export * from "./foundry-catalog.js";
 export * from "./foundry-quotas.js";
 export * from "./processing-jobs.js";
 export * from "./exports.js";
+export * from "./inbound-email.js";
 export * from "./files.js";
 export * from "./ocr.js";
 export {

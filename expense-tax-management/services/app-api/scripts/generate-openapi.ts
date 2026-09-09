@@ -51,6 +51,12 @@ const config: AppConfig = {
     baseUrl: "https://generator.invalid",
     urlSigningKey: "generator-signing-key",
   },
+  inboundEmail: {
+    baseAddress: "receipts@inbound.generator.invalid",
+    webhookSigningKey: "generator-webhook-key",
+    routingTokenSecret: "generator-routing-key",
+    challengeDir: "/tmp/generator-inbound-challenges",
+  },
 };
 
 const outputPath = process.env.OPENAPI_OUTPUT_PATH

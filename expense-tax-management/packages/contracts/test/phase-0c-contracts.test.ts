@@ -124,6 +124,10 @@ describe("Phase 0C OCR contracts", () => {
   });
 
   it("distinguishes OCR-created expenses from manual ones", () => {
-    expect(ExpenseSourceSchema.options).toEqual(["manual", "ocr"]);
+    expect(ExpenseSourceSchema.options).toEqual([
+      "manual",
+      "ocr",
+      "forwarded_email",
+    ]);
   });
 });
