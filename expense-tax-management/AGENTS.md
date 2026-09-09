@@ -29,9 +29,15 @@
   - `DomainError.gone()` (410 GONE) added for expired signatures/sessions — first new error code since 0I.
   - Expiry checked lazily, no scheduler (established precedent). Session creation uses existing `executeIdempotentMutation`. Delete is tombstone + best-effort object removal that rolls back on storage failure (metadata and bytes must not diverge silently).
   - `STORAGE_LOCAL_BASE_URL` must be client-reachable (loopback-published port), NOT a container-network hostname — content URLs leave the cluster. Documented pointedly in `.env.example`/compose (mirrors the 0J1 `.env`-architecture lesson).
-- App API migrations `002_identity_memberships` through `009_expense_files` are applied and verified locally. Foundry migrations `001_service_metadata` through `003_quotas_reservations` are applied and verified locally.
-- Final local gates: `PHASE_0I_INTEGRATION=1 PHASE_0J_INTEGRATION=1 PHASE_0J_WAVE2_INTEGRATION=1 PHASE_0J_WAVE3_INTEGRATION=1 PHASE_0J1_INTEGRATION=1 PHASE_0K_WAVE_A_INTEGRATION=1 PHASE_0K_WAVE_B_INTEGRATION=1 PHASE_0L_INTEGRATION=1 PHASE_0L_WORKER_LOOP=1 PHASE_0D_INTEGRATION=1 pnpm verify:phase-0d` (cascades through every prior verifier).
-- Final evidence: `.superpowers/sdd/phase-0j-waves-3-4/task-report.md` (Waves 1-4); 0J1, 0K Wave A, 0K Wave B, 0L, and 0D verified fresh this session (zero skips).
+- Phase 0C complete locally: receipt capture → OCR extraction → expense, end to end with a fake provider (design §22 gate, replaces stale `phase-0c-ocr-pipeline.md` per its own replan notice). Tenant creates an OCR job per file+mode (mode-gated by App API-owned ocr_mode_* entitlements); Python `OcrReceiptWorkflow` downloads real bytes (sha-verified), resolves mode→model via Foundry `effective-route`, reserves RECEIPT_OCR, fake-extracts (canned deterministic), settles CONSUMED, submits; App API's `submitResult` atomically creates the expense (`source "ocr"`, status `ready`) + binds file ↔ expense ↔ job. No placeholder drafts (failed jobs leave no rows). See `plans/sub-plans/phase-0c-ocr-pipeline-implementation.md`.
+  - Foundry migration 004: `fake` provider kind + seeded fake connection/model/three OCR modes/routes (one inert backend behind three curated names). New service-scoped `GET /internal/v1/effective-route` (`ai-worker` + `routes:read`); response carries kind + raw model ID, never secrets.
+  - App migration 010: expenses source CHECK widens to (`manual`,`ocr`); jobs gain `requested_by_user_id` (expense attribution), `source_file_id` (job→file link), `input_params` (generic creation-context hatch, carries modeKey).
+  - `QUOTA_BLOCKED` is a `result.error` marker convention (job FAILED, no expense); exhaustion proven e2e with a max-0 policy.
+  - Explicitly deferred (pre-release hardening track): App-signed admission grants (§16.3), reservation→route audit linkage (§11.4), upfront quota-status proxy (needs token acquisition), real vision-LLM adapter (needs credentials). Worker passes App-resolved tenantId through; tampering requires worker-token compromise.
+  - Cross-test lesson: OCR jobs always dispatch to the shared queue constant, so the e2e worker polls it and stops/restarts the dev compose worker around the run (else the stale worker poison-fails new workflow types). BaseUrl thunk on the local adapter covers ephemeral test listeners.
+- App API migrations `002_identity_memberships` through `010_ocr_expenses` are applied and verified locally. Foundry migrations `001_service_metadata` through `004_fake_ocr_provider` are applied and verified locally.
+- Final local gates: `PHASE_0I_INTEGRATION=1 PHASE_0J_INTEGRATION=1 PHASE_0J_WAVE2_INTEGRATION=1 PHASE_0J_WAVE3_INTEGRATION=1 PHASE_0J_WAVE4_INTEGRATION=1 PHASE_0J1_INTEGRATION=1 PHASE_0K_WAVE_A_INTEGRATION=1 PHASE_0K_WAVE_B_INTEGRATION=1 PHASE_0L_INTEGRATION=1 PHASE_0L_WORKER_LOOP=1 PHASE_0D_INTEGRATION=1 PHASE_0C_INTEGRATION=1 PHASE_0C_OCR_LOOP=1 pnpm verify:phase-0c` (cascades through every prior verifier).
+- Final evidence: `.superpowers/sdd/phase-0j-waves-3-4/task-report.md` (Waves 1-4); 0J1, 0K Wave A, 0K Wave B, 0L, 0D, and 0C verified fresh this session (zero skips).
 - Naming gotcha for future files: `.dockerignore` has `**/*secret*` and `**/*credentials*` (meant to block real credential files) — any source filename containing those substrings gets silently excluded from every service's Docker build context. Avoid those substrings in filenames; `vault.ts` is the established alternative for secret-handling logic.
 
 ## Change Boundaries
@@ -81,7 +87,6 @@
 - Restart opencode after changing project configuration, agents, or rules so changes load in a new process.
 
 ## Remaining Pre-Infrastructure Work
-- `0C`: receipt capture/OCR pipeline after storage, Foundry, and worker foundations.
 - `0E`: business/tax-year reports and export bundles based on completed tax treatment data.
 - `0P`: secure forwarded receipt intake and quarantine before OCR.
 - `0F0`, `0F`, `0M`, `0N`: application-specific mockup gates and Capture/Office/Foundry frontends.
