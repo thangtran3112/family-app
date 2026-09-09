@@ -125,6 +125,29 @@ services:
     networks:
       - default
 
+  ai-worker:
+    build:
+      context: ../expense-tax-management
+      dockerfile: services/ai-worker/Dockerfile
+    container_name: expense-tax-ai-worker
+    restart: unless-stopped
+    environment:
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      AI_WORKER_TASK_QUEUE: expense-tax-ai-worker
+      APP_API_BASE_URL: http://app-api:8100
+      # No real caller mints a worker token yet (Phase 0L foundation only,
+      # see AGENTS.md/plan doc) -- calls the worker makes will 401 against a
+      # real running app-api container until Phase 0C wires a real issuer.
+      APP_API_SERVICE_TOKEN: ${AI_WORKER_APP_API_SERVICE_TOKEN:-not-yet-issued}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      app-api:
+        condition: service_healthy
+    networks:
+      - default
+
 volumes:
   expense_service_storage:
 
