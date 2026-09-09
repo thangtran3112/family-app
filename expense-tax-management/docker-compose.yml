@@ -53,8 +53,12 @@ services:
       APP_SERVICE_TOKEN_AUDIENCE: ${APP_SERVICE_TOKEN_AUDIENCE:-expense-app-internal}
       APP_SERVICE_JWKS_URL: ${APP_SERVICE_JWKS_URL:-https://services.expense-tax.local/.well-known/jwks.json}
       APP_DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
     depends_on:
       postgres:
+        condition: service_healthy
+      temporal:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8100/health/live >/dev/null"]
