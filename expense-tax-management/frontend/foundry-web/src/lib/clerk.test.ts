@@ -3,12 +3,17 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { getPlatformAuthorization } from "./clerk";
+import { getPlatformAuthorization, requireClerkPublishableKey } from "./clerk";
 
 const source = (relativePath: string) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("Foundry Clerk authorization", () => {
+  it("requires a configured publishable key", () => {
+    expect(() => requireClerkPublishableKey(" ")).toThrow(
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required",
+    );
+  });
   it("requests platform template without a tenant organization", async () => {
     const getToken = vi.fn().mockResolvedValue("platform-token");
 

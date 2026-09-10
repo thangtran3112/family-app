@@ -4,6 +4,12 @@ export type ClerkGetToken = (options: {
   skipCache?: boolean;
 }) => Promise<string | null>;
 
+export function requireClerkPublishableKey(value: string | undefined): string {
+  const key = value?.trim();
+  if (!key) throw new Error("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required");
+  return key;
+}
+
 export function getTenantGateState(input: {
   isLoaded: boolean;
   isSignedIn: boolean | undefined;

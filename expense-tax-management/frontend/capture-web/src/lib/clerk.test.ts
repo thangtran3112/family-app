@@ -3,12 +3,21 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { getAppAuthorization, getTenantGateState } from "./clerk";
+import {
+  getAppAuthorization,
+  getTenantGateState,
+  requireClerkPublishableKey,
+} from "./clerk";
 
 const source = (relativePath: string) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("capture Clerk authorization", () => {
+  it("requires a configured publishable key", () => {
+    expect(() => requireClerkPublishableKey(undefined)).toThrow(
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required",
+    );
+  });
   it("rejects signed-out requests without creating a bearer token", async () => {
     await expect(getAppAuthorization(vi.fn().mockResolvedValue(null), "org_123"))
       .rejects.toThrow("Authentication required");

@@ -305,4 +305,28 @@ describe("Clerk webhook route and processing", () => {
     });
     expect(processEvent).toHaveBeenCalledOnce();
   });
+
+  it("rejects unknown user and organization webhook identities", async () => {
+    const handler = createClerkWebhookHandler({
+      async processEvent(_event, operation) {
+        await operation({
+          upsertUser: async () => {
+            throw new Error("Clerk user is not pre-provisioned");
+          },
+          markUserDeleted: vi.fn(),
+          upsertOrganization: async () => {
+            throw new Error("Clerk organization is not pre-provisioned");
+          },
+          markOrganizationDeleted: vi.fn(),
+          upsertMembership: vi.fn(),
+          markMembershipDeleted: vi.fn(),
+        });
+        return { replayed: false };
+      },
+    });
+
+    await expect(
+      handler.handle({ id: "evt_unknown_user", ...userEvent("user.created") }),
+    ).rejects.toThrow("not pre-provisioned");
+  });
 });

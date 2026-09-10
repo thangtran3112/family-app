@@ -23,9 +23,12 @@ def jwt_with_claims(claims: dict[str, object]) -> str:
 def valid_token() -> str:
     return jwt_with_claims(
         {
+            "iss": "https://clerk.test",
             "aud": ["app-api-machine"],
             "scope": "jobs:write files:read",
             "sub": "ai-worker-app-machine",
+            "jti": "jti-123",
+            "nbf": 800,
             "exp": 1_000,
         }
     )
@@ -44,6 +47,7 @@ async def test_issuer_creates_short_lived_jwt_with_machine_secret(valid_token):
         audience="app-api-machine",
         scopes=("jobs:write", "files:read"),
         source_machine_id="ai-worker-app-machine",
+        issuer="https://clerk.test",
         ttl_seconds=300,
         timeout_seconds=2,
         client_factory=lambda **kwargs: httpx.AsyncClient(
@@ -75,6 +79,7 @@ async def test_provider_reuses_cached_token_until_refresh_window(valid_token):
         audience="app-api-machine",
         scopes=("jobs:write", "files:read"),
         source_machine_id="ai-worker-app-machine",
+        expected_issuer="https://clerk.test",
         refresh_skew_seconds=50,
         now=lambda: 900,
     )
@@ -86,8 +91,28 @@ async def test_provider_reuses_cached_token_until_refresh_window(valid_token):
 
 async def test_provider_refreshes_token_inside_expiry_window():
     tokens = [
-        jwt_with_claims({"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 100}),
-        jwt_with_claims({"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 200}),
+        jwt_with_claims(
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti-1",
+                "nbf": 50,
+                "exp": 100,
+            }
+        ),
+        jwt_with_claims(
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti-2",
+                "nbf": 50,
+                "exp": 200,
+            }
+        ),
     ]
     now = 60
 
@@ -99,6 +124,7 @@ async def test_provider_refreshes_token_inside_expiry_window():
         audience="app-api-machine",
         scopes=("jobs:write",),
         source_machine_id="ai-worker-app-machine",
+        expected_issuer="https://clerk.test",
         refresh_skew_seconds=50,
         now=lambda: now,
     )
@@ -114,27 +140,74 @@ async def test_provider_refreshes_token_inside_expiry_window():
     "claims, message",
     [
         (
-            {"aud": ["wrong-audience"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 1_000},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["wrong-audience"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
             "audience",
         ),
         (
-            {"aud": ["app-api-machine"], "scope": "other:scope", "sub": "ai-worker-app-machine", "exp": 1_000},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "other:scope",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
             "scope",
         ),
         (
-            {"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 800},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 700,
+                "exp": 800,
+            },
             "expired",
         ),
         (
-            {"aud": ["app-api-machine"], "scope": "jobs:write", "exp": 1_000},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
             "subject",
         ),
         (
-            {"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "other-machine", "exp": 1_000},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "other-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
             "subject",
         ),
         (
-            {"aud": ["app-api-machine", "other-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 1_000},
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine", "other-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
             "audience",
         ),
     ],
@@ -150,6 +223,7 @@ async def test_issuer_rejects_invalid_claims(claims, message):
         audience="app-api-machine",
         scopes=("jobs:write",),
         source_machine_id="ai-worker-app-machine",
+        issuer="https://clerk.test",
         client_factory=lambda **kwargs: httpx.AsyncClient(
             transport=httpx.MockTransport(handler), **kwargs
         ),
@@ -163,9 +237,12 @@ async def test_issuer_rejects_invalid_claims(claims, message):
 async def test_issuer_ignores_client_id_claim_when_source_subject_is_valid():
     token = jwt_with_claims(
         {
+            "iss": "https://clerk.test",
             "aud": ["app-api-machine"],
             "scope": "jobs:write",
             "sub": "ai-worker-app-machine",
+            "jti": "jti-123",
+            "nbf": 800,
             "client_id": "other-machine",
             "exp": 1_000,
         }
@@ -179,6 +256,7 @@ async def test_issuer_ignores_client_id_claim_when_source_subject_is_valid():
         audience="app-api-machine",
         scopes=("jobs:write",),
         source_machine_id="ai-worker-app-machine",
+        issuer="https://clerk.test",
         client_factory=lambda **kwargs: httpx.AsyncClient(
             transport=httpx.MockTransport(handler), **kwargs
         ),
@@ -188,6 +266,77 @@ async def test_issuer_ignores_client_id_claim_when_source_subject_is_valid():
     assert await issuer.issue() == token
 
 
+@pytest.mark.parametrize(
+    "claims, message",
+    [
+        (
+            {
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
+            "issuer",
+        ),
+        (
+            {
+                "iss": "https://other.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 800,
+                "exp": 1_000,
+            },
+            "issuer",
+        ),
+        (
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "nbf": 800,
+                "exp": 1_000,
+            },
+            "token ID",
+        ),
+        (
+            {
+                "iss": "https://clerk.test",
+                "aud": ["app-api-machine"],
+                "scope": "jobs:write",
+                "sub": "ai-worker-app-machine",
+                "jti": "jti",
+                "nbf": 1_001,
+                "exp": 1_200,
+            },
+            "not-before",
+        ),
+    ],
+)
+async def test_issuer_rejects_missing_or_invalid_strict_clerk_claims(claims, message):
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"token": jwt_with_claims(claims)})
+
+    issuer = ClerkM2MTokenIssuer(
+        machine_secret_key="ak_test_secret",
+        audience="app-api-machine",
+        scopes=("jobs:write",),
+        source_machine_id="ai-worker-app-machine",
+        issuer="https://clerk.test",
+        client_factory=lambda **kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
+        now=lambda: 900,
+    )
+
+    with pytest.raises(M2MTokenError, match=message):
+        await issuer.issue()
+
+
 async def test_issuer_requires_machine_secret_without_logging_it():
     with pytest.raises(M2MTokenError, match="machine secret") as raised:
         ClerkM2MTokenIssuer(
@@ -195,6 +344,7 @@ async def test_issuer_requires_machine_secret_without_logging_it():
             audience="app-api-machine",
             scopes=("jobs:write",),
             source_machine_id="ai-worker-app-machine",
+            issuer="https://clerk.test",
         )
 
     assert "ak_test" not in str(raised.value)

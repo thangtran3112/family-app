@@ -58,31 +58,6 @@ function parseRoles(value: unknown, required: boolean): readonly string[] {
 }
 
 function clerkRole(payload: Record<string, unknown>): string | undefined {
-  if (payload.org_role !== undefined) {
-    if (
-      typeof payload.org_role !== "string" ||
-      typeof payload.org_id !== "string" ||
-      payload.org_id.trim().length === 0
-    ) {
-      throw new Error("Invalid token claim");
-    }
-    return payload.org_role;
-  }
-  if (
-    typeof payload.o === "object" &&
-    payload.o !== null &&
-    "rol" in payload.o
-  ) {
-    if (
-      typeof payload.o.rol !== "string" ||
-      !('id' in payload.o) ||
-      typeof payload.o.id !== "string" ||
-      payload.o.id.trim().length === 0
-    ) {
-      throw new Error("Invalid token claim");
-    }
-    return payload.o.rol;
-  }
   if (payload.platform_role !== undefined) {
     if (typeof payload.platform_role !== "string") {
       throw new Error("Invalid token claim");

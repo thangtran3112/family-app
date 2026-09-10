@@ -139,6 +139,29 @@ describe("Phase 0I Compose boundaries", () => {
     expect(nginxConfig).not.toMatch(/app-api|foundry-service/);
   });
 
+  it("passes every Clerk startup variable to local and production workers", () => {
+    const local = composeConfig(repoRoot).services["ai-worker"]?.environment ?? {};
+    const productionText = readFileSync(
+      path.join(repoRoot, "deploy/production/docker-compose.yml"),
+      "utf8",
+    );
+    for (const key of [
+      "CLERK_ISSUER_URL",
+      "CLERK_JWKS_URL",
+      "CLERK_TENANT_AUDIENCE",
+      "CLERK_PLATFORM_AUDIENCE",
+      "CLERK_APP_SERVICE_AUDIENCE",
+      "CLERK_FOUNDRY_SERVICE_AUDIENCE",
+      "CLERK_APP_MACHINE_SECRET_KEY",
+      "CLERK_FOUNDRY_MACHINE_SECRET_KEY",
+      "CLERK_APP_SERVICE_SUBJECT",
+      "CLERK_FOUNDRY_SERVICE_SUBJECT",
+    ]) {
+      expect(local).toHaveProperty(key);
+      expect(productionText).toMatch(new RegExp(`ai-worker:[\\s\\S]*${key}:`));
+    }
+  });
+
   it("does not fall back when an explicit env file is missing", () => {
     const missingEnvFile = path.join(
       mkdtempSync(path.join(os.tmpdir(), "expense-tax-missing-env-")),

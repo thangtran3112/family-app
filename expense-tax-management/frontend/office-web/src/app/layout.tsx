@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
+import { requireClerkPublishableKey } from "@/lib/clerk";
 import "./styles.css";
 export const metadata: Metadata = { title: "ExpenseTax Office", description: "Business ledger, tax preparation, and exports." };
-export default function RootLayout({ children }: { children: ReactNode }) { return <html lang="en"><body><ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "pk_test_ZXhhbXBsZS5jbGVyay5jb20k"}>{children}</ClerkProvider></body></html>; }
+export default function RootLayout({ children }: { children: ReactNode }) { return <html lang="en"><body><ClerkProvider publishableKey={requireClerkPublishableKey(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)}>{children}</ClerkProvider></body></html>; }

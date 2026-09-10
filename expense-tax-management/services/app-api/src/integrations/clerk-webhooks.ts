@@ -96,11 +96,6 @@ export function createClerkWebhookHandler(repository: ClerkWebhookRepository): C
   return { handle: (event) => repository.processEvent(event, (mutation) => dispatch(event, mutation)) };
 }
 
-function slugFor(name: string, clerkOrgId: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "organization";
-  return `${slug}-${clerkOrgId.replace(/[^a-zA-Z0-9]/g, "").slice(-16).toLowerCase()}`;
-}
-
 function databaseMutation(transaction: Transaction<AppDatabase>): ClerkWebhookMutation {
   return {
     async upsertUser(input) {
@@ -108,9 +103,7 @@ function databaseMutation(transaction: Transaction<AppDatabase>): ClerkWebhookMu
       const existing = await transaction.selectFrom("app.users").select("id").where("clerk_user_id", "=", input.clerkUserId).executeTakeFirst();
       if (existing) {
         await transaction.updateTable("app.users").set({ primary_email: input.email, display_name: input.displayName.slice(0, 100), status: "active", updated_at: now }).where("id", "=", existing.id).execute();
-      } else {
-        await transaction.insertInto("app.users").values({ id: randomUUID(), clerk_user_id: input.clerkUserId, primary_email: input.email, display_name: input.displayName.slice(0, 100), status: "active", created_at: now, updated_at: now }).execute();
-      }
+      } else throw new Error("Clerk user is not pre-provisioned");
     },
     async markUserDeleted(clerkUserId) {
       const now = new Date();
@@ -123,9 +116,7 @@ function databaseMutation(transaction: Transaction<AppDatabase>): ClerkWebhookMu
       const existing = await transaction.selectFrom("app.tenants").select("id").where("clerk_org_id", "=", input.clerkOrgId).executeTakeFirst();
       if (existing) {
         await transaction.updateTable("app.tenants").set({ name, status: "active", archived_at: null, updated_at: now }).where("id", "=", existing.id).execute();
-      } else {
-        await transaction.insertInto("app.tenants").values({ id: randomUUID(), clerk_org_id: input.clerkOrgId, name, slug: slugFor(name, input.clerkOrgId), status: "active", version: 1, created_at: now, updated_at: now, archived_at: null }).execute();
-      }
+      } else throw new Error("Clerk organization is not pre-provisioned");
     },
     async markOrganizationDeleted(clerkOrgId) {
       const now = new Date();

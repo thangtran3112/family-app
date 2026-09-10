@@ -70,6 +70,7 @@ import {
 } from "./domain/inbound-email.js";
 import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
 import { registerClerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import type { ClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 import {
   createClerkWebhookHandler,
   createDatabaseClerkWebhookRepository,
@@ -179,6 +180,7 @@ export interface BuildAppOptions {
   readonly verificationNotifier?: VerificationNotifier;
   readonly malwareScanner?: MalwareScanner;
   readonly clerkWebhookHandler?: ClerkWebhookHandler;
+  readonly clerkIdentityDomain?: ClerkIdentityMappingDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -265,6 +267,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         options.config,
         options.authKeyResolverFactory,
       ),
+    ...(options.clerkIdentityDomain
+      ? { clerkIdentityDomain: options.clerkIdentityDomain }
+      : {}),
   });
   registerDatabasePlugin(app, {
     database,

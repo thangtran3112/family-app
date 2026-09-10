@@ -8,7 +8,7 @@ const { fetchLedger, fetchTaxReport } = vi.hoisted(() => ({
 }));
 vi.mock("./api", () => ({ fetchLedger, fetchTaxReport }));
 
-import { loadDashboard, loadExpenses, loadTax } from "./page-data";
+import { loadDashboard, loadExpenses, loadTax, loadTaxForOffice } from "./page-data";
 
 const session: OfficeSession = {
   apiBaseUrl: "http://app.test",
@@ -41,5 +41,9 @@ describe("Office page data boundaries", () => {
     await loadExpenses(session, getToken, "org_123");
 
     expect(fetchLedger).toHaveBeenCalledWith(session, getToken, "org_123");
+  });
+
+  it("provides stable tax loader without a render-created callback", () => {
+    expect(loadTaxForOffice).toBeTypeOf("function");
   });
 });

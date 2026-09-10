@@ -69,6 +69,25 @@ function parseScopes(value: unknown): readonly string[] {
   return value.split(" ").filter((scope) => scope.length > 0);
 }
 
+function clerkOrganizationId(payload: Record<string, unknown>): string | null {
+  const nested = payload.o;
+  const nestedId =
+    typeof nested === "object" && nested !== null && "id" in nested
+      ? nested.id
+      : undefined;
+  const values = [payload.org_id, nestedId].filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+  if (values.length > 1 && values[0] !== values[1]) {
+    throw new Error("Invalid token claim");
+  }
+  if (payload.org_id !== undefined && values.length === 0) {
+    throw new Error("Invalid token claim");
+  }
+  return values[0] ?? null;
+}
+
 function tenantIdentityClaims(
   tokenType: AppTokenType,
   payload: Record<string, unknown>,
@@ -151,6 +170,8 @@ export function createTokenVerifier(
         // client_id and azp are caller-controlled metadata, not identity.
         const clientId = options.tokenType === "service" ? subject : null;
 
+        const organizationId =
+          options.tokenType === "tenant" ? clerkOrganizationId(payload) : null;
         return {
           tokenType: options.tokenType,
           subject,
@@ -165,6 +186,7 @@ export function createTokenVerifier(
             payload,
             options.requireVerifiedEmail ?? false,
           ),
+          ...(organizationId === null ? {} : { organizationId }),
         };
       } catch {
         throw new Error("Token verification failed");

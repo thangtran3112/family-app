@@ -123,12 +123,14 @@ def foundry_client_from_env() -> FoundryClient:
     scopes = ("routes:read", "reservations:write")
     issuer = ClerkM2MTokenIssuer(
         machine_secret_key=os.environ["CLERK_FOUNDRY_MACHINE_SECRET_KEY"],
+        issuer=os.environ["CLERK_ISSUER_URL"],
         audience=audience,
         scopes=scopes,
         source_machine_id=os.environ["CLERK_FOUNDRY_SERVICE_SUBJECT"],
     )
     provider = CachedM2MTokenProvider(
         issuer.issue,
+        expected_issuer=os.environ["CLERK_ISSUER_URL"],
         audience=audience,
         scopes=scopes,
         source_machine_id=os.environ["CLERK_FOUNDRY_SERVICE_SUBJECT"],

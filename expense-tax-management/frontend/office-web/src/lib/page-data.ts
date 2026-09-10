@@ -26,3 +26,11 @@ export function loadTax(
 ) {
   return fetchTaxReport(session, taxYear, getToken, organizationId);
 }
+
+export function loadTaxForOffice(
+  session: OfficeSession,
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
+) {
+  return loadTax(session, getToken, organizationId, 2025);
+}

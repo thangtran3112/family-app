@@ -3,12 +3,24 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { getAppAuthorization, getTenantGateState } from "./clerk";
+import {
+  getAppAuthorization,
+  getTenantGateState,
+  requireClerkPublishableKey,
+} from "./clerk";
 
 const source = (relativePath: string) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("office Clerk authorization", () => {
+  it("requires a configured publishable key", () => {
+    expect(() => requireClerkPublishableKey(undefined)).toThrow(
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required",
+    );
+    expect(requireClerkPublishableKey("pk_test_configured")).toBe(
+      "pk_test_configured",
+    );
+  });
   it("requires active organization before calling App API", async () => {
     const getToken = vi.fn();
 

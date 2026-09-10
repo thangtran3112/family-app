@@ -14,6 +14,7 @@ export interface AuthPrincipal {
   readonly email: string | null;
   readonly emailVerified: boolean | null;
   readonly displayName: string | null;
+  readonly organizationId?: string;
 }
 
 export interface TokenVerifier {

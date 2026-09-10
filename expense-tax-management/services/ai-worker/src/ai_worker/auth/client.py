@@ -34,15 +34,33 @@ def _decode_payload(token: str) -> Mapping[str, Any]:
     return payload
 
 
+def _decode_header(token: str) -> Mapping[str, Any]:
+    part = token.split(".", 2)[0]
+    try:
+        padding = "=" * (-len(part) % 4)
+        header = json.loads(base64.urlsafe_b64decode(part + padding))
+    except (ValueError, TypeError, binascii.Error, json.JSONDecodeError) as error:
+        raise M2MTokenError(
+            "Clerk M2M response contained an invalid JWT header"
+        ) from error
+    if not isinstance(header, dict) or header.get("alg") != "RS256":
+        raise M2MTokenError("Clerk M2M token has invalid algorithm")
+    return header
+
+
 def _validate_token(
     token: str,
     *,
     audience: str,
     scopes: Sequence[str],
     client_id: str,
+    issuer: str,
     now: float,
 ) -> float:
+    _decode_header(token)
     payload = _decode_payload(token)
+    if payload.get("iss") != issuer:
+        raise M2MTokenError("Clerk M2M token has wrong issuer")
     token_audience = payload.get("aud")
     if token_audience != [audience]:
         raise M2MTokenError("Clerk M2M token has wrong audience")
@@ -54,6 +72,18 @@ def _validate_token(
 
     if payload.get("sub") != client_id:
         raise M2MTokenError("Clerk M2M token has wrong source subject")
+
+    token_id = payload.get("jti")
+    if not isinstance(token_id, str) or not token_id.strip():
+        raise M2MTokenError("Clerk M2M token is missing token ID")
+
+    not_before = payload.get("nbf")
+    if (
+        not isinstance(not_before, (int, float))
+        or isinstance(not_before, bool)
+        or not_before > now + 30
+    ):
+        raise M2MTokenError("Clerk M2M token has invalid not-before")
 
     expiry = payload.get("exp")
     if (
@@ -75,6 +105,7 @@ class ClerkM2MTokenIssuer:
         audience: str,
         scopes: Sequence[str],
         source_machine_id: str,
+        issuer: str,
         ttl_seconds: int = 300,
         timeout_seconds: float = 5,
         endpoint: str = "https://api.clerk.com/v1/m2m_tokens",
@@ -89,6 +120,7 @@ class ClerkM2MTokenIssuer:
         self._audience = audience
         self._scopes = tuple(scopes)
         self._source_machine_id = source_machine_id
+        self._issuer = issuer
         self._ttl_seconds = ttl_seconds
         self._timeout_seconds = timeout_seconds
         self._endpoint = endpoint
@@ -119,6 +151,7 @@ class ClerkM2MTokenIssuer:
                     audience=self._audience,
                     scopes=self._scopes,
                     client_id=self._source_machine_id,
+                    issuer=self._issuer,
                     now=self._now(),
                 )
                 return token
@@ -138,13 +171,15 @@ class CachedM2MTokenProvider:
         audience: str,
         scopes: Sequence[str],
         source_machine_id: str,
+        expected_issuer: str,
         refresh_skew_seconds: int = 30,
         now: Callable[[], float] = time.time,
     ) -> None:
-        self._issuer = issuer
+        self._expected_issuer = expected_issuer
         self._audience = audience
         self._scopes = tuple(scopes)
         self._source_machine_id = source_machine_id
+        self._issuer = issuer
         self._refresh_skew_seconds = refresh_skew_seconds
         self._now = now
         self._token: str | None = None
@@ -163,6 +198,7 @@ class CachedM2MTokenProvider:
             audience=self._audience,
             scopes=self._scopes,
             client_id=self._source_machine_id,
+            issuer=self._expected_issuer,
             now=self._now(),
         )
         self._token = token

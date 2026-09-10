@@ -7,6 +7,8 @@ import {
 } from "../src/auth/verifier.js";
 import { serviceGuard, tenantGuard } from "../src/plugins/auth.js";
 import { createAppConfig } from "../src/config.js";
+import type { ClerkIdentityMappingDomain } from "../src/domain/clerk-identity.js";
+import { authenticatedUserGuard } from "../src/plugins/auth.js";
 
 const TENANT_ISSUER = "https://identity.test";
 const TENANT_AUDIENCE = "expense-app";
@@ -121,7 +123,9 @@ describe("App API authentication", () => {
     return token.sign(options.key ?? tenantKeys.privateKey);
   }
 
-  function createTestApp() {
+  function createTestApp(
+    clerkIdentityDomain?: ClerkIdentityMappingDomain,
+  ) {
     const tenantVerifier = createTokenVerifier({
       tokenType: "tenant",
       issuer: TENANT_ISSUER,
@@ -142,6 +146,7 @@ describe("App API authentication", () => {
         tenant: tenantVerifier,
         service: serviceVerifier,
       },
+      clerkIdentityDomain,
     });
     apps.add(app);
 
@@ -151,6 +156,19 @@ describe("App API authentication", () => {
       async (request) => ({
         principal: request.authPrincipal,
         verifiedIdentity: request.verifiedIdentity,
+      }),
+    );
+    app.get(
+      "/_test/private/tenant/:tenantId",
+      {
+        preHandler: [
+          tenantGuard,
+          authenticatedUserGuard(asyncIdentityResolver),
+        ],
+      },
+      async (request) => ({
+        user: request.authenticatedUser,
+        tenantId: request.resolvedTenantId,
       }),
     );
     app.get(
@@ -167,6 +185,12 @@ describe("App API authentication", () => {
     return app;
   }
 
+  const asyncIdentityResolver = {
+    async resolve() {
+      return null;
+    },
+  };
+
   async function requestTenant(authorization?: string | string[]) {
     return createTestApp().inject({
       method: "GET",
@@ -175,6 +199,43 @@ describe("App API authentication", () => {
         authorization === undefined ? {} : { authorization },
     });
   }
+
+  it("resolves Clerk user and organization into application identity on tenant routes", async () => {
+    const app = createTestApp({
+      async resolveTenantIdentity(clerkUserId, clerkOrgId) {
+        expect(clerkUserId).toBe("clerk-user-123");
+        expect(clerkOrgId).toBe("clerk-org-123");
+        return {
+          status: "resolved",
+          userId: "app-user-123",
+          tenantId: "app-tenant-123",
+          role: "owner",
+        };
+      },
+      async mapUser() {
+        throw new Error("not used");
+      },
+      async mapOrganization() {
+        throw new Error("not used");
+      },
+    });
+    const token = await signToken({
+      subject: "clerk-user-123",
+      claims: { org_id: "clerk-org-123" },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/_test/private/tenant/app-tenant-123",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      user: { id: "app-user-123" },
+      tenantId: "app-tenant-123",
+    });
+  });
 
   async function requestService(token: string) {
     return createTestApp().inject({

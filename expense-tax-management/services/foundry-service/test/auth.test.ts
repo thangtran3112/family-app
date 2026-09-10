@@ -343,7 +343,7 @@ describe("Foundry authentication", () => {
     expect(serviceWithPlatformToken.statusCode).toBe(401);
   });
 
-  it("maps Clerk organization role claims into platform roles", async () => {
+  it("rejects Clerk organization role claims as platform roles", async () => {
     const token = await signToken({
       claims: {
         org_id: "org_clerk_123",
@@ -352,13 +352,7 @@ describe("Foundry authentication", () => {
     });
     const response = await requestWithToken(OPERATOR_PATH, token);
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      principal: {
-        tokenType: "platform",
-        roles: ["operator"],
-      },
-    });
+    expectGenericError(response, 401);
   });
 
   it("rejects an organization role without org_id", async () => {
