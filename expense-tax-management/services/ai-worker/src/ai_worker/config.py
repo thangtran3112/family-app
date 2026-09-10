@@ -16,7 +16,10 @@ class ClerkConfig:
     platform_audience: str
     app_service_audience: str
     foundry_service_audience: str
-    machine_secret_key: str
+    app_machine_secret_key: str
+    foundry_machine_secret_key: str
+    app_service_subject: str
+    foundry_service_subject: str
     publishable_key: str | None = None
     secret_key: str | None = None
     webhook_signing_secret: str | None = None
@@ -74,7 +77,14 @@ def worker_config_from_env(
             foundry_service_audience=_required(
                 values, "CLERK_FOUNDRY_SERVICE_AUDIENCE"
             ),
-            machine_secret_key=_required(values, "CLERK_MACHINE_SECRET_KEY"),
+            app_machine_secret_key=_required(values, "CLERK_APP_MACHINE_SECRET_KEY"),
+            foundry_machine_secret_key=_required(
+                values, "CLERK_FOUNDRY_MACHINE_SECRET_KEY"
+            ),
+            app_service_subject=_required(values, "CLERK_APP_SERVICE_SUBJECT"),
+            foundry_service_subject=_required(
+                values, "CLERK_FOUNDRY_SERVICE_SUBJECT"
+            ),
             publishable_key=_optional(values, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
             secret_key=_optional(values, "CLERK_SECRET_KEY"),
             webhook_signing_secret=_optional(values, "CLERK_WEBHOOK_SIGNING_SECRET"),

@@ -302,7 +302,7 @@ describe("App API authentication", () => {
       key: serviceKeys.privateKey,
       issuer: "https://clerk.test",
       audience: "app-service-audience",
-      subject: "service-account-123",
+      subject: "ai-worker",
       claims: {
         azp: "ai-worker",
         scope: "expenses:extract expenses:write",
@@ -481,7 +481,7 @@ describe("App API authentication", () => {
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
-      subject: "service-account-123",
+      subject: "ai-worker",
       claims: {
         client_id: "ai-worker",
         scope: "expenses:write expenses:extract unused:scope",
@@ -493,7 +493,7 @@ describe("App API authentication", () => {
     expect(response.json()).toEqual({
       principal: {
         tokenType: "service",
-        subject: "service-account-123",
+      subject: "ai-worker",
         clientId: "ai-worker",
         audience: SERVICE_AUDIENCE,
         issuer: SERVICE_ISSUER,
@@ -512,7 +512,7 @@ describe("App API authentication", () => {
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
-      subject: "service-account-123",
+      subject: "ai-worker",
       claims: {
         azp: "ai-worker",
         scope: "expenses:write expenses:extract",
@@ -522,15 +522,50 @@ describe("App API authentication", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      principal: { tokenType: "service", clientId: "ai-worker" },
+      principal: {
+        tokenType: "service",
+        subject: "ai-worker",
+        clientId: "ai-worker",
+      },
     });
   });
 
-  it("does not fall back from an empty client_id to azp", async () => {
+  it("authorizes service routes from signed source subject, not client_id", async () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
+      subject: "ai-worker",
+      claims: {
+        client_id: "untrusted-claim",
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    expect((await requestService(token)).statusCode).toBe(200);
+  });
+
+  it("rejects service routes when signed source subject is wrong", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "other-worker",
+      claims: {
+        client_id: "ai-worker",
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    expectGenericError(await requestService(token), 403);
+  });
+
+  it("ignores empty client_id when source subject is valid", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "ai-worker",
       claims: {
         client_id: "",
         azp: "ai-worker",
@@ -538,7 +573,7 @@ describe("App API authentication", () => {
       },
     });
 
-    expectGenericError(await requestService(token), 401);
+    expect((await requestService(token)).statusCode).toBe(200);
   });
 
   it("uses client_id over azp when both service identity claims are present", async () => {
@@ -597,15 +632,16 @@ describe("App API authentication", () => {
     expectGenericError(await requestService(token), 401);
   });
 
-  it("rejects a service token without client_id", async () => {
+  it("does not require client_id on service tokens", async () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
+      subject: "ai-worker",
       claims: { scope: "expenses:extract expenses:write" },
     });
 
-    expectGenericError(await requestService(token), 401);
+    expect((await requestService(token)).statusCode).toBe(200);
   });
 
   it("forbids an ai-worker service token missing a required scope", async () => {

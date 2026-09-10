@@ -118,7 +118,7 @@ describe("Foundry authentication", () => {
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
-      subject: "service-account-123",
+      subject: options.subject ?? clientId,
       ...options,
       claims: {
         client_id: clientId,
@@ -313,7 +313,7 @@ describe("Foundry authentication", () => {
       key: serviceKeys.privateKey,
       issuer: "https://clerk.test",
       audience: "foundry-service-audience",
-      subject: "service-account-123",
+      subject: "app-api",
       claims: {
         azp: "app-api",
         scope: "entitlements:publish",
@@ -445,7 +445,7 @@ describe("Foundry authentication", () => {
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
-      subject: "service-account-123",
+      subject: "app-api",
       claims: {
         azp: "app-api",
         scope: "entitlements:publish",
@@ -459,11 +459,47 @@ describe("Foundry authentication", () => {
     });
   });
 
-  it("does not fall back from an empty client_id to azp", async () => {
+  it("authorizes service routes from signed source subject, not client_id", async () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
+      subject: "app-api",
+      claims: {
+        client_id: "untrusted-claim",
+        scope: "entitlements:publish",
+      },
+    });
+
+    expect(
+      (await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token)).statusCode,
+    ).toBe(200);
+  });
+
+  it("rejects service routes when signed source subject is wrong", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "other-worker",
+      claims: {
+        client_id: "app-api",
+        scope: "entitlements:publish",
+      },
+    });
+
+    expectGenericError(
+      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
+      403,
+    );
+  });
+
+  it("ignores empty client_id when source subject is valid", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "app-api",
       claims: {
         client_id: "",
         azp: "app-api",
@@ -471,10 +507,9 @@ describe("Foundry authentication", () => {
       },
     });
 
-    expectGenericError(
-      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
-      401,
-    );
+    expect(
+      (await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token)).statusCode,
+    ).toBe(200);
   });
 
   it("uses client_id over azp when both service identity claims are present", async () => {
@@ -644,18 +679,18 @@ describe("Foundry authentication", () => {
     expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
   });
 
-  it("rejects a service token without client_id", async () => {
+  it("does not require client_id on service tokens", async () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
       audience: SERVICE_AUDIENCE,
+      subject: "app-api",
       claims: { scope: "entitlements:publish" },
     });
 
-    expectGenericError(
-      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
-      401,
-    );
+    expect(
+      (await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token)).statusCode,
+    ).toBe(200);
   });
 
   it.each([

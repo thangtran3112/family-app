@@ -9,7 +9,10 @@ ENV = {
     "CLERK_PLATFORM_AUDIENCE": " platform-audience ",
     "CLERK_APP_SERVICE_AUDIENCE": " app-service-audience ",
     "CLERK_FOUNDRY_SERVICE_AUDIENCE": " foundry-service-audience ",
-    "CLERK_MACHINE_SECRET_KEY": " ak_test_machine_secret ",
+    "CLERK_APP_MACHINE_SECRET_KEY": " ak_test_app_machine_secret ",
+    "CLERK_FOUNDRY_MACHINE_SECRET_KEY": " ak_test_foundry_machine_secret ",
+    "CLERK_APP_SERVICE_SUBJECT": " ai-worker-app-machine ",
+    "CLERK_FOUNDRY_SERVICE_SUBJECT": " ai-worker-foundry-machine ",
     "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": " pk_test_fake ",
     "CLERK_SECRET_KEY": " sk_test_fake ",
     "CLERK_WEBHOOK_SIGNING_SECRET": " whsec_test_fake ",
@@ -26,7 +29,10 @@ def test_worker_config_parses_clerk_values_without_logging_secrets():
     assert config.clerk.platform_audience == "platform-audience"
     assert config.clerk.app_service_audience == "app-service-audience"
     assert config.clerk.foundry_service_audience == "foundry-service-audience"
-    assert config.clerk.machine_secret_key == "ak_test_machine_secret"
+    assert config.clerk.app_machine_secret_key == "ak_test_app_machine_secret"
+    assert config.clerk.foundry_machine_secret_key == "ak_test_foundry_machine_secret"
+    assert config.clerk.app_service_subject == "ai-worker-app-machine"
+    assert config.clerk.foundry_service_subject == "ai-worker-foundry-machine"
     assert config.clerk.publishable_key == "pk_test_fake"
     assert config.clerk.secret_key == "sk_test_fake"
     assert config.clerk.webhook_signing_secret == "whsec_test_fake"
@@ -42,7 +48,10 @@ def test_worker_config_parses_clerk_values_without_logging_secrets():
         ("CLERK_PLATFORM_AUDIENCE", "platform-audience"),
         ("CLERK_APP_SERVICE_AUDIENCE", "app-service-audience"),
         ("CLERK_FOUNDRY_SERVICE_AUDIENCE", "foundry-service-audience"),
-        ("CLERK_MACHINE_SECRET_KEY", "ak_test_machine_secret"),
+        ("CLERK_APP_MACHINE_SECRET_KEY", "ak_test_app_machine_secret"),
+        ("CLERK_FOUNDRY_MACHINE_SECRET_KEY", "ak_test_foundry_machine_secret"),
+        ("CLERK_APP_SERVICE_SUBJECT", "ai-worker-app-machine"),
+        ("CLERK_FOUNDRY_SERVICE_SUBJECT", "ai-worker-foundry-machine"),
     ],
 )
 def test_worker_config_reports_missing_clerk_variable(key, value):

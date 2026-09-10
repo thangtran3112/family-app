@@ -43,7 +43,8 @@ def _validate_token(
     now: float,
 ) -> float:
     payload = _decode_payload(token)
-    if payload.get("aud") != audience:
+    token_audience = payload.get("aud")
+    if token_audience != [audience]:
         raise M2MTokenError("Clerk M2M token has wrong audience")
 
     scope_claim = payload.get("scope")
@@ -51,9 +52,8 @@ def _validate_token(
     if any(scope not in token_scopes for scope in scopes):
         raise M2MTokenError("Clerk M2M token is missing required scope")
 
-    token_client_id = payload.get("client_id", payload.get("azp"))
-    if token_client_id != client_id:
-        raise M2MTokenError("Clerk M2M token has wrong client identity")
+    if payload.get("sub") != client_id:
+        raise M2MTokenError("Clerk M2M token has wrong source subject")
 
     expiry = payload.get("exp")
     if (
@@ -74,7 +74,7 @@ class ClerkM2MTokenIssuer:
         machine_secret_key: str,
         audience: str,
         scopes: Sequence[str],
-        client_id: str = "ai-worker",
+        source_machine_id: str,
         ttl_seconds: int = 300,
         timeout_seconds: float = 5,
         endpoint: str = "https://api.clerk.com/v1/m2m_tokens",
@@ -88,7 +88,7 @@ class ClerkM2MTokenIssuer:
         self._machine_secret_key = machine_secret_key
         self._audience = audience
         self._scopes = tuple(scopes)
-        self._client_id = client_id
+        self._source_machine_id = source_machine_id
         self._ttl_seconds = ttl_seconds
         self._timeout_seconds = timeout_seconds
         self._endpoint = endpoint
@@ -100,17 +100,14 @@ class ClerkM2MTokenIssuer:
             async with self._client_factory(timeout=self._timeout_seconds) as client:
                 response = await client.post(
                     self._endpoint,
-                    params={
+                    json={
                         "token_format": "jwt",
-                        "seconds_until_expiration": str(self._ttl_seconds),
+                        "seconds_until_expiration": self._ttl_seconds,
+                        "claims": {
+                            "scope": " ".join(self._scopes),
+                        },
                     },
                     headers={"Authorization": f"Bearer {self._machine_secret_key}"},
-                    json={
-                        "claims": {
-                            "aud": self._audience,
-                            "scope": " ".join(self._scopes),
-                        }
-                    },
                 )
                 response.raise_for_status()
                 body = response.json()
@@ -121,7 +118,7 @@ class ClerkM2MTokenIssuer:
                     token,
                     audience=self._audience,
                     scopes=self._scopes,
-                    client_id=self._client_id,
+                    client_id=self._source_machine_id,
                     now=self._now(),
                 )
                 return token
@@ -140,14 +137,14 @@ class CachedM2MTokenProvider:
         *,
         audience: str,
         scopes: Sequence[str],
-        client_id: str = "ai-worker",
+        source_machine_id: str,
         refresh_skew_seconds: int = 30,
         now: Callable[[], float] = time.time,
     ) -> None:
         self._issuer = issuer
         self._audience = audience
         self._scopes = tuple(scopes)
-        self._client_id = client_id
+        self._source_machine_id = source_machine_id
         self._refresh_skew_seconds = refresh_skew_seconds
         self._now = now
         self._token: str | None = None
@@ -165,7 +162,7 @@ class CachedM2MTokenProvider:
             token,
             audience=self._audience,
             scopes=self._scopes,
-            client_id=self._client_id,
+            client_id=self._source_machine_id,
             now=self._now(),
         )
         self._token = token

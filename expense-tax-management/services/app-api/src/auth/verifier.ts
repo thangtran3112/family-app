@@ -147,15 +147,9 @@ export function createTokenVerifier(
           requiredNumericDate(payload.nbf);
         }
 
-        const clientId =
-          payload.client_id === undefined
-            ? options.tokenType === "service" && payload.azp !== undefined
-              ? requiredNonEmptyString(payload.azp)
-              : null
-            : requiredNonEmptyString(payload.client_id);
-        if (options.tokenType === "service" && clientId === null) {
-          throw new Error("Invalid token claim");
-        }
+        // Service authorization is anchored to Clerk's signed machine subject.
+        // client_id and azp are caller-controlled metadata, not identity.
+        const clientId = options.tokenType === "service" ? subject : null;
 
         return {
           tokenType: options.tokenType,

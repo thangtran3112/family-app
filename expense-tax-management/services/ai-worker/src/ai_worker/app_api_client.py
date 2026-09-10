@@ -110,13 +110,15 @@ def app_api_client_from_env() -> AppApiClient:
     audience = os.environ["CLERK_APP_SERVICE_AUDIENCE"]
     scopes = ("jobs:write", "files:read")
     issuer = ClerkM2MTokenIssuer(
-        machine_secret_key=os.environ["CLERK_MACHINE_SECRET_KEY"],
+        machine_secret_key=os.environ["CLERK_APP_MACHINE_SECRET_KEY"],
         audience=audience,
         scopes=scopes,
+        source_machine_id=os.environ["CLERK_APP_SERVICE_SUBJECT"],
     )
     provider = CachedM2MTokenProvider(
         issuer.issue,
         audience=audience,
         scopes=scopes,
+        source_machine_id=os.environ["CLERK_APP_SERVICE_SUBJECT"],
     )
     return AppApiClient(base_url=base_url, token_provider=provider.get_token)

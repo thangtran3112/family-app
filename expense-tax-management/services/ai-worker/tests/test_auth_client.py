@@ -23,9 +23,9 @@ def jwt_with_claims(claims: dict[str, object]) -> str:
 def valid_token() -> str:
     return jwt_with_claims(
         {
-            "aud": "expense-services",
+            "aud": ["app-api-machine"],
             "scope": "jobs:write files:read",
-            "azp": "ai-worker",
+            "sub": "ai-worker-app-machine",
             "exp": 1_000,
         }
     )
@@ -41,8 +41,9 @@ async def test_issuer_creates_short_lived_jwt_with_machine_secret(valid_token):
     transport = httpx.MockTransport(handler)
     issuer = ClerkM2MTokenIssuer(
         machine_secret_key="ak_test_secret",
-        audience="expense-services",
+        audience="app-api-machine",
         scopes=("jobs:write", "files:read"),
+        source_machine_id="ai-worker-app-machine",
         ttl_seconds=300,
         timeout_seconds=2,
         client_factory=lambda **kwargs: httpx.AsyncClient(
@@ -53,10 +54,11 @@ async def test_issuer_creates_short_lived_jwt_with_machine_secret(valid_token):
 
     assert await issuer.issue() == valid_token
     assert requests[0].headers["authorization"] == "Bearer ak_test_secret"
-    assert requests[0].url.params["token_format"] == "jwt"
-    assert requests[0].url.params["seconds_until_expiration"] == "300"
+    assert str(requests[0].url.params) == ""
     assert json.loads(requests[0].content) == {
-        "claims": {"aud": "expense-services", "scope": "jobs:write files:read"}
+        "token_format": "jwt",
+        "seconds_until_expiration": 300,
+        "claims": {"scope": "jobs:write files:read"},
     }
 
 
@@ -70,8 +72,9 @@ async def test_provider_reuses_cached_token_until_refresh_window(valid_token):
 
     provider = CachedM2MTokenProvider(
         issue,
-        audience="expense-services",
+        audience="app-api-machine",
         scopes=("jobs:write", "files:read"),
+        source_machine_id="ai-worker-app-machine",
         refresh_skew_seconds=50,
         now=lambda: 900,
     )
@@ -83,8 +86,8 @@ async def test_provider_reuses_cached_token_until_refresh_window(valid_token):
 
 async def test_provider_refreshes_token_inside_expiry_window():
     tokens = [
-        jwt_with_claims({"aud": "expense-services", "scope": "jobs:write", "azp": "ai-worker", "exp": 100}),
-        jwt_with_claims({"aud": "expense-services", "scope": "jobs:write", "azp": "ai-worker", "exp": 200}),
+        jwt_with_claims({"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 100}),
+        jwt_with_claims({"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 200}),
     ]
     now = 60
 
@@ -93,8 +96,9 @@ async def test_provider_refreshes_token_inside_expiry_window():
 
     provider = CachedM2MTokenProvider(
         issue,
-        audience="expense-services",
+        audience="app-api-machine",
         scopes=("jobs:write",),
+        source_machine_id="ai-worker-app-machine",
         refresh_skew_seconds=50,
         now=lambda: now,
     )
@@ -110,24 +114,28 @@ async def test_provider_refreshes_token_inside_expiry_window():
     "claims, message",
     [
         (
-            {"aud": "wrong-audience", "scope": "jobs:write", "azp": "ai-worker", "exp": 1_000},
+            {"aud": ["wrong-audience"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 1_000},
             "audience",
         ),
         (
-            {"aud": "expense-services", "scope": "other:scope", "azp": "ai-worker", "exp": 1_000},
+            {"aud": ["app-api-machine"], "scope": "other:scope", "sub": "ai-worker-app-machine", "exp": 1_000},
             "scope",
         ),
         (
-            {"aud": "expense-services", "scope": "jobs:write", "azp": "ai-worker", "exp": 800},
+            {"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 800},
             "expired",
         ),
         (
-            {"aud": "expense-services", "scope": "jobs:write", "exp": 1_000},
-            "client identity",
+            {"aud": ["app-api-machine"], "scope": "jobs:write", "exp": 1_000},
+            "subject",
         ),
         (
-            {"aud": "expense-services", "scope": "jobs:write", "azp": "other-service", "exp": 1_000},
-            "client identity",
+            {"aud": ["app-api-machine"], "scope": "jobs:write", "sub": "other-machine", "exp": 1_000},
+            "subject",
+        ),
+        (
+            {"aud": ["app-api-machine", "other-machine"], "scope": "jobs:write", "sub": "ai-worker-app-machine", "exp": 1_000},
+            "audience",
         ),
     ],
 )
@@ -139,8 +147,9 @@ async def test_issuer_rejects_invalid_claims(claims, message):
 
     issuer = ClerkM2MTokenIssuer(
         machine_secret_key="ak_test_secret",
-        audience="expense-services",
+        audience="app-api-machine",
         scopes=("jobs:write",),
+        source_machine_id="ai-worker-app-machine",
         client_factory=lambda **kwargs: httpx.AsyncClient(
             transport=httpx.MockTransport(handler), **kwargs
         ),
@@ -151,12 +160,13 @@ async def test_issuer_rejects_invalid_claims(claims, message):
         await issuer.issue()
 
 
-async def test_issuer_accepts_clerk_m2m_worker_identity_from_client_id():
+async def test_issuer_ignores_client_id_claim_when_source_subject_is_valid():
     token = jwt_with_claims(
         {
-            "aud": "expense-services",
+            "aud": ["app-api-machine"],
             "scope": "jobs:write",
-            "client_id": "ai-worker",
+            "sub": "ai-worker-app-machine",
+            "client_id": "other-machine",
             "exp": 1_000,
         }
     )
@@ -166,9 +176,9 @@ async def test_issuer_accepts_clerk_m2m_worker_identity_from_client_id():
 
     issuer = ClerkM2MTokenIssuer(
         machine_secret_key="ak_test_secret",
-        audience="expense-services",
+        audience="app-api-machine",
         scopes=("jobs:write",),
-        client_id="ai-worker",
+        source_machine_id="ai-worker-app-machine",
         client_factory=lambda **kwargs: httpx.AsyncClient(
             transport=httpx.MockTransport(handler), **kwargs
         ),
@@ -182,8 +192,9 @@ async def test_issuer_requires_machine_secret_without_logging_it():
     with pytest.raises(M2MTokenError, match="machine secret") as raised:
         ClerkM2MTokenIssuer(
             machine_secret_key=" ",
-            audience="expense-services",
+            audience="app-api-machine",
             scopes=("jobs:write",),
+            source_machine_id="ai-worker-app-machine",
         )
 
     assert "ak_test" not in str(raised.value)
