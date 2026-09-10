@@ -13,7 +13,7 @@ export function OfficeAuthGate({ children }: { children: ReactNode }) {
     return <main className="auth"><p>Loading secure workspace...</p></main>;
   }
   if (state === "signed-out") {
-    return <main className="auth"><SignIn routing="path" path="/login" /></main>;
+    return <main className="auth"><SignIn routing="hash" /></main>;
   }
   if (state === "missing-organization") {
     return <main className="auth"><h1>Select an organization</h1><p>Choose active organization before accessing Office.</p><OrganizationSwitcher afterSelectOrganizationUrl="/dashboard" /></main>;

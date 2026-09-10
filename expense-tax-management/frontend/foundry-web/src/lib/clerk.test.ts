@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { getPlatformAuthorization } from "./clerk";
+
+const source = (relativePath: string) =>
+  readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("Foundry Clerk authorization", () => {
   it("requests platform template without a tenant organization", async () => {
@@ -28,5 +34,14 @@ describe("Foundry Clerk authorization", () => {
       template: "expense-foundry-platform",
       skipCache: true,
     });
+  });
+
+  it("uses hash routing for every mounted Clerk sign-in", () => {
+    for (const file of ["../components/foundry-auth-gate.tsx", "../app/platform-login/page.tsx"]) {
+      const contents = source(file);
+
+      expect(contents).toContain('routing="hash"');
+      expect(contents).not.toContain('routing="path"');
+    }
   });
 });

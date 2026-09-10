@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { getAppAuthorization, getTenantGateState } from "./clerk";
+
+const source = (relativePath: string) =>
+  readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 describe("office Clerk authorization", () => {
   it("requires active organization before calling App API", async () => {
@@ -26,5 +32,14 @@ describe("office Clerk authorization", () => {
 
   it("keeps signed-in users in recovery state until organization selected", () => {
     expect(getTenantGateState({ isLoaded: true, isSignedIn: true, organizationId: undefined })).toBe("missing-organization");
+  });
+
+  it("uses hash routing for every mounted Clerk sign-in", () => {
+    for (const file of ["../components/office-auth-gate.tsx", "../app/login/page.tsx"]) {
+      const contents = source(file);
+
+      expect(contents).toContain('routing="hash"');
+      expect(contents).not.toContain('routing="path"');
+    }
   });
 });

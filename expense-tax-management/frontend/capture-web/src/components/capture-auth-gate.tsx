@@ -13,7 +13,7 @@ export function CaptureAuthGate({ children }: { children: ReactNode }) {
     return <main className="auth"><p>Loading secure workspace...</p></main>;
   }
   if (state === "signed-out") {
-    return <main className="auth"><SignIn routing="path" path="/login" /></main>;
+    return <main className="auth"><SignIn routing="hash" /></main>;
   }
   if (state === "missing-organization") {
     return <main className="auth"><h1>Select an organization</h1><p>Choose active organization before accessing Capture.</p><OrganizationSwitcher afterSelectOrganizationUrl="/capture" /></main>;
