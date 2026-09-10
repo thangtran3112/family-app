@@ -99,7 +99,7 @@
 - Restart opencode after changing project configuration, agents, or rules so changes load in a new process.
 
 ## Remaining Pre-Infrastructure Work
-- `1A` polyglot GitHub Actions CI is complete. Phase 1B Tasks 6-9 are complete: deployed SHA `a6c402a`, green CI run `34420927967`, green deploy run `34421864322`, seven healthy/running services, App 012 and Foundry 004 migrations, loopback-only listeners, one retained Secret Manager version, and no persistent GHCR credential after cleanup. Phase 1C production gateway hardening and all Phase 1B Task 10 decisions remain pending.
+- `1A` polyglot GitHub Actions CI is complete. Phase 1B Tasks 6-9 are complete. Initial verified deployment was SHA `a6c402a` / Expense Tax Deploy run `34421864322`; verified hardening deployment was SHA `e679fa0` / run `34424329193`. These are recorded evidence, not current-SHA claims: authoritative current deployment state is the VPS file `/opt/expense-tax-management/app/deployed-image-tag` plus the latest successful `Expense Tax Deploy` workflow. Hardening verification covers strict provider-conditioned WIF `principalSet` trust for the exact repository, `refs/heads/main`, deploy workflow ref, and `production` environment; AI worker health; and ephemeral credential cleanup. Phase 1C production gateway hardening and all Phase 1B Task 10 decisions remain pending.
 - Later search, graph, premium mailbox, and mobile phases remain after core pre-infrastructure capabilities.
 
 ## Infrastructure Gate

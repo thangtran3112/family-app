@@ -132,18 +132,17 @@ fi
 
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-PRINCIPAL_SUBJECT="principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/subject/repo:${REPOSITORY}:environment:production"
-LEGACY_PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPOSITORY}"
+PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPOSITORY}"
 
 gcloud iam service-accounts remove-iam-policy-binding "$SERVICE_ACCOUNT_EMAIL" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="$LEGACY_PRINCIPAL_SET" >/dev/null 2>&1 || true
+  --member="principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/subject/repo:${REPOSITORY}:environment:production" >/dev/null 2>&1 || true
 
 gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_EMAIL" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="$PRINCIPAL_SUBJECT"
+  --member="$PRINCIPAL_SET"
 gcloud secrets add-iam-policy-binding "$SECRET_ID" \
   --project="$PROJECT_ID" \
   --role="roles/secretmanager.secretAccessor" \
@@ -162,7 +161,7 @@ import { readFileSync } from "node:fs";
 
 const [policyFile, projectNumber] = process.argv.slice(2);
 const policy = JSON.parse(readFileSync(policyFile, "utf8"));
-const expected = `principal://iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/expense-tax-github/subject/repo:thangtran3112/family-app:environment:production`;
+const expected = `principalSet://iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/expense-tax-github/attribute.repository/thangtran3112/family-app`;
 const members = (policy.bindings ?? [])
   .filter(({ role }) => role === "roles/iam.workloadIdentityUser")
   .flatMap(({ members: bindingMembers = [] }) => bindingMembers);

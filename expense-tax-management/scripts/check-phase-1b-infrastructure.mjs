@@ -21,6 +21,59 @@ function assertBefore(source, first, second, label = `${first} before ${second}`
     failures.push(`ordering: ${label}`);
   }
 }
+function commandBlocks(source, prefix) {
+  const lines = source.split("\n");
+  const blocks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!lines[index].trimStart().startsWith(prefix)) continue;
+    const block = [lines[index].trim()];
+    while (block.at(-1).endsWith("\\") && index + 1 < lines.length) {
+      index += 1;
+      block.push(lines[index].trim());
+    }
+    blocks.push(block.join("\n"));
+  }
+  return blocks;
+}
+function assertIamBindingTuples(source) {
+  const serviceAccountBlocks = commandBlocks(
+    source,
+    "gcloud iam service-accounts ",
+  ).filter((block) => block.includes("iam-policy-binding"));
+  const expected = [
+    {
+      action: "remove",
+      role: "roles/iam.workloadIdentityUser",
+      member: 'principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/subject/repo:${REPOSITORY}:environment:production',
+    },
+    {
+      action: "add",
+      role: "roles/iam.workloadIdentityUser",
+      member: "$PRINCIPAL_SET",
+    },
+  ];
+  const actual = serviceAccountBlocks.map((block) => ({
+    action: block.includes(" remove-") ? "remove" : block.includes(" add-") ? "add" : "unknown",
+    role: block.match(/--role="([^"]+)"/u)?.[1],
+    member: block.match(/--member="([^"]+)"/u)?.[1],
+  }));
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    failures.push("IAM service-account binding command tuples changed");
+  }
+
+  const secretBlocks = commandBlocks(source, "gcloud secrets add-iam-policy-binding ");
+  const expectedSecret = {
+    role: "roles/secretmanager.secretAccessor",
+    member: "serviceAccount:${SERVICE_ACCOUNT_EMAIL}",
+  };
+  const actualSecret = secretBlocks.map((block) => ({
+    role: block.match(/--role="([^"]+)"/u)?.[1],
+    member: block.match(/--member="([^"]+)"/u)?.[1],
+  }));
+  if (secretBlocks.length !== 1 || JSON.stringify(actualSecret) !== JSON.stringify([expectedSecret])) {
+    failures.push("Secret accessor binding command tuple changed");
+  }
+}
 
 assertIncludes(bootstrap, 'PROJECT_ID="expense-tax-tobytran-2026"');
 assertIncludes(bootstrap, 'BILLING_ACCOUNT="013C6D-EEE26E-EAA1A1"');
@@ -42,6 +95,10 @@ assertIncludes(bootstrap, "iam service-accounts create");
 assertIncludes(bootstrap, "iam workload-identity-pools create");
 assertIncludes(bootstrap, "iam workload-identity-pools providers create-oidc");
 assertIncludes(bootstrap, "assertion.repository=='thangtran3112/family-app'");
+assertIncludes(bootstrap, "assertion.ref=='refs/heads/main'");
+assertIncludes(bootstrap, "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main'");
+assertIncludes(bootstrap, "assertion.environment=='production'");
+assertIncludes(bootstrap, 'WIF_ATTRIBUTE_CONDITION="assertion.repository==\'thangtran3112/family-app\' && assertion.ref==\'refs/heads/main\' && assertion.workflow_ref==\'thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main\' && assertion.environment==\'production\'"');
 assertIncludes(bootstrap, "attributeMapping");
 assertIncludes(bootstrap, 'provider.attributeMapping?.["google.subject"]');
 assertIncludes(bootstrap, 'provider.attributeMapping?.["attribute.repository"]');
@@ -51,6 +108,11 @@ assertIncludes(bootstrap, "issuerUri");
 assertIncludes(bootstrap, "attributeCondition");
 assertIncludes(bootstrap, "roles/iam.workloadIdentityUser");
 assertIncludes(bootstrap, "principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPOSITORY}");
+assertIncludes(bootstrap, 'PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPOSITORY}"');
+assertIncludes(bootstrap, 'members.includes(expected)');
+assertIncludes(bootstrap, "members.length !== 1");
+assertExcludes(bootstrap, "PRINCIPAL_SUBJECT", "unsupported environment subject binding");
+assertExcludes(bootstrap, '--member="$PRINCIPAL_SUBJECT"', "unsupported subject principal binding");
 assertIncludes(bootstrap, "roles/secretmanager.secretAccessor");
 assertIncludes(bootstrap, "--format=json");
 assertIncludes(bootstrap, "trap cleanup EXIT");
@@ -88,6 +150,7 @@ assertIncludes(readme, "one non-destroyed version");
 assertIncludes(bootstrap, ".keys/gcp/expense-tax-bootstrap-outputs.json");
 assertIncludes(agents, "013C6D-EEE26E-EAA1A1");
 assertExcludes(agents, "013C6D-EEE26-EAA1A1", "invalid billing account typo");
+assertIamBindingTuples(bootstrap);
 
 if (failures.length > 0) {
   console.error(failures.map((failure) => `FAIL ${failure}`).join("\n"));

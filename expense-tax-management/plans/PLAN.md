@@ -2,7 +2,7 @@
 
 > **Project**: Expense Tax Management System (monorepo)
 > **Inspired by**: [TaxHacker](https://github.com/vas3k/TaxHacker) (v0.8.5, Next.js + Prisma + PostgreSQL)
-> **Status**: Phase 1A CI and Phase 1B Tasks 6-9 complete at deployed SHA `a6c402a`; Task 10 identity/gateway/storage/provider/compute decisions pending
+> **Status**: Phase 1A CI and Phase 1B Tasks 6-9 complete. Initial verified deployment `a6c402a` / run `34421864322`; hardening verification `e679fa0` / run `34424329193`. Current deployment is authoritative only from VPS `/opt/expense-tax-management/app/deployed-image-tag` and latest successful `Expense Tax Deploy` workflow. Task 10 identity/gateway/storage/provider/compute decisions pending.
 > **Last Updated**: 2026-09-09
 
 ---
@@ -82,7 +82,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
 | **1A** | Polyglot GitHub Actions CI (revised) | ✅ Complete; continuous gate | [implementation](sub-plans/phase-1a-polyglot-ci-implementation.md) (replaces [stale plan](sub-plans/phase-1a-cicd-pipeline.md)) |
-| **1B** | Production Container Deployment (revised) | ✅ Deployed at `a6c402a`; CI `34420927967`; deploy `34421864322`; Task 10 decisions pending | [implementation](sub-plans/phase-1b-production-cicd-implementation.md) · [design](sub-plans/phase-1b-production-cicd-design.md) |
+| **1B** | Production Container Deployment (revised) | ✅ Initial `a6c402a` / run `34421864322`; hardening `e679fa0` / run `34424329193`; current state from VPS marker/latest successful workflow; Task 10 pending | [implementation](sub-plans/phase-1b-production-cicd-implementation.md) · [design](sub-plans/phase-1b-production-cicd-design.md) |
 | **1C** | Defense-in-Depth Gateway Authentication (revised) | ⚪ Replan after 0I; release gate | [phase-1c-gateway-auth.md](sub-plans/phase-1c-gateway-auth.md) |
 
 ---

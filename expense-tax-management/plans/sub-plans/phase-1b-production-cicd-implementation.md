@@ -202,10 +202,16 @@ Expected: both PASS; Phase 1A CI remains unchanged and green.
 
 ### Task 5: Add Aggregate Verification and Update Durable Docs
 
-**Status:** Tasks 1-9 complete. Live deployment is verified at SHA `a6c402a`
-with CI run `34420927967` and deploy run `34421864322`; no GCP, GitHub, GHCR,
-SSH, or VPS operation belongs in this offline source gate. Task 10 decisions
-remain pending.
+**Status:** Tasks 1-9 complete. Initial verified deployment: SHA `a6c402a`,
+Expense Tax Deploy run `34421864322`. Verified hardening deployment: SHA
+`e679fa0`, Expense Tax Deploy run `34424329193`. These are historical evidence
+at time of record, not self-referential current-SHA claims. Authoritative current
+state is VPS `/opt/expense-tax-management/app/deployed-image-tag` plus the
+latest successful `Expense Tax Deploy` workflow. Hardening verification covers
+strict provider-conditioned WIF `principalSet` trust for the exact repository,
+`refs/heads/main`, deploy workflow ref, and `production` environment; AI worker
+health; and ephemeral credential cleanup. No GCP, GitHub, GHCR, SSH, or VPS
+operation belongs in this offline source gate. Task 10 decisions remain pending.
 
 **Files:**
 - Create: `scripts/verify-phase-1b.mjs`
@@ -224,7 +230,7 @@ Run bundle tests, GCP static checker, production-boundary tests, deploy-workflow
 
 - [x] **Step 2: Update durable state**
 
-Document GCP project/secret names, one-version destruction policy, compute-placement policy, external PostgreSQL network, live deployment paths, and remaining identity/DNS/storage/provider decisions. Record deployed SHA `a6c402a`, CI run `34420927967`, deploy run `34421864322`, and verified runtime/security gates. Keep Task 10 decisions pending.
+Document GCP project/secret names, one-version destruction policy, compute-placement policy, external PostgreSQL network, live deployment paths, and remaining identity/DNS/storage/provider decisions. Record initial deployment `a6c402a` / run `34421864322`, hardening deployment `e679fa0` / run `34424329193`, and verified runtime/security gates without claiming either is current. Treat VPS `/opt/expense-tax-management/app/deployed-image-tag` and the latest successful `Expense Tax Deploy` workflow as authoritative current state. Keep Task 10 decisions pending.
 
 - [x] **Step 3: Run source verification**
 
@@ -246,9 +252,9 @@ git commit -m "feat(1b): add production CI/CD"
 ### Task 6: Provision GCP Project, WIF, and Single-Version Bundle
 
 **Status: Complete.** Project, billing, APIs, WIF, service account, and one
-non-destroyed production secret version verified. WIF is restricted to the
-production deployment workflow on `refs/heads/main` and the `production`
-environment.
+non-destroyed production secret version verified. Hardening verification records
+strict provider-conditioned `principalSet` trust restricted to the exact
+repository, `refs/heads/main`, deploy workflow ref, and `production` environment.
 
 **Files:**
 - Runtime state only; no secret values written into repository.
@@ -331,8 +337,12 @@ Confirm both databases exist, are owned by `expense_temporal`, and the role can 
 
 ### Task 9: Push Source, Observe CI, and Perform First Deployment
 
-**Status: Complete.** CI `34420927967` and deploy `34421864322` are green;
-production runs deployed SHA `a6c402a` with seven healthy/running services.
+**Status: Complete.** Initial verified deployment was SHA `a6c402a` / run
+`34421864322`; hardening deployment was SHA `e679fa0` / run `34424329193`.
+Runtime state remains authoritative only from the VPS deployed-image marker and
+latest successful `Expense Tax Deploy` workflow. Hardening verification covered
+seven healthy/running services, AI worker health, strict WIF trust, and
+ephemeral credential cleanup.
 
 **Files:**
 - GitHub/VPS runtime state.
@@ -359,9 +369,11 @@ Confirm one non-destroyed secret version, root-owned mode-0600 VPS env, no GCP s
 
 - [x] **Step 5: Report deployment status**
 
-Report deployed SHA and Actions URL. Confirm repository source, local `main`,
-and `origin/main` match; leave unrelated mockup work untouched. Runtime state
-remains recorded by Actions and `/opt/expense-tax-management/app/deployed-image-tag`.
+Report historical deployment evidence separately from current state. Confirm
+current SHA from `/opt/expense-tax-management/app/deployed-image-tag` and current
+run from the latest successful `Expense Tax Deploy` workflow; do not infer either
+from this plan. Confirm repository source, local `main`, and `origin/main` match;
+leave unrelated mockup work untouched.
 
 ### Task 10: Stop at Next Product Decisions
 
