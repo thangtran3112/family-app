@@ -82,9 +82,7 @@ def worker_config_from_env(
                 values, "CLERK_FOUNDRY_MACHINE_SECRET_KEY"
             ),
             app_service_subject=_required(values, "CLERK_APP_SERVICE_SUBJECT"),
-            foundry_service_subject=_required(
-                values, "CLERK_FOUNDRY_SERVICE_SUBJECT"
-            ),
+            foundry_service_subject=_required(values, "CLERK_FOUNDRY_SERVICE_SUBJECT"),
             publishable_key=_optional(values, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
             secret_key=_optional(values, "CLERK_SECRET_KEY"),
             webhook_signing_secret=_optional(values, "CLERK_WEBHOOK_SIGNING_SECRET"),

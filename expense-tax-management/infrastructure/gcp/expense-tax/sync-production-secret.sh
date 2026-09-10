@@ -72,7 +72,8 @@ env -i PATH="$PATH" HOME="$HOME" \
   BUNDLE_FILE="$BUNDLE_FILE" \
   zsh -dfc '
   source "$API_ENV_FILE"
-  export OPENAI_API_KEY OPENROUTER_API_KEY
+  export OPENAI_API_KEY OPENROUTER_API_KEY \
+    CLERK_APP_MACHINE_SECRET_KEY CLERK_FOUNDRY_MACHINE_SECRET_KEY
   node --input-type=module <<"NODE"
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 const { buildProductionBundle, activeVersionIds } = await import(process.env.BUNDLE_MODULE);
@@ -84,6 +85,8 @@ const bundle = buildProductionBundle({
   shellEnv: {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    CLERK_APP_MACHINE_SECRET_KEY: process.env.CLERK_APP_MACHINE_SECRET_KEY,
+    CLERK_FOUNDRY_MACHINE_SECRET_KEY: process.env.CLERK_FOUNDRY_MACHINE_SECRET_KEY,
   },
   databaseEnv: readFileSync(process.env.DATABASE_ENV_PATH, "utf8"),
   currentEnv,

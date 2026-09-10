@@ -26,7 +26,10 @@ const inertComposeEnv = {
   CLERK_JWKS_URL: "https://identity.not-configured.invalid/.well-known/jwks.json",
   CLERK_TENANT_AUDIENCE: "phase-1b-inert-tenant",
   CLERK_PLATFORM_AUDIENCE: "phase-1b-inert-platform",
-  CLERK_SERVICE_AUDIENCE: "phase-1b-inert-service",
+  CLERK_APP_SERVICE_AUDIENCE: "mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "mch_3J9g3CNoKL9q6KfbRy5zq1Rh2zT",
+  CLERK_APP_SERVICE_SUBJECT: "mch_3J9Xg9Hu84Rn2oeqj7EMrv0ax19",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "mch_3J9gHBtDcxOE3fWE39Ay9uF7hFv",
   FOUNDRY_DATABASE_URL: "postgresql://inert:inert@postgres:5432/expense_tax_db",
   FOUNDRY_MIGRATION_DATABASE_URL: "postgresql://inert:inert@postgres:5432/expense_tax_db",
   STORAGE_BACKEND: "local",
@@ -35,7 +38,8 @@ const inertComposeEnv = {
   INBOUND_EMAIL_BASE_ADDRESS: "receipts@inbound.expense-tax.local",
   INBOUND_WEBHOOK_SIGNING_KEY: "1".repeat(64),
   INBOUND_ROUTING_TOKEN_SECRET: "2".repeat(64),
-  CLERK_MACHINE_SECRET_KEY: "ak_phase_1b_inert_machine_secret",
+  CLERK_APP_MACHINE_SECRET_KEY: "ak_phase_1b_inert_app_machine_secret",
+  CLERK_FOUNDRY_MACHINE_SECRET_KEY: "ak_phase_1b_inert_foundry_machine_secret",
   TEMPORAL_DB_PASSWORD: "phase-1b-inert-temporal-password",
 };
 

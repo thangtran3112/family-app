@@ -21,7 +21,15 @@ const databaseFixture = {
 const requiredShellEnv = {
   OPENAI_API_KEY: "openai",
   OPENROUTER_API_KEY: "openrouter",
-  CLERK_MACHINE_SECRET_KEY: "ak_test_machine_secret",
+  CLERK_APP_MACHINE_SECRET_KEY: "ak_test_app_machine_secret",
+  CLERK_FOUNDRY_MACHINE_SECRET_KEY: "ak_test_foundry_machine_secret",
+};
+
+const clerkMachineIds = {
+  CLERK_APP_SERVICE_AUDIENCE: "mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "mch_3J9g3CNoKL9q6KfbRy5zq1Rh2zT",
+  CLERK_APP_SERVICE_SUBJECT: "mch_3J9Xg9Hu84Rn2oeqj7EMrv0ax19",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "mch_3J9gHBtDcxOE3fWE39Ay9uF7hFv",
 };
 
 const productionRoot = join(
@@ -45,7 +53,7 @@ describe("buildProductionBundle", () => {
 
   it("emits every required production Compose value with fail-closed defaults", () => {
     const bundle = buildProductionBundle({
-      shellEnv: requiredShellEnv,
+      shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
       databaseEnv: databaseFixture,
       randomBytes: () => Buffer.alloc(32, 7),
     });
@@ -59,15 +67,32 @@ describe("buildProductionBundle", () => {
     expect([...new Set(requiredComposeKeys)].filter((key) => !keys.has(key))).toEqual([]);
     expect(bundle).toContain("APP_TENANT_TOKEN_ISSUER=https://identity.not-configured.invalid");
     expect(bundle).toContain("STORAGE_BACKEND=local");
-    expect(bundle).toContain("CLERK_MACHINE_SECRET_KEY=ak_test_machine_secret");
+    expect(bundle).toContain(
+      "CLERK_APP_MACHINE_SECRET_KEY=ak_test_app_machine_secret",
+    );
+    expect(bundle).toContain(
+      "CLERK_FOUNDRY_MACHINE_SECRET_KEY=ak_test_foundry_machine_secret",
+    );
     expect(bundle).not.toContain("IMAGE_TAG=");
+  });
+
+  it.each([
+    "CLERK_APP_MACHINE_SECRET_KEY",
+    "CLERK_FOUNDRY_MACHINE_SECRET_KEY",
+  ])("names only missing required key %s", (key) => {
+    const shellEnv = { ...requiredShellEnv, ...clerkMachineIds };
+    delete shellEnv[key];
+
+    expect(() =>
+      buildProductionBundle({ shellEnv, databaseEnv: databaseFixture }),
+    ).toThrowError(new RegExp(`missing required environment keys: ${key}$`));
   });
 
   it("rewrites only database URL authority and preserves query text", () => {
     const url =
       "postgresql://app:password@127.0.0.1:15432/expense_tax_db?host=127.0.0.1:15432&marker=@127.0.0.1:15432#fragment";
     const bundle = buildProductionBundle({
-      shellEnv: requiredShellEnv,
+      shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
       databaseEnv: { ...databaseFixture, APP_DATABASE_URL: url },
       randomBytes: () => Buffer.alloc(32, 7),
     });
@@ -83,14 +108,14 @@ describe("buildProductionBundle", () => {
   ])("rejects invalid database URL %s without exposing its value", (key, value) => {
     expect(() =>
       buildProductionBundle({
-        shellEnv: requiredShellEnv,
+        shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
         databaseEnv: { ...databaseFixture, [key]: value },
       }),
     ).toThrowError(new RegExp(key));
 
     try {
       buildProductionBundle({
-        shellEnv: requiredShellEnv,
+        shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
         databaseEnv: { ...databaseFixture, [key]: value },
       });
     } catch (error) {
@@ -118,7 +143,7 @@ describe("buildProductionBundle", () => {
 
   it("generates 32-byte hexadecimal keys on first run", () => {
     const bundle = buildProductionBundle({
-      shellEnv: requiredShellEnv,
+      shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
       databaseEnv: databaseFixture,
       randomBytes: () => Buffer.alloc(32, 7),
     });
@@ -135,7 +160,7 @@ describe("buildProductionBundle", () => {
 
   it("serializes keys in deterministic dotenv order", () => {
     const bundle = buildProductionBundle({
-      shellEnv: requiredShellEnv,
+      shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
       databaseEnv: databaseFixture,
       currentEnv: {
         TEMPORAL_DB_PASSWORD: "11".repeat(32),
@@ -155,11 +180,14 @@ describe("buildProductionBundle", () => {
       "APP_TENANT_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
       "APP_TENANT_TOKEN_AUDIENCE=phase-1b-inert-tenant",
       "APP_TENANT_TOKEN_ISSUER=https://identity.not-configured.invalid",
-      "CLERK_APP_SERVICE_AUDIENCE=expense-app-internal",
-      "CLERK_FOUNDRY_SERVICE_AUDIENCE=expense-foundry-internal",
+      "CLERK_APP_MACHINE_SECRET_KEY=ak_test_app_machine_secret",
+      "CLERK_APP_SERVICE_AUDIENCE=mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
+      "CLERK_APP_SERVICE_SUBJECT=mch_3J9Xg9Hu84Rn2oeqj7EMrv0ax19",
+      "CLERK_FOUNDRY_MACHINE_SECRET_KEY=ak_test_foundry_machine_secret",
+      "CLERK_FOUNDRY_SERVICE_AUDIENCE=mch_3J9g3CNoKL9q6KfbRy5zq1Rh2zT",
+      "CLERK_FOUNDRY_SERVICE_SUBJECT=mch_3J9gHBtDcxOE3fWE39Ay9uF7hFv",
       "CLERK_ISSUER_URL=https://identity.not-configured.invalid",
       "CLERK_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
-      "CLERK_MACHINE_SECRET_KEY=ak_test_machine_secret",
       "CLERK_PLATFORM_AUDIENCE=phase-1b-inert-platform",
       "CLERK_TENANT_AUDIENCE=phase-1b-inert-tenant",
       "FOUNDRY_DATABASE_URL=postgresql://foundry:foundry-password@postgres:5432/expense_tax_db",
@@ -203,7 +231,7 @@ describe("buildProductionBundle", () => {
   ])("rejects malformed preserved secret %s without exposing its value", (key, value) => {
     expect(() =>
       buildProductionBundle({
-        shellEnv: requiredShellEnv,
+        shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
         databaseEnv: databaseFixture,
         currentEnv: { [key]: value },
         randomBytes: () => Buffer.alloc(32),
@@ -212,7 +240,7 @@ describe("buildProductionBundle", () => {
 
     try {
       buildProductionBundle({
-        shellEnv: requiredShellEnv,
+        shellEnv: { ...requiredShellEnv, ...clerkMachineIds },
         databaseEnv: databaseFixture,
         currentEnv: { [key]: value },
         randomBytes: () => Buffer.alloc(32),
