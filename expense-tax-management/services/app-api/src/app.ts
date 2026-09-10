@@ -309,8 +309,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerPlanRoutes, {
     identityResolver: identityDomain,
     plansDomain,
+    ...(options.config.clerk?.foundryServiceSubject
+      ? { foundryServiceSubject: options.config.clerk.foundryServiceSubject }
+      : {}),
   });
-  app.register(registerJobRoutes, { processingJobsDomain });
+  app.register(registerJobRoutes, {
+    processingJobsDomain,
+    ...(options.config.clerk?.appServiceSubject
+      ? { workerServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
+  });
   const exportsDomain =
     options.exportsDomain ??
     createExportsDomain(database, storageAdapter, {
@@ -324,6 +332,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     identityResolver: identityDomain,
     filesDomain,
     contentSigningKey: options.config.storage.urlSigningKey,
+    ...(options.config.clerk?.appServiceSubject
+      ? { workerServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
   });
   const ocrJobsDomain =
     options.ocrJobsDomain ??
@@ -331,6 +342,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerOcrRoutes, {
     identityResolver: identityDomain,
     ocrJobsDomain,
+    ...(options.config.clerk?.appServiceSubject
+      ? { workerServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
   });
   const inboundEmailDomain =
     options.inboundEmailDomain ??

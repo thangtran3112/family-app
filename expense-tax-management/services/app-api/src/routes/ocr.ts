@@ -21,6 +21,7 @@ import { authenticatedUserGuard, serviceGuard, tenantGuard } from "../plugins/au
 export interface OcrRouteOptions {
   readonly identityResolver: IdentityResolver;
   readonly ocrJobsDomain: OcrJobsDomain;
+  readonly workerServiceSubject?: string;
 }
 
 const errors = {
@@ -69,7 +70,9 @@ export async function registerOcrRoutes(
   // Job-input reads ride on the worker's existing write scope: input is
   // part of the assigned-job write flow, and a second scope would double
   // the test matrix for zero security gain (same principal, same jobs).
-  const workerGuard = [serviceGuard("ai-worker", ["jobs:write"])];
+  const workerGuard = [
+    serviceGuard(options.workerServiceSubject ?? "ai-worker", ["jobs:write"]),
+  ];
 
   const jobRoutes = [
     {

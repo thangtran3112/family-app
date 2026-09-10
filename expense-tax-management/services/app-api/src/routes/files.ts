@@ -34,6 +34,7 @@ export interface FileRouteOptions {
   readonly identityResolver: IdentityResolver;
   readonly filesDomain: FilesDomain;
   readonly contentSigningKey: string;
+  readonly workerServiceSubject?: string;
 }
 
 const errors = {
@@ -80,7 +81,9 @@ export async function registerFileRoutes(
     tenantGuard,
     authenticatedUserGuard(options.identityResolver),
   ];
-  const workerGuard = [serviceGuard("ai-worker", ["files:read"])];
+  const workerGuard = [
+    serviceGuard(options.workerServiceSubject ?? "ai-worker", ["files:read"]),
+  ];
 
   typedApp.addContentTypeParser(
     ["image/jpeg", "image/png", "image/webp", "application/pdf"],

@@ -17,6 +17,8 @@ export interface ClerkConfig {
   readonly platformAudience: string;
   readonly appServiceAudience: string;
   readonly foundryServiceAudience: string;
+  readonly appServiceSubject: string;
+  readonly foundryServiceSubject: string;
   readonly publishableKey?: string | undefined;
   readonly secretKey?: string | undefined;
   readonly webhookSigningSecret?: string | undefined;
@@ -136,6 +138,14 @@ export function createFoundryConfig(
           foundryServiceAudience: requiredEnvironmentValue(
             env,
             "CLERK_FOUNDRY_SERVICE_AUDIENCE",
+          ),
+          appServiceSubject: requiredEnvironmentValue(
+            env,
+            "CLERK_APP_SERVICE_SUBJECT",
+          ),
+          foundryServiceSubject: requiredEnvironmentValue(
+            env,
+            "CLERK_FOUNDRY_SERVICE_SUBJECT",
           ),
           publishableKey: optionalEnvironmentValue(
             env,

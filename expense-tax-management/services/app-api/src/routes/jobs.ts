@@ -18,6 +18,7 @@ import { serviceGuard } from "../plugins/auth.js";
 
 export interface JobRouteOptions {
   readonly processingJobsDomain: ProcessingJobsDomain;
+  readonly workerServiceSubject?: string;
 }
 
 const errors = {
@@ -48,7 +49,9 @@ export async function registerJobRoutes(
 ): Promise<void> {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
   const adminGuard = [serviceGuard("platform-admin", ["jobs:manage"])];
-  const workerGuard = [serviceGuard("ai-worker", ["jobs:write"])];
+  const workerGuard = [
+    serviceGuard(options.workerServiceSubject ?? "ai-worker", ["jobs:write"]),
+  ];
 
   typedApp.post(
     "/internal/v1/jobs/foundation-echo",

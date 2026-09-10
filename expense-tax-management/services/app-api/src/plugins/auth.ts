@@ -100,7 +100,7 @@ export function authenticatedUserGuard(identityResolver: IdentityResolver): Auth
 }
 
 export function serviceGuard(
-  allowedPrincipal: string,
+  expectedSubject: string,
   requiredScopes: readonly string[],
 ): AuthGuard {
   return async (request) => {
@@ -111,7 +111,7 @@ export function serviceGuard(
     const scopes = new Set(principal.scopes);
 
     if (
-      principal.clientId !== allowedPrincipal ||
+      principal.subject !== expectedSubject ||
       requiredScopes.some((scope) => !scopes.has(scope))
     ) {
       throw requestError(403);

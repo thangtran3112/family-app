@@ -153,12 +153,13 @@ services:
       TEMPORAL_NAMESPACE: default
       AI_WORKER_TASK_QUEUE: expense-tax-ai-worker
       APP_API_BASE_URL: http://app-api:8100
-      # No real issuer mints worker tokens yet -- calls the worker makes
-      # will 401 against real running containers until identity issuance
-      # exists (pre-release track). Same placeholder discipline for both.
-      APP_API_SERVICE_TOKEN: ${AI_WORKER_APP_API_SERVICE_TOKEN:-not-yet-issued}
+      CLERK_APP_SERVICE_AUDIENCE: ${CLERK_APP_SERVICE_AUDIENCE:-expense-app-internal}
+      CLERK_FOUNDRY_SERVICE_AUDIENCE: ${CLERK_FOUNDRY_SERVICE_AUDIENCE:-expense-foundry-internal}
+      CLERK_APP_MACHINE_SECRET_KEY: ${CLERK_APP_MACHINE_SECRET_KEY:-not-yet-issued}
+      CLERK_FOUNDRY_MACHINE_SECRET_KEY: ${CLERK_FOUNDRY_MACHINE_SECRET_KEY:-not-yet-issued}
+      CLERK_APP_SERVICE_SUBJECT: ${CLERK_APP_SERVICE_SUBJECT:-ai-worker-app-machine-not-configured}
+      CLERK_FOUNDRY_SERVICE_SUBJECT: ${CLERK_FOUNDRY_SERVICE_SUBJECT:-ai-worker-foundry-machine-not-configured}
       FOUNDRY_BASE_URL: http://foundry-service:8200
-      FOUNDRY_SERVICE_TOKEN: ${AI_WORKER_FOUNDRY_SERVICE_TOKEN:-not-yet-issued}
     depends_on:
       temporal:
         condition: service_healthy

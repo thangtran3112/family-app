@@ -26,6 +26,8 @@ const ENV = {
   CLERK_PLATFORM_AUDIENCE: " platform-audience ",
   CLERK_APP_SERVICE_AUDIENCE: " app-service-audience ",
   CLERK_FOUNDRY_SERVICE_AUDIENCE: " foundry-service-audience ",
+  CLERK_APP_SERVICE_SUBJECT: " ai-worker-app-machine ",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: " ai-worker-foundry-machine ",
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: " pk_test_fake ",
   CLERK_SECRET_KEY: " sk_test_fake ",
   CLERK_WEBHOOK_SIGNING_SECRET: " whsec_test_fake ",
@@ -65,6 +67,8 @@ describe("App API Clerk configuration", () => {
       platformAudience: "platform-audience",
       appServiceAudience: "app-service-audience",
       foundryServiceAudience: "foundry-service-audience",
+      appServiceSubject: "ai-worker-app-machine",
+      foundryServiceSubject: "ai-worker-foundry-machine",
       publishableKey: "pk_test_fake",
       secretKey: "sk_test_fake",
       webhookSigningSecret: "whsec_test_fake",
@@ -78,6 +82,8 @@ describe("App API Clerk configuration", () => {
     "CLERK_PLATFORM_AUDIENCE",
     "CLERK_APP_SERVICE_AUDIENCE",
     "CLERK_FOUNDRY_SERVICE_AUDIENCE",
+    "CLERK_APP_SERVICE_SUBJECT",
+    "CLERK_FOUNDRY_SERVICE_SUBJECT",
   ])("fails with the named variable when %s is missing", (key) => {
     const env = { ...ENV };
     delete env[key as keyof typeof env];

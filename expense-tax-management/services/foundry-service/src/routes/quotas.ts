@@ -32,6 +32,8 @@ export interface QuotaRouteOptions {
   readonly quotasDomain: QuotasDomain;
   readonly routesDomain: RoutesDomain;
   readonly database: Kysely<FoundryDatabase>;
+  readonly workerServiceSubject?: string;
+  readonly appServiceSubject?: string;
 }
 
 const errors = {
@@ -55,10 +57,13 @@ export async function registerQuotaRoutes(
 ): Promise<void> {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
   const catalogManagerGuard = [platformGuard("catalog_manager")];
-  const workerGuard = [serviceGuard("ai-worker", ["reservations:write"])];
-  const routeReaderGuard = [serviceGuard("ai-worker", ["routes:read"])];
+  const workerSubject = options.workerServiceSubject ?? "ai-worker";
+  const workerGuard = [serviceGuard(workerSubject, ["reservations:write"])];
+  const routeReaderGuard = [serviceGuard(workerSubject, ["routes:read"])];
   const reconcilerGuard = [platformGuard("quota_reconciler")];
-  const appApiGuard = [serviceGuard("app-api", ["quota-status:read"])];
+  const appApiGuard = [
+    serviceGuard(options.appServiceSubject ?? "app-api", ["quota-status:read"]),
+  ];
 
   typedApp.post(
     "/internal/v1/tenant-ai-quotas",

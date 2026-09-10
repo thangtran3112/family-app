@@ -18,6 +18,8 @@ const TEST_ENV = {
   CLERK_PLATFORM_AUDIENCE: "platform-audience",
   CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
   CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
+  CLERK_APP_SERVICE_SUBJECT: "ai-worker-app-machine",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker-foundry-machine",
   FOUNDRY_DATABASE_URL: "postgresql://foundry-runtime.test/foundry",
 };
 
@@ -53,7 +55,12 @@ function servicePrincipal(
 ): AuthPrincipal {
   return {
     tokenType: "service",
-    subject: `${clientId}-subject`,
+    subject:
+      clientId === "ai-worker"
+        ? "ai-worker-foundry-machine"
+        : clientId === "app-api"
+          ? "ai-worker-app-machine"
+          : clientId,
     clientId,
     audience: "expense-foundry-internal",
     issuer: "https://services.test",

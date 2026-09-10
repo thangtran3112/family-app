@@ -189,7 +189,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     readinessProbe: app.databaseReadinessProbe,
   });
   app.register(registerCatalogRoutes, { catalogDomain });
-  app.register(registerQuotaRoutes, { quotasDomain, routesDomain, database });
+  app.register(registerQuotaRoutes, {
+    quotasDomain,
+    routesDomain,
+    database,
+    ...(options.config.clerk?.foundryServiceSubject
+      ? { workerServiceSubject: options.config.clerk.foundryServiceSubject }
+      : {}),
+    ...(options.config.clerk?.appServiceSubject
+      ? { appServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
+  });
   app.register(registerOperationsRoutes, { operationsDomain });
 
   return app;

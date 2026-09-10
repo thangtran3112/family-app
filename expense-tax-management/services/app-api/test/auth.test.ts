@@ -12,6 +12,7 @@ const TENANT_ISSUER = "https://identity.test";
 const TENANT_AUDIENCE = "expense-app";
 const SERVICE_ISSUER = "https://services.test";
 const SERVICE_AUDIENCE = "expense-app-internal";
+const APP_SERVICE_SUBJECT = "ai-worker-app-machine";
 
 const AUTH_ENV = {
   AUTH_PROVIDER: "legacy",
@@ -27,6 +28,8 @@ const AUTH_ENV = {
   CLERK_PLATFORM_AUDIENCE: "platform-audience",
   CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
   CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
+  CLERK_APP_SERVICE_SUBJECT: "ai-worker-app-machine",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker-foundry-machine",
 };
 
 const REQUIRED_AUTH_ENV_KEYS = (
@@ -153,7 +156,7 @@ describe("App API authentication", () => {
     app.get(
       "/_test/private/service",
       {
-        preHandler: serviceGuard("ai-worker", [
+         preHandler: serviceGuard("ai-worker", [
           "expenses:extract",
           "expenses:write",
         ]),
@@ -274,7 +277,7 @@ describe("App API authentication", () => {
     app.get(
       "/_test/private/clerk-service",
       {
-        preHandler: serviceGuard("ai-worker", [
+        preHandler: serviceGuard(APP_SERVICE_SUBJECT, [
           "expenses:extract",
           "expenses:write",
         ]),
@@ -302,7 +305,7 @@ describe("App API authentication", () => {
       key: serviceKeys.privateKey,
       issuer: "https://clerk.test",
       audience: "app-service-audience",
-      subject: "ai-worker",
+       subject: APP_SERVICE_SUBJECT,
       claims: {
         azp: "ai-worker",
         scope: "expenses:extract expenses:write",

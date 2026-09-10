@@ -13,6 +13,7 @@ const PLATFORM_AUDIENCE = "expense-foundry-platform";
 const SERVICE_ISSUER = "https://services.test";
 const SERVICE_AUDIENCE = "expense-foundry-internal";
 const APP_INTERNAL_AUDIENCE = "app-service-audience";
+const APP_SERVICE_SUBJECT = "ai-worker-app-machine";
 
 const AUTH_ENV = {
   AUTH_PROVIDER: "legacy",
@@ -29,6 +30,8 @@ const AUTH_ENV = {
   CLERK_PLATFORM_AUDIENCE: "platform-audience",
   CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
   CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
+  CLERK_APP_SERVICE_SUBJECT: "ai-worker-app-machine",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker-foundry-machine",
 };
 
 const REQUIRED_AUTH_ENV_KEYS = (
@@ -164,7 +167,7 @@ describe("Foundry authentication", () => {
     app.get(
       ENTITLEMENT_PUBLISH_PATH,
       {
-        preHandler: serviceGuard("app-api", ["entitlements:publish"]),
+         preHandler: serviceGuard("app-api", ["entitlements:publish"]),
       },
       async (request) => ({ principal: request.authPrincipal }),
     );
@@ -288,7 +291,7 @@ describe("Foundry authentication", () => {
     app.get(
       "/_test/platform/clerk-service",
       {
-        preHandler: serviceGuard("app-api", ["entitlements:publish"]),
+        preHandler: serviceGuard(APP_SERVICE_SUBJECT, ["entitlements:publish"]),
       },
       async (request) => ({ principal: request.authPrincipal }),
     );
@@ -313,7 +316,7 @@ describe("Foundry authentication", () => {
       key: serviceKeys.privateKey,
       issuer: "https://clerk.test",
       audience: "foundry-service-audience",
-      subject: "app-api",
+       subject: APP_SERVICE_SUBJECT,
       claims: {
         azp: "app-api",
         scope: "entitlements:publish",

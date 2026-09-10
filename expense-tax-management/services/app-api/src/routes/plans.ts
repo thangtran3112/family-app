@@ -35,6 +35,7 @@ import {
 export interface PlanRouteOptions {
   readonly identityResolver: IdentityResolver;
   readonly plansDomain: PlansDomain;
+  readonly foundryServiceSubject?: string;
 }
 
 const errors = {
@@ -67,7 +68,12 @@ export async function registerPlanRoutes(
     authenticatedUserGuard(options.identityResolver),
   ];
   const adminGuard = [serviceGuard("platform-admin", ["plans:manage"])];
-  const foundryGuard = [serviceGuard("foundry-service", ["entitlements:read"])];
+  const foundryGuard = [
+    serviceGuard(
+      options.foundryServiceSubject ?? "foundry-service",
+      ["entitlements:read"],
+    ),
+  ];
 
   typedApp.post(
     "/internal/v1/plans",
