@@ -1,4 +1,12 @@
-import { readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,6 +127,30 @@ describe("Phase 1B production deployment boundaries", () => {
     expect(deploy).not.toMatch(/(^|[^#])\bsource\s+/);
     expect(deploy).not.toMatch(/(^|[^#])\beval\s+/);
     expect(deploy).toContain("unsafe");
+  });
+
+  it("executes control-byte validation for valid and forbidden dotenv bytes", () => {
+    const deploy = readProductionFile("deploy.sh");
+    const awkProgram = deploy.match(/od -An -v -tu1 [^|]+\| awk '([^']+)'/)?.[1];
+    expect(awkProgram).toBeDefined();
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "expense-tax-env-bytes-"));
+    const validFile = path.join(tempRoot, "valid.env");
+    const controlFile = path.join(tempRoot, "control.env");
+
+    try {
+      writeFileSync(validFile, "APP_DATABASE_URL=postgresql://app/db\nTEMPORAL_DB_PASSWORD=test\n");
+      writeFileSync(controlFile, Buffer.from("APP_DATABASE_URL=postgresql://app/db\nTEMPORAL_DB_PASSWORD=bad\x01\n", "binary"));
+      const runValidator = (file: string) =>
+        execFileSync("sh", ["-c", `od -An -v -tu1 "$1" | awk '${awkProgram}'`, "validator", file], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+
+      expect(() => runValidator(validFile)).not.toThrow();
+      expect(() => runValidator(controlFile)).toThrow();
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps IMAGE_TAG exclusively outside transferred secret data", () => {

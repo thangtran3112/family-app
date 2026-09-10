@@ -48,7 +48,7 @@ validate_env_file() {
 validate_env_bytes() {
   local file=$1
   # Permit line-feed separators only. All other C0 controls, DEL, and NUL are unsafe.
-  if ! LC_ALL=C od -An -v -tu1 "$file" | awk '{for (i = 1; i <= NF; i++) if (($i < 10) || ($i > 10 && $i < 32) || ($i == 127)) exit 1'; then
+  if ! LC_ALL=C od -An -v -tu1 "$file" | awk '{for (i = 1; i <= NF; i++) { if (($i < 10) || ($i > 10 && $i < 32) || ($i == 127)) { exit 1 } }}'; then
     die "production env contains unsafe control bytes"
   fi
 }
