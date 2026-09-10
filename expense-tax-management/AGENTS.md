@@ -99,7 +99,7 @@
 - Restart opencode after changing project configuration, agents, or rules so changes load in a new process.
 
 ## Remaining Pre-Infrastructure Work
-- `1A` polyglot GitHub Actions CI is complete. Phase 1B source is complete and locally verified: GCP bootstrap/secret-sync policy, immutable six-image production Compose, rollback/deploy scripts, and build/deploy workflow are ready. Live deployment remains pending until Tasks 7-9 (deployment identity, Temporal database bootstrap, and first deployment) finish; Phase 1C production gateway hardening remains pending.
+- `1A` polyglot GitHub Actions CI is complete. Phase 1B Tasks 6-9 are complete: deployed SHA `a6c402a`, green CI run `34420927967`, green deploy run `34421864322`, seven healthy/running services, App 012 and Foundry 004 migrations, loopback-only listeners, one retained Secret Manager version, and no persistent GHCR credential after cleanup. Phase 1C production gateway hardening and all Phase 1B Task 10 decisions remain pending.
 - Later search, graph, premium mailbox, and mobile phases remain after core pre-infrastructure capabilities.
 
 ## Infrastructure Gate

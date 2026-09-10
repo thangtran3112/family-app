@@ -117,6 +117,22 @@ describe("production secret sync behavior", () => {
     expect(bootstrap).not.toContain("issuerUri: provider.issuerUri");
   });
 
+  it("pins WIF to production main workflow and environment subject", async () => {
+    const bootstrap = await readFile(bootstrapScript, "utf8");
+
+    for (const claim of [
+      "assertion.repository=='thangtran3112/family-app'",
+      "assertion.ref=='refs/heads/main'",
+      "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main'",
+      "assertion.environment=='production'",
+    ]) {
+      expect(bootstrap).toContain(claim);
+    }
+    expect(bootstrap).toContain("repo:thangtran3112/family-app:environment:production");
+    expect(bootstrap).toContain("gcloud iam service-accounts get-iam-policy");
+    expect(bootstrap).toContain("WIF service-account binding drift");
+  });
+
   it("does not leak startup output or API-key values", async () => {
     const test = await fixture("success");
     const result = await runSync(test.env);

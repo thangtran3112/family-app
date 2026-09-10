@@ -202,9 +202,10 @@ Expected: both PASS; Phase 1A CI remains unchanged and green.
 
 ### Task 5: Add Aggregate Verification and Update Durable Docs
 
-**Status:** Source complete and ready for review. Live deployment remains
-pending Tasks 7-9; no GCP, GitHub, GHCR, SSH, or VPS operation belongs in this
-offline source gate.
+**Status:** Tasks 1-9 complete. Live deployment is verified at SHA `a6c402a`
+with CI run `34420927967` and deploy run `34421864322`; no GCP, GitHub, GHCR,
+SSH, or VPS operation belongs in this offline source gate. Task 10 decisions
+remain pending.
 
 **Files:**
 - Create: `scripts/verify-phase-1b.mjs`
@@ -223,7 +224,7 @@ Run bundle tests, GCP static checker, production-boundary tests, deploy-workflow
 
 - [x] **Step 2: Update durable state**
 
-Document GCP project/secret names, one-version destruction policy, compute-placement policy, external PostgreSQL network, live deployment paths, and remaining identity/DNS/storage/provider decisions. Mark Phase 1B source complete but live deployment pending until Tasks 7-9 finish.
+Document GCP project/secret names, one-version destruction policy, compute-placement policy, external PostgreSQL network, live deployment paths, and remaining identity/DNS/storage/provider decisions. Record deployed SHA `a6c402a`, CI run `34420927967`, deploy run `34421864322`, and verified runtime/security gates. Keep Task 10 decisions pending.
 
 - [x] **Step 3: Run source verification**
 
@@ -244,6 +245,11 @@ git commit -m "feat(1b): add production CI/CD"
 
 ### Task 6: Provision GCP Project, WIF, and Single-Version Bundle
 
+**Status: Complete.** Project, billing, APIs, WIF, service account, and one
+non-destroyed production secret version verified. WIF is restricted to the
+production deployment workflow on `refs/heads/main` and the `production`
+environment.
+
 **Files:**
 - Runtime state only; no secret values written into repository.
 
@@ -251,23 +257,26 @@ git commit -m "feat(1b): add production CI/CD"
 - Consumes: scripts from Task 2, authenticated `gcloud`, local API keys, local VPS database env.
 - Produces: isolated project, WIF/service account, and one verified production secret version.
 
-- [ ] **Step 1: Create and activate named GCP configuration**
+- [x] **Step 1: Create and activate named GCP configuration**
 
 Create configuration `expense-tax`, set account `thangtran3112@gmail.com`, set project `expense-tax-tobytran-2026`, and verify active project/account.
 
-- [ ] **Step 2: Run GCP bootstrap**
+- [x] **Step 2: Run GCP bootstrap**
 
 Run `infrastructure/gcp/expense-tax/bootstrap.sh`. Verify project parent, billing, enabled APIs, WIF condition, service-account IAM, and secret-level IAM.
 
-- [ ] **Step 3: Synchronize production bundle**
+- [x] **Step 3: Synchronize production bundle**
 
 Run `infrastructure/gcp/expense-tax/sync-production-secret.sh`. Verify output reports key names and hashes only, never values.
 
-- [ ] **Step 4: Verify one-version invariant**
+- [x] **Step 4: Verify one-version invariant**
 
 List secret versions and assert exactly one is enabled with every older version destroyed. Access latest into a temporary file, validate required key names, then remove the file.
 
 ### Task 7: Provision Dedicated Deployment Identity and GitHub Environment
+
+**Status: Complete.** Dedicated SSH identity and GitHub `production`
+environment metadata verified without exposing secret values.
 
 **Files:**
 - Runtime state: local gitignored key under `.keys/ovh/`, VPS authorized key, GitHub production environment secrets/variables.
@@ -276,23 +285,26 @@ List secret versions and assert exactly one is enabled with every older version 
 - Consumes: GitHub CLI authentication and VPS operator SSH access.
 - Produces: dedicated CI SSH identity and workflow configuration without reusing personal key.
 
-- [ ] **Step 1: Generate dedicated Ed25519 key**
+- [x] **Step 1: Generate dedicated Ed25519 key**
 
 Generate `.keys/ovh/github-actions-expense-tax` with no passphrase, mode 0600, comment `github-actions-expense-tax`. Print fingerprint only.
 
-- [ ] **Step 2: Install public key on VPS**
+- [x] **Step 2: Install public key on VPS**
 
 Append idempotently to `ubuntu` authorized keys over personal operator SSH, preserve mode 0600, and verify a fresh connection using dedicated key.
 
-- [ ] **Step 3: Configure GitHub production environment**
+- [x] **Step 3: Configure GitHub production environment**
 
 Create environment `production`. Set `VPS_DEPLOY_SSH_KEY` and `VPS_DEPLOY_KNOWN_HOSTS` as environment secrets. Set environment variables for host `158.69.202.250`, port `2222`, user `ubuntu`, project ID, WIF provider resource name, and service-account email. Never display secret values.
 
-- [ ] **Step 4: Verify metadata only**
+- [x] **Step 4: Verify metadata only**
 
 Use GitHub API/CLI to list environment variable and secret names, and confirm expected names exist without retrieving values.
 
 ### Task 8: Bootstrap Temporal Databases on Live VPS (operator-only)
+
+**Status: Complete.** Idempotent bootstrap ran twice; least-privilege role and
+database ownership verified. Script remains operator-only.
 
 **Files:**
 - Runtime state only in existing PostgreSQL cluster.
@@ -301,7 +313,7 @@ Use GitHub API/CLI to list environment variable and secret names, and confirm ex
 - Consumes: local VPS-only PostgreSQL superuser password and GCP bundle's Temporal password without exposing either.
 - Produces: `expense_temporal` role and owned `temporal`/`temporal_visibility` databases.
 
-- [ ] **Step 1: Capture pre-change metadata**
+- [x] **Step 1: Capture pre-change metadata**
 
 Task 8 remains outside normal workflow deployment. The operator must run the
 bootstrap explicitly before first application deployment; no GitHub Actions step
@@ -309,15 +321,18 @@ transfers or installs `bootstrap-temporal-db.sh`.
 
 Over SSH, list database/role names and current PostgreSQL container health. Do not query user rows or print passwords.
 
-- [ ] **Step 2: Run idempotent bootstrap**
+- [x] **Step 2: Run idempotent bootstrap**
 
 Fetch only `TEMPORAL_DB_PASSWORD` from Secret Manager into a protected temporary file, source VPS superuser password locally, and pipe both to `bootstrap-temporal-db.sh`. Run twice; second run must report no destructive change.
 
-- [ ] **Step 3: Verify ownership and isolation**
+- [x] **Step 3: Verify ownership and isolation**
 
 Confirm both databases exist, are owned by `expense_temporal`, and the role can connect without superuser, createdb, createrole, replication, or bypass-RLS attributes.
 
 ### Task 9: Push Source, Observe CI, and Perform First Deployment
+
+**Status: Complete.** CI `34420927967` and deploy `34421864322` are green;
+production runs deployed SHA `a6c402a` with seven healthy/running services.
 
 **Files:**
 - GitHub/VPS runtime state.
@@ -326,23 +341,23 @@ Confirm both databases exist, are owned by `expense_temporal`, and the role can 
 - Consumes: Phase 1B commit, configured GitHub environment, GCP bundle, live VPS.
 - Produces: green CI/deploy run and private healthy containers at exact SHA.
 
-- [ ] **Step 1: Push Phase 1B commit to `main`**
+- [x] **Step 1: Push Phase 1B commit to `main`**
 
 Confirm staged/unstaged scope excludes legacy mockups, push `HEAD:main`, and update local `main` pointer.
 
-- [ ] **Step 2: Watch Phase 1A and deployment workflows**
+- [x] **Step 2: Watch Phase 1A and deployment workflows**
 
 Watch both Actions runs to completion. On failure, inspect failed logs and captured diagnostics, fix source, rerun verification, commit a focused correction, and push again.
 
-- [ ] **Step 3: Verify live private runtime**
+- [x] **Step 3: Verify live private runtime**
 
 Over dedicated SSH, verify exact image SHA, seven service health states, loopback listeners only, external database-network attachment, successful migration versions app 012/foundry 004, and no listener on public 80/443.
 
-- [ ] **Step 4: Verify secret hygiene**
+- [x] **Step 4: Verify secret hygiene**
 
 Confirm one non-destroyed secret version, root-owned mode-0600 VPS env, no GCP service-account keys, no secret values in Actions logs/artifacts, and remote GHCR logout.
 
-- [ ] **Step 5: Report deployment status**
+- [x] **Step 5: Report deployment status**
 
 Report deployed SHA and Actions URL. Confirm repository source, local `main`,
 and `origin/main` match; leave unrelated mockup work untouched. Runtime state

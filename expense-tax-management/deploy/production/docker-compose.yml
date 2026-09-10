@@ -114,6 +114,11 @@ services:
         condition: service_healthy
       foundry-service:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     networks: [default]
 
   capture-web:

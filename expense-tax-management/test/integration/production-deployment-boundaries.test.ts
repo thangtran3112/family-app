@@ -267,10 +267,24 @@ describe("Phase 1B production deployment boundaries", () => {
     expect(health).toContain("127.0.0.1:7303/providers");
     expect(health).toContain("compose exec -T temporal");
     expect(health).toContain("temporal operator cluster health");
+    expect(health).toContain("ai-worker");
+    expect(health).toContain("--status running --services");
     for (const name of ["deploy.sh", "health-check.sh", "bootstrap-temporal-db.sh"]) {
       expect(readProductionFile(name)).toMatch(/^set -Eeuo pipefail/m);
       expect(statSync(path.join(productionRoot, name)).mode & 0o777).toBe(0o755);
     }
     expect(composePath).toContain("deploy/production/docker-compose.yml");
+  });
+
+  it("keeps ai-worker liveness explicit and rollback-gated", () => {
+    const compose = YAML.parse(readProductionFile("docker-compose.yml")) as {
+      services: Record<string, { healthcheck?: { test?: string[] } }>;
+    };
+    const workerHealthcheck = compose.services["ai-worker"].healthcheck;
+    expect(workerHealthcheck?.test?.join(" ") ?? "").toContain("kill -0 1");
+
+    const deploy = readProductionFile("deploy.sh");
+    expect(deploy).toContain("health-check.sh");
+    expect(deploy).toContain("rollback failed");
   });
 });

@@ -84,21 +84,27 @@ assertIncludes(raw, 'scp "${SCP_OPTIONS[@]}"');
 assertExcludes(raw, 'scp "${SSH_OPTIONS[@]}"', "scp reusing ssh options");
 assertIncludes(raw, "deploy/production/docker-compose.yml");
 assertIncludes(raw, "deploy/production/deploy.sh");
-assertIncludes(raw, "sudo docker login ghcr.io");
-assertIncludes(raw, "sudo docker logout ghcr.io");
+assertIncludes(raw, "sudo env DOCKER_CONFIG=", "root-scoped Docker config");
+assertIncludes(raw, "docker login ghcr.io");
+assertIncludes(raw, "docker logout ghcr.io");
 assertExcludes(raw, "| docker login ghcr.io", "unprivileged Docker login");
 assertExcludes(raw, "cleanup() { docker logout ghcr.io", "unprivileged Docker logout");
 assertIncludes(raw, "if: always()");
 assertIncludes(raw, "rm -f");
 assertIncludes(raw, "trap");
+assertIncludes(raw, "install -d -m 0700 /tmp/expense-tax-deploy", "private remote staging directory");
+assertIncludes(raw, "DOCKER_CONFIG=/dev/shm/expense-tax-docker-config", "ephemeral root Docker config");
+assertIncludes(raw, "install -d -o root -g root -m 0700", "root-only Docker config directory");
+assertIncludes(raw, "rm -rf \\\"\\$DOCKER_CONFIG\\\"", "Docker config cleanup");
+assertIncludes(raw, "sudo env DOCKER_CONFIG=\\\"\\$DOCKER_CONFIG\\\"", "Docker config propagation");
 
 const remoteCleanup = workflow.jobs?.deploy?.steps?.find(
   ({ name }) => name === "Clean remote staging",
 );
 assertEqual(remoteCleanup?.if, "always()", "remote cleanup condition");
 assertIncludes(remoteCleanup?.run ?? "", "ssh ", "remote cleanup SSH call");
-assertIncludes(remoteCleanup?.run ?? "", "sudo docker logout ghcr.io", "remote cleanup Docker logout");
-assertIncludes(remoteCleanup?.run ?? "", "sudo rm -rf /tmp/expense-tax-deploy", "remote staging cleanup");
+assertIncludes(remoteCleanup?.run ?? "", "docker logout ghcr.io", "remote cleanup Docker logout");
+assertIncludes(remoteCleanup?.run ?? "", "/tmp/expense-tax-deploy", "remote staging cleanup");
 assertIncludes(remoteCleanup?.run ?? "", "|| true", "best-effort remote cleanup");
 
 const permissions = workflow.permissions ?? {};

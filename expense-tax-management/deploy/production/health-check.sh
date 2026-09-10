@@ -31,6 +31,19 @@ for endpoint in "${endpoints[@]}"; do
   fi
 done
 
+worker_ready=0
+for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+  if compose ps --status running --services | awk '$1 == "ai-worker" { found=1 } END { exit found ? 0 : 1 }'; then
+    worker_ready=1
+    break
+  fi
+  sleep "$delay"
+done
+if ((worker_ready == 0)); then
+  printf '%s\n' "ai-worker is not running" >&2
+  exit 1
+fi
+
 for ((attempt = 1; attempt <= attempts; attempt += 1)); do
   if compose exec -T temporal temporal operator cluster health --address temporal:7233 >/dev/null; then
     exit 0
