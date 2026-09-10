@@ -1,1 +1,2 @@
-export default function Login(){return <main className="auth"><section><p className="eyebrow">ExpenseTax Office</p><h1>Open the books.</h1><label>Email<input type="email" autoComplete="email"/></label><label>Password<input type="password" autoComplete="current-password"/></label><button className="primary">Continue with identity provider</button><p>Identity credentials are deployment-gated; this frontend handles no password itself.</p></section></main>}
+import { SignIn } from "@clerk/nextjs";
+export default function Login(){return <main className="auth"><SignIn routing="path" path="/login"/></main>}

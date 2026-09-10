@@ -1,16 +1,9 @@
-"""Thin HTTP client for the App API worker-callback routes.
-
-The worker is handed a plain bearer-token string by whatever process
-starts it (APP_API_SERVICE_TOKEN) -- it does not mint or sign a JWT
-itself. Short-lived App-signed admission grants for Foundry quota
-reservation (design doc section 16.3) are a Phase 0C concern once the
-worker actually needs to reserve AI usage; this foundation phase never
-talks to Foundry.
-"""
+"""Thin HTTP client for the App API worker-callback routes."""
 
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
 
 import httpx
 from expense_contracts.generated import (
@@ -19,11 +12,31 @@ from expense_contracts.generated import (
     OcrJobInputV1,
 )
 
+from ai_worker.auth.client import CachedM2MTokenProvider, ClerkM2MTokenIssuer
+
+TokenProvider = Callable[[], Awaitable[str]]
+
 
 class AppApiClient:
-    def __init__(self, base_url: str, service_token: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        service_token: str | None = None,
+        token_provider: TokenProvider | None = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._service_token = service_token
+        self._token_provider = token_provider
+
+    async def _headers(self) -> dict[str, str]:
+        token = (
+            await self._token_provider()
+            if self._token_provider is not None
+            else self._service_token
+        )
+        if not token:
+            raise RuntimeError("App API service token provider is required")
+        return {"Authorization": f"Bearer {token}"}
 
     async def update_status(
         self, job_id: str, request: JobStatusUpdateRequestV1
@@ -41,7 +54,7 @@ class AppApiClient:
                 # is what actually round-trips against a z.strictObject with
                 # plain `.optional()` fields.
                 json=request.model_dump(mode="json", exclude_none=True),
-                headers={"Authorization": f"Bearer {self._service_token}"},
+                headers=await self._headers(),
             )
             response.raise_for_status()
             return int(response.json()["version"])
@@ -53,7 +66,7 @@ class AppApiClient:
             response = await client.post(
                 f"{self._base_url}/internal/v1/jobs/{job_id}/result",
                 json=request.model_dump(mode="json", exclude_none=True),
-                headers={"Authorization": f"Bearer {self._service_token}"},
+                headers=await self._headers(),
             )
             response.raise_for_status()
             return int(response.json()["version"])
@@ -62,7 +75,7 @@ class AppApiClient:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self._base_url}/internal/v1/jobs/{job_id}/ocr-input",
-                headers={"Authorization": f"Bearer {self._service_token}"},
+                headers=await self._headers(),
             )
             response.raise_for_status()
             return OcrJobInputV1(**response.json())
@@ -74,7 +87,7 @@ class AppApiClient:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self._base_url}/internal/v1/files/{file_id}/read-url",
-                headers={"Authorization": f"Bearer {self._service_token}"},
+                headers=await self._headers(),
             )
             response.raise_for_status()
             return str(response.json()["url"])
@@ -94,5 +107,16 @@ class AppApiClient:
 
 def app_api_client_from_env() -> AppApiClient:
     base_url = os.environ["APP_API_BASE_URL"]
-    service_token = os.environ["APP_API_SERVICE_TOKEN"]
-    return AppApiClient(base_url=base_url, service_token=service_token)
+    audience = os.environ["CLERK_APP_SERVICE_AUDIENCE"]
+    scopes = ("jobs:write", "files:read")
+    issuer = ClerkM2MTokenIssuer(
+        machine_secret_key=os.environ["CLERK_MACHINE_SECRET_KEY"],
+        audience=audience,
+        scopes=scopes,
+    )
+    provider = CachedM2MTokenProvider(
+        issuer.issue,
+        audience=audience,
+        scopes=scopes,
+    )
+    return AppApiClient(base_url=base_url, token_provider=provider.get_token)

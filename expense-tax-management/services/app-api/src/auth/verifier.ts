@@ -1,5 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { AppAuthConfig } from "../config.js";
+import type {
+  AppAuthConfig,
+  AppConfig,
+  ClerkConfig,
+  TokenAuthorityConfig,
+} from "../config.js";
 import type {
   AppTokenType,
   AuthKeyResolver,
@@ -8,7 +13,7 @@ import type {
   TokenVerifier,
 } from "./types.js";
 
-const REQUIRED_CLAIMS = ["sub", "jti", "iat", "exp"] as const;
+const REQUIRED_CLAIMS = ["sub", "iat", "exp"] as const;
 const CLOCK_TOLERANCE_SECONDS = 30;
 
 export interface CreateTokenVerifierOptions {
@@ -16,7 +21,12 @@ export interface CreateTokenVerifierOptions {
   readonly issuer: string;
   readonly audience: string;
   readonly keyResolver: AuthKeyResolver;
+  readonly requireVerifiedEmail?: boolean;
 }
+
+export type AuthKeyResolverFactory = (
+  authority: TokenAuthorityConfig,
+) => AuthKeyResolver;
 
 function requiredNonEmptyString(value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -62,13 +72,38 @@ function parseScopes(value: unknown): readonly string[] {
 function tenantIdentityClaims(
   tokenType: AppTokenType,
   payload: Record<string, unknown>,
+  requireVerifiedEmail: boolean,
 ): Pick<AuthPrincipal, "displayName" | "email" | "emailVerified"> {
   if (tokenType === "service") {
     return { displayName: null, email: null, emailVerified: null };
   }
 
+  const hasEmailClaims =
+    payload.email !== undefined || payload.email_verified !== undefined;
+  if (!requireVerifiedEmail && !hasEmailClaims) {
+    return {
+      displayName:
+        payload.display_name === undefined
+          ? null
+          : requiredNonEmptyString(payload.display_name),
+      email: null,
+      emailVerified: null,
+    };
+  }
+
   if (payload.email_verified !== true) {
     throw new Error("Invalid token claim");
+  }
+
+  if (!requireVerifiedEmail) {
+    return {
+      displayName:
+        payload.display_name === undefined
+          ? null
+          : requiredNonEmptyString(payload.display_name),
+      email: requiredNonEmptyString(payload.email),
+      emailVerified: true,
+    };
   }
 
   return {
@@ -97,16 +132,26 @@ export function createTokenVerifier(
         }
 
         const subject = requiredNonEmptyString(payload.sub);
-        const tokenId = requiredNonEmptyString(payload.jti);
-        requiredNumericDate(payload.iat);
+        const tokenId = requiredNonEmptyString(
+          payload.jti === undefined ? payload.sid : payload.jti,
+        );
+        const issuedAt = requiredNumericDate(payload.iat);
         requiredNumericDate(payload.exp);
+        if (
+          issuedAt >
+          Math.floor(Date.now() / 1_000) + CLOCK_TOLERANCE_SECONDS
+        ) {
+          throw new Error("Invalid token claim");
+        }
         if (payload.nbf !== undefined) {
           requiredNumericDate(payload.nbf);
         }
 
         const clientId =
           payload.client_id === undefined
-            ? null
+            ? options.tokenType === "service" && payload.azp !== undefined
+              ? requiredNonEmptyString(payload.azp)
+              : null
             : requiredNonEmptyString(payload.client_id);
         if (options.tokenType === "service" && clientId === null) {
           throw new Error("Invalid token claim");
@@ -121,7 +166,11 @@ export function createTokenVerifier(
           roles: parseStringArray(payload.roles),
           scopes: parseScopes(payload.scope),
           tokenId,
-          ...tenantIdentityClaims(options.tokenType, payload),
+          ...tenantIdentityClaims(
+            options.tokenType,
+            payload,
+            options.requireVerifiedEmail ?? false,
+          ),
         };
       } catch {
         throw new Error("Token verification failed");
@@ -132,19 +181,59 @@ export function createTokenVerifier(
 
 export function createRemoteAuthVerifiers(
   config: AppAuthConfig,
+  keyResolverFactory: AuthKeyResolverFactory = (authority) =>
+    createRemoteJWKSet(new URL(authority.jwksUrl)),
 ): AuthVerifiers {
   return {
     tenant: createTokenVerifier({
       tokenType: "tenant",
       issuer: config.tenant.issuer,
       audience: config.tenant.audience,
-      keyResolver: createRemoteJWKSet(new URL(config.tenant.jwksUrl)),
+      keyResolver: keyResolverFactory(config.tenant),
+      requireVerifiedEmail: true,
     }),
     service: createTokenVerifier({
       tokenType: "service",
       issuer: config.service.issuer,
       audience: config.service.audience,
-      keyResolver: createRemoteJWKSet(new URL(config.service.jwksUrl)),
+      keyResolver: keyResolverFactory(config.service),
     }),
   };
+}
+
+export function createClerkAuthVerifiers(
+  config: ClerkConfig,
+  keyResolverFactory?: AuthKeyResolverFactory,
+): AuthVerifiers {
+  return createRemoteAuthVerifiers(
+    {
+      tenant: {
+        issuer: config.issuerUrl,
+        audience: config.tenantAudience,
+        jwksUrl: config.jwksUrl,
+      },
+      service: {
+        issuer: config.issuerUrl,
+         audience: config.appServiceAudience,
+        jwksUrl: config.jwksUrl,
+      },
+    },
+    keyResolverFactory,
+  );
+}
+
+export function createConfiguredAuthVerifiers(
+  config: Pick<AppConfig, "authProvider" | "auth" | "clerk">,
+  keyResolverFactory?: AuthKeyResolverFactory,
+): AuthVerifiers {
+  if (config.authProvider === "clerk") {
+    if (config.clerk === undefined) {
+      throw new Error(
+        "Clerk auth configuration is required when AUTH_PROVIDER=clerk",
+      );
+    }
+    return createClerkAuthVerifiers(config.clerk, keyResolverFactory);
+  }
+
+  return createRemoteAuthVerifiers(config.auth, keyResolverFactory);
 }

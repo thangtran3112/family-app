@@ -8,7 +8,10 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
-import { createRemoteAuthVerifiers } from "./auth/verifier.js";
+import {
+  createConfiguredAuthVerifiers,
+  type AuthKeyResolverFactory,
+} from "./auth/verifier.js";
 import type { AuthVerifiers } from "./auth/types.js";
 import type { FoundryConfig } from "./config.js";
 import { createFoundryDatabase } from "./database/client.js";
@@ -98,6 +101,7 @@ export interface BuildAppOptions {
   readonly config: FoundryConfig;
   readonly logger?: FastifyServerOptions["logger"];
   readonly authVerifiers?: AuthVerifiers;
+  readonly authKeyResolverFactory?: AuthKeyResolverFactory;
   readonly database?: Kysely<FoundryDatabase>;
   readonly readinessProbe?: DatabaseReadinessProbe;
   readonly secretStore?: SecretStore;
@@ -167,7 +171,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerErrorHandlers(app);
   registerAuthPlugin(app, {
     authVerifiers:
-      options.authVerifiers ?? createRemoteAuthVerifiers(options.config.auth),
+      options.authVerifiers ??
+      createConfiguredAuthVerifiers(
+        options.config,
+        options.authKeyResolverFactory,
+      ),
   });
   registerDatabasePlugin(app, {
     database,

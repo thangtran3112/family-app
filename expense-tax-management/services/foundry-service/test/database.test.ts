@@ -10,6 +10,12 @@ const TEST_ENV = {
   FOUNDRY_SERVICE_TOKEN_ISSUER: "https://services.test",
   FOUNDRY_SERVICE_TOKEN_AUDIENCE: "expense-foundry-internal",
   FOUNDRY_SERVICE_JWKS_URL: "https://services.test/.well-known/jwks.json",
+  CLERK_ISSUER_URL: "https://clerk.test",
+  CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "tenant-audience",
+  CLERK_PLATFORM_AUDIENCE: "platform-audience",
+  CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
   FOUNDRY_DATABASE_URL: "postgresql://foundry-runtime.test/foundry",
 };
 

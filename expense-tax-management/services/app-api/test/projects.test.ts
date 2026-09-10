@@ -17,6 +17,12 @@ const TEST_ENV = {
   APP_SERVICE_TOKEN_ISSUER: "https://services.test",
   APP_SERVICE_TOKEN_AUDIENCE: "expense-app-internal",
   APP_SERVICE_JWKS_URL: "https://services.test/.well-known/jwks.json",
+  CLERK_ISSUER_URL: "https://clerk.test",
+  CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "tenant-audience",
+  CLERK_PLATFORM_AUDIENCE: "platform-audience",
+  CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
   APP_DATABASE_URL: "postgresql://app-runtime.test/app",
 };
 const USER_ID = "11111111-1111-4111-8111-111111111111";

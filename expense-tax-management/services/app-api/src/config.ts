@@ -2,11 +2,27 @@ export interface AppConfig {
   readonly service: "app-api";
   readonly version: string;
   readonly port: number;
+  readonly authProvider: AuthProvider;
   readonly databaseUrl: string;
   readonly auth: AppAuthConfig;
+  readonly clerk?: ClerkConfig;
   readonly temporal: TemporalConnectionConfig;
   readonly storage: StorageConnectionConfig;
   readonly inboundEmail: InboundEmailConfig;
+}
+
+export type AuthProvider = "clerk" | "legacy";
+
+export interface ClerkConfig {
+  readonly issuerUrl: string;
+  readonly jwksUrl: string;
+  readonly tenantAudience: string;
+  readonly platformAudience: string;
+  readonly appServiceAudience: string;
+  readonly foundryServiceAudience: string;
+  readonly publishableKey?: string | undefined;
+  readonly secretKey?: string | undefined;
+  readonly webhookSigningSecret?: string | undefined;
 }
 
 export interface InboundEmailConfig {
@@ -63,12 +79,38 @@ function jwksUrl(
 ): string {
   const value = requiredEnvironmentValue(env, key);
   try {
-    new URL(value);
+    if (new URL(value).protocol !== "https:") {
+      throw new Error("non-HTTPS URL");
+    }
   } catch {
     throw new Error(`Invalid URL in environment variable: ${key}`);
   }
 
   return value;
+}
+
+function urlEnvironmentValue(
+  env: Readonly<Record<string, string | undefined>>,
+  key: string,
+): string {
+  const value = requiredEnvironmentValue(env, key);
+  try {
+    if (new URL(value).protocol !== "https:") {
+      throw new Error("non-HTTPS URL");
+    }
+  } catch {
+    throw new Error(`Invalid URL in environment variable: ${key}`);
+  }
+
+  return value;
+}
+
+function optionalEnvironmentValue(
+  env: Readonly<Record<string, string | undefined>>,
+  key: string,
+): string | undefined {
+  const value = env[key]?.trim();
+  return value || undefined;
 }
 
 export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
@@ -105,11 +147,49 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
   }
 
   const databaseUrl = requiredEnvironmentValue(databaseEnv, "APP_DATABASE_URL");
+  const authProvider = env.AUTH_PROVIDER?.trim() || "clerk";
+  if (authProvider !== "clerk" && authProvider !== "legacy") {
+    throw new Error("Invalid AUTH_PROVIDER: expected clerk or legacy");
+  }
 
-  return {
+  const clerk =
+    authProvider === "clerk"
+      ? {
+          issuerUrl: urlEnvironmentValue(env, "CLERK_ISSUER_URL"),
+          jwksUrl: urlEnvironmentValue(env, "CLERK_JWKS_URL"),
+          tenantAudience: requiredEnvironmentValue(
+            env,
+            "CLERK_TENANT_AUDIENCE",
+          ),
+          platformAudience: requiredEnvironmentValue(
+            env,
+            "CLERK_PLATFORM_AUDIENCE",
+          ),
+          appServiceAudience: requiredEnvironmentValue(
+            env,
+            "CLERK_APP_SERVICE_AUDIENCE",
+          ),
+          foundryServiceAudience: requiredEnvironmentValue(
+            env,
+            "CLERK_FOUNDRY_SERVICE_AUDIENCE",
+          ),
+          publishableKey: optionalEnvironmentValue(
+            env,
+            "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+          ),
+          secretKey: optionalEnvironmentValue(env, "CLERK_SECRET_KEY"),
+          webhookSigningSecret: optionalEnvironmentValue(
+            env,
+            "CLERK_WEBHOOK_SIGNING_SECRET",
+          ),
+        }
+      : undefined;
+
+  const config = {
     service: "app-api",
     version: options.version ?? "0.1.0",
     port,
+    authProvider,
     databaseUrl,
     auth: {
       tenant: {
@@ -123,6 +203,7 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
         jwksUrl: jwksUrl(env, "APP_SERVICE_JWKS_URL"),
       },
     },
+    clerk,
     temporal: {
       address: requiredEnvironmentValue(temporalEnv, "TEMPORAL_HOST"),
       namespace: requiredEnvironmentValue(temporalEnv, "TEMPORAL_NAMESPACE"),
@@ -154,5 +235,14 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
         "INBOUND_CHALLENGE_DIR",
       ),
     },
-  };
+  } as AppConfig;
+
+  if (config.clerk !== undefined) {
+    Object.defineProperty(config, "clerk", {
+      enumerable: false,
+      value: config.clerk,
+    });
+  }
+
+  return config;
 }

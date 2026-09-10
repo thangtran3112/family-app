@@ -1,5 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { FoundryAuthConfig } from "../config.js";
+import type {
+  ClerkConfig,
+  FoundryAuthConfig,
+  FoundryConfig,
+  TokenAuthorityConfig,
+} from "../config.js";
 import type {
   AuthKeyResolver,
   AuthPrincipal,
@@ -8,7 +13,7 @@ import type {
   TokenVerifier,
 } from "./types.js";
 
-const REQUIRED_CLAIMS = ["sub", "jti", "iat", "exp"] as const;
+const REQUIRED_CLAIMS = ["sub", "iat", "exp"] as const;
 const CLOCK_TOLERANCE_SECONDS = 30;
 
 export interface CreateTokenVerifierOptions {
@@ -17,6 +22,10 @@ export interface CreateTokenVerifierOptions {
   readonly audience: string;
   readonly keyResolver: AuthKeyResolver;
 }
+
+export type AuthKeyResolverFactory = (
+  authority: TokenAuthorityConfig,
+) => AuthKeyResolver;
 
 function requiredNonEmptyString(value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -46,6 +55,41 @@ function parseRoles(value: unknown, required: boolean): readonly string[] {
   }
 
   return value;
+}
+
+function clerkRole(payload: Record<string, unknown>): string | undefined {
+  if (payload.org_role !== undefined) {
+    if (
+      typeof payload.org_role !== "string" ||
+      typeof payload.org_id !== "string" ||
+      payload.org_id.trim().length === 0
+    ) {
+      throw new Error("Invalid token claim");
+    }
+    return payload.org_role;
+  }
+  if (
+    typeof payload.o === "object" &&
+    payload.o !== null &&
+    "rol" in payload.o
+  ) {
+    if (
+      typeof payload.o.rol !== "string" ||
+      !('id' in payload.o) ||
+      typeof payload.o.id !== "string" ||
+      payload.o.id.trim().length === 0
+    ) {
+      throw new Error("Invalid token claim");
+    }
+    return payload.o.rol;
+  }
+  if (payload.platform_role !== undefined) {
+    if (typeof payload.platform_role !== "string") {
+      throw new Error("Invalid token claim");
+    }
+    return payload.platform_role;
+  }
+  return undefined;
 }
 
 function parseScopes(value: unknown): readonly string[] {
@@ -78,16 +122,26 @@ export function createTokenVerifier(
         }
 
         const subject = requiredNonEmptyString(payload.sub);
-        const tokenId = requiredNonEmptyString(payload.jti);
-        requiredNumericDate(payload.iat);
+        const tokenId = requiredNonEmptyString(
+          payload.jti === undefined ? payload.sid : payload.jti,
+        );
+        const issuedAt = requiredNumericDate(payload.iat);
         requiredNumericDate(payload.exp);
+        if (
+          issuedAt >
+          Math.floor(Date.now() / 1_000) + CLOCK_TOLERANCE_SECONDS
+        ) {
+          throw new Error("Invalid token claim");
+        }
         if (payload.nbf !== undefined) {
           requiredNumericDate(payload.nbf);
         }
 
         const clientId =
           payload.client_id === undefined
-            ? null
+            ? options.tokenType === "service" && payload.azp !== undefined
+              ? requiredNonEmptyString(payload.azp)
+              : null
             : requiredNonEmptyString(payload.client_id);
         if (options.tokenType === "service" && clientId === null) {
           throw new Error("Invalid token claim");
@@ -99,7 +153,15 @@ export function createTokenVerifier(
           clientId,
           audience: options.audience,
           issuer: options.issuer,
-          roles: parseRoles(payload.roles, options.tokenType === "platform"),
+          roles: parseRoles(
+            payload.roles === undefined
+              ? (() => {
+                  const role = clerkRole(payload);
+                  return role === undefined ? undefined : [role];
+                })()
+              : payload.roles,
+            options.tokenType === "platform",
+          ),
           scopes: parseScopes(payload.scope),
           tokenId,
         };
@@ -112,19 +174,58 @@ export function createTokenVerifier(
 
 export function createRemoteAuthVerifiers(
   config: FoundryAuthConfig,
+  keyResolverFactory: AuthKeyResolverFactory = (authority) =>
+    createRemoteJWKSet(new URL(authority.jwksUrl)),
 ): AuthVerifiers {
   return {
     platform: createTokenVerifier({
       tokenType: "platform",
       issuer: config.platform.issuer,
       audience: config.platform.audience,
-      keyResolver: createRemoteJWKSet(new URL(config.platform.jwksUrl)),
+      keyResolver: keyResolverFactory(config.platform),
     }),
     service: createTokenVerifier({
       tokenType: "service",
       issuer: config.service.issuer,
       audience: config.service.audience,
-      keyResolver: createRemoteJWKSet(new URL(config.service.jwksUrl)),
+      keyResolver: keyResolverFactory(config.service),
     }),
   };
+}
+
+export function createClerkAuthVerifiers(
+  config: ClerkConfig,
+  keyResolverFactory?: AuthKeyResolverFactory,
+): AuthVerifiers {
+  return createRemoteAuthVerifiers(
+    {
+      platform: {
+        issuer: config.issuerUrl,
+        audience: config.platformAudience,
+        jwksUrl: config.jwksUrl,
+      },
+      service: {
+        issuer: config.issuerUrl,
+        audience: config.foundryServiceAudience,
+        jwksUrl: config.jwksUrl,
+      },
+    },
+    keyResolverFactory,
+  );
+}
+
+export function createConfiguredAuthVerifiers(
+  config: Pick<FoundryConfig, "authProvider" | "auth" | "clerk">,
+  keyResolverFactory?: AuthKeyResolverFactory,
+): AuthVerifiers {
+  if (config.authProvider === "clerk") {
+    if (config.clerk === undefined) {
+      throw new Error(
+        "Clerk auth configuration is required when AUTH_PROVIDER=clerk",
+      );
+    }
+    return createClerkAuthVerifiers(config.clerk, keyResolverFactory);
+  }
+
+  return createRemoteAuthVerifiers(config.auth, keyResolverFactory);
 }

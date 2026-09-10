@@ -4,7 +4,6 @@ export type CaptureScope =
 
 export interface CaptureSession {
   apiBaseUrl: string;
-  tenantToken: string;
   tenantId: string;
   scope: CaptureScope;
 }
@@ -25,9 +24,3 @@ export function readSession(): CaptureSession | null {
 export function writeSession(session: CaptureSession): void {
   sessionStorage.setItem(KEY, JSON.stringify(session));
 }
-
-export const demoScope: CaptureScope = {
-  kind: "business",
-  businessId: "33333333-3333-4333-8333-333333333333",
-  label: "Tran Studio",
-};

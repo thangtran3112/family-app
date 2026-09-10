@@ -39,6 +39,7 @@ type MoneyAmount = ColumnType<string, string | number, string>;
 
 export interface UserTable {
   readonly id: string;
+  clerk_user_id: NullableText;
   primary_email: string;
   display_name: string;
   status: "active" | "disabled";
@@ -60,6 +61,7 @@ export interface AuthIdentityTable {
 
 export interface TenantTable {
   readonly id: string;
+  clerk_org_id: NullableText;
   name: string;
   readonly slug: string;
   status: "active" | "archived";
@@ -303,6 +305,14 @@ export interface IdempotencyRecordTable {
   readonly resource_type: string | null;
   readonly resource_id: string | null;
   readonly expires_at: Timestamp;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface ClerkWebhookEventTable {
+  readonly id: string;
+  readonly event_id: string;
+  readonly event_type: string;
+  readonly processed_at: Timestamp;
   readonly created_at: GeneratedTimestamp;
 }
 
@@ -564,6 +574,7 @@ export interface AppDatabase {
   readonly "app.expense_tax_treatments": ExpenseTaxTreatmentTable;
   readonly "app.app_audit_events": AppAuditEventTable;
   readonly "app.idempotency_records": IdempotencyRecordTable;
+  readonly "app.clerk_webhook_events": ClerkWebhookEventTable;
   readonly "app.plans": PlanTable;
   readonly "app.plan_versions": PlanVersionTable;
   readonly "app.feature_definitions": FeatureDefinitionTable;

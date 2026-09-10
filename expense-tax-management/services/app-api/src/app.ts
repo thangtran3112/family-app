@@ -8,7 +8,10 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
-import { createRemoteAuthVerifiers } from "./auth/verifier.js";
+import {
+  createConfiguredAuthVerifiers,
+  type AuthKeyResolverFactory,
+} from "./auth/verifier.js";
 import type { AuthVerifiers } from "./auth/types.js";
 import type { AppConfig } from "./config.js";
 import { createAppDatabase } from "./database/client.js";
@@ -66,6 +69,12 @@ import {
   type InboundEmailDomain,
 } from "./domain/inbound-email.js";
 import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
+import { registerClerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import {
+  createClerkWebhookHandler,
+  createDatabaseClerkWebhookRepository,
+  type ClerkWebhookHandler,
+} from "./integrations/clerk-webhooks.js";
 import {
   createLocalVerificationNotifier,
   type VerificationNotifier,
@@ -148,6 +157,7 @@ export interface BuildAppOptions {
   readonly config: AppConfig;
   readonly logger?: FastifyServerOptions["logger"];
   readonly authVerifiers?: AuthVerifiers;
+  readonly authKeyResolverFactory?: AuthKeyResolverFactory;
   readonly database?: Kysely<AppDatabase>;
   readonly readinessProbe?: DatabaseReadinessProbe;
   readonly identityDomain?: IdentityDomain;
@@ -168,6 +178,7 @@ export interface BuildAppOptions {
   readonly inboundEmailDomain?: InboundEmailDomain;
   readonly verificationNotifier?: VerificationNotifier;
   readonly malwareScanner?: MalwareScanner;
+  readonly clerkWebhookHandler?: ClerkWebhookHandler;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -249,7 +260,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerErrorHandlers(app);
   registerAuthPlugin(app, {
     authVerifiers:
-      options.authVerifiers ?? createRemoteAuthVerifiers(options.config.auth),
+      options.authVerifiers ??
+      createConfiguredAuthVerifiers(
+        options.config,
+        options.authKeyResolverFactory,
+      ),
   });
   registerDatabasePlugin(app, {
     database,
@@ -336,6 +351,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     identityResolver: identityDomain,
     inboundEmailDomain,
     webhookSigningKey: options.config.inboundEmail.webhookSigningKey,
+  });
+  app.register(registerClerkWebhookRoutes, {
+    signingSecret: options.config.clerk?.webhookSigningSecret,
+    handler:
+      options.clerkWebhookHandler ??
+      createClerkWebhookHandler(createDatabaseClerkWebhookRepository(database)),
   });
 
   if (options.temporalStarter === undefined) {

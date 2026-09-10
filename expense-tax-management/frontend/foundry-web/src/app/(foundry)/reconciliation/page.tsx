@@ -1,1 +1,8 @@
-import{Badge,Head,Panel}from"@/components/ui";export default function Reconciliation(){return <><Head eyebrow="Quota reconciler only" title="Ambiguity stops here" role="Quota reconciler"/><Panel title="Reservation · RECONCILIATION_REQUIRED"><div className="steps"><span>RESERVED</span><span>CALL_STARTED</span><span className="active">AMBIGUOUS</span><span>CONSUMED / RELEASED</span></div><p>Provider evidence pending. Original request is never retried while billability is unknown.</p><div className="actions"><button>Mark consumed</button><button className="secondary">Approve release · 1/2</button></div><Badge tone="warn">Two distinct subjects required to release</Badge></Panel></>}
+"use client";
+import { FoundryData } from "@/components/foundry-data";
+import { Badge, Head, Panel } from "@/components/ui";
+import { loadReconciliation } from "@/lib/page-data";
+
+export default function Reconciliation() {
+  return <FoundryData load={loadReconciliation}>{(data) => <><Head eyebrow="Quota reconciler only" title="Ambiguity stops here" role="Quota reconciler" /><Panel title="Reconciliation queue"><table><thead><tr><th>Reservation</th><th>Tenant</th><th>Operation</th><th>Status</th><th>Approvals</th></tr></thead><tbody>{data.items.map((row) => <tr key={row.reservationId}><td className="mono">{row.reservationId}</td><td className="mono">{row.tenantId}</td><td>{row.operation}</td><td><Badge tone={row.status === "RECONCILIATION_REQUIRED" ? "warn" : "ok"}>{row.status}</Badge></td><td>{row.releasedApprovalCount}</td></tr>)}</tbody></table><p>Provider evidence pending. Original request is never retried while billability is unknown.</p></Panel></>}</FoundryData>;
+}

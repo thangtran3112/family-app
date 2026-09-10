@@ -128,6 +128,7 @@ export function createTenantDomain(database: Kysely<AppDatabase>): TenantDomain 
           const profileId = randomUUID();
           const tenantRow: Selectable<TenantTable> = {
             id: tenantId,
+            clerk_org_id: null,
             name: input.request.name,
             slug: tenantSlug(input.request.name, tenantId),
             status: "active",

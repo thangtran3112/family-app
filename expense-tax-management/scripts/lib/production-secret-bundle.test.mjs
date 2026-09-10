@@ -21,6 +21,7 @@ const databaseFixture = {
 const requiredShellEnv = {
   OPENAI_API_KEY: "openai",
   OPENROUTER_API_KEY: "openrouter",
+  CLERK_MACHINE_SECRET_KEY: "ak_test_machine_secret",
 };
 
 const productionRoot = join(
@@ -58,7 +59,7 @@ describe("buildProductionBundle", () => {
     expect([...new Set(requiredComposeKeys)].filter((key) => !keys.has(key))).toEqual([]);
     expect(bundle).toContain("APP_TENANT_TOKEN_ISSUER=https://identity.not-configured.invalid");
     expect(bundle).toContain("STORAGE_BACKEND=local");
-    expect(bundle).toContain("AI_WORKER_APP_API_SERVICE_TOKEN=not-configured");
+    expect(bundle).toContain("CLERK_MACHINE_SECRET_KEY=ak_test_machine_secret");
     expect(bundle).not.toContain("IMAGE_TAG=");
   });
 
@@ -146,8 +147,6 @@ describe("buildProductionBundle", () => {
     });
 
     expect(bundle.split("\n").filter(Boolean)).toEqual([
-      "AI_WORKER_APP_API_SERVICE_TOKEN=not-configured",
-      "AI_WORKER_FOUNDRY_SERVICE_TOKEN=not-configured",
       "APP_DATABASE_URL=postgresql://app:app-password@postgres:5432/expense_tax_db",
       "APP_MIGRATION_DATABASE_URL=postgresql://migrator:migrator-password@postgres:5432/expense_tax_db",
       "APP_SERVICE_JWKS_URL=https://services.not-configured.invalid/.well-known/jwks.json",
@@ -156,6 +155,13 @@ describe("buildProductionBundle", () => {
       "APP_TENANT_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
       "APP_TENANT_TOKEN_AUDIENCE=phase-1b-inert-tenant",
       "APP_TENANT_TOKEN_ISSUER=https://identity.not-configured.invalid",
+      "CLERK_APP_SERVICE_AUDIENCE=expense-app-internal",
+      "CLERK_FOUNDRY_SERVICE_AUDIENCE=expense-foundry-internal",
+      "CLERK_ISSUER_URL=https://identity.not-configured.invalid",
+      "CLERK_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
+      "CLERK_MACHINE_SECRET_KEY=ak_test_machine_secret",
+      "CLERK_PLATFORM_AUDIENCE=phase-1b-inert-platform",
+      "CLERK_TENANT_AUDIENCE=phase-1b-inert-tenant",
       "FOUNDRY_DATABASE_URL=postgresql://foundry:foundry-password@postgres:5432/expense_tax_db",
       "FOUNDRY_MIGRATION_DATABASE_URL=postgresql://foundry-migrator:foundry-migrator-password@postgres:5432/expense_tax_db",
       "FOUNDRY_PLATFORM_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",

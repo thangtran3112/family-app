@@ -9,6 +9,7 @@ from temporalio.worker import Worker
 
 from ai_worker.activities import FoundationEchoActivities
 from ai_worker.app_api_client import app_api_client_from_env
+from ai_worker.config import worker_config_from_env
 from ai_worker.constants import TASK_QUEUE
 from ai_worker.foundry_client import foundry_client_from_env
 from ai_worker.ocr_activities import OcrReceiptActivities
@@ -20,6 +21,7 @@ from ai_worker.workflows import (
 
 
 async def main() -> None:
+    worker_config_from_env()
     address = os.environ.get("TEMPORAL_HOST", "127.0.0.1:7233")
     namespace = os.environ.get("TEMPORAL_NAMESPACE", "default")
     task_queue = os.environ.get("AI_WORKER_TASK_QUEUE", TASK_QUEUE)

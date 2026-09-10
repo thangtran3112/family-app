@@ -1,7 +1,10 @@
 import { generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createTokenVerifier } from "../src/auth/verifier.js";
+import {
+  createConfiguredAuthVerifiers,
+  createTokenVerifier,
+} from "../src/auth/verifier.js";
 import { serviceGuard, tenantGuard } from "../src/plugins/auth.js";
 import { createAppConfig } from "../src/config.js";
 
@@ -11,17 +14,24 @@ const SERVICE_ISSUER = "https://services.test";
 const SERVICE_AUDIENCE = "expense-app-internal";
 
 const AUTH_ENV = {
+  AUTH_PROVIDER: "legacy",
   APP_TENANT_TOKEN_ISSUER: TENANT_ISSUER,
   APP_TENANT_TOKEN_AUDIENCE: TENANT_AUDIENCE,
   APP_TENANT_JWKS_URL: "https://identity.test/.well-known/jwks.json",
   APP_SERVICE_TOKEN_ISSUER: SERVICE_ISSUER,
   APP_SERVICE_TOKEN_AUDIENCE: SERVICE_AUDIENCE,
   APP_SERVICE_JWKS_URL: "https://services.test/.well-known/jwks.json",
+  CLERK_ISSUER_URL: "https://clerk.test",
+  CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "tenant-audience",
+  CLERK_PLATFORM_AUDIENCE: "platform-audience",
+  CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
 };
 
-const REQUIRED_AUTH_ENV_KEYS = Object.keys(AUTH_ENV) as Array<
-  keyof typeof AUTH_ENV
->;
+const REQUIRED_AUTH_ENV_KEYS = (
+  Object.keys(AUTH_ENV) as Array<keyof typeof AUTH_ENV>
+).filter((key) => key !== "AUTH_PROVIDER");
 
 type KeyPair = Awaited<ReturnType<typeof generateKeyPair>>;
 type RequiredClaim =
@@ -114,6 +124,7 @@ describe("App API authentication", () => {
       issuer: TENANT_ISSUER,
       audience: TENANT_AUDIENCE,
       keyResolver: async () => tenantKeys.publicKey,
+      requireVerifiedEmail: true,
     });
     const serviceVerifier = createTokenVerifier({
       tokenType: "service",
@@ -188,6 +199,9 @@ describe("App API authentication", () => {
     "prevents startup when %s is missing",
     (key) => {
       const env: Record<string, string> = { ...AUTH_ENV };
+      if (key.startsWith("CLERK_")) {
+        env.AUTH_PROVIDER = "clerk";
+      }
       delete env[key];
 
       expect(() => createAppConfig({ env })).toThrow(
@@ -195,6 +209,16 @@ describe("App API authentication", () => {
       );
     },
   );
+
+  it("fails clearly when Clerk runtime config is absent", () => {
+    expect(() =>
+      createConfiguredAuthVerifiers({
+        authProvider: "clerk",
+        auth: {} as never,
+        clerk: undefined,
+      }),
+    ).toThrow("Clerk auth configuration is required when AUTH_PROVIDER=clerk");
+  });
 
   it("accepts a valid tenant token", async () => {
     const token = await signToken();
@@ -223,6 +247,148 @@ describe("App API authentication", () => {
         displayName: "Person Name",
       },
     });
+  });
+
+  it("selects Clerk authorities for runtime route verifiers", async () => {
+    const authorities: string[] = [];
+    const app = buildApp({
+      config: createAppConfig({
+        env: { ...AUTH_ENV, AUTH_PROVIDER: "clerk" },
+        version: "test-clerk",
+      }),
+      logger: false,
+      authKeyResolverFactory: (authority) => {
+        authorities.push(`${authority.issuer}|${authority.audience}`);
+        return async () =>
+          authority.audience === "tenant-audience"
+            ? tenantKeys.publicKey
+            : serviceKeys.publicKey;
+      },
+    });
+    apps.add(app);
+    app.get(
+      "/_test/private/clerk-tenant",
+      { preHandler: tenantGuard },
+      async (request) => ({ principal: request.authPrincipal }),
+    );
+    app.get(
+      "/_test/private/clerk-service",
+      {
+        preHandler: serviceGuard("ai-worker", [
+          "expenses:extract",
+          "expenses:write",
+        ]),
+      },
+      async (request) => ({ principal: request.authPrincipal }),
+    );
+
+    const token = await signToken({
+      issuer: "https://clerk.test",
+      audience: "tenant-audience",
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/_test/private/clerk-tenant",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(authorities).toEqual([
+      "https://clerk.test|tenant-audience",
+      "https://clerk.test|app-service-audience",
+    ]);
+
+    const serviceToken = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: "https://clerk.test",
+      audience: "app-service-audience",
+      subject: "service-account-123",
+      claims: {
+        azp: "ai-worker",
+        scope: "expenses:extract expenses:write",
+      },
+    });
+    const tenantWithServiceToken = await app.inject({
+      method: "GET",
+      url: "/_test/private/clerk-tenant",
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+    const serviceResponse = await app.inject({
+      method: "GET",
+      url: "/_test/private/clerk-service",
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+    const serviceWithTenantToken = await app.inject({
+      method: "GET",
+      url: "/_test/private/clerk-service",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(tenantWithServiceToken.statusCode).toBe(401);
+    expect(serviceResponse.statusCode).toBe(200);
+    expect(serviceWithTenantToken.statusCode).toBe(401);
+  });
+
+  it("accepts a Clerk session token using sid as token ID", async () => {
+    const token = await signToken({
+      omit: ["jti"],
+      claims: { sid: "sess_clerk_123" },
+    });
+    const response = await requestTenant(`Bearer ${token}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { tokenId: "sess_clerk_123" },
+      verifiedIdentity: { tokenId: "sess_clerk_123" },
+    });
+  });
+
+  it("accepts a tenant token without verified email claims when not configured", async () => {
+    const verifier = createTokenVerifier({
+      tokenType: "tenant",
+      issuer: TENANT_ISSUER,
+      audience: TENANT_AUDIENCE,
+      keyResolver: async () => tenantKeys.publicKey,
+      requireVerifiedEmail: false,
+    });
+    const token = await signToken({
+      omit: ["email", "email_verified", "display_name"],
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      tokenType: "tenant",
+      email: null,
+      emailVerified: null,
+      displayName: null,
+    });
+  });
+
+  it("does not require email claims when only display_name is present", async () => {
+    const verifier = createTokenVerifier({
+      tokenType: "tenant",
+      issuer: TENANT_ISSUER,
+      audience: TENANT_AUDIENCE,
+      keyResolver: async () => tenantKeys.publicKey,
+      requireVerifiedEmail: false,
+    });
+    const token = await signToken({
+      omit: ["email", "email_verified"],
+      claims: { display_name: "Person Name" },
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      email: null,
+      emailVerified: null,
+      displayName: "Person Name",
+    });
+  });
+
+  it("rejects a future-issued tenant token beyond clock tolerance", async () => {
+    const token = await signToken({
+      issuedAt: Math.floor(Date.now() / 1_000) + 60,
+    });
+
+    expectGenericError(await requestTenant(`Bearer ${token}`), 401);
   });
 
   it("rejects a platform audience on the tenant guard", async () => {
@@ -341,6 +507,78 @@ describe("App API authentication", () => {
     });
   });
 
+  it("accepts a Clerk M2M token using azp as service client ID", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "service-account-123",
+      claims: {
+        azp: "ai-worker",
+        scope: "expenses:write expenses:extract",
+      },
+    });
+    const response = await requestService(token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { tokenType: "service", clientId: "ai-worker" },
+    });
+  });
+
+  it("does not fall back from an empty client_id to azp", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      claims: {
+        client_id: "",
+        azp: "ai-worker",
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    expectGenericError(await requestService(token), 401);
+  });
+
+  it("uses client_id over azp when both service identity claims are present", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      claims: {
+        client_id: "other-worker",
+        azp: "ai-worker",
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    expectGenericError(await requestService(token), 403);
+  });
+
+  it("does not fall back from an empty jti to sid", async () => {
+    const token = await signToken({
+      tokenId: "",
+      claims: { sid: "sess_clerk_123" },
+    });
+
+    expectGenericError(await requestTenant(`Bearer ${token}`), 401);
+  });
+
+  it("uses jti over sid when both token identity claims are present", async () => {
+    const token = await signToken({
+      tokenId: "primary-token",
+      claims: { sid: "fallback-session" },
+    });
+
+    const response = await requestTenant(`Bearer ${token}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { tokenId: "primary-token" },
+    });
+  });
+
   it("rejects a tenant token on the service guard", async () => {
     expectGenericError(await requestService(await signToken()), 401);
   });
@@ -349,7 +587,7 @@ describe("App API authentication", () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
-      audience: "foundry-internal",
+       audience: "foundry-service-audience",
       claims: {
         client_id: "ai-worker",
         scope: "expenses:extract expenses:write",

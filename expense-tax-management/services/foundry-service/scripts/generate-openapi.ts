@@ -28,6 +28,7 @@ const config: FoundryConfig = {
   service: "foundry-service",
   version: "0.1.0",
   port: 8200,
+  authProvider: "legacy",
   databaseUrl: "postgresql://openapi-generator.invalid/foundry",
   auth: {
     platform: {

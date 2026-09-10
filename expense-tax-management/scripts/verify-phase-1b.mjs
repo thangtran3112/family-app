@@ -22,6 +22,11 @@ const inertComposeEnv = {
   FOUNDRY_SERVICE_TOKEN_ISSUER: "https://services.not-configured.invalid",
   FOUNDRY_SERVICE_TOKEN_AUDIENCE: "phase-1b-inert-service",
   FOUNDRY_SERVICE_JWKS_URL: "https://services.not-configured.invalid/.well-known/jwks.json",
+  CLERK_ISSUER_URL: "https://identity.not-configured.invalid",
+  CLERK_JWKS_URL: "https://identity.not-configured.invalid/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "phase-1b-inert-tenant",
+  CLERK_PLATFORM_AUDIENCE: "phase-1b-inert-platform",
+  CLERK_SERVICE_AUDIENCE: "phase-1b-inert-service",
   FOUNDRY_DATABASE_URL: "postgresql://inert:inert@postgres:5432/expense_tax_db",
   FOUNDRY_MIGRATION_DATABASE_URL: "postgresql://inert:inert@postgres:5432/expense_tax_db",
   STORAGE_BACKEND: "local",
@@ -30,8 +35,7 @@ const inertComposeEnv = {
   INBOUND_EMAIL_BASE_ADDRESS: "receipts@inbound.expense-tax.local",
   INBOUND_WEBHOOK_SIGNING_KEY: "1".repeat(64),
   INBOUND_ROUTING_TOKEN_SECRET: "2".repeat(64),
-  AI_WORKER_APP_API_SERVICE_TOKEN: "phase-1b-inert-app-token",
-  AI_WORKER_FOUNDRY_SERVICE_TOKEN: "phase-1b-inert-foundry-token",
+  CLERK_MACHINE_SECRET_KEY: "ak_phase_1b_inert_machine_secret",
   TEMPORAL_DB_PASSWORD: "phase-1b-inert-temporal-password",
 };
 

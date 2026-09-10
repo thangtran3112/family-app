@@ -1,32 +1,38 @@
-"""Thin HTTP client for the Foundry service-scoped internal routes.
-
-Same bearer-token discipline as AppApiClient: the worker is handed a plain
-token string (FOUNDRY_SERVICE_TOKEN), it never mints one. Catalog shapes
-(provider/model/route) intentionally have no Pydantic models in
-expense_contracts -- they never cross the Temporal boundary, so the worker
-reads the small fields it needs straight off the JSON.
-
-App-signed admission grants (design doc section 16.3) are NOT implemented:
-the worker passes the App API-resolved tenantId through, and tampering
-with it requires worker-token compromise. Tracked as pre-release
-hardening; see phase-0c-ocr-pipeline-implementation.md.
-"""
+"""Thin HTTP client for the Foundry service-scoped internal routes."""
 
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 
+from ai_worker.auth.client import CachedM2MTokenProvider, ClerkM2MTokenIssuer
+
+TokenProvider = Callable[[], Awaitable[str]]
+
 
 class FoundryClient:
-    def __init__(self, base_url: str, service_token: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        service_token: str | None = None,
+        token_provider: TokenProvider | None = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._service_token = service_token
+        self._token_provider = token_provider
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._service_token}"}
+    async def _headers(self) -> dict[str, str]:
+        token = (
+            await self._token_provider()
+            if self._token_provider is not None
+            else self._service_token
+        )
+        if not token:
+            raise RuntimeError("Foundry service token provider is required")
+        return {"Authorization": f"Bearer {token}"}
 
     async def get_effective_route(
         self, operation: str, mode_key: str
@@ -35,7 +41,7 @@ class FoundryClient:
             response = await client.get(
                 f"{self._base_url}/internal/v1/effective-route",
                 params={"operation": operation, "modeKey": mode_key},
-                headers=self._headers(),
+                headers=await self._headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -58,7 +64,7 @@ class FoundryClient:
                     "aiModelId": ai_model_id,
                     "idempotencyKey": idempotency_key,
                 },
-                headers=self._headers(),
+                headers=await self._headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -75,7 +81,7 @@ class FoundryClient:
             response = await client.post(
                 f"{self._base_url}/internal/v1/ai-quota-reservations/{reservation_id}/call-started",
                 json=body,
-                headers=self._headers(),
+                headers=await self._headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -92,7 +98,7 @@ class FoundryClient:
             response = await client.post(
                 f"{self._base_url}/internal/v1/ai-quota-reservations/{reservation_id}/attempts/{attempt_number}/outcome",
                 json={"outcome": outcome},
-                headers=self._headers(),
+                headers=await self._headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -103,7 +109,7 @@ class FoundryClient:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self._base_url}/internal/v1/ai-quota-reservations/{reservation_id}/release",
-                headers=self._headers(),
+                headers=await self._headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -113,5 +119,16 @@ class FoundryClient:
 
 def foundry_client_from_env() -> FoundryClient:
     base_url = os.environ["FOUNDRY_BASE_URL"]
-    service_token = os.environ["FOUNDRY_SERVICE_TOKEN"]
-    return FoundryClient(base_url=base_url, service_token=service_token)
+    audience = os.environ["CLERK_FOUNDRY_SERVICE_AUDIENCE"]
+    scopes = ("routes:read", "reservations:write")
+    issuer = ClerkM2MTokenIssuer(
+        machine_secret_key=os.environ["CLERK_MACHINE_SECRET_KEY"],
+        audience=audience,
+        scopes=scopes,
+    )
+    provider = CachedM2MTokenProvider(
+        issuer.issue,
+        audience=audience,
+        scopes=scopes,
+    )
+    return FoundryClient(base_url=base_url, token_provider=provider.get_token)

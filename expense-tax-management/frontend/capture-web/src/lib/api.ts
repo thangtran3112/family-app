@@ -2,15 +2,15 @@ import { createAppApiClient } from "@expense-tax/contracts";
 
 import type { QueueItem } from "./queue";
 import type { CaptureSession } from "./session";
-
-function auth(session: CaptureSession) {
-  return { authorization: `Bearer ${session.tenantToken}` };
-}
+import { getAppAuthorization, type ClerkGetToken } from "./clerk";
 
 export async function uploadQueuedReceipt(
   session: CaptureSession,
   item: QueueItem,
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
 ) {
+  const authorization = await getAppAuthorization(getToken, organizationId);
   const client = createAppApiClient(session.apiBaseUrl);
   const body = {
     originalFilename: item.filename,
@@ -35,7 +35,7 @@ export async function uploadQueuedReceipt(
               },
               header: { "idempotency-key": idempotencyKey },
             },
-            headers: auth(session),
+            headers: authorization,
             body,
           },
         )
@@ -49,7 +49,7 @@ export async function uploadQueuedReceipt(
               },
               header: { "idempotency-key": idempotencyKey },
             },
-            headers: auth(session),
+            headers: authorization,
             body,
           },
         );
@@ -76,7 +76,7 @@ export async function uploadQueuedReceipt(
                 sessionId: created.data.uploadSession.id,
               },
             },
-            headers: auth(session),
+            headers: authorization,
           },
         )
       : await client.POST(
@@ -89,7 +89,7 @@ export async function uploadQueuedReceipt(
                 sessionId: created.data.uploadSession.id,
               },
             },
-            headers: auth(session),
+            headers: authorization,
           },
         );
   if (confirm.error || !confirm.data) throw new Error("Could not confirm upload");
@@ -108,7 +108,7 @@ export async function uploadQueuedReceipt(
               },
               header: { "idempotency-key": ocrIdempotencyKey },
             },
-            headers: auth(session),
+            headers: authorization,
             body: { modeKey: item.modeKey },
           },
         )
@@ -123,7 +123,7 @@ export async function uploadQueuedReceipt(
               },
               header: { "idempotency-key": ocrIdempotencyKey },
             },
-            headers: auth(session),
+            headers: authorization,
             body: { modeKey: item.modeKey },
           },
         );

@@ -1,1 +1,8 @@
-import{Head,Panel}from"@/components/ui";export default function Audit(){return <><Head eyebrow="Append-only operations" title="Audit history"/><Panel title="Recent events"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Outcome</th></tr></thead><tbody><tr><td className="mono">14:02:18Z</td><td>operator_12</td><td className="mono">route.v2.created</td><td>mode_balanced</td><td>success</td></tr><tr><td className="mono">13:48:01Z</td><td>reconciler_4</td><td className="mono">reservation.released</td><td>res_9f2</td><td>success</td></tr></tbody></table></Panel></>}
+"use client";
+import { FoundryData } from "@/components/foundry-data";
+import { Head, Panel } from "@/components/ui";
+import { loadAudit } from "@/lib/page-data";
+
+export default function Audit() {
+  return <FoundryData load={loadAudit}>{(data) => <><Head eyebrow="Append-only operations" title="Audit history" /><Panel title="Recent events"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Outcome</th></tr></thead><tbody>{data.items.map((row) => <tr key={row.id}><td className="mono">{row.createdAt}</td><td>{row.actorPlatformSubject ?? row.actorServicePrincipal ?? "-"}</td><td className="mono">{row.action}</td><td>{row.resourceType}:{row.resourceId ?? "-"}</td><td>{row.outcome}</td></tr>)}</tbody></table></Panel></>}</FoundryData>;
+}

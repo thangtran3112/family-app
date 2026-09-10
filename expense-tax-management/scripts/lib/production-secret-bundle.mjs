@@ -1,6 +1,10 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
 
-const REQUIRED_SHELL_KEYS = ["OPENAI_API_KEY", "OPENROUTER_API_KEY"];
+const REQUIRED_SHELL_KEYS = [
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "CLERK_MACHINE_SECRET_KEY",
+];
 const REQUIRED_DATABASE_KEYS = [
   "APP_DATABASE_URL",
   "APP_MIGRATION_DATABASE_URL",
@@ -27,8 +31,12 @@ const FAIL_CLOSED_RUNTIME_VALUES = {
   FOUNDRY_SERVICE_TOKEN_ISSUER: "https://services.not-configured.invalid",
   FOUNDRY_SERVICE_TOKEN_AUDIENCE: "phase-1b-inert-service",
   FOUNDRY_SERVICE_JWKS_URL: "https://services.not-configured.invalid/.well-known/jwks.json",
-  AI_WORKER_APP_API_SERVICE_TOKEN: "not-configured",
-  AI_WORKER_FOUNDRY_SERVICE_TOKEN: "not-configured",
+  CLERK_ISSUER_URL: "https://identity.not-configured.invalid",
+  CLERK_JWKS_URL: "https://identity.not-configured.invalid/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "phase-1b-inert-tenant",
+  CLERK_PLATFORM_AUDIENCE: "phase-1b-inert-platform",
+  CLERK_APP_SERVICE_AUDIENCE: "expense-app-internal",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "expense-foundry-internal",
   STORAGE_BACKEND: "local",
   STORAGE_LOCAL_BASE_URL: "http://127.0.0.1:8100",
   INBOUND_EMAIL_BASE_ADDRESS: "receipts@inbound.expense-tax.local",

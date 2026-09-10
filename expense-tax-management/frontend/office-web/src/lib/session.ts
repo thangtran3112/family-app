@@ -1,6 +1,5 @@
 export interface OfficeSession {
   apiBaseUrl: string;
-  tenantToken: string;
   tenantId: string;
   businessId: string;
   label: string;

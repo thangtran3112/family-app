@@ -1,1 +1,1 @@
-import type{ReactNode}from"react";import{Shell}from"@/components/shell";export default function Layout({children}:{children:ReactNode}){return <Shell>{children}</Shell>}
+import type{ReactNode}from"react";import{Shell}from"@/components/shell";import{FoundryAuthGate}from"@/components/foundry-auth-gate";export default function Layout({children}:{children:ReactNode}){return <FoundryAuthGate><Shell>{children}</Shell></FoundryAuthGate>}

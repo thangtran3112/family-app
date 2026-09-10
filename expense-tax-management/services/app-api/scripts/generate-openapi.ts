@@ -28,6 +28,7 @@ const config: AppConfig = {
   service: "app-api",
   version: "0.1.0",
   port: 8100,
+  authProvider: "legacy",
   databaseUrl: "postgresql://openapi-generator.invalid/app",
   auth: {
     tenant: {

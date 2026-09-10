@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCw, Trash2 } from "lucide-react";
+import { useAuth, useOrganization } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 import { uploadQueuedReceipt } from "@/lib/api";
@@ -13,6 +14,8 @@ import {
 import { readSession } from "@/lib/session";
 
 export default function QueuePage() {
+  const { getToken } = useAuth();
+  const { organization } = useOrganization();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   async function refresh() {
@@ -32,31 +35,21 @@ export default function QueuePage() {
     setBusy(item.id);
     const session = readSession();
     try {
-      if (!session) {
-        await updateQueue({
-          ...item,
-          status: "review",
-          progress: 100,
-          error: null,
-          fileId: `demo-${item.id}`,
-          jobId: `demo-job-${item.id}`,
-        });
-      } else {
-        await updateQueue({
-          ...item,
-          status: "uploading",
-          progress: 35,
-          error: null,
-        });
-        const result = await uploadQueuedReceipt(session, item);
-        await updateQueue({
-          ...item,
-          ...result,
-          status: "processing",
-          progress: 78,
-          error: null,
-        });
-      }
+      if (!session) throw new Error("Capture session unavailable");
+      await updateQueue({
+        ...item,
+        status: "uploading",
+        progress: 35,
+        error: null,
+      });
+      const result = await uploadQueuedReceipt(session, item, getToken, organization?.id);
+      await updateQueue({
+        ...item,
+        ...result,
+        status: "processing",
+        progress: 78,
+        error: null,
+      });
     } catch (error) {
       await updateQueue({
         ...item,

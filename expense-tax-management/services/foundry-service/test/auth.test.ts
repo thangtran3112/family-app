@@ -1,7 +1,10 @@
 import { generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createTokenVerifier } from "../src/auth/verifier.js";
+import {
+  createConfiguredAuthVerifiers,
+  createTokenVerifier,
+} from "../src/auth/verifier.js";
 import { platformGuard, serviceGuard } from "../src/plugins/auth.js";
 import { createFoundryConfig } from "../src/config.js";
 
@@ -9,9 +12,10 @@ const PLATFORM_ISSUER = "https://identity.test";
 const PLATFORM_AUDIENCE = "expense-foundry-platform";
 const SERVICE_ISSUER = "https://services.test";
 const SERVICE_AUDIENCE = "expense-foundry-internal";
-const APP_INTERNAL_AUDIENCE = "expense-app-internal";
+const APP_INTERNAL_AUDIENCE = "app-service-audience";
 
 const AUTH_ENV = {
+  AUTH_PROVIDER: "legacy",
   FOUNDRY_PLATFORM_TOKEN_ISSUER: PLATFORM_ISSUER,
   FOUNDRY_PLATFORM_TOKEN_AUDIENCE: PLATFORM_AUDIENCE,
   FOUNDRY_PLATFORM_JWKS_URL:
@@ -19,11 +23,17 @@ const AUTH_ENV = {
   FOUNDRY_SERVICE_TOKEN_ISSUER: SERVICE_ISSUER,
   FOUNDRY_SERVICE_TOKEN_AUDIENCE: SERVICE_AUDIENCE,
   FOUNDRY_SERVICE_JWKS_URL: "https://services.test/.well-known/jwks.json",
+  CLERK_ISSUER_URL: "https://clerk.test",
+  CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "tenant-audience",
+  CLERK_PLATFORM_AUDIENCE: "platform-audience",
+  CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
 };
 
-const REQUIRED_AUTH_ENV_KEYS = Object.keys(AUTH_ENV) as Array<
-  keyof typeof AUTH_ENV
->;
+const REQUIRED_AUTH_ENV_KEYS = (
+  Object.keys(AUTH_ENV) as Array<keyof typeof AUTH_ENV>
+).filter((key) => key !== "AUTH_PROVIDER");
 
 const OPERATOR_PATH = "/_test/platform/operator";
 const QUOTA_RECONCILER_PATH = "/_test/platform/quota-reconciler";
@@ -205,6 +215,9 @@ describe("Foundry authentication", () => {
     "prevents startup when %s is missing",
     (key) => {
       const env: Record<string, string> = { ...AUTH_ENV };
+      if (key.startsWith("CLERK_")) {
+        env.AUTH_PROVIDER = "clerk";
+      }
       delete env[key];
 
       expect(() => createFoundryConfig({ env })).toThrow(
@@ -212,6 +225,16 @@ describe("Foundry authentication", () => {
       );
     },
   );
+
+  it("fails clearly when Clerk runtime config is absent", () => {
+    expect(() =>
+      createConfiguredAuthVerifiers({
+        authProvider: "clerk",
+        auth: {} as never,
+        clerk: undefined,
+      }),
+    ).toThrow("Clerk auth configuration is required when AUTH_PROVIDER=clerk");
+  });
 
   it("rejects a tenant owner on the platform operator guard", async () => {
     const token = await signToken({
@@ -238,6 +261,137 @@ describe("Foundry authentication", () => {
         tokenId: "token-123",
       },
     });
+  });
+
+  it("selects Clerk authorities for runtime route verifiers", async () => {
+    const authorities: string[] = [];
+    const app = buildApp({
+      config: createFoundryConfig({
+        env: { ...AUTH_ENV, AUTH_PROVIDER: "clerk" },
+        version: "test-clerk",
+      }),
+      logger: false,
+      authKeyResolverFactory: (authority) => {
+        authorities.push(`${authority.issuer}|${authority.audience}`);
+        return async () =>
+          authority.audience === "platform-audience"
+            ? platformKeys.publicKey
+            : serviceKeys.publicKey;
+      },
+    });
+    apps.add(app);
+    app.get(
+      "/_test/platform/clerk-operator",
+      { preHandler: platformGuard("operator") },
+      async (request) => ({ principal: request.authPrincipal }),
+    );
+    app.get(
+      "/_test/platform/clerk-service",
+      {
+        preHandler: serviceGuard("app-api", ["entitlements:publish"]),
+      },
+      async (request) => ({ principal: request.authPrincipal }),
+    );
+
+    const token = await signToken({
+      issuer: "https://clerk.test",
+      audience: "platform-audience",
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/_test/platform/clerk-operator",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(authorities).toEqual([
+      "https://clerk.test|platform-audience",
+      "https://clerk.test|foundry-service-audience",
+    ]);
+
+    const serviceToken = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: "https://clerk.test",
+      audience: "foundry-service-audience",
+      subject: "service-account-123",
+      claims: {
+        azp: "app-api",
+        scope: "entitlements:publish",
+      },
+    });
+    const platformWithServiceToken = await app.inject({
+      method: "GET",
+      url: "/_test/platform/clerk-operator",
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+    const serviceResponse = await app.inject({
+      method: "GET",
+      url: "/_test/platform/clerk-service",
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+    const serviceWithPlatformToken = await app.inject({
+      method: "GET",
+      url: "/_test/platform/clerk-service",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(platformWithServiceToken.statusCode).toBe(401);
+    expect(serviceResponse.statusCode).toBe(200);
+    expect(serviceWithPlatformToken.statusCode).toBe(401);
+  });
+
+  it("maps Clerk organization role claims into platform roles", async () => {
+    const token = await signToken({
+      claims: {
+        org_id: "org_clerk_123",
+        org_role: "operator",
+      },
+    });
+    const response = await requestWithToken(OPERATOR_PATH, token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: {
+        tokenType: "platform",
+        roles: ["operator"],
+      },
+    });
+  });
+
+  it("rejects an organization role without org_id", async () => {
+    const token = await signToken({ claims: { org_role: "operator" } });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
+  });
+
+  it("rejects a v2 organization role without o.id", async () => {
+    const token = await signToken({ claims: { o: { rol: "operator" } } });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
+  });
+
+  it("rejects an untrusted top-level role claim", async () => {
+    const token = await signToken({ claims: { role: "operator" } });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
+  });
+
+  it("accepts an explicitly trusted platform_role claim", async () => {
+    const token = await signToken({ claims: { platform_role: "operator" } });
+    const response = await requestWithToken(OPERATOR_PATH, token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { roles: ["operator"] },
+    });
+  });
+
+  it("rejects a future-issued platform token beyond clock tolerance", async () => {
+    const token = await signToken({
+      issuedAt: Math.floor(Date.now() / 1_000) + 31,
+    });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
   });
 
   it("forbids an operator on the quota reconciler guard", async () => {
@@ -283,6 +437,83 @@ describe("Foundry authentication", () => {
         clientId: "app-api",
         scopes: ["entitlements:publish", "unused:scope"],
       },
+    });
+  });
+
+  it("accepts a Clerk M2M token using azp as service client ID", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      subject: "service-account-123",
+      claims: {
+        azp: "app-api",
+        scope: "entitlements:publish",
+      },
+    });
+    const response = await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { tokenType: "service", clientId: "app-api" },
+    });
+  });
+
+  it("does not fall back from an empty client_id to azp", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      claims: {
+        client_id: "",
+        azp: "app-api",
+        scope: "entitlements:publish",
+      },
+    });
+
+    expectGenericError(
+      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
+      401,
+    );
+  });
+
+  it("uses client_id over azp when both service identity claims are present", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: SERVICE_AUDIENCE,
+      claims: {
+        client_id: "other-service",
+        azp: "app-api",
+        scope: "entitlements:publish",
+      },
+    });
+
+    expectGenericError(
+      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
+      403,
+    );
+  });
+
+  it("does not fall back from an empty jti to sid", async () => {
+    const token = await signToken({
+      tokenId: "",
+      claims: { sid: "sess_clerk_123" },
+    });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
+  });
+
+  it("uses jti over sid when both token identity claims are present", async () => {
+    const token = await signToken({
+      tokenId: "primary-token",
+      claims: { roles: ["operator"], sid: "fallback-session" },
+    });
+    const response = await requestWithToken(OPERATOR_PATH, token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: { tokenId: "primary-token" },
     });
   });
 
