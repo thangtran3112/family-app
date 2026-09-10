@@ -111,6 +111,16 @@ describe("Phase 0I Compose boundaries", () => {
     expect(databaseEnvironmentKeys(foundryMigration?.environment)).toEqual([
       "FOUNDRY_MIGRATION_DATABASE_URL",
     ]);
+    const productionCompose = readFileSync(
+      path.join(repoRoot, "deploy/production/docker-compose.yml"),
+      "utf8",
+    );
+    expect(
+      productionCompose.match(/CLERK_APP_SERVICE_SUBJECT:/g),
+    ).toHaveLength(6);
+    expect(
+      productionCompose.match(/CLERK_FOUNDRY_SERVICE_SUBJECT:/g),
+    ).toHaveLength(6);
 
     expect(databaseEnvironmentKeys(legacy?.environment)).toEqual(["DATABASE_URL"]);
     expect(Object.keys(legacy?.environment ?? {})).not.toContain(
