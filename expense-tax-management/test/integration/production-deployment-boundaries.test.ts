@@ -97,6 +97,14 @@ describe("Phase 1B production deployment boundaries", () => {
     expect(compose.services.temporal.ports).toBeUndefined();
   });
 
+  it("skips Temporal database creation after operator bootstrap", () => {
+    const compose = YAML.parse(readProductionFile("docker-compose.yml")) as {
+      services: Record<string, { environment?: Record<string, string> }>;
+    };
+
+    expect(compose.services.temporal.environment?.SKIP_DB_CREATE).toBe("true");
+  });
+
   it("permits only explicit pre-identity fail-closed auth values", () => {
     const composeText = readProductionFile("docker-compose.yml");
     const compose = YAML.parse(composeText) as {

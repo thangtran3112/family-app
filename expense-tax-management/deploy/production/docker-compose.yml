@@ -185,6 +185,9 @@ services:
     environment:
       DB: postgres12
       DB_PORT: "5432"
+      # Task 8 bootstrap creates both databases under expense_temporal.
+      # auto-setup must not attempt CREATE DATABASE with this least-privilege role.
+      SKIP_DB_CREATE: "true"
       POSTGRES_USER: expense_temporal
       POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?TEMPORAL_DB_PASSWORD is required}
       POSTGRES_SEEDS: postgres
