@@ -249,3 +249,8 @@ public/swe-worker-*.js
 # Local agent planning and code graph state
 /docs/superpowers/
 .codegraph/
+# Keep reviewed architecture specs versioned while ignoring other superpowers scratch data.
+!/docs/
+!/docs/superpowers/
+!/docs/superpowers/specs/
+!/docs/superpowers/specs/2026-09-10-clerk-auth-integration-design.md
