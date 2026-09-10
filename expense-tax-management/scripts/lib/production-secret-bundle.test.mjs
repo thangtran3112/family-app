@@ -36,8 +36,39 @@ const productionRoot = join(
   fileURLToPath(new URL("../..", import.meta.url)),
   "deploy/production",
 );
+const syncScript = readFileSync(
+  join(
+    fileURLToPath(new URL("../..", import.meta.url)),
+    "infrastructure/gcp/expense-tax/sync-production-secret.sh",
+  ),
+  "utf8",
+);
 
 describe("buildProductionBundle", () => {
+  it("carries both Clerk secrets through protected sync input into the bundle", () => {
+    for (const key of [
+      "CLERK_APP_MACHINE_SECRET_KEY",
+      "CLERK_FOUNDRY_MACHINE_SECRET_KEY",
+    ]) {
+      expect(syncScript).toContain(`: \"\${${key}:?`);
+      expect(syncScript).toContain(`export ${key}=%q`);
+      expect(syncScript).toContain(`${key}: process.env.${key}`);
+    }
+    expect(syncScript).toContain('env -i PATH="$PATH" HOME="$HOME"');
+
+    const bundle = buildProductionBundle({
+      shellEnv: requiredShellEnv,
+      databaseEnv: databaseFixture,
+      randomBytes: () => Buffer.alloc(32, 7),
+    });
+    expect(bundle).toContain(
+      "CLERK_APP_MACHINE_SECRET_KEY=ak_test_app_machine_secret",
+    );
+    expect(bundle).toContain(
+      "CLERK_FOUNDRY_MACHINE_SECRET_KEY=ak_test_foundry_machine_secret",
+    );
+  });
+
   it("rewrites database URLs and preserves generated keys", () => {
     const bundle = buildProductionBundle({
       shellEnv: { ...requiredShellEnv, IMAGE_TAG: "attacker-supplied-tag" },
