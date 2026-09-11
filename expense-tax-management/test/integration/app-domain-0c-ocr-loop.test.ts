@@ -282,6 +282,7 @@ describe.skipIf(!integrationEnabled)("Phase 0C real OCR loop", () => {
     foundry = buildFoundry({
       config: createFoundryConfig({
         env: {
+          AUTH_PROVIDER: "legacy",
           FOUNDRY_PLATFORM_TOKEN_ISSUER: "https://identity.test",
           FOUNDRY_PLATFORM_TOKEN_AUDIENCE: "expense-foundry-platform",
           FOUNDRY_PLATFORM_JWKS_URL: "https://identity.test/.well-known/jwks.json",
