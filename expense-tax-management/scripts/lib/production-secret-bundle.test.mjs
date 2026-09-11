@@ -25,6 +25,18 @@ const requiredShellEnv = {
   CLERK_FOUNDRY_MACHINE_SECRET_KEY: "ak_test_foundry_machine_secret",
 };
 
+const productionClerkRuntime = {
+  AUTH_PROVIDER: "clerk",
+  CLERK_ISSUER_URL: "https://clerk.tobytran.dev",
+  CLERK_JWKS_URL: "https://clerk.tobytran.dev/.well-known/jwks.json",
+  CLERK_TENANT_AUDIENCE: "expense-app",
+  CLERK_PLATFORM_AUDIENCE: "expense-foundry-platform",
+  CLERK_APP_SERVICE_AUDIENCE: "mch_3JAI0juruFRPSkrE1rpcDKx1k1i",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: "mch_3JAIAMNUiVXteVOki8QENYHvJjp",
+  CLERK_APP_SERVICE_SUBJECT: "mch_3JAIPnx8itUTJsizuEGewr6NGBX",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: "mch_3JAIi2BwnqBf8bNzbjTtjJa6nGw",
+};
+
 const clerkMachineIds = {
   CLERK_APP_SERVICE_AUDIENCE: "mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
   CLERK_FOUNDRY_SERVICE_AUDIENCE: "mch_3J9g3CNoKL9q6KfbRy5zq1Rh2zT",
@@ -54,7 +66,16 @@ describe("buildProductionBundle", () => {
       expect(syncScript).toContain(`export ${key}=%q`);
       expect(syncScript).toContain(`${key}: process.env.${key}`);
     }
+    for (const key of Object.keys(productionClerkRuntime)) {
+      expect(syncScript).toContain(`: "\${${key}:?`);
+      expect(syncScript).toContain(`export ${key}=%q`);
+      expect(syncScript).toContain(`${key}: process.env.${key}`);
+    }
     expect(syncScript).toContain('env -i PATH="$PATH" HOME="$HOME"');
+    expect(syncScript).toContain('CLERK_ISSUER_URL" == "https://clerk.tobytran.dev"');
+    expect(syncScript).toContain('CLERK_JWKS_URL" == "https://clerk.tobytran.dev/.well-known/jwks.json"');
+    expect(syncScript).toContain('CLERK_TENANT_AUDIENCE" == "expense-app"');
+    expect(syncScript).toContain('CLERK_PLATFORM_AUDIENCE" == "expense-foundry-platform"');
 
     const bundle = buildProductionBundle({
       shellEnv: requiredShellEnv,
@@ -68,6 +89,32 @@ describe("buildProductionBundle", () => {
       "CLERK_FOUNDRY_MACHINE_SECRET_KEY=ak_test_foundry_machine_secret",
     );
   });
+
+  it("carries production Clerk runtime values while preserving inert test defaults", () => {
+    const bundle = buildProductionBundle({
+      shellEnv: { ...requiredShellEnv, ...productionClerkRuntime },
+      databaseEnv: databaseFixture,
+      randomBytes: () => Buffer.alloc(32, 7),
+    });
+
+    for (const [key, value] of Object.entries(productionClerkRuntime)) {
+      expect(bundle).toContain(`${key}=${value}`);
+    }
+
+    const inertBundle = buildProductionBundle({
+      shellEnv: requiredShellEnv,
+      databaseEnv: databaseFixture,
+      randomBytes: () => Buffer.alloc(32, 7),
+    });
+    expect(inertBundle).toContain("CLERK_TENANT_AUDIENCE=phase-1b-inert-tenant");
+  });
+
+  it.each(Object.keys(productionClerkRuntime))(
+    "requires production Clerk runtime key %s in protected sync input",
+    (key) => {
+      expect(syncScript).toContain(`: "\${${key}:?`);
+    },
+  );
 
   it("rewrites database URLs and preserves generated keys", () => {
     const bundle = buildProductionBundle({
@@ -211,6 +258,7 @@ describe("buildProductionBundle", () => {
       "APP_TENANT_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
       "APP_TENANT_TOKEN_AUDIENCE=phase-1b-inert-tenant",
       "APP_TENANT_TOKEN_ISSUER=https://identity.not-configured.invalid",
+      "AUTH_PROVIDER=clerk",
       "CLERK_APP_MACHINE_SECRET_KEY=ak_test_app_machine_secret",
       "CLERK_APP_SERVICE_AUDIENCE=mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
       "CLERK_APP_SERVICE_SUBJECT=mch_3J9Xg9Hu84Rn2oeqj7EMrv0ax19",

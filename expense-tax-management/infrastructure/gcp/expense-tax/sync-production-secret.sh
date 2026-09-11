@@ -58,11 +58,33 @@ API_ENV_FILE="$API_ENV_FILE" zsh -dfic '
   : "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in ~/.zshrc}"
   : "${CLERK_APP_MACHINE_SECRET_KEY:?CLERK_APP_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
   : "${CLERK_FOUNDRY_MACHINE_SECRET_KEY:?CLERK_FOUNDRY_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
+  : "${AUTH_PROVIDER:?AUTH_PROVIDER must be set in ~/.zshrc}"
+  : "${CLERK_ISSUER_URL:?CLERK_ISSUER_URL must be set in ~/.zshrc}"
+  : "${CLERK_JWKS_URL:?CLERK_JWKS_URL must be set in ~/.zshrc}"
+  : "${CLERK_TENANT_AUDIENCE:?CLERK_TENANT_AUDIENCE must be set in ~/.zshrc}"
+  : "${CLERK_PLATFORM_AUDIENCE:?CLERK_PLATFORM_AUDIENCE must be set in ~/.zshrc}"
+  : "${CLERK_APP_SERVICE_AUDIENCE:?CLERK_APP_SERVICE_AUDIENCE must be set in ~/.zshrc}"
+  : "${CLERK_FOUNDRY_SERVICE_AUDIENCE:?CLERK_FOUNDRY_SERVICE_AUDIENCE must be set in ~/.zshrc}"
+  : "${CLERK_APP_SERVICE_SUBJECT:?CLERK_APP_SERVICE_SUBJECT must be set in ~/.zshrc}"
+  : "${CLERK_FOUNDRY_SERVICE_SUBJECT:?CLERK_FOUNDRY_SERVICE_SUBJECT must be set in ~/.zshrc}"
+  [[ "$AUTH_PROVIDER" == "clerk" ]] || { echo "AUTH_PROVIDER must be clerk" >&2; exit 1; }
+  [[ "$CLERK_ISSUER_URL" == "https://clerk.tobytran.dev" ]] || { echo "CLERK_ISSUER_URL does not match approved production issuer" >&2; exit 1; }
+  [[ "$CLERK_JWKS_URL" == "https://clerk.tobytran.dev/.well-known/jwks.json" ]] || { echo "CLERK_JWKS_URL does not match approved production JWKS" >&2; exit 1; }
+  [[ "$CLERK_TENANT_AUDIENCE" == "expense-app" ]] || { echo "CLERK_TENANT_AUDIENCE does not match approved production audience" >&2; exit 1; }
+  [[ "$CLERK_PLATFORM_AUDIENCE" == "expense-foundry-platform" ]] || { echo "CLERK_PLATFORM_AUDIENCE does not match approved production audience" >&2; exit 1; }
+  [[ "$CLERK_APP_SERVICE_AUDIENCE" == "mch_3JAI0juruFRPSkrE1rpcDKx1k1i" ]] || { echo "CLERK_APP_SERVICE_AUDIENCE does not match approved production target" >&2; exit 1; }
+  [[ "$CLERK_FOUNDRY_SERVICE_AUDIENCE" == "mch_3JAIAMNUiVXteVOki8QENYHvJjp" ]] || { echo "CLERK_FOUNDRY_SERVICE_AUDIENCE does not match approved production target" >&2; exit 1; }
+  [[ "$CLERK_APP_SERVICE_SUBJECT" == "mch_3JAIPnx8itUTJsizuEGewr6NGBX" ]] || { echo "CLERK_APP_SERVICE_SUBJECT does not match approved production source" >&2; exit 1; }
+  [[ "$CLERK_FOUNDRY_SERVICE_SUBJECT" == "mch_3JAIi2BwnqBf8bNzbjTtjJa6nGw" ]] || { echo "CLERK_FOUNDRY_SERVICE_SUBJECT does not match approved production source" >&2; exit 1; }
   umask 077
-  # Export only required API-key variables and service secrets into protected builder input.
-  printf "export OPENAI_API_KEY=%q\\nexport OPENROUTER_API_KEY=%q\\nexport CLERK_APP_MACHINE_SECRET_KEY=%q\\nexport CLERK_FOUNDRY_MACHINE_SECRET_KEY=%q\\n" \
+  # Export only required API-key variables and runtime values into protected builder input.
+  printf "export OPENAI_API_KEY=%q\\nexport OPENROUTER_API_KEY=%q\\nexport CLERK_APP_MACHINE_SECRET_KEY=%q\\nexport CLERK_FOUNDRY_MACHINE_SECRET_KEY=%q\\nexport AUTH_PROVIDER=%q\\nexport CLERK_ISSUER_URL=%q\\nexport CLERK_JWKS_URL=%q\\nexport CLERK_TENANT_AUDIENCE=%q\\nexport CLERK_PLATFORM_AUDIENCE=%q\\nexport CLERK_APP_SERVICE_AUDIENCE=%q\\nexport CLERK_FOUNDRY_SERVICE_AUDIENCE=%q\\nexport CLERK_APP_SERVICE_SUBJECT=%q\\nexport CLERK_FOUNDRY_SERVICE_SUBJECT=%q\\n" \
     "$OPENAI_API_KEY" "$OPENROUTER_API_KEY" \
-    "$CLERK_APP_MACHINE_SECRET_KEY" "$CLERK_FOUNDRY_MACHINE_SECRET_KEY" > "$API_ENV_FILE"
+    "$CLERK_APP_MACHINE_SECRET_KEY" "$CLERK_FOUNDRY_MACHINE_SECRET_KEY" \
+    "$AUTH_PROVIDER" "$CLERK_ISSUER_URL" "$CLERK_JWKS_URL" \
+    "$CLERK_TENANT_AUDIENCE" "$CLERK_PLATFORM_AUDIENCE" \
+    "$CLERK_APP_SERVICE_AUDIENCE" "$CLERK_FOUNDRY_SERVICE_AUDIENCE" \
+    "$CLERK_APP_SERVICE_SUBJECT" "$CLERK_FOUNDRY_SERVICE_SUBJECT" > "$API_ENV_FILE"
 '
 chmod 600 "$API_ENV_FILE"
 
@@ -76,7 +98,11 @@ env -i PATH="$PATH" HOME="$HOME" \
   zsh -dfc '
   source "$API_ENV_FILE"
   export OPENAI_API_KEY OPENROUTER_API_KEY \
-    CLERK_APP_MACHINE_SECRET_KEY CLERK_FOUNDRY_MACHINE_SECRET_KEY
+    CLERK_APP_MACHINE_SECRET_KEY CLERK_FOUNDRY_MACHINE_SECRET_KEY \
+    AUTH_PROVIDER CLERK_ISSUER_URL CLERK_JWKS_URL \
+    CLERK_TENANT_AUDIENCE CLERK_PLATFORM_AUDIENCE \
+    CLERK_APP_SERVICE_AUDIENCE CLERK_FOUNDRY_SERVICE_AUDIENCE \
+    CLERK_APP_SERVICE_SUBJECT CLERK_FOUNDRY_SERVICE_SUBJECT
   node --input-type=module <<"NODE"
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 const { buildProductionBundle, activeVersionIds } = await import(process.env.BUNDLE_MODULE);
@@ -90,6 +116,15 @@ const bundle = buildProductionBundle({
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     CLERK_APP_MACHINE_SECRET_KEY: process.env.CLERK_APP_MACHINE_SECRET_KEY,
     CLERK_FOUNDRY_MACHINE_SECRET_KEY: process.env.CLERK_FOUNDRY_MACHINE_SECRET_KEY,
+    AUTH_PROVIDER: process.env.AUTH_PROVIDER,
+    CLERK_ISSUER_URL: process.env.CLERK_ISSUER_URL,
+    CLERK_JWKS_URL: process.env.CLERK_JWKS_URL,
+    CLERK_TENANT_AUDIENCE: process.env.CLERK_TENANT_AUDIENCE,
+    CLERK_PLATFORM_AUDIENCE: process.env.CLERK_PLATFORM_AUDIENCE,
+    CLERK_APP_SERVICE_AUDIENCE: process.env.CLERK_APP_SERVICE_AUDIENCE,
+    CLERK_FOUNDRY_SERVICE_AUDIENCE: process.env.CLERK_FOUNDRY_SERVICE_AUDIENCE,
+    CLERK_APP_SERVICE_SUBJECT: process.env.CLERK_APP_SERVICE_SUBJECT,
+    CLERK_FOUNDRY_SERVICE_SUBJECT: process.env.CLERK_FOUNDRY_SERVICE_SUBJECT,
   },
   databaseEnv: readFileSync(process.env.DATABASE_ENV_PATH, "utf8"),
   currentEnv,

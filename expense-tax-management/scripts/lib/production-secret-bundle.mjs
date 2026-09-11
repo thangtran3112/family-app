@@ -18,8 +18,20 @@ const GENERATED_KEYS = [
   "INBOUND_ROUTING_TOKEN_SECRET",
   "TEMPORAL_DB_PASSWORD",
 ];
+const CLERK_RUNTIME_KEYS = [
+  "AUTH_PROVIDER",
+  "CLERK_ISSUER_URL",
+  "CLERK_JWKS_URL",
+  "CLERK_TENANT_AUDIENCE",
+  "CLERK_PLATFORM_AUDIENCE",
+  "CLERK_APP_SERVICE_AUDIENCE",
+  "CLERK_FOUNDRY_SERVICE_AUDIENCE",
+  "CLERK_APP_SERVICE_SUBJECT",
+  "CLERK_FOUNDRY_SERVICE_SUBJECT",
+];
 
 const FAIL_CLOSED_RUNTIME_VALUES = {
+  AUTH_PROVIDER: "clerk",
   APP_TENANT_TOKEN_ISSUER: "https://identity.not-configured.invalid",
   APP_TENANT_TOKEN_AUDIENCE: "phase-1b-inert-tenant",
   APP_TENANT_JWKS_URL: "https://identity.not-configured.invalid/.well-known/jwks.json",
@@ -138,7 +150,15 @@ export function buildProductionBundle({
     values[key] = rewriteDatabaseUrl(key, database[key]);
   }
   for (const key of REQUIRED_SHELL_KEYS) values[key] = shell[key];
-  Object.assign(values, FAIL_CLOSED_RUNTIME_VALUES);
+  Object.assign(
+    values,
+    FAIL_CLOSED_RUNTIME_VALUES,
+    Object.fromEntries(
+      CLERK_RUNTIME_KEYS
+        .filter((key) => shell[key] !== undefined)
+        .map((key) => [key, shell[key]]),
+    ),
+  );
   for (const key of GENERATED_KEYS) {
     values[key] = current[key] === undefined ? generateSecret(randomBytes) : current[key];
     assertGeneratedSecret(key, values[key]);

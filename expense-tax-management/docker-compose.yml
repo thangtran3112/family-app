@@ -178,6 +178,8 @@ services:
     build:
       context: ../expense-tax-management
       dockerfile: frontend/capture-web/Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_ZXhhbXBsZS5jbGVyay5jb20k}
     container_name: expense-tax-capture-web
     restart: unless-stopped
     ports:
@@ -200,6 +202,8 @@ services:
     build:
       context: ../expense-tax-management
       dockerfile: frontend/office-web/Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_ZXhhbXBsZS5jbGVyay5jb20k}
     container_name: expense-tax-office-web
     restart: unless-stopped
     ports:
@@ -222,6 +226,8 @@ services:
     build:
       context: ../expense-tax-management
       dockerfile: frontend/foundry-web/Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_ZXhhbXBsZS5jbGVyay5jb20k}
     container_name: expense-tax-foundry-web
     restart: unless-stopped
     ports:

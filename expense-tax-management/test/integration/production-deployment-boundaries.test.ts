@@ -126,6 +126,31 @@ describe("Phase 1B production deployment boundaries", () => {
     }
   });
 
+  it("declares Clerk provider explicitly and requires public frontend build keys", () => {
+    const composeText = readProductionFile("docker-compose.yml");
+    expect(composeText).toContain("AUTH_PROVIDER: ${AUTH_PROVIDER:?AUTH_PROVIDER is required}");
+
+    for (const name of ["capture-web", "office-web", "foundry-web"]) {
+      const dockerfile = readFileSync(
+        path.join(repoRoot, "frontend", name, "Dockerfile"),
+        "utf8",
+      );
+      expect(dockerfile).toContain("ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+      expect(dockerfile).toContain("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required");
+      expect(dockerfile).toContain("ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+    }
+
+    const workflow = readFileSync(
+      path.join(repoRoot, "../.github/workflows/expense-tax-deploy.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain("environment: production");
+    expect(workflow).toContain(
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}",
+    );
+    expect(workflow).not.toContain("CLERK_SECRET_KEY");
+  });
+
   it("parses production dotenv as strict data without shell evaluation", () => {
     const deploy = readProductionFile("deploy.sh");
     expect(deploy).toContain("while IFS= read -r line");

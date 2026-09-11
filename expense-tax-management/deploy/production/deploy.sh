@@ -13,7 +13,7 @@ IMAGE_TAG="${IMAGE_TAG:-${1:-}}"
 # Allowlist is deliberately narrower than a shell environment. Values are data
 # only; no line is ever evaluated as shell syntax.
 KNOWN_ENV_KEYS=(
-  OPENAI_API_KEY OPENROUTER_API_KEY
+  OPENAI_API_KEY OPENROUTER_API_KEY AUTH_PROVIDER
   APP_TENANT_TOKEN_ISSUER APP_TENANT_TOKEN_AUDIENCE APP_TENANT_JWKS_URL
   APP_SERVICE_TOKEN_ISSUER APP_SERVICE_TOKEN_AUDIENCE APP_SERVICE_JWKS_URL
   APP_DATABASE_URL APP_MIGRATION_DATABASE_URL
@@ -87,6 +87,7 @@ load_env_file() {
 validate_auth_values() {
   local key value
   for key in \
+    AUTH_PROVIDER \
     APP_TENANT_TOKEN_ISSUER APP_TENANT_TOKEN_AUDIENCE APP_TENANT_JWKS_URL \
     APP_SERVICE_TOKEN_ISSUER APP_SERVICE_TOKEN_AUDIENCE APP_SERVICE_JWKS_URL \
     FOUNDRY_PLATFORM_TOKEN_ISSUER FOUNDRY_PLATFORM_TOKEN_AUDIENCE FOUNDRY_PLATFORM_JWKS_URL \
@@ -97,6 +98,9 @@ validate_auth_values() {
     CLERK_APP_MACHINE_SECRET_KEY CLERK_FOUNDRY_MACHINE_SECRET_KEY; do
     value=${!key:-}
     [[ -n "$value" ]] || die "$key is required"
+    if [[ "$key" == "AUTH_PROVIDER" && "$value" != "clerk" ]]; then
+      die "AUTH_PROVIDER must be clerk"
+    fi
     case "$value" in
       https://identity.not-configured.invalid|https://identity.not-configured.invalid/.well-known/jwks.json|https://services.not-configured.invalid|https://services.not-configured.invalid/.well-known/jwks.json|not-configured)
         # Explicit Phase 1B values are nonfunctional: JWKS cannot resolve and

@@ -25,6 +25,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 30
     permissions:
       contents: read
@@ -71,6 +72,8 @@ jobs:
           tags: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ github.event.workflow_run.head_sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          build-args: |
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
   deploy:
     name: Deploy production

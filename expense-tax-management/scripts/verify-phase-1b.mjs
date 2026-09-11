@@ -8,6 +8,7 @@ const productionCompose = path.join(repoRoot, "deploy", "production", "docker-co
 const inertComposeEnv = {
   ...process.env,
   IMAGE_TAG: "0".repeat(64),
+  AUTH_PROVIDER: "clerk",
   APP_TENANT_TOKEN_ISSUER: "https://identity.not-configured.invalid",
   APP_TENANT_TOKEN_AUDIENCE: "phase-1b-inert-tenant",
   APP_TENANT_JWKS_URL: "https://identity.not-configured.invalid/.well-known/jwks.json",

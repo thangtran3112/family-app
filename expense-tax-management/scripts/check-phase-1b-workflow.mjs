@@ -35,6 +35,13 @@ assertIncludes(raw, "persist-credentials: false");
 assertIncludes(raw, "docker/setup-buildx-action@v3");
 assertIncludes(raw, "docker/login-action@v3");
 assertIncludes(raw, "docker/build-push-action@v6");
+assertIncludes(raw, "environment: production", "production build environment");
+assertIncludes(
+  raw,
+  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}",
+  "public Clerk publishable key build argument",
+);
+assertExcludes(raw, "CLERK_SECRET_KEY", "server Clerk secret in image build");
 assertIncludes(raw, "packages: write");
 assertIncludes(raw, "contents: read");
 assertIncludes(raw, "GITHUB_TOKEN");
