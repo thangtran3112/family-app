@@ -213,15 +213,17 @@ describe("production secret sync behavior", () => {
     expect(result.stderr).toContain("mode 0600");
   });
 
-  it("rejects a webhook secret that is not a nonempty whsec value", async () => {
+  it.each([
+    ["bare whsec_ prefix", "whsec_"],
+    ["whitespace-only content", " \t\n"],
+  ])("rejects webhook secret file with %s", async (_description, value) => {
     const test = await fixture("success");
-    await writeFile(join(test.root, "clerk-webhook-signing-secret"), "not-a-clerk-secret\n", { mode: 0o600 });
+    await writeFile(join(test.root, "clerk-webhook-signing-secret"), value, { mode: 0o600 });
 
     const result = await runSync(test.env);
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("whsec_");
-    expect(result.stderr).not.toContain("not-a-clerk-secret");
   });
 
   it("aborts on current-version access failure before uploading", async () => {

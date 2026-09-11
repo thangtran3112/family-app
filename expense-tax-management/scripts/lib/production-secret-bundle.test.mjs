@@ -76,6 +76,7 @@ describe("buildProductionBundle", () => {
     expect(syncScript).toContain(': "${CLERK_WEBHOOK_SIGNING_SECRET_FILE:?');
     expect(syncScript).toContain('must have mode 0600');
     expect(syncScript).toContain('must contain a nonempty whsec_ secret');
+    expect(syncScript).toContain("=~ '^whsec_[^[:space:]]+$'");
     expect(syncScript).toContain('export CLERK_WEBHOOK_SIGNING_SECRET=%q');
     expect(syncScript).toContain('CLERK_ISSUER_URL" == "https://clerk.tobytran.dev"');
     expect(syncScript).toContain('CLERK_JWKS_URL" == "https://clerk.tobytran.dev/.well-known/jwks.json"');

@@ -69,7 +69,7 @@ API_ENV_FILE="$API_ENV_FILE" zsh -dfic '
   [[ "$SECRET_FILE_MODE" =~ ^[0-7]+$ ]] || SECRET_FILE_MODE="$(stat -c '%a' "$CLERK_WEBHOOK_SIGNING_SECRET_FILE" 2>/dev/null || true)"
   [[ "$SECRET_FILE_MODE" == "600" ]] || { echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE must have mode 0600" >&2; exit 1; }
   CLERK_WEBHOOK_SIGNING_SECRET="$(<"$CLERK_WEBHOOK_SIGNING_SECRET_FILE")"
-  [[ -n "$CLERK_WEBHOOK_SIGNING_SECRET" && "$CLERK_WEBHOOK_SIGNING_SECRET" == whsec_* ]] || { echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE must contain a nonempty whsec_ secret" >&2; exit 1; }
+  [[ "$CLERK_WEBHOOK_SIGNING_SECRET" =~ '^whsec_[^[:space:]]+$' ]] || { echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE must contain a nonempty whsec_ secret" >&2; exit 1; }
   : "${AUTH_PROVIDER:?AUTH_PROVIDER must be set in ~/.zshrc}"
   : "${CLERK_ISSUER_URL:?CLERK_ISSUER_URL must be set in ~/.zshrc}"
   : "${CLERK_JWKS_URL:?CLERK_JWKS_URL must be set in ~/.zshrc}"
