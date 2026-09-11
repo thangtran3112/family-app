@@ -10,7 +10,7 @@ SERVICE_ACCOUNT_ID="expense-tax-github-deploy"
 POOL_ID="expense-tax-github"
 PROVIDER_ID="github"
 REPOSITORY="thangtran3112/family-app"
-WIF_ATTRIBUTE_CONDITION="assertion.repository=='thangtran3112/family-app' && assertion.ref=='refs/heads/main' && (assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main' || assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-cloudflare.yml@refs/heads/main') && assertion.environment=='production'"
+WIF_ATTRIBUTE_CONDITION="assertion.repository=='thangtran3112/family-app' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main' && assertion.environment=='production'"
 OUTPUT_FILE="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/.keys/gcp/expense-tax-bootstrap-outputs.json}"
 TEMP_DIR="$(mktemp -d)"
 PROVIDER_FILE="$TEMP_DIR/provider.json"
@@ -105,7 +105,7 @@ const expected = {
   "attribute.ref": "assertion.ref",
   "attribute.workflow_ref": "assertion.workflow_ref",
   "attribute.environment": "assertion.environment",
-  attributeCondition: "assertion.repository=='thangtran3112/family-app' && assertion.ref=='refs/heads/main' && (assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main' || assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-cloudflare.yml@refs/heads/main') && assertion.environment=='production'",
+  attributeCondition: "assertion.repository=='thangtran3112/family-app' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main' && assertion.environment=='production'",
 };
 const actual = {
   issuerUri: provider.oidc?.issuerUri,

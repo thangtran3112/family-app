@@ -42,3 +42,25 @@ Date: 2026-09-10
 - VPS bootstrap accepts GNU/macOS `stat` output and installs/upgrades
   cloudflared until version `2025.4.0` or newer is present before using
   `--token-file`.
+
+## Final review remediation evidence
+
+- Trusted plan job uploads only binary `tfplan` artifact with one-day retention;
+  apply downloads that artifact and runs `terraform apply -auto-approve tfplan`.
+  PR validation remains backend-disabled, secretless, and without OIDC.
+- Cloudflare Terraform now uses dedicated service account/WIF bootstrap path
+  (`bootstrap-cloudflare.sh`) with exact repository, `refs/heads/main`, workflow,
+  and `production` admission. State bootstrap removes legacy application deploy
+  service-account object access and grants bucket object access only to the
+  dedicated Cloudflare identity. No Secret Manager or application deploy role is
+  granted by this path.
+- VPS bootstrap now requires a mode `0600` known-hosts file and uses
+  `UserKnownHostsFile` with `StrictHostKeyChecking=yes`; `accept-new` is absent.
+- README token export sets `umask 077` before redirection and enforces mode `0600`.
+- Verification passed: `terraform fmt -check -recursive .`,
+  `terraform init -backend=false && terraform validate`, `bash -n` for all
+  touched shell scripts, Cloudflare static check, twelve Vitest checks across
+  Cloudflare and Phase 1B infrastructure suites, and
+  `git diff --check`.
+- No Cloudflare API calls, gcloud mutations, VPS commands, Terraform apply, or
+  repository push executed.

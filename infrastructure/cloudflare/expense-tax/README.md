@@ -32,7 +32,11 @@ Never put token in `.tfvars`, command arguments, logs, or committed files.
 State bucket name is deterministic: `expense-tax-tobytran-2026-tfstate`.
 Bootstrap requires authenticated gcloud, verifies bucket project ownership
 against `expense-tax-tobytran-2026` before any IAM mutation, and grants existing
-deploy service account object admin. This command mutates GCP only when
+dedicated `expense-tax-cloudflare-terraform` service account object admin. The
+application deploy service account has no access to this bucket. Run
+`expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`
+first to create the dedicated service account and exact Cloudflare workflow WIF
+provider. These commands mutate GCP only when
 deliberately run by an operator; it was not run as part of this change.
 
 Bucket versioning is enabled. Lifecycle policy deletes noncurrent state object
@@ -58,9 +62,16 @@ terraform apply \
   -var="cloudflare_api_token=${CLOUDFLARE_API_TOKEN}"
 ```
 
-Use `terraform output -raw tunnel_token > ~/.config/cloudflared/expense-tax.token`
-only after apply, then immediately enforce `chmod 600` and do not print the
-file. Terraform state contains sensitive tunnel material and must stay in GCS.
+Use a restrictive umask before exporting the token, then do not print the file:
+
+```bash
+umask 077
+mkdir -p ~/.config/cloudflared
+terraform output -raw tunnel_token > ~/.config/cloudflared/expense-tax.token
+chmod 600 ~/.config/cloudflared/expense-tax.token
+```
+
+Terraform state contains sensitive tunnel material and must stay in GCS.
 
 ## VPS token installation
 
@@ -72,6 +83,7 @@ From repository root, with local token file mode `0600`:
   --user ubuntu \
   --key ~/.ssh/id_ed25519_personal \
   --ssh-port 2222 \
+  --known-hosts-file ~/.ssh/expense-tax-known-hosts \
   --tunnel-token-file ~/.config/cloudflared/expense-tax.token
 ```
 
@@ -87,6 +99,7 @@ for application ports; Tunnel traffic is outbound.
 1. Provision reachable Ubuntu VPS and complete existing `infrastructure/vps/bootstrap.sh` SSH/Docker/Postgres steps.
 2. Apply this Terraform module only if Tunnel hostnames or ingress need changes; the remotely managed Tunnel identity remains in Cloudflare state.
 3. Export sensitive `tunnel_token` directly to a local `0600` file without printing it.
-4. Run `bootstrap-cloudflared.sh` against new host and verify systemd active status.
+4. Provide a pinned known-hosts file with mode `0600`, run
+   `bootstrap-cloudflared.sh` against new host, and verify systemd active status.
 5. Verify all five HTTPS hostnames and API/webhook health checks.
 6. Stop and remove cloudflared service from old VPS after new VPS is healthy; do not rotate DNS because CNAMEs target Tunnel UUID, not VPS IP.

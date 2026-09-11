@@ -141,11 +141,11 @@ describe("production secret sync behavior", () => {
       "assertion.repository=='thangtran3112/family-app'",
       "assertion.ref=='refs/heads/main'",
       "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main'",
-      "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-cloudflare.yml@refs/heads/main'",
       "assertion.environment=='production'",
     ]) {
       expect(bootstrap).toContain(claim);
     }
+    expect(bootstrap).not.toContain("expense-tax-cloudflare.yml");
     expect(bootstrap).toContain("PRINCIPAL_SET");
     expect(bootstrap).toContain("attribute.repository/${REPOSITORY}");
     expect(bootstrap).not.toContain("PRINCIPAL_SUBJECT");

@@ -4,7 +4,8 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: bootstrap-cloudflared.sh --host HOST --user USER --key PATH
-                                --ssh-port PORT --tunnel-token-file PATH
+                                 --ssh-port PORT --known-hosts-file PATH
+                                 --tunnel-token-file PATH
 EOF
 }
 
@@ -12,6 +13,7 @@ HOST=""
 USER_NAME=""
 SSH_KEY=""
 SSH_PORT=""
+KNOWN_HOSTS_FILE=""
 TOKEN_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -20,13 +22,14 @@ while [[ $# -gt 0 ]]; do
     --user) USER_NAME="$2"; shift 2 ;;
     --key) SSH_KEY="$2"; shift 2 ;;
     --ssh-port) SSH_PORT="$2"; shift 2 ;;
+    --known-hosts-file) KNOWN_HOSTS_FILE="$2"; shift 2 ;;
     --tunnel-token-file) TOKEN_FILE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
 done
 
-for required in HOST USER_NAME SSH_KEY SSH_PORT TOKEN_FILE; do
+for required in HOST USER_NAME SSH_KEY SSH_PORT KNOWN_HOSTS_FILE TOKEN_FILE; do
   if [[ -z "${!required}" ]]; then
     echo "Missing required argument for ${required}" >&2
     usage
@@ -45,8 +48,18 @@ fi
   exit 1
 }
 [[ -r "$SSH_KEY" ]] || { echo "SSH key is not readable" >&2; exit 1; }
+[[ -f "$KNOWN_HOSTS_FILE" ]] || { echo "Known-hosts file not found" >&2; exit 1; }
+if KNOWN_HOSTS_MODE="$(stat -c '%a' "$KNOWN_HOSTS_FILE" 2>/dev/null)"; then
+  :
+else
+  KNOWN_HOSTS_MODE="$(stat -f '%Lp' "$KNOWN_HOSTS_FILE")"
+fi
+[[ "$KNOWN_HOSTS_MODE" == "600" ]] || {
+  echo "Known-hosts file must have mode 0600" >&2
+  exit 1
+}
 
-SSH_OPTIONS=(-p "$SSH_PORT" -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+SSH_OPTIONS=(-p "$SSH_PORT" -i "$SSH_KEY" -o BatchMode=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes)
 REMOTE="${USER_NAME}@${HOST}"
 
 ssh_run() {

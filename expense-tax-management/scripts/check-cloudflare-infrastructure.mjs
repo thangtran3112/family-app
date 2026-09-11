@@ -10,6 +10,14 @@ const read = (file) => readFileSync(join(moduleRoot, file), "utf8");
 const main = read("main.tf");
 const readme = read("README.md");
 const state = read("bootstrap-state.sh");
+const cloudflareBootstrap = readFileSync(
+  join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
+  "utf8",
+);
+const appBootstrap = readFileSync(
+  join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"),
+  "utf8",
+);
 const vps = readFileSync(join(repoRoot, "infrastructure/vps/bootstrap-cloudflared.sh"), "utf8");
 const workflowRaw = readFileSync(join(repoRoot, ".github/workflows/expense-tax-cloudflare.yml"), "utf8");
 const workflow = YAML.parse(workflowRaw);
@@ -61,7 +69,11 @@ includes(vps, "2025.4.0");
 includes(vps, "apt-get install -y cloudflared");
 includes(vps, "--token-file /etc/cloudflared/expense-tax-tunnel.token");
 includes(vps, "pkg.cloudflare.com/cloudflared");
+includes(vps, "--known-hosts-file");
+includes(vps, "UserKnownHostsFile");
+includes(vps, "StrictHostKeyChecking=yes");
 excludes(vps, "cat \"$TOKEN_FILE\"", "token content command substitution");
+excludes(vps, "StrictHostKeyChecking=accept-new", "unverified SSH host key acceptance");
 
 if (!pullRequestJob) failures.push("missing: unprivileged PR validation job");
 if (!planJob || !applyJob) failures.push("missing: plan/apply jobs");
@@ -94,11 +106,27 @@ includes(workflowRaw, "terraform init");
 includes(workflowRaw, "terraform validate");
 includes(workflowRaw, "terraform plan");
 includes(workflowRaw, "terraform apply");
+includes(workflowRaw, "actions/upload-artifact@v4");
+includes(workflowRaw, "actions/download-artifact@v4");
+includes(workflowRaw, "retention-days: 1");
+includes(workflowRaw, "terraform apply -auto-approve tfplan");
+includes(workflowRaw, "GCP_CLOUDFLARE_WORKLOAD_IDENTITY_PROVIDER");
+includes(workflowRaw, "GCP_CLOUDFLARE_SERVICE_ACCOUNT");
+excludes(workflowRaw, "GCP_WORKLOAD_IDENTITY_PROVIDER", "shared application WIF provider");
+excludes(workflowRaw, "GCP_DEPLOY_SERVICE_ACCOUNT", "shared application deploy service account");
 includes(workflowRaw, "environment: production");
 includes(workflowRaw, "inputs.apply == true");
 includes(workflowRaw, "-backend=false", "PR validation backend disabled");
 includes(state, "verify_bucket_project", "state bucket project verification");
 includes(state, "daysSinceNoncurrentTime", "state noncurrent lifecycle policy");
+includes(state, "CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT", "dedicated Cloudflare state identity");
+includes(state, "remove-iam-policy-binding", "remove application state access");
+includes(cloudflareBootstrap, "expense-tax-cloudflare.yml@refs/heads/main", "exact Cloudflare workflow WIF admission");
+includes(cloudflareBootstrap, "refs/heads/main", "Cloudflare WIF main branch admission");
+includes(cloudflareBootstrap, "assertion.environment=='production'", "Cloudflare WIF production admission");
+excludes(cloudflareBootstrap, "secretmanager.secretAccessor", "application Secret Manager access");
+excludes(cloudflareBootstrap, "roles/run.", "application deploy permissions");
+excludes(appBootstrap, "expense-tax-cloudflare.yml", "Cloudflare workflow in application WIF admission");
 excludes(workflowRaw, "expense-tax-management/deploy/production", "application deployment in Cloudflare workflow");
 excludes(workflowRaw, "docker push", "container deployment in Cloudflare workflow");
 

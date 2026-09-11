@@ -7,6 +7,7 @@ on:
       - "infrastructure/vps/bootstrap-cloudflared.sh"
       - ".github/workflows/expense-tax-cloudflare.yml"
       - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"
+      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
   push:
     branches:
       - main
@@ -15,6 +16,7 @@ on:
       - "infrastructure/vps/bootstrap-cloudflared.sh"
       - ".github/workflows/expense-tax-cloudflare.yml"
       - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"
+      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
   workflow_dispatch:
     inputs:
       apply:
@@ -83,8 +85,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_CLOUDFLARE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CLOUDFLARE_SERVICE_ACCOUNT }}
           create_credentials_file: true
           cleanup_credentials: true
 
@@ -107,6 +109,14 @@ jobs:
         working-directory: infrastructure/cloudflare/expense-tax
         run: terraform plan -out=tfplan
 
+      - name: Upload reviewed Terraform plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: expense-tax-cloudflare-tfplan
+          path: infrastructure/cloudflare/expense-tax/tfplan
+          retention-days: 1
+          if-no-files-found: error
+
   apply:
     name: Terraform apply
     needs: plan
@@ -125,11 +135,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download reviewed Terraform plan
+        uses: actions/download-artifact@v4
+        with:
+          name: expense-tax-cloudflare-tfplan
+          path: infrastructure/cloudflare/expense-tax
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_CLOUDFLARE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CLOUDFLARE_SERVICE_ACCOUNT }}
           create_credentials_file: true
           cleanup_credentials: true
 
@@ -142,4 +158,4 @@ jobs:
 
       - name: Terraform apply
         working-directory: infrastructure/cloudflare/expense-tax
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve tfplan

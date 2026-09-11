@@ -3,7 +3,8 @@ set -euo pipefail
 
 BUCKET="expense-tax-tobytran-2026-tfstate"
 PROJECT_ID="expense-tax-tobytran-2026"
-DEPLOY_SERVICE_ACCOUNT="expense-tax-github-deploy@expense-tax-tobytran-2026.iam.gserviceaccount.com"
+APP_DEPLOY_SERVICE_ACCOUNT_EMAIL="expense-tax-github-deploy@expense-tax-tobytran-2026.iam.gserviceaccount.com"
+CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT="expense-tax-cloudflare-terraform@expense-tax-tobytran-2026.iam.gserviceaccount.com"
 TEMP_DIR="$(mktemp -d)"
 LIFECYCLE_FILE="${TEMP_DIR}/lifecycle.json"
 
@@ -51,8 +52,11 @@ JSON
 
 gcloud storage buckets update "gs://${BUCKET}" --versioning
 gcloud storage buckets update "gs://${BUCKET}" --lifecycle-file="$LIFECYCLE_FILE"
+gcloud storage buckets remove-iam-policy-binding "gs://${BUCKET}" \
+  --member="serviceAccount:${APP_DEPLOY_SERVICE_ACCOUNT_EMAIL}" \
+  --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
-  --member="serviceAccount:${DEPLOY_SERVICE_ACCOUNT}" \
+  --member="serviceAccount:${CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT}" \
   --role="roles/storage.objectAdmin"
 
 echo "state bucket ready: gs://${BUCKET}"
