@@ -27,16 +27,24 @@ const TEST_ENV = {
 };
 
 const migrationTestUrl = process.env.FOUNDRY_MIGRATION_TEST_DATABASE_URL;
-let migrationTestAllowed = false;
-if (migrationTestUrl !== undefined) {
+const migrationTestMarker = process.env.FOUNDRY_MIGRATION_TEST_DISPOSABLE;
+
+function isDisposableMigrationTestAllowed(
+  url: string | undefined,
+  marker: string | undefined,
+): boolean {
+  if (marker !== "1" || url === undefined) return false;
   try {
-    migrationTestAllowed = ["localhost", "127.0.0.1", "::1"].includes(
-      new URL(migrationTestUrl).hostname,
-    );
+    return ["localhost", "127.0.0.1", "::1"].includes(new URL(url).hostname);
   } catch {
-    migrationTestAllowed = false;
+    return false;
   }
 }
+
+const migrationTestAllowed = isDisposableMigrationTestAllowed(
+  migrationTestUrl,
+  migrationTestMarker,
+);
 
 describe("Foundry database boundaries", () => {
   const apps = new Set<ReturnType<typeof buildApp>>();
@@ -74,6 +82,18 @@ describe("Foundry database boundaries", () => {
   afterAll(async () => {
     await migrationDatabase?.destroy();
   });
+
+  it.each([
+    [undefined, "postgresql://user@127.0.0.1/task2_migration_test", false],
+    ["0", "postgresql://user@127.0.0.1/task2_migration_test", false],
+    ["1", "postgresql://user@db.internal/task2_migration_test", false],
+    ["1", "postgresql://user@127.0.0.1/task2_migration_test", true],
+  ])(
+    "enables migration setup only for explicit disposable marker and local URL",
+    (marker, url, expected) => {
+      expect(isDisposableMigrationTestAllowed(url, marker)).toBe(expected);
+    },
+  );
 
   it.skipIf(!migrationTestAllowed)(
     "allows one Clerk user to hold both operator roles and rejects duplicate role rows",
