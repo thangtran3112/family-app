@@ -126,7 +126,7 @@ function InvitationAcceptance() {
     return <main className="auth"><h1>Invitation could not be accepted</h1><p>{error}</p></main>;
   }
 
-  return <main className="auth"><h1>Accepting invitation</h1><p>Signing you in with invited email address...</p></main>;
+  return <main className="auth"><h1>Accepting invitation</h1><p>Signing you in with invited email address...</p><div id="clerk-captcha" /></main>;
 }
 
 export default function AcceptInvitationPage() {
