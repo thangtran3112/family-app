@@ -284,11 +284,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     config: options.config,
     readinessProbe: app.databaseReadinessProbe,
   });
-  app.register(registerAuthCheckRoutes, {
-    ...(options.config.clerk?.appServiceSubject
-      ? { workerServiceSubject: options.config.clerk.appServiceSubject }
-      : {}),
-  });
+  if (options.config.clerk !== undefined) {
+    app.register(registerAuthCheckRoutes, {
+      workerServiceSubject: options.config.clerk.appServiceSubject,
+    });
+  }
   app.register(registerIdentityRoutes, { identityDomain });
   app.register(registerTenantRoutes, {
     identityResolver: identityDomain,

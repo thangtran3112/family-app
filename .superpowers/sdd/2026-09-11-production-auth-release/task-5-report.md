@@ -81,3 +81,28 @@ Correction verification:
 
 Live production smoke remains pending. No production request, mutation, or live
 evidence was performed.
+
+## Auth Contract Correction
+
+- Foundry platform smoke now calls `/internal/v1/auth-check/platform` and
+  requires top-level `role: "catalog_manager"`.
+- Smoke configuration now requires `APP_M2M_SUBJECT` and
+  `FOUNDRY_M2M_SUBJECT`; both worker checks assert verified subject and
+  `tokenType: "service"`.
+- Removed `ai-worker` subject fallbacks. Auth-check route registration requires
+  configured Clerk worker subjects; Clerk config already rejects missing values.
+- Smoke mocks now match registered route responses, including verified issuer,
+  audience, subject, token type, and platform role.
+- Added wrong-subject and missing-scope `403` coverage for both worker routes,
+  plus non-catalog-manager and disabled-role Foundry platform denial coverage.
+
+Correction verification:
+
+- Smoke tests: 10 passed
+- App auth-check tests: 4 passed
+- Foundry auth-check tests: 6 passed
+- Full tests: App 226 passed; Foundry 114 passed, 1 skipped; Contracts 54 passed
+- Full lint and typecheck: passed
+
+Live production smoke remains pending. No live calls, mutations, or fabricated
+production evidence were made.

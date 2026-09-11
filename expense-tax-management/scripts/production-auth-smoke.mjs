@@ -16,6 +16,8 @@ const requiredEnvironment = [
   "CLERK_PLATFORM_AUDIENCE",
   "APP_M2M_AUDIENCE",
   "FOUNDRY_M2M_AUDIENCE",
+  "APP_M2M_SUBJECT",
+  "FOUNDRY_M2M_SUBJECT",
   "THANG_TENANT_TOKEN",
   "THANG_PLATFORM_TOKEN",
   "TRAMILY_TENANT_TOKEN",
@@ -77,6 +79,8 @@ export function parseSmokeConfig(env = process.env) {
     expectedPlatformAudience: values.CLERK_PLATFORM_AUDIENCE.trim(),
     expectedAppM2mAudience: values.APP_M2M_AUDIENCE.trim(),
     expectedFoundryM2mAudience: values.FOUNDRY_M2M_AUDIENCE.trim(),
+    expectedAppM2mSubject: values.APP_M2M_SUBJECT.trim(),
+    expectedFoundryM2mSubject: values.FOUNDRY_M2M_SUBJECT.trim(),
     thangTenantToken: values.THANG_TENANT_TOKEN,
     thangPlatformToken: values.THANG_PLATFORM_TOKEN,
     tramilyTenantToken: values.TRAMILY_TENANT_TOKEN,
@@ -111,11 +115,11 @@ export function buildSmokePlan(config) {
     { name: "office page", method: "GET", url: endpoint(config.officeUrl, "/dashboard"), expectedStatus: 200 },
     { name: "app no-token rejection", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 401 },
     { name: "thang tenant app access", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 200, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
-    { name: "thang platform Foundry access", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/ai-models"), expectedStatus: 200, token: config.thangPlatformToken, expectedAudience: config.expectedPlatformAudience, expectedRole: "operator" },
+    { name: "thang platform Foundry access", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/platform"), expectedStatus: 200, token: config.thangPlatformToken, expectedAudience: config.expectedPlatformAudience, expectedRole: "catalog_manager" },
     { name: "tramily Foundry denial", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/platform"), expectedStatus: 401, token: config.tramilyTenantToken, expectedAudience: config.expectedTenantAudience },
     { name: "tenant/org mismatch denial", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.mismatchTenantId}`), expectedStatus: 403, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
-    { name: "app M2M audience", method: "GET", url: endpoint(config.appApiUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.appM2mToken, expectedAudience: config.expectedAppM2mAudience },
-    { name: "Foundry M2M audience", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.foundryM2mToken, expectedAudience: config.expectedFoundryM2mAudience },
+    { name: "app M2M audience", method: "GET", url: endpoint(config.appApiUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.appM2mToken, expectedAudience: config.expectedAppM2mAudience, expectedSubject: config.expectedAppM2mSubject, expectedTokenType: "service" },
+    { name: "Foundry M2M audience", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.foundryM2mToken, expectedAudience: config.expectedFoundryM2mAudience, expectedSubject: config.expectedFoundryM2mSubject, expectedTokenType: "service" },
     { name: "webhook delivery", method: "POST", url: config.webhookReplayUrl, expectedStatus: 202, body: config.webhookReplayBody, headers: config.webhookReplayHeaders, expectedReplay: false },
     { name: "webhook replay", method: "POST", url: config.webhookReplayUrl, expectedStatus: 202, body: config.webhookReplayBody, headers: config.webhookReplayHeaders, expectedReplay: true },
   ];
@@ -183,7 +187,9 @@ function assertClaimMetadata(check, body) {
   if (typeof claims.issuer !== "string" || claims.issuer === "") throw new Error("issuer metadata missing");
   if (claims.issuer !== check.expectedIssuer) throw new Error("issuer metadata mismatch");
   if (claims.audience !== check.expectedAudience) throw new Error("audience metadata mismatch");
-  if (check.expectedRole && claims.role !== check.expectedRole) throw new Error("role metadata mismatch");
+  if (check.expectedSubject && claims.subject !== check.expectedSubject) throw new Error("subject metadata mismatch");
+  if (check.expectedTokenType && claims.tokenType !== check.expectedTokenType) throw new Error("token type metadata mismatch");
+  if (check.expectedRole && body.role !== check.expectedRole) throw new Error("role metadata mismatch");
 }
 
 function assertReplay(check, body) {

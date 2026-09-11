@@ -6,7 +6,7 @@ import { ErrorResponseSchema } from "@expense-tax/contracts";
 import { platformGuard, serviceGuard } from "../plugins/auth.js";
 
 export interface AuthCheckRouteOptions {
-  readonly workerServiceSubject?: string;
+  readonly workerServiceSubject: string;
 }
 
 const claimsSchema = z.strictObject({
@@ -34,8 +34,10 @@ export async function registerAuthCheckRoutes(
   options: AuthCheckRouteOptions,
 ): Promise<void> {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
+  const workerSubject = options.workerServiceSubject.trim();
+  if (!workerSubject) throw new Error("Missing required Foundry worker service subject");
   const workerGuard = [
-    serviceGuard(options.workerServiceSubject ?? "ai-worker", ["routes:read"]),
+    serviceGuard(workerSubject, ["routes:read"]),
   ];
 
   typedApp.get(

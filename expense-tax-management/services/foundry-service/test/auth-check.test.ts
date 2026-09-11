@@ -103,4 +103,49 @@ describe("Foundry auth-check routes", () => {
       tokenType: "service",
     });
   });
+
+  it.each([
+    ["wrong subject", { ...workerPrincipal, subject: "other-worker" }],
+    ["missing scope", { ...workerPrincipal, scopes: [] }],
+  ])("rejects worker auth-check with %s", async (_case, principal) => {
+    const app = buildApp({
+      config: createFoundryConfig({ env }),
+      logger: false,
+      authVerifiers: {
+        platform: { verify: async () => platformPrincipal },
+        service: { verify: async () => principal },
+      },
+      platformOperatorDomain: {
+        hasRole: async () => true,
+      } as PlatformOperatorDomain,
+    });
+    apps.add(app);
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/v1/auth-check/worker",
+      headers: { authorization: "Bearer worker-token" },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it.each(["operator", "disabled catalog_manager"])("denies non-active %s platform role", async (role) => {
+    const app = buildApp({
+      config: createFoundryConfig({ env }),
+      logger: false,
+      authVerifiers: {
+        platform: { verify: async () => platformPrincipal },
+        service: { verify: async () => workerPrincipal },
+      },
+      platformOperatorDomain: {
+        hasRole: async (_subject, requestedRole) => requestedRole === role && false,
+      } as PlatformOperatorDomain,
+    });
+    apps.add(app);
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/v1/auth-check/platform",
+      headers: { authorization: "Bearer platform-token" },
+    });
+    expect(response.statusCode).toBe(403);
+  });
 });

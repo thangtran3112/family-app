@@ -140,4 +140,26 @@ describe("App auth-check routes", () => {
       tokenType: "service",
     });
   });
+
+  it.each([
+    ["wrong subject", { ...workerPrincipal, subject: "other-worker" }],
+    ["missing scope", { ...workerPrincipal, scopes: [] }],
+  ])("rejects worker auth-check with %s", async (_case, principal) => {
+    const app = buildApp({
+      config: createAppConfig({ env }),
+      logger: false,
+      temporalStarter,
+      authVerifiers: {
+        tenant: { verify: async () => tenantPrincipal },
+        service: { verify: async () => principal },
+      },
+    });
+    apps.add(app);
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/v1/auth-check/worker",
+      headers: { authorization: "Bearer worker-token" },
+    });
+    expect(response.statusCode).toBe(403);
+  });
 });

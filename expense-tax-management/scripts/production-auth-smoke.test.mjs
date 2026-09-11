@@ -38,6 +38,8 @@ function config(overrides = {}) {
     expectedPlatformAudience: "family-platform-aud",
     expectedAppM2mAudience: "app-api-machine",
     expectedFoundryM2mAudience: "foundry-service-machine",
+    expectedAppM2mSubject: "app-m2m-subject",
+    expectedFoundryM2mSubject: "foundry-m2m-subject",
     thangTenantToken: "thang-tenant-secret",
     thangPlatformToken: "thang-platform-secret",
     tramilyTenantToken: "tramily-tenant-secret",
@@ -80,6 +82,8 @@ describe("production auth smoke helpers", () => {
         ["CLERK_PLATFORM_AUDIENCE", "platform"],
         ["APP_M2M_AUDIENCE", "app"],
         ["FOUNDRY_M2M_AUDIENCE", "foundry"],
+        ["APP_M2M_SUBJECT", "app-subject"],
+        ["FOUNDRY_M2M_SUBJECT", "foundry-subject"],
         ["THANG_TENANT_TOKEN", "thang"],
         ["THANG_PLATFORM_TOKEN", "platform-token"],
         ["TRAMILY_TENANT_TOKEN", "tramily"],
@@ -124,14 +128,14 @@ describe("production auth smoke helpers", () => {
       if (url.includes("/webhook")) return response(202, { replayed: calls.filter((call) => call.url.includes("/webhook")).length > 1, claimsVerified: { issuer: "https://clerk.example.test" } });
       if (url.includes("foundry")) {
         if (options.headers?.authorization?.includes("tramily")) return response(401);
-        if (options.headers?.authorization?.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine" } });
-        return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-platform-aud", role: "operator" } });
+        if (options.headers?.authorization?.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine", subject: "foundry-m2m-subject", tokenType: "service" } });
+        return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-platform-aud", subject: "thang-platform-subject", tokenType: "platform" }, role: "catalog_manager" });
       }
       if (url.includes("other-tenant")) return response(403, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud" } });
       if (!options.headers?.authorization) return response(401);
-      if (options.headers.authorization.includes("app-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "app-api-machine" } });
-      if (options.headers.authorization.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine" } });
-      return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud" } });
+      if (options.headers.authorization.includes("app-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "app-api-machine", subject: "app-m2m-subject", tokenType: "service" } });
+      if (options.headers.authorization.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine", subject: "foundry-m2m-subject", tokenType: "service" } });
+      return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud", subject: "thang-tenant-subject", tokenType: "tenant" } });
     };
 
     const result = await runSmokeTests(config({

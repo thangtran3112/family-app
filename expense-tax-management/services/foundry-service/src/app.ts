@@ -197,11 +197,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     config: options.config,
     readinessProbe: app.databaseReadinessProbe,
   });
-  app.register(registerAuthCheckRoutes, {
-    ...(options.config.clerk?.foundryServiceSubject
-      ? { workerServiceSubject: options.config.clerk.foundryServiceSubject }
-      : {}),
-  });
+  if (options.config.clerk !== undefined) {
+    app.register(registerAuthCheckRoutes, {
+      workerServiceSubject: options.config.clerk.foundryServiceSubject,
+    });
+  }
   app.register(registerCatalogRoutes, { catalogDomain });
   app.register(registerQuotaRoutes, {
     quotasDomain,
