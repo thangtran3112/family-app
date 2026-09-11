@@ -78,6 +78,9 @@ if (applyJob?.environment !== "production") failures.push("apply must use produc
 if (applyJob?.permissions?.["id-token"] !== "write") {
   failures.push("apply must receive OIDC permission");
 }
+if (!String(applyJob?.if).includes("github.ref == 'refs/heads/main'")) {
+  failures.push("apply must require refs/heads/main");
+}
 includes(workflowRaw, "google-github-actions/auth@v3");
 includes(workflowRaw, "hashicorp/setup-terraform@v3");
 includes(workflowRaw, "terraform init");
