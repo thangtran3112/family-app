@@ -32,6 +32,9 @@ jobs:
     name: Contracts, services, workers, frontends
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Frontend builds require a nonproduction public Clerk key; never use production credentials in CI.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

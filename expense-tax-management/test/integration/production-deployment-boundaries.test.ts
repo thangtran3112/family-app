@@ -151,6 +151,17 @@ describe("Phase 1B production deployment boundaries", () => {
     expect(workflow).not.toContain("CLERK_SECRET_KEY");
   });
 
+  it("uses only a test Clerk key for CI frontend builds", () => {
+    const workflow = readFileSync(
+      path.join(repoRoot, "../.github/workflows/expense-tax-ci.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci");
+    expect(workflow).not.toMatch(/NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:\s*pk_live_/);
+    expect(workflow).not.toContain("vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+  });
+
   it("parses production dotenv as strict data without shell evaluation", () => {
     const deploy = readProductionFile("deploy.sh");
     expect(deploy).toContain("while IFS= read -r line");
