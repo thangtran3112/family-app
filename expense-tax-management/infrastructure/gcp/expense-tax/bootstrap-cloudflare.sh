@@ -34,7 +34,7 @@ if ! gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
   >/dev/null 2>&1; then
   gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID" \
     --project="$PROJECT_ID" --location=global --workload-identity-pool="$POOL_ID" \
-    --display-name="GitHub Actions Cloudflare Terraform" \
+    --display-name="Expense Tax CF Terraform" \
     --issuer-uri="https://token.actions.githubusercontent.com" \
     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.workflow_ref=assertion.workflow_ref,attribute.environment=assertion.environment" \
     --attribute-condition="$WIF_ATTRIBUTE_CONDITION"
