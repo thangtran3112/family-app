@@ -97,8 +97,8 @@ describe("production auth smoke helpers", () => {
     expect(plan.map((check) => check.name)).toEqual([
       "app health",
       "foundry health",
-      "capture health",
-      "office health",
+      "capture page",
+      "office page",
       "app no-token rejection",
       "thang tenant app access",
       "thang platform Foundry access",
@@ -120,9 +120,10 @@ describe("production auth smoke helpers", () => {
     const fetchImpl = async (url, options = {}) => {
       calls.push({ url, options });
       if (url.endsWith("/health/ready")) return response(200, { status: "ready" });
+      if (url.endsWith("/capture") || url.endsWith("/dashboard")) return response(200);
       if (url.includes("/webhook")) return response(202, { replayed: calls.filter((call) => call.url.includes("/webhook")).length > 1, claimsVerified: { issuer: "https://clerk.example.test" } });
       if (url.includes("foundry")) {
-        if (options.headers?.authorization?.includes("tramily")) return response(403, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud" } });
+        if (options.headers?.authorization?.includes("tramily")) return response(401);
         if (options.headers?.authorization?.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine" } });
         return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-platform-aud", role: "operator" } });
       }

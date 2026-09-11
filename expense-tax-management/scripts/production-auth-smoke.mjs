@@ -107,15 +107,15 @@ export function buildSmokePlan(config) {
   return [
     { name: "app health", method: "GET", url: endpoint(config.appApiUrl, "/health/ready"), expectedStatus: 200 },
     { name: "foundry health", method: "GET", url: endpoint(config.foundryUrl, "/health/ready"), expectedStatus: 200 },
-    { name: "capture health", method: "GET", url: endpoint(config.captureUrl, "/health/ready"), expectedStatus: 200 },
-    { name: "office health", method: "GET", url: endpoint(config.officeUrl, "/health/ready"), expectedStatus: 200 },
+    { name: "capture page", method: "GET", url: endpoint(config.captureUrl, "/capture"), expectedStatus: 200 },
+    { name: "office page", method: "GET", url: endpoint(config.officeUrl, "/dashboard"), expectedStatus: 200 },
     { name: "app no-token rejection", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 401 },
     { name: "thang tenant app access", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 200, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
     { name: "thang platform Foundry access", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/ai-models"), expectedStatus: 200, token: config.thangPlatformToken, expectedAudience: config.expectedPlatformAudience, expectedRole: "operator" },
-    { name: "tramily Foundry denial", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/ai-models"), expectedStatus: 403, token: config.tramilyTenantToken, expectedAudience: config.expectedTenantAudience },
+    { name: "tramily Foundry denial", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/platform"), expectedStatus: 401, token: config.tramilyTenantToken, expectedAudience: config.expectedTenantAudience },
     { name: "tenant/org mismatch denial", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.mismatchTenantId}`), expectedStatus: 403, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
-    { name: "app M2M audience", method: "GET", url: endpoint(config.appApiUrl, "/internal/v1/worker/auth-check"), expectedStatus: 200, token: config.appM2mToken, expectedAudience: config.expectedAppM2mAudience },
-    { name: "Foundry M2M audience", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/worker/auth-check"), expectedStatus: 200, token: config.foundryM2mToken, expectedAudience: config.expectedFoundryM2mAudience },
+    { name: "app M2M audience", method: "GET", url: endpoint(config.appApiUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.appM2mToken, expectedAudience: config.expectedAppM2mAudience },
+    { name: "Foundry M2M audience", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/worker"), expectedStatus: 200, token: config.foundryM2mToken, expectedAudience: config.expectedFoundryM2mAudience },
     { name: "webhook delivery", method: "POST", url: config.webhookReplayUrl, expectedStatus: 202, body: config.webhookReplayBody, headers: config.webhookReplayHeaders, expectedReplay: false },
     { name: "webhook replay", method: "POST", url: config.webhookReplayUrl, expectedStatus: 202, body: config.webhookReplayBody, headers: config.webhookReplayHeaders, expectedReplay: true },
   ];
@@ -217,7 +217,7 @@ export async function runSmokeTests(config, options = {}) {
         body: check.body,
       }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
       if (result.status !== check.expectedStatus) throw new Error(`expected ${check.expectedStatus}, got ${result.status}`);
-      if (check.token) {
+      if (check.token && check.expectedStatus !== 401) {
         assertClaimMetadata({ ...check, expectedIssuer: config.expectedIssuer }, result.body);
       }
       assertReplay(check, result.body);

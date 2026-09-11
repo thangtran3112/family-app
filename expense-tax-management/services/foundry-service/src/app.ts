@@ -35,6 +35,7 @@ import {
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerQuotaRoutes } from "./routes/quotas.js";
+import { registerAuthCheckRoutes } from "./routes/auth-check.js";
 import type { Kysely } from "kysely";
 
 const SENSITIVE_FIELD_NAMES = [
@@ -195,6 +196,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerHealthRoutes, {
     config: options.config,
     readinessProbe: app.databaseReadinessProbe,
+  });
+  app.register(registerAuthCheckRoutes, {
+    ...(options.config.clerk?.foundryServiceSubject
+      ? { workerServiceSubject: options.config.clerk.foundryServiceSubject }
+      : {}),
   });
   app.register(registerCatalogRoutes, { catalogDomain });
   app.register(registerQuotaRoutes, {

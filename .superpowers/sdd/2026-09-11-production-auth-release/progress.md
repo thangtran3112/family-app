@@ -39,4 +39,6 @@
 - Task 4: fix round 1/5 (secure webhook secret file ingestion added; bare-prefix validation finding; commit 8589502).
 - Task 4: fix round 2/5 (bare `whsec_`/empty/whitespace rejected; commit fe275ba; review clean).
 - Task 4: runtime partial — Svix endpoint created for exact nine supported events; Secret Manager rotated to sole active version 4. Deployment loading version 4 is in CI.
+- Ruling: Task 5 smoke assumptions referenced nonexistent auth-check routes and response metadata. Add narrow read-only guarded auth-check routes; use real frontend paths and expect tramily tenant token Foundry rejection as `401`. Cost if wrong: four small internal verification endpoints become production surface behind existing guards.
 - Task 5: implementation complete with review fixes; focused/full verification passes; live production smoke pending and intentionally not executed in this task.
+- Task 5 correction: registered guarded App/Foundry auth-check routes and corrected Capture/Office paths; behavioral tests, full tests, lint, and typecheck pass; live smoke remains pending.

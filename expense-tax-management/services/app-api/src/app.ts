@@ -71,6 +71,7 @@ import {
 } from "./domain/inbound-email.js";
 import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
 import { registerClerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { registerAuthCheckRoutes } from "./routes/auth-check.js";
 import type { ClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 import {
   createClerkWebhookHandler,
@@ -282,6 +283,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(registerHealthRoutes, {
     config: options.config,
     readinessProbe: app.databaseReadinessProbe,
+  });
+  app.register(registerAuthCheckRoutes, {
+    ...(options.config.clerk?.appServiceSubject
+      ? { workerServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
   });
   app.register(registerIdentityRoutes, { identityDomain });
   app.register(registerTenantRoutes, {

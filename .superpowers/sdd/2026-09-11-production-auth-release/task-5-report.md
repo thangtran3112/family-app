@@ -57,3 +57,27 @@ production mutation or request was executed.
 - `pnpm lint`: passed
 - `pnpm exec eslint scripts/production-auth-smoke.mjs scripts/production-auth-smoke.test.mjs`: passed
 - `git diff --check`: passed
+
+## Load-Bearing Plan Correction
+
+- Added read-only App API auth-check routes for mapped tenant identity and the
+  configured App worker subject with `jobs:write`.
+- Added read-only Foundry auth-check routes for `catalog_manager` and the
+  configured Foundry worker subject with `routes:read`.
+- Route responses expose only `claimsVerified` issuer/audience/subject/tokenType
+  plus mapped tenant/user or role metadata.
+- Smoke paths now use `/capture`, `/dashboard`, and registered auth-check routes;
+  tramily tenant token against Foundry expects `401` before role lookup.
+- Added behavioral route tests for no-token rejection, mapping, role, subject,
+  and scope guards.
+
+Correction verification:
+
+- App auth-check tests: 2 passed
+- Foundry auth-check tests: 2 passed
+- Full App API tests: 224 passed
+- Full Foundry tests: 110 passed, 1 skipped
+- Full typecheck and lint: passed
+
+Live production smoke remains pending. No production request, mutation, or live
+evidence was performed.
