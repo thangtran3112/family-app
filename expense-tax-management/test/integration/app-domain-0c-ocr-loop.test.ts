@@ -134,7 +134,7 @@ function foundrySql(sql: string): string {
 function appServicePrincipal(clientId: string, scopes: readonly string[]): AppAuthPrincipal {
   return {
     tokenType: "service",
-    subject: `${clientId}-subject`,
+    subject: clientId,
     clientId,
     audience: "expense-app-internal",
     issuer: "https://services.test",
@@ -150,7 +150,7 @@ function appServicePrincipal(clientId: string, scopes: readonly string[]): AppAu
 function foundryServicePrincipal(clientId: string, scopes: readonly string[]): FoundryAuthPrincipal {
   return {
     tokenType: "service",
-    subject: `${clientId}-subject`,
+    subject: clientId,
     clientId,
     audience: "expense-foundry-internal",
     issuer: "https://services.test",
@@ -321,6 +321,16 @@ describe.skipIf(!integrationEnabled)("Phase 0C real OCR loop", () => {
           APP_API_SERVICE_TOKEN: WORKER_TOKEN,
           FOUNDRY_BASE_URL: `http://127.0.0.1:${foundryPort}`,
           FOUNDRY_SERVICE_TOKEN: WORKER_TOKEN,
+          CLERK_ISSUER_URL: "https://clerk.test",
+          CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+          CLERK_TENANT_AUDIENCE: "tenant-audience",
+          CLERK_PLATFORM_AUDIENCE: "platform-audience",
+          CLERK_APP_SERVICE_AUDIENCE: "app-service-audience",
+          CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
+          CLERK_APP_SERVICE_SUBJECT: "ai-worker",
+          CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker",
+          CLERK_APP_MACHINE_SECRET_KEY: "test-inert-app-machine-secret",
+          CLERK_FOUNDRY_MACHINE_SECRET_KEY: "test-inert-foundry-machine-secret",
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
