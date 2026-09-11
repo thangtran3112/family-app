@@ -59,4 +59,16 @@ describe("capture Clerk authorization", () => {
       expect(contents).not.toContain('routing="path"');
     }
   });
+
+  it("accepts Clerk organization invitations with their ticket", () => {
+    const contents = source("../app/accept-invitation/page.tsx");
+
+    expect(contents).toContain("useSignIn");
+    expect(contents).toContain("useSignUp");
+    expect(contents).toContain("signIn.ticket");
+    expect(contents).toContain("signUp.ticket");
+    expect(contents).toContain("signUp.password");
+    expect(contents).toContain('type="password"');
+    expect(contents).not.toContain("<SignIn");
+  });
 });
