@@ -17,6 +17,16 @@ const failures = [];
 const pullRequestJob = workflow.jobs?.validate;
 const planJob = workflow.jobs?.plan;
 const applyJob = workflow.jobs?.apply;
+export const TRUSTED_PLAN_CONDITION =
+  "(github.event_name == 'push' && github.ref == 'refs/heads/main') || " +
+  "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')";
+export const APPLY_CONDITION =
+  "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply == true";
+
+export function conditionIsExactly(actual, expected) {
+  return String(actual ?? "").replace(/\s+/gu, " ").trim() ===
+    String(expected).replace(/\s+/gu, " ").trim();
+}
 
 function includes(source, value, label = value) {
   if (!source.includes(value)) failures.push(`missing: ${label}`);
@@ -68,18 +78,15 @@ if (planJob?.environment !== "production") failures.push("trusted plan must use 
 if (planJob?.permissions?.["id-token"] !== "write") {
   failures.push("trusted plan must receive OIDC permission");
 }
-if (!String(planJob?.if).includes("github.ref == 'refs/heads/main'")) {
-  failures.push("trusted plan must require refs/heads/main");
-}
-if (!String(planJob?.if).includes("github.event_name == 'push'") || !String(planJob?.if).includes("workflow_dispatch")) {
+if (!conditionIsExactly(planJob?.if, TRUSTED_PLAN_CONDITION)) {
   failures.push("trusted plan must allow only main push or manual dispatch");
 }
 if (applyJob?.environment !== "production") failures.push("apply must use production environment");
 if (applyJob?.permissions?.["id-token"] !== "write") {
   failures.push("apply must receive OIDC permission");
 }
-if (!String(applyJob?.if).includes("github.ref == 'refs/heads/main'")) {
-  failures.push("apply must require refs/heads/main");
+if (!conditionIsExactly(applyJob?.if, APPLY_CONDITION)) {
+  failures.push("apply must require main manual dispatch with approval");
 }
 includes(workflowRaw, "google-github-actions/auth@v3");
 includes(workflowRaw, "hashicorp/setup-terraform@v3");

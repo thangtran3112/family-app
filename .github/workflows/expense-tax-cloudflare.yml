@@ -65,7 +65,7 @@ jobs:
 
   plan:
     name: Terraform plan
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -110,7 +110,7 @@ jobs:
   apply:
     name: Terraform apply
     needs: plan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.apply == true
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply == true
     runs-on: ubuntu-latest
     environment: production
     permissions:
