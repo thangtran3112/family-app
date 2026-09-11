@@ -32,12 +32,17 @@ Never put token in `.tfvars`, command arguments, logs, or committed files.
 State bucket name is deterministic: `expense-tax-tobytran-2026-tfstate`.
 Bootstrap requires authenticated gcloud, verifies bucket project ownership
 against `expense-tax-tobytran-2026` before any IAM mutation, and grants existing
-dedicated `expense-tax-cloudflare-terraform` service account object admin. The
+dedicated `expense-tax-cf-terraform` service account object admin. The
 application deploy service account has no access to this bucket. Run
 `expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`
 first to create the dedicated service account and exact Cloudflare workflow WIF
 provider. These commands mutate GCP only when
 deliberately run by an operator; it was not run as part of this change.
+
+Configure these GitHub production environment variables from bootstrap output:
+
+- `GCP_CLOUDFLARE_WORKLOAD_IDENTITY_PROVIDER`: dedicated Cloudflare WIF provider
+- `GCP_CLOUDFLARE_SERVICE_ACCOUNT`: `expense-tax-cf-terraform@expense-tax-tobytran-2026.iam.gserviceaccount.com`
 
 Bucket versioning is enabled. Lifecycle policy deletes noncurrent state object
 versions after exactly 30 days; current versions are retained indefinitely.

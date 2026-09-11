@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 PROJECT_ID="expense-tax-tobytran-2026"
-SERVICE_ACCOUNT_ID="expense-tax-cloudflare-terraform"
+SERVICE_ACCOUNT_ID="expense-tax-cf-terraform"
 POOL_ID="expense-tax-github"
 PROVIDER_ID="cloudflare"
 REPOSITORY="thangtran3112/family-app"

@@ -4,7 +4,7 @@ set -euo pipefail
 BUCKET="expense-tax-tobytran-2026-tfstate"
 PROJECT_ID="expense-tax-tobytran-2026"
 APP_DEPLOY_SERVICE_ACCOUNT_EMAIL="expense-tax-github-deploy@expense-tax-tobytran-2026.iam.gserviceaccount.com"
-CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT="expense-tax-cloudflare-terraform@expense-tax-tobytran-2026.iam.gserviceaccount.com"
+CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT="expense-tax-cf-terraform@expense-tax-tobytran-2026.iam.gserviceaccount.com"
 TEMP_DIR="$(mktemp -d)"
 LIFECYCLE_FILE="${TEMP_DIR}/lifecycle.json"
 

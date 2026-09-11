@@ -15,6 +15,7 @@ const cloudflareBootstrap = readFileSync(
   join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
   "utf8",
 );
+const legacyServiceAccountId = ["expense-tax-cloudflare", "terraform"].join("-");
 
 describe("Cloudflare workflow condition checks", () => {
   it("accepts equivalent whitespace in trusted plan condition", () => {
@@ -59,7 +60,11 @@ describe("Cloudflare workflow condition checks", () => {
     expect(vps).toContain("StrictHostKeyChecking=yes");
     expect(vps).not.toContain("accept-new");
     expect(state).toContain("CLOUDFLARE_TERRAFORM_SERVICE_ACCOUNT");
+    expect(state).toContain("expense-tax-cf-terraform@expense-tax-tobytran-2026.iam.gserviceaccount.com");
+    expect(state).not.toContain(legacyServiceAccountId);
     expect(state).toContain("remove-iam-policy-binding");
+    expect(cloudflareBootstrap).toContain('SERVICE_ACCOUNT_ID="expense-tax-cf-terraform"');
+    expect(cloudflareBootstrap).not.toContain(legacyServiceAccountId);
     expect(cloudflareBootstrap).toContain("expense-tax-cloudflare.yml@refs/heads/main");
     expect(cloudflareBootstrap).not.toContain("secretmanager.secretAccessor");
   });
