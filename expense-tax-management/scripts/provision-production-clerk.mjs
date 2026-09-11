@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/u;
 const CLERK_API_URL = "https://api.clerk.com";
@@ -36,7 +37,8 @@ function validateDatabaseUrl(value, field) {
   return validatedValue;
 }
 
-export function parseProvisioningInput(env = process.env) {
+export function parseProvisioningInput(env = process.env, options = {}) {
+  const bootstrapEmpty = options.bootstrapEmpty === true;
   const missingOrInvalid = [];
   const read = (name, validator = validateRequiredValue) => {
     try {
@@ -54,9 +56,15 @@ export function parseProvisioningInput(env = process.env) {
     clerkOrgId: read("CLERK_FAMILY_ORG_ID", validateExternalId),
     thangClerkUserId: read("CLERK_THANG_USER_ID", validateExternalId),
     tramilyClerkUserId: read("CLERK_TRAMILY_USER_ID", validateExternalId),
-    appTenantId: read("APP_TENANT_ID", validateExternalId),
-    thangAppUserId: read("APP_THANG_USER_ID", validateExternalId),
-    tramilyAppUserId: read("APP_TRAMILY_USER_ID", validateExternalId),
+    appTenantId: bootstrapEmpty
+      ? undefined
+      : read("APP_TENANT_ID", validateExternalId),
+    thangAppUserId: bootstrapEmpty
+      ? undefined
+      : read("APP_THANG_USER_ID", validateExternalId),
+    tramilyAppUserId: bootstrapEmpty
+      ? undefined
+      : read("APP_TRAMILY_USER_ID", validateExternalId),
   };
 
   if (missingOrInvalid.length > 0) {
@@ -66,6 +74,17 @@ export function parseProvisioningInput(env = process.env) {
   }
 
   return values;
+}
+
+export function deterministicBootstrapUuid(kind, externalId) {
+  const digest = createHash("sha256")
+    .update(`expense-tax/bootstrap/${kind}/${externalId}`)
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
+  digest[12] = "5";
+  digest[16] = (parseInt(digest[16], 16) & 0x3 | 0x8).toString(16);
+  return `${digest.slice(0, 8).join("")}-${digest.slice(8, 12).join("")}-${digest.slice(12, 16).join("")}-${digest.slice(16, 20).join("")}-${digest.slice(20).join("")}`;
 }
 
 function sqlLiteral(value) {
@@ -203,6 +222,130 @@ function assertVerifiedMemberships(input, memberships) {
   }
 }
 
+function bootstrapIdentityIds(input) {
+  const tenantId = deterministicBootstrapUuid("tenant", input.clerkOrgId);
+  const thangUserId = deterministicBootstrapUuid("user", input.thangClerkUserId);
+  const tramilyUserId = deterministicBootstrapUuid("user", input.tramilyClerkUserId);
+  return {
+    tenantId,
+    thangUserId,
+    tramilyUserId,
+    personalProfileId: deterministicBootstrapUuid("personal-profile", tenantId),
+  };
+}
+
+function bootstrapAppSql(input) {
+  const ids = bootstrapIdentityIds(input);
+  const tenantId = sqlLiteral(ids.tenantId);
+  const thangUserId = sqlLiteral(ids.thangUserId);
+  const tramilyUserId = sqlLiteral(ids.tramilyUserId);
+  const profileId = sqlLiteral(ids.personalProfileId);
+  const orgId = sqlLiteral(input.clerkOrgId);
+  const thangClerkId = sqlLiteral(input.thangClerkUserId);
+  const tramilyClerkId = sqlLiteral(input.tramilyClerkUserId);
+  return `BEGIN;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM app.users WHERE id NOT IN (${thangUserId}::uuid, ${tramilyUserId}::uuid))
+     OR EXISTS (
+       SELECT 1 FROM app.users
+       WHERE id = ${thangUserId}::uuid
+         AND (primary_email <> 'thangtran3112@gmail.com' OR display_name <> 'Thang Tran' OR status <> 'active'
+           OR (clerk_user_id IS NOT NULL AND clerk_user_id <> ${thangClerkId}))
+     )
+     OR EXISTS (
+       SELECT 1 FROM app.users
+       WHERE id = ${tramilyUserId}::uuid
+         AND (primary_email <> 'tramilyt@gmail.com' OR display_name <> 'Tramily Tran' OR status <> 'active'
+           OR (clerk_user_id IS NOT NULL AND clerk_user_id <> ${tramilyClerkId}))
+     ) THEN
+    RAISE EXCEPTION 'unrelated existing or conflicting App users';
+  END IF;
+  IF EXISTS (SELECT 1 FROM app.tenants WHERE id <> ${tenantId}::uuid)
+     OR EXISTS (
+       SELECT 1 FROM app.tenants
+       WHERE id = ${tenantId}::uuid
+         AND (name <> 'Family' OR slug <> 'family' OR status <> 'active'
+           OR (clerk_org_id IS NOT NULL AND clerk_org_id <> ${orgId}))
+     ) THEN
+    RAISE EXCEPTION 'unrelated existing or conflicting App tenants';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM app.tenant_memberships
+    WHERE tenant_id = ${tenantId}::uuid AND user_id = ${thangUserId}::uuid
+      AND (role <> 'owner' OR status <> 'active')
+  ) OR EXISTS (
+    SELECT 1 FROM app.tenant_memberships
+    WHERE tenant_id = ${tenantId}::uuid AND user_id = ${tramilyUserId}::uuid
+      AND (role <> 'member' OR status <> 'active')
+  ) THEN
+    RAISE EXCEPTION 'conflicting Family tenant membership';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM app.personal_profiles
+    WHERE id = ${profileId}::uuid
+      AND (tenant_id <> ${tenantId}::uuid OR name <> 'Family Personal')
+  ) THEN
+    RAISE EXCEPTION 'conflicting Family Personal profile';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM app.personal_memberships
+    WHERE personal_profile_id = ${profileId}::uuid AND user_id = ${thangUserId}::uuid
+      AND (tenant_id <> ${tenantId}::uuid OR role <> 'owner' OR status <> 'active')
+  ) OR EXISTS (
+    SELECT 1 FROM app.personal_memberships
+    WHERE personal_profile_id = ${profileId}::uuid AND user_id = ${tramilyUserId}::uuid
+      AND (tenant_id <> ${tenantId}::uuid OR role <> 'editor' OR status <> 'active')
+  ) THEN
+    RAISE EXCEPTION 'conflicting Family Personal membership';
+  END IF;
+END $$;
+INSERT INTO app.tenants (id, name, slug, status, clerk_org_id)
+VALUES (${tenantId}::uuid, 'Family', 'family', 'active', ${orgId})
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO app.users (id, primary_email, display_name, status, clerk_user_id)
+VALUES
+  (${thangUserId}::uuid, 'thangtran3112@gmail.com', 'Thang Tran', 'active', ${thangClerkId}),
+  (${tramilyUserId}::uuid, 'tramilyt@gmail.com', 'Tramily Tran', 'active', ${tramilyClerkId})
+ON CONFLICT (id) DO NOTHING;
+UPDATE app.tenants SET clerk_org_id = ${orgId}, updated_at = now()
+WHERE id = ${tenantId}::uuid AND status = 'active';
+UPDATE app.users SET clerk_user_id = ${thangClerkId}, updated_at = now()
+WHERE id = ${thangUserId}::uuid AND status = 'active';
+UPDATE app.users SET clerk_user_id = ${tramilyClerkId}, updated_at = now()
+WHERE id = ${tramilyUserId}::uuid AND status = 'active';
+INSERT INTO app.tenant_memberships (tenant_id, user_id, role, status)
+VALUES
+  (${tenantId}::uuid, ${thangUserId}::uuid, 'owner', 'active'),
+  (${tenantId}::uuid, ${tramilyUserId}::uuid, 'member', 'active')
+ON CONFLICT (tenant_id, user_id) DO NOTHING;
+INSERT INTO app.personal_profiles (id, tenant_id, name)
+VALUES (${profileId}::uuid, ${tenantId}::uuid, 'Family Personal')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO app.personal_memberships (personal_profile_id, tenant_id, user_id, role, status)
+VALUES
+  (${profileId}::uuid, ${tenantId}::uuid, ${thangUserId}::uuid, 'owner', 'active'),
+  (${profileId}::uuid, ${tenantId}::uuid, ${tramilyUserId}::uuid, 'editor', 'active')
+ON CONFLICT (personal_profile_id, user_id) DO NOTHING;
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM app.users WHERE id IN (${thangUserId}::uuid, ${tramilyUserId}::uuid)
+      AND status = 'active' AND clerk_user_id IN (${thangClerkId}, ${tramilyClerkId})) <> 2
+     OR (SELECT count(*) FROM app.tenants WHERE id = ${tenantId}::uuid
+      AND status = 'active' AND clerk_org_id = ${orgId}) <> 1
+     OR (SELECT count(*) FROM app.tenant_memberships
+      WHERE tenant_id = ${tenantId}::uuid AND status = 'active') <> 2
+     OR (SELECT count(*) FROM app.personal_profiles
+      WHERE id = ${profileId}::uuid AND tenant_id = ${tenantId}::uuid) <> 1
+     OR (SELECT count(*) FROM app.personal_memberships
+      WHERE personal_profile_id = ${profileId}::uuid AND tenant_id = ${tenantId}::uuid
+        AND status = 'active') <> 2 THEN
+    RAISE EXCEPTION 'bootstrap rows failed exact verification';
+  END IF;
+END $$;
+COMMIT;`;
+}
+
 function appMappingSql(input) {
   const users = [
     [input.thangAppUserId, input.thangClerkUserId],
@@ -267,8 +410,9 @@ export async function provisionAppMappings(input, memberships, options = {}) {
   const runPsql =
     options.runPsql || ((details) => executePsql({ databaseUrl: input.appDatabaseUrl, ...details }));
   const details = {
-    sql: appMappingSql(input),
+    sql: options.bootstrapEmpty ? bootstrapAppSql(input) : appMappingSql(input),
     env: databaseEnvironment(input.appDatabaseUrl),
+    ...(options.bootstrapEmpty ? { bootstrapIds: bootstrapIdentityIds(input) } : {}),
   };
   if (options.dryRun) return details;
   await runPsql(details);
@@ -309,14 +453,18 @@ export async function provisionFoundryOperator(input, options = {}) {
 }
 
 async function main() {
-  const input = parseProvisioningInput();
+  const bootstrapEmpty = process.argv.includes("--bootstrap-empty");
+  const input = parseProvisioningInput(process.env, { bootstrapEmpty });
   const dryRun = process.argv.includes("--dry-run") || process.env.PROVISION_PRODUCTION_CLERK_CONFIRM !== "Family-auth-release";
   const memberships = await fetchClerkMemberships(input);
-  const app = await provisionAppMappings(input, memberships, { dryRun });
+  const app = await provisionAppMappings(input, memberships, { dryRun, bootstrapEmpty });
   const foundry = await provisionFoundryOperator(input, { dryRun });
   console.log(`${dryRun ? "dry-run" : "provisioned"}: Clerk memberships=2 app mappings=3 Foundry roles=2`);
   if (dryRun) {
     console.log(`SQL preflight: app host=${app.env.PGHOST} foundry host=${foundry.env.PGHOST}`);
+    if (bootstrapEmpty) {
+      console.log(`bootstrap IDs: ${JSON.stringify(app.bootstrapIds)}`);
+    }
   }
 }
 

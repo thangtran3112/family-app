@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fetchClerkMemberships,
   executePsql,
+  deterministicBootstrapUuid,
   parseProvisioningInput,
   provisionAppMappings,
   provisionFoundryOperator,
@@ -96,6 +97,19 @@ describe("parseProvisioningInput", () => {
     } catch (error) {
       expect(error.message).not.toContain(env.APP_DATABASE_URL);
     }
+  });
+
+  it("allows bootstrap mode to derive App IDs when existing IDs are absent", () => {
+    const env = { ...validEnv };
+    delete env.APP_TENANT_ID;
+    delete env.APP_THANG_USER_ID;
+    delete env.APP_TRAMILY_USER_ID;
+
+    expect(parseProvisioningInput(env, { bootstrapEmpty: true })).toMatchObject({
+      appTenantId: undefined,
+      thangAppUserId: undefined,
+      tramilyAppUserId: undefined,
+    });
   });
 });
 
@@ -241,6 +255,10 @@ describe("database provisioning", () => {
     { userId: "user_thang", organizationId: "org_family", role: "org:admin" },
     { userId: "user_tramily", organizationId: "org_family", role: "org:member" },
   ];
+  const bootstrapInput = { ...input };
+  delete bootstrapInput.appTenantId;
+  delete bootstrapInput.thangAppUserId;
+  delete bootstrapInput.tramilyAppUserId;
 
   it("uses stable target IDs and idempotent app mapping SQL", async () => {
     let execution;
@@ -264,6 +282,49 @@ describe("database provisioning", () => {
     expect(execution.sql).toContain("tenant-id");
     expect(execution.sql).toContain("BEGIN");
     expect(execution.sql).toContain("clerk_user_id IS NULL OR clerk_user_id =");
+  });
+
+  it("derives stable UUIDs from bootstrap identity inputs", () => {
+    const tenantId = deterministicBootstrapUuid("tenant", input.clerkOrgId);
+    const thangId = deterministicBootstrapUuid("user", input.thangClerkUserId);
+
+    expect(tenantId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(tenantId).toBe(deterministicBootstrapUuid("tenant", input.clerkOrgId));
+    expect(tenantId).not.toBe(thangId);
+  });
+
+  it("builds fail-closed bootstrap SQL for Family, memberships, and Personal rows", async () => {
+    let execution;
+    await provisionAppMappings(bootstrapInput, memberships, {
+      bootstrapEmpty: true,
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.sql).toContain("INSERT INTO app.tenants");
+    expect(execution.sql).toContain("INSERT INTO app.users");
+    expect(execution.sql).toContain("INSERT INTO app.tenant_memberships");
+    expect(execution.sql).toContain("INSERT INTO app.personal_profiles");
+    expect(execution.sql).toContain("INSERT INTO app.personal_memberships");
+    expect(execution.sql).toContain("'owner'");
+    expect(execution.sql).toContain("'member'");
+    expect(execution.sql).toContain("'editor'");
+    expect(execution.sql).toContain("unrelated existing");
+    expect(execution.sql).toContain("bootstrap rows failed exact verification");
+    expect(execution.sql).toContain("BEGIN");
+    expect(execution.sql).toContain("COMMIT");
+    expect(execution.bootstrapIds).toEqual({
+      tenantId: deterministicBootstrapUuid("tenant", input.clerkOrgId),
+      thangUserId: deterministicBootstrapUuid("user", input.thangClerkUserId),
+      tramilyUserId: deterministicBootstrapUuid("user", input.tramilyClerkUserId),
+      personalProfileId: deterministicBootstrapUuid(
+        "personal-profile",
+        deterministicBootstrapUuid("tenant", input.clerkOrgId),
+      ),
+    });
   });
 
   it("rejects inactive targets and conflicting remaps in SQL", async () => {
