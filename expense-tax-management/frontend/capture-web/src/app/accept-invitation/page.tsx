@@ -11,9 +11,15 @@ function InvitationAcceptance() {
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const started = useRef(false);
+  const signUpRef = useRef(signUp);
+  const invitedEmailRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [needsPassword, setNeedsPassword] = useState(false);
+
+  useEffect(() => {
+    signUpRef.current = signUp;
+  }, [signUp]);
 
   const acceptInvitation = useEffectEvent(async () => {
     const navigateToCapture = ({ decorateUrl }: { decorateUrl: (url: string) => string }) => {
@@ -42,6 +48,7 @@ function InvitationAcceptance() {
         return;
       }
       if (signUp.status !== "complete") {
+        invitedEmailRef.current = signUp.emailAddress;
         if (signUp.missingFields.includes("password")) {
           setNeedsPassword(true);
         } else {
@@ -68,21 +75,27 @@ function InvitationAcceptance() {
   const completePasswordSignUp = async () => {
     setError(null);
     try {
-      if (!signUp.emailAddress) {
+      const activeSignUp = signUpRef.current;
+      if (!activeSignUp.emailAddress) {
         setError("Invitation did not include an email address.");
         return;
       }
+      if (activeSignUp.emailAddress !== invitedEmailRef.current) {
+        setError("Invitation account changed. Restart invitation link.");
+        return;
+      }
 
-      const result = await signUp.password({ emailAddress: signUp.emailAddress, password });
+      const result = await activeSignUp.password({ emailAddress: activeSignUp.emailAddress, password });
       if (result.error) {
         setError(result.error.longMessage ?? result.error.message);
         return;
       }
-      if (signUp.status !== "complete") {
+      const completedSignUp = signUpRef.current;
+      if (completedSignUp.status !== "complete") {
         setError("Invitation sign-up is missing required account details.");
         return;
       }
-      const finalized = await signUp.finalize({
+      const finalized = await completedSignUp.finalize({
         navigate: ({ decorateUrl }) => window.location.assign(decorateUrl("/capture")),
       });
       if (finalized.error) setError(finalized.error.longMessage ?? finalized.error.message);

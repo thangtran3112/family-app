@@ -67,7 +67,8 @@ describe("capture Clerk authorization", () => {
     expect(contents).toContain("useSignUp");
     expect(contents).toContain("signIn.ticket");
     expect(contents).toContain("signUp.ticket");
-    expect(contents).toContain("signUp.password");
+    expect(contents).toContain("activeSignUp.password");
+    expect(contents).toContain("completedSignUp.finalize");
     expect(contents).toContain('type="password"');
     expect(contents).toContain('id="clerk-captcha"');
     expect(contents).not.toContain("<SignIn");
