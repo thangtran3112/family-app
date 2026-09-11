@@ -25,6 +25,7 @@
     "db:migrate:app": "pnpm --filter @expense-tax/app-api --fail-if-no-match run db:migrate",
     "db:migrate:foundry": "pnpm --filter @expense-tax/foundry-service --fail-if-no-match run db:migrate",
     "test:integration": "vitest run test/integration",
+    "provision:production-clerk": "node scripts/provision-production-clerk.mjs",
     "verify:phase-0i": "node scripts/verify-phase-0i.mjs",
     "verify:phase-0j:wave1": "node scripts/verify-phase-0j-wave1.mjs",
     "verify:phase-0j:wave2": "node scripts/verify-phase-0j-wave2.mjs",
