@@ -174,6 +174,7 @@ describe.skipIf(!integrationEnabled)("Phase 0D expense files", () => {
     const app = buildApp({
       config: createAppConfig({
         env: {
+          AUTH_PROVIDER: "legacy",
           APP_TENANT_TOKEN_ISSUER: "https://identity.test",
           APP_TENANT_TOKEN_AUDIENCE: "expense-app",
           APP_TENANT_JWKS_URL: "https://identity.test/.well-known/jwks.json",
