@@ -35,7 +35,11 @@ for required in HOST USER_NAME SSH_KEY SSH_PORT TOKEN_FILE; do
 done
 
 [[ -f "$TOKEN_FILE" ]] || { echo "Tunnel token file not found" >&2; exit 1; }
-TOKEN_MODE="$(stat -f '%Lp' "$TOKEN_FILE")"
+if TOKEN_MODE="$(stat -c '%a' "$TOKEN_FILE" 2>/dev/null)"; then
+  :
+else
+  TOKEN_MODE="$(stat -f '%Lp' "$TOKEN_FILE")"
+fi
 [[ "$TOKEN_MODE" == "600" ]] || {
   echo "Tunnel token file must have mode 0600" >&2
   exit 1
@@ -51,7 +55,28 @@ ssh_run() {
 
 echo "Installing cloudflared on ${REMOTE}"
 ssh_run 'set -Eeuo pipefail
-  if ! command -v cloudflared >/dev/null 2>&1; then
+  required_version=2025.4.0
+  version_at_least() {
+    local current required
+    local current_major current_minor current_patch
+    local required_major required_minor required_patch
+    current="$1"
+    required="$2"
+    IFS=. read -r current_major current_minor current_patch <<< "$current"
+    IFS=. read -r required_major required_minor required_patch <<< "$required"
+    if (( current_major > required_major )); then return 0; fi
+    if (( current_major < required_major )); then return 1; fi
+    if (( current_minor > required_minor )); then return 0; fi
+    if (( current_minor < required_minor )); then return 1; fi
+    (( current_patch >= required_patch ))
+  }
+
+  installed_version=""
+  if command -v cloudflared >/dev/null 2>&1; then
+    installed_version="$(cloudflared --version 2>/dev/null | sed -nE 's/[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1)"
+  fi
+
+  if [[ -z "$installed_version" ]] || ! version_at_least "$installed_version" "$required_version"; then
     sudo install -d -m 0755 /usr/share/keyrings
     curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
       | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
@@ -60,7 +85,12 @@ ssh_run 'set -Eeuo pipefail
     sudo apt-get update
     sudo apt-get install -y cloudflared
   fi
-  cloudflared --version >/dev/null'
+
+  installed_version="$(cloudflared --version 2>/dev/null | sed -nE 's/[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1)"
+  version_at_least "$installed_version" "$required_version" || {
+    echo "cloudflared ${required_version} or newer is required; found ${installed_version:-unknown}" >&2
+    exit 1
+  }'
 
 ssh "${SSH_OPTIONS[@]}" "$REMOTE" 'set -Eeuo pipefail
   sudo install -d -m 0755 /etc/cloudflared

@@ -30,9 +30,15 @@ Never put token in `.tfvars`, command arguments, logs, or committed files.
 ## State bootstrap and Terraform
 
 State bucket name is deterministic: `expense-tax-tobytran-2026-tfstate`.
-Bootstrap requires authenticated gcloud and grants existing deploy service
-account object admin. This command mutates GCP only when deliberately run by an
-operator; it was not run as part of this change.
+Bootstrap requires authenticated gcloud, verifies bucket project ownership
+against `expense-tax-tobytran-2026` before any IAM mutation, and grants existing
+deploy service account object admin. This command mutates GCP only when
+deliberately run by an operator; it was not run as part of this change.
+
+Bucket versioning is enabled. Lifecycle policy deletes noncurrent state object
+versions after exactly 30 days; current versions are retained indefinitely.
+Terraform state contains the sensitive tunnel token, so do not disable this
+policy or place state in another backend without equivalent retention controls.
 
 ```bash
 cd /Users/toby.tran/personal/family-app
@@ -69,11 +75,12 @@ From repository root, with local token file mode `0600`:
   --tunnel-token-file ~/.config/cloudflared/expense-tax.token
 ```
 
-The script installs cloudflared from Cloudflare's official apt repository,
-writes `/etc/cloudflared/expense-tax-tunnel.token` with mode `0600` through
-stdin, installs a token-file systemd unit, enables/restarts it, and verifies
-active status. It never prints token content. Keep VPS firewall inbound policy
-closed for application ports; Tunnel traffic is outbound.
+The script installs or upgrades cloudflared from Cloudflare's official apt
+repository when missing or older than `2025.4.0`, writes
+`/etc/cloudflared/expense-tax-tunnel.token` with mode `0600` through stdin,
+installs a token-file systemd unit, enables/restarts it, and verifies active
+status. It never prints token content. Keep VPS firewall inbound policy closed
+for application ports; Tunnel traffic is outbound.
 
 ## Migration to a new VPS
 

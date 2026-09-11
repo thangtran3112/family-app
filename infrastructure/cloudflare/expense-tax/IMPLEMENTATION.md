@@ -26,3 +26,19 @@ Date: 2026-09-10
 - Cloudflare infrastructure static policy check passed.
 - Existing mocked GCP infrastructure test passed: 7 tests.
 - `git diff --check` passed.
+
+## Review hardening evidence
+
+- PR workflow path is unprivileged: Terraform initializes with
+  `-backend=false`, receives no Cloudflare secret, no production environment,
+  and no OIDC permission.
+- Trusted Terraform plan runs only on `push` to `refs/heads/main` or manual
+  dispatch in protected `production`; apply remains manual-only with
+  `apply=true`. GCP WIF admission condition remains exact and unchanged.
+- State bootstrap verifies bucket project number matches
+  `expense-tax-tobytran-2026` before versioning, lifecycle, or IAM mutation.
+- State bucket lifecycle retains current state indefinitely and deletes
+  noncurrent versions after exactly 30 days.
+- VPS bootstrap accepts GNU/macOS `stat` output and installs/upgrades
+  cloudflared until version `2025.4.0` or newer is present before using
+  `--token-file`.
