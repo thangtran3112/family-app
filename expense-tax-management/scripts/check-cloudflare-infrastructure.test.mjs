@@ -68,4 +68,12 @@ describe("Cloudflare workflow condition checks", () => {
     expect(cloudflareBootstrap).toContain("expense-tax-cloudflare.yml@refs/heads/main");
     expect(cloudflareBootstrap).not.toContain("secretmanager.secretAccessor");
   });
+
+  it("verifies exact state bucket membership in requested project before mutations", () => {
+    expect(state).toContain("gcloud storage buckets list --project=\"$PROJECT_ID\" --format='value(name)'");
+    expect(state).toMatch(/grep -Fqx \"\$BUCKET\"/);
+    expect(state).not.toContain("gcloud storage buckets describe \"gs://${BUCKET}\" --format='value(projectNumber)'");
+    expect(state.indexOf("verify_bucket_project")).toBeLessThan(state.indexOf("--versioning"));
+    expect(state.indexOf("verify_bucket_project")).toBeLessThan(state.indexOf("add-iam-policy-binding"));
+  });
 });

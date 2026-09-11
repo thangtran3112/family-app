@@ -35,8 +35,9 @@ Date: 2026-09-10
 - Trusted Terraform plan runs only on `push` to `refs/heads/main` or manual
   dispatch in protected `production`; apply remains manual-only with
   `apply=true`. GCP WIF admission condition remains exact and unchanged.
-- State bootstrap verifies bucket project number matches
-  `expense-tax-tobytran-2026` before versioning, lifecycle, or IAM mutation.
+- State bootstrap verifies the exact bucket name appears in the
+  `expense-tax-tobytran-2026` project-scoped bucket listing before versioning,
+  lifecycle, or IAM mutation.
 - State bucket lifecycle retains current state indefinitely and deletes
   noncurrent versions after exactly 30 days.
 - VPS bootstrap accepts GNU/macOS `stat` output and installs/upgrades

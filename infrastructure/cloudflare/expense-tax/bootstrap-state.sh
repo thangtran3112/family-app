@@ -24,14 +24,13 @@ else
   echo "state bucket already exists: ${BUCKET}"
 fi
 
-EXPECTED_PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 verify_bucket_project() {
-  local bucket_project_number
-  bucket_project_number="$(gcloud storage buckets describe "gs://${BUCKET}" --format='value(projectNumber)')"
-  [[ -n "$bucket_project_number" && "$bucket_project_number" == "$EXPECTED_PROJECT_NUMBER" ]] || {
-    echo "state bucket belongs to unexpected GCP project: ${BUCKET}" >&2
+  local project_buckets
+  project_buckets="$(gcloud storage buckets list --project="$PROJECT_ID" --format='value(name)')"
+  if ! grep -Fqx "$BUCKET" <<< "$project_buckets"; then
+    echo "state bucket is not present in expected GCP project: ${BUCKET}" >&2
     exit 1
-  }
+  fi
 }
 
 verify_bucket_project

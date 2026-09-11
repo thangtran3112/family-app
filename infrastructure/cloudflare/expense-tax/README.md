@@ -30,8 +30,9 @@ Never put token in `.tfvars`, command arguments, logs, or committed files.
 ## State bootstrap and Terraform
 
 State bucket name is deterministic: `expense-tax-tobytran-2026-tfstate`.
-Bootstrap requires authenticated gcloud, verifies bucket project ownership
-against `expense-tax-tobytran-2026` before any IAM mutation, and grants existing
+Bootstrap requires authenticated gcloud, verifies the exact bucket name appears
+in a project-scoped listing for `expense-tax-tobytran-2026` before any IAM
+mutation, and grants existing
 dedicated `expense-tax-cf-terraform` service account object admin. The
 application deploy service account has no access to this bucket. Run
 `expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`
