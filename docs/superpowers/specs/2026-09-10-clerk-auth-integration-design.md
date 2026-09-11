@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 
-**Status:** Approved provider, tenant mapping, and revised M2M topology; revised spec pending review
+**Status:** Implemented and privately deployed; PostgreSQL identity mappings and authenticated production smoke remain pending
 
 ## Goal
 
@@ -21,8 +21,8 @@ preserving application-owned authorization and resource ownership.
 - Clerk M2M uses four machines: `app-api` and `foundry-service` are targets;
   `ai-worker-app` and `ai-worker-foundry` are source machines. Each source is
   scoped to exactly one target and has a distinct secret.
-- No public DNS, gateway, TLS, or identity-dependent live exposure changes in
-  this integration phase.
+- Production exposure uses Cloudflare Tunnel with product-scoped HTTPS hosts;
+  VPS application ports remain loopback-only.
 - Clerk Hobby is target plan initially: two users, one organization, no paid
   add-ons. Detailed application roles stay in PostgreSQL, avoiding Clerk custom
   organization-role add-on requirements.

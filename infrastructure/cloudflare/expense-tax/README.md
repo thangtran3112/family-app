@@ -28,6 +28,11 @@ are managed separately from Tunnel records in `clerk_dns.tf`.
 | `clkmail.tobytran.dev` | `mail.isbd4mdbk2ld.clerk.services` | DNS-only |
 | `clk._domainkey.tobytran.dev` | `dkim1.isbd4mdbk2ld.clerk.services` | DNS-only |
 | `clk2._domainkey.tobytran.dev` | `dkim2.isbd4mdbk2ld.clerk.services` | DNS-only |
+| `_dmarc.tobytran.dev` | `v=DMARC1; p=none; adkim=s; aspf=s` | TXT |
+
+DMARC starts in monitoring mode (`p=none`) while Gmail reputation warms. SPF/DKIM
+are Clerk-managed CNAMEs; move DMARC to `quarantine` or `reject` only after
+reviewing aggregate reports.
 
 Records already exist in Cloudflare. Import each record into its stable
 Terraform address before planning or applying this module. Cloudflare imports

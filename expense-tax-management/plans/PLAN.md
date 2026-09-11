@@ -2,8 +2,8 @@
 
 > **Project**: Expense Tax Management System (monorepo)
 > **Inspired by**: [TaxHacker](https://github.com/vas3k/TaxHacker) (v0.8.5, Next.js + Prisma + PostgreSQL)
-> **Status**: Phase 1A CI and Phase 1B Tasks 6-9 complete. Initial verified deployment `a6c402a` / run `34421864322`; hardening verification `e679fa0` / run `34424329193`. Current deployment is authoritative only from VPS `/opt/expense-tax-management/app/deployed-image-tag` and latest successful `Expense Tax Deploy` workflow. Task 10 identity/gateway/storage/provider/compute decisions pending.
-> **Last Updated**: 2026-09-09
+> **Status**: Local Phase 0 implementation archived. Private Clerk production auth/deploy live. Pending: invited-user signup, PostgreSQL identity/operator mappings, webhook, authenticated smoke tests.
+> **Last Updated**: 2026-09-11
 
 ---
 
@@ -56,23 +56,7 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
-| **0A** | Project Bootstrap & Monorepo Setup | ✅ Complete | [phase-0a-project-setup.md](sub-plans/phase-0a-project-setup.md) |
-| **0B** | Prototype Core Data Model & Database | ✅ Complete (historical baseline) | [phase-0b-data-model.md](sub-plans/phase-0b-data-model.md) |
-| **0I** | TypeScript APIs & Polyglot Contract Rebaseline | ✅ Complete | [design](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md) · [execution plan](sub-plans/phase-0i-polyglot-platform-rebaseline-implementation.md) |
-| **0J** | Personal, Small Business, Project & Tax Domain Reframe | ✅ Local implementation complete; infrastructure gate | [design](sub-plans/phase-0j-personal-business-tax-domain-design.md) · [agent rules](../AGENTS.md) |
-| **0J1** | Tenant Plans, Add-ons & Entitlements | ✅ Local implementation complete; infrastructure gate | [implementation](sub-plans/phase-0j1-plans-entitlements-implementation.md) |
-| **0K** | AI Foundry Service & Runtime Quotas | ✅ Local implementation complete (Waves A+B); infrastructure gate | [Wave A](sub-plans/phase-0k-wave-a-catalog-implementation.md), [Wave B](sub-plans/phase-0k-wave-b-quotas-reservations-implementation.md) |
-| **0L** | Python Temporal AI Worker Foundation | ✅ Local implementation complete; infrastructure gate | [implementation plan](sub-plans/phase-0l-temporal-worker-foundation-implementation.md), [0I design section 4.3](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#43-python-worker-ownership) |
-| **0D** | Direct Cloud Storage & Signed Uploads (revised) | ✅ Local implementation complete; infrastructure gate | [implementation plan](sub-plans/phase-0d-uploads-storage-implementation.md) (replaces [stale plan](sub-plans/phase-0d-cloud-storage.md)) |
-| **0C** | Receipt Upload & OCR Pipeline (revised) | ✅ Local implementation complete; infrastructure gate | [implementation plan](sub-plans/phase-0c-ocr-pipeline-implementation.md) (replaces [stale plan](sub-plans/phase-0c-ocr-pipeline.md)) |
-| **0E** | Business Tax Preparation, Project Analysis & Export (revised) | ✅ Local implementation complete; infrastructure gate | [implementation plan](sub-plans/phase-0e-reports-exports-implementation.md) (replaces [stale plan](sub-plans/phase-0e-project-tax.md)) |
-| **0P** | Secure Forwarded Receipt Intake | ✅ Local implementation complete; provider adapters gated | [implementation plan](sub-plans/phase-0p-forwarded-intake-implementation.md), [0I design section 12](sub-plans/phase-0i-polyglot-platform-rebaseline-design.md#12-forwarded-receipt-intake) |
-| **0F0** | Three App-Specific UI Mockup Gates | ✅ Capture, Office, Foundry approved | [review](mockups/rebaseline/REVIEW.md), [plan](sub-plans/phase-0f0-web-ui-mockups.md) |
-| **0F** | Capture PWA (phone/tablet only) | ✅ Local implementation complete; identity/deployment gate | [implementation](sub-plans/phase-0f-capture-pwa-implementation.md) |
-| **0M** | Office Web (laptop reporting/tax/export) | ✅ Local implementation complete; identity/deployment gate | [implementation](sub-plans/phase-0m-office-web-implementation.md) |
-| **0N** | Foundry Web (authorized platform staff only) | ✅ Local implementation complete; platform identity/deployment gate | [implementation](sub-plans/phase-0n-foundry-web-implementation.md) |
-| **0G** | Repository Structure & Prototype Python Contracts | ✅ Complete (contract ownership superseded) | [phase-0g-repository-structure-shared-contracts.md](sub-plans/phase-0g-repository-structure-shared-contracts.md) |
-| **0H** | Family-App Monorepo & Shared Infrastructure | ✅ Complete | [phase-0h-family-infra-split.md](sub-plans/phase-0h-family-infra-split.md) |
+| **0** | Core implementation baseline | ✅ Archived complete | See phase sub-plans and archived task reports. |
 
 ---
 
@@ -81,8 +65,8 @@ Approved platform architecture: [Phase 0I Polyglot Platform Rebaseline](sub-plan
 
 | Phase | Description | Status | Sub-Plan |
 |-------|-------------|--------|----------|
-| **1A** | Polyglot GitHub Actions CI (revised) | ✅ Complete; continuous gate | [implementation](sub-plans/phase-1a-polyglot-ci-implementation.md) (replaces [stale plan](sub-plans/phase-1a-cicd-pipeline.md)) |
-| **1B** | Production Container Deployment (revised) | ✅ Initial `a6c402a` / run `34421864322`; hardening `e679fa0` / run `34424329193`; current state from VPS marker/latest successful workflow; Task 10 pending | [implementation](sub-plans/phase-1b-production-cicd-implementation.md) · [design](sub-plans/phase-1b-production-cicd-design.md) |
+| **1A** | Polyglot GitHub Actions CI | ✅ Archived complete | [implementation](sub-plans/phase-1a-polyglot-ci-implementation.md) |
+| **1B** | Private production auth/deployment | 🟡 Live; user mappings and smoke tests pending | [implementation](sub-plans/phase-1b-production-cicd-implementation.md) · [design](sub-plans/phase-1b-production-cicd-design.md) |
 | **1C** | Defense-in-Depth Gateway Authentication (revised) | ⚪ Replan after 0I; release gate | [phase-1c-gateway-auth.md](sub-plans/phase-1c-gateway-auth.md) |
 
 ---
