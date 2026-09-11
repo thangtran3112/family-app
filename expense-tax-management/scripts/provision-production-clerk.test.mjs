@@ -111,6 +111,15 @@ describe("parseProvisioningInput", () => {
       tramilyAppUserId: undefined,
     });
   });
+
+  it.each([
+    ["CLERK_THANG_USER_ID", { CLERK_THANG_USER_ID: validEnv.CLERK_TRAMILY_USER_ID }],
+    ["APP_TENANT_ID", { APP_TENANT_ID: validEnv.APP_THANG_USER_ID }],
+  ])("rejects duplicate identity targets before provisioning: %s", (_field, override) => {
+    expect(() => parseProvisioningInput({ ...validEnv, ...override })).toThrow(
+      /duplicate|must differ|CLERK_THANG_USER_ID|APP_TENANT_ID/,
+    );
+  });
 });
 
 describe("validateExternalId", () => {
@@ -338,6 +347,45 @@ describe("database provisioning", () => {
     expect(execution.sql).toContain("status = 'active'");
     expect(execution.sql).toContain("RAISE EXCEPTION");
     expect(execution.sql).toContain("clerk_user_id IS NULL OR clerk_user_id =");
+  });
+
+  it("runs read-only App preflight during dry-run", async () => {
+    let execution;
+    await provisionAppMappings(input, memberships, {
+      dryRun: true,
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.sql).toContain("BEGIN READ ONLY");
+    expect(execution.sql).toContain("ROLLBACK");
+    expect(execution.sql).not.toContain("UPDATE app.");
+    expect(execution.sql).not.toContain("INSERT INTO app.");
+  });
+
+  it("runs read-only bootstrap and Foundry preflights during dry-run", async () => {
+    let appExecution;
+    let foundryExecution;
+    await provisionAppMappings(bootstrapInput, memberships, {
+      bootstrapEmpty: true,
+      dryRun: true,
+      runPsql: async (details) => {
+        appExecution = details;
+      },
+    });
+    await provisionFoundryOperator(input, {
+      dryRun: true,
+      runPsql: async (details) => {
+        foundryExecution = details;
+      },
+    });
+
+    expect(appExecution.sql).toContain("BEGIN READ ONLY");
+    expect(appExecution.sql).not.toContain("INSERT INTO app.");
+    expect(foundryExecution.sql).toContain("BEGIN READ ONLY");
+    expect(foundryExecution.sql).toContain("ROLLBACK");
+    expect(foundryExecution.sql).not.toContain("INSERT INTO");
   });
 
   it("provisions both thang roles and rejects disabled conflicts", async () => {

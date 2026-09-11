@@ -37,6 +37,36 @@ function validateDatabaseUrl(value, field) {
   return validatedValue;
 }
 
+function validateDistinctIdentityAssignments(input, bootstrapEmpty = false) {
+  const duplicateFields = [];
+  const appTargets = bootstrapEmpty
+    ? []
+    : [
+        ["APP_TENANT_ID", input.appTenantId],
+        ["APP_THANG_USER_ID", input.thangAppUserId],
+        ["APP_TRAMILY_USER_ID", input.tramilyAppUserId],
+      ];
+  if (input.thangClerkUserId === input.tramilyClerkUserId) {
+    duplicateFields.push("CLERK_THANG_USER_ID", "CLERK_TRAMILY_USER_ID");
+  }
+  for (let index = 0; index < appTargets.length; index += 1) {
+    for (let next = index + 1; next < appTargets.length; next += 1) {
+      if (
+        appTargets[index][1] !== undefined &&
+        appTargets[next][1] !== undefined &&
+        appTargets[index][1] === appTargets[next][1]
+      ) {
+        duplicateFields.push(appTargets[index][0], appTargets[next][0]);
+      }
+    }
+  }
+  if (duplicateFields.length > 0) {
+    throw new Error(
+      `invalid provisioning input: duplicate identity targets ${[...new Set(duplicateFields)].join(", ")}`,
+    );
+  }
+}
+
 export function parseProvisioningInput(env = process.env, options = {}) {
   const bootstrapEmpty = options.bootstrapEmpty === true;
   const missingOrInvalid = [];
@@ -73,6 +103,7 @@ export function parseProvisioningInput(env = process.env, options = {}) {
     );
   }
 
+  validateDistinctIdentityAssignments(values, bootstrapEmpty);
   return values;
 }
 
@@ -165,6 +196,7 @@ function assertMembershipRecord(record, userId, organizationId) {
 }
 
 export async function fetchClerkMemberships(input, options = {}) {
+  validateDistinctIdentityAssignments(input);
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const users = [input.thangClerkUserId, input.tramilyClerkUserId];
@@ -405,18 +437,70 @@ END $$;
 COMMIT;`;
 }
 
+function appMappingPreflightSql(input) {
+  const users = [
+    [input.thangAppUserId, input.thangClerkUserId],
+    [input.tramilyAppUserId, input.tramilyClerkUserId],
+  ];
+  const checks = users
+    .map(
+      ([appUserId, clerkUserId]) => `
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM app.users
+    WHERE id = ${sqlLiteral(appUserId)}::uuid
+      AND status = 'active'
+      AND (clerk_user_id IS NULL OR clerk_user_id = ${sqlLiteral(clerkUserId)})
+  ) THEN
+    RAISE EXCEPTION 'inactive, missing, or conflicting app user mapping';
+  END IF;
+END $$;`,
+    )
+    .join("\n");
+  return `BEGIN READ ONLY;
+${checks}
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM app.tenants
+    WHERE id = ${sqlLiteral(input.appTenantId)}::uuid
+      AND status = 'active'
+      AND (clerk_org_id IS NULL OR clerk_org_id = ${sqlLiteral(input.clerkOrgId)})
+  ) THEN
+    RAISE EXCEPTION 'inactive, missing, or conflicting app tenant mapping';
+  END IF;
+END $$;
+ROLLBACK;`;
+}
+
+function bootstrapPreflightSql(input) {
+  const writeSql = bootstrapAppSql(input);
+  const guardSql = writeSql.slice(0, writeSql.indexOf("INSERT INTO app.tenants"));
+  return `${guardSql.replace("BEGIN;", "BEGIN READ ONLY;")}ROLLBACK;`;
+}
+
 export async function provisionAppMappings(input, memberships, options = {}) {
+  validateDistinctIdentityAssignments(input, options.bootstrapEmpty === true);
   assertVerifiedMemberships(input, memberships);
   const runPsql =
     options.runPsql || ((details) => executePsql({ databaseUrl: input.appDatabaseUrl, ...details }));
+  const writeSql = options.bootstrapEmpty ? bootstrapAppSql(input) : appMappingSql(input);
   const details = {
-    sql: options.bootstrapEmpty ? bootstrapAppSql(input) : appMappingSql(input),
     env: databaseEnvironment(input.appDatabaseUrl),
     ...(options.bootstrapEmpty ? { bootstrapIds: bootstrapIdentityIds(input) } : {}),
   };
-  if (options.dryRun) return details;
-  await runPsql(details);
-  return details;
+  if (options.dryRun) {
+    await runPsql({
+      sql: options.bootstrapEmpty
+        ? bootstrapPreflightSql(input)
+        : appMappingPreflightSql(input),
+      env: details.env,
+    });
+    return details;
+  }
+  await runPsql({ ...details, sql: writeSql });
+  return { ...details, sql: writeSql };
 }
 
 function foundryOperatorSql(input) {
@@ -440,16 +524,35 @@ ON CONFLICT (clerk_user_id, role) DO UPDATE
 COMMIT;`;
 }
 
+function foundryOperatorPreflightSql(input) {
+  const userId = sqlLiteral(input.thangClerkUserId);
+  return `BEGIN READ ONLY;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM foundry.platform_operator_identities
+    WHERE clerk_user_id = ${userId} AND role IN ('operator', 'catalog_manager') AND status = 'disabled'
+  ) THEN
+    RAISE EXCEPTION 'disabled platform operator role conflict';
+  END IF;
+END $$;
+ROLLBACK;`;
+}
+
 export async function provisionFoundryOperator(input, options = {}) {
+  validateDistinctIdentityAssignments(input);
   const runPsql =
     options.runPsql || ((details) => executePsql({ databaseUrl: input.foundryDatabaseUrl, ...details }));
+  const writeSql = foundryOperatorSql(input);
   const details = {
-    sql: foundryOperatorSql(input),
     env: databaseEnvironment(input.foundryDatabaseUrl),
   };
-  if (options.dryRun) return details;
-  await runPsql(details);
-  return details;
+  if (options.dryRun) {
+    await runPsql({ sql: foundryOperatorPreflightSql(input), env: details.env });
+    return details;
+  }
+  await runPsql({ ...details, sql: writeSql });
+  return { ...details, sql: writeSql };
 }
 
 async function main() {
