@@ -51,13 +51,25 @@ fi
 API_ENV_FILE="$API_ENV_FILE" zsh -dfic '
   # Startup files are user-controlled; discard all startup output before loading them.
   set +x
+  exec 3>&2
   exec >/dev/null 2>&1
   source ~/.zshrc
   set +x
+  exec 2>&3 3>&-
   : "${OPENAI_API_KEY:?OPENAI_API_KEY must be set in ~/.zshrc}"
   : "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in ~/.zshrc}"
   : "${CLERK_APP_MACHINE_SECRET_KEY:?CLERK_APP_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
   : "${CLERK_FOUNDRY_MACHINE_SECRET_KEY:?CLERK_FOUNDRY_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
+  : "${CLERK_WEBHOOK_SIGNING_SECRET_FILE:?CLERK_WEBHOOK_SIGNING_SECRET_FILE must point to a mode-0600 file}"
+  if [[ ! -f "$CLERK_WEBHOOK_SIGNING_SECRET_FILE" ]]; then
+    echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE not found" >&2
+    exit 1
+  fi
+  SECRET_FILE_MODE="$(stat -f '%Lp' "$CLERK_WEBHOOK_SIGNING_SECRET_FILE" 2>/dev/null || true)"
+  [[ "$SECRET_FILE_MODE" =~ ^[0-7]+$ ]] || SECRET_FILE_MODE="$(stat -c '%a' "$CLERK_WEBHOOK_SIGNING_SECRET_FILE" 2>/dev/null || true)"
+  [[ "$SECRET_FILE_MODE" == "600" ]] || { echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE must have mode 0600" >&2; exit 1; }
+  CLERK_WEBHOOK_SIGNING_SECRET="$(<"$CLERK_WEBHOOK_SIGNING_SECRET_FILE")"
+  [[ -n "$CLERK_WEBHOOK_SIGNING_SECRET" && "$CLERK_WEBHOOK_SIGNING_SECRET" == whsec_* ]] || { echo "CLERK_WEBHOOK_SIGNING_SECRET_FILE must contain a nonempty whsec_ secret" >&2; exit 1; }
   : "${AUTH_PROVIDER:?AUTH_PROVIDER must be set in ~/.zshrc}"
   : "${CLERK_ISSUER_URL:?CLERK_ISSUER_URL must be set in ~/.zshrc}"
   : "${CLERK_JWKS_URL:?CLERK_JWKS_URL must be set in ~/.zshrc}"
@@ -85,6 +97,7 @@ API_ENV_FILE="$API_ENV_FILE" zsh -dfic '
     "$CLERK_TENANT_AUDIENCE" "$CLERK_PLATFORM_AUDIENCE" \
     "$CLERK_APP_SERVICE_AUDIENCE" "$CLERK_FOUNDRY_SERVICE_AUDIENCE" \
     "$CLERK_APP_SERVICE_SUBJECT" "$CLERK_FOUNDRY_SERVICE_SUBJECT" > "$API_ENV_FILE"
+  printf "export CLERK_WEBHOOK_SIGNING_SECRET=%q\\n" "$CLERK_WEBHOOK_SIGNING_SECRET" >> "$API_ENV_FILE"
 '
 chmod 600 "$API_ENV_FILE"
 
@@ -99,6 +112,7 @@ env -i PATH="$PATH" HOME="$HOME" \
   source "$API_ENV_FILE"
   export OPENAI_API_KEY OPENROUTER_API_KEY \
     CLERK_APP_MACHINE_SECRET_KEY CLERK_FOUNDRY_MACHINE_SECRET_KEY \
+    CLERK_WEBHOOK_SIGNING_SECRET \
     AUTH_PROVIDER CLERK_ISSUER_URL CLERK_JWKS_URL \
     CLERK_TENANT_AUDIENCE CLERK_PLATFORM_AUDIENCE \
     CLERK_APP_SERVICE_AUDIENCE CLERK_FOUNDRY_SERVICE_AUDIENCE \
@@ -116,6 +130,7 @@ const bundle = buildProductionBundle({
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     CLERK_APP_MACHINE_SECRET_KEY: process.env.CLERK_APP_MACHINE_SECRET_KEY,
     CLERK_FOUNDRY_MACHINE_SECRET_KEY: process.env.CLERK_FOUNDRY_MACHINE_SECRET_KEY,
+    CLERK_WEBHOOK_SIGNING_SECRET: process.env.CLERK_WEBHOOK_SIGNING_SECRET,
     AUTH_PROVIDER: process.env.AUTH_PROVIDER,
     CLERK_ISSUER_URL: process.env.CLERK_ISSUER_URL,
     CLERK_JWKS_URL: process.env.CLERK_JWKS_URL,

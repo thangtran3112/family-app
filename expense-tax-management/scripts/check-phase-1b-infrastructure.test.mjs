@@ -36,11 +36,13 @@ printf '%s\\n' "$*" >> "$MOCK_LOG"
 case "$1:$2:$3" in
   secrets:versions:list)
     count="$(wc -l < "$LIST_COUNT")"
-    printf '%s\\n' "$count" > "$LIST_COUNT"
+    printf '%s\\n' "$((count + 1))" > "$LIST_COUNT"
     if [[ "$MOCK_MODE" == "access-failure" ]]; then
       printf '%s\\n' '[{"name":"projects/test/secrets/expense-tax-production-env/versions/1","state":"ENABLED"}]'
     else
-      if [[ "$count" == "0" ]]; then
+      if [[ "$MOCK_MODE" == "success" && "$count" -ge 1 ]]; then
+        printf '%s\\n' '[{"name":"projects/test/secrets/expense-tax-production-env/versions/3","state":"ENABLED"}]'
+      elif [[ "$count" == "0" ]]; then
         printf '%s\\n' '[{"name":"projects/test/secrets/expense-tax-production-env/versions/1","state":"ENABLED"},{"name":"projects/test/secrets/expense-tax-production-env/versions/2","state":"DISABLED"}]'
       else
         printf '%s\\n' '[{"name":"projects/test/secrets/expense-tax-production-env/versions/1","state":"ENABLED"},{"name":"projects/test/secrets/expense-tax-production-env/versions/2","state":"DISABLED"},{"name":"projects/test/secrets/expense-tax-production-env/versions/3","state":"ENABLED"}]'
@@ -90,8 +92,19 @@ async function fixture(mode) {
     "export OPENROUTER_API_KEY=test-openrouter",
     "export CLERK_APP_MACHINE_SECRET_KEY=test-clerk-app",
     "export CLERK_FOUNDRY_MACHINE_SECRET_KEY=test-clerk-foundry",
+    "export AUTH_PROVIDER=clerk",
+    "export CLERK_ISSUER_URL=https://clerk.tobytran.dev",
+    "export CLERK_JWKS_URL=https://clerk.tobytran.dev/.well-known/jwks.json",
+    "export CLERK_TENANT_AUDIENCE=expense-app",
+    "export CLERK_PLATFORM_AUDIENCE=expense-foundry-platform",
+    "export CLERK_APP_SERVICE_AUDIENCE=mch_3JAI0juruFRPSkrE1rpcDKx1k1i",
+    "export CLERK_FOUNDRY_SERVICE_AUDIENCE=mch_3JAIAMNUiVXteVOki8QENYHvJjp",
+    "export CLERK_APP_SERVICE_SUBJECT=mch_3JAIPnx8itUTJsizuEGewr6NGBX",
+    "export CLERK_FOUNDRY_SERVICE_SUBJECT=mch_3JAIi2BwnqBf8bNzbjTtjJa6nGw",
     "printf '%s\\n' \"startup-openrouter=$OPENROUTER_API_KEY\"",
   ].join("\n"));
+  const webhookSecret = join(root, "clerk-webhook-signing-secret");
+  await writeFile(webhookSecret, "whsec_test_webhook_secret\n", { mode: 0o600 });
   const database = join(root, "database.env");
   await writeFile(database, [
     "APP_DATABASE_URL=postgresql://app@127.0.0.1:15432/expense_tax_db",
@@ -110,6 +123,7 @@ async function fixture(mode) {
       PATH: `${root}:${process.env.PATH}`,
       HOME: root,
       DATABASE_ENV_PATH: database,
+      CLERK_WEBHOOK_SIGNING_SECRET_FILE: webhookSecret,
       MOCK_LOG: log,
       MOCK_PAYLOAD: payload,
       LIST_COUNT: join(root, "list.count"),
@@ -176,6 +190,38 @@ describe("production secret sync behavior", () => {
     expect(result.stdout).not.toContain("test-openrouter");
     expect(result.stderr).not.toContain("test-openai");
     expect(result.stderr).not.toContain("test-openrouter");
+  });
+
+  it("requires a protected webhook secret file and uploads its value", async () => {
+    const test = await fixture("success");
+    const result = await runSync(test.env);
+    const payload = await readFile(join(test.root, "payload.env"), "utf8");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(payload).toContain("CLERK_WEBHOOK_SIGNING_SECRET=whsec_test_webhook_secret");
+    expect(result.stdout).not.toContain("whsec_test_webhook_secret");
+    expect(result.stderr).not.toContain("whsec_test_webhook_secret");
+  });
+
+  it("rejects a webhook secret file without mode 0600", async () => {
+    const test = await fixture("success");
+    await chmod(join(test.root, "clerk-webhook-signing-secret"), 0o644);
+
+    const result = await runSync(test.env);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("mode 0600");
+  });
+
+  it("rejects a webhook secret that is not a nonempty whsec value", async () => {
+    const test = await fixture("success");
+    await writeFile(join(test.root, "clerk-webhook-signing-secret"), "not-a-clerk-secret\n", { mode: 0o600 });
+
+    const result = await runSync(test.env);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("whsec_");
+    expect(result.stderr).not.toContain("not-a-clerk-secret");
   });
 
   it("aborts on current-version access failure before uploading", async () => {

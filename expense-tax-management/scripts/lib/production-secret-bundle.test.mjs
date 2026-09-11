@@ -23,6 +23,7 @@ const requiredShellEnv = {
   OPENROUTER_API_KEY: "openrouter",
   CLERK_APP_MACHINE_SECRET_KEY: "ak_test_app_machine_secret",
   CLERK_FOUNDRY_MACHINE_SECRET_KEY: "ak_test_foundry_machine_secret",
+  CLERK_WEBHOOK_SIGNING_SECRET: "whsec_test_webhook_secret",
 };
 
 const productionClerkRuntime = {
@@ -72,6 +73,10 @@ describe("buildProductionBundle", () => {
       expect(syncScript).toContain(`${key}: process.env.${key}`);
     }
     expect(syncScript).toContain('env -i PATH="$PATH" HOME="$HOME"');
+    expect(syncScript).toContain(': "${CLERK_WEBHOOK_SIGNING_SECRET_FILE:?');
+    expect(syncScript).toContain('must have mode 0600');
+    expect(syncScript).toContain('must contain a nonempty whsec_ secret');
+    expect(syncScript).toContain('export CLERK_WEBHOOK_SIGNING_SECRET=%q');
     expect(syncScript).toContain('CLERK_ISSUER_URL" == "https://clerk.tobytran.dev"');
     expect(syncScript).toContain('CLERK_JWKS_URL" == "https://clerk.tobytran.dev/.well-known/jwks.json"');
     expect(syncScript).toContain('CLERK_TENANT_AUDIENCE" == "expense-app"');
@@ -87,6 +92,9 @@ describe("buildProductionBundle", () => {
     );
     expect(bundle).toContain(
       "CLERK_FOUNDRY_MACHINE_SECRET_KEY=ak_test_foundry_machine_secret",
+    );
+    expect(bundle).toContain(
+      "CLERK_WEBHOOK_SIGNING_SECRET=whsec_test_webhook_secret",
     );
   });
 
@@ -157,6 +165,7 @@ describe("buildProductionBundle", () => {
   it.each([
     "CLERK_APP_MACHINE_SECRET_KEY",
     "CLERK_FOUNDRY_MACHINE_SECRET_KEY",
+    "CLERK_WEBHOOK_SIGNING_SECRET",
   ])("names only missing required key %s", (key) => {
     const shellEnv = { ...requiredShellEnv, ...clerkMachineIds };
     delete shellEnv[key];
@@ -269,6 +278,7 @@ describe("buildProductionBundle", () => {
       "CLERK_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
       "CLERK_PLATFORM_AUDIENCE=phase-1b-inert-platform",
       "CLERK_TENANT_AUDIENCE=phase-1b-inert-tenant",
+      "CLERK_WEBHOOK_SIGNING_SECRET=whsec_test_webhook_secret",
       "FOUNDRY_DATABASE_URL=postgresql://foundry:foundry-password@postgres:5432/expense_tax_db",
       "FOUNDRY_MIGRATION_DATABASE_URL=postgresql://foundry-migrator:foundry-migrator-password@postgres:5432/expense_tax_db",
       "FOUNDRY_PLATFORM_JWKS_URL=https://identity.not-configured.invalid/.well-known/jwks.json",
