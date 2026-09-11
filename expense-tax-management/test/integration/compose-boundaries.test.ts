@@ -162,6 +162,25 @@ describe("Phase 0I Compose boundaries", () => {
     }
   });
 
+  it("passes complete fail-closed Clerk config to local API services", () => {
+    const services = composeConfig(repoRoot).services;
+    const expectedClerk = {
+      CLERK_ISSUER_URL: "https://clerk.not-configured.invalid",
+      CLERK_JWKS_URL:
+        "https://clerk.not-configured.invalid/.well-known/jwks.json",
+      CLERK_TENANT_AUDIENCE: "expense-app",
+      CLERK_PLATFORM_AUDIENCE: "expense-foundry-platform",
+      CLERK_APP_SERVICE_AUDIENCE: "mch_3J9fsniGga4hUqUf65ZQqzeGX2b",
+      CLERK_FOUNDRY_SERVICE_AUDIENCE: "mch_3J9g3CNoKL9q6KfbRy5zq1Rh2zT",
+      CLERK_APP_SERVICE_SUBJECT: "mch_3J9Xg9Hu84Rn2oeqj7EMrv0ax19",
+      CLERK_FOUNDRY_SERVICE_SUBJECT: "mch_3J9gHBtDcxOE3fWE39Ay9uF7hFv",
+    };
+
+    for (const serviceName of ["app-api", "foundry-service"]) {
+      expect(services[serviceName]?.environment).toMatchObject(expectedClerk);
+    }
+  });
+
   it("does not fall back when an explicit env file is missing", () => {
     const missingEnvFile = path.join(
       mkdtempSync(path.join(os.tmpdir(), "expense-tax-missing-env-")),
