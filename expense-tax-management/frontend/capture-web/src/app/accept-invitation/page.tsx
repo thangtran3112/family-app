@@ -47,7 +47,13 @@ function InvitationAcceptance() {
         return;
       }
       if (signUp.status !== "complete") {
-        if (!cancelled) setNeedsPassword(true);
+        if (!cancelled) {
+          if (signUp.missingFields.includes("password")) {
+            setNeedsPassword(true);
+          } else {
+            setError(`Invitation sign-up needs: ${signUp.missingFields.join(", ") || "additional details"}.`);
+          }
+        }
         return;
       }
       const finalized = await signUp.finalize({ navigate: navigateToCapture });
