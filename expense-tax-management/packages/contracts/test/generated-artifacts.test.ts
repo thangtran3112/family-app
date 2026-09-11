@@ -36,7 +36,7 @@ function expectStableJson(relativePath: string): Record<string, unknown> {
   const raw = readArtifact(relativePath);
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   expect(raw).not.toMatch(/\/Users\/|[A-Z]:\\\\/);
-  expect(raw).not.toMatch(/generatedAt|timestamp/i);
+  expect(raw).not.toMatch(/"(?:generatedAt|timestamp)"\s*:/i);
   expect(raw).toBe(`${JSON.stringify(sortJson(parsed), null, 2)}\n`);
   return parsed;
 }
@@ -60,6 +60,20 @@ describe("generated API artifacts", () => {
       "/api/v1/tenants/{tenantId}/invitations",
     );
     expect(appDocument.paths).toHaveProperty("/api/v1/invitations/accept");
+    expect(appDocument.paths).toHaveProperty("/api/v1/integrations/clerk/webhook");
+    expect(
+      (appDocument.paths as Record<string, { post?: { parameters?: unknown[] } }>)[
+        "/api/v1/integrations/clerk/webhook"
+      ]?.post?.parameters,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          in: "header",
+          name: "svix-timestamp",
+          required: true,
+        }),
+      ]),
+    );
     expect(appDocument.paths).toHaveProperty(
       "/api/v1/tenants/{tenantId}/memberships/{userId}",
     );
