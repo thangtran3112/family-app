@@ -37,7 +37,7 @@ function url(value, name) {
   const candidate = required(value, name);
   try {
     const parsed = new URL(candidate);
-    if (!/^https?:$/u.test(parsed.protocol)) throw new Error("unsupported protocol");
+    if (parsed.protocol !== "https:") throw new Error("HTTPS required");
   } catch {
     throw new Error(`invalid smoke URL: ${name}`);
   }
@@ -72,7 +72,7 @@ export function parseSmokeConfig(env = process.env) {
     officeUrl: url(values.OFFICE_URL, "OFFICE_URL"),
     tenantId: values.FAMILY_TENANT_ID.trim(),
     mismatchTenantId: values.MISMATCH_TENANT_ID.trim(),
-    expectedIssuer: values.CLERK_ISSUER_URL.trim(),
+    expectedIssuer: url(values.CLERK_ISSUER_URL, "CLERK_ISSUER_URL"),
     expectedTenantAudience: values.CLERK_TENANT_AUDIENCE.trim(),
     expectedPlatformAudience: values.CLERK_PLATFORM_AUDIENCE.trim(),
     expectedAppM2mAudience: values.APP_M2M_AUDIENCE.trim(),
@@ -121,18 +121,44 @@ export function buildSmokePlan(config) {
   ];
 }
 
+export function isExecutionConfirmed(args = process.argv.slice(2), env = process.env) {
+  return args.includes("--execute") && env.PRODUCTION_AUTH_SMOKE_CONFIRM === CONFIRMATION;
+}
+
+async function readLimitedBody(response) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return `${text}${decoder.decode()}`;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) throw new Error("response exceeded smoke limit");
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    await reader.cancel();
+    throw error;
+  }
+}
+
 async function boundedFetch(fetchImpl, urlValue, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(urlValue, { ...options, signal: controller.signal });
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) throw new Error("response exceeded smoke limit");
+    const text = await readLimitedBody(response);
     let body = null;
     if (text !== "") {
       try { body = JSON.parse(text); } catch { body = {}; }
     }
     return { status: response.status, body };
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("request timed out");
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -152,10 +178,10 @@ function claimMetadata(claims) {
 }
 
 function assertClaimMetadata(check, body) {
-  if (!check.expectedAudience && !check.expectedRole) return;
   const claims = verifiedClaims(body);
   if (!claims) throw new Error("service did not return verified claim metadata");
-  if (claims.issuer !== undefined && claims.issuer !== check.expectedIssuer) throw new Error("issuer metadata mismatch");
+  if (typeof claims.issuer !== "string" || claims.issuer === "") throw new Error("issuer metadata missing");
+  if (claims.issuer !== check.expectedIssuer) throw new Error("issuer metadata mismatch");
   if (claims.audience !== check.expectedAudience) throw new Error("audience metadata mismatch");
   if (check.expectedRole && claims.role !== check.expectedRole) throw new Error("role metadata mismatch");
 }
@@ -163,6 +189,18 @@ function assertClaimMetadata(check, body) {
 function assertReplay(check, body) {
   if (check.expectedReplay && body?.replayed !== true) throw new Error("webhook replay marker missing");
   if (check.expectedReplay === false && body?.replayed === true) throw new Error("initial webhook delivery marked replayed");
+}
+
+function redactSensitive(message, config) {
+  const sensitiveValues = [
+    config.thangTenantToken,
+    config.thangPlatformToken,
+    config.tramilyTenantToken,
+    config.appM2mToken,
+    config.foundryM2mToken,
+    ...Object.values(config.webhookReplayHeaders ?? {}),
+  ].filter((value) => typeof value === "string" && value !== "");
+  return sensitiveValues.reduce((safeMessage, value) => safeMessage.replaceAll(value, "[REDACTED]"), message);
 }
 
 export async function runSmokeTests(config, options = {}) {
@@ -179,7 +217,7 @@ export async function runSmokeTests(config, options = {}) {
         body: check.body,
       }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
       if (result.status !== check.expectedStatus) throw new Error(`expected ${check.expectedStatus}, got ${result.status}`);
-      if (result.status >= 200 && result.status < 300) {
+      if (check.token) {
         assertClaimMetadata({ ...check, expectedIssuer: config.expectedIssuer }, result.body);
       }
       assertReplay(check, result.body);
@@ -187,8 +225,9 @@ export async function runSmokeTests(config, options = {}) {
       logger(`PASS ${check.name} status=${result.status}${metadata ? ` claims=${JSON.stringify(metadata)}` : ""}`);
       results.push({ name: check.name, status: result.status, passed: true, metadata });
     } catch (error) {
-      logger(`FAIL ${check.name} ${error instanceof Error ? error.message : "request failed"}`);
-      results.push({ name: check.name, passed: false, error: error instanceof Error ? error.message : "request failed" });
+      const message = redactSensitive(error instanceof Error ? error.message : "request failed", config);
+      logger(`FAIL ${check.name} ${message}`);
+      results.push({ name: check.name, passed: false, error: message });
     }
   }
   return {
@@ -200,7 +239,7 @@ export async function runSmokeTests(config, options = {}) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  if (!process.argv.includes("--execute") || process.env.PRODUCTION_AUTH_SMOKE_CONFIRM !== CONFIRMATION) {
+  if (!isExecutionConfirmed()) {
     console.error(`refusing smoke execution: pass --execute and PRODUCTION_AUTH_SMOKE_CONFIRM=${CONFIRMATION}`);
     process.exitCode = 2;
   } else {

@@ -1,6 +1,6 @@
 # Task 5 Report
 
-Status: complete
+Status: incomplete — implementation verified; live production smoke pending
 
 Implemented `expense-tax-management/scripts/production-auth-smoke.mjs` and its
 focused Vitest suite.
@@ -36,3 +36,24 @@ Concerns:
   documented environment inputs before any approved private run.
 - Webhook replay requires valid, short-lived Svix headers supplied out of band;
   no signing secret is accepted or stored by this script.
+
+## Review Fixes
+
+- Require HTTPS for every configured endpoint and Clerk issuer.
+- Require present, exact `claimsVerified.issuer` on every authenticated check.
+- Read response bodies through a bounded stream instead of `response.text()`.
+- Added issuer, HTTP rejection, timeout, response-size, confirmation-guard, and
+  logger-redaction tests.
+- Webhook replay sends identical signed body/headers twice and asserts first
+  response is not marked replayed while second response is marked replayed.
+
+Live production smoke remains pending. No live evidence is claimed and no live
+production mutation or request was executed.
+
+## Review-Fix Verification
+
+- `pnpm exec vitest run scripts/production-auth-smoke.test.mjs`: 10 passed
+- `pnpm test`: 384 passed, 1 skipped
+- `pnpm lint`: passed
+- `pnpm exec eslint scripts/production-auth-smoke.mjs scripts/production-auth-smoke.test.mjs`: passed
+- `git diff --check`: passed
