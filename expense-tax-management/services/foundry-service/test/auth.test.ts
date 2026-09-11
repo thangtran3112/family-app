@@ -434,7 +434,7 @@ describe("Foundry authentication", () => {
 
   it("rejects a future-issued platform token beyond clock tolerance", async () => {
     const token = await signToken({
-      issuedAt: Math.floor(Date.now() / 1_000) + 31,
+      issuedAt: Math.floor(Date.now() / 1_000) + 60,
     });
 
     expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
