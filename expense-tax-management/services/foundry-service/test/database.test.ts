@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { ErrorResponseSchema, HealthResponseSchema } from "@expense-tax/contracts";
 import { buildApp } from "../src/app.js";
 import { createFoundryConfig } from "../src/config.js";
@@ -103,5 +105,29 @@ describe("Foundry database boundaries", () => {
       version: "test",
     });
     expect(readinessProbe).not.toHaveBeenCalled();
+  });
+
+  it("migrates operator identities to a composite user and role key", async () => {
+    const migration = await readFile(
+      path.join(
+        import.meta.dirname,
+        "../src/database/migrations/006_platform_operator_identity_roles.ts",
+      ),
+      "utf8",
+    );
+
+    expect(migration).toContain("PRIMARY KEY (clerk_user_id, role)");
+    expect(migration).toContain("DROP CONSTRAINT IF EXISTS platform_operator_identities_pkey");
+    expect(migration).toContain("duplicate");
+  });
+
+  it("keeps role checks exact so one user can hold both roles", async () => {
+    const domain = await readFile(
+      path.join(import.meta.dirname, "../src/domain/platform-operators.ts"),
+      "utf8",
+    );
+
+    expect(domain).toContain('.where("role", "=", role)');
+    expect(domain).toContain('.where("status", "=", "active")');
   });
 });

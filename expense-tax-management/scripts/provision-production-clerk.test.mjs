@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  fetchClerkMemberships,
   parseProvisioningInput,
+  provisionAppMappings,
+  provisionFoundryOperator,
   validateExternalId,
 } from "./provision-production-clerk.mjs";
 
@@ -112,5 +115,160 @@ describe("validateExternalId", () => {
     expect(validateExternalId("org_2abcDEF123", "CLERK_ORG_ID")).toBe(
       "org_2abcDEF123",
     );
+  });
+});
+
+describe("fetchClerkMemberships", () => {
+  it("accepts both family users with member or admin roles", async () => {
+    const requests = [];
+    const memberships = await fetchClerkMemberships(
+      {
+        clerkSecretKey: "sk_test_secret",
+        clerkOrgId: "org_family",
+        thangClerkUserId: "user_thang",
+        tramilyClerkUserId: "user_tramily",
+      },
+      {
+        fetchImpl: async (url, options) => {
+          requests.push({ url, options });
+          const userId = new URL(url).searchParams.get("user_id");
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  organization: { id: "org_family" },
+                  public_user_data: { user_id: userId },
+                  role: userId === "user_thang" ? "org:admin" : "org:member",
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        },
+      },
+    );
+
+    expect(memberships).toEqual([
+      { userId: "user_thang", organizationId: "org_family", role: "org:admin" },
+      { userId: "user_tramily", organizationId: "org_family", role: "org:member" },
+    ]);
+    expect(requests).toHaveLength(2);
+    expect(requests[0].options.headers.Authorization).toBe("Bearer sk_test_secret");
+  });
+
+  it.each([
+    [401, "unauthorized"],
+    [200, "missing membership"],
+  ])("rejects Clerk response %s", async (status, reason) => {
+    await expect(
+      fetchClerkMemberships(
+        {
+          clerkSecretKey: "sk_test_secret",
+          clerkOrgId: "org_family",
+          thangClerkUserId: "user_thang",
+          tramilyClerkUserId: "user_tramily",
+        },
+        {
+          fetchImpl: async () =>
+            new Response(JSON.stringify({ data: reason === "missing membership" ? [] : [] }), {
+              status,
+            }),
+        },
+      ),
+    ).rejects.toThrow(/membership|Clerk/);
+  });
+
+  it.each([
+    { organization: { id: "org_other" }, role: "org:member" },
+    { organization: { id: "org_family" }, role: "org:basic_member" },
+  ])("rejects mismatched organization or role", async (membership) => {
+    await expect(
+      fetchClerkMemberships(
+        {
+          clerkSecretKey: "sk_test_secret",
+          clerkOrgId: "org_family",
+          thangClerkUserId: "user_thang",
+          tramilyClerkUserId: "user_tramily",
+        },
+        {
+          fetchImpl: async () =>
+            new Response(
+              JSON.stringify({
+                data: [{ ...membership, public_user_data: { user_id: "user_thang" } }],
+              }),
+              { status: 200 },
+            ),
+        },
+      ),
+    ).rejects.toThrow(/membership/);
+  });
+});
+
+describe("database provisioning", () => {
+  const input = {
+    appDatabaseUrl: "postgresql://app:password@app.test/expense_tax?sslmode=require",
+    foundryDatabaseUrl: "postgresql://foundry:password@foundry.test/foundry",
+    clerkOrgId: "org_family",
+    thangClerkUserId: "user_thang",
+    tramilyClerkUserId: "user_tramily",
+    appTenantId: "tenant-id",
+    thangAppUserId: "thang-id",
+    tramilyAppUserId: "tramily-id",
+  };
+  const memberships = [
+    { userId: "user_thang", organizationId: "org_family", role: "org:admin" },
+    { userId: "user_tramily", organizationId: "org_family", role: "org:member" },
+  ];
+
+  it("uses stable target IDs and idempotent app mapping SQL", async () => {
+    let execution;
+    await provisionAppMappings(input, memberships, {
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.databaseUrl).toBeUndefined();
+    expect(execution.env).toMatchObject({
+      PGHOST: "app.test",
+      PGPORT: "5432",
+      PGUSER: "app",
+      PGPASSWORD: "password",
+      PGDATABASE: "expense_tax",
+      PGSSLMODE: "require",
+    });
+    expect(execution.sql).toContain("thang-id");
+    expect(execution.sql).toContain("tramily-id");
+    expect(execution.sql).toContain("tenant-id");
+    expect(execution.sql).toContain("BEGIN");
+    expect(execution.sql).toContain("clerk_user_id IS NULL OR clerk_user_id =");
+  });
+
+  it("rejects inactive targets and conflicting remaps in SQL", async () => {
+    let execution;
+    await provisionAppMappings(input, memberships, {
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.sql).toContain("status = 'active'");
+    expect(execution.sql).toContain("RAISE EXCEPTION");
+    expect(execution.sql).toContain("clerk_user_id IS NULL OR clerk_user_id =");
+  });
+
+  it("provisions both thang roles and rejects disabled conflicts", async () => {
+    let execution;
+    await provisionFoundryOperator(input, {
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.env.PGHOST).toBe("foundry.test");
+    expect(execution.sql).toContain("'operator'");
+    expect(execution.sql).toContain("'catalog_manager'");
+    expect(execution.sql).toContain("status = 'disabled'");
+    expect(execution.sql).toContain("ON CONFLICT (clerk_user_id, role)");
   });
 });
