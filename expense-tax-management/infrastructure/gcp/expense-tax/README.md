@@ -30,7 +30,7 @@ secret payload. Existing WIF provider metadata and project placement/billing are
 validated for exact issuer, attribute mapping, repository condition, organization,
 and billing account; drift aborts bootstrap. Service-account impersonation uses
 the official repository attribute `principalSet` binding. Provider admission
-further restricts tokens to `main`, this deploy workflow, and the `production`
+further restricts tokens to `main`, the deploy or Cloudflare workflow, and the `production`
 environment.
 
 ## Secret synchronization

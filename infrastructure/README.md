@@ -3,6 +3,8 @@
 `infrastructure/` is the **shared** platform for all family apps. It owns stateful services that are not app-specific.
 
 ## Contents
+- `cloudflare/expense-tax/` — remote-managed Cloudflare Tunnel, public host ingress, DNS CNAMEs, and GCS state bootstrap.
+- `vps/bootstrap-cloudflared.sh` — installs the Tunnel connector on an already reachable Ubuntu VPS without public application ports.
 - `docker-compose.common.yml` — postgres 17+pgvector, neo4j/falkordb, temporal, temporal-ui, nginx gateway. Volumes `postgres_data`, `neo4j_data`.
 - `postgres/init-multiple-dbs.sh` — creates one DB per app from `POSTGRES_MULTIPLE_DATABASES` (comma-separated). Default `expense_tax_db`; add future DBs there.
 - `nginx/nginx.conf` — upstreams `expense-service:8000` etc.; gateway routes `/api/` → expense-service, `/` → frontend.

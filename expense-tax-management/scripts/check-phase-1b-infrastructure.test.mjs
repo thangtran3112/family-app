@@ -88,6 +88,8 @@ async function fixture(mode) {
     "printf '%s\\n' \"startup-openai=$OPENAI_API_KEY\"",
     "export OPENAI_API_KEY=test-openai",
     "export OPENROUTER_API_KEY=test-openrouter",
+    "export CLERK_APP_MACHINE_SECRET_KEY=test-clerk-app",
+    "export CLERK_FOUNDRY_MACHINE_SECRET_KEY=test-clerk-foundry",
     "printf '%s\\n' \"startup-openrouter=$OPENROUTER_API_KEY\"",
   ].join("\n"));
   const database = join(root, "database.env");
@@ -139,6 +141,7 @@ describe("production secret sync behavior", () => {
       "assertion.repository=='thangtran3112/family-app'",
       "assertion.ref=='refs/heads/main'",
       "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-deploy.yml@refs/heads/main'",
+      "assertion.workflow_ref=='thangtran3112/family-app/.github/workflows/expense-tax-cloudflare.yml@refs/heads/main'",
       "assertion.environment=='production'",
     ]) {
       expect(bootstrap).toContain(claim);

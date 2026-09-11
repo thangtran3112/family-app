@@ -59,7 +59,7 @@ API_ENV_FILE="$API_ENV_FILE" zsh -dfic '
   : "${CLERK_APP_MACHINE_SECRET_KEY:?CLERK_APP_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
   : "${CLERK_FOUNDRY_MACHINE_SECRET_KEY:?CLERK_FOUNDRY_MACHINE_SECRET_KEY must be set in ~/.zshrc}"
   umask 077
-  # Export only required secret inputs into protected builder input.
+  # Export only required API-key variables and service secrets into protected builder input.
   printf "export OPENAI_API_KEY=%q\\nexport OPENROUTER_API_KEY=%q\\nexport CLERK_APP_MACHINE_SECRET_KEY=%q\\nexport CLERK_FOUNDRY_MACHINE_SECRET_KEY=%q\\n" \
     "$OPENAI_API_KEY" "$OPENROUTER_API_KEY" \
     "$CLERK_APP_MACHINE_SECRET_KEY" "$CLERK_FOUNDRY_MACHINE_SECRET_KEY" > "$API_ENV_FILE"

@@ -246,6 +246,13 @@ public/swe-worker-*.js
 
 .keys/*
 
+# Terraform local state and provider cache; keep committed lockfiles.
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+
 # Local agent planning and code graph state
 /docs/superpowers/
 .codegraph/

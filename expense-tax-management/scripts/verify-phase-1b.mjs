@@ -66,6 +66,9 @@ run("Production secret bundle tests", "pnpm", [
 run("GCP infrastructure static policy", "node", [
   "scripts/check-phase-1b-infrastructure.mjs",
 ]);
+run("Cloudflare infrastructure static policy", "node", [
+  "scripts/check-cloudflare-infrastructure.mjs",
+]);
 run("GCP infrastructure mocked behavior", "pnpm", [
   "exec",
   "vitest",
