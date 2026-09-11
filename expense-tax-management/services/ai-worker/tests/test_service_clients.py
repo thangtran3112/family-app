@@ -4,8 +4,8 @@ import respx
 from expense_contracts.generated import JobStatusUpdateRequestV1
 from httpx import Response
 
-from ai_worker.app_api_client import AppApiClient
-from ai_worker.foundry_client import FoundryClient
+from ai_worker.app_api_client import AppApiClient, app_api_client_from_env
+from ai_worker.foundry_client import FoundryClient, foundry_client_from_env
 
 
 async def test_app_api_client_injects_token_provider():
@@ -53,3 +53,18 @@ async def test_foundry_client_injects_token_provider():
         assert await client.get_effective_route("ocr", "default") == {"route": "fake"}
 
     assert route.calls[0].request.headers["authorization"] == "Bearer foundry-token"
+
+
+def test_factories_use_explicit_legacy_service_tokens(monkeypatch):
+    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
+    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "app-token")
+    monkeypatch.setenv("FOUNDRY_BASE_URL", "http://foundry.test")
+    monkeypatch.setenv("FOUNDRY_SERVICE_TOKEN", "foundry-token")
+
+    app_client = app_api_client_from_env()
+    foundry_client = foundry_client_from_env()
+
+    assert app_client._service_token == "app-token"
+    assert app_client._token_provider is None
+    assert foundry_client._service_token == "foundry-token"
+    assert foundry_client._token_provider is None

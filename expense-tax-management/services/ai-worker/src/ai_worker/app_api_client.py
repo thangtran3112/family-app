@@ -107,6 +107,10 @@ class AppApiClient:
 
 def app_api_client_from_env() -> AppApiClient:
     base_url = os.environ["APP_API_BASE_URL"]
+    service_token = os.environ.get("APP_API_SERVICE_TOKEN")
+    if service_token:
+        return AppApiClient(base_url=base_url, service_token=service_token)
+
     audience = os.environ["CLERK_APP_SERVICE_AUDIENCE"]
     scopes = ("jobs:write", "files:read")
     issuer = ClerkM2MTokenIssuer(

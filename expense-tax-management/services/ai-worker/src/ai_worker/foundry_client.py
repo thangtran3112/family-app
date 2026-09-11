@@ -119,6 +119,10 @@ class FoundryClient:
 
 def foundry_client_from_env() -> FoundryClient:
     base_url = os.environ["FOUNDRY_BASE_URL"]
+    service_token = os.environ.get("FOUNDRY_SERVICE_TOKEN")
+    if service_token:
+        return FoundryClient(base_url=base_url, service_token=service_token)
+
     audience = os.environ["CLERK_FOUNDRY_SERVICE_AUDIENCE"]
     scopes = ("routes:read", "reservations:write")
     issuer = ClerkM2MTokenIssuer(

@@ -78,7 +78,7 @@ function executeSql(sql: string): string {
 function servicePrincipal(clientId: string, scopes: readonly string[]): AuthPrincipal {
   return {
     tokenType: "service",
-    subject: `${clientId}-subject`,
+    subject: clientId,
     clientId,
     audience: "expense-app-internal",
     issuer: "https://services.test",
@@ -187,6 +187,18 @@ describe.skipIf(!integrationEnabled)("Phase 0L real worker loop", () => {
           AI_WORKER_TASK_QUEUE: TASK_QUEUE,
           APP_API_BASE_URL: `http://127.0.0.1:${appPort}`,
           APP_API_SERVICE_TOKEN: WORKER_TOKEN,
+          // Legacy fake service tokens keep this test local; Clerk values only
+          // satisfy worker startup validation and are never contacted.
+          CLERK_ISSUER_URL: "https://clerk.test",
+          CLERK_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
+          CLERK_TENANT_AUDIENCE: "phase-0l-test-tenant",
+          CLERK_PLATFORM_AUDIENCE: "phase-0l-test-platform",
+          CLERK_APP_SERVICE_AUDIENCE: "phase-0l-test-app-service",
+          CLERK_FOUNDRY_SERVICE_AUDIENCE: "phase-0l-test-foundry-service",
+          CLERK_APP_MACHINE_SECRET_KEY: "phase-0l-test-app-machine-secret",
+          CLERK_FOUNDRY_MACHINE_SECRET_KEY: "phase-0l-test-foundry-machine-secret",
+          CLERK_APP_SERVICE_SUBJECT: "phase-0l-test-app-subject",
+          CLERK_FOUNDRY_SERVICE_SUBJECT: "phase-0l-test-foundry-subject",
           // Echo jobs never touch Foundry, but run_worker constructs all
           // clients at startup -- dummies satisfy construction only.
           FOUNDRY_BASE_URL: "http://127.0.0.1:9",
