@@ -131,7 +131,7 @@ describe("Foundry authentication", () => {
     });
   }
 
-  function createTestApp() {
+  function createTestApp(options: Record<string, unknown> = {}) {
     const platformVerifier = createTokenVerifier({
       tokenType: "platform",
       issuer: PLATFORM_ISSUER,
@@ -151,7 +151,16 @@ describe("Foundry authentication", () => {
         platform: platformVerifier,
         service: serviceVerifier,
       },
-    });
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return (
+            (subject === "mapped-operator" && role === "operator") ||
+            (subject === "mapped-reconciler" && role === "quota_reconciler")
+          );
+        },
+      },
+      ...options,
+    } as Parameters<typeof buildApp>[0]);
     apps.add(app);
 
     app.get(
@@ -249,13 +258,16 @@ describe("Foundry authentication", () => {
   });
 
   it("accepts only the exact platform operator role", async () => {
-    const response = await requestWithToken(OPERATOR_PATH, await signToken());
+    const response = await requestWithToken(
+      OPERATOR_PATH,
+      await signToken({ subject: "mapped-operator" }),
+    );
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       principal: {
         tokenType: "platform",
-        subject: "platform-account-123",
+        subject: "mapped-operator",
         clientId: null,
         audience: PLATFORM_AUDIENCE,
         issuer: PLATFORM_ISSUER,
@@ -281,6 +293,11 @@ describe("Foundry authentication", () => {
             ? platformKeys.publicKey
             : serviceKeys.publicKey;
       },
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return subject === "mapped-operator" && role === "operator";
+        },
+      },
     });
     apps.add(app);
     app.get(
@@ -297,6 +314,7 @@ describe("Foundry authentication", () => {
     );
 
     const token = await signToken({
+      subject: "mapped-operator",
       issuer: "https://clerk.test",
       audience: "platform-audience",
     });
@@ -373,13 +391,44 @@ describe("Foundry authentication", () => {
     expectGenericError(await requestWithToken(OPERATOR_PATH, token), 401);
   });
 
-  it("accepts an explicitly trusted platform_role claim", async () => {
+  it("rejects a platform_role claim without an application operator mapping", async () => {
     const token = await signToken({ claims: { platform_role: "operator" } });
     const response = await requestWithToken(OPERATOR_PATH, token);
 
+    expectGenericError(response, 403);
+  });
+
+  it("rejects provider roles for an organization member", async () => {
+    const token = await signToken({
+      claims: {
+        org_id: "org_clerk_123",
+        org_role: "admin",
+        roles: ["operator"],
+      },
+    });
+
+    expectGenericError(await requestWithToken(OPERATOR_PATH, token), 403);
+  });
+
+  it("accepts a mapped application platform operator", async () => {
+    const app = createTestApp({
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return subject === "platform-account-123" && role === "operator";
+        },
+      },
+    });
+    const token = await signToken({ claims: { roles: [] } });
+
+    const response = await app.inject({
+      method: "GET",
+      url: OPERATOR_PATH,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      principal: { roles: ["operator"] },
+      principal: { subject: "platform-account-123", roles: [] },
     });
   });
 
@@ -399,7 +448,10 @@ describe("Foundry authentication", () => {
   });
 
   it("accepts only the exact platform quota_reconciler role", async () => {
-    const token = await signToken({ claims: { roles: ["quota_reconciler"] } });
+    const token = await signToken({
+      subject: "mapped-reconciler",
+      claims: { roles: ["quota_reconciler"] },
+    });
     const response = await requestWithToken(QUOTA_RECONCILER_PATH, token);
 
     expect(response.statusCode).toBe(200);
@@ -538,6 +590,7 @@ describe("Foundry authentication", () => {
 
   it("uses jti over sid when both token identity claims are present", async () => {
     const token = await signToken({
+      subject: "mapped-operator",
       tokenId: "primary-token",
       claims: { roles: ["operator"], sid: "fallback-session" },
     });

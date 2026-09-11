@@ -4,10 +4,12 @@ import type {
   AuthVerifiers,
   TokenVerifier,
 } from "../auth/types.js";
+import type { PlatformOperatorDomain } from "../domain/platform-operators.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     authVerifiers: AuthVerifiers;
+    platformOperatorDomain: PlatformOperatorDomain;
   }
 
   interface FastifyRequest {
@@ -17,6 +19,7 @@ declare module "fastify" {
 
 export interface AuthPluginOptions {
   readonly authVerifiers: AuthVerifiers;
+  readonly platformOperatorDomain: PlatformOperatorDomain;
 }
 
 type AuthGuard = (request: FastifyRequest) => Promise<void>;
@@ -55,6 +58,7 @@ export function registerAuthPlugin(
   options: AuthPluginOptions,
 ): void {
   app.decorate("authVerifiers", options.authVerifiers);
+  app.decorate("platformOperatorDomain", options.platformOperatorDomain);
   app.decorateRequest("authPrincipal", null);
 }
 
@@ -65,7 +69,13 @@ export function platformGuard(requiredRole: string): AuthGuard {
       request.server.authVerifiers.platform,
     );
 
-    if (!principal.roles.includes(requiredRole)) {
+    if (
+      principal.tokenType !== "platform" ||
+      !(await request.server.platformOperatorDomain.hasRole(
+        principal.subject,
+        requiredRole,
+      ))
+    ) {
       throw requestError(403);
     }
 

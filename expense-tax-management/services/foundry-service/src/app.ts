@@ -20,6 +20,10 @@ import { createCatalogDomain, type CatalogDomain } from "./domain/catalog.js";
 import { createQuotasDomain, type QuotasDomain } from "./domain/quotas.js";
 import { createRoutesDomain, type RoutesDomain } from "./domain/routes.js";
 import { createOperationsDomain, type OperationsDomain } from "./domain/operations.js";
+import {
+  createPlatformOperatorDomain,
+  type PlatformOperatorDomain,
+} from "./domain/platform-operators.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { createPostgresSecretStore, type SecretStore } from "./domain/vault.js";
 import { registerErrorHandlers } from "./errors.js";
@@ -109,6 +113,7 @@ export interface BuildAppOptions {
   readonly quotasDomain?: QuotasDomain;
   readonly routesDomain?: RoutesDomain;
   readonly operationsDomain?: OperationsDomain;
+  readonly platformOperatorDomain?: PlatformOperatorDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -138,6 +143,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const quotasDomain = options.quotasDomain ?? createQuotasDomain(database);
   const routesDomain = options.routesDomain ?? createRoutesDomain(database);
   const operationsDomain = options.operationsDomain ?? createOperationsDomain(database);
+  const platformOperatorDomain =
+    options.platformOperatorDomain ?? createPlatformOperatorDomain(database);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -176,6 +183,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         options.config,
         options.authKeyResolverFactory,
       ),
+    platformOperatorDomain,
   });
   registerDatabasePlugin(app, {
     database,

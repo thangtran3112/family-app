@@ -1,5 +1,7 @@
 import { buildApp } from "./app.js";
 import { createAppConfig } from "./config.js";
+import { createAppDatabase } from "./database/client.js";
+import { createDatabaseClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 
 const configuredPort = Number(process.env.PORT ?? "8100");
 const port = Number.isInteger(configuredPort) ? configuredPort : 8100;
@@ -7,7 +9,12 @@ const config = createAppConfig({
   port,
   version: process.env.APP_VERSION ?? "0.1.0",
 });
-const app = buildApp({ config });
+const database = createAppDatabase(config.databaseUrl);
+const app = buildApp({
+  config,
+  database,
+  clerkIdentityDomain: createDatabaseClerkIdentityMappingDomain(database),
+});
 
 let shuttingDown = false;
 
@@ -19,6 +26,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   shuttingDown = true;
   app.log.info({ signal }, "shutting down");
   await app.close();
+  await database.destroy();
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -37,5 +45,6 @@ try {
   });
 } catch (error: unknown) {
   app.log.error({ err: error }, "server startup failed");
+  await database.destroy();
   process.exitCode = 1;
 }

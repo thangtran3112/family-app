@@ -22,6 +22,7 @@ export interface CreateTokenVerifierOptions {
   readonly audience: string;
   readonly keyResolver: AuthKeyResolver;
   readonly requireVerifiedEmail?: boolean;
+  readonly requireOrganizationId?: boolean;
 }
 
 export type AuthKeyResolverFactory = (
@@ -172,6 +173,9 @@ export function createTokenVerifier(
 
         const organizationId =
           options.tokenType === "tenant" ? clerkOrganizationId(payload) : null;
+        if (options.requireOrganizationId && organizationId === null) {
+          throw new Error("Invalid token claim");
+        }
         return {
           tokenType: options.tokenType,
           subject,
@@ -199,6 +203,7 @@ export function createRemoteAuthVerifiers(
   config: AppAuthConfig,
   keyResolverFactory: AuthKeyResolverFactory = (authority) =>
     createRemoteJWKSet(new URL(authority.jwksUrl)),
+  requireOrganizationId = false,
 ): AuthVerifiers {
   return {
     tenant: createTokenVerifier({
@@ -206,6 +211,7 @@ export function createRemoteAuthVerifiers(
       issuer: config.tenant.issuer,
       audience: config.tenant.audience,
       keyResolver: keyResolverFactory(config.tenant),
+      requireOrganizationId,
       requireVerifiedEmail: true,
     }),
     service: createTokenVerifier({
@@ -235,6 +241,7 @@ export function createClerkAuthVerifiers(
       },
     },
     keyResolverFactory,
+    true,
   );
 }
 

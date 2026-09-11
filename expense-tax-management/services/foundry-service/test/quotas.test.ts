@@ -39,7 +39,7 @@ const RESERVATION = {
 function platformPrincipal(roles: readonly string[]): AuthPrincipal {
   return {
     tokenType: "platform",
-    subject: "operator-1",
+    subject: roles.includes("quota_reconciler") ? "reconciler-1" : "catalog-1",
     clientId: null,
     audience: "expense-foundry-platform",
     issuer: "https://identity.test",
@@ -123,6 +123,14 @@ describe("Foundry quota/reservation routes", () => {
       logger: false,
       authVerifiers: { platform: platformVerifier, service: serviceVerifier },
       quotasDomain,
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return (
+            (subject === "catalog-1" && role === "catalog_manager") ||
+            (subject === "reconciler-1" && role === "quota_reconciler")
+          );
+        },
+      },
     });
     apps.add(app);
     return { app, quotasDomain };
@@ -201,7 +209,7 @@ describe("Foundry quota/reservation routes", () => {
     expect(response.statusCode).toBe(200);
     expect(quotasDomain.resolveReconciliation).toHaveBeenCalledWith({
       reservationId: RESERVATION.id,
-      resolvedBySubject: "operator-1",
+      resolvedBySubject: "reconciler-1",
       request: { decision: "released", reason: "ambiguous timeout" },
       requestId: expect.any(String),
     });

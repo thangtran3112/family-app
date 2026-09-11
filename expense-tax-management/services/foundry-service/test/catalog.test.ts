@@ -88,7 +88,7 @@ describe("Foundry catalog routes", () => {
           return platformPrincipal(["catalog_manager"]);
         }
         if (token === "no-role-token") {
-          return platformPrincipal([]);
+          return { ...platformPrincipal([]), subject: "no-role" };
         }
         throw new Error("wrong token");
       }),
@@ -106,6 +106,11 @@ describe("Foundry catalog routes", () => {
       logger: false,
       authVerifiers: { platform: platformVerifier, service: serviceVerifier },
       catalogDomain,
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return subject === "operator-1" && role === "catalog_manager";
+        },
+      },
     });
     apps.add(app);
     return { app, catalogDomain };

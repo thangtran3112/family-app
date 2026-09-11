@@ -94,6 +94,14 @@ export interface FoundryAuditEventTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface PlatformOperatorIdentityTable {
+  readonly clerk_user_id: string;
+  readonly role: string;
+  status: Generated<"active" | "disabled">;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
 export interface TenantAiQuotaTable {
   readonly id: string;
   readonly tenant_id: string;
@@ -161,6 +169,7 @@ export interface FoundryDatabase {
   readonly "foundry.ai_modes": AiModeTable;
   readonly "foundry.ai_mode_route_versions": AiModeRouteVersionTable;
   readonly "foundry.foundry_audit_events": FoundryAuditEventTable;
+  readonly "foundry.platform_operator_identities": PlatformOperatorIdentityTable;
   readonly "foundry.tenant_ai_quotas": TenantAiQuotaTable;
   readonly "foundry.ai_quota_periods": AiQuotaPeriodTable;
   readonly "foundry.ai_quota_reservations": AiQuotaReservationTable;

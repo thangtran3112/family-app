@@ -15,6 +15,7 @@ import {
 import type { AuthVerifiers } from "./auth/types.js";
 import type { AppConfig } from "./config.js";
 import { createAppDatabase } from "./database/client.js";
+import { createDatabaseClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 import type { AppDatabase } from "./database/types.js";
 import {
   createBusinessDomain,
@@ -203,6 +204,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     logger: loggerWithRedaction(options.logger),
   });
   const database = options.database ?? createAppDatabase(options.config.databaseUrl);
+  const clerkIdentityDomain =
+    options.clerkIdentityDomain ?? createDatabaseClerkIdentityMappingDomain(database);
   const identityDomain = options.identityDomain ?? createIdentityDomain(database);
   const tenantDomain = options.tenantDomain ?? createTenantDomain(database);
   const membershipDomain =
@@ -267,9 +270,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         options.config,
         options.authKeyResolverFactory,
       ),
-    ...(options.clerkIdentityDomain
-      ? { clerkIdentityDomain: options.clerkIdentityDomain }
-      : {}),
+    clerkIdentityDomain,
   });
   registerDatabasePlugin(app, {
     database,

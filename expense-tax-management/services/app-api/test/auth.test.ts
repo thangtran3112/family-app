@@ -237,6 +237,28 @@ describe("App API authentication", () => {
     });
   });
 
+  it("wires the database Clerk mapping domain into the default app path", () => {
+    const app = createTestApp();
+
+    expect(app.clerkIdentityDomain).not.toBeNull();
+  });
+
+  it("rejects a Clerk tenant token without a signed organization id", async () => {
+    const verifier = createTokenVerifier({
+      tokenType: "tenant",
+      issuer: TENANT_ISSUER,
+      audience: TENANT_AUDIENCE,
+      keyResolver: async () => tenantKeys.publicKey,
+      requireVerifiedEmail: true,
+      requireOrganizationId: true,
+    });
+    const token = await signToken();
+
+    await expect(verifier.verify(token)).rejects.toThrow(
+      "Token verification failed",
+    );
+  });
+
   async function requestService(token: string) {
     return createTestApp().inject({
       method: "GET",
@@ -328,6 +350,24 @@ describe("App API authentication", () => {
             ? tenantKeys.publicKey
             : serviceKeys.publicKey;
       },
+      clerkIdentityDomain: {
+        async resolveTenantIdentity(clerkUserId, clerkOrgId) {
+          expect(clerkUserId).toBe("account-123");
+          expect(clerkOrgId).toBe("clerk-org-123");
+          return {
+            status: "resolved",
+            userId: "app-user-123",
+            tenantId: "app-tenant-123",
+            role: "owner",
+          };
+        },
+        async mapUser() {
+          throw new Error("not used");
+        },
+        async mapOrganization() {
+          throw new Error("not used");
+        },
+      },
     });
     apps.add(app);
     app.get(
@@ -349,6 +389,7 @@ describe("App API authentication", () => {
     const token = await signToken({
       issuer: "https://clerk.test",
       audience: "tenant-audience",
+      claims: { org_id: "clerk-org-123" },
     });
     const response = await app.inject({
       method: "GET",

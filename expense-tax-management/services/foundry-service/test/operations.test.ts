@@ -21,8 +21,8 @@ const ENV = {
   CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker-foundry-machine",
   FOUNDRY_DATABASE_URL: "postgresql://unused.test/foundry",
 };
-function principal(roles: readonly string[]): AuthPrincipal {
-  return { tokenType: "platform", subject: "operator", clientId: null,
+function principal(roles: readonly string[], subject: string): AuthPrincipal {
+  return { tokenType: "platform", subject, clientId: null,
     audience: "expense-foundry-platform", issuer: "https://identity.test",
     roles, scopes: [], tokenId: "token" };
 }
@@ -35,10 +35,16 @@ describe("Foundry operations read routes", () => {
       listProviderCalls: vi.fn(async () => []), listQuotaPeriods: vi.fn(async () => []),
       listReconciliationQueue: vi.fn(async () => []), listAuditEvents: vi.fn(async () => []),
     };
-    const verifier: TokenVerifier = { verify: vi.fn(async (token) => token === "reconciler" ? principal(["quota_reconciler"]) : principal(["catalog_manager"])) };
+    const verifier: TokenVerifier = { verify: vi.fn(async (token) => token === "reconciler" ? principal(["quota_reconciler"], "reconciler") : principal(["catalog_manager"], "catalog")) };
     const app = buildApp({ config: createFoundryConfig({ env: ENV }), logger: false,
       authVerifiers: { platform: verifier, service: { verify: vi.fn(async () => { throw new Error("unused"); }) } },
-      catalogDomain: {} as never, quotasDomain: {} as never, routesDomain: {} as never, operationsDomain });
+      catalogDomain: {} as never, quotasDomain: {} as never, routesDomain: {} as never, operationsDomain,
+      platformOperatorDomain: {
+        async hasRole(subject, role) {
+          return (subject === "reconciler" && role === "quota_reconciler") ||
+            (subject === "catalog" && role === "catalog_manager");
+        },
+      }, });
     apps.add(app); return { app, operationsDomain };
   }
   it("separates reconciler telemetry from catalog audit/period reads", async () => {
