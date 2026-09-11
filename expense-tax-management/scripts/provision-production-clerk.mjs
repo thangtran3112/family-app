@@ -149,7 +149,7 @@ export async function executePsql({
       "psql",
       ["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--file=-"],
       {
-      env: { ...env, ...databaseEnv },
+      env: { ...process.env, ...env, ...databaseEnv },
       },
     );
     let stderr = "";

@@ -434,4 +434,29 @@ describe("database provisioning", () => {
       }),
     ).rejects.not.toThrow("database-secret");
   });
+
+  it("preserves PATH while PG environment values override parent values", async () => {
+    let childEnvironment;
+    const spawnImpl = (_command, _args, options) => {
+      childEnvironment = options.env;
+      const listeners = new Map();
+      return {
+        stderr: { on: () => undefined },
+        stdin: { end: () => queueMicrotask(() => listeners.get("close")?.(0)) },
+        once: (event, listener) => listeners.set(event, listener),
+      };
+    };
+
+    await executePsql({
+      databaseUrl: "postgresql://url-user:url-password@url-host:5544/url-db?sslmode=require",
+      sql: "SELECT 1",
+      env: { PGHOST: "caller-host" },
+      spawnImpl,
+    });
+
+    expect(childEnvironment.PATH).toBe(process.env.PATH);
+    expect(childEnvironment.PGHOST).toBe("url-host");
+    expect(childEnvironment.PGPORT).toBe("5544");
+    expect(childEnvironment.PGDATABASE).toBe("url-db");
+  });
 });
