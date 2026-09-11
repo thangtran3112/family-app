@@ -16,6 +16,11 @@ for (const job of ["quality", "integration", "no-deploy"]) {
 if (parsed.jobs["no-deploy"].needs?.join?.(",") !== "quality,integration") {
   throw new Error("Deployment gate no longer waits for all CI jobs");
 }
+if (
+  parsed.jobs.integration.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY !== "pk_test_ci"
+) {
+  throw new Error("Integration job must use the test Clerk publishable key");
+}
 for (const required of [
   "pnpm contracts:check",
   "pnpm --filter @expense-tax/contracts build",

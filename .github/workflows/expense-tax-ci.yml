@@ -76,6 +76,9 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # Capture production builds require a nonproduction public Clerk key; never use production credentials in CI.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
