@@ -67,7 +67,8 @@ ssh_run() {
 }
 
 echo "Installing cloudflared on ${REMOTE}"
-ssh_run 'set -Eeuo pipefail
+ssh_run "$(cat <<'REMOTE_INSTALL'
+set -Eeuo pipefail
   required_version=2025.4.0
   version_at_least() {
     local current required
@@ -103,9 +104,12 @@ ssh_run 'set -Eeuo pipefail
   version_at_least "$installed_version" "$required_version" || {
     echo "cloudflared ${required_version} or newer is required; found ${installed_version:-unknown}" >&2
     exit 1
-  }'
+  }
+REMOTE_INSTALL
+)"
 
-ssh "${SSH_OPTIONS[@]}" "$REMOTE" 'set -Eeuo pipefail
+ssh "${SSH_OPTIONS[@]}" "$REMOTE" "$(cat <<'REMOTE_SERVICE'
+set -Eeuo pipefail
   sudo install -d -m 0755 /etc/cloudflared
   sudo install -o root -g root -m 0600 /dev/stdin /etc/cloudflared/expense-tax-tunnel.token
   sudo tee /etc/systemd/system/expense-tax-cloudflared.service >/dev/null <<"UNIT"
@@ -128,4 +132,6 @@ UNIT
   sudo systemctl enable --now expense-tax-cloudflared.service
   sudo systemctl restart expense-tax-cloudflared.service
   sudo systemctl is-active --quiet expense-tax-cloudflared.service
-  echo "cloudflared service active"' < "$TOKEN_FILE"
+  echo "cloudflared service active"
+REMOTE_SERVICE
+)" < "$TOKEN_FILE"
