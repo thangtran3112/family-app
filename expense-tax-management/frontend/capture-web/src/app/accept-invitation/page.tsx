@@ -2,7 +2,7 @@
 
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 
 function InvitationAcceptance() {
   const searchParams = useSearchParams();
@@ -15,59 +15,55 @@ function InvitationAcceptance() {
   const [password, setPassword] = useState("");
   const [needsPassword, setNeedsPassword] = useState(false);
 
-  useEffect(() => {
-    if (started.current || !ticket || (status !== "sign_in" && status !== "sign_up")) return;
-
-    started.current = true;
-    let cancelled = false;
-
+  const acceptInvitation = useEffectEvent(async () => {
     const navigateToCapture = ({ decorateUrl }: { decorateUrl: (url: string) => string }) => {
       window.location.assign(decorateUrl("/capture"));
     };
 
     const accept = async () => {
       if (status === "sign_in") {
-        const result = await signIn.ticket({ ticket });
+        const result = await signIn.ticket({ ticket: ticket! });
         if (result.error) {
-          if (!cancelled) setError(result.error.longMessage ?? result.error.message);
+          setError(result.error.longMessage ?? result.error.message);
           return;
         }
         if (signIn.status !== "complete") {
-          if (!cancelled) setError("Invitation sign-in needs another authentication step.");
+          setError("Invitation sign-in needs another authentication step.");
           return;
         }
         const finalized = await signIn.finalize({ navigate: navigateToCapture });
-        if (finalized.error && !cancelled) setError(finalized.error.longMessage ?? finalized.error.message);
+        if (finalized.error) setError(finalized.error.longMessage ?? finalized.error.message);
         return;
       }
 
-      const result = await signUp.ticket({ ticket });
+      const result = await signUp.ticket({ ticket: ticket! });
       if (result.error) {
-        if (!cancelled) setError(result.error.longMessage ?? result.error.message);
+        setError(result.error.longMessage ?? result.error.message);
         return;
       }
       if (signUp.status !== "complete") {
-        if (!cancelled) {
-          if (signUp.missingFields.includes("password")) {
-            setNeedsPassword(true);
-          } else {
-            setError(`Invitation sign-up needs: ${signUp.missingFields.join(", ") || "additional details"}.`);
-          }
+        if (signUp.missingFields.includes("password")) {
+          setNeedsPassword(true);
+        } else {
+          setError(`Invitation sign-up needs: ${signUp.missingFields.join(", ") || "additional details"}.`);
         }
         return;
       }
       const finalized = await signUp.finalize({ navigate: navigateToCapture });
-      if (finalized.error && !cancelled) setError(finalized.error.longMessage ?? finalized.error.message);
+      if (finalized.error) setError(finalized.error.longMessage ?? finalized.error.message);
     };
 
-    void accept().catch((reason: unknown) => {
-      if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not accept invitation.");
+    await accept();
+  });
+
+  useEffect(() => {
+    if (started.current || !ticket || (status !== "sign_in" && status !== "sign_up")) return;
+
+    started.current = true;
+    void acceptInvitation().catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : "Could not accept invitation.");
     });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [signIn, signUp, status, ticket]);
+  }, [status, ticket]);
 
   const completePasswordSignUp = async () => {
     setError(null);
