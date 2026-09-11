@@ -16,7 +16,7 @@ Date: 2026-09-10
 - No gcloud mutations executed.
 - No VPS command, deployment, DNS mutation, or push executed.
 - Existing `plans/mockups/**` and untracked AGENTS/CLAUDE files were not modified.
-- `expense-clerk.tobytran.dev` intentionally remains outside Terraform and documented as DNS-only Clerk custom Frontend API CNAME.
+- `expense-clerk.tobytran.dev` was not used; production Clerk uses `clerk.tobytran.dev`.
 
 ## Verification
 
@@ -65,3 +65,13 @@ Date: 2026-09-10
   `git diff --check`.
 - No Cloudflare API calls, gcloud mutations, VPS commands, Terraform apply, or
   repository push executed.
+
+## Clerk DNS Change Verification
+
+- `terraform init -backend=false` completed using the existing provider lock; no backend or Cloudflare API access used.
+- `terraform fmt -check -recursive .` passed.
+- `terraform validate` passed with backend disabled.
+- `bash infrastructure/cloudflare/expense-tax/test-clerk-dns.sh` passed for all five Clerk CNAME targets, `proxied = false`, and preserved Tunnel `proxied = true` configuration.
+- Existing Cloudflare Vitest static suite passed: 6 tests.
+- `git diff --check` passed for all changed Clerk files.
+- No Terraform import/apply, external calls, DNS mutation, or repository push executed.

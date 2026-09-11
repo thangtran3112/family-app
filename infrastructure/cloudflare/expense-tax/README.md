@@ -14,8 +14,37 @@ public ports; it connects outbound to Cloudflare.
 | `expense-office.tobytran.dev` | `127.0.0.1:7302` (Office) |
 | `expense-foundry.tobytran.dev` | `127.0.0.1:7303` (Foundry) |
 
-`expense-clerk.tobytran.dev` is reserved for Clerk's custom Frontend API CNAME.
-It is DNS-only and is not created or managed by this Tunnel module.
+Production Clerk uses `clerk.tobytran.dev`; `expense-clerk.tobytran.dev` was not
+used. App and API hosts remain product-scoped (`expense.tobytran.dev`,
+`expense-api.tobytran.dev`, and related hosts). Clerk records are DNS-only and
+are managed separately from Tunnel records in `clerk_dns.tf`.
+
+## Production Clerk DNS
+
+| Host | CNAME target | Cloudflare mode |
+|---|---|---|
+| `clerk.tobytran.dev` | `frontend-api.clerk.services` | DNS-only |
+| `accounts.tobytran.dev` | `accounts.clerk.services` | DNS-only |
+| `clkmail.tobytran.dev` | `mail.isbd4mdbk2ld.clerk.services` | DNS-only |
+| `clk._domainkey.tobytran.dev` | `dkim1.isbd4mdbk2ld.clerk.services` | DNS-only |
+| `clk2._domainkey.tobytran.dev` | `dkim2.isbd4mdbk2ld.clerk.services` | DNS-only |
+
+Records already exist in Cloudflare. Import each record into its stable
+Terraform address before planning or applying this module. Cloudflare imports
+use `zone_id/record_id`; obtain each existing record ID from Cloudflare without
+creating replacement records:
+
+```bash
+cd infrastructure/cloudflare/expense-tax
+terraform import 'cloudflare_dns_record.clerk["frontend_api"]' "$CLOUDFLARE_ZONE_ID/$CLERK_FRONTEND_API_RECORD_ID"
+terraform import 'cloudflare_dns_record.clerk["accounts"]' "$CLOUDFLARE_ZONE_ID/$CLERK_ACCOUNTS_RECORD_ID"
+terraform import 'cloudflare_dns_record.clerk["mail"]' "$CLOUDFLARE_ZONE_ID/$CLERK_MAIL_RECORD_ID"
+terraform import 'cloudflare_dns_record.clerk["dkim1"]' "$CLOUDFLARE_ZONE_ID/$CLERK_DKIM1_RECORD_ID"
+terraform import 'cloudflare_dns_record.clerk["dkim2"]' "$CLOUDFLARE_ZONE_ID/$CLERK_DKIM2_RECORD_ID"
+```
+
+Do not use Tunnel CNAME targets for these records and do not set
+`proxied = true`; Clerk validation requires DNS-only records.
 
 ## Cloudflare token
 
@@ -66,6 +95,15 @@ terraform plan \
 terraform apply \
   -var="cloudflare_account_id=${CLOUDFLARE_ACCOUNT_ID}" \
   -var="cloudflare_api_token=${CLOUDFLARE_API_TOKEN}"
+```
+
+For local validation without backend or Cloudflare access:
+
+```bash
+terraform init -backend=false
+terraform fmt -check -recursive .
+terraform validate
+bash test-clerk-dns.sh
 ```
 
 Use a restrictive umask before exporting the token, then do not print the file:
