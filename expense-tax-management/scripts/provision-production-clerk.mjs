@@ -87,12 +87,21 @@ function databaseEnvironment(databaseUrl) {
   };
 }
 
-async function executePsql({ databaseUrl, sql, env = process.env }) {
+export async function executePsql({
+  databaseUrl,
+  sql,
+  env = process.env,
+  spawnImpl = spawn,
+}) {
   const databaseEnv = databaseEnvironment(databaseUrl);
   await new Promise((resolve, reject) => {
-    const child = spawn("psql", ["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--file=-"], {
+    const child = spawnImpl(
+      "psql",
+      ["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--file=-"],
+      {
       env: { ...env, ...databaseEnv },
-    });
+      },
+    );
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -100,7 +109,16 @@ async function executePsql({ databaseUrl, sql, env = process.env }) {
     child.once("error", reject);
     child.once("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`psql failed with exit code ${code}: ${stderr.slice(0, 200)}`));
+      else {
+        let redactedStderr = stderr.replaceAll(databaseUrl, "[REDACTED]");
+        if (databaseEnv.PGPASSWORD !== "") {
+          redactedStderr = redactedStderr.replaceAll(
+            databaseEnv.PGPASSWORD,
+            "[REDACTED]",
+          );
+        }
+        reject(new Error(`psql failed with exit code ${code}: ${redactedStderr.slice(0, 200)}`));
+      }
     });
     child.stdin.end(sql);
   });

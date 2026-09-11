@@ -1,9 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ErrorResponseSchema, HealthResponseSchema } from "@expense-tax/contracts";
+import { sql } from "kysely";
 import { buildApp } from "../src/app.js";
 import { createFoundryConfig } from "../src/config.js";
+import { up as migrateOperatorRoles } from "../src/database/migrations/006_platform_operator_identity_roles.js";
+import { createFoundryDatabase } from "../src/database/client.js";
 
 const TEST_ENV = {
   FOUNDRY_PLATFORM_TOKEN_ISSUER: "https://identity.test",
@@ -23,13 +26,81 @@ const TEST_ENV = {
   FOUNDRY_DATABASE_URL: "postgresql://foundry-runtime.test/foundry",
 };
 
+const migrationTestUrl = process.env.FOUNDRY_MIGRATION_TEST_DATABASE_URL;
+let migrationTestAllowed = false;
+if (migrationTestUrl !== undefined) {
+  try {
+    migrationTestAllowed = ["localhost", "127.0.0.1", "::1"].includes(
+      new URL(migrationTestUrl).hostname,
+    );
+  } catch {
+    migrationTestAllowed = false;
+  }
+}
+
 describe("Foundry database boundaries", () => {
   const apps = new Set<ReturnType<typeof buildApp>>();
+  let migrationDatabase: ReturnType<typeof createFoundryDatabase> | undefined;
 
   afterEach(async () => {
     await Promise.all([...apps].map((app) => app.close()));
     apps.clear();
   });
+
+  beforeAll(async () => {
+    if (!migrationTestAllowed || !migrationTestUrl) return;
+    migrationDatabase = createFoundryDatabase(migrationTestUrl);
+    await sql`CREATE SCHEMA IF NOT EXISTS foundry`.execute(migrationDatabase);
+    await sql`DROP TABLE IF EXISTS foundry.platform_operator_identities`.execute(
+      migrationDatabase,
+    );
+    await sql`
+      CREATE TABLE foundry.platform_operator_identities (
+        clerk_user_id text PRIMARY KEY,
+        role text NOT NULL CHECK (role IN ('operator', 'catalog_manager', 'quota_reconciler')),
+        status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `.execute(migrationDatabase);
+    await migrateOperatorRoles(migrationDatabase);
+  });
+
+  afterEach(async () => {
+    if (!migrationDatabase) return;
+    await sql`TRUNCATE foundry.platform_operator_identities`.execute(migrationDatabase);
+  });
+
+  afterAll(async () => {
+    await migrationDatabase?.destroy();
+  });
+
+  it.skipIf(!migrationTestAllowed)(
+    "allows one Clerk user to hold both operator roles and rejects duplicate role rows",
+    async () => {
+      if (!migrationDatabase) throw new Error("migration test database is not configured");
+      await sql`
+        INSERT INTO foundry.platform_operator_identities (clerk_user_id, role)
+        VALUES ('user_thang', 'operator'), ('user_thang', 'catalog_manager')
+      `.execute(migrationDatabase);
+
+      const rows = await sql<{ role: string }>`
+        SELECT role FROM foundry.platform_operator_identities
+        WHERE clerk_user_id = 'user_thang' ORDER BY role
+      `.execute(migrationDatabase);
+      expect(rows.rows.map((row) => row.role)).toEqual([
+        "catalog_manager",
+        "operator",
+      ]);
+
+      await expect(
+        sql`
+          INSERT INTO foundry.platform_operator_identities (clerk_user_id, role)
+          VALUES ('user_thang', 'operator')
+        `.execute(migrationDatabase),
+      ).rejects.toThrow(/duplicate key|platform_operator_identities_pkey/);
+    },
+  );
 
   it("accepts runtime configuration without a migration database URL", () => {
     const runtimeEnv: Record<string, string> = { ...TEST_ENV };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   fetchClerkMemberships,
+  executePsql,
   parseProvisioningInput,
   provisionAppMappings,
   provisionFoundryOperator,
@@ -202,6 +203,27 @@ describe("fetchClerkMemberships", () => {
       ),
     ).rejects.toThrow(/membership/);
   });
+
+  it("uses bounded timeout and redacts request secrets from failures", async () => {
+    await expect(
+      fetchClerkMemberships(
+        {
+          clerkSecretKey: "sk_test_secret",
+          clerkOrgId: "org_family",
+          thangClerkUserId: "user_thang",
+          tramilyClerkUserId: "user_tramily",
+        },
+        {
+          timeoutMs: 1,
+          fetchImpl: async (_url, options) => {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            expect(options.signal.aborted).toBe(true);
+            throw new Error("sk_test_secret");
+          },
+        },
+      ),
+    ).rejects.toThrow("Clerk membership request failed for user_thang");
+  });
 });
 
 describe("database provisioning", () => {
@@ -270,5 +292,37 @@ describe("database provisioning", () => {
     expect(execution.sql).toContain("'catalog_manager'");
     expect(execution.sql).toContain("status = 'disabled'");
     expect(execution.sql).toContain("ON CONFLICT (clerk_user_id, role)");
+  });
+
+  it("redacts database password from psql stderr", async () => {
+    const stderr = "password=database-secret connection failed";
+    const spawnImpl = () => {
+      const listeners = new Map();
+      const child = {
+        stderr: { on: (_event, listener) => listeners.set("stderr", listener) },
+        stdin: { end: () => undefined },
+        once: (event, listener) => listeners.set(event, listener),
+      };
+      queueMicrotask(() => {
+        listeners.get("stderr")?.(Buffer.from(stderr));
+        listeners.get("close")?.(2);
+      });
+      return child;
+    };
+
+    await expect(
+      executePsql({
+        databaseUrl: "postgresql://app:database-secret@app.test/expense_tax",
+        sql: "SELECT 1",
+        spawnImpl,
+      }),
+    ).rejects.toThrow(/\[REDACTED\]/);
+    await expect(
+      executePsql({
+        databaseUrl: "postgresql://app:database-secret@app.test/expense_tax",
+        sql: "SELECT 1",
+        spawnImpl,
+      }),
+    ).rejects.not.toThrow("database-secret");
   });
 });
