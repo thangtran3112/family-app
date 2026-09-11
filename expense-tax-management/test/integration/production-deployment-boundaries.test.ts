@@ -151,6 +151,31 @@ describe("Phase 1B production deployment boundaries", () => {
     expect(workflow).not.toContain("CLERK_SECRET_KEY");
   });
 
+  it("allows and validates webhook secret, then scopes it to app-api", () => {
+    const deploy = readProductionFile("deploy.sh");
+    const allowlist = deploy.match(/KNOWN_ENV_KEYS=\(([^)]*)\)/s)?.[1] ?? "";
+    const authValidation = deploy.slice(
+      deploy.indexOf("validate_auth_values()"),
+      deploy.indexOf("compose()"),
+    );
+    const compose = YAML.parse(readProductionFile("docker-compose.yml")) as {
+      services: Record<string, { environment?: Record<string, string> }>;
+    };
+
+    expect(allowlist).toContain("CLERK_WEBHOOK_SIGNING_SECRET");
+    expect(authValidation).toContain("CLERK_WEBHOOK_SIGNING_SECRET");
+    expect(authValidation).toContain("^whsec_[^[:space:]]+$");
+    expect(compose.services["app-api"].environment?.CLERK_WEBHOOK_SIGNING_SECRET).toBe(
+      "${CLERK_WEBHOOK_SIGNING_SECRET:?CLERK_WEBHOOK_SIGNING_SECRET is required}",
+    );
+
+    for (const serviceName of ["foundry-service", "ai-worker", "capture-web", "office-web", "foundry-web"]) {
+      expect(compose.services[serviceName].environment).not.toHaveProperty(
+        "CLERK_WEBHOOK_SIGNING_SECRET",
+      );
+    }
+  });
+
   it("uses only a test Clerk key for CI frontend builds", () => {
     const workflow = readFileSync(
       path.join(repoRoot, "../.github/workflows/expense-tax-ci.yml"),

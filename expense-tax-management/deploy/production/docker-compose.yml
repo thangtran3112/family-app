@@ -25,6 +25,7 @@ services:
       CLERK_FOUNDRY_SERVICE_AUDIENCE: ${CLERK_FOUNDRY_SERVICE_AUDIENCE:?CLERK_FOUNDRY_SERVICE_AUDIENCE is required}
       CLERK_APP_SERVICE_SUBJECT: ${CLERK_APP_SERVICE_SUBJECT:?CLERK_APP_SERVICE_SUBJECT is required}
       CLERK_FOUNDRY_SERVICE_SUBJECT: ${CLERK_FOUNDRY_SERVICE_SUBJECT:?CLERK_FOUNDRY_SERVICE_SUBJECT is required}
+      CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:?CLERK_WEBHOOK_SIGNING_SECRET is required}
       # Phase 1B may use https://identity.not-configured.invalid and
       # https://services.not-configured.invalid. These values are deliberately
       # nonfunctional: JWKS cannot resolve and authenticated requests fail.

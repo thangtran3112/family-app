@@ -56,8 +56,63 @@ const syncScript = readFileSync(
   ),
   "utf8",
 );
+const productionDeployScript = readFileSync(
+  join(productionRoot, "deploy.sh"),
+  "utf8",
+);
+const productionCompose = readFileSync(
+  join(productionRoot, "docker-compose.yml"),
+  "utf8",
+);
 
 describe("buildProductionBundle", () => {
+  it("allows and validates the webhook secret in production deploy input", () => {
+    const allowlist = productionDeployScript.match(/KNOWN_ENV_KEYS=\(([^)]*)\)/su)?.[1] ?? "";
+    const requiredAuthKeys = productionDeployScript.match(/validate_auth_values\(\)[\s\S]*?for key in \\\n([\s\S]*?); do/u)?.[1] ?? "";
+
+    expect(allowlist).toContain("CLERK_WEBHOOK_SIGNING_SECRET");
+    expect(requiredAuthKeys).toContain("CLERK_WEBHOOK_SIGNING_SECRET");
+    expect(productionDeployScript).toContain(
+      "! \"$value\" =~ ^whsec_[^[:space:]]+$",
+    );
+  });
+
+  it("passes webhook secret only to app-api in production Compose", () => {
+    const appApi = productionCompose.slice(
+      productionCompose.indexOf("  app-api:"),
+      productionCompose.indexOf("  app-api-migrate:"),
+    );
+    const nonAppApiServices = [
+      productionCompose.slice(
+        productionCompose.indexOf("  foundry-service:"),
+        productionCompose.indexOf("  foundry-service-migrate:"),
+      ),
+      productionCompose.slice(
+        productionCompose.indexOf("  ai-worker:"),
+        productionCompose.indexOf("  capture-web:"),
+      ),
+      productionCompose.slice(
+        productionCompose.indexOf("  capture-web:"),
+        productionCompose.indexOf("  office-web:"),
+      ),
+      productionCompose.slice(
+        productionCompose.indexOf("  office-web:"),
+        productionCompose.indexOf("  foundry-web:"),
+      ),
+      productionCompose.slice(
+        productionCompose.indexOf("  foundry-web:"),
+        productionCompose.indexOf("  temporal:"),
+      ),
+    ];
+
+    expect(appApi).toContain(
+      "CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:?CLERK_WEBHOOK_SIGNING_SECRET is required}",
+    );
+    for (const service of nonAppApiServices) {
+      expect(service).not.toContain("CLERK_WEBHOOK_SIGNING_SECRET");
+    }
+  });
+
   it("carries both Clerk secrets through protected sync input into the bundle", () => {
     for (const key of [
       "CLERK_APP_MACHINE_SECRET_KEY",
