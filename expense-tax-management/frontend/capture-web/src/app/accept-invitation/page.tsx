@@ -85,7 +85,7 @@ function InvitationAcceptance() {
         return;
       }
 
-      const result = await activeSignUp.password({ emailAddress: activeSignUp.emailAddress, password });
+      const result = await activeSignUp.password({ password });
       if (result.error) {
         setError(result.error.longMessage ?? result.error.message);
         return;
