@@ -129,6 +129,12 @@ describe("deduplication canonicalization", () => {
       currency: "KWD",
       incurredOn: "2026-09-11",
     })).toMatchObject({ amountMinorUnits: 1230, currency: "KWD" });
+    expect(buildDeduplicationFingerprint({
+      merchant: "Large Tokyo Shop",
+      amount: "9007199254740991",
+      currency: "JPY",
+      incurredOn: "2026-09-11",
+    })).toMatchObject({ amountMinorUnits: 9007199254740991, currency: "JPY" });
   });
 
   it("bounds derived match idempotency keys while preserving identity", () => {

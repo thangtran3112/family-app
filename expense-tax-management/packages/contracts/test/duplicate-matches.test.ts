@@ -192,6 +192,21 @@ describe("deduplication contracts", () => {
         currency: "KWD",
       }).success,
     ).toBe(false);
+    expect(
+      DeduplicationEvidenceV1Schema.safeParse({
+        ...evidence,
+        amount: "9007199254740991",
+        currency: "JPY",
+      }).success,
+    ).toBe(true);
+    const { currency: _currency, ...shaOnlyEvidence } = evidence;
+    void _currency;
+    expect(
+      DeduplicationEvidenceV1Schema.safeParse({
+        ...shaOnlyEvidence,
+        amount: "9007199254740991",
+      }).success,
+    ).toBe(true);
   });
 
   it("exports inferred evidence with exact worker fields", () => {

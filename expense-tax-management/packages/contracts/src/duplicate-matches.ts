@@ -37,11 +37,7 @@ const DeduplicationAmountSchema = z
   .string()
   .trim()
   .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
-  .refine((value) => {
-    const [whole, fraction = ""] = value.split(".");
-    const minorUnits = BigInt(whole ?? "") * 100n + BigInt(fraction.padEnd(2, "0"));
-    return minorUnits > 0n && minorUnits <= MAX_SAFE_MINOR_UNITS;
-  }, "Amount must be positive and safely representable in minor units");
+  .refine((value) => /[1-9]/.test(value.replace(".", "")), "Amount must be positive");
 const DeduplicationCurrencySchema = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
 const DeduplicationDateSchema = z
   .string()
