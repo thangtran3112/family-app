@@ -22,7 +22,7 @@ Scope: final review fix wave only. No production mutation, deployment, subagents
 
 | Area | Result |
 |---|---|
-| Root TypeScript tests | `pnpm test`: 408 passed; 1 pre-existing Foundry database test skipped |
+| Root TypeScript tests | `pnpm test`: 480 passed; 1 pre-existing Foundry database test skipped |
 | App API tests | 29 files, 280 passed |
 | Contracts tests | 12 files, 61 passed |
 | Worker tests | 55 passed |
