@@ -40,7 +40,7 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 
 ## Commit
 
-- Pending at report creation; commit includes only this report and five implementation/test files.
+- `032819c fix(auth): harden production provisioning` includes this report and five implementation/test files.
 
 ## Concerns
 
