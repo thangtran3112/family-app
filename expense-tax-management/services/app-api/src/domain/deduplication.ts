@@ -20,6 +20,32 @@ import {
 } from "./idempotency.js";
 
 const FINGERPRINT_VERSION = 1;
+// ISO 4217 currencies not listed here use conventional two minor units.
+const CURRENCY_MINOR_UNIT_SCALES: Readonly<Record<string, number>> = {
+  BHD: 3,
+  IQD: 3,
+  JOD: 3,
+  KWD: 3,
+  LYD: 3,
+  OMR: 3,
+  TND: 3,
+  BIF: 0,
+  CLP: 0,
+  DJF: 0,
+  GNF: 0,
+  ISK: 0,
+  JPY: 0,
+  KMF: 0,
+  KRW: 0,
+  PYG: 0,
+  RWF: 0,
+  UGX: 0,
+  VND: 0,
+  VUV: 0,
+  XAF: 0,
+  XOF: 0,
+  XPF: 0,
+};
 
 export interface DeduplicationFingerprint {
   readonly version: number;
@@ -89,11 +115,13 @@ export function normalizeMerchant(value: string): string {
     .trim();
 }
 
-export function toAmountMinorUnits(value: string): number {
-  const match = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.exec(value.trim());
+export function toAmountMinorUnits(value: string, scale = 2): number {
+  const match = /^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.exec(value.trim());
   if (!match) throw DomainError.validation();
   const [whole, fraction = ""] = value.trim().split(".");
-  const minorUnits = BigInt(whole ?? "") * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (fraction.length > scale) throw DomainError.validation();
+  const factor = 10n ** BigInt(scale);
+  const minorUnits = BigInt(whole ?? "") * factor + BigInt(fraction.padEnd(scale, "0"));
   if (minorUnits <= 0n || minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw DomainError.validation();
   }
@@ -124,9 +152,12 @@ export function buildDeduplicationFingerprint(input: {
 }): DeduplicationFingerprint | null {
   const normalizedMerchant = normalizeMerchant(input.merchant);
   if (!normalizedMerchant || !input.amount || !input.currency || !input.incurredOn) return null;
-  const amountMinorUnits = toAmountMinorUnits(input.amount);
   const currency = input.currency.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw DomainError.validation();
+  const amountMinorUnits = toAmountMinorUnits(
+    input.amount,
+    CURRENCY_MINOR_UNIT_SCALES[currency] ?? 2,
+  );
   const incurredOn = canonicalDate(input.incurredOn);
   const canonical = [
     `v${FINGERPRINT_VERSION}`,
@@ -143,6 +174,16 @@ export function buildDeduplicationFingerprint(input: {
     incurredOn,
     hash: createHash("sha256").update(canonical).digest("hex"),
   };
+}
+
+export function buildMatchIdempotencyKey(
+  requestIdempotencyKey: string,
+  matchType: DeterministicCandidate["matchType"],
+  existingExpenseId: string,
+): string {
+  return `dedup:${createHash("sha256")
+    .update(`${requestIdempotencyKey}\n${matchType}\n${existingExpenseId}`)
+    .digest("hex")}`;
 }
 
 function sameScope(
@@ -494,35 +535,58 @@ export function createDeduplicationDomain(
 
           const matchIds: string[] = [];
           let fileQuery = transaction
-            .selectFrom("app.expense_files")
-            .select(["expense_id", "sha256_hex", "personal_profile_id", "business_id"])
-            .where("tenant_id", "=", job.tenant_id)
-            .where("sha256_hex", "=", file.sha256_hex)
-            .where("expense_id", "is not", null);
+            .selectFrom("app.expense_files as file")
+            .innerJoin("app.expenses as existing_expense", (join) =>
+              join
+                .onRef("existing_expense.id", "=", "file.expense_id")
+                .onRef("existing_expense.tenant_id", "=", "file.tenant_id")
+                .on("existing_expense.status", "<>", "archived"),
+            )
+            .select([
+              "file.expense_id as expense_id",
+              "file.sha256_hex as sha256_hex",
+              "file.personal_profile_id as personal_profile_id",
+              "file.business_id as business_id",
+            ])
+            .where("file.tenant_id", "=", job.tenant_id)
+            .where("file.sha256_hex", "=", file.sha256_hex)
+            .where("file.expense_id", "is not", null);
           fileQuery = job.personal_profile_id !== null
             ? fileQuery
-                .where("personal_profile_id", "=", job.personal_profile_id)
-                .where("business_id", "is", null)
+                .where("file.personal_profile_id", "=", job.personal_profile_id)
+                .where("file.business_id", "is", null)
             : fileQuery
-                .where("business_id", "=", job.business_id)
-                .where("personal_profile_id", "is", null);
+                .where("file.business_id", "=", job.business_id)
+                .where("file.personal_profile_id", "is", null);
           const files = file.sha256_hex ? await fileQuery.execute() : [];
           const fingerprints = fingerprint
             ? await (job.personal_profile_id !== null
                 ? transaction
-                    .selectFrom("app.expense_dedup_fingerprints")
-                    .selectAll()
-                    .where("tenant_id", "=", job.tenant_id)
-                    .where("normalized_merchant", "=", fingerprint.normalizedMerchant)
-                    .where("personal_profile_id", "=", job.personal_profile_id)
-                    .where("business_id", "is", null)
+                    .selectFrom("app.expense_dedup_fingerprints as fingerprint")
+                    .innerJoin("app.expenses as existing_expense", (join) =>
+                      join
+                        .onRef("existing_expense.id", "=", "fingerprint.expense_id")
+                        .onRef("existing_expense.tenant_id", "=", "fingerprint.tenant_id")
+                        .on("existing_expense.status", "<>", "archived"),
+                    )
+                    .selectAll("fingerprint")
+                    .where("fingerprint.tenant_id", "=", job.tenant_id)
+                    .where("fingerprint.normalized_merchant", "=", fingerprint.normalizedMerchant)
+                    .where("fingerprint.personal_profile_id", "=", job.personal_profile_id)
+                    .where("fingerprint.business_id", "is", null)
                 : transaction
-                    .selectFrom("app.expense_dedup_fingerprints")
-                    .selectAll()
-                    .where("tenant_id", "=", job.tenant_id)
-                    .where("normalized_merchant", "=", fingerprint.normalizedMerchant)
-                    .where("business_id", "=", job.business_id)
-                    .where("personal_profile_id", "is", null)
+                    .selectFrom("app.expense_dedup_fingerprints as fingerprint")
+                    .innerJoin("app.expenses as existing_expense", (join) =>
+                      join
+                        .onRef("existing_expense.id", "=", "fingerprint.expense_id")
+                        .onRef("existing_expense.tenant_id", "=", "fingerprint.tenant_id")
+                        .on("existing_expense.status", "<>", "archived"),
+                    )
+                    .selectAll("fingerprint")
+                    .where("fingerprint.tenant_id", "=", job.tenant_id)
+                    .where("fingerprint.normalized_merchant", "=", fingerprint.normalizedMerchant)
+                    .where("fingerprint.business_id", "=", job.business_id)
+                    .where("fingerprint.personal_profile_id", "is", null)
               ).execute()
             : [];
           const candidates = findDeterministicCandidates({
@@ -561,7 +625,11 @@ export function createDeduplicationDomain(
               matchType: match.matchType,
               confidence: match.confidence,
               evidence: match.evidence,
-              idempotencyKey: `${input.request.idempotencyKey}:${match.matchType}:${match.existingExpenseId}`,
+              idempotencyKey: buildMatchIdempotencyKey(
+                input.request.idempotencyKey,
+                match.matchType,
+                match.existingExpenseId,
+              ),
             }));
           }
           await transaction

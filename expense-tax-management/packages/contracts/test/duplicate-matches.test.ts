@@ -183,7 +183,7 @@ describe("deduplication contracts", () => {
       DeduplicationEvidenceV1Schema.safeParse({ ...evidence, tenantId: ids.tenantId }).success,
     ).toBe(false);
     expect(
-      DeduplicationEvidenceV1Schema.safeParse({ ...evidence, amount: "12.345" }).success,
+       DeduplicationEvidenceV1Schema.safeParse({ ...evidence, amount: "12.3456" }).success,
     ).toBe(false);
   });
 

@@ -6,6 +6,7 @@ import { createAppConfig } from "../src/config.js";
 import { DeduplicationEvidenceV1Schema } from "@expense-tax/contracts";
 import {
   buildDeduplicationFingerprint,
+  buildMatchIdempotencyKey,
   findDeterministicCandidates,
   normalizeMerchant,
   resolveCandidateExpenseId,
@@ -113,6 +114,29 @@ describe("deduplication canonicalization", () => {
       currency: " usd ",
       incurredOn: "2026-02-30",
     })).toThrow();
+  });
+
+  it("uses documented currency scales in canonical minor units", () => {
+    expect(buildDeduplicationFingerprint({
+      merchant: "Tokyo Shop",
+      amount: "1000",
+      currency: "jpy",
+      incurredOn: "2026-09-11",
+    })).toMatchObject({ amountMinorUnits: 1000, currency: "JPY" });
+    expect(buildDeduplicationFingerprint({
+      merchant: "Kuwait Shop",
+      amount: "1.234",
+      currency: "KWD",
+      incurredOn: "2026-09-11",
+    })).toMatchObject({ amountMinorUnits: 1234, currency: "KWD" });
+  });
+
+  it("bounds derived match idempotency keys while preserving identity", () => {
+    const longRequestKey = "x".repeat(255);
+    const first = buildMatchIdempotencyKey(longRequestKey, "fuzzy_fields", "expense-1");
+    expect(first).toHaveLength(70);
+    expect(first).toBe(buildMatchIdempotencyKey(longRequestKey, "fuzzy_fields", "expense-1"));
+    expect(first).not.toBe(buildMatchIdempotencyKey(longRequestKey, "fingerprint", "expense-1"));
   });
 
   it("rejects an unbound or mismatched candidate expense", () => {
