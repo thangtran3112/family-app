@@ -48,4 +48,10 @@
 - Step 2 explicitly incomplete: required Terraform inputs/credentials were absent, so `terraform plan` stopped before planning. No plan executed; static inspection cannot prove plan contents.
 - Step 5 explicitly incomplete: no push or deployment-approval request was executed or granted because no reviewed plan was available.
 - No apply, public probes, Cloudflare/GCP mutation, or external action was executed.
-- Next action: provide required Terraform plan inputs/credentials and explicit deployment approval, then run and review the free-tier plan before any apply.
+- Next action, in order: provide required Terraform plan inputs/credentials; run and inspect the free-tier plan; request explicit deployment approval; apply only after approval. Public production probes require separate approval.
+
+## Task 5 Review Fix Evidence: Round 2 (2026-09-11)
+
+- Corrected sequencing: inputs/credentials first, then plan execution, plan inspection, explicit approval request, and apply only after approval.
+- Public production probes remain a separate approval gate.
+- No external action was executed while correcting evidence.

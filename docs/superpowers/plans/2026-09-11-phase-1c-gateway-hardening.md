@@ -290,9 +290,9 @@ Record commands, results, cost boundary, and any deferred GCP-specific work in t
 git commit -m "docs(gateway): record phase 1c verification"
 ```
 
-- [ ] **Step 5: Push and request deployment approval.**
+- [ ] **Step 5: Push reviewed code and request deployment approval after plan review.**
 
-Push reviewed code and docs. Stop before production Cloudflare apply unless the user explicitly approves the reviewed free-tier Terraform plan.
+After required Terraform inputs are provided, run and inspect the reviewed free-tier plan. Only then push reviewed code and docs and request explicit deployment approval. Apply only after approval. Public production probes require separate approval.
 
 #### Task 5 Evidence (2026-09-11)
 
@@ -303,5 +303,5 @@ Push reviewed code and docs. Stop before production Cloudflare apply unless the 
 - `git diff --check` passed.
 - Public HTTPS host, health, header, method, path, Clerk authorization, webhook, and direct-port checks were deferred. User explicitly prohibited external production probes without separate approval.
 - No Terraform plan, apply, deployment, Cloudflare/GCP mutation, push, or deployment-approval request was executed. **Step 5 incomplete:** no approval was requested or granted because no reviewed plan was available.
-- Next action: provide required Terraform plan inputs/credentials and explicit deployment approval, then run and review the free-tier plan before any apply.
+- Next action, in order: provide required Terraform plan inputs/credentials; run and inspect the free-tier plan; request explicit deployment approval; apply only after approval. Public production probes require separate approval.
 - Deferred GCP-specific work: future GCP Load Balancer/Cloud Armor mapping remains documentation/design only; paid Cloud Armor requires separate cost and deployment approval.

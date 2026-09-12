@@ -45,10 +45,16 @@ Static Terraform inspection is supplemental only; it cannot prove that a Terrafo
 
 ## Next Action
 
-Provide required Terraform plan inputs/credentials and explicit deployment approval. Then run and review the free-tier Terraform plan before any apply; separately obtain approval before running public production probes.
+Provide required Terraform plan inputs/credentials, run and inspect the free-tier Terraform plan, request explicit deployment approval, then apply only after approval. Public production probes require separate approval.
 
 ## Evidence Files
 
 - `docs/superpowers/plans/2026-09-11-phase-1c-gateway-hardening.md`
 - `.superpowers/sdd/2026-09-11-phase-1c-gateway-hardening/progress.md`
 - `.superpowers/sdd/2026-09-11-phase-1c-gateway-hardening/task-5-report.md`
+
+## Task 5 Review Fix Evidence: Round 2 (2026-09-11)
+
+- Corrected gate sequence: provide required Terraform inputs/credentials, run the plan, inspect the plan, request explicit deployment approval, then apply only after approval.
+- Public production probes remain a separate approval gate.
+- No external action was executed while correcting evidence.
