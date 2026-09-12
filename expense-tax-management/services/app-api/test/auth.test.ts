@@ -53,6 +53,7 @@ interface SignTokenOptions {
   readonly algorithm?: "RS256" | "ES256";
   readonly issuer?: string;
   readonly audience?: string | string[];
+  readonly rawAudience?: unknown;
   readonly subject?: string;
   readonly tokenId?: string;
   readonly issuedAt?: number;
@@ -92,6 +93,9 @@ describe("App API authentication", () => {
       display_name: "Person Name",
       ...options.claims,
     };
+    if (options.rawAudience !== undefined) {
+      claims.aud = options.rawAudience;
+    }
     for (const claim of omitted) {
       delete claims[claim];
     }
@@ -100,9 +104,10 @@ describe("App API authentication", () => {
       kid: "test-key",
     });
 
-    token = token
-      .setIssuer(options.issuer ?? TENANT_ISSUER)
-      .setAudience(options.audience ?? TENANT_AUDIENCE);
+    token = token.setIssuer(options.issuer ?? TENANT_ISSUER);
+    if (options.rawAudience === undefined) {
+      token = token.setAudience(options.audience ?? TENANT_AUDIENCE);
+    }
 
     if (!omitted.has("sub")) {
       token = token.setSubject(options.subject ?? "account-123");
@@ -662,14 +667,23 @@ describe("App API authentication", () => {
   });
 
   it.each([
-    [SERVICE_AUDIENCE, SERVICE_AUDIENCE],
-    [SERVICE_AUDIENCE, "other-service"],
-    ["other-service", SERVICE_AUDIENCE],
-  ])("rejects a service token with extra audience entries", async (first, second) => {
+    { label: "zero", audience: [] },
+    { label: "singleton wrong", audience: ["other-service"] },
+    {
+      label: "singleton malformed",
+      rawAudience: [42],
+    },
+    { label: "duplicate", audience: [SERVICE_AUDIENCE, SERVICE_AUDIENCE] },
+    {
+      label: "extra wrong",
+      audience: [SERVICE_AUDIENCE, "other-service"],
+    },
+  ])("rejects a service token with $label audience", async ({ audience, rawAudience }) => {
     const token = await signToken({
       key: serviceKeys.privateKey,
       issuer: SERVICE_ISSUER,
-      audience: [first, second],
+      audience,
+      rawAudience,
       subject: "ai-worker",
       claims: {
         scope: "expenses:write expenses:extract",
