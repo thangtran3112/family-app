@@ -368,21 +368,11 @@ async function mergeCandidate(
   transaction: Transaction<AppDatabase>,
   input: {
     readonly tenantId: string;
-    readonly scope: FileScope;
-    readonly existingExpenseId: string;
-    readonly candidateExpenseId: string;
+    readonly existing: Selectable<AppDatabase["app.expenses"]>;
+    readonly candidate: Selectable<AppDatabase["app.expenses"]>;
   },
 ): Promise<void> {
-  const existing = await loadScopedExpense(transaction, {
-    tenantId: input.tenantId,
-    scope: input.scope,
-    expenseId: input.existingExpenseId,
-  });
-  const candidate = await loadScopedExpense(transaction, {
-    tenantId: input.tenantId,
-    scope: input.scope,
-    expenseId: input.candidateExpenseId,
-  });
+  const { existing, candidate } = input;
   const enrichment = {
     ...(existing.description === null && candidate.description !== null
       ? { description: candidate.description }
@@ -427,6 +417,31 @@ async function mergeCandidate(
     .where("id", "=", candidate.id)
     .where("status", "!=", "archived")
     .execute();
+}
+
+async function lockResolutionExpenses(
+  transaction: Transaction<AppDatabase>,
+  input: { readonly tenantId: string; readonly scope: FileScope },
+  expenseIds: readonly [string, string],
+): Promise<{
+  readonly existing: Selectable<AppDatabase["app.expenses"]>;
+  readonly candidate: Selectable<AppDatabase["app.expenses"]>;
+}> {
+  const locked = new Map<string, Selectable<AppDatabase["app.expenses"]>>();
+  for (const expenseId of [...expenseIds].sort()) {
+    locked.set(
+      expenseId,
+      await loadScopedExpense(transaction, {
+        tenantId: input.tenantId,
+        scope: input.scope,
+        expenseId,
+      }),
+    );
+  }
+  return {
+    existing: locked.get(expenseIds[0]) as Selectable<AppDatabase["app.expenses"]>,
+    candidate: locked.get(expenseIds[1]) as Selectable<AppDatabase["app.expenses"]>,
+  };
 }
 
 async function requireJob(
@@ -813,22 +828,15 @@ export function createDeduplicationDomain(
         parseBody: (value) => DuplicateResolutionResponseSchema.parse(value),
         execute: async (transaction) => {
           const match = await loadScopedMatch(transaction, input);
-          await loadScopedExpense(transaction, {
+          const expenses = await lockResolutionExpenses(transaction, {
             tenantId: input.tenantId,
             scope: input.scope,
-            expenseId: match.existing_expense_id,
-          });
-          await loadScopedExpense(transaction, {
-            tenantId: input.tenantId,
-            scope: input.scope,
-            expenseId: match.candidate_expense_id,
-          });
+          }, [match.existing_expense_id, match.candidate_expense_id]);
           if (input.action === "merge") {
             await mergeCandidate(transaction, {
               tenantId: input.tenantId,
-              scope: input.scope,
-              existingExpenseId: match.existing_expense_id,
-              candidateExpenseId: match.candidate_expense_id,
+              existing: expenses.existing,
+              candidate: expenses.candidate,
             });
           } else if (input.action === "discard_new") {
             const archived = await transaction
