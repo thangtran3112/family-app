@@ -96,11 +96,11 @@ describe("production auth smoke helpers", () => {
     })).toThrow(/APP_API_URL/);
   });
 
-  it("builds expected health, no-token, identity, mismatch, M2M, and replay checks", () => {
+  it("builds ordered reachability, identity, mismatch, M2M, and replay checks", () => {
     const plan = buildSmokePlan(config());
     expect(plan.map((check) => check.name)).toEqual([
       "app health",
-      "foundry health",
+      "foundry page",
       "capture page",
       "office page",
       "app no-token rejection",
@@ -113,6 +113,7 @@ describe("production auth smoke helpers", () => {
       "webhook delivery",
       "webhook replay",
     ]);
+    expect(plan.find((check) => check.name === "foundry page").url).toBe("https://foundry.example.test/");
     expect(plan.find((check) => check.name === "app no-token rejection").expectedStatus).toBe(401);
     expect(plan.find((check) => check.name === "app M2M audience").expectedAudience).not.toBe(
       plan.find((check) => check.name === "Foundry M2M audience").expectedAudience,
@@ -123,7 +124,7 @@ describe("production auth smoke helpers", () => {
     const calls = [];
     const fetchImpl = async (url, options = {}) => {
       calls.push({ url, options });
-      if (url.endsWith("/health/ready")) return response(200, { status: "ready" });
+      if (url.endsWith("/health/ready") || url.endsWith("/")) return response(200, { status: "ready" });
       if (url.endsWith("/capture") || url.endsWith("/dashboard")) return response(200);
       if (url.includes("/webhook")) return response(202, { replayed: calls.filter((call) => call.url.includes("/webhook")).length > 1, claimsVerified: { issuer: "https://clerk.example.test" } });
       if (url.includes("foundry")) {

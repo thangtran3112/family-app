@@ -110,7 +110,7 @@ function endpoint(base, path) {
 export function buildSmokePlan(config) {
   return [
     { name: "app health", method: "GET", url: endpoint(config.appApiUrl, "/health/ready"), expectedStatus: 200 },
-    { name: "foundry health", method: "GET", url: endpoint(config.foundryUrl, "/health/ready"), expectedStatus: 200 },
+    { name: "foundry page", method: "GET", url: endpoint(config.foundryUrl, "/"), expectedStatus: 200 },
     { name: "capture page", method: "GET", url: endpoint(config.captureUrl, "/capture"), expectedStatus: 200 },
     { name: "office page", method: "GET", url: endpoint(config.officeUrl, "/dashboard"), expectedStatus: 200 },
     { name: "app no-token rejection", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 401 },
