@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
-  new URL("../src/database/migrations/013_expense_deduplication.ts", import.meta.url),
+  new URL("../src/database/migrations/015_expense_deduplication.ts", import.meta.url),
   "utf8",
 );
 
