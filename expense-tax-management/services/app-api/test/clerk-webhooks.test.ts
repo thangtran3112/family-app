@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { Readable } from "node:stream";
 
+import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -15,7 +16,10 @@ import {
   verifyClerkWebhookSignature,
   parseClerkWebhookEvent,
 } from "../src/integrations/clerk-webhook-signature.js";
-import { CLERK_WEBHOOK_MAX_BODY_BYTES } from "../src/routes/clerk-webhooks.js";
+import {
+  CLERK_WEBHOOK_MAX_BODY_BYTES,
+  registerClerkWebhookRoutes,
+} from "../src/routes/clerk-webhooks.js";
 
 const SECRET = "whsec_test-secret";
 const EVENT_ID = "evt_test_123";
@@ -302,6 +306,34 @@ describe("Clerk webhook route and processing", () => {
     expect(response.statusCode).toBe(413);
     expect(verifySignature).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("destroys an oversized content-length stream without masking 413", async () => {
+    const app = Fastify({ logger: false });
+    let preParsing;
+    app.addHook("onRoute", (route) => {
+      if (route.url === "/api/v1/integrations/clerk/webhook") preParsing = route.preParsing;
+    });
+    await registerClerkWebhookRoutes(app, {
+      signingSecret: SECRET,
+      handler: { handle: vi.fn(async () => ({ replayed: false })) },
+    });
+    expect(preParsing).toBeTypeOf("function");
+    const payload = Readable.from([Buffer.from("not-consumed")]);
+    const destroy = vi.spyOn(payload, "destroy");
+    destroy.mockImplementation(() => {
+      throw new Error("destroy failed");
+    });
+
+    await expect(
+      preParsing(
+        { headers: { "content-length": String(CLERK_WEBHOOK_MAX_BODY_BYTES + 1) } },
+        {},
+        payload,
+      ),
+    ).rejects.toMatchObject({ statusCode: 413 });
+    expect(destroy).toHaveBeenCalledOnce();
     await app.close();
   });
 

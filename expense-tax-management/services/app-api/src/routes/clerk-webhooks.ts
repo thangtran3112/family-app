@@ -14,6 +14,14 @@ function payloadTooLargeError(): Error & { statusCode: 413 } {
   return Object.assign(new Error("Request payload too large"), { statusCode: 413 as const });
 }
 
+function abortClerkWebhookPayload(payload: Readable): void {
+  try {
+    payload.destroy();
+  } catch {
+    // Preserve 413 even if stream cleanup fails.
+  }
+}
+
 export async function readClerkWebhookBody(payload: AsyncIterable<Buffer | string>): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -43,6 +51,7 @@ export async function registerClerkWebhookRoutes(app: FastifyInstance, options: 
     preParsing: async (request, _reply, payload) => {
       const contentLength = Number(request.headers["content-length"]);
       if (Number.isInteger(contentLength) && contentLength > CLERK_WEBHOOK_MAX_BODY_BYTES) {
+        abortClerkWebhookPayload(payload);
         throw payloadTooLargeError();
       }
       const body = await readClerkWebhookBody(payload);

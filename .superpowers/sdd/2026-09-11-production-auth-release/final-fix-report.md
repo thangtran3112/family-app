@@ -45,3 +45,11 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 ## Concerns
 
 - Foundry database suite retains one pre-existing skipped test; no new skips introduced.
+
+## Security Fix Round 1/5
+
+- Finding: content-length fast rejection raised 413 before disposing the request payload.
+- RED: focused stream test observed no `destroy()` call on the rejected path.
+- GREEN: fast path now destroys payload inside a guarded cleanup helper; cleanup exceptions are swallowed so existing 413 handling remains authoritative.
+- Regression: captured `preParsing` hook uses an oversized content-length stream whose `destroy()` throws; test confirms one destroy attempt and rejected error status 413.
+- Verification: app-api tests 241/241, lint PASS, typecheck PASS, `git diff --check` PASS.
