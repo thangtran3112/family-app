@@ -64,3 +64,4 @@
 - Ruling: On oversized declared content length, call `payload.resume()` to drain without buffering, then return `413`; do not destroy socket-backed request payload before response. Cost if wrong: rejected request bytes may continue consuming inbound bandwidth briefly, bounded by server/Tunnel timeouts, but memory stays bounded and client receives required status.
 - Final fix wave: stream cleanup round 2 (`5a88b8f`) replaced destructive abort with drain; strengthened full-body TCP test exposed response race.
 - Final fix wave: stream cleanup round 3 (`2ebd8ca`) awaits bounded-memory drain before `413`; full 1 MiB+1 TCP body receives clean `413`; scoped re-review clean.
+- Final production verification: CI `34666125473` and deploy `34666766000` passed for `5a0ae46`; live 1 MiB+1 webhook request returned `413`; authenticated smoke passed 13/13; temporary sessions revoked and all local sign-in/token/secret artifacts deleted.
