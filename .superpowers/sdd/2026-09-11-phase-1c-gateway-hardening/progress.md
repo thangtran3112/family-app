@@ -41,6 +41,8 @@
 - Final review parked: static checker does not table-test every frontend/health/webhook method rejection. Ruling: Fastify runtime tests prove unknown paths and unsupported methods fail closed for both services, while the static method table is a declarative contract; defer broader matrix tests as non-blocking coverage work. Cost if wrong: static policy drift in untested public route classes could evade checker detection.
 - Final verification: fresh `pnpm test` passed 448 tests with 1 pre-existing skipped Foundry database test; lint, typecheck, build, static checker, Terraform fmt/init/validate passed.
 - Phase 1C implementation: complete (commits `d7f8ba3..72af839`, final review clean with 1 parked non-blocking coverage finding; Terraform plan/apply and public probes deferred pending inputs/approval).
+- CI regression: clean-install contract drift failed because gateway-policy dist was not built before OpenAPI generation; fixed in `0158844` by building workspace dependency before App API/Foundry generation.
+- CI fix review: minor (deferred): ordering test uses source positions rather than runtime command execution; behavior verified by clean `check-generated` run.
 
 ## Task 5 Verification Evidence (2026-09-11)
 
