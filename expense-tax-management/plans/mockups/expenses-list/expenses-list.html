@@ -3,30 +3,32 @@
 <title>Expenses List — Mockup (0F0)</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
-.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.grid2{display:grid!important;grid-template-columns:250px 1fr;gap:18px}.rows{display:grid!important;grid-template-columns:1fr 1fr;gap:10px}.row{margin:0!important}}
+ .app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:640px) and (max-width:1023px){.app{max-width:768px}.grid2{display:grid!important;grid-template-columns:200px 1fr;gap:18px}.row{margin:0 0 10px!important}}@media(min-width:1024px){.app{max-width:1100px}.grid2{display:grid!important;grid-template-columns:250px 1fr;gap:18px}.rows{display:grid!important;grid-template-columns:1fr 1fr;gap:10px}.row{margin:0!important}}
 h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 12px}
 .search{display:flex;gap:8px}.search input{flex:1;background:#1b1b21;border:1px solid #34343a;border-radius:10px;color:#fff;padding:11px 12px;font-size:14px}.tgl{background:#1b1b21;border:1px solid #34343a;color:#d4d4d8;border-radius:10px;padding:0 12px;font-size:13px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0}.chip{flex:none;font-size:12px;padding:7px 12px;border-radius:99px;background:#1b1b21;border:1px solid #34343a;color:#d4d4d8}.chip.on{background:#0c2b21;border-color:#10b981;color:#34d399;font-weight:700}
 .toolbar{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#a1a1aa;margin:2px 0 10px}
 .row{display:flex;gap:10px;background:#131318;border:1px solid #27272a;border-radius:14px;padding:12px;margin-bottom:10px;align-items:center}.row.sel{border-color:#10b981}.cbx{width:20px;height:20px;border-radius:6px;border:1px solid #52525b;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;color:#052e22}.cbx.on{background:#10b981;border-color:#10b981}
-.dot{width:40px;height:40px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;background:#1b1b21}.m{flex:1;min-width:0}.m b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.m small{color:#a1a1aa;font-size:11.5px}.amt b{font-size:14px}.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px}.ok{background:#0c2b21;color:#34d399}.pend{background:#2b220c;color:#fbbf24}.dup{background:#3b1116;color:#fca5a5}
+ .dot{width:40px;height:40px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;letter-spacing:.03em;background:#1b1b21}.m{flex:1;min-width:0}.m b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.m small{color:#a1a1aa;font-size:11.5px}.amt b{font-size:14px}.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px}.ok{background:#0c2b21;color:#34d399}.pend{background:#2b220c;color:#fbbf24}.dup{background:#3b1116;color:#fca5a5}
 .bulk{position:sticky;bottom:12px;background:#10b981;color:#052e22;border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;font-size:14px;font-weight:700;box-shadow:0 8px 30px #000a}
 .empty{text-align:center;padding:44px 20px;color:#a1a1aa;font-size:14px}.empty span{font-size:44px;display:block;margin-bottom:10px}
 .off{background:#2b220c;border:1px solid #92600e;color:#fcd34d;font-size:12px;border-radius:10px;padding:9px 12px;margin-bottom:10px;text-align:center}
-.filters{background:#131318;border:1px solid #27272a;border-radius:14px;padding:14px;font-size:13px;color:#d4d4d8}.filters h4{font-size:12px;color:#a1a1aa;margin:10px 0 6px}
-</style></head>
-<body><div class="app"><h1>🧾 Expenses</h1><p class="sub">248 results · Sep 2026 · list + grid toggle</p>
-<div class="off">📴 Offline — showing cached results. Live AI search disabled.</div>
-<div class="search"><input placeholder="🔍 Search merchant, item, tag…"><button class="tgl">☰ ☷ List ▾</button></div>
+ .filters{background:#131318;border:1px solid #27272a;border-radius:14px;padding:14px;font-size:13px;color:#d4d4d8}.filters h4{font-size:12px;color:#a1a1aa;margin:10px 0 6px}.pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px}.pager button{background:#1b1b21;border:1px solid #3f3f46;color:#e4e4e7;border-radius:9px;padding:8px 12px;font-size:12px}.pager span{color:#a1a1aa;font-size:12px}
+ </style><link rel="stylesheet" href="../mockup.css"><link rel="icon" href="../favicon.svg"></head>
+  <body><div class="app-shell"><nav class="side" aria-label="Primary navigation"><b style="padding:8px 12px 16px">ExpenseTax</b><a href="#">Dashboard</a><a href="#">Upload</a><a class="on" href="#">Expenses</a><a href="#">Projects</a><a href="#">Categories</a><a href="#">Settings</a></nav><main class="main"><div class="app"><h1>Expenses</h1><p class="sub">248 results · Sep 2026 · list + grid toggle</p>
+ <div class="off">Offline — showing cached results. Live AI search disabled.</div>
+ <div class="search"><input placeholder="Search merchant, item, tag..." aria-label="Search expenses"><button class="tgl">List / Grid</button></div>
 <div class="chips"><span class="chip on">All</span><span class="chip">Sep 2026</span><span class="chip">Groceries</span><span class="chip">Kitchen Reno</span><span class="chip">Deductible</span><span class="chip">Needs review</span><span class="chip">$50+</span></div>
-<div class="grid2"><div class="filters"><h4>SORT</h4>Date ↓ · Amount · Merchant<h4>STATUS</h4>✓ Done (231) · ◷ OCR (9) · ⚠ Duplicates (8)<h4>AMOUNT</h4>$0 — $500 slider</div>
+ <div class="grid2"><div class="filters"><h4>SORT</h4>Date down · Amount · Merchant<h4>STATUS</h4>Done (231) · OCR (9) · Duplicates (8)<h4>AMOUNT</h4>$0 - $500 slider</div>
 <div class="rows">
-<div class="row sel"><div class="cbx on">✓</div><div class="dot">🛒</div><div class="m"><b>Whole Foods Market</b><small>Today · Groceries · Kitchen Reno</small></div><div class="amt"><b>$84.32</b><br><span class="badge ok">✓ done</span></div></div>
-<div class="row sel"><div class="cbx on">✓</div><div class="dot">⛽</div><div class="m"><b>Shell #4421</b><small>Yesterday · Transport</small></div><div class="amt"><b>$45.00</b><br><span class="badge ok">✓ done</span></div></div>
-<div class="row"><div class="cbx"></div><div class="dot">🍜</div><div class="m"><b>Pho Saigon</b><small>Sep 4 · Dining · 80%</small></div><div class="amt"><b>$62.40</b><br><span class="badge pend">◷ ocr</span></div></div>
-<div class="row"><div class="cbx"></div><div class="dot">🏢</div><div class="m"><b>Office Depot</b><small>Sep 3 · Office</small></div><div class="amt"><b>$129.99</b><br><span class="badge dup">⚠ dup?</span></div></div>
-<div class="row"><div class="cbx"></div><div class="dot">💡</div><div class="m"><b>PG&amp;E Bill</b><small>Sep 1 · Utilities · Home office 30%</small></div><div class="amt"><b>$96.18</b><br><span class="badge ok">✓ done</span></div></div>
-<div class="empty"><span>🗂</span>No results for “catering october”.<br>Try widening the date range.</div>
+ <div class="row sel"><div class="cbx on">✓</div><div class="dot">GRO</div><div class="m"><b>Whole Foods Market</b><small>Today · Groceries · Kitchen Reno</small></div><div class="amt"><b>$84.32</b><br><span class="badge ok">Done</span></div></div>
+ <div class="row sel"><div class="cbx on">✓</div><div class="dot">FUEL</div><div class="m"><b>Shell #4421</b><small>Yesterday · Transport</small></div><div class="amt"><b>$45.00</b><br><span class="badge ok">Done</span></div></div>
+ <div class="row"><div class="cbx"></div><div class="dot">MEAL</div><div class="m"><b>Pho Saigon</b><small>Sep 4 · Dining · 80%</small></div><div class="amt"><b>$62.40</b><br><span class="badge pend">OCR</span></div></div>
+ <div class="row"><div class="cbx"></div><div class="dot">OFF</div><div class="m"><b>Office Depot</b><small>Sep 3 · Office</small></div><div class="amt"><b>$129.99</b><br><span class="badge dup">Duplicate?</span></div></div>
+ <div class="row"><div class="cbx"></div><div class="dot">UTIL</div><div class="m"><b>PG&amp;E Bill</b><small>Sep 1 · Utilities · Home office 30%</small></div><div class="amt"><b>$96.18</b><br><span class="badge ok">Done</span></div></div>
+ <div class="alt-state empty"><b>Alternate no-results state:</b> no results for "catering october". Try widening the date range.</div>
+ <div class="pager"><button>Previous</button><span>Page 1 of 25</span><button>Next</button></div>
 </div></div>
-<div class="bulk"><span>2 selected</span><span>Categorize · Tag · Project · 🗑</span></div>
-</div></body></html>
+ <div class="bulk"><span>2 selected</span><span>Categorize · Tag · Project · Delete</span></div>
+ <p class="viewport-note"><b>Mobile</b>: quick search and chips. <b>Tablet</b>: filter rail plus list. <b>Laptop</b>: grid, bulk actions, pagination, and tax review.</p>
+  </div></main><nav class="bottomnav" aria-label="Primary navigation"><div><span>D</span>Dashboard</div><div><span>U</span>Upload</div><div><button class="fab" aria-label="Upload receipt">+</button></div><div class="on"><span>E</span>Expenses</div><div><span>S</span>Settings</div></nav></div></body></html>

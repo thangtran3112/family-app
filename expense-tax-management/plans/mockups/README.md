@@ -1,38 +1,47 @@
 # Mockups — Web UI Preflight (Phase 0F0)
 
-> All frontend implementation (Phase 0F+) is gated on mockups here being reviewed + approved.
-> Source of truth for required screens: `../sub-plans/phase-0f0-web-ui-mockups.md`.
+> **Review reopened 2026-09-07**: These renders document the rejected combined-app direction and are not implementation-ready.
+> New source of truth: `../sub-plans/phase-0i-polyglot-platform-rebaseline-design.md` and revised Phase 0F0 planning.
+> Each frontend is blocked only by its matching Phase 0F0 Capture, Office, or Foundry mockup gate.
+
+## Viewport Intent
+
+- **Capture PWA, mobile 375px**: receipt capture, business profile, camera recovery, offline queue, quick correction, forwarding address, and curated OCR mode.
+- **Capture PWA, tablet 768px**: capture plus batch review; no dense reporting or tax filing preparation.
+- **Office Web, laptop 1440px**: core dashboard, ledger, businesses, projects, tax preparation, exports, forwarding controls, and plans; later mailbox/search screens use feature-specific gates.
+- **Foundry Web, laptop 1440px**: platform-only providers, models, curated routes, quotas, health, and audit.
+
+Every folder now carries `mobile-375.png`, `tablet-768.png`, `desktop-1440.png`, and an HTML source. `mockup.css` contains shared tokens, focus/touch rules, safe-area insets, and authenticated shell styling.
 
 ## Folder Index
 
-| Folder | Screen / Route | Files (HTML interactive + 2 PNG renders) | Status |
+| Folder | Screen / Route | Files (HTML interactive + 3 viewport PNG renders) | Status |
 |---|---|---|---|
-| `auth/` | `/login`, `/signup`, `/forgot-password` | `auth.html` + `auth-mobile-375.png` + `auth-desktop-1440.png` | ✅ Draft |
-| `dashboard/` | `/` stats, recents, quick actions, projects | `dashboard.html` + `dashboard-mobile-375.png` + `dashboard-desktop-1440.png` + skeleton state inline | ✅ Draft |
-| `upload/` | `/upload` camera, picker, batch, progress, review | `upload.html` + `upload-mobile-375.png` + `upload-desktop-1440.png` | ✅ Draft |
-| `expenses-list/` | `/expenses` list/grid, filters, search, bulk, sort | `expenses-list.html` + `expenses-list-mobile-375.png` + `expenses-list-desktop-1440.png` + empty/offline inline | ✅ Draft |
-| `expense-detail/` | `/expenses/[id]` viewer, fields, tax, items, history | `expense-detail.html` + `expense-detail-mobile-375.png` + `expense-detail-desktop-1440.png` | ✅ Draft |
-| `projects/` | `/projects`, `/projects/[id]`, tax summary, export | `projects.html` + `projects-mobile-375.png` + `projects-desktop-1440.png` | ✅ Draft |
-| `categories/` | `/categories` list, form, stats | `categories.html` + `categories-mobile-375.png` + `categories-desktop-1440.png` | ✅ Draft |
-| `settings/` | `/settings` profile, tenant, LLM, budget, export | `settings.html` + `settings-mobile-375.png` + `settings-desktop-1440.png` + 80%/100% budget states inline | ✅ Draft |
-| `components/` | shared Radix components (card, pickers, charts, nav) | `components.html` + `components-mobile-375.png` + `components-desktop-1440.png` | ✅ Draft |
-| `pwa-mobile/` | bottom nav, install banner, offline, pull-refresh, swipe | `pwa-mobile.html` + `pwa-mobile-mobile-375.png` + `pwa-mobile-desktop-1440.png` | ✅ Draft |
+| `auth/` | Legacy combined auth direction | Existing renders retained as reference | Rework/split required |
+| `dashboard/` | Legacy mixed dashboard | Existing renders retained as reference | Move to Office Web |
+| `upload/` | Capture and batch review | Existing renders retained as reference | Rework for business profile, curated modes, quotas, and forwarding |
+| `expenses-list/` | Legacy mixed ledger | Existing renders retained as reference | Split PWA recents from Office ledger |
+| `expense-detail/` | Legacy mixed detail/tax edit | Existing renders retained as reference | Split quick review from Office tax review |
+| `projects/` | Legacy project tax summary | Existing renders retained as reference | Remove tax identity; move to Office project analysis |
+| `categories/` | Legacy single taxonomy | Existing renders retained as reference | Separate spending and tax taxonomy views |
+| `settings/` | Rejected tenant/provider administration mix | Existing renders retained as reference | Replace across three applications |
+| `components/` | Legacy shared component gallery | Existing renders retained as reference | Split by application responsibility |
+| `pwa-mobile/` | Capture PWA interaction reference | Existing renders retained as reference | Extend with profile, quota, and forwarding states |
 
 ## Conventions
 
-- Naming: `<screen>-<viewport>.<ext>`, e.g. `dashboard-mobile-375.png`.
-- Dark mode default; mobile-375 is primary, desktop-1440 secondary.
+- Naming: `<screen>-<viewport>.<ext>`, e.g. `dashboard-mobile-375.png`, `dashboard-tablet-768.png`, `dashboard-desktop-1440.png`.
+- Dark mode default; mobile-375 is primary for capture, tablet-768 is primary for batch correction, desktop-1440 is primary for reporting/export.
 - Each folder gets a `NOTES.md` with Figma/v0/Excalidraw source URLs + open questions.
-- No code, no build artifacts — `.png` + optional standalone `.html` only.
+- No application code or build artifacts — `.png`, `mockup.css`, and optional standalone `.html` only.
 
-## Review Checklist (gate for Phase 0F)
+## Rebaseline Gate Index
 
-- [x] All folders have mocks (10 HTML + 20 PNG, 2026-09-06 draft)
-- [x] Loading / empty / error / offline states covered (dashboard skeleton, list empty + offline bar, upload progress, settings budget alerts)
-- [x] Bottom nav + upload action + camera guide at 375px (dashboard, pwa-mobile, upload)
-- [x] Tax + LLM budget visuals with realistic data (projects tax summary, settings budget 64%/80%/100%)
-- [ ] Human review approval — **pending your sign-off below**
+- [ ] **Capture gate -> Phase 0F**: Capture screen/state set approved at 375px and 768px.
+- [ ] **Office gate -> Phase 0M**: Office core set approved at 1024px and 1440px; no compressed mobile dashboard/tax UI.
+- [ ] **Foundry gate -> Phase 0N**: Platform-operator set approved at 1024px and 1440px.
+- [ ] Each approved set passes applicable shared role, boundary, accessibility, and failure-state checks from revised Phase 0F0.
 
-**Review:** _pending_ — reviewer: ___, date: ___, verdict: ___
+**Review:** reopened by architecture rebaseline decision, 2026-09-07; written specification still awaits approval
 
-> Agent self-check 2026-09-06: dashboard mobile + desktop PNGs visually verified (bottom-nav ↔ sidebar switch correct, dark theme, badges). Remaining 18 PNGs rendered from the same verified HTML/CSS system — spot-check recommended during your review.
+> Historical note: 30 legacy PNGs passed structural checks on 2026-09-06. That evidence does not approve the new three-application architecture.

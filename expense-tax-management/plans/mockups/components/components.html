@@ -3,7 +3,7 @@
 <title>Components — Mockup (0F0)</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
-.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.gal{display:grid!important;grid-template-columns:1fr 1fr;gap:14px}}
+ .app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:640px) and (max-width:1023px){.app{max-width:768px}.gal{display:grid!important;grid-template-columns:1fr 1fr;gap:14px}}@media(min-width:1024px){.app{max-width:1100px}.gal{display:grid!important;grid-template-columns:1fr 1fr;gap:14px}}
 h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}.gal{display:flex;flex-direction:column;gap:12px}
 .card{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px}.card h3{font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 .exp{display:flex;gap:10px;align-items:center;background:#1b1b21;border:1px solid #34343a;border-radius:12px;padding:10px}.badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px}.ok{background:#0c2b21;color:#34d399}.pend{background:#2b220c;color:#fbbf24}.dup{background:#3b1116;color:#fca5a5}.info{background:#0e1e3a;color:#93c5fd}
@@ -14,17 +14,18 @@ table{width:100%;font-size:12px;border-collapse:collapse}th{color:#a1a1aa;text-a
 .cbar{height:10px;background:#27272a;border-radius:99px;overflow:hidden;margin:4px 0}.cbar i{display:block;height:100%;background:#10b981}
 .mnav{background:#0e0e11;border:1px solid #27272a;border-radius:14px;display:flex;padding:10px}.mnav div{flex:1;text-align:center;font-size:10px;color:#71717a}.mnav div.on{color:#34d399}.mnav span{font-size:20px;display:block}
 .drop{border:2px dashed #3f3f46;border-radius:12px;padding:16px;text-align:center;color:#a1a1aa;font-size:12px}
-</style></head>
-<body><div class="app"><h1>🧩 Components</h1><p class="sub">Radix-based gallery — every 0F component, one mock each</p>
+ </style><link rel="stylesheet" href="../mockup.css"><link rel="icon" href="../favicon.svg"></head>
+ <body><div class="app"><h1>Components</h1><p class="sub">Shared component gallery — mobile capture, tablet review, laptop reporting</p>
 <div class="gal">
-<div class="card"><h3>ExpenseCard</h3><div class="exp"><span style="font-size:22px">🛒</span><div style="flex:1"><b style="font-size:13px">Whole Foods</b><br><small style="color:#a1a1aa">Today · $84.32</small></div><span class="badge ok">✓ done</span></div></div>
-<div class="card"><h3>StatusBadge (all variants)</h3><span class="badge ok">✓ done</span> <span class="badge pend">◷ ocr</span> <span class="badge dup">⚠ dup?</span> <span class="badge info">◉ extracting</span></div>
-<div class="card"><h3>FileUploader</h3><div class="drop">Drag &amp; drop · <b style="color:#34d399">browse</b> · 📸 camera</div></div>
-<div class="card"><h3>CategoryPicker / ProjectPicker</h3><select><option>🟢 🍔 Groceries</option><option>🔵 ⛽ Transport</option></select><select style="margin-top:8px"><option>🏠 Kitchen Reno</option><option>📑 2026 Taxes</option></select></div>
+ <div class="card"><h3>ExpenseCard</h3><div class="exp"><span style="font-size:12px">GRO</span><div style="flex:1"><b style="font-size:13px">Whole Foods</b><br><small style="color:#a1a1aa">Today · $84.32</small></div><span class="badge ok">Done</span></div></div>
+ <div class="card"><h3>ExpenseForm</h3><label>Merchant</label><input value="Whole Foods Market"><div style="display:flex;gap:8px"><input value="$84.32" aria-label="Amount"><select aria-label="Category"><option>Groceries</option></select></div><button style="width:100%;margin-top:8px;background:#10b981;border:0;color:#052e22;border-radius:10px;font-weight:700">Save expense</button></div>
+ <div class="card"><h3>StatusBadge (all variants)</h3><span class="badge ok">Done</span> <span class="badge pend">OCR</span> <span class="badge dup">Duplicate?</span> <span class="badge info">Extracting</span> <span class="badge dup">Failed</span></div>
+ <div class="card"><h3>FileUploader</h3><div class="drop">Drag &amp; drop · <b style="color:#34d399">browse</b> · camera</div></div>
+ <div class="card"><h3>CategoryPicker / ProjectPicker</h3><select><option>Groceries</option><option>Transport</option></select><select style="margin-top:8px"><option>Kitchen Reno</option><option>2026 Taxes</option></select></div>
 <div class="card"><h3>TagInput</h3><div class="tags"><span class="tag">household ×</span><span class="tag">weekly ×</span><span class="tag" style="border-style:dashed;color:#34d399">+ Add</span></div></div>
 <div class="card"><h3>QuickFilter</h3><div class="chips"><span class="chip on">All</span><span class="chip">Deductible</span><span class="chip">Sep 2026</span><span class="chip">Needs review</span></div></div>
 <div class="card"><h3>TaxSummaryChart (recharts → CSS stand-in)</h3><div style="font-size:12px">Materials $1,120</div><div class="cbar"><i style="width:82%"></i></div><div style="font-size:12px">Labor $640</div><div class="cbar"><i style="width:47%;background:#3b82f6"></i></div><div style="font-size:12px">Meals $180</div><div class="cbar"><i style="width:16%;background:#f59e0b"></i></div></div>
 <div class="card"><h3>DataTable</h3><table><tr><th>Merchant ⇅</th><th>Date ⇅</th><th style="text-align:right">Amt ⇅</th></tr><tr><td>Whole Foods</td><td>Sep 6</td><td style="text-align:right">$84.32</td></tr><tr><td>Shell</td><td>Sep 5</td><td style="text-align:right">$45.00</td></tr></table></div>
-<div class="card"><h3>BottomNav</h3><div class="mnav"><div class="on"><span>◇</span>Home</div><div><span>⤒</span>Scan</div><div><span>🧾</span>Bills</div><div><span>📁</span>Plans</div><div><span>⚙</span>More</div></div></div>
-<div class="card"><h3>ReceiptViewer</h3><div style="background:#000;border-radius:10px;padding:18px;text-align:center;color:#a1a1aa;font-size:12px">🧾 receipt image · pinch-to-zoom · − 100% + ⛶</div></div>
-</div></div></body></html>
+ <div class="card"><h3>BottomNav</h3><div class="mnav"><div class="on"><span>D</span>Dashboard</div><div><span>U</span>Upload</div><div><span>E</span>Expenses</div><div><span>P</span>Projects</div><div><span>S</span>Settings</div></div></div>
+ <div class="card"><h3>ReceiptViewer</h3><div style="background:#000;border-radius:10px;padding:18px;text-align:center;color:#a1a1aa;font-size:12px">receipt image · pinch-to-zoom · - 100% + · Full · Download</div></div>
+ </div><p class="viewport-note"><b>Mobile</b>: capture and quick-edit components. <b>Tablet</b>: review forms and queue states. <b>Laptop</b>: data tables, charts, exports, and full receipt viewer.</p></div></body></html>

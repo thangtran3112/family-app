@@ -3,7 +3,7 @@
 <title>Upload — Mockup (0F0)</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{background:#09090b;color:#fafafa;font-family:-apple-system,Inter,"SF Pro",Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
-.app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:1024px){.app{max-width:1100px}.cols{display:grid!important;grid-template-columns:1.1fr 1fr;gap:20px}.viewfinder{height:420px!important}}
+ .app{width:100%;max-width:430px;padding:16px 16px 48px}@media(min-width:640px) and (max-width:1023px){.app{max-width:768px}.cols{display:grid!important;grid-template-columns:1fr 1fr;gap:18px}.viewfinder{height:360px!important}}@media(min-width:1024px){.app{max-width:1100px}.cols{display:grid!important;grid-template-columns:1fr 1.35fr;gap:20px}.cols>div:first-child{order:2}.cols>div:nth-child(2){order:1}.viewfinder{height:240px!important}.viewfinder .guide{inset:28px 90px}}
 h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}.cols{display:flex;flex-direction:column;gap:14px}
 .viewfinder{position:relative;background:#000;border:1px solid #27272a;border-radius:16px;height:300px;overflow:hidden;background-image:repeating-linear-gradient(0deg,transparent,transparent 34px,#ffffff08 35px),repeating-linear-gradient(90deg,transparent,transparent 34px,#ffffff08 35px)}.guide{position:absolute;inset:36px 28px;border:2px dashed #34d399;border-radius:12px}.guide:before{content:"Align receipt inside frame";position:absolute;top:-26px;left:0;right:0;text-align:center;font-size:12px;color:#34d399}.shutter{position:absolute;bottom:14px;left:0;right:0;display:flex;justify-content:center;gap:18px;align-items:center}.shut{width:64px;height:64px;border-radius:99px;background:#fff;border:5px solid #71717a}.ghost{width:44px;height:44px;border-radius:99px;background:#27272acc;border:1px solid #52525b;color:#fff;font-size:18px}
 .card{background:#131318;border:1px solid #27272a;border-radius:16px;padding:16px}.card h3{font-size:14px;margin-bottom:10px}
@@ -13,19 +13,19 @@ h1{font-size:20px}.sub{color:#a1a1aa;font-size:13px;margin:4px 0 14px}.cols{disp
 label{font-size:12px;color:#a1a1aa;display:block;margin:10px 0 5px}input,select{width:100%;background:#1b1b21;border:1px solid #34343a;color:#fff;border-radius:10px;padding:11px;font-size:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .primary{width:100%;margin-top:14px;background:#10b981;border:0;color:#052e22;font-weight:700;font-size:15px;padding:13px;border-radius:10px}.sec2{width:100%;margin-top:8px;background:transparent;border:1px solid #3f3f46;color:#e4e4e7;font-weight:600;font-size:14px;padding:12px;border-radius:10px}
 .conf{font-size:11px;color:#34d399;margin-left:6px}
-</style></head>
-<body><div class="app"><h1>⤒ Upload receipt</h1><p class="sub">Camera-first · batch supported · OCR → extract → review</p>
-<div class="cols"><div>
-<div class="viewfinder"><div class="guide"></div><div class="shutter"><button class="ghost">🖼</button><button class="shut"></button><button class="ghost">⚡</button></div></div>
+ </style><link rel="stylesheet" href="../mockup.css"><link rel="icon" href="../favicon.svg"></head>
+ <body><div class="app-shell"><nav class="side" aria-label="Primary navigation"><b style="padding:8px 12px 16px">ExpenseTax</b><a href="#">Dashboard</a><a class="on" href="#">Upload</a><a href="#">Expenses</a><a href="#">Projects</a><a href="#">Categories</a><a href="#">Settings</a></nav><main class="main"><div class="app"><h1>Upload receipt</h1><p class="sub">Camera-first on mobile/tablet · review and export-ready on laptop</p>
+ <div class="cols"><div>
+ <div class="viewfinder"><div class="guide"></div><div class="shutter"><button class="ghost" aria-label="Choose image">Gallery</button><button class="shut" aria-label="Capture receipt"></button><button class="ghost" aria-label="Toggle flash">Flash</button></div></div>
 <div class="card" style="margin-top:12px"><h3>Or pick files</h3><div class="drop">Drag &amp; drop here, or <b>browse files</b><br><small>PNG · JPG · PDF · up to 10 at once</small></div></div>
 </div><div>
 <div class="card"><h3>Batch — 3 files</h3>
-<div class="job"><span>🧾</span><div class="t"><b>wholefoods-sep6.jpg</b><div class="steps"><i class="done"></i><i class="done"></i><i class="done"></i></div><small style="color:#a1a1aa">OCR ✓ · Extract ✓ · Ready to review</small></div><span class="pill ok">review</span></div>
-<div class="job"><span>🧾</span><div class="t"><b>shell-fuel.pdf</b><div class="steps"><i class="done"></i><i class="run"></i><i></i></div><small style="color:#a1a1aa">Extracting line items… 60%</small></div><span class="pill run2">◷ ocr</span></div>
-<div class="job"><span>🧾</span><div class="t"><b>pho-receipt.jpg</b><div class="steps"><i class="run"></i><i></i><i></i></div><small style="color:#a1a1aa">Uploading… 35%</small></div><span class="pill run2">◷ up</span></div>
+ <div class="job"><span aria-hidden="true">FILE</span><div class="t"><b>wholefoods-sep6.jpg</b><div class="steps"><i class="done"></i><i class="done"></i><i class="done"></i></div><small style="color:#a1a1aa">OCR done · Extracted · Ready to review</small></div><span class="pill ok">review</span></div>
+ <div class="job"><span aria-hidden="true">FILE</span><div class="t"><b>shell-fuel.pdf</b><div class="steps"><i class="done"></i><i class="run"></i><i></i></div><small style="color:#a1a1aa">Extracting line items... 60%</small></div><span class="pill run2">OCR</span></div>
+ <div class="job"><span aria-hidden="true">FILE</span><div class="t"><b>pho-receipt.jpg</b><div class="steps"><i class="run"></i><i></i><i></i></div><small style="color:#a1a1aa">Uploading... 35%</small></div><span class="pill run2">Upload</span></div>
 </div>
-<div class="card" style="margin-top:12px"><h3>Review &amp; confirm <span class="conf">✓ AI 96% confident</span></h3>
+ <div class="card" style="margin-top:12px"><h3>Review &amp; confirm <span class="conf">AI 96% confident · 1 of 3 selected</span></h3>
 <label>Merchant</label><input value="Whole Foods Market"><div class="row2"><div><label>Amount</label><input value="$84.32"></div><div><label>Date</label><input value="2026-09-06"></div></div>
-<div class="row2"><div><label>Category</label><select><option>🍔 Groceries</option><option>Dining</option><option>Transport</option></select></div><div><label>Project</label><select><option>Kitchen Reno</option><option>2026 Taxes</option><option>— none —</option></select></div></div>
-<button class="primary">Save expense ✓</button><button class="sec2">Edit line items (4)</button>
-</div></div></div></div></body></html>
+ <div class="row2"><div><label>Category</label><select><option>Groceries</option><option>Dining</option><option>Transport</option></select></div><div><label>Project</label><select><option>Kitchen Reno</option><option>2026 Taxes</option><option>-- none --</option></select></div></div>
+ <button class="primary">Save expense</button><button class="sec2">Edit line items (4)</button><div class="alt-state" style="margin-top:10px"><b>Recovery state:</b> camera permission denied. Choose files instead or open browser settings. <button class="sec2" style="margin-top:8px">Retry camera</button></div>
+  </div></div><p class="viewport-note"><b>Mobile/tablet</b>: capture first. <b>Laptop</b>: batch review, correction, and export-ready data.</p></div></main><nav class="bottomnav" aria-label="Primary navigation"><div><span>D</span>Dashboard</div><div class="on"><span>U</span>Upload</div><div><button class="fab" aria-label="Upload receipt">+</button></div><div><span>E</span>Expenses</div><div><span>S</span>Settings</div></nav></div></body></html>
