@@ -22,6 +22,7 @@ try {
   run("pnpm", ["--filter", "@expense-tax/contracts", "run", "generate:json-schema"], {
     CONTRACTS_GENERATED_ROOT: temporaryContractsRoot,
   });
+  run("pnpm", ["--filter", "@expense-tax/gateway-policy", "run", "build"]);
   run("pnpm", ["--filter", "@expense-tax/app-api", "run", "generate:openapi"], {
     OPENAPI_OUTPUT_PATH: path.join(
       temporaryContractsRoot,
