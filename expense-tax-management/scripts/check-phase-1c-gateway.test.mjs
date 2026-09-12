@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkPhase1cGateway } from "./check-phase-1c-gateway.mjs";
+import {
+  checkPhase1cGateway,
+  parseCloudflareIngress,
+} from "./check-phase-1c-gateway.mjs";
 
 const projectRoot = join(process.cwd());
 const repoRoot = join(projectRoot, "..");
@@ -53,6 +56,12 @@ describe("Phase 1C gateway static policy", () => {
     expect(terraform.indexOf('path     = "/internal/v1/*"')).toBeLessThan(
       terraform.indexOf('service  = "http://127.0.0.1:7303"'),
     );
+  });
+
+  it("requires the final parsed ingress entry to be the exact 404 catch-all", () => {
+    expect(parseCloudflareIngress(terraform).at(-1)).toEqual({
+      service: "http_status:404",
+    });
   });
 
   it("keeps application ports private and documents free-tier boundary", () => {

@@ -25,6 +25,20 @@ const securityHeaders = [
   ["Cache-Control", "no-store"],
 ];
 
+export function parseCloudflareIngress(source) {
+  const ingressBody = source.match(/ingress\s*=\s*\[([\s\S]*?)\n\s*\]\s*\n/u)?.[1];
+  if (!ingressBody) return [];
+
+  return [...ingressBody.matchAll(/\{\s*([\s\S]*?)\n\s*\},/gu)].map(([, body]) => {
+    const entry = {};
+    for (const line of body.split("\n")) {
+      const match = line.match(/^\s*(hostname|path|service)\s*=\s*(?:"([^"]+)"|(\S+))\s*$/u);
+      if (match) entry[match[1]] = match[2] ?? match[3];
+    }
+    return entry;
+  });
+}
+
 export function checkPhase1cGateway() {
   const failures = [];
   const includes = (source, value, label = value) => {
@@ -94,6 +108,10 @@ export function checkPhase1cGateway() {
     'service  = "http://127.0.0.1:7303"',
     "Foundry service route before Foundry web route",
   );
+  const finalIngress = parseCloudflareIngress(terraform).at(-1);
+  if (JSON.stringify(finalIngress) !== JSON.stringify({ service: "http_status:404" })) {
+    failures.push("ordering: final ingress route must be exact http_status:404 catch-all");
+  }
 
   if (/cloudflare_(access|worker|waf|rate_limit)/u.test(terraform)) {
     failures.push("forbidden: paid Cloudflare resource or product reference");
