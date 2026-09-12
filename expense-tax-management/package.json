@@ -44,6 +44,7 @@
     "verify:phase-1a": "node scripts/verify-phase-1a.mjs",
     "verify:phase-1b": "node scripts/verify-phase-1b.mjs",
     "check:cloudflare-infrastructure": "node scripts/check-cloudflare-infrastructure.mjs",
+    "check:phase-1c-gateway": "node scripts/check-phase-1c-gateway.mjs",
     "legacy:frontend:dev": "pnpm --filter web dev",
     "legacy:frontend:build": "pnpm --filter web build",
     "legacy:frontend:lint": "pnpm --filter web lint",

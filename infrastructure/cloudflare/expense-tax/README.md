@@ -4,6 +4,11 @@ Terraform manages one remotely configured Cloudflare Tunnel and five public
 hostnames. cloudflared runs on an already reachable Ubuntu VPS and exposes no
 public ports; it connects outbound to Cloudflare.
 
+This module is limited to free-tier Cloudflare Tunnel/DNS/proxy controls. paid WAF,
+rate limiting, Workers, Cloud Armor, and paid Access/Zero Trust seats
+require separate approval and must not be added here without an explicit cost
+decision.
+
 ## Host routing
 
 | Host | VPS origin |
