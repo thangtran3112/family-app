@@ -1,7 +1,7 @@
 # Phase 3C Auto-Tagging and Categorization Design
 
 **Date:** 2026-09-12  
-**Status:** Proposed  
+**Status:** Approved
 **Depends on:** Phase 0C OCR, Phase 0J domain model, Phase 0K Foundry, Phase 0L Temporal worker, Phase 3B deduplication
 
 ## Objective

@@ -1,7 +1,7 @@
 # Phase 1D Protected Development Workflow Design
 
 **Date:** 2026-09-12  
-**Status:** Proposed  
+**Status:** Approved
 **Depends on:** Phase 1A CI, Phase 1B production deployment, Phase 1C gateway hardening
 
 ## Objective
