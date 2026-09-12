@@ -40,5 +40,23 @@
 - Task 4: fix round 2/5 (bare `whsec_`/empty/whitespace rejected; commit fe275ba; review clean).
 - Task 4: runtime partial — Svix endpoint created for exact nine supported events; Secret Manager rotated to sole active version 4. Deployment loading version 4 is in CI.
 - Ruling: Task 5 smoke assumptions referenced nonexistent auth-check routes and response metadata. Add narrow read-only guarded auth-check routes; use real frontend paths and expect tramily tenant token Foundry rejection as `401`. Cost if wrong: four small internal verification endpoints become production surface behind existing guards.
-- Task 5: implementation complete with review fixes; focused/full verification passes; live production smoke pending and intentionally not executed in this task.
-- Task 5 correction: registered guarded App/Foundry auth-check routes and corrected Capture/Office paths; behavioral tests, full tests, lint, and typecheck pass; live smoke remains pending.
+- Ruling: Foundry Web is public but guarded Foundry Service API is loopback-only. Route only `expense-foundry.tobytran.dev/internal/v1/*` through existing Cloudflare Tunnel to `127.0.0.1:8200`, preserving generic Foundry Web routing and service token guards. Cost if wrong: guarded internal API becomes internet-reachable through Cloudflare, though origins remain private and every route retains auth.
+- Task 5a: complete (commits `7ad4357..996ee30`, review clean)
+- Ruling: Task 5 smoke cannot use `/health/ready` on Foundry hostname because path routing deliberately exposes only guarded `/internal/v1/*`; use Foundry Web `/` for public reachability, then guarded platform and M2M checks as Foundry Service readiness proof. Cost if wrong: no separate unauthenticated public Foundry Service readiness probe.
+- Task 5b: complete (commit `172edbb`, review clean)
+- Task 5 live smoke: 8/13 passed. Public pages, no-token denial, tramily Foundry denial, and webhook delivery/replay passed. Thang tenant/platform, tenant mismatch, and both M2M checks returned 401.
+- Root cause: Clerk user JWT signature/issuer/audience verify successfully, but `expense-app` emits empty `display_name` for invited users without Clerk names and App verifier rejects it. Clerk M2M JWT emits the spec-documented singleton audience array, while both service verifiers incorrectly require scalar `aud`. Thang platform token also emits `roles: null` because required public metadata was never populated.
+- Ruling: App tenant verifier falls back from missing/blank display name to already-required verified email; malformed non-string display names remain rejected. Cost if wrong: nameless users appear by email until profile data is supplied.
+- Ruling: Service verifiers accept only scalar expected audience or exact singleton array containing expected audience; tenant/platform session tokens continue requiring scalar audiences and multi-audience service tokens remain rejected. Cost if wrong: expands accepted representation to Clerk's documented M2M shape without expanding destination boundary.
+- Ruling: Populate approved test operator's Clerk profile and `foundry_roles` metadata rather than weakening platform role-marker validation. Cost if wrong: Clerk and Foundry role state require coordinated provisioning for future operators.
+- Task 5c: fix round 1/5 (2 findings addressed, 0 open; commit `4e66f51`)
+- Task 5c: complete (commits `d79b173..4e66f51`, review clean)
+- Task 5 live smoke after deploy `34663283463`: 11/13 passed. All production auth decisions/statuses are correct; runner falsely fails successful tenant access because it calls an ordinary tenant resource lacking smoke metadata, and falsely demands claim metadata from expected 403 mismatch denial.
+- Ruling: Use guarded App tenant auth-check route for positive tenant verification and assert its resolved app tenant ID; validate claim metadata only on expected 200 authenticated checks, never expected denial bodies. Cost if wrong: smoke no longer expects diagnostic claims in generic resource/denial responses.
+- Task 5d: complete (commit `83b2294`, review clean)
+- Task 4: complete — exact-event Svix endpoint active, Secret Manager version 4 sole active version, signed production delivery/replay verified.
+- Task 5: complete — production smoke passed 13/13 after CI `34662593958`, deploy `34663283463`, and Cloudflare apply `34661292159`; temporary sign-in sessions revoked, bridge stopped, and all token/secret/sign-in artifacts deleted.
+- Final review: Important — Clerk webhook pre-parser buffers request body without a byte limit before Fastify parsing. Minors — psql child receives full parent environment; direct Foundry provisioning caller can skip membership verification; bootstrap conflict predicates use NULL-unsafe `<>`.
+- Final fix wave: original Important and three Minors addressed in `032819c`; review clean for those findings.
+- Final fix wave: residual oversized content-length stream cleanup finding addressed in `70aa7cb`; scoped re-review clean.
+- Final review: complete, no open Critical/Important/Minor findings.

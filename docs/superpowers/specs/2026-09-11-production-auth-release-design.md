@@ -44,6 +44,10 @@ Provisioning transaction:
 5. Re-read all mappings and resolve tenant identity through production domain.
 
 No user, tenant, membership, expense, or operator row is created implicitly.
+For an empty production database only, the confirmed operator provisioning
+command may explicitly bootstrap the Family tenant, both App users, tenant
+memberships, Personal profile/memberships, and Foundry role rows. It must fail
+if existing rows conflict with the verified Clerk identities.
 
 ## Webhook
 
@@ -52,6 +56,8 @@ No user, tenant, membership, expense, or operator row is created implicitly.
   rotation flow; do not store secret in repository or command history.
 - Verify Svix signature, event ID idempotency, user/org/membership upserts, and
   deletion markers.
+- Cap raw request bodies at 1 MiB before signature verification or JSON parsing;
+  oversized requests return `413` without handler execution.
 - Send a controlled test event only after endpoint and secret are configured.
 
 ## Smoke Tests

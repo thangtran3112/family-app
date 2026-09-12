@@ -84,7 +84,8 @@ git commit -m "feat(auth): validate production provisioning inputs"
 **Interfaces:**
 - `fetchClerkMemberships(input)` calls `GET /v1/organizations/{organization_id}/memberships?user_id={user_id}` with `Authorization: Bearer ${CLERK_SECRET_KEY}` and verifies both users belong to `CLERK_FAMILY_ORG_ID` with `org:member` or `org:admin` membership.
 - `provisionAppMappings(input, memberships)` updates `app.users.clerk_user_id` and `app.tenants.clerk_org_id` transactionally through `psql` with `PG*` environment variables derived from URLs, never URL command arguments.
-- `provisionFoundryOperator(input)` inserts/validates two thang rows (`operator`, `catalog_manager`) in `foundry.platform_operator_identities`; it rejects disabled rows.
+- `--bootstrap-empty` explicitly creates deterministic App UUID rows for the initial Family tenant, thang/tramily users, tenant memberships, Personal profile/memberships, then applies Clerk mappings. It is allowed only when production App user/tenant tables are empty or already match the deterministic bootstrap rows.
+- `provisionFoundryOperator(input, memberships)` revalidates verified Clerk memberships at its exported boundary, inserts/validates two thang rows (`operator`, `catalog_manager`) in `foundry.platform_operator_identities`, and rejects disabled rows.
 - `--dry-run` performs Clerk membership verification and SQL preflight but no writes.
 
 - [ ] **Step 1: Write failing membership and SQL tests.**
@@ -114,7 +115,7 @@ duplicate `(user, role)` remains rejected.
 
 - [ ] **Step 6: Implement transactional SQL.**
 
-App mapping SQL must assert active target rows, allow `NULL` or same Clerk ID only, update both user rows and tenant row, and verify one affected row per mapping. Foundry SQL must assert no conflicting role and upsert only the selected thang identity.
+App mapping SQL must assert active target rows, allow `NULL` or same Clerk ID only, update both user rows and tenant row, and verify one affected row per mapping. Empty bootstrap SQL must fail on unrelated existing users/tenants, create Family tenant/users/tenant memberships/Personal profile and memberships transactionally, then verify exact rows. Foundry SQL must assert no conflicting role and upsert only selected thang identity.
 
 - [ ] **Step 7: Implement dry-run and write modes.**
 
@@ -157,7 +158,7 @@ Run with all required environment values and `pnpm provision:production-clerk --
 
 - [ ] **Step 3: Run confirmed provisioning.**
 
-Set `PROVISION_PRODUCTION_CLERK_CONFIRM=Family-auth-release` and run command once. Capture only result counts and stable IDs.
+Set `PROVISION_PRODUCTION_CLERK_CONFIRM=Family-auth-release` and run command once with `--bootstrap-empty`. Capture only result counts and stable IDs.
 
 - [ ] **Step 4: Verify database state read-only.**
 
@@ -175,6 +176,7 @@ Update `.superpowers/sdd/2026-09-10-clerk-auth-integration/progress.md` with IDs
 **Interfaces:**
 - Endpoint: `https://expense-api.tobytran.dev/api/v1/integrations/clerk/webhook`.
 - Secret input: `CLERK_WEBHOOK_SIGNING_SECRET` through approved Secret Manager sync.
+- Raw request bodies are capped at 1 MiB before signature verification or parsing; oversized content-length and chunked requests return `413` and abort their payload streams.
 
 - [ ] **Step 1: Create Clerk webhook.**
 
@@ -197,10 +199,21 @@ Use Clerk webhook test delivery. Verify `202`, one database event row, and repla
 **Files:**
 - Create: `expense-tax-management/scripts/production-auth-smoke.mjs`
 - Create: `expense-tax-management/scripts/production-auth-smoke.test.mjs`
+- Create: `expense-tax-management/services/app-api/src/routes/auth-check.ts`
+- Create: `expense-tax-management/services/app-api/test/auth-check.test.ts`
+- Create: `expense-tax-management/services/foundry-service/src/routes/auth-check.ts`
+- Create: `expense-tax-management/services/foundry-service/test/auth-check.test.ts`
+- Modify: `expense-tax-management/services/app-api/src/app.ts`
+- Modify: `expense-tax-management/services/foundry-service/src/app.ts`
+- Modify: `infrastructure/cloudflare/expense-tax/main.tf`
+- Modify: `expense-tax-management/scripts/check-cloudflare-infrastructure.mjs`
+- Modify: `expense-tax-management/scripts/check-cloudflare-infrastructure.test.mjs`
 
 **Interfaces:**
-- Script checks public health, no-token rejection, supplied Clerk browser-session token calls, M2M target audiences, and webhook replay result.
+- Script checks public health/pages, no-token rejection, supplied Clerk browser-session token calls against authenticated auth-check routes, M2M target audiences, and webhook replay result.
 - Script prints status codes and claim metadata only; never prints bearer tokens.
+- App API exposes read-only tenant and worker auth-check routes; Foundry exposes read-only platform and worker auth-check routes. Each returns only service-verified issuer/audience/subject/type and mapped IDs/role needed by smoke tests.
+- Existing Foundry hostname routes `/internal/v1/*` to loopback Foundry Service port 8200 before generic host routing sends other paths to Foundry Web port 7303. No new hostname or public origin port.
 
 - [ ] **Step 1: Write failing smoke command tests.**
 
@@ -214,7 +227,7 @@ Expected: FAIL until smoke helpers exist.
 
 - [ ] **Step 3: Implement smoke helpers.**
 
-Use bounded `fetch`, decode JWT payload only after signature has been verified by the service endpoint, redact `Authorization`, and fail nonzero on any unexpected status.
+Add guarded auth-check routes first, then use bounded `fetch`, redact `Authorization`, and fail nonzero on any unexpected status. Capture/Office checks use `/capture` and `/dashboard`; tramily tenant token against Foundry expects `401` because platform audience verification fails before role lookup.
 
 - [ ] **Step 4: Run local tests and private production smoke.**
 
