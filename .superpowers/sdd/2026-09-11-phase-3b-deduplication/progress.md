@@ -45,6 +45,13 @@
 - Task 5: fix round 2/5 (auth normalization, refresh/race handling, Node-compatible jsdom, rendered errors; commit `310a507`)
 - Task 5: fix round 3/5 (multi-item success announcement; commit `95aaf6a`)
 - Task 5: complete (commits `c47afc2..95aaf6a`, review clean)
+- Task 6: fix round 1/5 (verification coverage and push status made explicit; commit `42849df`)
+- Task 6: complete (commits `bdcb466..42849df`, review clean; real PostgreSQL coverage remains limited to merge rollback/Business scope, with other idempotency/action cases covered by unit/domain tests)
+- Final review: Critical — dedup scope triggers use unlocked parent reads. Important — post-result dedup failure attempts illegal `SUCCEEDED -> FAILED`; Office amount display assumes two decimals. Minor — deleted/non-ready source files may match.
+- Final fix wave: critical scope locking, durable post-result callback retry, currency-scale UI, and existing-file READY filtering addressed in `6fccffe`; report counts corrected in `a4af106`; scoped re-review cleared critical/important findings.
+- Final review parked: candidate source file itself can still be `PENDING`/`FAILED` when evidence runs. Ruling: existing candidate expense is already materialized and active; this is a non-blocking source-state hardening follow-up, not an authorization or data-loss path. Cost if wrong: an invalid source file state could produce a review candidate before normal file readiness enforcement.
+- Final fix verification: scope trigger parent locks, durable post-result worker retry, currency-scale Office rendering, and READY existing-file filtering verified by fresh App API/worker/Office tests, disposable PostgreSQL integration, contracts, lint, typecheck, build, and diff checks.
+- Phase 3B implementation: complete (commits `62ce952..a4af106`, final re-review clean with 1 parked non-blocking source-state finding; production deployment not run).
 - Task 6: complete. Full root TypeScript, generated-contract, worker, Office,
   focused callback, and disposable PostgreSQL verification passed. Counts:
   408 root TypeScript tests, 54 worker tests, 43 Office tests, 14 focused
