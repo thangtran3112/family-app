@@ -26,10 +26,44 @@ const securityHeaders = [
 ];
 
 export function parseCloudflareIngress(source) {
-  const ingressBody = source.match(/ingress\s*=\s*\[([\s\S]*?)\n\s*\]\s*\n/u)?.[1];
-  if (!ingressBody) return [];
+  const ingressStart = source.indexOf("ingress");
+  const listStart = source.indexOf("[", ingressStart);
+  if (ingressStart === -1 || listStart === -1) return [];
 
-  return [...ingressBody.matchAll(/\{\s*([\s\S]*?)\n\s*\},/gu)].map(([, body]) => {
+  let listDepth = 1;
+  let listEnd = -1;
+  let inString = false;
+  for (let index = listStart + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"' && source[index - 1] !== "\\") inString = !inString;
+    if (inString) continue;
+    if (character === "[") listDepth += 1;
+    if (character === "]") listDepth -= 1;
+    if (listDepth === 0) {
+      listEnd = index;
+      break;
+    }
+  }
+  if (listEnd === -1) return [];
+
+  const ingressBody = source.slice(listStart + 1, listEnd);
+  const objectBodies = [];
+  let objectStart = -1;
+  let objectDepth = 0;
+  inString = false;
+  for (let index = 0; index < ingressBody.length; index += 1) {
+    const character = ingressBody[index];
+    if (character === '"' && ingressBody[index - 1] !== "\\") inString = !inString;
+    if (inString) continue;
+    if (character === "{" && objectDepth === 0) objectStart = index;
+    if (character === "{") objectDepth += 1;
+    if (character === "}") {
+      objectDepth -= 1;
+      if (objectDepth === 0) objectBodies.push(ingressBody.slice(objectStart + 1, index));
+    }
+  }
+
+  return objectBodies.map((body) => {
     const entry = {};
     for (const line of body.split("\n")) {
       const match = line.match(/^\s*(hostname|path|service)\s*=\s*(?:"([^"]+)"|(\S+))\s*$/u);

@@ -64,6 +64,22 @@ describe("Phase 1C gateway static policy", () => {
     });
   });
 
+  it("parses a final ingress object without a trailing comma", () => {
+    const source = `ingress = [
+      {
+        service = "http_status:404"
+      },
+      {
+        service = "http://127.0.0.1:7301"
+      }
+    ]`;
+
+    expect(parseCloudflareIngress(source)).toEqual([
+      { service: "http_status:404" },
+      { service: "http://127.0.0.1:7301" },
+    ]);
+  });
+
   it("keeps application ports private and documents free-tier boundary", () => {
     for (const port of ["7301", "7302", "7303", "8100", "8200"]) {
       expect(compose).toContain(`127.0.0.1:${port}:${port}`);
