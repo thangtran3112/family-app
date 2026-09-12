@@ -48,6 +48,7 @@ import {
   registerDatabasePlugin,
   type DatabaseReadinessProbe,
 } from "./plugins/database.js";
+import { registerGatewayHardening } from "./plugins/gateway-hardening.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerBusinessRoutes } from "./routes/businesses.js";
 import { registerIdentityRoutes } from "./routes/identity.js";
@@ -204,6 +205,9 @@ function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const app = Fastify({
     logger: loggerWithRedaction(options.logger),
+    bodyLimit: 1024 * 1024,
+    connectionTimeout: 15_000,
+    keepAliveTimeout: 5_000,
   });
   const database = options.database ?? createAppDatabase(options.config.databaseUrl);
   const clerkIdentityDomain =
@@ -265,6 +269,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
 
   registerErrorHandlers(app);
+  registerGatewayHardening(app);
   registerAuthPlugin(app, {
     authVerifiers:
       options.authVerifiers ??
