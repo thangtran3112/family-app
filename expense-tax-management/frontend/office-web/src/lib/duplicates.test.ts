@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { OfficeSession } from "./session";
+import { formatDuplicateAmount } from "../app/(office)/duplicates/page";
 import {
   DuplicateReviewError,
   DUPLICATE_REVIEW_UPDATED_EVENT,
@@ -116,6 +117,14 @@ describe("Office duplicate review API helpers", () => {
 });
 
 describe("duplicate review presentation states", () => {
+  it.each([
+    ["USD", 12345, "123.45 USD"],
+    ["JPY", 12345, "12345 JPY"],
+    ["KWD", 12345, "12.345 KWD"],
+  ])("renders %s using shared currency scale", (currency, minorUnits, expected) => {
+    expect(formatDuplicateAmount(minorUnits, currency)).toBe(expected);
+  });
+
   it("fails closed until secure Office scope is ready", () => {
     expect(getDuplicateReviewState({ isLoaded: true, isSignedIn: true, organizationLoaded: true, hasSession: false, hasOrganization: true })).toBe("unauthorized");
     expect(getDuplicateReviewState({ isLoaded: true, isSignedIn: true, organizationLoaded: true, hasSession: true, hasOrganization: false })).toBe("unauthorized");

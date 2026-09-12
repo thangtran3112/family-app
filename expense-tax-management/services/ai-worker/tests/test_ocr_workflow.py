@@ -1,9 +1,11 @@
 import hashlib
 import uuid
 
+import pytest
 import respx
 from expense_contracts.generated import JobReferenceV1
 from httpx import Response
+from temporalio.client import WorkflowFailureError
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -203,7 +205,7 @@ async def test_ocr_workflow_maps_quota_conflict_to_a_typed_failed_result():
 
 
 @respx.mock
-async def test_ocr_workflow_retries_dedup_and_fails_with_succeeded_result_version():
+async def test_ocr_workflow_retries_dedup_without_mutating_succeeded_job():
     status_route, result_route = mock_happy_path()
     respx.post(
         f"{FOUNDRY_BASE}/internal/v1/ai-quota-reservations/{RESERVATION_ID}/release"
@@ -242,20 +244,68 @@ async def test_ocr_workflow_retries_dedup_and_fails_with_succeeded_result_versio
             ],
         ),
     ):
-        await env.client.execute_workflow(
-            OcrReceiptWorkflow.run,
-            job_reference(),
-            id=f"job-{JOB_ID}",
-            task_queue=TASK_QUEUE,
-        )
+        with pytest.raises(WorkflowFailureError):
+            await env.client.execute_workflow(
+                OcrReceiptWorkflow.run,
+                job_reference(),
+                id=f"job-{JOB_ID}",
+                task_queue=TASK_QUEUE,
+            )
 
     assert len(dedup_route.calls) == 5
     assert len(result_route.calls) == 1
-    assert len(status_route.calls) == 2
-    failed_status = status_route.calls[1].request.content
-    assert b'"status":"FAILED"' in failed_status
-    assert b'"expectedJobVersion":4' in failed_status
-    assert b"OCR_FAILED: extraction pipeline error" in failed_status
+    assert len(status_route.calls) == 1
+    assert b'"status":"FAILED"' not in status_route.calls[0].request.content
+
+
+@respx.mock
+async def test_ocr_workflow_surfaces_nonretryable_dedup_failure_without_failed_transition():
+    status_route, result_route = mock_happy_path()
+    dedup_route = respx.post(
+        f"{APP_BASE}/internal/v1/jobs/{JOB_ID}/deduplication"
+    ).mock(return_value=Response(422, json={"error": "invalid evidence"}))
+    app_api = AppApiClient(base_url=APP_BASE, service_token="app-token")
+    ocr = OcrReceiptActivities(
+        app_api, FoundryClient(base_url=FOUNDRY_BASE, service_token="foundry-token")
+    )
+    echo = FoundationEchoActivities(app_api)
+
+    async with (
+        await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter
+        ) as env,
+        Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[OcrReceiptWorkflow],
+            activities=[
+                echo.mark_running,
+                ocr.ocr_get_input,
+                ocr.ocr_download_receipt,
+                ocr.ocr_resolve_route,
+                ocr.ocr_reserve,
+                ocr.ocr_mark_call_started,
+                ocr.ocr_run_extraction,
+                ocr.ocr_record_accepted,
+                ocr.ocr_release,
+                ocr.ocr_submit_extraction,
+                ocr.ocr_record_deduplication,
+                ocr.ocr_submit_failed,
+                ocr.ocr_mark_failed,
+            ],
+        ),
+    ):
+        with pytest.raises(WorkflowFailureError):
+            await env.client.execute_workflow(
+                OcrReceiptWorkflow.run,
+                job_reference(),
+                id=f"job-{JOB_ID}",
+                task_queue=TASK_QUEUE,
+            )
+
+    assert len(dedup_route.calls) == 1
+    assert len(result_route.calls) == 1
+    assert len(status_route.calls) == 1
 
 
 @respx.mock

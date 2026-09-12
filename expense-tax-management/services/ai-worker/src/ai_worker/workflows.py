@@ -208,17 +208,6 @@ class OcrReceiptWorkflow:
                 retry_policy=http_retry,
             )
             version = result_version
-            await workflow.execute_activity(
-                OcrReceiptActivities.ocr_record_deduplication,
-                OcrRecordDeduplicationArgs(
-                    job_reference=job_reference,
-                    source_file_id=str(job_input.fileId),
-                    expected_job_version=result_version,
-                    extraction=extraction,
-                ),
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=http_retry,
-            )
         except Exception:  # noqa: BLE001 -- terminal FN mapping: every activity failure past retry policy lands a typed OCR_FAILED instead of a stuck-RUNNING job (see class docstring)
             try:
                 await workflow.execute_activity(
@@ -231,6 +220,20 @@ class OcrReceiptWorkflow:
                 pass
             await fail("OCR_FAILED: extraction pipeline error", version)
             return
+
+        # OCR result is already SUCCEEDED. Callback retries remain durable, but
+        # callback failure must never attempt an illegal SUCCEEDED -> FAILED transition.
+        await workflow.execute_activity(
+            OcrReceiptActivities.ocr_record_deduplication,
+            OcrRecordDeduplicationArgs(
+                job_reference=job_reference,
+                source_file_id=str(job_input.fileId),
+                expected_job_version=result_version,
+                extraction=extraction,
+            ),
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=http_retry,
+        )
 
 
 @workflow.defn(name="ForwardedReceiptWorkflow")

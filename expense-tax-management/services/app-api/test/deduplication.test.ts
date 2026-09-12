@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -181,6 +182,14 @@ describe("deduplication canonicalization", () => {
         {
           expenseId: "same-file",
           sha256Hex: "a".repeat(64),
+          status: "READY",
+          personalProfileId: "33333333-3333-4333-8333-333333333333",
+          businessId: null,
+        },
+        {
+          expenseId: "deleted-file",
+          sha256Hex: "a".repeat(64),
+          status: "DELETED",
           personalProfileId: "33333333-3333-4333-8333-333333333333",
           businessId: null,
         },
@@ -240,12 +249,21 @@ describe("deduplication canonicalization", () => {
       { existingExpenseId: "same-fingerprint", matchType: "fingerprint" },
       { existingExpenseId: "fuzzy", matchType: "fuzzy_fields" },
     ]);
+    expect(candidates).not.toContainEqual(expect.objectContaining({ existingExpenseId: "deleted-file" }));
     expect(candidates[2]?.evidence).toMatchObject({
       existingAmountMinorUnits: 10400,
       candidateAmountMinorUnits: 10000,
       existingIncurredOn: "2026-09-13",
       candidateIncurredOn: "2026-09-11",
     });
+  });
+
+  it("only queries READY source files for exact SHA candidates", () => {
+    const source = readFileSync(
+      new URL("../src/domain/deduplication.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('.where("file.status", "=", "READY")');
   });
 });
 

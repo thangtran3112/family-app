@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth, useOrganization } from "@clerk/nextjs";
-import type { DuplicateResolutionAction } from "@expense-tax/contracts";
+import { DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES, type DuplicateResolutionAction } from "@expense-tax/contracts";
 import { useState } from "react";
 
 import { OfficeData } from "@/components/office-data";
@@ -12,14 +12,15 @@ import { readOfficeSession } from "@/lib/session";
 
 type DuplicateMatch = Awaited<ReturnType<typeof loadDuplicates>>["items"][number];
 
-function amount(minorUnits: number | undefined, currency: string | undefined) {
+export function formatDuplicateAmount(minorUnits: number | undefined, currency: string | undefined) {
   if (minorUnits === undefined || !currency) return "Not available";
-  return `${(minorUnits / 100).toFixed(2)} ${currency}`;
+  const scale = DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES[currency as keyof typeof DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES] ?? 2;
+  return `${(minorUnits / 10 ** scale).toFixed(scale)} ${currency}`;
 }
 
 function Comparison({ match }: { match: DuplicateMatch }) {
   const evidence = match.evidence;
-  return <section className="toolbar" aria-label="Expense comparison"><div><h4>Existing expense</h4><p>{match.existingExpenseId}</p><p>{amount(evidence.existingAmountMinorUnits, evidence.currency)}</p><p>{evidence.existingIncurredOn ?? "Date not available"}</p></div><div><h4>Candidate expense</h4><p>{match.candidateExpenseId}</p><p>{amount(evidence.candidateAmountMinorUnits, evidence.currency)}</p><p>{evidence.candidateIncurredOn ?? "Date not available"}</p></div></section>;
+  return <section className="toolbar" aria-label="Expense comparison"><div><h4>Existing expense</h4><p>{match.existingExpenseId}</p><p>{formatDuplicateAmount(evidence.existingAmountMinorUnits, evidence.currency)}</p><p>{evidence.existingIncurredOn ?? "Date not available"}</p></div><div><h4>Candidate expense</h4><p>{match.candidateExpenseId}</p><p>{formatDuplicateAmount(evidence.candidateAmountMinorUnits, evidence.currency)}</p><p>{evidence.candidateIncurredOn ?? "Date not available"}</p></div></section>;
 }
 
 export function DuplicateReviewPanel({ initialItems, initialNextCursor }: { initialItems: DuplicateMatch[]; initialNextCursor: string | null }) {

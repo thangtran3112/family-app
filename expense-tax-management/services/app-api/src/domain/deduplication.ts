@@ -73,6 +73,7 @@ export interface DeduplicationDomain {
 export interface DeduplicationCandidateFile {
   readonly expenseId: string | null;
   readonly sha256Hex: string | null;
+  readonly status?: "PENDING" | "READY" | "FAILED" | "DELETED";
   readonly personalProfileId: string | null;
   readonly businessId: string | null;
 }
@@ -213,6 +214,7 @@ export function findDeterministicCandidates(input: {
       if (
         other.expenseId === null ||
         other.expenseId === input.candidateExpenseId ||
+        other.status !== "READY" ||
         other.sha256Hex !== input.file.sha256Hex ||
         !sameScope(other, input.scope)
       ) continue;
@@ -670,11 +672,13 @@ export function createDeduplicationDomain(
             .select([
               "file.expense_id as expense_id",
               "file.sha256_hex as sha256_hex",
+              "file.status as status",
               "file.personal_profile_id as personal_profile_id",
               "file.business_id as business_id",
             ])
             .where("file.tenant_id", "=", job.tenant_id)
             .where("file.sha256_hex", "=", file.sha256_hex)
+            .where("file.status", "=", "READY")
             .where("file.expense_id", "is not", null);
           fileQuery = job.personal_profile_id !== null
             ? fileQuery
@@ -720,6 +724,7 @@ export function createDeduplicationDomain(
             file: {
               expenseId: file.expense_id,
               sha256Hex: file.sha256_hex,
+              status: file.status,
               personalProfileId: file.personal_profile_id,
               businessId: file.business_id,
             },
@@ -727,6 +732,7 @@ export function createDeduplicationDomain(
             files: files.map((row) => ({
               expenseId: row.expense_id,
               sha256Hex: row.sha256_hex,
+              status: row.status,
               personalProfileId: row.personal_profile_id,
               businessId: row.business_id,
             })),

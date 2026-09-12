@@ -37,6 +37,12 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("inbound_emails_dedup_parent_scope_guard_trigger");
   });
 
+  it("locks every referenced parent row while validating scope", () => {
+    expect(migration.match(/FROM app\.expenses[\s\S]*?FOR UPDATE/g)).toHaveLength(4);
+    expect(migration).toMatch(/FROM app\.expense_files[\s\S]*?FOR UPDATE/);
+    expect(migration).toMatch(/FROM app\.inbound_emails[\s\S]*?FOR UPDATE/);
+  });
+
   it("declares status, match type, fingerprint, lookup, and idempotency constraints", () => {
     expect(migration).toMatch(/match_type IN \('file_sha256', 'fingerprint', 'fuzzy_fields'\)/);
     expect(migration).toMatch(/status IN \('pending', 'merged', 'separate', 'dismissed'\)/);

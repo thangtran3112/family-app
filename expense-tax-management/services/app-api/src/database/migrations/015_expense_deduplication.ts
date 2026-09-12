@@ -207,7 +207,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         SELECT tenant_id, personal_profile_id, business_id
           INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
           FROM app.expenses
-         WHERE id = NEW.expense_id;
+          WHERE id = NEW.expense_id
+          FOR UPDATE;
         IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
           OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
           OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
@@ -218,7 +219,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
           SELECT tenant_id, personal_profile_id, business_id
             INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
             FROM app.expense_files
-           WHERE id = NEW.source_file_id;
+           WHERE id = NEW.source_file_id
+           FOR UPDATE;
           IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
             OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
             OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
@@ -230,7 +232,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
           SELECT tenant_id, personal_profile_id, business_id
             INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
             FROM app.inbound_emails
-           WHERE id = NEW.inbound_email_id;
+           WHERE id = NEW.inbound_email_id
+           FOR UPDATE;
           IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
             OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
             OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
@@ -241,7 +244,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         SELECT tenant_id, personal_profile_id, business_id
           INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
           FROM app.expenses
-         WHERE id = NEW.expense_id;
+          WHERE id = NEW.expense_id
+          FOR UPDATE;
         IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
           OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
           OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
@@ -251,7 +255,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         SELECT tenant_id, personal_profile_id, business_id
           INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
           FROM app.expenses
-         WHERE id = NEW.existing_expense_id;
+          WHERE id = NEW.existing_expense_id
+          FOR UPDATE;
         IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
           OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
           OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
@@ -260,8 +265,9 @@ export async function up(database: Kysely<unknown>): Promise<void> {
 
         SELECT tenant_id, personal_profile_id, business_id
           INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
-          FROM app.expenses
-         WHERE id = NEW.candidate_expense_id;
+           FROM app.expenses
+          WHERE id = NEW.candidate_expense_id
+          FOR UPDATE;
         IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
           OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
           OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN

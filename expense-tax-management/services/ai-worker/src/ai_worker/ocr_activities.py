@@ -12,6 +12,7 @@ from expense_contracts.generated import (
 )
 from pydantic import BaseModel
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from ai_worker.app_api_client import AppApiClient, DeduplicationEvidenceV1
 from ai_worker.foundry_client import FoundryClient
@@ -200,21 +201,31 @@ class OcrReceiptActivities:
     ) -> dict[str, object]:
         job_id = str(args.job_reference.jobId)
         extraction = args.extraction
-        return await self._app_api_client.record_deduplication_evidence(
-            job_id,
-            DeduplicationEvidenceV1(
-                schemaVersion=1,
-                jobId=args.job_reference.jobId,
-                sourceFileId=args.source_file_id,
-                merchant=extraction.merchant,
-                amount=extraction.amount,
-                currency=extraction.currency,
-                incurredOn=extraction.incurredOn,
-                orderNumber=extraction.orderNumber,
-                expectedJobVersion=args.expected_job_version,
-                idempotencyKey=f"{job_id}:ocr:dedup:v1",
-            ),
-        )
+        try:
+            return await self._app_api_client.record_deduplication_evidence(
+                job_id,
+                DeduplicationEvidenceV1(
+                    schemaVersion=1,
+                    jobId=args.job_reference.jobId,
+                    sourceFileId=args.source_file_id,
+                    merchant=extraction.merchant,
+                    amount=extraction.amount,
+                    currency=extraction.currency,
+                    incurredOn=extraction.incurredOn,
+                    orderNumber=extraction.orderNumber,
+                    expectedJobVersion=args.expected_job_version,
+                    idempotencyKey=f"{job_id}:ocr:dedup:v1",
+                ),
+            )
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if 400 <= status < 500 and status not in {408, 429}:
+                raise ApplicationError(
+                    f"Deduplication callback rejected with HTTP {status}",
+                    type="DeduplicationCallbackNonRetryable",
+                    non_retryable=True,
+                ) from exc
+            raise
 
     @activity.defn(name="ocr_submit_failed")
     async def ocr_submit_failed(self, args: OcrSubmitFailedArgs) -> int:
