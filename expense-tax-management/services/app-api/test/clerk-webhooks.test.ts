@@ -319,14 +319,15 @@ describe("Clerk webhook route and processing", () => {
       clerkWebhookHandler: { handle: handler },
       clerkWebhookVerifySignature: verifySignature,
     });
-    await app.listen({ host: "127.0.0.1", port: 0 });
-    const address = app.server.address();
-    if (!address || typeof address === "string") throw new Error("test server did not expose TCP address");
 
     try {
+      await app.listen({ host: "127.0.0.1", port: 0 });
+      const address = app.server.address();
+      if (!address || typeof address === "string") throw new Error("test server did not expose TCP address");
       const response = await new Promise<string>((resolve, reject) => {
         const socket = net.createConnection({ host: "127.0.0.1", port: address.port });
         let received = "";
+        const body = Buffer.alloc(CLERK_WEBHOOK_MAX_BODY_BYTES + 1, 0x78);
         socket.setTimeout(5_000, () => {
           socket.destroy();
           reject(new Error("timed out waiting for oversized webhook response"));
@@ -335,9 +336,12 @@ describe("Clerk webhook route and processing", () => {
           received += chunk.toString("latin1");
         });
         socket.on("error", reject);
-        socket.on("close", () => resolve(received));
+        socket.on("close", (hadError) => {
+          if (hadError) reject(new Error("oversized webhook socket closed with an error"));
+          else resolve(received);
+        });
         socket.on("connect", () => {
-          socket.end([
+          socket.write([
             "POST /api/v1/integrations/clerk/webhook HTTP/1.1",
             "Host: 127.0.0.1",
             "Content-Type: application/json",
@@ -346,6 +350,12 @@ describe("Clerk webhook route and processing", () => {
             "",
             "",
           ].join("\r\n"));
+          socket.cork();
+          for (let offset = 0; offset < body.length; offset += 64 * 1024) {
+            socket.write(body.subarray(offset, Math.min(offset + 64 * 1024, body.length)));
+          }
+          socket.uncork();
+          socket.end();
         });
       });
 

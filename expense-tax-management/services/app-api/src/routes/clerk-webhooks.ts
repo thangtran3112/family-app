@@ -14,12 +14,28 @@ function payloadTooLargeError(): Error & { statusCode: 413 } {
   return Object.assign(new Error("Request payload too large"), { statusCode: 413 as const });
 }
 
-function drainClerkWebhookPayload(payload: Readable): void {
-  try {
-    payload.resume();
-  } catch {
-    // Preserve 413 even if stream cleanup fails.
-  }
+async function drainClerkWebhookPayload(payload: Readable): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      payload.removeListener("end", finish);
+      payload.removeListener("error", finish);
+      payload.removeListener("close", finish);
+      resolve();
+    };
+    payload.once("end", finish);
+    payload.once("error", finish);
+    payload.once("close", finish);
+    try {
+      payload.resume();
+      if (payload.readableEnded) finish();
+    } catch {
+      // Preserve 413 even if stream cleanup fails.
+      finish();
+    }
+  });
 }
 
 export async function readClerkWebhookBody(payload: AsyncIterable<Buffer | string>): Promise<Buffer> {
@@ -51,7 +67,7 @@ export async function registerClerkWebhookRoutes(app: FastifyInstance, options: 
     preParsing: async (request, _reply, payload) => {
       const contentLength = Number(request.headers["content-length"]);
       if (Number.isInteger(contentLength) && contentLength > CLERK_WEBHOOK_MAX_BODY_BYTES) {
-        drainClerkWebhookPayload(payload);
+        await drainClerkWebhookPayload(payload);
         throw payloadTooLargeError();
       }
       const body = await readClerkWebhookBody(payload);

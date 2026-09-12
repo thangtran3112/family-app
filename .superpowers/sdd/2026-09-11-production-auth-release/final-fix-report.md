@@ -63,3 +63,11 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 - Regression: TCP client sends only oversized Content-Length headers, receives HTTP 413, and confirms signature verifier and handler remain untouched. Separate hook test confirms resume failures cannot mask 413.
 - Verification: app-api tests 242/242, lint PASS, typecheck PASS, `git diff --check` PASS.
 - Commit: `5a88b8f fix(auth): drain oversized webhook requests`.
+
+## Security Fix Round 3/5
+
+- Finding: prior TCP regression sent oversized headers followed by EOF, not the declared request body, and setup could leak a listening server before cleanup.
+- RED: strengthened TCP test sent the complete bounded 1 MiB+1 body in 64 KiB chunks; it exposed reset/EPIPE because immediate `resume()` did not wait for drain completion.
+- GREEN: fast path now awaits non-buffering stream end/error/close after `resume()` before raising 413; resume failures still resolve cleanup without masking 413.
+- Regression: listening TCP test sends all declared bytes, asserts HTTP 413 and clean socket close, verifies signature/handler untouched, and closes app in `finally` around listen/address setup.
+- Verification: app-api tests 242/242, lint PASS, typecheck PASS, `git diff --check` PASS.
