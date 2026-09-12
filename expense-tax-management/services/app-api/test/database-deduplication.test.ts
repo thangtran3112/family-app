@@ -23,9 +23,14 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("expense_dedup_fingerprints_expense_tenant_fk");
     expect(migration).toContain("expense_duplicate_matches_existing_expense_tenant_fk");
     expect(migration).toContain("expense_duplicate_matches_candidate_expense_tenant_fk");
-    expect(migration).toContain("UNIQUE INDEX expenses_id_tenant_unique");
     expect(migration).toContain("UNIQUE INDEX expense_files_id_tenant_unique");
     expect(migration).toContain("UNIQUE INDEX inbound_emails_id_tenant_unique");
+    expect(migration).toContain("validate_expense_dedup_scope");
+    expect(migration).toContain("tenant_memberships");
+    expect(migration).toContain("status = 'active'");
+    expect(migration).toContain("expense_sources_scope_validation_trigger");
+    expect(migration).toContain("expense_dedup_fingerprints_scope_validation_trigger");
+    expect(migration).toContain("expense_duplicate_matches_scope_validation_trigger");
   });
 
   it("declares status, match type, fingerprint, lookup, and idempotency constraints", () => {
@@ -40,16 +45,25 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("WHERE resolution_idempotency_key IS NOT NULL");
     expect(migration).toContain("expense_duplicate_matches_pending_unique");
     expect(migration).toContain("WHERE status = 'pending'");
+    expect(migration).toContain("char_length(trim(normalized_merchant)) > 0");
     expect(migration).toMatch(/status = 'pending'[\s\S]*resolution_idempotency_key IS NULL/);
     expect(migration).toMatch(/status <> 'pending'[\s\S]*resolution_idempotency_key IS NOT NULL/);
     expect(migration).toMatch(/source_type = 'manual_upload'[\s\S]*source_file_id IS NOT NULL[\s\S]*inbound_email_id IS NULL/);
     expect(migration).toMatch(/source_type = 'forwarded_email'[\s\S]*inbound_email_id IS NOT NULL/);
+    expect(migration).toContain("prevent_duplicate_match_terminal_update");
+    expect(migration).toContain("OLD IS DISTINCT FROM NEW");
+    expect(migration).toContain("expense_duplicate_matches_terminal_guard_trigger");
   });
 
   it("drops migration-owned reference indexes after dependent tables", () => {
-    expect(migration).toContain("DROP INDEX IF EXISTS app.expenses_id_tenant_unique");
     expect(migration).toContain("DROP INDEX IF EXISTS app.expense_files_id_tenant_unique");
     expect(migration).toContain("DROP INDEX IF EXISTS app.inbound_emails_id_tenant_unique");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_sources_scope_validation_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_dedup_fingerprints_scope_validation_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_duplicate_matches_scope_validation_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_duplicate_matches_terminal_guard_trigger");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_expense_dedup_scope()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_duplicate_match_terminal_update()");
     expect(migration).toMatch(/dropTable\("app\.expense_duplicate_matches"\)[\s\S]*dropTable\("app\.expense_dedup_fingerprints"\)[\s\S]*dropTable\("app\.expense_sources"\)/);
   });
 });

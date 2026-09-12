@@ -28,10 +28,10 @@ Implemented Task 1 contracts and deduplication schema.
 - `pnpm contracts:check`: passed.
 - `git diff --check`: passed.
 
-## Concerns
+## Migration Ordering
 
-- Existing repository already contains `013_clerk_identity_mappings.ts` and `014_clerk_webhook_events.ts`; brief-required filename `013_expense_deduplication.ts` was added without changing those auth migrations. Fresh migration ordering therefore contains two `013_*` files; follow-up should renumber this dedup migration or reconcile migration numbering before applying to a shared database.
-- No live/disposable PostgreSQL migration execution was run; verification used migration-source assertions and TypeScript compilation. No production database was contacted or mutated.
+- `013_clerk_identity_mappings.ts` and `014_clerk_webhook_events.ts` are existing auth migrations.
+- `015_expense_deduplication.ts` is final migration filename; auth migrations and legacy Python models remain unchanged.
 
 ## Migration Numbering Fix
 
@@ -55,6 +55,24 @@ Implemented Task 1 contracts and deduplication schema.
 - Contracts and App API lint, typecheck, build, and generated contract checks passed.
 - `git diff --check` passed.
 
+## Review Round 2 Fixes
+
+- Added migration-owned `app.validate_expense_dedup_scope()` trigger function and INSERT/UPDATE triggers on all three dedup tables. It compares tenant, Personal profile, and Business scope for every referenced expense/file/inbound email.
+- The same trigger validates `resolved_by` against an active `app.tenant_memberships` row for the match tenant. This is database-level actor attribution; App domain authorization remains required above it.
+- Added terminal-state immutability guard using `OLD IS DISTINCT FROM NEW`; pending rows may transition, terminal rows cannot change.
+- Added trimmed nonempty normalized merchant check and corresponding regression assertion.
+- Added `idempotencyKey` to strict duplicate-match and resolution-response contracts.
+- Evidence match-type combinations remain intentionally deferred to later matching-domain implementation and are recorded by existing match-type/evidence contracts.
+- Added trigger, membership, merchant, terminal-state, response-idempotency, and down-cleanup regression assertions.
+
+## Review Round 2 Verification
+
+- Focused contracts/schema suite: 2 files, 8 tests passed.
+- App API test suite: 27 files, 259 tests passed.
+- Contracts and App API lint, typecheck, build, and generated contract checks passed.
+- Disposable PostgreSQL migration test: migrations 001-015 applied successfully after creating required disposable `app` schema; direct 015 down completed; dedup tables, migration-owned indexes, and trigger functions were absent afterward.
+- `git diff --check` passed.
+
 ## Remaining Concern
 
-- No disposable PostgreSQL migration execution was run; verification used migration-source assertions and TypeScript compilation. No production database was contacted or mutated.
+- Disposable validation required explicit creation of `app` schema because project initialization normally creates it outside migration files. No production database was contacted or mutated.

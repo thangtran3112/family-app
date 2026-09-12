@@ -50,6 +50,7 @@ const match = {
   resolvedBy: null,
   resolvedAt: null,
   resolutionIdempotencyKey: null,
+  idempotencyKey: "dedup-match-1",
   createdAt: "2026-09-11T12:00:00.000Z",
 };
 
@@ -139,6 +140,7 @@ describe("deduplication contracts", () => {
         action: "keep_both",
         status: "separate",
         version: 2,
+        idempotencyKey: "resolve-1",
       }).success,
     ).toBe(true);
     expect(DeduplicationEvidenceV1Schema.parse(evidence)).toEqual(evidence);

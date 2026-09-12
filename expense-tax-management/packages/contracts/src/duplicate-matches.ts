@@ -109,6 +109,7 @@ export const DuplicateMatchSchema = z
     resolvedBy: z.uuid().nullable(),
     resolvedAt: TimestampSchema.nullable(),
     resolutionIdempotencyKey: z.string().trim().min(1).max(255).nullable(),
+    idempotencyKey: z.string().trim().min(1).max(255),
     createdAt: TimestampSchema,
   })
   .refine((value) => (value.personalProfileId !== null) !== (value.businessId !== null), {
@@ -148,5 +149,6 @@ export const DuplicateResolutionResponseSchema = z.strictObject({
   action: DuplicateResolutionActionSchema,
   status: DuplicateMatchStatusSchema,
   version: VersionSchema,
+  idempotencyKey: z.string().trim().min(1).max(255),
 });
 export type DuplicateResolutionResponse = z.infer<typeof DuplicateResolutionResponseSchema>;

@@ -2,10 +2,6 @@ import { type Kysely, sql } from "kysely";
 
 export async function up(database: Kysely<unknown>): Promise<void> {
   await sql`
-    CREATE UNIQUE INDEX expenses_id_tenant_unique
-      ON app.expenses (id, tenant_id)
-  `.execute(database);
-  await sql`
     CREATE UNIQUE INDEX expense_files_id_tenant_unique
       ON app.expense_files (id, tenant_id)
   `.execute(database);
@@ -88,6 +84,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         CHECK ((personal_profile_id IS NULL) <> (business_id IS NULL)),
       CONSTRAINT expense_dedup_fingerprints_version_check
         CHECK (fingerprint_version > 0),
+      CONSTRAINT expense_dedup_fingerprints_merchant_check
+        CHECK (char_length(trim(normalized_merchant)) > 0),
       CONSTRAINT expense_dedup_fingerprints_amount_check
         CHECK (amount_minor_units >= 0),
       CONSTRAINT expense_dedup_fingerprints_currency_check
@@ -189,13 +187,141 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       ON app.expense_duplicate_matches
         (tenant_id, personal_profile_id, business_id, status, created_at DESC)
   `.execute(database);
+  await sql`
+    CREATE OR REPLACE FUNCTION app.validate_expense_dedup_scope()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      referenced_tenant_id uuid;
+      referenced_personal_profile_id uuid;
+      referenced_business_id uuid;
+    BEGIN
+      IF TG_TABLE_NAME = 'expense_sources' THEN
+        SELECT tenant_id, personal_profile_id, business_id
+          INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+          FROM app.expenses
+         WHERE id = NEW.expense_id;
+        IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+          OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+          OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+          RAISE EXCEPTION 'expense source expense scope mismatch';
+        END IF;
+
+        IF NEW.source_file_id IS NOT NULL THEN
+          SELECT tenant_id, personal_profile_id, business_id
+            INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+            FROM app.expense_files
+           WHERE id = NEW.source_file_id;
+          IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+            OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+            OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+            RAISE EXCEPTION 'expense source file scope mismatch';
+          END IF;
+        END IF;
+
+        IF NEW.inbound_email_id IS NOT NULL THEN
+          SELECT tenant_id, personal_profile_id, business_id
+            INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+            FROM app.inbound_emails
+           WHERE id = NEW.inbound_email_id;
+          IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+            OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+            OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+            RAISE EXCEPTION 'expense source inbound email scope mismatch';
+          END IF;
+        END IF;
+      ELSIF TG_TABLE_NAME = 'expense_dedup_fingerprints' THEN
+        SELECT tenant_id, personal_profile_id, business_id
+          INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+          FROM app.expenses
+         WHERE id = NEW.expense_id;
+        IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+          OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+          OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+          RAISE EXCEPTION 'dedup fingerprint expense scope mismatch';
+        END IF;
+      ELSIF TG_TABLE_NAME = 'expense_duplicate_matches' THEN
+        SELECT tenant_id, personal_profile_id, business_id
+          INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+          FROM app.expenses
+         WHERE id = NEW.existing_expense_id;
+        IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+          OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+          OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+          RAISE EXCEPTION 'duplicate existing expense scope mismatch';
+        END IF;
+
+        SELECT tenant_id, personal_profile_id, business_id
+          INTO referenced_tenant_id, referenced_personal_profile_id, referenced_business_id
+          FROM app.expenses
+         WHERE id = NEW.candidate_expense_id;
+        IF NOT FOUND OR referenced_tenant_id IS DISTINCT FROM NEW.tenant_id
+          OR referenced_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+          OR referenced_business_id IS DISTINCT FROM NEW.business_id THEN
+          RAISE EXCEPTION 'duplicate candidate expense scope mismatch';
+        END IF;
+
+        IF NEW.resolved_by IS NOT NULL AND NOT EXISTS (
+          SELECT 1
+            FROM app.tenant_memberships
+           WHERE tenant_id = NEW.tenant_id
+             AND user_id = NEW.resolved_by
+             AND status = 'active'
+        ) THEN
+          RAISE EXCEPTION 'duplicate match resolver is not an active tenant member';
+        END IF;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_sources_scope_validation_trigger
+      BEFORE INSERT OR UPDATE ON app.expense_sources
+      FOR EACH ROW EXECUTE FUNCTION app.validate_expense_dedup_scope()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_dedup_fingerprints_scope_validation_trigger
+      BEFORE INSERT OR UPDATE ON app.expense_dedup_fingerprints
+      FOR EACH ROW EXECUTE FUNCTION app.validate_expense_dedup_scope()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_duplicate_matches_scope_validation_trigger
+      BEFORE INSERT OR UPDATE ON app.expense_duplicate_matches
+      FOR EACH ROW EXECUTE FUNCTION app.validate_expense_dedup_scope()
+  `.execute(database);
+  await sql`
+    CREATE OR REPLACE FUNCTION app.prevent_duplicate_match_terminal_update()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    BEGIN
+      IF OLD.status <> 'pending' AND OLD IS DISTINCT FROM NEW THEN
+        RAISE EXCEPTION 'terminal duplicate match is immutable';
+      END IF;
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_duplicate_matches_terminal_guard_trigger
+      BEFORE UPDATE ON app.expense_duplicate_matches
+      FOR EACH ROW EXECUTE FUNCTION app.prevent_duplicate_match_terminal_update()
+  `.execute(database);
 }
 
 export async function down(database: Kysely<unknown>): Promise<void> {
+  await sql`DROP TRIGGER IF EXISTS expense_duplicate_matches_terminal_guard_trigger ON app.expense_duplicate_matches`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_duplicate_matches_scope_validation_trigger ON app.expense_duplicate_matches`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_dedup_fingerprints_scope_validation_trigger ON app.expense_dedup_fingerprints`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_sources_scope_validation_trigger ON app.expense_sources`.execute(database);
   await database.schema.dropTable("app.expense_duplicate_matches").ifExists().execute();
   await database.schema.dropTable("app.expense_dedup_fingerprints").ifExists().execute();
   await database.schema.dropTable("app.expense_sources").ifExists().execute();
+  await sql`DROP FUNCTION IF EXISTS app.prevent_duplicate_match_terminal_update()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.validate_expense_dedup_scope()`.execute(database);
   await sql`DROP INDEX IF EXISTS app.inbound_emails_id_tenant_unique`.execute(database);
   await sql`DROP INDEX IF EXISTS app.expense_files_id_tenant_unique`.execute(database);
-  await sql`DROP INDEX IF EXISTS app.expenses_id_tenant_unique`.execute(database);
 }
