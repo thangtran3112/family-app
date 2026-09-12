@@ -8,6 +8,7 @@ import {
 } from "./check-cloudflare-infrastructure.mjs";
 
 const repoRoot = join(process.cwd(), "..");
+const main = readFileSync(join(repoRoot, "infrastructure/cloudflare/expense-tax/main.tf"), "utf8");
 const workflow = readFileSync(join(repoRoot, ".github/workflows/expense-tax-cloudflare.yml"), "utf8");
 const vps = readFileSync(join(repoRoot, "infrastructure/vps/bootstrap-cloudflared.sh"), "utf8");
 const state = readFileSync(join(repoRoot, "infrastructure/cloudflare/expense-tax/bootstrap-state.sh"), "utf8");
@@ -67,6 +68,21 @@ describe("Cloudflare workflow condition checks", () => {
     expect(cloudflareBootstrap).not.toContain(legacyServiceAccountId);
     expect(cloudflareBootstrap).toContain("expense-tax-cloudflare.yml@refs/heads/main");
     expect(cloudflareBootstrap).not.toContain("secretmanager.secretAccessor");
+  });
+
+  it("routes guarded Foundry API paths before the generic Foundry web route", () => {
+    const guardedFoundryRoute = [
+      "        hostname = var.foundry_hostname",
+      "        path     = \"/internal/v1/*\"",
+      "        service  = \"http://127.0.0.1:8200\"",
+    ].join("\n");
+    const genericFoundryRoute = [
+      "        hostname = var.foundry_hostname",
+      "        service  = \"http://127.0.0.1:7303\"",
+    ].join("\n");
+
+    expect(main).toContain(guardedFoundryRoute);
+    expect(main.indexOf(guardedFoundryRoute)).toBeLessThan(main.indexOf(genericFoundryRoute));
   });
 
   it("verifies exact state bucket membership in requested project before mutations", () => {

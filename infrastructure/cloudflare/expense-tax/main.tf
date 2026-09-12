@@ -53,6 +53,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "expense_tax" {
       },
       {
         hostname = var.foundry_hostname
+        path     = "/internal/v1/*"
+        service  = "http://127.0.0.1:8200"
+      },
+      {
+        hostname = var.foundry_hostname
         service  = "http://127.0.0.1:7303"
       },
       {
