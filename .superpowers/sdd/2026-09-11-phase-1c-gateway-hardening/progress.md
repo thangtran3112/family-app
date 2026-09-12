@@ -45,6 +45,8 @@
 - CI fix review: minor (deferred): ordering test uses source positions rather than runtime command execution; behavior verified by clean `check-generated` run.
 - CI regression: Docker service builds lacked gateway-policy workspace files; fixed in `aae0497` by copying/building package and runtime dist in both service Dockerfiles.
 - CI review: root `contracts:generate` still lacked gateway-policy build; fixed in `2f55670`, review clean.
+- CI regression: Phase 0I typecheck ran before gateway-policy build; fixed in `dff5f9e` by ordering root and CI typechecks after gateway build.
+- CI fix review: minor (deferred): ordering test uses package-name positions rather than command parsing; local checks pass.
 
 ## Task 5 Verification Evidence (2026-09-11)
 
