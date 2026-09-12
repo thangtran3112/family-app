@@ -1,4 +1,4 @@
-import { fetchLedger, fetchTaxReport } from "./api";
+import { fetchDuplicateMatches, fetchLedger, fetchTaxReport } from "./api";
 import type { ClerkGetToken } from "./clerk";
 import type { OfficeSession } from "./session";
 
@@ -33,4 +33,12 @@ export function loadTaxForOffice(
   organizationId: string | null | undefined,
 ) {
   return loadTax(session, getToken, organizationId, 2025);
+}
+
+export function loadDuplicates(
+  session: OfficeSession,
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
+) {
+  return fetchDuplicateMatches(session, getToken, organizationId);
 }
