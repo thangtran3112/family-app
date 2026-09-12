@@ -293,3 +293,14 @@ git commit -m "docs(gateway): record phase 1c verification"
 - [ ] **Step 5: Push and request deployment approval.**
 
 Push reviewed code and docs. Stop before production Cloudflare apply unless the user explicitly approves the reviewed free-tier Terraform plan.
+
+#### Task 5 Evidence (2026-09-11)
+
+- Local root verification from `expense-tax-management`: `pnpm test` passed with 445 tests passed and 1 pre-existing skipped Foundry database test; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Phase 1C static verification passed: `pnpm exec vitest run scripts/check-phase-1c-gateway.test.mjs` passed 6 tests; `pnpm check:phase-1c-gateway` passed.
+- Terraform local checks passed in `infrastructure/cloudflare/expense-tax`: `terraform fmt -check -recursive .`, `terraform init -backend=false`, and `terraform validate`.
+- Terraform plan was not executed: required `cloudflare_account_id` input was unavailable. No credentials were printed, invented, or used to contact Cloudflare. Static inspection confirms only Tunnel, Tunnel config, DNS, and expected loopback origins are declared; no paid Cloudflare product resource is present and no public origin bind is declared.
+- `git diff --check` passed.
+- Public HTTPS host, health, header, method, path, Clerk authorization, webhook, and direct-port checks were deferred. User explicitly prohibited external production probes without separate approval.
+- No Terraform apply, deployment, Cloudflare/GCP mutation, or push was performed.
+- Deferred GCP-specific work: future GCP Load Balancer/Cloud Armor mapping remains documentation/design only; paid Cloud Armor requires separate cost and deployment approval.
