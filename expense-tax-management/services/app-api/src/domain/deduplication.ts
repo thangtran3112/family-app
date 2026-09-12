@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES,
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   type DeduplicationEvidenceV1,
   DuplicateMatchEvidenceSchema,
@@ -21,31 +22,6 @@ import {
 
 const FINGERPRINT_VERSION = 1;
 // ISO 4217 currencies not listed here use conventional two minor units.
-const CURRENCY_MINOR_UNIT_SCALES: Readonly<Record<string, number>> = {
-  BHD: 3,
-  IQD: 3,
-  JOD: 3,
-  KWD: 3,
-  LYD: 3,
-  OMR: 3,
-  TND: 3,
-  BIF: 0,
-  CLP: 0,
-  DJF: 0,
-  GNF: 0,
-  ISK: 0,
-  JPY: 0,
-  KMF: 0,
-  KRW: 0,
-  PYG: 0,
-  RWF: 0,
-  UGX: 0,
-  VND: 0,
-  VUV: 0,
-  XAF: 0,
-  XOF: 0,
-  XPF: 0,
-};
 
 export interface DeduplicationFingerprint {
   readonly version: number;
@@ -116,7 +92,7 @@ export function normalizeMerchant(value: string): string {
 }
 
 export function toAmountMinorUnits(value: string, scale = 2): number {
-  const match = /^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.exec(value.trim());
+  const match = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.exec(value.trim());
   if (!match) throw DomainError.validation();
   const [whole, fraction = ""] = value.trim().split(".");
   if (fraction.length > scale) throw DomainError.validation();
@@ -156,7 +132,7 @@ export function buildDeduplicationFingerprint(input: {
   if (!/^[A-Z]{3}$/.test(currency)) throw DomainError.validation();
   const amountMinorUnits = toAmountMinorUnits(
     input.amount,
-    CURRENCY_MINOR_UNIT_SCALES[currency] ?? 2,
+    DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES[currency as keyof typeof DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES] ?? 2,
   );
   const incurredOn = canonicalDate(input.incurredOn);
   const canonical = [

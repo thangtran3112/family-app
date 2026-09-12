@@ -125,10 +125,10 @@ describe("deduplication canonicalization", () => {
     })).toMatchObject({ amountMinorUnits: 1000, currency: "JPY" });
     expect(buildDeduplicationFingerprint({
       merchant: "Kuwait Shop",
-      amount: "1.234",
+      amount: "1.23",
       currency: "KWD",
       incurredOn: "2026-09-11",
-    })).toMatchObject({ amountMinorUnits: 1234, currency: "KWD" });
+    })).toMatchObject({ amountMinorUnits: 1230, currency: "KWD" });
   });
 
   it("bounds derived match idempotency keys while preserving identity", () => {

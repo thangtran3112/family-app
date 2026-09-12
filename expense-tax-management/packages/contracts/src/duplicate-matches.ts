@@ -8,10 +8,35 @@ import {
 } from "./expenses.js";
 
 const MAX_SAFE_MINOR_UNITS = BigInt(Number.MAX_SAFE_INTEGER);
+export const DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES = {
+  BHD: 3,
+  IQD: 3,
+  JOD: 3,
+  KWD: 3,
+  LYD: 3,
+  OMR: 3,
+  TND: 3,
+  BIF: 0,
+  CLP: 0,
+  DJF: 0,
+  GNF: 0,
+  ISK: 0,
+  JPY: 0,
+  KMF: 0,
+  KRW: 0,
+  PYG: 0,
+  RWF: 0,
+  UGX: 0,
+  VND: 0,
+  VUV: 0,
+  XAF: 0,
+  XOF: 0,
+  XPF: 0,
+} as const;
 const DeduplicationAmountSchema = z
   .string()
   .trim()
-  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
   .refine((value) => {
     const [whole, fraction = ""] = value.split(".");
     const minorUnits = BigInt(whole ?? "") * 100n + BigInt(fraction.padEnd(2, "0"));
@@ -55,18 +80,32 @@ export const DuplicateResolutionActionSchema = z.enum([
 ]);
 export type DuplicateResolutionAction = z.infer<typeof DuplicateResolutionActionSchema>;
 
-export const DeduplicationEvidenceV1Schema = z.strictObject({
-  schemaVersion: z.literal(1),
-  jobId: z.uuid(),
-  sourceFileId: z.uuid(),
-  merchant: z.string().trim().min(1).max(200).optional(),
-  amount: DeduplicationAmountSchema.optional(),
-  currency: DeduplicationCurrencySchema.optional(),
-  incurredOn: DeduplicationDateSchema.optional(),
-  orderNumber: z.string().trim().min(1).max(200).optional(),
-  expectedJobVersion: VersionSchema,
-  idempotencyKey: z.string().trim().min(1).max(255),
-});
+export const DeduplicationEvidenceV1Schema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    jobId: z.uuid(),
+    sourceFileId: z.uuid(),
+    merchant: z.string().trim().min(1).max(200).optional(),
+    amount: DeduplicationAmountSchema.optional(),
+    currency: DeduplicationCurrencySchema.optional(),
+    incurredOn: DeduplicationDateSchema.optional(),
+    orderNumber: z.string().trim().min(1).max(200).optional(),
+    expectedJobVersion: VersionSchema,
+    idempotencyKey: z.string().trim().min(1).max(255),
+  })
+  .superRefine((value, context) => {
+    if (value.amount === undefined || value.currency === undefined) return;
+    const [whole, fraction = ""] = value.amount.split(".");
+    const scale = DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES[value.currency as keyof typeof DEDUPLICATION_CURRENCY_MINOR_UNIT_SCALES] ?? 2;
+    const minorUnits = BigInt(whole ?? "") * 10n ** BigInt(scale) + BigInt(fraction.padEnd(scale, "0"));
+    if (fraction.length > scale || minorUnits > MAX_SAFE_MINOR_UNITS) {
+      context.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "Amount is not safely representable for currency scale",
+      });
+    }
+  });
 export type DeduplicationEvidenceV1 = z.infer<typeof DeduplicationEvidenceV1Schema>;
 
 export const DuplicateMatchEvidenceSchema = z
