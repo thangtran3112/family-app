@@ -163,6 +163,16 @@ describe("rendered Office duplicate review", () => {
     expect(harness.api.announceDuplicateReviewUpdated).toHaveBeenCalledTimes(1);
   });
 
+  it("announces successful resolution while another pending item remains", async () => {
+    harness.officeData.data = { items: [match(), match({ id: "match-2", existingExpenseId: "existing-2", candidateExpenseId: "candidate-2" })], nextCursor: null };
+    renderPage();
+    fireEvent.click(screen.getAllByRole("button", { name: "Merge" })[0]);
+    expect(await screen.findByText("Merged duplicate review.")).toBeTruthy();
+    expect(screen.getAllByText("Possible duplicate")).toHaveLength(1);
+    expect(screen.getByText("candidate-2")).toBeTruthy();
+    expect(harness.api.announceDuplicateReviewUpdated).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes list after conflict and announces conflict", async () => {
     harness.api.resolveDuplicateMatch.mockRejectedValue(new harness.DuplicateReviewError("changed", 409));
     renderPage();

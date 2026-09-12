@@ -121,9 +121,11 @@ export function DuplicateReviewPanel({ initialItems, initialNextCursor }: { init
   if (unauthorized) return <Panel title="Office authorization required"><div className="empty" role="alert">Office authorization required. Sign in again before reviewing duplicate matches.</div></Panel>;
 
   const reviewState = getDuplicateReviewState({ isLoaded: true, isSignedIn: true, organizationLoaded: true, hasSession: true, hasOrganization: true, items, conflict });
-  if (reviewState === "empty") return <Panel title="Nothing waiting"><div className="empty" role="status">{resolvedMessage ?? "No pending duplicate matches. New evidence will appear here for review."}</div></Panel>;
+  const successAnnouncement = resolvedMessage && <div className="empty" role="status" aria-live="polite">{resolvedMessage}</div>;
+  if (reviewState === "empty") return <Panel title="Nothing waiting">{successAnnouncement}<div className="empty" role="status">No pending duplicate matches. New evidence will appear here for review.</div></Panel>;
 
   return <Panel title={`${items.length} pending match${items.length === 1 ? "" : "es"}`}>
+    {successAnnouncement}
     {reviewState === "conflict" && <div className="empty" role="alert">Match changed while you were reviewing. List refreshed; confirm comparison again before resolving.</div>}
     {actionError && <div className="empty" role="alert">{actionError}</div>}
     {paginationError && <div className="empty" role="alert">{paginationError}</div>}
