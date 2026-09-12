@@ -27,7 +27,7 @@
 
 ## Commit
 
-- Implementation commit hash: pending until commit is created.
+- Implementation commit hash: `2cc9806`.
 
 ## Concerns
 
