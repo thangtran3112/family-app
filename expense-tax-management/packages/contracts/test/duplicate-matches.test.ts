@@ -6,6 +6,7 @@ import {
   DuplicateMatchSchema,
   DuplicateResolutionRequestSchema,
   DuplicateResolutionResponseSchema,
+  ExpenseProvenanceSchema,
   type DeduplicationEvidenceV1,
 } from "../src/index.js";
 
@@ -48,6 +49,7 @@ const match = {
   version: 1,
   resolvedBy: null,
   resolvedAt: null,
+  resolutionIdempotencyKey: null,
   createdAt: "2026-09-11T12:00:00.000Z",
 };
 
@@ -75,9 +77,38 @@ describe("deduplication contracts", () => {
 
   it("enforces match types, statuses, and confidence bounds", () => {
     expect(DuplicateMatchSchema.safeParse({ ...match, status: "pending" }).success).toBe(true);
-    expect(DuplicateMatchSchema.safeParse({ ...match, status: "merged" }).success).toBe(true);
-    expect(DuplicateMatchSchema.safeParse({ ...match, status: "separate" }).success).toBe(true);
-    expect(DuplicateMatchSchema.safeParse({ ...match, status: "dismissed" }).success).toBe(true);
+    const resolvedMatch = {
+      resolvedBy: ids.resolvedBy,
+      resolvedAt: "2026-09-11T12:00:00.000Z",
+      resolutionIdempotencyKey: "resolve-1",
+    };
+    expect(
+      DuplicateMatchSchema.safeParse({ ...match, ...resolvedMatch, status: "merged" }).success,
+    ).toBe(true);
+    expect(
+      DuplicateMatchSchema.safeParse({ ...match, ...resolvedMatch, status: "separate" }).success,
+    ).toBe(true);
+    expect(
+      DuplicateMatchSchema.safeParse({ ...match, ...resolvedMatch, status: "dismissed" }).success,
+    ).toBe(true);
+    expect(DuplicateMatchSchema.safeParse({ ...match, resolvedBy: ids.resolvedBy }).success).toBe(false);
+    expect(
+      DuplicateMatchSchema.safeParse({
+        ...match,
+        status: "merged",
+        resolvedBy: ids.resolvedBy,
+        resolvedAt: "2026-09-11T12:00:00.000Z",
+        resolutionIdempotencyKey: "resolve-1",
+      }).success,
+    ).toBe(true);
+    expect(
+      DuplicateMatchSchema.safeParse({
+        ...match,
+        status: "merged",
+        resolvedBy: ids.resolvedBy,
+        resolvedAt: "2026-09-11T12:00:00.000Z",
+      }).success,
+    ).toBe(false);
     expect(DuplicateMatchSchema.safeParse({ ...match, matchType: "unknown" }).success).toBe(false);
     expect(DuplicateMatchSchema.safeParse({ ...match, confidence: -0.01 }).success).toBe(false);
     expect(DuplicateMatchSchema.safeParse({ ...match, confidence: 1.01 }).success).toBe(false);
@@ -111,6 +142,35 @@ describe("deduplication contracts", () => {
       }).success,
     ).toBe(true);
     expect(DeduplicationEvidenceV1Schema.parse(evidence)).toEqual(evidence);
+    const provenance = {
+      id: ids.matchId,
+      tenantId: ids.tenantId,
+      personalProfileId: ids.personalProfileId,
+      businessId: null,
+      expenseId: ids.existingExpenseId,
+      sourceType: "manual_upload" as const,
+      sourceFileId: ids.candidateExpenseId,
+      inboundEmailId: null,
+      metadata: {},
+      createdAt: "2026-09-11T12:00:00.000Z",
+    };
+    expect(ExpenseProvenanceSchema.safeParse(provenance).success).toBe(true);
+    expect(
+      ExpenseProvenanceSchema.safeParse({
+        ...provenance,
+        sourceFileId: null,
+        sourceType: "manual_upload",
+        inboundEmailId: ids.candidateExpenseId,
+      }).success,
+    ).toBe(false);
+    expect(
+      ExpenseProvenanceSchema.safeParse({
+        ...provenance,
+        sourceFileId: null,
+        sourceType: "forwarded_email",
+        inboundEmailId: ids.candidateExpenseId,
+      }).success,
+    ).toBe(true);
     expect(
       DeduplicationEvidenceV1Schema.safeParse({ ...evidence, tenantId: ids.tenantId }).success,
     ).toBe(false);

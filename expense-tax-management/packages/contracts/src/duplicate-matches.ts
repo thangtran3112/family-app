@@ -82,7 +82,17 @@ export const ExpenseProvenanceSchema = z
   })
   .refine((value) => value.sourceFileId !== null || value.inboundEmailId !== null, {
     message: "At least one source reference is required",
-  });
+  })
+  .refine(
+    (value) =>
+      (value.sourceType === "manual_upload" &&
+        value.sourceFileId !== null &&
+        value.inboundEmailId === null) ||
+      (value.sourceType === "forwarded_email" && value.inboundEmailId !== null),
+    {
+      message: "Source type must match its source references",
+    },
+  );
 export type ExpenseProvenance = z.infer<typeof ExpenseProvenanceSchema>;
 
 export const DuplicateMatchSchema = z
@@ -98,11 +108,26 @@ export const DuplicateMatchSchema = z
     version: VersionSchema,
     resolvedBy: z.uuid().nullable(),
     resolvedAt: TimestampSchema.nullable(),
+    resolutionIdempotencyKey: z.string().trim().min(1).max(255).nullable(),
     createdAt: TimestampSchema,
   })
   .refine((value) => (value.personalProfileId !== null) !== (value.businessId !== null), {
     message: "Exactly one Personal profile or business scope is required",
-  });
+  })
+  .refine(
+    (value) =>
+      (value.status === "pending" &&
+        value.resolvedBy === null &&
+        value.resolvedAt === null &&
+        value.resolutionIdempotencyKey === null) ||
+      (value.status !== "pending" &&
+        value.resolvedBy !== null &&
+        value.resolvedAt !== null &&
+        value.resolutionIdempotencyKey !== null),
+    {
+      message: "Resolution metadata must match match status",
+    },
+  );
 export type DuplicateMatch = z.infer<typeof DuplicateMatchSchema>;
 
 export const DuplicateMatchListSchema = z.strictObject({
