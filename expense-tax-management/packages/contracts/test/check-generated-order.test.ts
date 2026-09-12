@@ -6,6 +6,9 @@ const checkerSource = readFileSync(
   new URL("../scripts/check-generated.mjs", import.meta.url),
   "utf8",
 );
+const rootPackage = JSON.parse(
+  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+) as { scripts: Record<string, string> };
 
 describe("generated contract checker build order", () => {
   it("builds gateway policy before generating service OpenAPI", () => {
@@ -23,4 +26,24 @@ describe("generated contract checker build order", () => {
     expect(appOpenApi).toBeGreaterThan(gatewayBuild);
     expect(foundryOpenApi).toBeGreaterThan(gatewayBuild);
   });
+
+  it.each(["typecheck", "ci:typecheck"])(
+    "builds gateway policy before %s service typechecks",
+    (scriptName) => {
+      const script = rootPackage.scripts[scriptName] ?? "";
+      const gatewayBuild = script.indexOf(
+        "pnpm --filter @expense-tax/gateway-policy --fail-if-no-match run build",
+      );
+      const appTypecheck = script.indexOf(
+        "@expense-tax/app-api",
+      );
+      const foundryTypecheck = script.indexOf(
+        "@expense-tax/foundry-service",
+      );
+
+      expect(gatewayBuild).toBeGreaterThanOrEqual(0);
+      expect(appTypecheck).toBeGreaterThan(gatewayBuild);
+      expect(foundryTypecheck).toBeGreaterThan(gatewayBuild);
+    },
+  );
 });
