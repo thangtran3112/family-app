@@ -238,14 +238,40 @@ git commit -m "feat(office): add duplicate review"
 - Modify: `docs/superpowers/plans/2026-09-11-phase-3b-deduplication.md` with evidence after implementation
 - Modify: `.superpowers/sdd/2026-09-11-phase-3b-deduplication/progress.md`
 
-- [ ] **Step 1: Run full local verification.**
+- [x] **Step 1: Run full local verification.**
 
 Run root TypeScript tests/lint/typecheck/build, contracts generation/check, full worker tests/lint/format, Office tests/lint/typecheck/build, and diff checks.
 
-- [ ] **Step 2: Verify integration boundaries.**
+- [x] **Step 2: Verify integration boundaries.**
 
 Run migration tests against disposable PostgreSQL, worker callback tests, scope isolation tests, and idempotency/replay tests. Do not run production mutation.
 
-- [ ] **Step 3: Record evidence and push.**
+- [x] **Step 3: Record evidence and push.**
 
 Record test counts, one pre-existing skip if present, and deferred pHash/semantic/mailbox work. Push reviewed commits. Production deployment requires normal CI/deploy workflow and public verification approval.
+
+### Task 6 Evidence
+
+- Root TypeScript: `pnpm test` passed 408 tests across gateway-policy, contracts,
+  App API, and Foundry. One pre-existing Foundry database test skipped.
+- Root lint/typecheck/build: `pnpm lint`, `pnpm typecheck`, and `pnpm build`
+  passed.
+- Contracts: `pnpm contracts:generate` and `pnpm contracts:check` passed. No
+  generated artifact diff remained.
+- Worker: full `uv run pytest` passed 54 tests; `uv run ruff check src tests`
+  passed; `uv run ruff format --check src tests` reported 22 files formatted.
+  Focused callback suite passed 14 tests.
+- Office Web: 43 tests passed; lint and typecheck passed. Production build
+  passed with local placeholder `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`; initial
+  no-key invocation failed at the expected required-config guard.
+- PostgreSQL integration: `PHASE_3B_INTEGRATION=1 pnpm exec vitest run
+  test/integration/app-domain-3b-deduplication.test.ts` passed. Disposable
+  database was migrated through `015_expense_deduplication`, scope isolation,
+  rollback, merge, provenance transfer, archive, audit, and cleanup checks
+  passed. No disposable database remained.
+- Diff checks: `git diff --check` passed; generated artifacts and unrelated
+  source files remained unchanged before evidence edits.
+- Scope guard: no production mutation, deployment, external action, paid
+  provider call, pHash/imagehash, embeddings/semantic similarity, or mailbox
+  scanning work was run or added. Those remain deferred.
+- Full command output and caveats: `.superpowers/sdd/2026-09-11-phase-3b-deduplication/task-6-report.md`.
