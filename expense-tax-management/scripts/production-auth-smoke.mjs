@@ -114,7 +114,7 @@ export function buildSmokePlan(config) {
     { name: "capture page", method: "GET", url: endpoint(config.captureUrl, "/capture"), expectedStatus: 200 },
     { name: "office page", method: "GET", url: endpoint(config.officeUrl, "/dashboard"), expectedStatus: 200 },
     { name: "app no-token rejection", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 401 },
-    { name: "thang tenant app access", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.tenantId}`), expectedStatus: 200, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
+    { name: "thang tenant app access", method: "GET", url: endpoint(config.appApiUrl, "/internal/v1/auth-check/tenant"), expectedStatus: 200, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience, expectedTenantId: config.tenantId },
     { name: "thang platform Foundry access", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/platform"), expectedStatus: 200, token: config.thangPlatformToken, expectedAudience: config.expectedPlatformAudience, expectedRole: "catalog_manager" },
     { name: "tramily Foundry denial", method: "GET", url: endpoint(config.foundryUrl, "/internal/v1/auth-check/platform"), expectedStatus: 401, token: config.tramilyTenantToken, expectedAudience: config.expectedTenantAudience },
     { name: "tenant/org mismatch denial", method: "GET", url: endpoint(config.appApiUrl, `/api/v1/tenants/${config.mismatchTenantId}`), expectedStatus: 403, token: config.thangTenantToken, expectedAudience: config.expectedTenantAudience },
@@ -190,6 +190,7 @@ function assertClaimMetadata(check, body) {
   if (check.expectedSubject && claims.subject !== check.expectedSubject) throw new Error("subject metadata mismatch");
   if (check.expectedTokenType && claims.tokenType !== check.expectedTokenType) throw new Error("token type metadata mismatch");
   if (check.expectedRole && body.role !== check.expectedRole) throw new Error("role metadata mismatch");
+  if (check.expectedTenantId && body.tenantId !== check.expectedTenantId) throw new Error("tenant metadata mismatch");
 }
 
 function assertReplay(check, body) {
@@ -223,7 +224,7 @@ export async function runSmokeTests(config, options = {}) {
         body: check.body,
       }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
       if (result.status !== check.expectedStatus) throw new Error(`expected ${check.expectedStatus}, got ${result.status}`);
-      if (check.token && check.expectedStatus !== 401) {
+      if (check.token && check.expectedStatus === 200) {
         assertClaimMetadata({ ...check, expectedIssuer: config.expectedIssuer }, result.body);
       }
       assertReplay(check, result.body);

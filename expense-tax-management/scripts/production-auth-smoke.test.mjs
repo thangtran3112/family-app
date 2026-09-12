@@ -115,9 +115,64 @@ describe("production auth smoke helpers", () => {
     ]);
     expect(plan.find((check) => check.name === "foundry page").url).toBe("https://foundry.example.test/");
     expect(plan.find((check) => check.name === "app no-token rejection").expectedStatus).toBe(401);
+    expect(plan.find((check) => check.name === "thang tenant app access")).toMatchObject({
+      url: "https://app.example.test/internal/v1/auth-check/tenant",
+      expectedStatus: 200,
+      expectedTenantId: "family-tenant",
+    });
     expect(plan.find((check) => check.name === "app M2M audience").expectedAudience).not.toBe(
       plan.find((check) => check.name === "Foundry M2M audience").expectedAudience,
     );
+  });
+
+  it("validates resolved tenant ID on positive tenant auth check", async () => {
+    const result = await runSmokeTests(config(), {
+      fetchImpl: async (url) => {
+        if (url.endsWith("/internal/v1/auth-check/tenant")) {
+          return response(200, {
+            claimsVerified: {
+              issuer: "https://clerk.example.test",
+              audience: "family-tenant-aud",
+              subject: "thang-tenant-subject",
+              tokenType: "tenant",
+            },
+            tenantId: "wrong-tenant",
+            userId: "user-1",
+          });
+        }
+        return response(401);
+      },
+      logger: () => {},
+    });
+
+    expect(result.results.find((check) => check.name === "thang tenant app access")).toMatchObject({
+      passed: false,
+      error: "tenant metadata mismatch",
+    });
+  });
+
+  it("allows expected tenant denial without claim metadata", async () => {
+    const result = await runSmokeTests(config(), {
+      fetchImpl: async (url) => url.includes("other-tenant") ? response(403) : response(401),
+      logger: () => {},
+    });
+
+    expect(result.results.find((check) => check.name === "tenant/org mismatch denial")).toMatchObject({
+      passed: true,
+      status: 403,
+    });
+  });
+
+  it("requires claim metadata for expected successful token responses", async () => {
+    const result = await runSmokeTests(config(), {
+      fetchImpl: async (url) => url.endsWith("/internal/v1/auth-check/tenant") ? response(200) : response(401),
+      logger: () => {},
+    });
+
+    expect(result.results.find((check) => check.name === "thang tenant app access")).toMatchObject({
+      passed: false,
+      error: "service did not return verified claim metadata",
+    });
   });
 
   it("passes status and verified claim metadata checks without decoding bearer tokens", async () => {
@@ -132,6 +187,11 @@ describe("production auth smoke helpers", () => {
         if (options.headers?.authorization?.includes("foundry-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "foundry-service-machine", subject: "foundry-m2m-subject", tokenType: "service" } });
         return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-platform-aud", subject: "thang-platform-subject", tokenType: "platform" }, role: "catalog_manager" });
       }
+      if (url.endsWith("/internal/v1/auth-check/tenant")) return response(200, {
+        claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud", subject: "thang-tenant-subject", tokenType: "tenant" },
+        tenantId: "family-tenant",
+        userId: "user-1",
+      });
       if (url.includes("other-tenant")) return response(403, { claimsVerified: { issuer: "https://clerk.example.test", audience: "family-tenant-aud" } });
       if (!options.headers?.authorization) return response(401);
       if (options.headers.authorization.includes("app-m2m")) return response(200, { claimsVerified: { issuer: "https://clerk.example.test", audience: "app-api-machine", subject: "app-m2m-subject", tokenType: "service" } });
