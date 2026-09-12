@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import net from "node:net";
 import { Readable } from "node:stream";
 
 import Fastify from "fastify";
@@ -309,7 +310,54 @@ describe("Clerk webhook route and processing", () => {
     await app.close();
   });
 
-  it("destroys an oversized content-length stream without masking 413", async () => {
+  it("returns 413 over TCP without resetting an oversized Content-Length request", async () => {
+    const verifySignature = vi.fn(() => true);
+    const handler = vi.fn(async () => ({ replayed: false }));
+    const app = buildApp({
+      config: createAppConfig({ env: TEST_ENV, version: "test" }),
+      logger: false,
+      clerkWebhookHandler: { handle: handler },
+      clerkWebhookVerifySignature: verifySignature,
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("test server did not expose TCP address");
+
+    try {
+      const response = await new Promise<string>((resolve, reject) => {
+        const socket = net.createConnection({ host: "127.0.0.1", port: address.port });
+        let received = "";
+        socket.setTimeout(5_000, () => {
+          socket.destroy();
+          reject(new Error("timed out waiting for oversized webhook response"));
+        });
+        socket.on("data", (chunk) => {
+          received += chunk.toString("latin1");
+        });
+        socket.on("error", reject);
+        socket.on("close", () => resolve(received));
+        socket.on("connect", () => {
+          socket.end([
+            "POST /api/v1/integrations/clerk/webhook HTTP/1.1",
+            "Host: 127.0.0.1",
+            "Content-Type: application/json",
+            `Content-Length: ${CLERK_WEBHOOK_MAX_BODY_BYTES + 1}`,
+            "Connection: close",
+            "",
+            "",
+          ].join("\r\n"));
+        });
+      });
+
+      expect(response).toMatch(/^HTTP\/1\.1 413 /);
+      expect(verifySignature).not.toHaveBeenCalled();
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("drains an oversized content-length stream without masking 413", async () => {
     const app = Fastify({ logger: false });
     let preParsing;
     app.addHook("onRoute", (route) => {
@@ -321,9 +369,9 @@ describe("Clerk webhook route and processing", () => {
     });
     expect(preParsing).toBeTypeOf("function");
     const payload = Readable.from([Buffer.from("not-consumed")]);
-    const destroy = vi.spyOn(payload, "destroy");
-    destroy.mockImplementation(() => {
-      throw new Error("destroy failed");
+    const resume = vi.spyOn(payload, "resume");
+    resume.mockImplementation(() => {
+      throw new Error("resume failed");
     });
 
     await expect(
@@ -333,7 +381,7 @@ describe("Clerk webhook route and processing", () => {
         payload,
       ),
     ).rejects.toMatchObject({ statusCode: 413 });
-    expect(destroy).toHaveBeenCalledOnce();
+    expect(resume).toHaveBeenCalledOnce();
     await app.close();
   });
 

@@ -54,3 +54,11 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 - Regression: captured `preParsing` hook uses an oversized content-length stream whose `destroy()` throws; test confirms one destroy attempt and rejected error status 413.
 - Verification: app-api tests 241/241, lint PASS, typecheck PASS, `git diff --check` PASS.
 - Commit: `70aa7cb fix(auth): abort oversized webhook payloads`.
+
+## Security Fix Round 2/5
+
+- Finding: `destroy()` on the content-length fast path reset the upstream Tunnel connection before Fastify could emit its 413 response.
+- RED: bounded raw TCP test against a listening Fastify app received no HTTP response with destructive cleanup.
+- GREEN: fast path now calls guarded `payload.resume()` to drain without resetting the socket, then raises 413. Synchronous resume failures are swallowed.
+- Regression: TCP client sends only oversized Content-Length headers, receives HTTP 413, and confirms signature verifier and handler remain untouched. Separate hook test confirms resume failures cannot mask 413.
+- Verification: app-api tests 242/242, lint PASS, typecheck PASS, `git diff --check` PASS.
