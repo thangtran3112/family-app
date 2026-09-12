@@ -71,3 +71,4 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 - GREEN: fast path now awaits non-buffering stream end/error/close after `resume()` before raising 413; resume failures still resolve cleanup without masking 413.
 - Regression: listening TCP test sends all declared bytes, asserts HTTP 413 and clean socket close, verifies signature/handler untouched, and closes app in `finally` around listen/address setup.
 - Verification: app-api tests 242/242, lint PASS, typecheck PASS, `git diff --check` PASS.
+- Commit: `2ebd8ca fix(auth): verify webhook body draining`.
