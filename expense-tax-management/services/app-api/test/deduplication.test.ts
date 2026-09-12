@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { AuthPrincipal, TokenVerifier } from "../src/auth/types.js";
 import { createAppConfig } from "../src/config.js";
+import { DeduplicationEvidenceV1Schema } from "@expense-tax/contracts";
 import {
   buildDeduplicationFingerprint,
   findDeterministicCandidates,
   normalizeMerchant,
+  resolveCandidateExpenseId,
   toAmountMinorUnits,
   type DeduplicationDomain,
 } from "../src/domain/deduplication.js";
@@ -71,12 +73,61 @@ describe("deduplication canonicalization", () => {
   });
 
   it("rejects incomplete fingerprint evidence while allowing exact file evidence", () => {
-    expect(() => buildDeduplicationFingerprint({
+    expect(buildDeduplicationFingerprint({
       merchant: "",
       amount: "12.30",
       currency: "USD",
       incurredOn: "2026-09-11",
+    })).toBeNull();
+    expect(() => DeduplicationEvidenceV1Schema.parse({
+      schemaVersion: 1,
+      jobId: JOB_ID,
+      sourceFileId: FILE_ID,
+      expectedJobVersion: 3,
+      idempotencyKey: "dedup-sha-only",
+    })).not.toThrow();
+  });
+
+  it("rejects unsafe money, invalid dates, and non-canonical currencies", () => {
+    expect(() => buildDeduplicationFingerprint({
+      merchant: "Cafe",
+      amount: "0.00",
+      currency: "USD",
+      incurredOn: "2026-09-11",
     })).toThrow();
+    expect(() => buildDeduplicationFingerprint({
+      merchant: "Cafe",
+      amount: "1.234",
+      currency: "USD",
+      incurredOn: "2026-09-11",
+    })).toThrow();
+    expect(() => buildDeduplicationFingerprint({
+      merchant: "Cafe",
+      amount: "1.00",
+      currency: "US",
+      incurredOn: "2026-09-11",
+    })).toThrow();
+    expect(() => buildDeduplicationFingerprint({
+      merchant: "Cafe",
+      amount: "1.00",
+      currency: " usd ",
+      incurredOn: "2026-02-30",
+    })).toThrow();
+  });
+
+  it("rejects an unbound or mismatched candidate expense", () => {
+    expect(() => resolveCandidateExpenseId({
+      targetAggregateId: null,
+      fileExpenseId: null,
+    })).toThrow();
+    expect(() => resolveCandidateExpenseId({
+      targetAggregateId: "target",
+      fileExpenseId: "different",
+    })).toThrow();
+    expect(resolveCandidateExpenseId({
+      targetAggregateId: "target",
+      fileExpenseId: "target",
+    })).toBe("target");
   });
 
   it("matches exact and fuzzy candidates only inside exact tenant-derived scope", () => {
@@ -132,6 +183,16 @@ describe("deduplication canonicalization", () => {
           businessId: null,
         },
         {
+          expenseId: "different-currency",
+          fingerprintHash: "c".repeat(64),
+          normalizedMerchant: fingerprint.normalizedMerchant,
+          amountMinorUnits: 10100,
+          currency: "CAD",
+          incurredOn: "2026-09-12",
+          personalProfileId: "33333333-3333-4333-8333-333333333333",
+          businessId: null,
+        },
+        {
           expenseId: "other-business",
           fingerprintHash: fingerprint.hash,
           normalizedMerchant: fingerprint.normalizedMerchant,
@@ -149,6 +210,12 @@ describe("deduplication canonicalization", () => {
       { existingExpenseId: "same-fingerprint", matchType: "fingerprint" },
       { existingExpenseId: "fuzzy", matchType: "fuzzy_fields" },
     ]);
+    expect(candidates[2]?.evidence).toMatchObject({
+      existingAmountMinorUnits: 10400,
+      candidateAmountMinorUnits: 10000,
+      existingIncurredOn: "2026-09-13",
+      candidateIncurredOn: "2026-09-11",
+    });
   });
 });
 

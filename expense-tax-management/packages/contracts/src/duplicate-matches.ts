@@ -3,10 +3,29 @@ import { z } from "zod";
 import {
   CurrencySchema,
   DateOnlySchema,
-  DecimalMoneySchema,
   TimestampSchema,
   VersionSchema,
 } from "./expenses.js";
+
+const MAX_SAFE_MINOR_UNITS = BigInt(Number.MAX_SAFE_INTEGER);
+const DeduplicationAmountSchema = z
+  .string()
+  .trim()
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
+  .refine((value) => {
+    const [whole, fraction = ""] = value.split(".");
+    const minorUnits = BigInt(whole ?? "") * 100n + BigInt(fraction.padEnd(2, "0"));
+    return minorUnits > 0n && minorUnits <= MAX_SAFE_MINOR_UNITS;
+  }, "Amount must be positive and safely representable in minor units");
+const DeduplicationCurrencySchema = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
+const DeduplicationDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "Date must be a valid ISO date");
 
 const ScopeFields = {
   tenantId: z.uuid(),
@@ -40,10 +59,10 @@ export const DeduplicationEvidenceV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   jobId: z.uuid(),
   sourceFileId: z.uuid(),
-  merchant: z.string().trim().min(1).max(200),
-  amount: DecimalMoneySchema,
-  currency: CurrencySchema,
-  incurredOn: DateOnlySchema,
+  merchant: z.string().trim().min(1).max(200).optional(),
+  amount: DeduplicationAmountSchema.optional(),
+  currency: DeduplicationCurrencySchema.optional(),
+  incurredOn: DeduplicationDateSchema.optional(),
   orderNumber: z.string().trim().min(1).max(200).optional(),
   expectedJobVersion: VersionSchema,
   idempotencyKey: z.string().trim().min(1).max(255),
@@ -54,10 +73,14 @@ export const DuplicateMatchEvidenceSchema = z
   .strictObject({
     fileSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     fingerprintHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-    normalizedMerchant: z.string().trim().min(1).max(200).optional(),
+     normalizedMerchant: z.string().trim().min(1).max(200).optional(),
     amountMinorUnits: z.number().int().nonnegative().optional(),
+     existingAmountMinorUnits: z.number().int().nonnegative().optional(),
+     candidateAmountMinorUnits: z.number().int().nonnegative().optional(),
     currency: CurrencySchema.optional(),
     incurredOn: DateOnlySchema.optional(),
+     existingIncurredOn: DateOnlySchema.optional(),
+     candidateIncurredOn: DateOnlySchema.optional(),
     amountDifferencePercent: z.number().min(0).max(100).optional(),
     incurredOnDifferenceDays: z.number().int().nonnegative().optional(),
   })

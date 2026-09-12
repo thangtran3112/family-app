@@ -90,8 +90,14 @@ export function normalizeMerchant(value: string): string {
 }
 
 export function toAmountMinorUnits(value: string): number {
-  const [whole, fraction = ""] = value.split(".");
-  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  const match = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.exec(value.trim());
+  if (!match) throw DomainError.validation();
+  const [whole, fraction = ""] = value.trim().split(".");
+  const minorUnits = BigInt(whole ?? "") * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (minorUnits <= 0n || minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw DomainError.validation();
+  }
+  return Number(minorUnits);
 }
 
 function dateOnly(value: Date | string): string {
@@ -99,31 +105,42 @@ function dateOnly(value: Date | string): string {
   return value.toISOString().slice(0, 10);
 }
 
+function canonicalDate(value: string): string {
+  const date = value.trim();
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime())) {
+    throw DomainError.validation();
+  }
+  const canonical = parsed.toISOString().slice(0, 10);
+  if (canonical !== date) throw DomainError.validation();
+  return canonical;
+}
+
 export function buildDeduplicationFingerprint(input: {
   readonly merchant: string;
   readonly amount: string;
   readonly currency: string;
   readonly incurredOn: string;
-}): DeduplicationFingerprint {
+}): DeduplicationFingerprint | null {
   const normalizedMerchant = normalizeMerchant(input.merchant);
-  if (!normalizedMerchant || !input.amount || !input.currency || !input.incurredOn) {
-    throw DomainError.validation();
-  }
+  if (!normalizedMerchant || !input.amount || !input.currency || !input.incurredOn) return null;
   const amountMinorUnits = toAmountMinorUnits(input.amount);
-  const currency = input.currency.toUpperCase();
+  const currency = input.currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw DomainError.validation();
+  const incurredOn = canonicalDate(input.incurredOn);
   const canonical = [
     `v${FINGERPRINT_VERSION}`,
     normalizedMerchant,
     amountMinorUnits,
     currency,
-    input.incurredOn,
+    incurredOn,
   ].join("\n");
   return {
     version: FINGERPRINT_VERSION,
     normalizedMerchant,
     amountMinorUnits,
     currency,
-    incurredOn: input.incurredOn,
+    incurredOn,
     hash: createHash("sha256").update(canonical).digest("hex"),
   };
 }
@@ -153,7 +170,7 @@ export function findDeterministicCandidates(input: {
   readonly scope: FileScope;
   readonly candidateExpenseId: string;
   readonly file: DeduplicationCandidateFile;
-  readonly fingerprint: DeduplicationFingerprint;
+  readonly fingerprint: DeduplicationFingerprint | null;
   readonly files: readonly DeduplicationCandidateFile[];
   readonly fingerprints: readonly DeduplicationCandidateFingerprint[];
 }): DeterministicCandidate[] {
@@ -174,6 +191,7 @@ export function findDeterministicCandidates(input: {
       });
     }
   }
+  if (!input.fingerprint) return candidates;
   for (const other of input.fingerprints) {
     if (other.expenseId === input.candidateExpenseId || !sameScope(other, input.scope)) continue;
     if (other.fingerprintHash === input.fingerprint.hash) {
@@ -185,7 +203,10 @@ export function findDeterministicCandidates(input: {
       });
       continue;
     }
-    if (other.normalizedMerchant !== input.fingerprint.normalizedMerchant) continue;
+    if (
+      other.normalizedMerchant !== input.fingerprint.normalizedMerchant ||
+      other.currency !== input.fingerprint.currency
+    ) continue;
     const amountDifferencePercent =
       Math.abs(other.amountMinorUnits - input.fingerprint.amountMinorUnits) /
       input.fingerprint.amountMinorUnits * 100;
@@ -201,8 +222,12 @@ export function findDeterministicCandidates(input: {
         evidence: {
           normalizedMerchant: input.fingerprint.normalizedMerchant,
           amountMinorUnits: input.fingerprint.amountMinorUnits,
+          existingAmountMinorUnits: other.amountMinorUnits,
+          candidateAmountMinorUnits: input.fingerprint.amountMinorUnits,
           currency: input.fingerprint.currency,
           incurredOn: input.fingerprint.incurredOn,
+          existingIncurredOn: dateOnly(other.incurredOn),
+          candidateIncurredOn: input.fingerprint.incurredOn,
           amountDifferencePercent,
           incurredOnDifferenceDays,
         },
@@ -210,6 +235,18 @@ export function findDeterministicCandidates(input: {
     }
   }
   return candidates;
+}
+
+export function resolveCandidateExpenseId(input: {
+  readonly targetAggregateId: string | null;
+  readonly fileExpenseId: string | null;
+}): string {
+  if (input.targetAggregateId && input.fileExpenseId && input.targetAggregateId !== input.fileExpenseId) {
+    throw DomainError.validation();
+  }
+  const candidateExpenseId = input.targetAggregateId ?? input.fileExpenseId;
+  if (!candidateExpenseId) throw DomainError.validation();
+  return candidateExpenseId;
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -252,6 +289,10 @@ async function requireJob(
     .forUpdate()
     .executeTakeFirst();
   if (!job) throw DomainError.notFound();
+  if (job.status !== "SUCCEEDED") throw DomainError.conflict();
+  if (job.target_aggregate_id !== null && job.target_aggregate_type !== "expense") {
+    throw DomainError.validation();
+  }
   if (job.version !== input.expectedJobVersion) throw DomainError.preconditionFailed();
   if (job.source_file_id !== input.sourceFileId) throw DomainError.validation();
   if (job.personal_profile_id === null && job.business_id === null) throw DomainError.validation();
@@ -269,19 +310,37 @@ async function findCandidate(
     .selectAll()
     .where("id", "=", sourceFileId)
     .where("tenant_id", "=", job.tenant_id)
+    .$if(job.personal_profile_id !== null, (query) =>
+      query.where("personal_profile_id", "=", job.personal_profile_id),
+    )
+    .$if(job.business_id !== null, (query) =>
+      query.where("business_id", "=", job.business_id),
+    )
+    .$if(job.personal_profile_id !== null, (query) => query.where("business_id", "is", null))
+    .$if(job.business_id !== null, (query) => query.where("personal_profile_id", "is", null))
     .executeTakeFirst();
   if (!file || file.status === "DELETED") throw DomainError.notFound();
   if (
     file.personal_profile_id !== job.personal_profile_id ||
     file.business_id !== job.business_id
   ) throw DomainError.validation();
-  const candidateExpenseId = job.target_aggregate_id ?? file.expense_id;
-  if (!candidateExpenseId) throw DomainError.validation();
+  const candidateExpenseId = resolveCandidateExpenseId({
+    targetAggregateId: job.target_aggregate_id,
+    fileExpenseId: file.expense_id,
+  });
   const candidate = await transaction
     .selectFrom("app.expenses")
     .selectAll()
     .where("id", "=", candidateExpenseId)
     .where("tenant_id", "=", job.tenant_id)
+    .$if(job.personal_profile_id !== null, (query) =>
+      query.where("personal_profile_id", "=", job.personal_profile_id),
+    )
+    .$if(job.business_id !== null, (query) =>
+      query.where("business_id", "=", job.business_id),
+    )
+    .$if(job.personal_profile_id !== null, (query) => query.where("business_id", "is", null))
+    .$if(job.business_id !== null, (query) => query.where("personal_profile_id", "is", null))
     .executeTakeFirst();
   if (!candidate || candidate.status === "archived") throw DomainError.notFound();
   if (
@@ -362,7 +421,18 @@ export function createDeduplicationDomain(
               ? { kind: "personal", profileId: job.personal_profile_id }
               : { kind: "business", businessId: job.business_id as string };
           const { file, candidate } = await findCandidate(transaction, job, input.request.sourceFileId);
-          const fingerprint = buildDeduplicationFingerprint(input.request);
+          const fingerprint =
+            input.request.merchant !== undefined &&
+            input.request.amount !== undefined &&
+            input.request.currency !== undefined &&
+            input.request.incurredOn !== undefined
+              ? buildDeduplicationFingerprint({
+                  merchant: input.request.merchant,
+                  amount: input.request.amount,
+                  currency: input.request.currency,
+                  incurredOn: input.request.incurredOn,
+                })
+              : null;
           const inboundEmailId =
             job.workflow_type === FORWARDED_RECEIPT_WORKFLOW_TYPE &&
             typeof job.input_params === "object" &&
@@ -402,40 +472,59 @@ export function createDeduplicationDomain(
             })
             .onConflict((oc) => oc.columns(["tenant_id", "source_file_id"]).doNothing())
             .execute();
-          await transaction
-            .insertInto("app.expense_dedup_fingerprints")
-            .values({
-              id: randomUUID(),
-              tenant_id: job.tenant_id,
-              personal_profile_id: job.personal_profile_id,
-              business_id: job.business_id,
-              expense_id: candidate.id,
-              fingerprint_version: fingerprint.version,
-              normalized_merchant: fingerprint.normalizedMerchant,
-              amount_minor_units: fingerprint.amountMinorUnits,
-              currency: fingerprint.currency,
-              incurred_on: new Date(`${fingerprint.incurredOn}T00:00:00.000Z`),
-              fingerprint_hash: fingerprint.hash,
-            })
-            .onConflict((oc) => oc.columns(["expense_id", "fingerprint_version"]).doNothing())
-            .execute();
+          if (fingerprint) {
+            await transaction
+              .insertInto("app.expense_dedup_fingerprints")
+              .values({
+                id: randomUUID(),
+                tenant_id: job.tenant_id,
+                personal_profile_id: job.personal_profile_id,
+                business_id: job.business_id,
+                expense_id: candidate.id,
+                fingerprint_version: fingerprint.version,
+                normalized_merchant: fingerprint.normalizedMerchant,
+                amount_minor_units: fingerprint.amountMinorUnits,
+                currency: fingerprint.currency,
+                incurred_on: new Date(`${fingerprint.incurredOn}T00:00:00.000Z`),
+                fingerprint_hash: fingerprint.hash,
+              })
+              .onConflict((oc) => oc.columns(["expense_id", "fingerprint_version"]).doNothing())
+              .execute();
+          }
 
           const matchIds: string[] = [];
-          const files = file.sha256_hex
-            ? await transaction
-                .selectFrom("app.expense_files")
-                .select(["expense_id", "sha256_hex", "personal_profile_id", "business_id"])
-                .where("tenant_id", "=", job.tenant_id)
-                .where("sha256_hex", "=", file.sha256_hex)
-                .where("expense_id", "is not", null)
-                .execute()
-            : [];
-          const fingerprints = await transaction
-            .selectFrom("app.expense_dedup_fingerprints")
-            .selectAll()
+          let fileQuery = transaction
+            .selectFrom("app.expense_files")
+            .select(["expense_id", "sha256_hex", "personal_profile_id", "business_id"])
             .where("tenant_id", "=", job.tenant_id)
-            .where("normalized_merchant", "=", fingerprint.normalizedMerchant)
-            .execute();
+            .where("sha256_hex", "=", file.sha256_hex)
+            .where("expense_id", "is not", null);
+          fileQuery = job.personal_profile_id !== null
+            ? fileQuery
+                .where("personal_profile_id", "=", job.personal_profile_id)
+                .where("business_id", "is", null)
+            : fileQuery
+                .where("business_id", "=", job.business_id)
+                .where("personal_profile_id", "is", null);
+          const files = file.sha256_hex ? await fileQuery.execute() : [];
+          const fingerprints = fingerprint
+            ? await (job.personal_profile_id !== null
+                ? transaction
+                    .selectFrom("app.expense_dedup_fingerprints")
+                    .selectAll()
+                    .where("tenant_id", "=", job.tenant_id)
+                    .where("normalized_merchant", "=", fingerprint.normalizedMerchant)
+                    .where("personal_profile_id", "=", job.personal_profile_id)
+                    .where("business_id", "is", null)
+                : transaction
+                    .selectFrom("app.expense_dedup_fingerprints")
+                    .selectAll()
+                    .where("tenant_id", "=", job.tenant_id)
+                    .where("normalized_merchant", "=", fingerprint.normalizedMerchant)
+                    .where("business_id", "=", job.business_id)
+                    .where("personal_profile_id", "is", null)
+              ).execute()
+            : [];
           const candidates = findDeterministicCandidates({
             scope,
             candidateExpenseId: candidate.id,

@@ -128,11 +128,11 @@ git commit -m "feat(dedup): record scoped duplicate evidence"
 **Interfaces:**
 - `AppApiClient.record_deduplication_evidence(job_id, evidence)` posts to `/internal/v1/jobs/{job_id}/deduplication` using current M2M provider.
 - Activity `ocr_record_deduplication` calls that client using only `job_reference`, `source_file_id`, and OCR extraction fields.
-- `OcrReceiptWorkflow` invokes dedup evidence after extraction and before final result submission with deterministic idempotency key `{job_id}:ocr:dedup:v1`.
+- `OcrReceiptWorkflow` submits the normal versioned OCR result after extraction, then invokes dedup evidence with the returned `SUCCEEDED` job version and deterministic idempotency key `{job_id}:ocr:dedup:v1`.
 
 - [ ] **Step 1: Write failing worker tests.**
 
-Assert callback URL/body/auth, evidence omits tenant/profile/business selectors, deterministic idempotency, retry behavior, and workflow ordering after extraction before result submission.
+Assert callback URL/body/auth, evidence omits tenant/profile/business selectors, deterministic idempotency, retry behavior, and workflow ordering after successful result submission with returned job version.
 
 - [ ] **Step 2: Run worker tests and verify red.**
 

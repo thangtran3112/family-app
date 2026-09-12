@@ -192,10 +192,10 @@ describe("deduplication contracts", () => {
       schemaVersion: 1;
       jobId: string;
       sourceFileId: string;
-      merchant: string;
-      amount: string;
-      currency: string;
-      incurredOn: string;
+       merchant?: string | undefined;
+       amount?: string | undefined;
+       currency?: string | undefined;
+       incurredOn?: string | undefined;
       orderNumber?: string | undefined;
       expectedJobVersion: number;
       idempotencyKey: string;
