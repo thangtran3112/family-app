@@ -112,6 +112,7 @@ export * from "./exports.js";
 export * from "./inbound-email.js";
 export * from "./files.js";
 export * from "./ocr.js";
+export * from "./duplicate-matches.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,

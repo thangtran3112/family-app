@@ -543,6 +543,53 @@ export interface InboundEmailQuarantineEventTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface ExpenseSourceTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly expense_id: string;
+  readonly source_type: "manual_upload" | "forwarded_email";
+  readonly source_file_id: string | null;
+  readonly inbound_email_id: string | null;
+  readonly metadata: JsonValue;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface ExpenseDedupFingerprintTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly expense_id: string;
+  readonly fingerprint_version: number;
+  readonly normalized_merchant: string;
+  readonly amount_minor_units: number;
+  readonly currency: string;
+  readonly incurred_on: Date;
+  readonly fingerprint_hash: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface ExpenseDuplicateMatchTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly existing_expense_id: string;
+  readonly candidate_expense_id: string;
+  readonly match_type: "file_sha256" | "fingerprint" | "fuzzy_fields";
+  readonly confidence: MoneyAmount;
+  readonly evidence: JsonValue;
+  status: "pending" | "merged" | "separate" | "dismissed";
+  version: Generated<number>;
+  resolved_by: string | null;
+  resolved_at: NullableTimestamp;
+  resolution_idempotency_key: string | null;
+  readonly idempotency_key: string;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface EntitlementSnapshotOutboxTable {
   readonly outbox_sequence: Generated<string>;
   readonly tenant_id: string;
@@ -594,4 +641,7 @@ export interface AppDatabase {
   readonly "app.inbound_emails": InboundEmailTable;
   readonly "app.inbound_email_attachments": InboundEmailAttachmentTable;
   readonly "app.inbound_email_quarantine_events": InboundEmailQuarantineEventTable;
+  readonly "app.expense_sources": ExpenseSourceTable;
+  readonly "app.expense_dedup_fingerprints": ExpenseDedupFingerprintTable;
+  readonly "app.expense_duplicate_matches": ExpenseDuplicateMatchTable;
 }
