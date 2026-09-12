@@ -24,6 +24,16 @@ Implemented minimal Docker build-context and runtime staging for
 - Foundry-service typecheck, build, and lint: passed.
 - Root `pnpm lint`: passed.
 - `git diff --check`: passed.
+- Clean-install reproduction: removing gateway-policy `dist` caused
+  `contracts:generate` to fail during app OpenAPI generation with
+  `ERR_MODULE_NOT_FOUND`.
+- Added gateway-policy build as first `contracts:generate` step.
+- Focused Phase 1C order test: 9 passed.
+- `pnpm contracts:generate`: passed, including gateway build first.
+- `pnpm contracts:check`: passed.
+- App-api typecheck, build, and lint: passed.
+- Foundry-service typecheck, build, and lint: passed.
+- `git diff --check`: passed.
 
 ## Concerns
 

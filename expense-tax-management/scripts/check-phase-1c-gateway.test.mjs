@@ -16,6 +16,7 @@ const terraform = read("infrastructure/cloudflare/expense-tax/main.tf");
 const compose = read("expense-tax-management/docker-compose.yml");
 const design = read("docs/superpowers/specs/2026-09-11-phase-1c-gateway-hardening-design.md");
 const readme = read("infrastructure/cloudflare/expense-tax/README.md");
+const packageJson = JSON.parse(read("expense-tax-management/package.json"));
 const frontendConfigs = [
   "expense-tax-management/frontend/capture-web/next.config.ts",
   "expense-tax-management/frontend/office-web/next.config.ts",
@@ -110,6 +111,19 @@ describe("Phase 1C gateway static policy", () => {
     ]);
     expect(Object.values(terraformSources).join("\n")).not.toMatch(
       /cloudflare_(access|worker|waf|rate_limit)/u,
+    );
+  });
+
+  it("builds gateway policy before contract generators", () => {
+    const generateScript = packageJson.scripts["contracts:generate"];
+    const gatewayBuild =
+      "pnpm --filter @expense-tax/gateway-policy --fail-if-no-match run build";
+    const contractSchemaGeneration =
+      "pnpm --filter @expense-tax/contracts --fail-if-no-match run generate:json-schema";
+
+    expect(generateScript.indexOf(gatewayBuild)).toBe(0);
+    expect(generateScript.indexOf(gatewayBuild)).toBeLessThan(
+      generateScript.indexOf(contractSchemaGeneration),
     );
   });
 });
