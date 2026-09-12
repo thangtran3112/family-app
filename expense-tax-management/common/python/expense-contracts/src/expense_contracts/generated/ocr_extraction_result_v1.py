@@ -19,4 +19,5 @@ class OcrExtractionResultV1(BaseModel):
     incurredOn: date
     merchant: constr(min_length=1, max_length=200)
     notes: constr(max_length=2000) | None = None
+    orderNumber: constr(min_length=1, max_length=200) | None = None
     schemaVersion: Literal[1]

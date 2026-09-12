@@ -20,6 +20,7 @@ export const OcrExtractionResultV1Schema = z.strictObject({
   amount: DecimalMoneySchema,
   currency: CurrencySchema,
   incurredOn: DateOnlySchema,
+  orderNumber: z.string().trim().min(1).max(200).optional(),
   notes: z.string().trim().max(2000).optional(),
   confidence: z.number().min(0).max(1),
 });

@@ -43,10 +43,12 @@ describe("Phase 0C OCR contracts", () => {
       amount: "12.34",
       currency: "USD",
       incurredOn: "2026-09-09",
+      orderNumber: "ORDER-123",
       notes: "lunch",
       confidence: 0.9,
     });
     expect(extraction.amount).toBe("12.34");
+    expect(extraction.orderNumber).toBe("ORDER-123");
     expect(() =>
       OcrExtractionResultV1Schema.parse({
         schemaVersion: 1,

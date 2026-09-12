@@ -210,6 +210,7 @@ class OcrReceiptActivities:
                 amount=extraction.amount,
                 currency=extraction.currency,
                 incurredOn=extraction.incurredOn,
+                orderNumber=extraction.orderNumber,
                 expectedJobVersion=args.expected_job_version,
                 idempotencyKey=f"{job_id}:ocr:dedup:v1",
             ),

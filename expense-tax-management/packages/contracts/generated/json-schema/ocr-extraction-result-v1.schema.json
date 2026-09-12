@@ -29,6 +29,11 @@
       "maxLength": 2000,
       "type": "string"
     },
+    "orderNumber": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
     "schemaVersion": {
       "const": 1,
       "type": "number"
