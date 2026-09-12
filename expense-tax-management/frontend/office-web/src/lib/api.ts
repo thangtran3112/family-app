@@ -38,6 +38,22 @@ export function getSourceBadge(matchType: "file_sha256" | "fingerprint" | "fuzzy
   return { label: "Matching fields", tone: "warn" as const };
 }
 
+export function formatPendingDuplicateCount(input: { items: readonly unknown[]; nextCursor: string | null }) {
+  return input.nextCursor ? "50+" : String(input.items.length);
+}
+
+export function shouldApplyPendingDuplicateCount(active: boolean, requestSequence: number, currentSequence: number) {
+  return active && requestSequence === currentSequence;
+}
+
+async function getDuplicateAuthorization(getToken: ClerkGetToken, organizationId: string | null | undefined) {
+  try {
+    return await getAppAuthorization(getToken, organizationId);
+  } catch {
+    throw new DuplicateReviewError("Office authorization required", 401);
+  }
+}
+
 export async function fetchDuplicateMatches(
   session: OfficeSession,
   getToken: ClerkGetToken,
@@ -53,7 +69,7 @@ export async function fetchDuplicateMatches(
         path: { tenantId: session.tenantId, businessId: session.businessId },
         query: { status: "pending", limit: 50, ...(cursor ? { cursor } : {}) },
       },
-      headers: await getAppAuthorization(getToken, organizationId),
+      headers: await getDuplicateAuthorization(getToken, organizationId),
     },
   );
   if (!result.data) throw new DuplicateReviewError("Duplicate matches unavailable", result.response?.status);
@@ -78,7 +94,7 @@ export async function resolveDuplicateMatch(
     "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches/{matchId}/resolve",
     {
       params: { path: { tenantId: session.tenantId, businessId: session.businessId, matchId } },
-      headers: await getAppAuthorization(getToken, organizationId),
+      headers: await getDuplicateAuthorization(getToken, organizationId),
       body: { action, expectedMatchVersion, idempotencyKey: crypto.randomUUID() },
     },
   );

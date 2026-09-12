@@ -35,7 +35,9 @@ const harness = vi.hoisted(() => ({
   api: {
     fetchDuplicateMatches: vi.fn(),
     resolveDuplicateMatch: vi.fn(),
+    announceDuplicateReviewUpdated: vi.fn(),
   },
+  readOfficeSession: vi.fn(),
   clerk: {
     getToken: vi.fn().mockResolvedValue("office-token"),
     organization: { id: "org_123" },
@@ -63,9 +65,10 @@ vi.mock("@/components/office-data", () => ({
   },
 }));
 vi.mock("@/lib/page-data", () => ({ loadDuplicates: vi.fn() }));
-vi.mock("@/lib/session", () => ({ readOfficeSession: () => ({ apiBaseUrl: "http://app.test", tenantId: "tenant-1", businessId: "business-1", label: "Family" }) }));
+vi.mock("@/lib/session", () => ({ readOfficeSession: () => harness.readOfficeSession() }));
 vi.mock("@/lib/api", () => ({
   DuplicateReviewError: harness.DuplicateReviewError,
+  announceDuplicateReviewUpdated: harness.api.announceDuplicateReviewUpdated,
   fetchDuplicateMatches: harness.api.fetchDuplicateMatches,
   resolveDuplicateMatch: harness.api.resolveDuplicateMatch,
   getDuplicateReviewState: ({ items, conflict }: { items: unknown[]; conflict?: boolean }) => conflict ? "conflict" : items.length === 0 ? "empty" : "pending",
@@ -85,6 +88,7 @@ describe("rendered Office duplicate review", () => {
     vi.clearAllMocks();
     harness.officeData.mode = "pending";
     harness.officeData.data = { items: [match()], nextCursor: "cursor-2" };
+    harness.readOfficeSession.mockReturnValue({ apiBaseUrl: "http://app.test", tenantId: "tenant-1", businessId: "business-1", label: "Family" });
     harness.api.resolveDuplicateMatch.mockResolvedValue({ status: "merged" });
     harness.api.fetchDuplicateMatches.mockResolvedValue({ items: [match({ id: "match-2", existingExpenseId: "existing-2", candidateExpenseId: "candidate-2" })], nextCursor: null });
   });
@@ -134,12 +138,29 @@ describe("rendered Office duplicate review", () => {
     expect(screen.getByText("Possible duplicate")).toBeTruthy();
   });
 
-  it("fails closed when action authorization expires", async () => {
-    harness.api.resolveDuplicateMatch.mockRejectedValue(new harness.DuplicateReviewError("expired", 401));
+  it.each([401, 403])("fails closed when action authorization expires with %s", async (status) => {
+    harness.api.resolveDuplicateMatch.mockRejectedValue(new harness.DuplicateReviewError("expired", status));
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Office authorization required");
     expect(screen.queryByRole("button", { name: "Merge" })).toBeNull();
+  });
+
+  it("fails closed when active session read rejects", async () => {
+    harness.readOfficeSession.mockImplementation(() => { throw new Error("session unavailable"); });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Office authorization required");
+    expect(screen.queryByRole("button", { name: "Merge" })).toBeNull();
+  });
+
+  it("removes resolved item, announces success, and shows live resolution message", async () => {
+    harness.officeData.data = { items: [match()], nextCursor: null };
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    expect(await screen.findByText("Merged duplicate review.")).toBeTruthy();
+    expect(screen.queryByText("Possible duplicate")).toBeNull();
+    expect(harness.api.announceDuplicateReviewUpdated).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes list after conflict and announces conflict", async () => {
@@ -157,5 +178,37 @@ describe("rendered Office duplicate review", () => {
     expect(await screen.findByText("candidate-2")).toBeTruthy();
     expect(screen.getByText("existing-1")).toBeTruthy();
     expect(harness.api.fetchDuplicateMatches).toHaveBeenCalledWith(expect.anything(), expect.anything(), "org_123", undefined, "cursor-2");
+  });
+
+  it("shows pagination failure without dropping existing matches", async () => {
+    harness.api.fetchDuplicateMatches.mockRejectedValue(new Error("Page unavailable"));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Page unavailable");
+    expect(screen.getByText("existing-1")).toBeTruthy();
+  });
+
+  it("shows refresh progress and handles refresh failure", async () => {
+    let finishRefresh!: (value: unknown) => void;
+    harness.api.fetchDuplicateMatches.mockReturnValue(new Promise((resolve) => { finishRefresh = resolve; }));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh list" }));
+    expect(screen.getByRole("status").textContent).toContain("Refreshing duplicate list");
+    expect((screen.getByRole("button", { name: "Refresh list" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Merge" }) as HTMLButtonElement).disabled).toBe(true);
+    finishRefresh({ items: [match()], nextCursor: null });
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("1 pending duplicate matches"));
+
+    harness.api.fetchDuplicateMatches.mockRejectedValue(new Error("Refresh unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh list" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Refresh unavailable");
+  });
+
+  it("fails closed when refresh authorization expires", async () => {
+    harness.api.fetchDuplicateMatches.mockRejectedValue(new harness.DuplicateReviewError("expired", 403));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh list" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Office authorization required");
+    expect(screen.queryByRole("button", { name: "Merge" })).toBeNull();
   });
 });

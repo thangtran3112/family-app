@@ -6,9 +6,11 @@ import {
   DUPLICATE_REVIEW_UPDATED_EVENT,
   announceDuplicateReviewUpdated,
   fetchDuplicateMatches,
+  formatPendingDuplicateCount,
   getDuplicateReviewState,
   getSourceBadge,
   resolveDuplicateMatch,
+  shouldApplyPendingDuplicateCount,
 } from "./api";
 
 const session: OfficeSession = {
@@ -55,6 +57,17 @@ describe("Office duplicate review API helpers", () => {
     });
   });
 
+  it("normalizes Clerk token failures to unauthorized", async () => {
+    const client = { GET: vi.fn() };
+
+    await expect(fetchDuplicateMatches(session, vi.fn().mockRejectedValue(new Error("Authentication required")), "org_123", client as never)).rejects.toMatchObject({
+      name: "DuplicateReviewError",
+      status: 401,
+      message: "Office authorization required",
+    });
+    expect(client.GET).not.toHaveBeenCalled();
+  });
+
   it("sends selected action, optimistic version, and idempotency key", async () => {
     const client = { POST: vi.fn().mockResolvedValue({ data: { status: "merged" } }) };
     const getToken = vi.fn().mockResolvedValue("office-token");
@@ -88,6 +101,17 @@ describe("Office duplicate review API helpers", () => {
 
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: DUPLICATE_REVIEW_UPDATED_EVENT }));
     vi.unstubAllGlobals();
+  });
+
+  it("shows honest pending count when another page exists", () => {
+    expect(formatPendingDuplicateCount({ items: [], nextCursor: "cursor-2" })).toBe("50+");
+    expect(formatPendingDuplicateCount({ items: [{ id: "match-1" }], nextCursor: null })).toBe("1");
+  });
+
+  it("ignores stale badge responses after a newer refresh starts", () => {
+    expect(shouldApplyPendingDuplicateCount(true, 1, 2)).toBe(false);
+    expect(shouldApplyPendingDuplicateCount(true, 2, 2)).toBe(true);
+    expect(shouldApplyPendingDuplicateCount(false, 2, 2)).toBe(false);
   });
 });
 
