@@ -3,10 +3,11 @@ import type { OfficeSession } from "./session";
 import { getAppAuthorization, type ClerkGetToken } from "./clerk";
 
 type AppApiClient = ReturnType<typeof createAppApiClient>;
+export const DUPLICATE_REVIEW_UPDATED_EVENT = "expense-tax:duplicate-review-updated";
 
 export class DuplicateReviewError extends Error {
   constructor(message: string, readonly status?: number) {
-    super(message);
+    super(status === 401 || status === 403 ? "Office authorization required" : message);
     this.name = "DuplicateReviewError";
   }
 }
@@ -42,6 +43,7 @@ export async function fetchDuplicateMatches(
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
+  cursor?: string,
 ) {
   const api = client ?? createAppApiClient(session.apiBaseUrl);
   const result = await api.GET(
@@ -49,13 +51,17 @@ export async function fetchDuplicateMatches(
     {
       params: {
         path: { tenantId: session.tenantId, businessId: session.businessId },
-        query: { status: "pending", limit: 50 },
+        query: { status: "pending", limit: 50, ...(cursor ? { cursor } : {}) },
       },
       headers: await getAppAuthorization(getToken, organizationId),
     },
   );
   if (!result.data) throw new DuplicateReviewError("Duplicate matches unavailable", result.response?.status);
   return result.data;
+}
+
+export function announceDuplicateReviewUpdated() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(DUPLICATE_REVIEW_UPDATED_EVENT));
 }
 
 export async function resolveDuplicateMatch(

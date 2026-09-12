@@ -39,6 +39,7 @@ export function loadDuplicates(
   session: OfficeSession,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
+  cursor?: string,
 ) {
-  return fetchDuplicateMatches(session, getToken, organizationId);
+  return fetchDuplicateMatches(session, getToken, organizationId, undefined, cursor);
 }

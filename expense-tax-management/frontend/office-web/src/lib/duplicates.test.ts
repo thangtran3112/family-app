@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { OfficeSession } from "./session";
 import {
   DuplicateReviewError,
+  DUPLICATE_REVIEW_UPDATED_EVENT,
+  announceDuplicateReviewUpdated,
   fetchDuplicateMatches,
   getDuplicateReviewState,
   getSourceBadge,
@@ -32,6 +34,27 @@ describe("Office duplicate review API helpers", () => {
     );
   });
 
+  it("forwards cursor when loading another pending page", async () => {
+    const client = { GET: vi.fn().mockResolvedValue({ data: { items: [], nextCursor: null } }) };
+
+    await fetchDuplicateMatches(session, vi.fn().mockResolvedValue("office-token"), "org_123", client as never, "cursor-2");
+
+    expect(client.GET).toHaveBeenCalledWith(
+      "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches",
+      expect.objectContaining({ params: expect.objectContaining({ query: { status: "pending", limit: 50, cursor: "cursor-2" } }) }),
+    );
+  });
+
+  it.each([401, 403])("maps %s response to explicit unauthorized error", async (status) => {
+    const client = { GET: vi.fn().mockResolvedValue({ response: { status } }) };
+
+    await expect(fetchDuplicateMatches(session, vi.fn().mockResolvedValue("office-token"), "org_123", client as never)).rejects.toMatchObject({
+      name: "DuplicateReviewError",
+      status,
+      message: "Office authorization required",
+    });
+  });
+
   it("sends selected action, optimistic version, and idempotency key", async () => {
     const client = { POST: vi.fn().mockResolvedValue({ data: { status: "merged" } }) };
     const getToken = vi.fn().mockResolvedValue("office-token");
@@ -55,6 +78,16 @@ describe("Office duplicate review API helpers", () => {
       name: "DuplicateReviewError",
       status: 409,
     } satisfies Partial<DuplicateReviewError>);
+  });
+
+  it("announces successful review changes to other Office surfaces", () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+
+    announceDuplicateReviewUpdated();
+
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: DUPLICATE_REVIEW_UPDATED_EVENT }));
+    vi.unstubAllGlobals();
   });
 });
 
