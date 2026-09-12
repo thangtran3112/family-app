@@ -32,6 +32,15 @@
 - Task 4: fix round 2/5 (1 Important addressed; final no-comma Terraform object parsed; commit `74a8808`)
 - Task 4: minor (deferred): broader ingress ordering beyond Foundry service-before-web remains outside focused static checker scope.
 - Task 4: complete (commits `ff20979..74a8808`, review clean; 1 deferred minor)
+- Task 5: fix round 1/5 (2 Important evidence gaps addressed; commit `68e0c14`)
+- Task 5: fix round 2/5 (approval sequencing corrected; commit `3210480`)
+- Task 5: complete (commits `accbb45..3210480`, review clean; deployment/public gates intentionally deferred)
+- Final review: Important — authorization-header hashing is attacker-controlled and permits unlimited limiter buckets; checker scans only `main.tf`; route checker lacks executable method/unknown-path coverage. Minor — frontend `no-store` applies to immutable assets.
+- Ruling: Replace authorization-based limiter keys with trusted transport identity only, prioritizing security over Task 1's original digest proposal; cost if wrong: users behind one proxy share a coarse process-local bucket until trusted proxy identity is explicitly configured.
+- Final fix wave: original limiter, Terraform scan, route coverage, and asset cache findings addressed in `72af839`; scoped re-review confirmed three addressed.
+- Final review parked: static checker does not table-test every frontend/health/webhook method rejection. Ruling: Fastify runtime tests prove unknown paths and unsupported methods fail closed for both services, while the static method table is a declarative contract; defer broader matrix tests as non-blocking coverage work. Cost if wrong: static policy drift in untested public route classes could evade checker detection.
+- Final verification: fresh `pnpm test` passed 448 tests with 1 pre-existing skipped Foundry database test; lint, typecheck, build, static checker, Terraform fmt/init/validate passed.
+- Phase 1C implementation: complete (commits `d7f8ba3..72af839`, final review clean with 1 parked non-blocking coverage finding; Terraform plan/apply and public probes deferred pending inputs/approval).
 
 ## Task 5 Verification Evidence (2026-09-11)
 
