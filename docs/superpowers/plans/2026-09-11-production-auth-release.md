@@ -176,7 +176,7 @@ Update `.superpowers/sdd/2026-09-10-clerk-auth-integration/progress.md` with IDs
 **Interfaces:**
 - Endpoint: `https://expense-api.tobytran.dev/api/v1/integrations/clerk/webhook`.
 - Secret input: `CLERK_WEBHOOK_SIGNING_SECRET` through approved Secret Manager sync.
-- Raw request bodies are capped at 1 MiB before signature verification or parsing; oversized content-length and chunked requests return `413` and abort their payload streams.
+- Raw request bodies are capped at 1 MiB before signature verification or parsing; oversized content-length and chunked requests return `413` while draining without buffering or resetting the upstream connection.
 
 - [ ] **Step 1: Create Clerk webhook.**
 

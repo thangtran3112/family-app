@@ -60,3 +60,7 @@
 - Final fix wave: original Important and three Minors addressed in `032819c`; review clean for those findings.
 - Final fix wave: residual oversized content-length stream cleanup finding addressed in `70aa7cb`; scoped re-review clean.
 - Final review: complete, no open Critical/Important/Minor findings.
+- Final production probe: 1,048,577-byte webhook request returned Cloudflare `502` while App logged `413`; explicit `payload.destroy()` reset Tunnel upstream before response delivery. App remained healthy.
+- Ruling: On oversized declared content length, call `payload.resume()` to drain without buffering, then return `413`; do not destroy socket-backed request payload before response. Cost if wrong: rejected request bytes may continue consuming inbound bandwidth briefly, bounded by server/Tunnel timeouts, but memory stays bounded and client receives required status.
+- Final fix wave: stream cleanup round 2 (`5a88b8f`) replaced destructive abort with drain; strengthened full-body TCP test exposed response race.
+- Final fix wave: stream cleanup round 3 (`2ebd8ca`) awaits bounded-memory drain before `413`; full 1 MiB+1 TCP body receives clean `413`; scoped re-review clean.
