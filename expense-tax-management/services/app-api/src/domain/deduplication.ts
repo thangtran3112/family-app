@@ -638,7 +638,12 @@ export function createDeduplicationDomain(
               inbound_email_id: inboundEmailId,
               metadata: toJsonValue(input.request.orderNumber ? { orderNumber: input.request.orderNumber } : {}),
             })
-            .onConflict((oc) => oc.columns(["tenant_id", "source_file_id"]).doNothing())
+            .onConflict((oc) =>
+              oc
+                .columns(["tenant_id", "source_file_id"])
+                .where("source_file_id", "is not", null)
+                .doNothing(),
+            )
             .execute();
           if (fingerprint) {
             await transaction
