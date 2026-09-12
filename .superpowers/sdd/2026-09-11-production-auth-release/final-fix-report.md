@@ -53,3 +53,4 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 - GREEN: fast path now destroys payload inside a guarded cleanup helper; cleanup exceptions are swallowed so existing 413 handling remains authoritative.
 - Regression: captured `preParsing` hook uses an oversized content-length stream whose `destroy()` throws; test confirms one destroy attempt and rejected error status 413.
 - Verification: app-api tests 241/241, lint PASS, typecheck PASS, `git diff --check` PASS.
+- Commit: `70aa7cb fix(auth): abort oversized webhook payloads`.
