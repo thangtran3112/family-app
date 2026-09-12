@@ -6,6 +6,7 @@ from httpx import Response
 
 from ai_worker.app_api_client import AppApiClient, app_api_client_from_env
 from ai_worker.foundry_client import FoundryClient, foundry_client_from_env
+from ai_worker.ocr_activities import DeduplicationEvidenceV1
 
 
 async def test_app_api_client_injects_token_provider():
@@ -36,6 +37,37 @@ async def test_app_api_client_injects_token_provider():
 
     assert token_calls == 1
     assert route.calls[0].request.headers["authorization"] == "Bearer app-token"
+
+
+@respx.mock
+async def test_app_api_client_records_deduplication_evidence_with_auth_and_strict_body():
+    job_id = uuid.UUID("11111111-1111-4111-8111-111111111111")
+    evidence = DeduplicationEvidenceV1(
+        schemaVersion=1,
+        jobId=job_id,
+        sourceFileId=uuid.UUID("44444444-4444-4444-8444-444444444444"),
+        merchant="Cafe",
+        amount="12.30",
+        currency="USD",
+        incurredOn="2026-09-11",
+        expectedJobVersion=5,
+        idempotencyKey=f"{job_id}:ocr:dedup:v1",
+    )
+    route = respx.post(f"http://app.test/internal/v1/jobs/{job_id}/deduplication").mock(
+        return_value=Response(200, json={"decision": "no_match", "matchIds": []})
+    )
+
+    client = AppApiClient(base_url="http://app.test", service_token="app-token")
+    result = await client.record_deduplication_evidence(str(job_id), evidence)
+
+    assert result == {"decision": "no_match", "matchIds": []}
+    assert route.calls[0].request.headers["authorization"] == "Bearer app-token"
+    assert route.calls[0].request.content == (
+        b'{"schemaVersion":1,"jobId":"11111111-1111-4111-8111-111111111111",'
+        b'"sourceFileId":"44444444-4444-4444-8444-444444444444","merchant":"Cafe",'
+        b'"amount":"12.30","currency":"USD","incurredOn":"2026-09-11",'
+        b'"expectedJobVersion":5,"idempotencyKey":"11111111-1111-4111-8111-111111111111:ocr:dedup:v1"}'
+    )
 
 
 async def test_foundry_client_injects_token_provider():

@@ -95,6 +95,9 @@ def mock_happy_path(reserve_conflict: bool = False):
 @respx.mock
 async def test_ocr_workflow_runs_the_full_pipeline_to_succeeded():
     status_route, result_route = mock_happy_path()
+    dedup_route = respx.post(
+        f"{APP_BASE}/internal/v1/jobs/{JOB_ID}/deduplication"
+    ).mock(return_value=Response(200, json={"decision": "no_match", "matchIds": []}))
     app_api = AppApiClient(base_url=APP_BASE, service_token="app-token")
     ocr = OcrReceiptActivities(
         app_api, FoundryClient(base_url=FOUNDRY_BASE, service_token="foundry-token")
@@ -120,6 +123,7 @@ async def test_ocr_workflow_runs_the_full_pipeline_to_succeeded():
                 ocr.ocr_record_accepted,
                 ocr.ocr_release,
                 ocr.ocr_submit_extraction,
+                ocr.ocr_record_deduplication,
                 ocr.ocr_submit_failed,
                 ocr.ocr_mark_failed,
             ],
@@ -138,6 +142,15 @@ async def test_ocr_workflow_runs_the_full_pipeline_to_succeeded():
     assert b'"status":"SUCCEEDED"' in sent
     assert b'"merchant":"Fake OCR Merchant"' in sent
     assert b'"resultSchemaVersion":"ocr-extraction-v1"' in sent
+    assert dedup_route.called
+    assert respx.calls.index(result_route.calls[0]) < respx.calls.index(
+        dedup_route.calls[0]
+    )
+    assert b'"expectedJobVersion":4' in dedup_route.calls[0].request.content
+    assert (
+        b'"idempotencyKey":"77777777-7777-4777-8777-777777777777:ocr:dedup:v1"'
+        in dedup_route.calls[0].request.content
+    )
 
 
 @respx.mock
@@ -170,6 +183,7 @@ async def test_ocr_workflow_maps_quota_conflict_to_a_typed_failed_result():
                 ocr.ocr_record_accepted,
                 ocr.ocr_release,
                 ocr.ocr_submit_extraction,
+                ocr.ocr_record_deduplication,
                 ocr.ocr_submit_failed,
                 ocr.ocr_mark_failed,
             ],
@@ -189,8 +203,67 @@ async def test_ocr_workflow_maps_quota_conflict_to_a_typed_failed_result():
 
 
 @respx.mock
+async def test_ocr_workflow_retries_dedup_and_fails_with_succeeded_result_version():
+    status_route, result_route = mock_happy_path()
+    respx.post(
+        f"{FOUNDRY_BASE}/internal/v1/ai-quota-reservations/{RESERVATION_ID}/release"
+    ).mock(return_value=Response(200, json={"id": str(RESERVATION_ID)}))
+    dedup_route = respx.post(
+        f"{APP_BASE}/internal/v1/jobs/{JOB_ID}/deduplication"
+    ).mock(return_value=Response(503, json={"error": "temporary outage"}))
+    app_api = AppApiClient(base_url=APP_BASE, service_token="app-token")
+    ocr = OcrReceiptActivities(
+        app_api, FoundryClient(base_url=FOUNDRY_BASE, service_token="foundry-token")
+    )
+    echo = FoundationEchoActivities(app_api)
+
+    async with (
+        await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter,
+        ) as env,
+        Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[OcrReceiptWorkflow],
+            activities=[
+                echo.mark_running,
+                ocr.ocr_get_input,
+                ocr.ocr_download_receipt,
+                ocr.ocr_resolve_route,
+                ocr.ocr_reserve,
+                ocr.ocr_mark_call_started,
+                ocr.ocr_run_extraction,
+                ocr.ocr_record_accepted,
+                ocr.ocr_release,
+                ocr.ocr_submit_extraction,
+                ocr.ocr_record_deduplication,
+                ocr.ocr_submit_failed,
+                ocr.ocr_mark_failed,
+            ],
+        ),
+    ):
+        await env.client.execute_workflow(
+            OcrReceiptWorkflow.run,
+            job_reference(),
+            id=f"job-{JOB_ID}",
+            task_queue=TASK_QUEUE,
+        )
+
+    assert len(dedup_route.calls) == 5
+    assert len(result_route.calls) == 1
+    assert len(status_route.calls) == 2
+    failed_status = status_route.calls[1].request.content
+    assert b'"status":"FAILED"' in failed_status
+    assert b'"expectedJobVersion":4' in failed_status
+    assert b"OCR_FAILED: extraction pipeline error" in failed_status
+
+
+@respx.mock
 async def test_forwarded_receipt_workflow_enters_the_standard_ocr_pipeline():
     _, result_route = mock_happy_path()
+    respx.post(f"{APP_BASE}/internal/v1/jobs/{JOB_ID}/deduplication").mock(
+        return_value=Response(200, json={"decision": "no_match", "matchIds": []})
+    )
     app_api = AppApiClient(base_url=APP_BASE, service_token="app-token")
     ocr = OcrReceiptActivities(
         app_api,
@@ -222,6 +295,7 @@ async def test_forwarded_receipt_workflow_enters_the_standard_ocr_pipeline():
                 ocr.ocr_record_accepted,
                 ocr.ocr_release,
                 ocr.ocr_submit_extraction,
+                ocr.ocr_record_deduplication,
                 ocr.ocr_submit_failed,
                 ocr.ocr_mark_failed,
             ],

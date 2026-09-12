@@ -13,7 +13,7 @@ from expense_contracts.generated import (
 from pydantic import BaseModel
 from temporalio import activity
 
-from ai_worker.app_api_client import AppApiClient
+from ai_worker.app_api_client import AppApiClient, DeduplicationEvidenceV1
 from ai_worker.foundry_client import FoundryClient
 from ai_worker.providers.fake_ocr import extract_receipt
 
@@ -67,6 +67,14 @@ class OcrReleaseArgs(BaseModel):
 class OcrSubmitExtractionArgs(BaseModel):
     model_config = {"extra": "forbid"}
     job_reference: JobReferenceV1
+    expected_job_version: int
+    extraction: OcrExtractionResultV1
+
+
+class OcrRecordDeduplicationArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    job_reference: JobReferenceV1
+    source_file_id: str
     expected_job_version: int
     extraction: OcrExtractionResultV1
 
@@ -183,6 +191,27 @@ class OcrReceiptActivities:
                 expectedJobVersion=args.expected_job_version,
                 resultSchemaVersion=OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
                 result=args.extraction.model_dump(mode="json", exclude_none=True),
+            ),
+        )
+
+    @activity.defn(name="ocr_record_deduplication")
+    async def ocr_record_deduplication(
+        self, args: OcrRecordDeduplicationArgs
+    ) -> dict[str, object]:
+        job_id = str(args.job_reference.jobId)
+        extraction = args.extraction
+        return await self._app_api_client.record_deduplication_evidence(
+            job_id,
+            DeduplicationEvidenceV1(
+                schemaVersion=1,
+                jobId=args.job_reference.jobId,
+                sourceFileId=args.source_file_id,
+                merchant=extraction.merchant,
+                amount=extraction.amount,
+                currency=extraction.currency,
+                incurredOn=extraction.incurredOn,
+                expectedJobVersion=args.expected_job_version,
+                idempotencyKey=f"{job_id}:ocr:dedup:v1",
             ),
         )
 

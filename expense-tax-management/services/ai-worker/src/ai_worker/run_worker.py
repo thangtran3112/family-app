@@ -54,6 +54,7 @@ async def main() -> None:
             ocr.ocr_record_accepted,
             ocr.ocr_release,
             ocr.ocr_submit_extraction,
+            ocr.ocr_record_deduplication,
             ocr.ocr_submit_failed,
             ocr.ocr_mark_failed,
         ],

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable
+from datetime import date
+from typing import Literal
+from uuid import UUID
 
 import httpx
 from expense_contracts.generated import (
@@ -11,10 +14,26 @@ from expense_contracts.generated import (
     JobStatusUpdateRequestV1,
     OcrJobInputV1,
 )
+from pydantic import BaseModel, ConfigDict
 
 from ai_worker.auth.client import CachedM2MTokenProvider, ClerkM2MTokenIssuer
 
 TokenProvider = Callable[[], Awaitable[str]]
+
+
+class DeduplicationEvidenceV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal[1]
+    jobId: UUID
+    sourceFileId: UUID
+    merchant: str | None = None
+    amount: str | None = None
+    currency: str | None = None
+    incurredOn: date | None = None
+    orderNumber: str | None = None
+    expectedJobVersion: int
+    idempotencyKey: str
 
 
 class AppApiClient:
@@ -70,6 +89,18 @@ class AppApiClient:
             )
             response.raise_for_status()
             return int(response.json()["version"])
+
+    async def record_deduplication_evidence(
+        self, job_id: str, evidence: DeduplicationEvidenceV1
+    ) -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self._base_url}/internal/v1/jobs/{job_id}/deduplication",
+                json=evidence.model_dump(mode="json", exclude_none=True),
+                headers=await self._headers(),
+            )
+            response.raise_for_status()
+            return dict(response.json())
 
     async def get_ocr_input(self, job_id: str) -> OcrJobInputV1:
         async with httpx.AsyncClient() as client:

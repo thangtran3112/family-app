@@ -20,6 +20,7 @@ with workflow.unsafe.imports_passed_through():
         OcrMarkFailedArgs,
         OcrReceiptActivities,
         OcrRecordAcceptedArgs,
+        OcrRecordDeduplicationArgs,
         OcrReleaseArgs,
         OcrReserveArgs,
         OcrResolveRouteArgs,
@@ -196,11 +197,23 @@ class OcrReceiptWorkflow:
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=http_retry,
             )
-            await workflow.execute_activity(
+            result_version = await workflow.execute_activity(
                 OcrReceiptActivities.ocr_submit_extraction,
                 OcrSubmitExtractionArgs(
                     job_reference=job_reference,
                     expected_job_version=version,
+                    extraction=extraction,
+                ),
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=http_retry,
+            )
+            version = result_version
+            await workflow.execute_activity(
+                OcrReceiptActivities.ocr_record_deduplication,
+                OcrRecordDeduplicationArgs(
+                    job_reference=job_reference,
+                    source_file_id=str(job_input.fileId),
+                    expected_job_version=result_version,
                     extraction=extraction,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),

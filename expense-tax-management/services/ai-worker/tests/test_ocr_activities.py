@@ -15,6 +15,7 @@ from ai_worker.ocr_activities import (
     OcrMarkFailedArgs,
     OcrReceiptActivities,
     OcrRecordAcceptedArgs,
+    OcrRecordDeduplicationArgs,
     OcrReleaseArgs,
     OcrReserveArgs,
     OcrRunExtractionArgs,
@@ -229,3 +230,41 @@ async def test_ocr_full_happy_path_posts_version_chained_callbacks():
         ),
     )
     assert status_route.called
+
+
+@respx.mock
+async def test_ocr_record_deduplication_sends_only_job_bound_ocr_evidence():
+    route = respx.post(f"{APP_BASE}/internal/v1/jobs/{JOB_ID}/deduplication").mock(
+        return_value=Response(200, json={"decision": "no_match", "matchIds": []})
+    )
+    extraction = OcrExtractionResultV1(
+        schemaVersion=1,
+        merchant="Cafe",
+        amount="12.30",
+        currency="USD",
+        incurredOn="2026-09-11",
+        confidence=0.99,
+    )
+
+    result = await ActivityEnvironment().run(
+        activities().ocr_record_deduplication,
+        OcrRecordDeduplicationArgs(
+            job_reference=job_reference(),
+            source_file_id=str(FILE_ID),
+            expected_job_version=5,
+            extraction=extraction,
+        ),
+    )
+
+    assert result == {"decision": "no_match", "matchIds": []}
+    sent = route.calls[0].request.content
+    assert b'"jobId":"33333333-3333-4333-8333-333333333333"' in sent
+    assert b'"sourceFileId":"44444444-4444-4444-8444-444444444444"' in sent
+    assert b'"expectedJobVersion":5' in sent
+    assert (
+        b'"idempotencyKey":"33333333-3333-4333-8333-333333333333:ocr:dedup:v1"' in sent
+    )
+    assert b'"tenantId"' not in sent
+    assert b'"personalProfileId"' not in sent
+    assert b'"businessId"' not in sent
+    assert b'"existingExpenseId"' not in sent
