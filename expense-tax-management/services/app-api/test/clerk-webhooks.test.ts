@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { Readable } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,7 @@ import {
   verifyClerkWebhookSignature,
   parseClerkWebhookEvent,
 } from "../src/integrations/clerk-webhook-signature.js";
+import { CLERK_WEBHOOK_MAX_BODY_BYTES } from "../src/routes/clerk-webhooks.js";
 
 const SECRET = "whsec_test-secret";
 const EVENT_ID = "evt_test_123";
@@ -87,6 +89,14 @@ function userEvent(type: "user.created" | "user.updated" | "user.deleted" = "use
       primary_email_address_id: "email_1",
     },
   };
+}
+
+function exactLengthUserBody(length: number): Buffer {
+  const prefix = Buffer.from(
+    '{"type":"user.updated","data":{"id":"user_test_123","first_name":"Ada","last_name":"Lovelace","email_addresses":[{"id":"email_1","email_address":"ada@example.test"}],"primary_email_address_id":"email_1","padding":"',
+  );
+  const suffix = Buffer.from('"}}');
+  return Buffer.concat([prefix, Buffer.alloc(length - prefix.length - suffix.length, 0x78), suffix]);
 }
 
 function repository(): ClerkWebhookRepository & {
@@ -246,6 +256,72 @@ describe("Clerk webhook route and processing", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(store.events.size).toBe(0);
+    await app.close();
+  });
+
+  it("accepts a body exactly at the raw-body limit", async () => {
+    const verifySignature = vi.fn(() => true);
+    const handler = vi.fn(async () => ({ replayed: false }));
+    const app = buildApp({
+      config: createAppConfig({ env: TEST_ENV, version: "test" }),
+      logger: false,
+      clerkWebhookHandler: { handle: handler },
+      clerkWebhookVerifySignature: verifySignature,
+    });
+    const body = exactLengthUserBody(CLERK_WEBHOOK_MAX_BODY_BYTES);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/integrations/clerk/webhook",
+      headers: { ...signedHeaders(body, Math.floor(Date.now() / 1000)), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(verifySignature).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("rejects an oversized body before signature verification or handler execution", async () => {
+    const verifySignature = vi.fn(() => true);
+    const handler = vi.fn(async () => ({ replayed: false }));
+    const app = buildApp({
+      config: createAppConfig({ env: TEST_ENV, version: "test" }),
+      logger: false,
+      clerkWebhookHandler: { handle: handler },
+      clerkWebhookVerifySignature: verifySignature,
+    });
+    const body = Buffer.concat([exactLengthUserBody(CLERK_WEBHOOK_MAX_BODY_BYTES), Buffer.from("x")]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/integrations/clerk/webhook",
+      headers: { ...signedHeaders(body, Math.floor(Date.now() / 1000)), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(verifySignature).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("rejects chunked bodies once accumulated bytes exceed the limit", async () => {
+    const handler = vi.fn(async () => ({ replayed: false }));
+    const app = buildApp({
+      config: createAppConfig({ env: TEST_ENV, version: "test" }),
+      logger: false,
+      clerkWebhookHandler: { handle: handler },
+    });
+    const body = Buffer.concat([exactLengthUserBody(CLERK_WEBHOOK_MAX_BODY_BYTES), Buffer.from("x")]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/integrations/clerk/webhook",
+      headers: { "content-type": "application/json" },
+      payload: Readable.from([body.subarray(0, CLERK_WEBHOOK_MAX_BODY_BYTES), body.subarray(CLERK_WEBHOOK_MAX_BODY_BYTES)]),
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
     await app.close();
   });
 

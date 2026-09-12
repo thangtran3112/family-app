@@ -374,7 +374,7 @@ describe("database provisioning", () => {
         appExecution = details;
       },
     });
-    await provisionFoundryOperator(input, {
+    await provisionFoundryOperator(input, memberships, {
       dryRun: true,
       runPsql: async (details) => {
         foundryExecution = details;
@@ -390,7 +390,7 @@ describe("database provisioning", () => {
 
   it("provisions both thang roles and rejects disabled conflicts", async () => {
     let execution;
-    await provisionFoundryOperator(input, {
+    await provisionFoundryOperator(input, memberships, {
       runPsql: async (details) => {
         execution = details;
       },
@@ -401,6 +401,31 @@ describe("database provisioning", () => {
     expect(execution.sql).toContain("'catalog_manager'");
     expect(execution.sql).toContain("status = 'disabled'");
     expect(execution.sql).toContain("ON CONFLICT (clerk_user_id, role)");
+  });
+
+  it("requires verified Clerk memberships when provisioning Foundry directly", async () => {
+    await expect(
+      provisionFoundryOperator(input, [], { runPsql: async () => undefined }),
+    ).rejects.toThrow(/membership verification failed/);
+  });
+
+  it("uses NULL-safe comparisons for bootstrap conflict guards", async () => {
+    let execution;
+    await provisionAppMappings(bootstrapInput, memberships, {
+      bootstrapEmpty: true,
+      runPsql: async (details) => {
+        execution = details;
+      },
+    });
+
+    expect(execution.sql).toContain("primary_email IS DISTINCT FROM 'thangtran3112@gmail.com'");
+    expect(execution.sql).toContain("display_name IS DISTINCT FROM 'Thang Tran'");
+    expect(execution.sql).toContain("status IS DISTINCT FROM 'active'");
+    expect(execution.sql).toContain("role IS DISTINCT FROM 'owner'");
+    expect(execution.sql).not.toMatch(/primary_email\s*<>/);
+    expect(execution.sql).not.toMatch(/display_name\s*<>/);
+    expect(execution.sql).not.toMatch(/status\s*<>/);
+    expect(execution.sql).not.toMatch(/role\s*<>/);
   });
 
   it("redacts database password from psql stderr", async () => {
@@ -450,7 +475,7 @@ describe("database provisioning", () => {
     await executePsql({
       databaseUrl: "postgresql://url-user:url-password@url-host:5544/url-db?sslmode=require",
       sql: "SELECT 1",
-      env: { PGHOST: "caller-host" },
+      env: { PGHOST: "caller-host", CLERK_SECRET_KEY: "must-not-leak", APP_DATABASE_URL: "must-not-leak" },
       spawnImpl,
     });
 
@@ -458,5 +483,7 @@ describe("database provisioning", () => {
     expect(childEnvironment.PGHOST).toBe("url-host");
     expect(childEnvironment.PGPORT).toBe("5544");
     expect(childEnvironment.PGDATABASE).toBe("url-db");
+    expect(childEnvironment.CLERK_SECRET_KEY).toBeUndefined();
+    expect(childEnvironment.APP_DATABASE_URL).toBeUndefined();
   });
 });

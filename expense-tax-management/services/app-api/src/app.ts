@@ -70,7 +70,7 @@ import {
   type InboundEmailDomain,
 } from "./domain/inbound-email.js";
 import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
-import { registerClerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { registerClerkWebhookRoutes, type ClerkWebhookRouteOptions } from "./routes/clerk-webhooks.js";
 import { registerAuthCheckRoutes } from "./routes/auth-check.js";
 import type { ClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 import {
@@ -182,6 +182,7 @@ export interface BuildAppOptions {
   readonly verificationNotifier?: VerificationNotifier;
   readonly malwareScanner?: MalwareScanner;
   readonly clerkWebhookHandler?: ClerkWebhookHandler;
+  readonly clerkWebhookVerifySignature?: ClerkWebhookRouteOptions["verifySignature"];
   readonly clerkIdentityDomain?: ClerkIdentityMappingDomain;
 }
 
@@ -380,6 +381,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
   app.register(registerClerkWebhookRoutes, {
     signingSecret: options.config.clerk?.webhookSigningSecret,
+    ...(options.clerkWebhookVerifySignature !== undefined
+      ? { verifySignature: options.clerkWebhookVerifySignature }
+      : {}),
     handler:
       options.clerkWebhookHandler ??
       createClerkWebhookHandler(createDatabaseClerkWebhookRepository(database)),

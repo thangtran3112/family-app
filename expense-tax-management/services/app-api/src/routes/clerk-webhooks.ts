@@ -8,6 +8,24 @@ import type { ClerkWebhookHandler } from "../integrations/clerk-webhooks.js";
 import { parseClerkEventFromBody } from "../integrations/clerk-webhooks.js";
 import { ClerkWebhookPayloadError, verifyClerkWebhookSignature, type ClerkWebhookHeaders } from "../integrations/clerk-webhook-signature.js";
 
+export const CLERK_WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
+
+function payloadTooLargeError(): Error & { statusCode: 413 } {
+  return Object.assign(new Error("Request payload too large"), { statusCode: 413 as const });
+}
+
+export async function readClerkWebhookBody(payload: AsyncIterable<Buffer | string>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of payload) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > CLERK_WEBHOOK_MAX_BODY_BYTES) throw payloadTooLargeError();
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, size);
+}
+
 declare module "fastify" {
   interface FastifyRequest {
     clerkRawBody?: Buffer;
@@ -23,9 +41,11 @@ export interface ClerkWebhookRouteOptions {
 export async function registerClerkWebhookRoutes(app: FastifyInstance, options: ClerkWebhookRouteOptions): Promise<void> {
   app.post("/api/v1/integrations/clerk/webhook", {
     preParsing: async (request, _reply, payload) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of payload) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      const body = Buffer.concat(chunks);
+      const contentLength = Number(request.headers["content-length"]);
+      if (Number.isInteger(contentLength) && contentLength > CLERK_WEBHOOK_MAX_BODY_BYTES) {
+        throw payloadTooLargeError();
+      }
+      const body = await readClerkWebhookBody(payload);
       request.clerkRawBody = body;
       return Readable.from([body]);
     },

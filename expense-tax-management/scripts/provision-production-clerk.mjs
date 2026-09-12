@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/u;
 const CLERK_API_URL = "https://api.clerk.com";
 const DEFAULT_TIMEOUT_MS = 10_000;
+const PSQL_ENVIRONMENT_KEYS = ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR"];
 
 function validateRequiredValue(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -144,12 +145,18 @@ export async function executePsql({
   spawnImpl = spawn,
 }) {
   const databaseEnv = databaseEnvironment(databaseUrl);
+  const parentEnvironment = { ...process.env, ...env };
+  const runtimeEnvironment = Object.fromEntries(
+    PSQL_ENVIRONMENT_KEYS
+      .filter((key) => parentEnvironment[key] !== undefined)
+      .map((key) => [key, parentEnvironment[key]]),
+  );
   await new Promise((resolve, reject) => {
     const child = spawnImpl(
       "psql",
       ["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--file=-"],
       {
-      env: { ...process.env, ...env, ...databaseEnv },
+        env: { ...runtimeEnvironment, ...databaseEnv },
       },
     );
     let stderr = "";
@@ -282,14 +289,14 @@ BEGIN
      OR EXISTS (
        SELECT 1 FROM app.users
        WHERE id = ${thangUserId}::uuid
-         AND (primary_email <> 'thangtran3112@gmail.com' OR display_name <> 'Thang Tran' OR status <> 'active'
-           OR (clerk_user_id IS NOT NULL AND clerk_user_id <> ${thangClerkId}))
+          AND (primary_email IS DISTINCT FROM 'thangtran3112@gmail.com' OR display_name IS DISTINCT FROM 'Thang Tran' OR status IS DISTINCT FROM 'active'
+            OR (clerk_user_id IS NOT NULL AND clerk_user_id IS DISTINCT FROM ${thangClerkId}))
      )
      OR EXISTS (
        SELECT 1 FROM app.users
        WHERE id = ${tramilyUserId}::uuid
-         AND (primary_email <> 'tramilyt@gmail.com' OR display_name <> 'Tramily Tran' OR status <> 'active'
-           OR (clerk_user_id IS NOT NULL AND clerk_user_id <> ${tramilyClerkId}))
+          AND (primary_email IS DISTINCT FROM 'tramilyt@gmail.com' OR display_name IS DISTINCT FROM 'Tramily Tran' OR status IS DISTINCT FROM 'active'
+            OR (clerk_user_id IS NOT NULL AND clerk_user_id IS DISTINCT FROM ${tramilyClerkId}))
      ) THEN
     RAISE EXCEPTION 'unrelated existing or conflicting App users';
   END IF;
@@ -297,37 +304,37 @@ BEGIN
      OR EXISTS (
        SELECT 1 FROM app.tenants
        WHERE id = ${tenantId}::uuid
-         AND (name <> 'Family' OR slug <> 'family' OR status <> 'active'
-           OR (clerk_org_id IS NOT NULL AND clerk_org_id <> ${orgId}))
+          AND (name IS DISTINCT FROM 'Family' OR slug IS DISTINCT FROM 'family' OR status IS DISTINCT FROM 'active'
+            OR (clerk_org_id IS NOT NULL AND clerk_org_id IS DISTINCT FROM ${orgId}))
      ) THEN
     RAISE EXCEPTION 'unrelated existing or conflicting App tenants';
   END IF;
   IF EXISTS (
     SELECT 1 FROM app.tenant_memberships
     WHERE tenant_id = ${tenantId}::uuid AND user_id = ${thangUserId}::uuid
-      AND (role <> 'owner' OR status <> 'active')
+       AND (role IS DISTINCT FROM 'owner' OR status IS DISTINCT FROM 'active')
   ) OR EXISTS (
     SELECT 1 FROM app.tenant_memberships
     WHERE tenant_id = ${tenantId}::uuid AND user_id = ${tramilyUserId}::uuid
-      AND (role <> 'member' OR status <> 'active')
+       AND (role IS DISTINCT FROM 'member' OR status IS DISTINCT FROM 'active')
   ) THEN
     RAISE EXCEPTION 'conflicting Family tenant membership';
   END IF;
   IF EXISTS (
     SELECT 1 FROM app.personal_profiles
     WHERE id = ${profileId}::uuid
-      AND (tenant_id <> ${tenantId}::uuid OR name <> 'Family Personal')
+       AND (tenant_id IS DISTINCT FROM ${tenantId}::uuid OR name IS DISTINCT FROM 'Family Personal')
   ) THEN
     RAISE EXCEPTION 'conflicting Family Personal profile';
   END IF;
   IF EXISTS (
     SELECT 1 FROM app.personal_memberships
     WHERE personal_profile_id = ${profileId}::uuid AND user_id = ${thangUserId}::uuid
-      AND (tenant_id <> ${tenantId}::uuid OR role <> 'owner' OR status <> 'active')
+       AND (tenant_id IS DISTINCT FROM ${tenantId}::uuid OR role IS DISTINCT FROM 'owner' OR status IS DISTINCT FROM 'active')
   ) OR EXISTS (
     SELECT 1 FROM app.personal_memberships
     WHERE personal_profile_id = ${profileId}::uuid AND user_id = ${tramilyUserId}::uuid
-      AND (tenant_id <> ${tenantId}::uuid OR role <> 'editor' OR status <> 'active')
+       AND (tenant_id IS DISTINCT FROM ${tenantId}::uuid OR role IS DISTINCT FROM 'editor' OR status IS DISTINCT FROM 'active')
   ) THEN
     RAISE EXCEPTION 'conflicting Family Personal membership';
   END IF;
@@ -539,8 +546,9 @@ END $$;
 ROLLBACK;`;
 }
 
-export async function provisionFoundryOperator(input, options = {}) {
+export async function provisionFoundryOperator(input, memberships, options = {}) {
   validateDistinctIdentityAssignments(input);
+  assertVerifiedMemberships(input, memberships);
   const runPsql =
     options.runPsql || ((details) => executePsql({ databaseUrl: input.foundryDatabaseUrl, ...details }));
   const writeSql = foundryOperatorSql(input);
@@ -561,7 +569,7 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run") || process.env.PROVISION_PRODUCTION_CLERK_CONFIRM !== "Family-auth-release";
   const memberships = await fetchClerkMemberships(input);
   const app = await provisionAppMappings(input, memberships, { dryRun, bootstrapEmpty });
-  const foundry = await provisionFoundryOperator(input, { dryRun });
+  const foundry = await provisionFoundryOperator(input, memberships, { dryRun });
   console.log(`${dryRun ? "dry-run" : "provisioned"}: Clerk memberships=2 app mappings=3 Foundry roles=2`);
   if (dryRun) {
     console.log(`SQL preflight: app host=${app.env.PGHOST} foundry host=${foundry.env.PGHOST}`);
