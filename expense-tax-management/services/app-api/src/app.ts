@@ -74,6 +74,7 @@ import {
 import { registerInboundEmailRoutes } from "./routes/inbound-email.js";
 import { registerClerkWebhookRoutes, type ClerkWebhookRouteOptions } from "./routes/clerk-webhooks.js";
 import { registerAuthCheckRoutes } from "./routes/auth-check.js";
+import { registerDuplicateMatchRoutes } from "./routes/duplicate-matches.js";
 import type { ClerkIdentityMappingDomain } from "./domain/clerk-identity.js";
 import {
   createClerkWebhookHandler,
@@ -341,6 +342,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     ...(options.config.clerk?.appServiceSubject
       ? { workerServiceSubject: options.config.clerk.appServiceSubject }
       : {}),
+  });
+  app.register(registerDuplicateMatchRoutes, {
+    identityResolver: identityDomain,
+    deduplicationDomain: (deduplicationDomain.resolveMatch
+      ? deduplicationDomain
+      : createDeduplicationDomain(database)) as Parameters<typeof registerDuplicateMatchRoutes>[1]["deduplicationDomain"],
   });
   const exportsDomain =
     options.exportsDomain ??

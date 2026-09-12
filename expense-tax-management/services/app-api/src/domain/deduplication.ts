@@ -7,8 +7,11 @@ import {
   DuplicateMatchEvidenceSchema,
   type DuplicateMatchList,
   type DuplicateMatchStatus,
+  DuplicateResolutionResponseSchema,
+  type DuplicateResolutionAction,
+  type DuplicateResolutionResponse,
 } from "@expense-tax/contracts";
-import { type Kysely, type Selectable, type Transaction } from "kysely";
+import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
 
 import type { AppDatabase } from "../database/types.js";
 import { DomainError } from "../errors.js";
@@ -43,7 +46,19 @@ export interface ListDeduplicationMatchesInput {
   readonly tenantId: string;
   readonly scope: FileScope;
   readonly status?: DuplicateMatchStatus;
+  readonly cursor?: string;
   readonly limit?: number;
+}
+
+export interface ResolveDeduplicationMatchInput {
+  readonly actorUserId: string;
+  readonly tenantId: string;
+  readonly scope: FileScope;
+  readonly matchId: string;
+  readonly action: DuplicateResolutionAction;
+  readonly expectedMatchVersion: number;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
 }
 
 export interface DeduplicationDomain {
@@ -52,6 +67,7 @@ export interface DeduplicationDomain {
     readonly matchIds: readonly string[];
   }>;
   listMatches(input: ListDeduplicationMatchesInput): Promise<DuplicateMatchList>;
+  resolveMatch?(input: ResolveDeduplicationMatchInput): Promise<DuplicateResolutionResponse>;
 }
 
 export interface DeduplicationCandidateFile {
@@ -293,6 +309,124 @@ function toDuplicateMatch(row: Selectable<AppDatabase["app.expense_duplicate_mat
     idempotencyKey: row.idempotency_key,
     createdAt: row.created_at.toISOString(),
   };
+}
+
+function encodeMatchCursor(createdAt: Date, id: string): string {
+  return Buffer.from(`${createdAt.toISOString()}|${id}`, "utf8").toString("base64url");
+}
+
+function decodeMatchCursor(cursor: string): { createdAt: Date; id: string } {
+  const decoded = Buffer.from(cursor, "base64url").toString("utf8");
+  const separator = decoded.indexOf("|");
+  const createdAt = new Date(decoded.slice(0, separator));
+  const id = decoded.slice(separator + 1);
+  if (separator < 0 || Number.isNaN(createdAt.getTime()) || !id) throw DomainError.validation();
+  return { createdAt, id };
+}
+
+function resolvedStatus(action: DuplicateResolutionAction): "merged" | "separate" | "dismissed" {
+  return action === "merge" ? "merged" : action === "keep_both" ? "separate" : "dismissed";
+}
+
+async function loadScopedMatch(
+  transaction: Transaction<AppDatabase>,
+  input: ResolveDeduplicationMatchInput,
+) {
+  let query = transaction
+    .selectFrom("app.expense_duplicate_matches")
+    .selectAll()
+    .where("id", "=", input.matchId)
+    .where("tenant_id", "=", input.tenantId);
+  query = input.scope.kind === "personal"
+    ? query.where("personal_profile_id", "=", input.scope.profileId).where("business_id", "is", null)
+    : query.where("business_id", "=", input.scope.businessId).where("personal_profile_id", "is", null);
+  const match = await query.forUpdate().executeTakeFirst();
+  if (!match) throw DomainError.notFound();
+  if (match.status !== "pending") throw DomainError.conflict();
+  if (match.version !== input.expectedMatchVersion) throw DomainError.conflict();
+  return match;
+}
+
+async function loadScopedExpense(
+  transaction: Transaction<AppDatabase>,
+  input: { readonly tenantId: string; readonly scope: FileScope; readonly expenseId: string },
+) {
+  let query = transaction
+    .selectFrom("app.expenses")
+    .selectAll()
+    .where("id", "=", input.expenseId)
+    .where("tenant_id", "=", input.tenantId);
+  query = input.scope.kind === "personal"
+    ? query.where("personal_profile_id", "=", input.scope.profileId).where("business_id", "is", null)
+    : query.where("business_id", "=", input.scope.businessId).where("personal_profile_id", "is", null);
+  const expense = await query.forUpdate().executeTakeFirst();
+  if (!expense || expense.status === "archived") throw DomainError.conflict();
+  return expense;
+}
+
+async function mergeCandidate(
+  transaction: Transaction<AppDatabase>,
+  input: {
+    readonly tenantId: string;
+    readonly scope: FileScope;
+    readonly existingExpenseId: string;
+    readonly candidateExpenseId: string;
+  },
+): Promise<void> {
+  const existing = await loadScopedExpense(transaction, {
+    tenantId: input.tenantId,
+    scope: input.scope,
+    expenseId: input.existingExpenseId,
+  });
+  const candidate = await loadScopedExpense(transaction, {
+    tenantId: input.tenantId,
+    scope: input.scope,
+    expenseId: input.candidateExpenseId,
+  });
+  const enrichment = {
+    ...(existing.description === null && candidate.description !== null
+      ? { description: candidate.description }
+      : {}),
+    ...(existing.project_id === null && candidate.project_id !== null
+      ? { project_id: candidate.project_id }
+      : {}),
+    ...(existing.spending_category_id === null && candidate.spending_category_id !== null
+      ? { spending_category_id: candidate.spending_category_id }
+      : {}),
+    ...(existing.incurred_on === null && candidate.incurred_on !== null
+      ? { incurred_on: candidate.incurred_on }
+      : {}),
+  };
+  if (Object.keys(enrichment).length > 0) {
+    await transaction
+      .updateTable("app.expenses")
+      .set({ ...enrichment, updated_at: new Date(), version: sql<number>`version + 1` })
+      .where("id", "=", existing.id)
+      .execute();
+  }
+  await transaction
+    .updateTable("app.expense_files")
+    .set({ expense_id: existing.id })
+    .where("tenant_id", "=", input.tenantId)
+    .where("expense_id", "=", candidate.id)
+    .execute();
+  await transaction
+    .updateTable("app.expense_sources")
+    .set({ expense_id: existing.id })
+    .where("tenant_id", "=", input.tenantId)
+    .where("expense_id", "=", candidate.id)
+    .execute();
+  await transaction
+    .updateTable("app.expenses")
+    .set({
+      status: "archived",
+      archived_at: new Date(),
+      updated_at: new Date(),
+      version: sql<number>`version + 1`,
+    })
+    .where("id", "=", candidate.id)
+    .where("status", "!=", "archived")
+    .execute();
 }
 
 async function requireJob(
@@ -631,20 +765,123 @@ export function createDeduplicationDomain(
 
     async listMatches(input) {
       await requireScopeRole(database, input);
+      const cursor = input.cursor ? decodeMatchCursor(input.cursor) : null;
       let query = database
         .selectFrom("app.expense_duplicate_matches")
         .selectAll()
         .where("tenant_id", "=", input.tenantId)
         .where("status", "=", input.status ?? "pending");
       query = input.scope.kind === "personal"
-        ? query.where("personal_profile_id", "=", input.scope.profileId)
-        : query.where("business_id", "=", input.scope.businessId);
+        ? query.where("personal_profile_id", "=", input.scope.profileId).where("business_id", "is", null)
+        : query.where("business_id", "=", input.scope.businessId).where("personal_profile_id", "is", null);
+      if (cursor) {
+        query = query.where((eb) => eb.or([
+          eb("created_at", "<", cursor.createdAt),
+          eb.and([eb("created_at", "=", cursor.createdAt), eb("id", "<", cursor.id)]),
+        ]));
+      }
       const rows = await query
         .orderBy("created_at", "desc")
         .orderBy("id", "desc")
-        .limit(input.limit ?? 50)
+        .limit((input.limit ?? 50) + 1)
         .execute();
-      return { items: rows.map(toDuplicateMatch), nextCursor: null };
+      const items = rows.slice(0, input.limit ?? 50);
+      const last = items.at(-1);
+      return {
+        items: items.map(toDuplicateMatch),
+        nextCursor: rows.length > (input.limit ?? 50) && last
+          ? encodeMatchCursor(last.created_at, last.id)
+          : null,
+      };
+    },
+
+    async resolveMatch(input) {
+      const role = await requireScopeRole(database, input);
+      if (role !== "owner" && role !== "editor") throw DomainError.forbidden();
+      const result = await executeIdempotentMutation(database, {
+        actorKey: `user:${input.actorUserId}`,
+        operationKey: "deduplication.match.resolve",
+        idempotencyKey: input.idempotencyKey,
+        requestHash: hashNormalizedRequest({
+          tenantId: input.tenantId,
+          scope: input.scope,
+          matchId: input.matchId,
+          action: input.action,
+          expectedMatchVersion: input.expectedMatchVersion,
+        }),
+        statusCode: 200 as const,
+        parseBody: (value) => DuplicateResolutionResponseSchema.parse(value),
+        execute: async (transaction) => {
+          const match = await loadScopedMatch(transaction, input);
+          await loadScopedExpense(transaction, {
+            tenantId: input.tenantId,
+            scope: input.scope,
+            expenseId: match.existing_expense_id,
+          });
+          await loadScopedExpense(transaction, {
+            tenantId: input.tenantId,
+            scope: input.scope,
+            expenseId: match.candidate_expense_id,
+          });
+          if (input.action === "merge") {
+            await mergeCandidate(transaction, {
+              tenantId: input.tenantId,
+              scope: input.scope,
+              existingExpenseId: match.existing_expense_id,
+              candidateExpenseId: match.candidate_expense_id,
+            });
+          } else if (input.action === "discard_new") {
+            const archived = await transaction
+              .updateTable("app.expenses")
+              .set({
+                status: "archived",
+                archived_at: new Date(),
+                updated_at: new Date(),
+                version: sql<number>`version + 1`,
+              })
+              .where("id", "=", match.candidate_expense_id)
+              .where("status", "!=", "archived")
+              .executeTakeFirst();
+            if (archived.numUpdatedRows !== 1n) throw DomainError.conflict();
+          }
+          const now = new Date();
+          const updated = await transaction
+            .updateTable("app.expense_duplicate_matches")
+            .set({
+              status: resolvedStatus(input.action),
+              version: sql<number>`version + 1`,
+              resolved_by: input.actorUserId,
+              resolved_at: now,
+              resolution_idempotency_key: input.idempotencyKey,
+            })
+            .where("id", "=", match.id)
+            .where("tenant_id", "=", input.tenantId)
+            .where("status", "=", "pending")
+            .where("version", "=", input.expectedMatchVersion)
+            .returning(["id", "version"])
+            .executeTakeFirst();
+          if (!updated) throw DomainError.conflict();
+          const response = {
+            matchId: updated.id,
+            action: input.action,
+            status: resolvedStatus(input.action),
+            version: updated.version,
+            idempotencyKey: input.idempotencyKey,
+          } satisfies DuplicateResolutionResponse;
+          await recordAuditEvent(transaction, {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            action: `deduplication.match_${input.action}`,
+            outcome: "success",
+            resourceType: "expense_duplicate_match",
+            resourceId: match.id,
+            requestId: input.requestId,
+            metadata: { action: input.action, status: response.status },
+          });
+          return response;
+        },
+      });
+      return result.body;
     },
   };
 }
