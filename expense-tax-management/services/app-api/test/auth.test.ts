@@ -335,6 +335,25 @@ describe("App API authentication", () => {
     });
   });
 
+  it.each([undefined, "", "   "])(
+    "uses verified email when production tenant display name is %j",
+    async (displayName) => {
+      const token = await signToken({
+        claims: { display_name: displayName },
+      });
+
+      const response = await requestTenant(`Bearer ${token}`);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        verifiedIdentity: {
+          verifiedEmail: "person@example.test",
+          displayName: "person@example.test",
+        },
+      });
+    },
+  );
+
   it("selects Clerk authorities for runtime route verifiers", async () => {
     const authorities: string[] = [];
     const app = buildApp({
@@ -537,11 +556,19 @@ describe("App API authentication", () => {
     "exp",
     "email",
     "email_verified",
-    "display_name",
   ] as const)(
     "rejects a tenant token missing %s",
     async (claim) => {
       const token = await signToken({ omit: [claim] });
+
+      expectGenericError(await requestTenant(`Bearer ${token}`), 401);
+    },
+  );
+
+  it.each([42, {}, []])(
+    "rejects a tenant token with malformed display_name %j",
+    async (displayName) => {
+      const token = await signToken({ claims: { display_name: displayName } });
 
       expectGenericError(await requestTenant(`Bearer ${token}`), 401);
     },
@@ -610,6 +637,46 @@ describe("App API authentication", () => {
         displayName: null,
       },
     });
+  });
+
+  it("accepts an ai-worker service token with Clerk singleton audience array", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: [SERVICE_AUDIENCE],
+      subject: "ai-worker",
+      claims: {
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    const response = await requestService(token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: {
+        tokenType: "service",
+        audience: SERVICE_AUDIENCE,
+      },
+    });
+  });
+
+  it.each([
+    [SERVICE_AUDIENCE, SERVICE_AUDIENCE],
+    [SERVICE_AUDIENCE, "other-service"],
+    ["other-service", SERVICE_AUDIENCE],
+  ])("rejects a service token with extra audience entries", async (first, second) => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: [first, second],
+      subject: "ai-worker",
+      claims: {
+        scope: "expenses:write expenses:extract",
+      },
+    });
+
+    expectGenericError(await requestService(token), 401);
   });
 
   it("accepts a Clerk M2M token using azp as service client ID", async () => {

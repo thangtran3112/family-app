@@ -78,6 +78,20 @@ function parseScopes(value: unknown): readonly string[] {
   return value.split(" ").filter((scope) => scope.length > 0);
 }
 
+function hasExpectedAudience(
+  value: unknown,
+  expected: string,
+  allowSingletonArray: boolean,
+): boolean {
+  return (
+    value === expected ||
+    (allowSingletonArray &&
+      Array.isArray(value) &&
+      value.length === 1 &&
+      value[0] === expected)
+  );
+}
+
 export function createTokenVerifier(
   options: CreateTokenVerifierOptions,
 ): TokenVerifier {
@@ -92,7 +106,13 @@ export function createTokenVerifier(
           requiredClaims: [...REQUIRED_CLAIMS],
         });
 
-        if (payload.aud !== options.audience) {
+        if (
+          !hasExpectedAudience(
+            payload.aud,
+            options.audience,
+            options.tokenType === "service",
+          )
+        ) {
           throw new Error("Invalid token claim");
         }
 

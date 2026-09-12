@@ -70,6 +70,20 @@ function parseScopes(value: unknown): readonly string[] {
   return value.split(" ").filter((scope) => scope.length > 0);
 }
 
+function hasExpectedAudience(
+  value: unknown,
+  expected: string,
+  allowSingletonArray: boolean,
+): boolean {
+  return (
+    value === expected ||
+    (allowSingletonArray &&
+      Array.isArray(value) &&
+      value.length === 1 &&
+      value[0] === expected)
+  );
+}
+
 function clerkOrganizationId(payload: Record<string, unknown>): string | null {
   const nested = payload.o;
   const nestedId =
@@ -126,9 +140,22 @@ function tenantIdentityClaims(
     };
   }
 
+  const email = requiredNonEmptyString(payload.email);
+  const displayNameClaim = payload.display_name;
+  if (
+    displayNameClaim !== undefined &&
+    displayNameClaim !== null &&
+    typeof displayNameClaim !== "string"
+  ) {
+    throw new Error("Invalid token claim");
+  }
+
   return {
-    displayName: requiredNonEmptyString(payload.display_name),
-    email: requiredNonEmptyString(payload.email),
+    displayName:
+      typeof displayNameClaim === "string" && displayNameClaim.trim().length > 0
+        ? displayNameClaim
+        : email,
+    email,
     emailVerified: true,
   };
 }
@@ -147,7 +174,13 @@ export function createTokenVerifier(
           requiredClaims: [...REQUIRED_CLAIMS],
         });
 
-        if (payload.aud !== options.audience) {
+        if (
+          !hasExpectedAudience(
+            payload.aud,
+            options.audience,
+            options.tokenType === "service",
+          )
+        ) {
           throw new Error("Invalid token claim");
         }
 

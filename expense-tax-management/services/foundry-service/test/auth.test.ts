@@ -489,6 +489,49 @@ describe("Foundry authentication", () => {
     });
   });
 
+  it("accepts an app-api service token with Clerk singleton audience array", async () => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: [SERVICE_AUDIENCE],
+      subject: "app-api",
+      claims: {
+        scope: "entitlements:publish",
+      },
+    });
+
+    const response = await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      principal: {
+        tokenType: "service",
+        audience: SERVICE_AUDIENCE,
+      },
+    });
+  });
+
+  it.each([
+    [SERVICE_AUDIENCE, SERVICE_AUDIENCE],
+    [SERVICE_AUDIENCE, "other-service"],
+    ["other-service", SERVICE_AUDIENCE],
+  ])("rejects a service token with extra audience entries", async (first, second) => {
+    const token = await signToken({
+      key: serviceKeys.privateKey,
+      issuer: SERVICE_ISSUER,
+      audience: [first, second],
+      subject: "app-api",
+      claims: {
+        scope: "entitlements:publish",
+      },
+    });
+
+    expectGenericError(
+      await requestWithToken(ENTITLEMENT_PUBLISH_PATH, token),
+      401,
+    );
+  });
+
   it("accepts a Clerk M2M token using azp as service client ID", async () => {
     const token = await signToken({
       key: serviceKeys.privateKey,
