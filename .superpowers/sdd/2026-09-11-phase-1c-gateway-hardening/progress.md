@@ -43,6 +43,8 @@
 - Phase 1C implementation: complete (commits `d7f8ba3..72af839`, final review clean with 1 parked non-blocking coverage finding; Terraform plan/apply and public probes deferred pending inputs/approval).
 - CI regression: clean-install contract drift failed because gateway-policy dist was not built before OpenAPI generation; fixed in `0158844` by building workspace dependency before App API/Foundry generation.
 - CI fix review: minor (deferred): ordering test uses source positions rather than runtime command execution; behavior verified by clean `check-generated` run.
+- CI regression: Docker service builds lacked gateway-policy workspace files; fixed in `aae0497` by copying/building package and runtime dist in both service Dockerfiles.
+- CI review: root `contracts:generate` still lacked gateway-policy build; fixed in `2f55670`, review clean.
 
 ## Task 5 Verification Evidence (2026-09-11)
 
