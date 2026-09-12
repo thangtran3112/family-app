@@ -5,7 +5,7 @@ Scope: Full Verification and Deployment Gate
 
 ## Result
 
-Local application and static verification passed. Terraform backend-disabled validation passed. Deployment and external behavior gates remain unexecuted where user approval or external production access was required.
+Local application and static verification passed. Terraform backend-disabled validation passed. Task 5 Step 2 and Step 5 remain incomplete: required Terraform inputs/credentials were absent, so no plan executed; no apply, public probes, push, or deployment-approval request executed.
 
 ## Verification
 
@@ -29,18 +29,23 @@ Terraform commands run from `infrastructure/cloudflare/expense-tax`:
 | `terraform init -backend=false` | PASS; existing locked Cloudflare provider reused |
 | `terraform validate` | PASS |
 
-`terraform plan -refresh=false -input=false` was attempted without supplying missing required inputs. Terraform stopped before planning because `cloudflare_account_id` and `cloudflare_api_token` were not provided as Terraform variables. No credentials were printed, invented, or used for an external plan request.
+Task 5 Step 2 is incomplete. `terraform plan -refresh=false -input=false` was attempted without the required Terraform inputs/credentials. Terraform stopped before planning because `cloudflare_account_id` and `cloudflare_api_token` were not provided as Terraform variables. Therefore no Terraform plan executed. No credentials were printed, invented, or used for an external plan request.
 
-Static Terraform inspection confirms expected Tunnel, Tunnel config, DNS, and loopback origin declarations. No paid Cloudflare product resource or public origin bind is present.
+Static Terraform inspection is supplemental only; it cannot prove that a Terraform plan contains only expected Tunnel/DNS changes. It confirms expected Tunnel, Tunnel config, DNS, and loopback origin declarations, with no paid Cloudflare product resource or public origin bind present.
 
 ## Deployment Boundary
 
 - No Terraform apply.
 - No deployment or push.
 - No Cloudflare or GCP mutation.
+- Task 5 Step 5 is incomplete: no deployment-approval request was executed because no reviewed Terraform plan was available. No approval was requested or granted.
 - No public HTTPS, webhook, authorization, or direct-port production probes. User prohibited external production probes without separate approval.
 - Public verification requirements remain deferred: five HTTPS hosts, health, security headers, unsupported methods, unknown paths, expected Clerk `401`/`403`, webhook `202`/replay, and direct VPS port non-reachability.
 - GCP Load Balancer/Cloud Armor mapping remains deferred documentation/design work. Paid Cloud Armor requires separate cost and deployment approval.
+
+## Next Action
+
+Provide required Terraform plan inputs/credentials and explicit deployment approval. Then run and review the free-tier Terraform plan before any apply; separately obtain approval before running public production probes.
 
 ## Evidence Files
 

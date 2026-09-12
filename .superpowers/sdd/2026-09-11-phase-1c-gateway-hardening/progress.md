@@ -42,3 +42,10 @@
 - `git diff --check` passed.
 - Public HTTPS and direct VPS port verification deferred by explicit user instruction; no external production probes, apply, deployment, Cloudflare/GCP mutation, or push performed.
 - GCP-specific Load Balancer/Cloud Armor mapping remains deferred documentation/design work and requires separate cost/deployment approval.
+
+## Task 5 Review Fix Evidence (2026-09-11)
+
+- Step 2 explicitly incomplete: required Terraform inputs/credentials were absent, so `terraform plan` stopped before planning. No plan executed; static inspection cannot prove plan contents.
+- Step 5 explicitly incomplete: no push or deployment-approval request was executed or granted because no reviewed plan was available.
+- No apply, public probes, Cloudflare/GCP mutation, or external action was executed.
+- Next action: provide required Terraform plan inputs/credentials and explicit deployment approval, then run and review the free-tier plan before any apply.
