@@ -28,6 +28,7 @@ import { registerOperationsRoutes } from "./routes/operations.js";
 import { createPostgresSecretStore, type SecretStore } from "./domain/vault.js";
 import { registerErrorHandlers } from "./errors.js";
 import { registerAuthPlugin } from "./plugins/auth.js";
+import { registerGatewayHardening } from "./plugins/gateway-hardening.js";
 import {
   registerDatabasePlugin,
   type DatabaseReadinessProbe,
@@ -135,6 +136,9 @@ function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const app = Fastify({
     logger: loggerWithRedaction(options.logger),
+    bodyLimit: 1024 * 1024,
+    connectionTimeout: 15_000,
+    keepAliveTimeout: 5_000,
   });
   const database =
     options.database ?? createFoundryDatabase(options.config.databaseUrl);
@@ -177,6 +181,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
 
   registerErrorHandlers(app);
+  registerGatewayHardening(app);
   registerAuthPlugin(app, {
     authVerifiers:
       options.authVerifiers ??

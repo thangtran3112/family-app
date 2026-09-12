@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@expense-tax/contracts": "workspace:*",
+    "@expense-tax/gateway-policy": "workspace:*",
     "@fastify/swagger": "^9.8.1",
     "fastify": "^5.12.3",
     "fastify-type-provider-zod": "^7.0.0",

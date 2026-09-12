@@ -280,6 +280,9 @@ importers:
       '@expense-tax/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@expense-tax/gateway-policy':
+        specifier: workspace:*
+        version: link:../../packages/gateway-policy
       '@fastify/swagger':
         specifier: ^9.8.1
         version: 9.8.1(supports-color@10.2.2)
