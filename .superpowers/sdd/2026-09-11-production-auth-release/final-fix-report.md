@@ -62,3 +62,4 @@ Unrelated worktree changes, controller docs, ledger, and prior reports were pres
 - GREEN: fast path now calls guarded `payload.resume()` to drain without resetting the socket, then raises 413. Synchronous resume failures are swallowed.
 - Regression: TCP client sends only oversized Content-Length headers, receives HTTP 413, and confirms signature verifier and handler remain untouched. Separate hook test confirms resume failures cannot mask 413.
 - Verification: app-api tests 242/242, lint PASS, typecheck PASS, `git diff --check` PASS.
+- Commit: `5a88b8f fix(auth): drain oversized webhook requests`.
