@@ -54,7 +54,7 @@ export const DuplicateMatchEvidenceSchema = z
   .strictObject({
     fileSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     fingerprintHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-    normalizedMerchant: z.string().min(1).max(200).optional(),
+    normalizedMerchant: z.string().trim().min(1).max(200).optional(),
     amountMinorUnits: z.number().int().nonnegative().optional(),
     currency: CurrencySchema.optional(),
     incurredOn: DateOnlySchema.optional(),

@@ -145,7 +145,13 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       CONSTRAINT expense_duplicate_matches_version_check
         CHECK (version > 0),
       CONSTRAINT expense_duplicate_matches_idempotency_key_check
-        CHECK (char_length(trim(idempotency_key)) BETWEEN 1 AND 255),
+        CHECK (idempotency_key = trim(idempotency_key)
+          AND char_length(idempotency_key) BETWEEN 1 AND 255),
+      CONSTRAINT expense_duplicate_matches_resolution_idempotency_key_check
+        CHECK (
+          resolution_idempotency_key IS NULL
+          OR resolution_idempotency_key = trim(resolution_idempotency_key)
+        ),
       CONSTRAINT expense_duplicate_matches_resolution_state_check
         CHECK (
           (
@@ -310,9 +316,60 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       BEFORE UPDATE ON app.expense_duplicate_matches
       FOR EACH ROW EXECUTE FUNCTION app.prevent_duplicate_match_terminal_update()
   `.execute(database);
+  await sql`
+    CREATE OR REPLACE FUNCTION app.prevent_expense_dedup_parent_scope_update()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    BEGIN
+      IF OLD.tenant_id IS NOT DISTINCT FROM NEW.tenant_id
+        AND OLD.personal_profile_id IS NOT DISTINCT FROM NEW.personal_profile_id
+        AND OLD.business_id IS NOT DISTINCT FROM NEW.business_id THEN
+        RETURN NEW;
+      END IF;
+
+      IF TG_TABLE_NAME = 'expenses' THEN
+        IF EXISTS (SELECT 1 FROM app.expense_sources WHERE expense_id = OLD.id)
+          OR EXISTS (SELECT 1 FROM app.expense_dedup_fingerprints WHERE expense_id = OLD.id)
+          OR EXISTS (SELECT 1 FROM app.expense_duplicate_matches
+                      WHERE existing_expense_id = OLD.id OR candidate_expense_id = OLD.id) THEN
+          RAISE EXCEPTION 'referenced expense scope is immutable';
+        END IF;
+      ELSIF TG_TABLE_NAME = 'expense_files' THEN
+        IF EXISTS (SELECT 1 FROM app.expense_sources WHERE source_file_id = OLD.id) THEN
+          RAISE EXCEPTION 'referenced expense file scope is immutable';
+        END IF;
+      ELSIF TG_TABLE_NAME = 'inbound_emails' THEN
+        IF EXISTS (SELECT 1 FROM app.expense_sources WHERE inbound_email_id = OLD.id) THEN
+          RAISE EXCEPTION 'referenced inbound email scope is immutable';
+        END IF;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expenses_dedup_parent_scope_guard_trigger
+      BEFORE UPDATE OF tenant_id, personal_profile_id, business_id ON app.expenses
+      FOR EACH ROW EXECUTE FUNCTION app.prevent_expense_dedup_parent_scope_update()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_files_dedup_parent_scope_guard_trigger
+      BEFORE UPDATE OF tenant_id, personal_profile_id, business_id ON app.expense_files
+      FOR EACH ROW EXECUTE FUNCTION app.prevent_expense_dedup_parent_scope_update()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER inbound_emails_dedup_parent_scope_guard_trigger
+      BEFORE UPDATE OF tenant_id, personal_profile_id, business_id ON app.inbound_emails
+      FOR EACH ROW EXECUTE FUNCTION app.prevent_expense_dedup_parent_scope_update()
+  `.execute(database);
 }
 
 export async function down(database: Kysely<unknown>): Promise<void> {
+  await sql`DROP TRIGGER IF EXISTS expenses_dedup_parent_scope_guard_trigger ON app.expenses`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_files_dedup_parent_scope_guard_trigger ON app.expense_files`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS inbound_emails_dedup_parent_scope_guard_trigger ON app.inbound_emails`.execute(database);
   await sql`DROP TRIGGER IF EXISTS expense_duplicate_matches_terminal_guard_trigger ON app.expense_duplicate_matches`.execute(database);
   await sql`DROP TRIGGER IF EXISTS expense_duplicate_matches_scope_validation_trigger ON app.expense_duplicate_matches`.execute(database);
   await sql`DROP TRIGGER IF EXISTS expense_dedup_fingerprints_scope_validation_trigger ON app.expense_dedup_fingerprints`.execute(database);
@@ -322,6 +379,7 @@ export async function down(database: Kysely<unknown>): Promise<void> {
   await database.schema.dropTable("app.expense_sources").ifExists().execute();
   await sql`DROP FUNCTION IF EXISTS app.prevent_duplicate_match_terminal_update()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.validate_expense_dedup_scope()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.prevent_expense_dedup_parent_scope_update()`.execute(database);
   await sql`DROP INDEX IF EXISTS app.inbound_emails_id_tenant_unique`.execute(database);
   await sql`DROP INDEX IF EXISTS app.expense_files_id_tenant_unique`.execute(database);
 }

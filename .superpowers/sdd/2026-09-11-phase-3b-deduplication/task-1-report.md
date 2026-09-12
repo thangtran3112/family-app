@@ -76,3 +76,22 @@ Implemented Task 1 contracts and deduplication schema.
 ## Remaining Concern
 
 - Disposable validation required explicit creation of `app` schema because project initialization normally creates it outside migration files. No production database was contacted or mutated.
+
+## Review Round 3 Fixes
+
+- Added migration-owned `app.prevent_expense_dedup_parent_scope_update()` and BEFORE UPDATE scope guards on expenses, expense files, and inbound emails. Referenced parent scope changes now fail while provenance, fingerprints, or duplicate matches depend on the row.
+- Changed duplicate evidence `normalizedMerchant` to trim before minimum-length validation, rejecting whitespace-only values consistently with SQL.
+- Canonicalized database callback and resolution idempotency checks with exact `key = trim(key)` constraints while preserving length and null-state rules.
+- Added parent-trigger/function SQL-shape and whitespace evidence regression assertions.
+
+## Review Round 3 Verification
+
+- Focused contracts/schema suite: 2 files, 8 tests passed.
+- App API test suite: 27 files, 259 tests passed.
+- Contracts and App API lint, typecheck, build, and generated contract checks passed.
+- Disposable PostgreSQL migration test: migrations 001-015 applied successfully; direct 015 down completed; dedup tables and parent guard function were absent afterward.
+- `git diff --check` passed.
+
+## Final Concern
+
+- No production database or external service was contacted or mutated. Generated checks retain existing Python formatter deprecation warnings.

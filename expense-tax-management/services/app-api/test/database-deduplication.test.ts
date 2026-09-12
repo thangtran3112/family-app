@@ -31,6 +31,10 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("expense_sources_scope_validation_trigger");
     expect(migration).toContain("expense_dedup_fingerprints_scope_validation_trigger");
     expect(migration).toContain("expense_duplicate_matches_scope_validation_trigger");
+    expect(migration).toContain("prevent_expense_dedup_parent_scope_update");
+    expect(migration).toContain("expenses_dedup_parent_scope_guard_trigger");
+    expect(migration).toContain("expense_files_dedup_parent_scope_guard_trigger");
+    expect(migration).toContain("inbound_emails_dedup_parent_scope_guard_trigger");
   });
 
   it("declares status, match type, fingerprint, lookup, and idempotency constraints", () => {
@@ -41,6 +45,8 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("expense_duplicate_matches_candidate_lookup_index");
     expect(migration).toContain("expense_duplicate_matches_idempotency_unique");
     expect(migration).toContain("idempotency_key text NOT NULL");
+    expect(migration).toContain("idempotency_key = trim(idempotency_key)");
+    expect(migration).toContain("resolution_idempotency_key = trim(resolution_idempotency_key)");
     expect(migration).toContain("expense_duplicate_matches_resolution_idempotency_unique");
     expect(migration).toContain("WHERE resolution_idempotency_key IS NOT NULL");
     expect(migration).toContain("expense_duplicate_matches_pending_unique");
@@ -64,6 +70,10 @@ describe("expense deduplication migration", () => {
     expect(migration).toContain("DROP TRIGGER IF EXISTS expense_duplicate_matches_terminal_guard_trigger");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_expense_dedup_scope()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_duplicate_match_terminal_update()");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expenses_dedup_parent_scope_guard_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_files_dedup_parent_scope_guard_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS inbound_emails_dedup_parent_scope_guard_trigger");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_expense_dedup_parent_scope_update()");
     expect(migration).toMatch(/dropTable\("app\.expense_duplicate_matches"\)[\s\S]*dropTable\("app\.expense_dedup_fingerprints"\)[\s\S]*dropTable\("app\.expense_sources"\)/);
   });
 });

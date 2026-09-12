@@ -113,6 +113,12 @@ describe("deduplication contracts", () => {
     expect(DuplicateMatchSchema.safeParse({ ...match, matchType: "unknown" }).success).toBe(false);
     expect(DuplicateMatchSchema.safeParse({ ...match, confidence: -0.01 }).success).toBe(false);
     expect(DuplicateMatchSchema.safeParse({ ...match, confidence: 1.01 }).success).toBe(false);
+    expect(
+      DuplicateMatchSchema.safeParse({
+        ...match,
+        evidence: { normalizedMerchant: "   " },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates list, resolution, and strict worker evidence contracts", () => {
