@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   checkPhase1cGateway,
   parseCloudflareIngress,
+  ROUTE_METHOD_POLICY,
+  terraformSources,
 } from "./check-phase-1c-gateway.mjs";
 
 const projectRoot = join(process.cwd());
@@ -90,5 +92,24 @@ describe("Phase 1C gateway static policy", () => {
     expect(readme).toContain("free-tier");
     expect(readme).toContain("paid WAF");
     expect(readme).toContain("separate approval");
+  });
+
+  it("defines fail-closed method policy for frontend, health, and webhook routes", () => {
+    expect(ROUTE_METHOD_POLICY.frontend).toEqual(["GET", "HEAD"]);
+    expect(ROUTE_METHOD_POLICY.health).toEqual(["GET", "HEAD"]);
+    expect(ROUTE_METHOD_POLICY.webhook).toEqual(["POST"]);
+    expect(ROUTE_METHOD_POLICY.rejected).toEqual(["TRACE", "CONNECT"]);
+  });
+
+  it("scans every Cloudflare Terraform file for paid resources", () => {
+    expect(Object.keys(terraformSources).sort()).toEqual([
+      "clerk_dns.tf",
+      "main.tf",
+      "outputs.tf",
+      "variables.tf",
+    ]);
+    expect(Object.values(terraformSources).join("\n")).not.toMatch(
+      /cloudflare_(access|worker|waf|rate_limit)/u,
+    );
   });
 });

@@ -80,16 +80,12 @@ describe("gateway route classification", () => {
 });
 
 describe("authorization rate keys", () => {
-  it("hashes bearer authorization and never returns the raw credential", () => {
-    const rawAuthorization = "Bearer super-secret-token";
+  it("uses only trusted transport identity", () => {
     const key = authorizationRateKey({
-      authorization: rawAuthorization,
       remoteAddress: "192.0.2.10",
     });
 
-    expect(key).not.toContain(rawAuthorization);
-    expect(key).not.toContain("super-secret-token");
-    expect(key).toMatch(/^authorization:[a-f0-9]{64}$/u);
+    expect(key).toBe("address:192.0.2.10");
   });
 
   it("uses remote address when authorization is absent", () => {

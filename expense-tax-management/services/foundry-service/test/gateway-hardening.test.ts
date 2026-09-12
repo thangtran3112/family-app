@@ -219,4 +219,20 @@ describe("Foundry gateway hardening", () => {
       ).statusCode,
     ).toBe(403);
   });
+
+  it("rejects unsupported methods and unknown paths without running handlers", async () => {
+    const app = createTestApp();
+    let handlerCalls = 0;
+    app.get("/_test/routes", async () => {
+      handlerCalls += 1;
+      return { ok: true };
+    });
+
+    const unsupported = await app.inject({ method: "POST", url: "/_test/routes" });
+    const unknown = await app.inject({ method: "GET", url: "/_test/unknown" });
+
+    expect([404, 405]).toContain(unsupported.statusCode);
+    expect(unknown.statusCode).toBe(404);
+    expect(handlerCalls).toBe(0);
+  });
 });

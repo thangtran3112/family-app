@@ -190,6 +190,33 @@ describe("App API gateway hardening", () => {
     expect(handlerCalls).toBe(120);
   });
 
+  it("shares limiter bucket across attacker-controlled authorization values", async () => {
+    const { app } = createTestApp();
+    app.get("/_test/authenticated-transport", async () => ({ ok: true }));
+
+    for (let index = 0; index < 120; index += 1) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/_test/authenticated-transport",
+            headers: { authorization: `Bearer attacker-token-${index}` },
+          })
+        ).statusCode,
+      ).toBe(200);
+    }
+
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/_test/authenticated-transport",
+          headers: { authorization: "Bearer attacker-token-final" },
+        })
+      ).statusCode,
+    ).toBe(429);
+  });
+
   it("preserves existing 401 and 403 authorization decisions", async () => {
     const { app } = createTestApp();
     app.get("/_test/tenant", { preHandler: tenantGuard }, async () => ({ ok: true }));
@@ -208,6 +235,22 @@ describe("App API gateway hardening", () => {
 
     expect(unauthenticated.statusCode).toBe(401);
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("rejects unsupported methods and unknown paths without running handlers", async () => {
+    const { app } = createTestApp();
+    let handlerCalls = 0;
+    app.get("/_test/routes", async () => {
+      handlerCalls += 1;
+      return { ok: true };
+    });
+
+    const unsupported = await app.inject({ method: "POST", url: "/_test/routes" });
+    const unknown = await app.inject({ method: "GET", url: "/_test/unknown" });
+
+    expect([404, 405]).toContain(unsupported.statusCode);
+    expect(unknown.statusCode).toBe(404);
+    expect(handlerCalls).toBe(0);
   });
 
   it("does not expose raw authorization values in logs or responses", async () => {

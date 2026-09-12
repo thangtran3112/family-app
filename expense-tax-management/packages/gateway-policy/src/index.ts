@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 export type GatewayRouteClass = "webhook" | "api" | "internal" | "health";
 
 export interface GatewayLimit {
@@ -43,7 +41,6 @@ export interface GatewayRateLimiter {
 }
 
 export interface AuthorizationRateKeyInput {
-  authorization?: string;
   remoteAddress?: string;
 }
 
@@ -111,14 +108,8 @@ export function createGatewayRateLimiter({
 }
 
 export function authorizationRateKey({
-  authorization,
   remoteAddress,
 }: AuthorizationRateKeyInput): string {
-  if (authorization?.trim()) {
-    const digest = createHash("sha256").update(authorization).digest("hex");
-    return `authorization:${digest}`;
-  }
-
   return `address:${remoteAddress ?? "unknown"}`;
 }
 

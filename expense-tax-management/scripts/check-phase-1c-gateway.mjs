@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,7 +6,13 @@ const appRoot = join(fileURLToPath(new URL("..", import.meta.url)));
 const repoRoot = join(appRoot, "..");
 const read = (path) => readFileSync(join(repoRoot, path), "utf8");
 
-const terraform = read("infrastructure/cloudflare/expense-tax/main.tf");
+const terraformDirectory = join(repoRoot, "infrastructure/cloudflare/expense-tax");
+export const terraformSources = Object.fromEntries(
+  readdirSync(terraformDirectory)
+    .filter((fileName) => fileName.endsWith(".tf"))
+    .map((fileName) => [fileName, read(`infrastructure/cloudflare/expense-tax/${fileName}`)]),
+);
+const terraform = terraformSources["main.tf"] ?? "";
 const compose = read("expense-tax-management/docker-compose.yml");
 const design = read("docs/superpowers/specs/2026-09-11-phase-1c-gateway-hardening-design.md");
 const readme = read("infrastructure/cloudflare/expense-tax/README.md");
@@ -24,6 +30,13 @@ const securityHeaders = [
   ["Strict-Transport-Security", "max-age=31536000; includeSubDomains"],
   ["Cache-Control", "no-store"],
 ];
+
+export const ROUTE_METHOD_POLICY = {
+  frontend: ["GET", "HEAD"],
+  health: ["GET", "HEAD"],
+  webhook: ["POST"],
+  rejected: ["TRACE", "CONNECT"],
+};
 
 export function parseCloudflareIngress(source) {
   const ingressStart = source.indexOf("ingress");
@@ -95,6 +108,12 @@ export function checkPhase1cGateway() {
   }
   for (const source of frontendConfigs) {
     includes(source, 'source: "/:path*"', "frontend catch-all header route");
+    includes(source, 'source: "/api/:path*"', "frontend API no-store route");
+    includes(
+      source,
+      'source: "/:path((?!_next/static|_next/image|favicon.ico|.*\\\\.[^/]+$).*)"',
+      "frontend dynamic document no-store route",
+    );
     excludes(source, "Content-Security-Policy", "frontend CSP");
   }
 
@@ -147,8 +166,20 @@ export function checkPhase1cGateway() {
     failures.push("ordering: final ingress route must be exact http_status:404 catch-all");
   }
 
-  if (/cloudflare_(access|worker|waf|rate_limit)/u.test(terraform)) {
+  const allTerraform = Object.values(terraformSources).join("\n");
+  if (/cloudflare_(access|worker|waf|rate_limit)/u.test(allTerraform)) {
     failures.push("forbidden: paid Cloudflare resource or product reference");
+  }
+  if (
+    JSON.stringify(ROUTE_METHOD_POLICY) !==
+    JSON.stringify({
+      frontend: ["GET", "HEAD"],
+      health: ["GET", "HEAD"],
+      webhook: ["POST"],
+      rejected: ["TRACE", "CONNECT"],
+    })
+  ) {
+    failures.push("route methods: unsupported method policy changed");
   }
   includes(design, "free tier", "free-tier cost boundary");
   includes(design, "No Workers/edge functions", "Workers exclusion");

@@ -22,11 +22,9 @@ export function registerGatewayHardening(app: FastifyInstance): void {
   const limiter = createGatewayRateLimiter();
 
   app.addHook("onRequest", async (request, reply) => {
-    const authorization = request.headers.authorization;
     const decision = limiter.check(
       classifyGatewayRoute(requestPath(request)),
       authorizationRateKey({
-        ...(typeof authorization === "string" ? { authorization } : {}),
         ...(request.socket.remoteAddress
           ? { remoteAddress: request.socket.remoteAddress }
           : {}),
