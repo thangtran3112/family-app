@@ -13,11 +13,14 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import type { ProcessingJobsDomain } from "../domain/processing-jobs.js";
+import type { DeduplicationDomain } from "../domain/deduplication.js";
 import { DomainError } from "../errors.js";
 import { serviceGuard } from "../plugins/auth.js";
+import { registerDeduplicationRoutes } from "./deduplication.js";
 
 export interface JobRouteOptions {
   readonly processingJobsDomain: ProcessingJobsDomain;
+  readonly deduplicationDomain?: DeduplicationDomain;
   readonly workerServiceSubject?: string;
 }
 
@@ -154,4 +157,13 @@ export async function registerJobRoutes(
       return reply.code(result.statusCode).send(result.body);
     },
   );
+
+  if (options.deduplicationDomain) {
+    await registerDeduplicationRoutes(app, {
+      deduplicationDomain: options.deduplicationDomain,
+      ...(options.workerServiceSubject
+        ? { workerServiceSubject: options.workerServiceSubject }
+        : {}),
+    });
+  }
 }
