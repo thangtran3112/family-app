@@ -70,7 +70,12 @@ export function checkPhase1dProtectedDevelopment({ ciSource, deploySource, agent
   }
 
   equal(failures, deployTrigger?.workflow_run?.branches?.join(","), "main", "deployment workflow branch");
-  if (["build", "deploy"].some((job) => !(deploy.jobs?.[job]?.if ?? "").includes("github.event.workflow_run.head_branch == 'main'"))) {
+  const expectedDeploymentCondition = "github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository";
+  if (["build", "deploy"].some((job) => {
+    const jobFailures = [];
+    equal(jobFailures, (deploy.jobs?.[job]?.if ?? "").trim(), expectedDeploymentCondition, `${job} deployment condition`);
+    return jobFailures.length > 0;
+  })) {
     failures.push("deployment workflow must remain main-only");
   }
   if (deployTrigger?.pull_request !== undefined) failures.push("deployment workflow must not trigger on pull_request");
@@ -83,11 +88,17 @@ export function checkPhase1dProtectedDevelopment({ ciSource, deploySource, agent
     "Unit/quality check must succeed before merge.",
     "Never bypass branch protection or force-push.",
   ];
-  if (!agentsSource.includes("Create a `feature/*` branch from `origin/dev`.")) {
+  const gitSafetyHeading = "## Git Safety";
+  const gitSafetyStart = agentsSource.indexOf(gitSafetyHeading);
+  const nextHeading = gitSafetyStart === -1 ? -1 : agentsSource.indexOf("\n## ", gitSafetyStart + gitSafetyHeading.length);
+  const gitSafetySection = gitSafetyStart === -1
+    ? ""
+    : agentsSource.slice(gitSafetyStart, nextHeading === -1 ? undefined : nextHeading);
+  if (!gitSafetySection.includes("Create a `feature/*` branch from `origin/dev`.")) {
     failures.push("AGENTS.md must require feature/* worktrees");
   }
-  for (const rule of agentsRules) includes(failures, agentsSource, rule, "AGENTS.md policy");
-  if (agentsSource.includes("- Work on current branch; no feature branches.")) failures.push("AGENTS.md retains contradictory Git Safety rule");
+  for (const rule of agentsRules) includes(failures, gitSafetySection, rule, "AGENTS.md policy");
+  if (gitSafetySection.includes("- Work on current branch; no feature branches.")) failures.push("AGENTS.md retains contradictory Git Safety rule");
 
   return failures;
 }
