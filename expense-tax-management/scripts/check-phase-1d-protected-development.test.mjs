@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import YAML from "yaml";
 import { checkPhase1dProtectedDevelopment } from "./check-phase-1d-protected-development.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,9 +45,31 @@ describe("Phase 1D protected development policy", () => {
     expect(checkPhase1dProtectedDevelopment(input)).toContain("deployment workflow must remain main-only");
   });
 
+  it("rejects a broadened deployment job condition", async () => {
+    const input = await readPolicyInputs();
+    const deploy = YAML.parse(input.deploySource);
+    const exactCondition = deploy.jobs.build.if;
+    deploy.jobs.build.if = `${exactCondition} || github.event.workflow_run.head_branch == 'dev'`;
+    input.deploySource = YAML.stringify(deploy);
+    expect(checkPhase1dProtectedDevelopment(input)).toContain("deployment workflow must remain main-only");
+  });
+
   it("rejects contradictory Git Safety rules", async () => {
     const input = await readPolicyInputs();
     input.agentsSource = input.agentsSource.replace("Create a `feature/*` branch", "Work on current branch");
+    expect(checkPhase1dProtectedDevelopment(input)).toContain("AGENTS.md must require feature/* worktrees");
+  });
+
+  it("requires feature worktree policy inside Git Safety", async () => {
+    const input = await readPolicyInputs();
+    const requiredRule = "Create a `feature/*` branch from `origin/dev`.";
+    input.agentsSource = input.agentsSource.replace(
+      "## Architecture\n",
+      `## Architecture\n\n- ${requiredRule}\n`,
+    );
+    const gitSafetyStart = input.agentsSource.indexOf("## Git Safety\n");
+    const actualRuleStart = input.agentsSource.indexOf(`- ${requiredRule}\n`, gitSafetyStart);
+    input.agentsSource = `${input.agentsSource.slice(0, actualRuleStart)}- Work on current branch; no feature branches.\n${input.agentsSource.slice(actualRuleStart + `- ${requiredRule}\n`.length)}`;
     expect(checkPhase1dProtectedDevelopment(input)).toContain("AGENTS.md must require feature/* worktrees");
   });
 
