@@ -42,8 +42,20 @@ Local phases 0I, 0J Waves 1-4, 0J1, 0K Waves A+B, 0L, 0C, 0D, 0E, 0P, 0F0, 0F, 0
 
 ## Git Safety
 
-- Work on current branch; no feature branches.
-- Do not commit/push/reset/stash/clean/switch unless user explicitly requests.
+- Every coding-harness implementation session must use a git worktree.
+- Refresh `origin/dev` before creating the worktree.
+- Create a `feature/*` branch from `origin/dev`.
+- Never commit directly on `dev` or `main`.
+- Push only the feature branch, then open a pull request to `dev`.
+- Unit/quality check must succeed before merge.
+- Integration result is advisory and must be reported when red.
+- GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the feature branch includes current `origin/dev`; use squash merge.
+- Never bypass branch protection or force-push.
+- `main` remains outside the development flow until a later release phase.
+- No GitHub or Git remote write may run without explicit execution-time confirmation immediately before the command, including push, workflow dispatch, ref creation, ruleset activation, default-branch change, pull-request creation, and merge.
+- Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
+- Never inspect, print, commit, or expose secrets.
+- Inspect status and diff before editing; never revert unrelated changes.
 - Inspect status + diff before editing; never revert unrelated changes.
 
 ## Verification
