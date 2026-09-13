@@ -56,7 +56,6 @@ Local phases 0I, 0J Waves 1-4, 0J1, 0K Waves A+B, 0L, 0C, 0D, 0E, 0P, 0F0, 0F, 0
 - Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
 - Never inspect, print, commit, or expose secrets.
 - Inspect status and diff before editing; never revert unrelated changes.
-- Inspect status + diff before editing; never revert unrelated changes.
 
 ## Verification
 
