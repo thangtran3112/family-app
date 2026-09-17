@@ -1,8 +1,8 @@
 # Phase 3D Premium Connected Mailbox Design
 
 **Date:** 2026-09-12  
-**Status:** Approved
-**Depends on:** Phase 0J1 entitlements, Phase 0L Temporal worker, Phase 0P forwarded intake, Phase 3B deduplication, Phase 1C gateway hardening
+**Status:** Approved; implementation not started; blocked by Phase 3C
+**Depends on:** Phase 3C auto-tagging, Phase 0J1 entitlements, Phase 0L Temporal worker, Phase 0P forwarded intake, Phase 3B deduplication, Phase 1C gateway hardening
 
 ## Objective
 

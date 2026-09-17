@@ -1,8 +1,8 @@
-# Mockups — Web UI Preflight (Phase 0F0)
+# Mockups - Web UI Preflight (Phase 0F0)
 
-> **Review reopened 2026-09-07**: These renders document the rejected combined-app direction and are not implementation-ready.
-> New source of truth: `../sub-plans/phase-0i-polyglot-platform-rebaseline-design.md` and revised Phase 0F0 planning.
-> Each frontend is blocked only by its matching Phase 0F0 Capture, Office, or Foundry mockup gate.
+> **Status:** Rebaseline approved 2026-09-09; Capture, Office, Foundry, and shared gates complete.
+> Current approved source: `rebaseline/`. Root screen folders remain historical combined-app references only.
+> Durable architecture: `../sub-plans/phase-0i-polyglot-platform-rebaseline-design.md` and `../sub-plans/phase-0f0-web-ui-mockups.md`.
 
 ## Viewport Intent
 
@@ -37,11 +37,11 @@ Every folder now carries `mobile-375.png`, `tablet-768.png`, `desktop-1440.png`,
 
 ## Rebaseline Gate Index
 
-- [ ] **Capture gate -> Phase 0F**: Capture screen/state set approved at 375px and 768px.
-- [ ] **Office gate -> Phase 0M**: Office core set approved at 1024px and 1440px; no compressed mobile dashboard/tax UI.
-- [ ] **Foundry gate -> Phase 0N**: Platform-operator set approved at 1024px and 1440px.
-- [ ] Each approved set passes applicable shared role, boundary, accessibility, and failure-state checks from revised Phase 0F0.
+- [x] **Capture gate -> Phase 0F**: Capture screen/state set approved at 375px and 768px.
+- [x] **Office gate -> Phase 0M**: Office core set approved at 1024px and 1440px; no compressed mobile dashboard/tax UI.
+- [x] **Foundry gate -> Phase 0N**: Platform-operator set approved at 1024px and 1440px.
+- [x] Approved sets pass applicable shared role, boundary, accessibility, and failure-state checks from revised Phase 0F0.
 
-**Review:** reopened by architecture rebaseline decision, 2026-09-07; written specification still awaits approval
+**Review:** approved by Toby Tran on 2026-09-09. See `rebaseline/REVIEW.md`.
 
 > Historical note: 30 legacy PNGs passed structural checks on 2026-09-06. That evidence does not approve the new three-application architecture.

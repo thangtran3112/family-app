@@ -12,7 +12,7 @@
 
 ## Completed Baseline
 
-Local phases 0I, 0J Waves 1-4, 0J1, 0K Waves A+B, 0L, 0C, 0D, 0E, 0P, 0F0, 0F, 0M, and 0N complete. Details: `plans/PLAN.md` and `plans/sub-plans/`. Do not duplicate completed-phase history here.
+Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phase 1C gateway hardening, Phase 1D protected development, and Phase 3B deduplication are complete. Canonical status: `plans/PLAN.md`. Completed implementation detail remains in git history, not live planning files.
 
 ## Current Production
 
@@ -23,7 +23,9 @@ Local phases 0I, 0J Waves 1-4, 0J1, 0K Waves A+B, 0L, 0C, 0D, 0E, 0P, 0F0, 0F, 0
 - Production Clerk invitations redirect to `/accept-invitation`; ticket binds signup to invited email.
 - Password policy: minimum 8 characters; compromised-password rejection on; complexity rules off.
 - Clerk SPF/DKIM CNAMEs verified. DMARC: `_dmarc.tobytran.dev` = `v=DMARC1; p=none; adkim=s; aspf=s`.
-- Remaining: users finish invitations, then provision PostgreSQL identity/operator mappings and run authenticated smoke tests. Webhook remains deferred until endpoint verification.
+- Clerk user/org mappings and Foundry operator roles provisioned; signed webhook delivery/replay verified.
+- Authenticated production smoke passed 13/13.
+- Phase 3B deduplication is deployed. Phase 3C and Phase 3D remain unimplemented.
 
 ## Boundaries
 
@@ -67,6 +69,7 @@ Local phases 0I, 0J Waves 1-4, 0J1, 0K Waves A+B, 0L, 0C, 0D, 0E, 0P, 0F0, 0F, 0
 
 - Production mutation requires explicit deployment approval.
 - VPS hosts APIs, Temporal, workers, and stateful orchestration; no always-on GCP compute.
-- GCP owns Secret Manager/IAM/GitHub OIDC/WIF only.
+- Current production GCP owns Secret Manager/IAM/GitHub OIDC/WIF; Phase 3D may add only its approved scale-to-zero mailbox broker.
 - Secret Manager production bundle retains exactly one non-destroyed version.
+- Temporal database bootstrap remains an explicit operator-only Task 8; normal deploy never runs `bootstrap-temporal-db.sh`.
 - Current infrastructure sources: `infrastructure/vps/`, `infrastructure/cloudflare/expense-tax/`, `.github/workflows/expense-tax-deploy.yml`.

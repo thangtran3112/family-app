@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Not started; blocked by Phase 3D-A. Refresh `origin/dev` and use a new `feature/*` worktree after Phase 3D-A merges.
+
 **Goal:** Add single-flight scheduled/manual scans, fenced Gmail discovery, deterministic candidate staging/classification, and Office review on top of 3D-A.
 
 **Architecture:** App API owns scan/candidate rows, cursor fences, lease CAS, entitlement checks, and review authorization. Broker reads Gmail and calls App staging directly. Temporal and Python orchestrate only opaque run/candidate IDs, counts, page sequence, and typed errors; they never receive or return Gmail cursor/history IDs or provider metadata.
