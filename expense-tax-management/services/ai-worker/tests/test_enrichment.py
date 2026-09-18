@@ -858,14 +858,45 @@ def test_enrichment_module_is_pure():
 
 
 # ---------------------------------------------------------------------------
-# F1: numbered generated classes must not appear in enrichment.py production source
+# F1/NI1: no import from expense_enrichment_result_v1 in production source
 # ---------------------------------------------------------------------------
 
+# The forbidden import pattern — exact module path that can only appear as a
+# Python import statement, never in docstring prose (which only names the
+# top-level class or short variant names, not the full submodule path).
+_RESULT_SUBMODULE_IMPORT = (
+    "from expense_contracts.generated.expense_enrichment_result_v1 import"
+)
 
-def test_enrichment_module_does_not_use_numbered_generated_suggestion_classes():
-    # Suggestions/Suggestions1/Suggestions2 are generator-internal names.
-    # Production code must build plain dicts validated through the top-level
-    # ExpenseEnrichmentResultV1.model_validate(), not direct class construction.
+
+def test_forbidden_import_pattern_catches_violation_on_synthetic_source():
+    # TDD proof: confirm the assertion would catch a violating source string.
+    # This test must pass unconditionally — it exercises only the pattern itself.
+    synthetic_bad = "from expense_contracts.generated.expense_enrichment_result_v1 import Suggestions\n"
+    assert _RESULT_SUBMODULE_IMPORT in synthetic_bad, (
+        "Pattern must catch direct submodule import"
+    )
+
+
+def test_forbidden_import_pattern_does_not_false_positive_on_prose():
+    # Docstrings and comments that mention the class name or variant names
+    # must not trigger — they never contain the full submodule path.
+    prose_samples = [
+        "# ExpenseEnrichmentResultV1.model_validate()\n",
+        '"""Suggestions/Suggestions1/Suggestions2 are generator-internal."""\n',
+        "# see expense_contracts.generated for top-level exports\n",
+        "ExpenseEnrichmentResultV1  # referenced by short name\n",
+    ]
+    for sample in prose_samples:
+        assert _RESULT_SUBMODULE_IMPORT not in sample, (
+            f"Pattern must not match prose: {sample!r}"
+        )
+
+
+def test_enrichment_module_does_not_import_from_result_submodule():
+    # Stronger than checking construction sites: rejects any import from the
+    # result submodule, covering Suggestions*/AggregateCounts/RuleTagKey/Outcome.
+    # Production must import result types only via the top-level generated package.
     spec = importlib.util.find_spec("ai_worker.enrichment")
     assert spec is not None
     src_file = spec.origin
@@ -873,7 +904,8 @@ def test_enrichment_module_does_not_use_numbered_generated_suggestion_classes():
     with open(src_file) as f:
         src = f.read()
 
-    # Must not directly construct numbered variant classes
-    assert "Suggestions(" not in src, "Direct Suggestions() construction found"
-    assert "Suggestions1(" not in src, "Direct Suggestions1() construction found"
-    assert "Suggestions2(" not in src, "Direct Suggestions2() construction found"
+    assert _RESULT_SUBMODULE_IMPORT not in src, (
+        "enrichment.py must not import directly from "
+        "expense_enrichment_result_v1 submodule; "
+        "use top-level ExpenseEnrichmentResultV1.model_validate() instead"
+    )
