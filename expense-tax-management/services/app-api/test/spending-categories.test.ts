@@ -219,11 +219,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${SC_TENANT_ID}', '${SC_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
 
         INSERT INTO app.expense_enrichment_suggestions
@@ -279,11 +279,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${SC_TENANT_ID}', '${SC_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
 
         INSERT INTO app.expense_enrichment_suggestions

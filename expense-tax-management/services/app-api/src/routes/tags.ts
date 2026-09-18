@@ -1,5 +1,5 @@
 /**
- * Task 8 — Tag routes.
+ * Task 8 — Tag CRUD and expense-tag association routes only.
  *
  * Tenant-level tag CRUD:
  *   GET    /api/v1/tenants/:tenantId/tags
@@ -9,21 +9,17 @@
  *   POST   /api/v1/tenants/:tenantId/tags/:tagId/unarchive
  *   POST   /api/v1/tenants/:tenantId/tags/:tagId/merge
  *
- * Scope routes — personal:
+ * Expense-tag association — personal scope:
  *   GET    /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/tags
  *   PUT    /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/tags/:tagId
  *   DELETE /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/tags/:tagId
- *   GET    /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/suggestions
- *   POST   /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/suggestions/:suggestionId/resolve
- *   POST   /api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/enrichment-runs
  *
- * Scope routes — business:
+ * Expense-tag association — business scope:
  *   GET    /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/tags
  *   PUT    /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/tags/:tagId
  *   DELETE /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/tags/:tagId
- *   GET    /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/suggestions
- *   POST   /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/suggestions/:suggestionId/resolve
- *   POST   /api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/enrichment-runs
+ *
+ * Suggestion list/resolve and enrichment-runs live in routes/enrichment.ts.
  */
 
 import {
@@ -38,10 +34,6 @@ import {
   ExpenseTagSchema,
   ExpenseTagListSchema,
   ExpenseTagRemoveRequestSchema,
-  EnrichmentSuggestionListSchema,
-  SuggestionResolveRequestSchema,
-  SuggestionResolveResponseSchema,
-  SuggestionRerunRequestSchema,
   TenantIdParamsSchema,
 } from "@expense-tax/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -85,17 +77,11 @@ const PersonalExpenseParamsSchema = TenantIdParamsSchema.extend({
   expenseId: z.string().uuid(),
 });
 const PersonalExpenseTagParamsSchema = PersonalExpenseParamsSchema.extend({ tagId: z.string().uuid() });
-const PersonalExpenseSuggestionParamsSchema = PersonalExpenseParamsSchema.extend({
-  suggestionId: z.string().uuid(),
-});
 const BusinessExpenseParamsSchema = TenantIdParamsSchema.extend({
   businessId: z.string().uuid(),
   expenseId: z.string().uuid(),
 });
 const BusinessExpenseTagParamsSchema = BusinessExpenseParamsSchema.extend({ tagId: z.string().uuid() });
-const BusinessExpenseSuggestionParamsSchema = BusinessExpenseParamsSchema.extend({
-  suggestionId: z.string().uuid(),
-});
 
 export async function registerTagRoutes(
   app: FastifyInstance,
@@ -238,14 +224,11 @@ export async function registerTagRoutes(
   );
 
   // ----------------------------------------------------------------
-  // Scope routes — personal
+  // Expense-tag associations — personal scope
   // ----------------------------------------------------------------
 
   const personalTagCollection = "/api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/tags";
   const personalTagItem = `${personalTagCollection}/:tagId`;
-  const personalSuggestions = "/api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/suggestions";
-  const personalSuggestionResolve = `${personalSuggestions}/:suggestionId/resolve`;
-  const personalEnrichmentRuns = "/api/v1/tenants/:tenantId/personal-profiles/:profileId/expenses/:expenseId/enrichment-runs";
 
   typedApp.get(
     personalTagCollection,
@@ -315,90 +298,12 @@ export async function registerTagRoutes(
     },
   );
 
-  typedApp.get(
-    personalSuggestions,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: PersonalExpenseParamsSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 200: EnrichmentSuggestionListSchema, ...standardErrors },
-      },
-    },
-    async (request) =>
-      options.tagDomain.listSuggestions({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: request.params.profileId,
-        businessId: null,
-        expenseId: request.params.expenseId,
-      }),
-  );
-
-  typedApp.post(
-    personalSuggestionResolve,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: PersonalExpenseSuggestionParamsSchema,
-        body: SuggestionResolveRequestSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 200: SuggestionResolveResponseSchema, ...standardErrors },
-      },
-    },
-    async (request) =>
-      options.tagDomain.resolveSuggestion({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: request.params.profileId,
-        businessId: null,
-        expenseId: request.params.expenseId,
-        suggestionId: request.params.suggestionId,
-        request: request.body as {
-          action: "accepted" | "rejected";
-          expectedSuggestionVersion: number;
-          expectedExpenseVersion: number;
-          idempotencyKey: string;
-          taxAcceptance?: { businessTaxProfileId: string; deductiblePercent: string };
-        },
-        requestId: request.id,
-      }),
-  );
-
-  typedApp.post(
-    personalEnrichmentRuns,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: PersonalExpenseParamsSchema,
-        body: SuggestionRerunRequestSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 204: z.null(), ...standardErrors },
-      },
-    },
-    async (request, reply) => {
-      await options.tagDomain.rerunEnrichment({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: request.params.profileId,
-        businessId: null,
-        expenseId: request.params.expenseId,
-        kinds: request.body.kinds,
-        requestId: request.id,
-      });
-      return reply.code(204).send(null);
-    },
-  );
-
   // ----------------------------------------------------------------
-  // Scope routes — business
+  // Expense-tag associations — business scope
   // ----------------------------------------------------------------
 
   const businessTagCollection = "/api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/tags";
   const businessTagItem = `${businessTagCollection}/:tagId`;
-  const businessSuggestions = "/api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/suggestions";
-  const businessSuggestionResolve = `${businessSuggestions}/:suggestionId/resolve`;
-  const businessEnrichmentRuns = "/api/v1/tenants/:tenantId/businesses/:businessId/expenses/:expenseId/enrichment-runs";
 
   typedApp.get(
     businessTagCollection,
@@ -462,81 +367,6 @@ export async function registerTagRoutes(
         expenseId: request.params.expenseId,
         tagId: request.params.tagId,
         expectedVersion: request.body.expectedVersion,
-        requestId: request.id,
-      });
-      return reply.code(204).send(null);
-    },
-  );
-
-  typedApp.get(
-    businessSuggestions,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: BusinessExpenseParamsSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 200: EnrichmentSuggestionListSchema, ...standardErrors },
-      },
-    },
-    async (request) =>
-      options.tagDomain.listSuggestions({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: null,
-        businessId: request.params.businessId,
-        expenseId: request.params.expenseId,
-      }),
-  );
-
-  typedApp.post(
-    businessSuggestionResolve,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: BusinessExpenseSuggestionParamsSchema,
-        body: SuggestionResolveRequestSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 200: SuggestionResolveResponseSchema, ...standardErrors },
-      },
-    },
-    async (request) =>
-      options.tagDomain.resolveSuggestion({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: null,
-        businessId: request.params.businessId,
-        expenseId: request.params.expenseId,
-        suggestionId: request.params.suggestionId,
-        request: request.body as {
-          action: "accepted" | "rejected";
-          expectedSuggestionVersion: number;
-          expectedExpenseVersion: number;
-          idempotencyKey: string;
-          taxAcceptance?: { businessTaxProfileId: string; deductiblePercent: string };
-        },
-        requestId: request.id,
-      }),
-  );
-
-  typedApp.post(
-    businessEnrichmentRuns,
-    {
-      preHandler: authentication(options.identityResolver),
-      schema: {
-        params: BusinessExpenseParamsSchema,
-        body: SuggestionRerunRequestSchema,
-        security: [{ tenantBearer: [] }],
-        response: { 204: z.null(), ...standardErrors },
-      },
-    },
-    async (request, reply) => {
-      await options.tagDomain.rerunEnrichment({
-        actorUserId: actorUserId(request),
-        tenantId: request.params.tenantId,
-        profileId: null,
-        businessId: request.params.businessId,
-        expenseId: request.params.expenseId,
-        kinds: request.body.kinds,
         requestId: request.id,
       });
       return reply.code(204).send(null);

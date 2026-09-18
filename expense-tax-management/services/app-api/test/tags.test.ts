@@ -995,12 +995,12 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
            'expense', '${expId}', 1,
-           '{}', 'expense-enrichment-v1')
+           '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1011,18 +1011,21 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
            kind, tag_id, spending_category_id, tax_category_definition_id,
            business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
-           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key,
+           resolved_by_user_id, resolved_at)
         VALUES
           -- pending suggestion for source tag
           ('${pendingSugId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            '${expId}', '${fakeJobId}', 'tag', '${srcTag.id}', NULL, NULL,
            NULL, NULL, NULL, NULL,
-           'historical', 0.9, '${"a".repeat(64)}', 'pending', 1, 1, 'pending-sug-${runKey}'),
+           'historical', 0.9, '${"a".repeat(64)}', 'pending', 1, 1, 'pending-sug-${runKey}',
+           NULL, NULL),
           -- accepted suggestion for source tag (terminal — must NOT change)
           ('${acceptedSugId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            '${expId}', '${fakeJobId}', 'tag', '${srcTag.id}', NULL, NULL,
            NULL, NULL, NULL, NULL,
-           'historical', 0.8, '${"b".repeat(64)}', 'accepted', 2, 1, 'accepted-sug-${runKey}')
+           'historical', 0.8, '${"b".repeat(64)}', 'accepted', 2, 1, 'accepted-sug-${runKey}',
+           '${T8_USER_ID}', now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1078,12 +1081,12 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
            'expense', '${expId}', 1,
-           '{}', 'expense-enrichment-v1')
+           '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1152,12 +1155,12 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
            'expense', '${expId}', 1,
-           '{}', 'expense-enrichment-v1')
+           '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1225,12 +1228,12 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
            'expense', '${expId}', 1,
-           '{}', 'expense-enrichment-v1')
+           '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1295,12 +1298,12 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
            'expense', '${expId}', 1,
-           '{}', 'expense-enrichment-v1')
+           '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 

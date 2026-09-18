@@ -247,8 +247,22 @@ describe.skipIf(!requested)(
         INSERT INTO app.taxonomy_versions (id, jurisdiction_code, tax_year, code, name, status, source_url, source_revision, source_checksum)
         VALUES ('${TX_TAXVER_ID}', 'US-FEDERAL', 2025, 'tx-v1', 'TX Taxonomy', 'active', 'https://test.local', 'rev1', '${"a".repeat(64)}')
         ON CONFLICT DO NOTHING;
+        -- Additional years needed for tests that create profiles with years 2022/2023/2024.
+        -- Each business_tax_profile row must reference a (taxonomy_version_id, tax_year) pair
+        -- that exists in taxonomy_versions.
+        INSERT INTO app.taxonomy_versions (id, jurisdiction_code, tax_year, code, name, status, source_url, source_revision, source_checksum)
+        VALUES
+          ('7f000000-0000-4000-8000-000000000010', 'US-FEDERAL', 2024, 'tx-v2', 'TX 2024', 'active', 'https://test.local', 'rev1', '${"b".repeat(64)}'),
+          ('7f000000-0000-4000-8000-000000000011', 'US-FEDERAL', 2023, 'tx-v3', 'TX 2023', 'active', 'https://test.local', 'rev1', '${"c".repeat(64)}'),
+          ('7f000000-0000-4000-8000-000000000012', 'US-FEDERAL', 2022, 'tx-v4', 'TX 2022', 'active', 'https://test.local', 'rev1', '${"d".repeat(64)}')
+        ON CONFLICT DO NOTHING;
         INSERT INTO app.tax_category_definitions (id, taxonomy_version_id, code, name, status, sort_order)
-        VALUES ('${TX_TAXCAT_ID}', '${TX_TAXVER_ID}', 'MEALS', 'Meals', 'active', 1)
+        VALUES
+          ('${TX_TAXCAT_ID}', '${TX_TAXVER_ID}', 'MEALS', 'Meals', 'active', 1),
+          -- Tax categories for additional years (same IDs reused across taxonomies for test simplicity)
+          ('7f000000-0000-4000-8000-000000000020', '7f000000-0000-4000-8000-000000000010', 'MEALS24', 'Meals 2024', 'active', 1),
+          ('7f000000-0000-4000-8000-000000000021', '7f000000-0000-4000-8000-000000000011', 'MEALS23', 'Meals 2023', 'active', 1),
+          ('7f000000-0000-4000-8000-000000000022', '7f000000-0000-4000-8000-000000000012', 'MEALS22', 'Meals 2022', 'active', 1)
         ON CONFLICT DO NOTHING;
       `);
     });
@@ -264,7 +278,10 @@ describe.skipIf(!requested)(
       sugId: string; expId: string; fakeJobId: string;
       profileId: string; profileVersion: number; taxCatId: string;
       status?: string; idemKey: string;
+      taxVersionId?: string; taxYear?: number;
     }): void {
+      const tvId = opts.taxVersionId ?? TX_TAXVER_ID;
+      const tYear = opts.taxYear ?? 2025;
       runtimeSqlTx(`
         INSERT INTO app.expense_enrichment_suggestions
           (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
@@ -274,7 +291,7 @@ describe.skipIf(!requested)(
         VALUES
           ('${opts.sugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            '${opts.expId}', '${opts.fakeJobId}', 'tax_category', NULL, NULL, '${opts.taxCatId}',
-           '${opts.profileId}', ${opts.profileVersion}, '${TX_TAXVER_ID}', 2025,
+           '${opts.profileId}', ${opts.profileVersion}, '${tvId}', ${tYear},
            'historical', 0.8, '${"f".repeat(64)}', '${opts.status ?? "pending"}', 1, 1, '${opts.idemKey}')
         ON CONFLICT DO NOTHING;
       `);
@@ -306,11 +323,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -345,7 +362,7 @@ describe.skipIf(!requested)(
         INSERT INTO app.business_tax_profiles
           (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
         VALUES
-          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2024, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2024, '7f000000-0000-4000-8000-000000000010', 'schedule_c', 'cash', 'active')
         ON CONFLICT DO NOTHING;
       `);
 
@@ -362,11 +379,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -375,6 +392,8 @@ describe.skipIf(!requested)(
         sugId: pendingSugId, expId, fakeJobId,
         profileId, profileVersion: 1, taxCatId: TX_TAXCAT_ID,
         idemKey: `tx-l2-sug-${runKey}`,
+        taxVersionId: "7f000000-0000-4000-8000-000000000010",
+        taxYear: 2024,
       });
 
       // Close the profile
@@ -401,7 +420,7 @@ describe.skipIf(!requested)(
         INSERT INTO app.business_tax_profiles
           (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
         VALUES
-          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2023, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2023, '7f000000-0000-4000-8000-000000000011', 'schedule_c', 'cash', 'active')
         ON CONFLICT DO NOTHING;
       `);
 
@@ -418,11 +437,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -431,6 +450,8 @@ describe.skipIf(!requested)(
         sugId: pendingSugId, expId, fakeJobId,
         profileId, profileVersion: 1, taxCatId: TX_TAXCAT_ID,
         idemKey: `tx-l3-sug-${runKey}`,
+        taxVersionId: "7f000000-0000-4000-8000-000000000011",
+        taxYear: 2023,
       });
 
       // Upsert a treatment — supersedes pending tax suggestions for the expense
@@ -441,8 +462,8 @@ describe.skipIf(!requested)(
         expenseId: expId,
         request: {
           businessTaxProfileId: profileId,
-          taxonomyVersionId: TX_TAXVER_ID,
-          taxCategoryDefinitionId: TX_TAXCAT_ID,
+          taxonomyVersionId: "7f000000-0000-4000-8000-000000000011", // matches 2023 profile
+          taxCategoryDefinitionId: "7f000000-0000-4000-8000-000000000021", // category in 2023 taxonomy
           deductiblePercent: "100.00",
           reviewStatus: "reviewed",
         },
@@ -463,7 +484,7 @@ describe.skipIf(!requested)(
         INSERT INTO app.business_tax_profiles
           (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
         VALUES
-          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2022, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2022, '7f000000-0000-4000-8000-000000000012', 'schedule_c', 'cash', 'active')
         ON CONFLICT DO NOTHING;
       `);
 
@@ -480,11 +501,11 @@ describe.skipIf(!requested)(
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
            target_aggregate_type, target_aggregate_id, expected_aggregate_version,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
-           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
         ON CONFLICT DO NOTHING;
       `);
 
@@ -502,12 +523,12 @@ describe.skipIf(!requested)(
           ('${acceptedSugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL, '${TX_TAXCAT_ID}',
            '${profileId}', 1, '${TX_TAXVER_ID}', 2022,
-           'historical', 0.8, '${"g".repeat(64)}', 'accepted', 2, 1, 'tx-l4-accepted-${runKey}',
+           'historical', 0.8, '${"a".repeat(64)}', 'accepted', 2, 1, 'tx-l4-accepted-${runKey}',
            '${TX_USER_ID}', now()),
           ('${rejectedSugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
            '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL, '${TX_TAXCAT_ID}',
            '${profileId}', 1, '${TX_TAXVER_ID}', 2022,
-           'historical', 0.7, '${"h".repeat(64)}', 'rejected', 2, 1, 'tx-l4-rejected-${runKey}',
+           'historical', 0.7, '${"b".repeat(64)}', 'rejected', 2, 1, 'tx-l4-rejected-${runKey}',
            '${TX_USER_ID}', now())
         ON CONFLICT DO NOTHING;
       `);

@@ -67,6 +67,7 @@ import { registerJobRoutes } from "./routes/jobs.js";
 import { createDeduplicationDomain, type DeduplicationDomain } from "./domain/deduplication.js";
 import { createTagDomain, type TagDomain } from "./domain/tags.js";
 import { registerTagRoutes } from "./routes/tags.js";
+import { registerEnrichmentRoutes } from "./routes/enrichment.js";
 import { registerExportRoutes } from "./routes/exports.js";
 import { createExportsDomain, type ExportsDomain } from "./domain/exports.js";
 import { registerFileRoutes } from "./routes/files.js";
@@ -362,6 +363,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       : {}),
   });
   app.register(registerTagRoutes, {
+    identityResolver: identityDomain,
+    tagDomain,
+  });
+  app.register(registerEnrichmentRoutes, {
     identityResolver: identityDomain,
     tagDomain,
   });

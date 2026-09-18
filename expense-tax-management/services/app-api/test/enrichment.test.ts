@@ -22,6 +22,8 @@ import {
   buildEnrichmentInput,
   applyEnrichmentResult,
   twentyFourMonthCutoff,
+  resolveSuggestion,
+  rerunEnrichment,
 } from "../src/domain/enrichment.js";
 import {
   createEnrichmentJobsDomain,
@@ -120,8 +122,53 @@ describe("domain/enrichment.ts — module exports", () => {
     expect(typeof applyEnrichmentResult).toBe("function");
   });
 
-  // F15: resolveSuggestion and rerunEnrichment removed from enrichment.ts.
-  // Task 8 owns those operations. No stubs needed.
+  // Task 8: real implementations (no stubs).
+  it("resolveSuggestion is exported as a function", () => {
+    expect(typeof resolveSuggestion).toBe("function");
+    expect(resolveSuggestion.length).toBeGreaterThanOrEqual(2); // (database, input)
+  });
+
+  it("rerunEnrichment is exported as a function", () => {
+    expect(typeof rerunEnrichment).toBe("function");
+    expect(rerunEnrichment.length).toBeGreaterThanOrEqual(2); // (database, input)
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Task 8 — resolveSuggestion / rerunEnrichment contract smoke tests   //
+// ------------------------------------------------------------------ //
+
+describe("resolveSuggestion — input contract validation (domain-level, no live DB)", () => {
+  // These tests verify that the domain function signature and parameter
+  // contract are correct at the TypeScript level; behavioral tests with
+  // a real DB live in enrichment.test.ts live section (T8-R*) and
+  // app-domain-3c-auto-tagging.test.ts (T8-live-*).
+  it("accepts 'accepted' and 'rejected' actions, rejects 'superseded' at contract level", async () => {
+    // The SuggestionResolveRequestSchema no longer includes 'superseded'.
+    // This is a pure contract test; no DB call is made.
+    const { SuggestionResolveRequestSchema } = await import("@expense-tax/contracts");
+    const accepted = SuggestionResolveRequestSchema.safeParse({
+      action: "accepted",
+      expectedSuggestionVersion: 1,
+      expectedExpenseVersion: 1,
+      idempotencyKey: "test-key",
+    });
+    const rejected = SuggestionResolveRequestSchema.safeParse({
+      action: "rejected",
+      expectedSuggestionVersion: 1,
+      expectedExpenseVersion: 1,
+      idempotencyKey: "test-key",
+    });
+    const superseded = SuggestionResolveRequestSchema.safeParse({
+      action: "superseded",
+      expectedSuggestionVersion: 1,
+      expectedExpenseVersion: 1,
+      idempotencyKey: "test-key",
+    });
+    expect(accepted.success).toBe(true);
+    expect(rejected.success).toBe(true);
+    expect(superseded.success).toBe(false);
+  });
 });
 
 describe("createEnrichmentJobsDomain — applied outcome no longer rejected", () => {

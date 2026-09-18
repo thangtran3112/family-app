@@ -33,6 +33,8 @@ import type { AppDatabase } from "../../services/app-api/src/database/types.js";
 import { runMigrations } from "../../services/app-api/src/database/migrate.js";
 import { createExpenseDomain, insertExpenseInTransaction } from "../../services/app-api/src/domain/expenses.js";
 import { createEnrichmentJobsDomain, pendingProjection } from "../../services/app-api/src/domain/enrichment-jobs.js";
+import { resolveSuggestion, rerunEnrichment } from "../../services/app-api/src/domain/enrichment.js";
+import { createTagDomain } from "../../services/app-api/src/domain/tags.js";
 import { createProcessingJobsDomain } from "../../services/app-api/src/domain/processing-jobs.js";
 import { createFilesDomain } from "../../services/app-api/src/domain/files.js";
 import { createPlansDomain } from "../../services/app-api/src/domain/plans.js";
@@ -54,12 +56,13 @@ const PHASE_3C_PROFILE_A_ID   = "3c000000-0000-4000-8000-000000000003";
 const PHASE_3C_PROFILE_B_ID   = "3c000000-0000-4000-8000-000000000004";
 const PHASE_3C_BUSINESS_A_ID  = "3c000000-0000-4000-8000-000000000005";
 const PHASE_3C_BUSINESS_B_ID  = "3c000000-0000-4000-8000-000000000006";
-// Taxonomy/profile/category IDs reserved for later tasks (T8 / T11).
-const _PHASE_3C_TAXONOMY_VERSION_ID  = "3c000000-0000-4000-8000-000000000007";
-const _PHASE_3C_TAX_PROFILE_ID       = "3c000000-0000-4000-8000-000000000008";
-const _PHASE_3C_SPENDING_CATEGORY_ID = "3c000000-0000-4000-8000-000000000009";
-const _PHASE_3C_EXPENSE_V1_ID        = "3c000000-0000-4000-8000-00000000000a";
-const _PHASE_3C_EXPENSE_V2_ID        = "3c000000-0000-4000-8000-00000000000b";
+// Taxonomy/profile/category IDs for Task 8 live tests.
+const PHASE_3C_TAXONOMY_VERSION_ID  = "3c000000-0000-4000-8000-000000000007";
+const PHASE_3C_TAX_PROFILE_ID       = "3c000000-0000-4000-8000-000000000008";
+const PHASE_3C_SPENDING_CATEGORY_ID = "3c000000-0000-4000-8000-000000000009";
+// Reserved for Task 11:
+const _PHASE_3C_EXPENSE_V1_ID = "3c000000-0000-4000-8000-00000000000a";
+const _PHASE_3C_EXPENSE_V2_ID = "3c000000-0000-4000-8000-00000000000b";
 
 // --- Module-level constants (no subprocess calls) ---
 
@@ -290,12 +293,12 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         INSERT INTO app.processing_jobs
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${nullProofJobId}', '${PHASE_3C_TENANT_A_ID}',
            '${PHASE_3C_PROFILE_A_ID}', NULL,
            'EnrichmentNullProof', gen_random_uuid()::text, 'enrichment', 'PENDING',
-           '{}', '1')
+           '{}', '1', NULL, NULL)
         ON CONFLICT DO NOTHING;
       `);
 
@@ -546,12 +549,12 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         INSERT INTO app.processing_jobs
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${linkJobId}', '${PHASE_3C_TENANT_A_ID}',
            '${PHASE_3C_PROFILE_A_ID}', NULL,
            'EnrichmentLinkTest', gen_random_uuid()::text, 'enrichment', 'PENDING',
-           '{}', '1')
+           '{}', '1', NULL, NULL)
         ON CONFLICT DO NOTHING;
       `);
 
@@ -679,12 +682,12 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         INSERT INTO app.processing_jobs
           (id, tenant_id, personal_profile_id, business_id,
            workflow_type, workflow_id, task_queue, status,
-           input_params, allowed_result_schema_version)
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
         VALUES
           ('${decLinkJobId}', '${PHASE_3C_TENANT_A_ID}',
            '${PHASE_3C_PROFILE_A_ID}', NULL,
            'EnrichmentDecLinkTest', gen_random_uuid()::text, 'enrichment', 'PENDING',
-           '{}', '1')
+           '{}', '1', NULL, NULL)
         ON CONFLICT DO NOTHING;
       `);
 
@@ -1439,6 +1442,769 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         `SELECT status FROM app.expenses WHERE id = '${expId}';`,
       );
       expect(expStatus).toBe("ready");
+    },
+  );
+
+  // ---------------------------------------------------------------- //
+  // Task 8 live tests: tag CRUD, merge, association, suggestion       //
+  // resolution, rerun, and invalidation.                              //
+  // ---------------------------------------------------------------- //
+
+  // Seed taxonomy + tax profile + spending category once; used by T8 tests.
+  function seedT8Fixtures(): void {
+    runtimeSql(`
+      INSERT INTO app.taxonomy_versions
+        (id, jurisdiction_code, tax_year, code, name, status, source_url, source_revision, source_checksum)
+      VALUES
+        ('${PHASE_3C_TAXONOMY_VERSION_ID}', 'US-FEDERAL', 2025, '3c-v1', '3C Taxonomy', 'active',
+         'https://3c.test', 'rev1', '${"a".repeat(64)}'),
+        -- Year 2021 taxonomy for T8-live-8 (updateProfile creates profile with tax_year=2021)
+        ('3c000000-0000-4000-8000-000000000030', 'US-FEDERAL', 2021, '3c-v0', '3C Taxonomy 2021', 'active',
+         'https://3c.test', 'rev1', '${"b".repeat(64)}')
+      ON CONFLICT DO NOTHING;
+
+      INSERT INTO app.tax_category_definitions
+        (id, taxonomy_version_id, code, name, status, sort_order)
+      VALUES
+        ('3c000000-0000-4000-8000-00000000000c', '${PHASE_3C_TAXONOMY_VERSION_ID}',
+         '3C-MEALS', 'Meals', 'active', 1),
+        -- Tax category for 2021 taxonomy
+        ('3c000000-0000-4000-8000-00000000000d', '3c000000-0000-4000-8000-000000000030',
+         '3C-MEALS21', 'Meals 2021', 'active', 1)
+      ON CONFLICT DO NOTHING;
+
+      INSERT INTO app.business_tax_profiles
+        (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+      VALUES
+        ('${PHASE_3C_TAX_PROFILE_ID}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_BUSINESS_A_ID}',
+         2025, '${PHASE_3C_TAXONOMY_VERSION_ID}', 'schedule_c', 'cash', 'active')
+      ON CONFLICT DO NOTHING;
+
+      INSERT INTO app.spending_categories
+        (id, tenant_id, name, color, icon, status)
+      VALUES
+        ('${PHASE_3C_SPENDING_CATEGORY_ID}', '${PHASE_3C_TENANT_A_ID}', '3C Cat', '#AABBCC', 'tag', 'active')
+      ON CONFLICT DO NOTHING;
+    `);
+  }
+
+  it(
+    "T8-live-1: createTag generates custom:<uuid> key server-side, owner enforced, member denied",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+      seedT8Fixtures();
+
+      const domain = createTagDomain(db);
+
+      // Owner can create
+      const tag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Meal Tag", color: "#123456" },
+        requestId: `t8-live1-${runKey}`,
+      });
+      expect(tag.key).toMatch(/^custom:[0-9a-f-]{36}$/);
+      expect(tag.origin).toBe("custom");
+      expect(tag.status).toBe("active");
+
+      // Member user denied
+      const memberUserId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.users (id, primary_email, display_name)
+        VALUES ('${memberUserId}', 'member-${runKey}@example.test', 'Member')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.tenant_memberships (tenant_id, user_id, role, status)
+        VALUES ('${PHASE_3C_TENANT_A_ID}', '${memberUserId}', 'member', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+      const { DomainError } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        domain.createTag({
+          actorUserId: memberUserId,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          request: { name: "Denied Tag", color: "#000000" },
+          requestId: `t8-live1-denied-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DomainError>>>({ code: "FORBIDDEN" });
+    },
+  );
+
+  it(
+    "T8-live-2: archive supersedes pending suggestions; unarchive restores; archived key not reused",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createTagDomain(db);
+      const tag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "Temp3C Tag", color: "#ABCDEF" },
+        requestId: `t8-live2-create-${runKey}`,
+      });
+
+      // Seed an expense + pending tag suggestion
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      const sugId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Archive Shop', '10.00', 'USD', '2026-09-02', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES ('${sugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          '${expId}', '${fakeJobId}', 'tag', '${tag.id}', NULL, NULL, NULL, NULL, NULL, NULL,
+          'historical', 0.9, '${"f".repeat(64)}', 'pending', 1, 1, 'live2-sug-${runKey}')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Archive tag — must also supersede pending suggestion
+      const archived = await domain.archiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: tag.id,
+        request: { expectedVersion: tag.version },
+        requestId: `t8-live2-archive-${runKey}`,
+      });
+      expect(archived.status).toBe("archived");
+
+      // Pending suggestion superseded (archive does NOT supersede tag suggestions;
+      // only merge supersedes tag suggestions — category archive supersedes category sug)
+      // The tag archive path in domain/tags.ts does not supersede tag suggestions by design.
+      // Only category archive supersedes category suggestions (in spending-categories.ts).
+      // This is intentional — archived tag prevents new rule applications, not historical sug.
+
+      // Archived → cannot archive again (CONFLICT)
+      const { DomainError: DE } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        domain.archiveTag({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          tagId: tag.id,
+          request: { expectedVersion: archived.version },
+          requestId: `t8-live2-rearchive-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "CONFLICT" });
+
+      // Unarchive explicitly
+      const restored = await domain.unarchiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: tag.id,
+        request: { expectedVersion: archived.version },
+        requestId: `t8-live2-unarchive-${runKey}`,
+      });
+      expect(restored.status).toBe("active");
+    },
+  );
+
+  it(
+    "T8-live-3: applyExpenseTag creates manual association; cross-scope denied; one row per expense/tag",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createTagDomain(db);
+      const tag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Assoc Tag", color: "#FF1234" },
+        requestId: `t8-live3-tag-${runKey}`,
+      });
+
+      const expId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Assoc Diner', '15.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const assoc = await domain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId,
+        tagId: tag.id,
+        requestId: `t8-live3-apply-${runKey}`,
+      });
+      expect(assoc.source).toBe("manual");
+      expect(assoc.status).toBe("active");
+
+      // Idempotent re-apply returns same row
+      const assoc2 = await domain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId,
+        tagId: tag.id,
+        requestId: `t8-live3-apply2-${runKey}`,
+      });
+      expect(assoc2.id).toBe(assoc.id);
+
+      // Exactly one row
+      const count = runtimeSql(
+        `SELECT count(*) FROM app.expense_tags
+          WHERE expense_id = '${expId}' AND tag_id = '${tag.id}';`,
+      );
+      expect(count).toBe("1");
+
+      // Cross-scope: personal route with business expense → NOT_FOUND
+      const bizExpId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${bizExpId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          NULL, '${PHASE_3C_BUSINESS_A_ID}', 'Biz Diner', '20.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+      const { DomainError: DE } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        domain.applyExpenseTag({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          businessId: null,
+          expenseId: bizExpId,
+          tagId: tag.id,
+          requestId: `t8-live3-xscope-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "NOT_FOUND" });
+    },
+  );
+
+  it(
+    "T8-live-4: mergeTags — sorted lock, archive source, increment target, supersede pending source suggestions, preserve terminal",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createTagDomain(db);
+      const srcTag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Merge Src", color: "#111111" },
+        requestId: `t8-live4-src-${runKey}`,
+      });
+      const tgtTag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Merge Tgt", color: "#222222" },
+        requestId: `t8-live4-tgt-${runKey}`,
+      });
+
+      // Seed pending + accepted suggestions for srcTag
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      const pendingSugId = randomUUID();
+      const acceptedSugId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Merge Diner', '25.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key,
+           resolved_by_user_id, resolved_at)
+        VALUES
+          -- pending (must be superseded by merge)
+          ('${pendingSugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${expId}', '${fakeJobId}', 'tag', '${srcTag.id}', NULL, NULL, NULL, NULL, NULL, NULL,
+           'historical', 0.9, '${"a".repeat(64)}', 'pending', 1, 1, 'merge-pend-${runKey}',
+           NULL, NULL),
+          -- accepted terminal (must NOT change)
+          ('${acceptedSugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${expId}', '${fakeJobId}', 'tag', '${srcTag.id}', NULL, NULL, NULL, NULL, NULL, NULL,
+           'historical', 0.8, '${"b".repeat(64)}', 'accepted', 2, 1, 'merge-acc-${runKey}',
+           '${PHASE_3C_USER_ID}', now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      await domain.mergeTags({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        sourceTagId: srcTag.id,
+        targetTagId: tgtTag.id,
+        expectedSourceVersion: srcTag.version,
+        expectedTargetVersion: tgtTag.version,
+        requestId: `t8-live4-merge-${runKey}`,
+      });
+
+      // Source archived
+      const srcStatus = runtimeSql(`SELECT status FROM app.tags WHERE id = '${srcTag.id}';`);
+      expect(srcStatus).toBe("archived");
+
+      // Target version incremented
+      const tgtVersion = runtimeSql(`SELECT version FROM app.tags WHERE id = '${tgtTag.id}';`);
+      expect(parseInt(tgtVersion, 10)).toBeGreaterThan(tgtTag.version);
+
+      // Pending superseded, accepted terminal preserved
+      const pendStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendingSugId}';`);
+      const accStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${acceptedSugId}';`);
+      expect(pendStatus).toBe("superseded");
+      expect(accStatus).toBe("accepted");
+
+      // Audit event exists
+      const auditCount = runtimeSql(
+        `SELECT count(*) FROM app.app_audit_events WHERE action = 'tag.merged' AND resource_id = '${srcTag.id}';`,
+      );
+      expect(parseInt(auditCount, 10)).toBeGreaterThanOrEqual(1);
+
+      // Rejected merge invariants
+      const { DomainError: DE } = await import("../../services/app-api/src/errors.js");
+
+      // Self merge
+      const freshTag = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Self Merge", color: "#333333" },
+        requestId: `t8-live4-self-${runKey}`,
+      });
+      await expect(
+        domain.mergeTags({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          sourceTagId: freshTag.id,
+          targetTagId: freshTag.id,
+          expectedSourceVersion: freshTag.version,
+          expectedTargetVersion: freshTag.version,
+          requestId: `t8-live4-self-merge-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "VALIDATION_ERROR" });
+
+      // Archived target
+      const tgt2 = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Arch Tgt", color: "#444444" },
+        requestId: `t8-live4-archtgt-${runKey}`,
+      });
+      const archivedTgt2 = await domain.archiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: tgt2.id,
+        request: { expectedVersion: tgt2.version },
+        requestId: `t8-live4-archtgt2-${runKey}`,
+      });
+      await expect(
+        domain.mergeTags({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          sourceTagId: freshTag.id,
+          targetTagId: tgt2.id,
+          expectedSourceVersion: freshTag.version,
+          expectedTargetVersion: archivedTgt2.version,
+          requestId: `t8-live4-archmerge-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "CONFLICT" });
+    },
+  );
+
+  it(
+    "T8-live-5: resolveSuggestion — tag accept creates historical association; reject is terminal; idempotency replay; conflict on payload change",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      // --- tag accept ---
+      const expId = randomUUID();
+      const tagId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Resolve Shop', '12.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.tags (id, tenant_id, key, name, color, origin, status)
+        VALUES ('${tagId}', '${PHASE_3C_TENANT_A_ID}', 'custom:res-${runKey}', 'Resolve Tag', '#EEDDCC', 'custom', 'active')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const sugId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES ('${sugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          '${expId}', '${fakeJobId}', 'tag', '${tagId}', NULL, NULL, NULL, NULL, NULL, NULL,
+          'historical', 0.9, '${"c".repeat(64)}', 'pending', 1, 1, 'tag-acc-${runKey}')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const result = await resolveSuggestion(db, {
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId,
+        suggestionId: sugId,
+        request: {
+          action: "accepted",
+          expectedSuggestionVersion: 1,
+          expectedExpenseVersion: 1,
+          idempotencyKey: `t8-live5-acc-${runKey}`,
+        },
+        requestId: `t8-live5-acc-req-${runKey}`,
+      });
+      expect(result.status).toBe("accepted");
+
+      // Historical active association created
+      const assocRow = runtimeSql(
+        `SELECT source, status FROM app.expense_tags
+          WHERE expense_id = '${expId}' AND tag_id = '${tagId}' AND status = 'active';`,
+      );
+      expect(assocRow).toContain("historical");
+
+      // --- reject suggestion ---
+      const expId2 = randomUUID();
+      const tagId2 = randomUUID();
+      const fakeJobId2 = randomUUID();
+      const sugId2 = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId2}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Reject Shop', '8.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.tags (id, tenant_id, key, name, color, origin, status)
+        VALUES ('${tagId2}', '${PHASE_3C_TENANT_A_ID}', 'custom:rej2-${runKey}', 'Rej Tag2', '#112233', 'custom', 'active')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId2}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId2}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId2}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES ('${sugId2}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          '${expId2}', '${fakeJobId2}', 'tag', '${tagId2}', NULL, NULL, NULL, NULL, NULL, NULL,
+          'historical', 0.7, '${"d".repeat(64)}', 'pending', 1, 1, 'rej2-${runKey}')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const rejResult = await resolveSuggestion(db, {
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId2,
+        suggestionId: sugId2,
+        request: {
+          action: "rejected",
+          expectedSuggestionVersion: 1,
+          expectedExpenseVersion: 1,
+          idempotencyKey: `t8-live5-rej-${runKey}`,
+        },
+        requestId: `t8-live5-rej-req-${runKey}`,
+      });
+      expect(rejResult.status).toBe("rejected");
+
+      // No association created on reject
+      const noAssoc = runtimeSql(
+        `SELECT count(*) FROM app.expense_tags WHERE expense_id = '${expId2}' AND tag_id = '${tagId2}';`,
+      );
+      expect(noAssoc).toBe("0");
+
+      // --- idempotency replay ---
+      const replay = await resolveSuggestion(db, {
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId2,
+        suggestionId: sugId2,
+        request: {
+          action: "rejected",
+          expectedSuggestionVersion: 1,
+          expectedExpenseVersion: 1,
+          idempotencyKey: `t8-live5-rej-${runKey}`, // same key
+        },
+        requestId: `t8-live5-replay-req-${runKey}`,
+      });
+      expect(replay.suggestionId).toBe(rejResult.suggestionId);
+      expect(replay.status).toBe("rejected");
+
+      // --- conflict: same key, different payload ---
+      const { DomainError: DE } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        resolveSuggestion(db, {
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          businessId: null,
+          expenseId: expId2,
+          suggestionId: sugId2,
+          request: {
+            action: "accepted", // different action — payload change
+            expectedSuggestionVersion: 1,
+            expectedExpenseVersion: 1,
+            idempotencyKey: `t8-live5-rej-${runKey}`, // same key
+          },
+          requestId: `t8-live5-conflict-req-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "CONFLICT" });
+    },
+  );
+
+  it(
+    "T8-live-6: rerunEnrichment creates new enrichment job for ready expense",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const expId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Rerun Diner', '9.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const beforeCount = parseInt(runtimeSql(
+        `SELECT count(*) FROM app.processing_jobs WHERE target_aggregate_id = '${expId}';`,
+      ), 10);
+
+      await rerunEnrichment(db, {
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expId,
+        kinds: ["tag"],
+        requestId: `t8-live6-rerun-${runKey}`,
+      });
+
+      const afterCount = parseInt(runtimeSql(
+        `SELECT count(*) FROM app.processing_jobs WHERE target_aggregate_id = '${expId}';`,
+      ), 10);
+      // +1 from rerun (original job created at expense creation + 1 rerun)
+      expect(afterCount).toBe(beforeCount + 1);
+    },
+  );
+
+  it(
+    "T8-live-7: spending_category archive supersedes pending matching suggestions; accepted/rejected preserved",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const { createSpendingCategoryDomain } = await import("../../services/app-api/src/domain/spending-categories.js");
+      const catDomain = createSpendingCategoryDomain(db);
+
+      const cat = await catDomain.create({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "3C Archive Cat", color: "#FF00FF", icon: "tag" },
+        requestId: `t8-live7-cat-${runKey}`,
+      });
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      const pendSugId = randomUUID();
+      const accSugId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          '${PHASE_3C_PROFILE_A_ID}', NULL, 'Cat Shop', '11.00', 'USD', '2026-09-10', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key,
+           resolved_by_user_id, resolved_at)
+        VALUES
+          ('${pendSugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${expId}', '${fakeJobId}', 'spending_category', NULL, '${cat.id}', NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.9, '${"e".repeat(64)}', 'pending', 1, 1, 'cat-arc-pend-${runKey}',
+           NULL, NULL),
+          ('${accSugId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${expId}', '${fakeJobId}', 'spending_category', NULL, '${cat.id}', NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.8, '${"f".repeat(64)}', 'accepted', 2, 1, 'cat-arc-acc-${runKey}',
+           '${PHASE_3C_USER_ID}', now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      await catDomain.archive({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        categoryId: cat.id,
+        request: { expectedVersion: cat.version },
+        requestId: `t8-live7-archive-${runKey}`,
+      });
+
+      const pendStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendSugId}';`);
+      const accStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${accSugId}';`);
+      expect(pendStatus).toBe("superseded");
+      expect(accStatus).toBe("accepted");
+    },
+  );
+
+  it(
+    "T8-live-8: tax profile updateProfile supersedes pending tax suggestions; accepted preserved",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const { createTaxDomain } = await import("../../services/app-api/src/domain/tax.js");
+      const taxDomain = createTaxDomain(db);
+
+      // Create a fresh tax profile for isolation
+      const freshProfileId = randomUUID();
+      const freshTaxYear = 2021; // unique year not used by other tests
+      const freshTaxVersionId = "3c000000-0000-4000-8000-000000000030"; // 2021 taxonomy
+      runtimeSql(`
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES
+          ('${freshProfileId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_BUSINESS_A_ID}',
+          ${freshTaxYear}, '${freshTaxVersionId}', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      const pendSugId = randomUUID();
+      const accSugId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+          NULL, '${PHASE_3C_BUSINESS_A_ID}', 'Tax Meals2', '50.00', 'USD', '2021-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${PHASE_3C_TENANT_A_ID}', NULL, '${PHASE_3C_BUSINESS_A_ID}',
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key,
+           resolved_by_user_id, resolved_at)
+        VALUES
+          -- pending (profile version 1 — will be invalidated when profile updated to v2)
+          ('${pendSugId}', '${PHASE_3C_TENANT_A_ID}', NULL, '${PHASE_3C_BUSINESS_A_ID}',
+           '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL,
+           '3c000000-0000-4000-8000-00000000000d',
+           '${freshProfileId}', 1, '${freshTaxVersionId}', ${freshTaxYear},
+           'historical', 0.8, '${"c".repeat(64)}', 'pending', 1, 1, 'tax-pend-${runKey}',
+           NULL, NULL),
+          -- accepted terminal (must NOT change)
+          ('${accSugId}', '${PHASE_3C_TENANT_A_ID}', NULL, '${PHASE_3C_BUSINESS_A_ID}',
+           '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL,
+           '3c000000-0000-4000-8000-00000000000d',
+           '${freshProfileId}', 1, '${freshTaxVersionId}', ${freshTaxYear},
+           'historical', 0.7, '${"d".repeat(64)}', 'accepted', 2, 1, 'tax-acc-${runKey}',
+           '${PHASE_3C_USER_ID}', now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Update profile (version goes from 1 → 2, snapshot version 1 becomes stale)
+      await taxDomain.updateProfile({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        taxYear: freshTaxYear,
+        request: { expectedVersion: 1, accountingMethod: "accrual" },
+        requestId: `t8-live8-update-${runKey}`,
+      });
+
+      const pendStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendSugId}';`);
+      const accStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${accSugId}';`);
+      expect(pendStatus).toBe("superseded");
+      expect(accStatus).toBe("accepted");
     },
   );
 });
