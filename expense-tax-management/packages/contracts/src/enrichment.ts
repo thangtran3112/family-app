@@ -1,11 +1,17 @@
+/**
+ * Phase 3C enrichment public contracts.
+ *
+ * - ScopeSchema is canonical here; do not create another public scope schema elsewhere.
+ * - No internal worker input/result schemas; Task 3 owns those.
+ * - Spec authority: 2026-09-12-phase-3c-auto-tagging-design.md
+ */
 import { z } from "zod";
 
 import { TimestampSchema, TaxYearSchema, VersionSchema } from "./expenses.js";
+import { DeductiblePercentSchema } from "./tax-treatments.js";
 
 // ------------------------------------------------------------------ //
-// Scope
-// Canonical personal/business discriminated union.
-// Do NOT re-export from spending-categories.ts or any other public module.
+// Canonical scope discriminated union
 // ------------------------------------------------------------------ //
 
 export const ScopeSchema = z.union([
@@ -15,49 +21,57 @@ export const ScopeSchema = z.union([
 export type Scope = z.infer<typeof ScopeSchema>;
 
 // ------------------------------------------------------------------ //
+// Shared helpers
+// ------------------------------------------------------------------ //
+
+const ColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color must be a 6-digit hex string like #RRGGBB");
+
+/**
+ * Tag key: lowercase, trimmed, 1–100 chars.
+ * Allows namespace syntax: merchant:<slug>, timing:weekend, category:<key>, custom:<uuid>
+ * Characters: a-z 0-9 _ : . -
+ */
+const TagKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9_:.-]+$/, "Tag key must be lowercase and may contain letters, digits, underscores, colons, dots, or hyphens");
+
+// Scope XOR refine (personal XOR business)
+const scopeXorRefine = (value: { personalProfileId: string | null; businessId: string | null }) =>
+  (value.personalProfileId !== null) !== (value.businessId !== null);
+
+// ------------------------------------------------------------------ //
 // Tag
 // ------------------------------------------------------------------ //
 
 export const TagStatusSchema = z.enum(["active", "archived"]);
 export type TagStatus = z.infer<typeof TagStatusSchema>;
 
-export const TagOriginSchema = z.enum(["ai", "manual_baseline"]);
+export const TagOriginSchema = z.enum(["custom", "rule"]);
 export type TagOrigin = z.infer<typeof TagOriginSchema>;
-
-const TagKeySchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(100)
-  .regex(/^[a-z0-9_-]+$/, "Tag key must be lowercase alphanumeric with underscores or hyphens");
-
-const ColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 
 export const TagSchema = z
   .strictObject({
     id: z.uuid(),
     tenantId: z.uuid(),
-    personalProfileId: z.uuid().nullable(),
-    businessId: z.uuid().nullable(),
     key: z.string().min(1).max(100),
     name: z.string().min(1).max(100),
-    color: ColorSchema,
+    color: ColorSchema.nullable(),
     origin: TagOriginSchema,
     status: TagStatusSchema,
     version: VersionSchema,
+    createdByUserId: z.uuid().nullable(),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
-  })
-  .refine(
-    (value) => (value.personalProfileId !== null) !== (value.businessId !== null),
-    { message: "Exactly one personal profile or business scope is required" },
-  );
+  });
 export type Tag = z.infer<typeof TagSchema>;
 
 export const TagCreateRequestSchema = z.strictObject({
   key: TagKeySchema,
   name: z.string().trim().min(1).max(100),
-  color: ColorSchema,
+  color: ColorSchema.nullable().optional(),
 });
 export type TagCreateRequest = z.infer<typeof TagCreateRequestSchema>;
 
@@ -65,7 +79,7 @@ export const TagUpdateRequestSchema = z
   .strictObject({
     expectedVersion: VersionSchema,
     name: z.string().trim().min(1).max(100).optional(),
-    color: ColorSchema.optional(),
+    color: ColorSchema.nullable().optional(),
   })
   .refine(
     (value) => value.name !== undefined || value.color !== undefined,
@@ -78,6 +92,23 @@ export const TagArchiveRequestSchema = z.strictObject({
 });
 export type TagArchiveRequest = z.infer<typeof TagArchiveRequestSchema>;
 
+export const TagUnarchiveRequestSchema = z.strictObject({
+  expectedVersion: VersionSchema,
+});
+export type TagUnarchiveRequest = z.infer<typeof TagUnarchiveRequestSchema>;
+
+export const TagMergeRequestSchema = z
+  .strictObject({
+    sourceTagId: z.uuid(),
+    targetTagId: z.uuid(),
+    expectedSourceVersion: VersionSchema,
+    expectedTargetVersion: VersionSchema,
+  })
+  .refine((value) => value.sourceTagId !== value.targetTagId, {
+    message: "Source and target tags must be different",
+  });
+export type TagMergeRequest = z.infer<typeof TagMergeRequestSchema>;
+
 export const TagListSchema = z.strictObject({
   items: z.array(TagSchema),
   nextCursor: z.string().nullable(),
@@ -85,15 +116,36 @@ export const TagListSchema = z.strictObject({
 export type TagList = z.infer<typeof TagListSchema>;
 
 // ------------------------------------------------------------------ //
-// ExpenseTag  (tag association)
+// ExpenseTag  (one row per expense/tag decision)
 // ------------------------------------------------------------------ //
 
-export const ExpenseTagSchema = z.strictObject({
-  expenseId: z.uuid(),
-  tagId: z.uuid(),
-  tenantId: z.uuid(),
-  createdAt: TimestampSchema,
-});
+export const ExpenseTagSourceSchema = z.enum(["manual", "rule", "historical", "ai"]);
+export type ExpenseTagSource = z.infer<typeof ExpenseTagSourceSchema>;
+
+export const ExpenseTagStatusSchema = z.enum(["active", "removed"]);
+export type ExpenseTagStatus = z.infer<typeof ExpenseTagStatusSchema>;
+
+export const ExpenseTagSchema = z
+  .strictObject({
+    id: z.uuid(),
+    tenantId: z.uuid(),
+    personalProfileId: z.uuid().nullable(),
+    businessId: z.uuid().nullable(),
+    expenseId: z.uuid(),
+    tagId: z.uuid(),
+    source: ExpenseTagSourceSchema,
+    confidence: z.number().min(0).max(1),
+    ruleVersion: z.number().int().positive().nullable(),
+    suggestionId: z.uuid().nullable(),
+    status: ExpenseTagStatusSchema,
+    version: VersionSchema,
+    appliedByUserId: z.uuid().nullable(),
+    removedByUserId: z.uuid().nullable(),
+    appliedAt: TimestampSchema.nullable(),
+    removedAt: TimestampSchema.nullable(),
+    createdAt: TimestampSchema,
+  })
+  .refine(scopeXorRefine, { message: "Exactly one personal profile or business scope is required" });
 export type ExpenseTag = z.infer<typeof ExpenseTagSchema>;
 
 export const ExpenseTagAssociateRequestSchema = z.strictObject({
@@ -103,26 +155,39 @@ export type ExpenseTagAssociateRequest = z.infer<typeof ExpenseTagAssociateReque
 
 export const ExpenseTagRemoveRequestSchema = z.strictObject({
   tagId: z.uuid(),
+  expectedVersion: VersionSchema,
 });
 export type ExpenseTagRemoveRequest = z.infer<typeof ExpenseTagRemoveRequestSchema>;
 
+export const ExpenseTagListSchema = z.strictObject({
+  items: z.array(ExpenseTagSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ExpenseTagList = z.infer<typeof ExpenseTagListSchema>;
+
 // ------------------------------------------------------------------ //
-// ExpenseSpendingCategoryDecision
+// ExpenseSpendingCategoryDecision  (append-only history)
 // ------------------------------------------------------------------ //
 
-export const DecisionSourceSchema = z.enum(["ai", "manual_baseline", "manual_user"]);
+export const DecisionSourceSchema = z.enum(["manual", "manual_baseline", "historical", "ai"]);
 export type DecisionSource = z.infer<typeof DecisionSourceSchema>;
 
-export const ExpenseSpendingCategoryDecisionSchema = z.strictObject({
-  id: z.uuid(),
-  expenseId: z.uuid(),
-  tenantId: z.uuid(),
-  spendingCategoryId: z.uuid().nullable(),
-  source: DecisionSourceSchema,
-  actorUserId: z.uuid().nullable(),
-  expenseVersion: VersionSchema,
-  createdAt: TimestampSchema,
-});
+export const ExpenseSpendingCategoryDecisionSchema = z
+  .strictObject({
+    id: z.uuid(),
+    tenantId: z.uuid(),
+    personalProfileId: z.uuid().nullable(),
+    businessId: z.uuid().nullable(),
+    expenseId: z.uuid(),
+    priorSpendingCategoryId: z.uuid().nullable(),
+    newSpendingCategoryId: z.uuid().nullable(),
+    source: DecisionSourceSchema,
+    actorUserId: z.uuid().nullable(),
+    expenseVersion: VersionSchema,
+    suggestionId: z.uuid().nullable(),
+    createdAt: TimestampSchema,
+  })
+  .refine(scopeXorRefine, { message: "Exactly one personal profile or business scope is required" });
 export type ExpenseSpendingCategoryDecision = z.infer<typeof ExpenseSpendingCategoryDecisionSchema>;
 
 export const ExpenseSpendingCategoryDecisionListSchema = z.strictObject({
@@ -148,60 +213,101 @@ export const EnrichmentSuggestionStatusSchema = z.enum([
 ]);
 export type EnrichmentSuggestionStatus = z.infer<typeof EnrichmentSuggestionStatusSchema>;
 
-const EvidenceHashSchema = z.string().regex(/^[a-f0-9]{64}$/, "Evidence hash must be a 64-char hex SHA-256");
+export const EnrichmentSuggestionSourceSchema = z.enum(["historical", "ai"]);
+export type EnrichmentSuggestionSource = z.infer<typeof EnrichmentSuggestionSourceSchema>;
 
+const EvidenceHashSchema = z.string().regex(/^[a-f0-9]{64}$/, "Evidence hash must be a 64-char lowercase hex SHA-256");
+
+// Base fields shared by all kinds
 const BaseSuggestionFields = {
   id: z.uuid(),
   tenantId: z.uuid(),
+  personalProfileId: z.uuid().nullable(),
+  businessId: z.uuid().nullable(),
   expenseId: z.uuid(),
   jobId: z.uuid(),
   kind: EnrichmentSuggestionKindSchema,
-  status: EnrichmentSuggestionStatusSchema,
-  candidateId: z.uuid().nullable(),
+  source: EnrichmentSuggestionSourceSchema,
+  confidence: z.number().min(0).max(1),
   evidence: z.record(z.string(), z.unknown()),
   evidenceHash: EvidenceHashSchema,
-  confidence: z.number().min(0).max(1),
-  workerSchemaVersion: z.number().int().positive(),
-  expenseVersion: z.number().int().positive(),
+  status: EnrichmentSuggestionStatusSchema,
+  version: VersionSchema,
+  expenseVersion: VersionSchema,
+  idempotencyKey: z.string().trim().min(1).max(255),
+  resolvedByUserId: z.uuid().nullable(),
+  resolvedAt: TimestampSchema.nullable(),
   createdAt: TimestampSchema,
 };
 
+// Tax snapshot fields — present for tax_category, null for others
 const TaxSnapshotPresentFields = {
-  businessTaxProfileId: z.uuid(),
-  businessTaxProfileVersion: VersionSchema,
+  taxProfileId: z.uuid(),
   taxonomyVersionId: z.uuid(),
   taxYear: TaxYearSchema,
-  taxCategoryDefinitionId: z.uuid(),
 };
 
 const TaxSnapshotNullFields = {
-  businessTaxProfileId: z.null(),
-  businessTaxProfileVersion: z.null(),
+  taxProfileId: z.null(),
   taxonomyVersionId: z.null(),
   taxYear: z.null(),
-  taxCategoryDefinitionId: z.null(),
 };
+
+// Resolution state refine
+const resolutionStateRefine = (value: {
+  status: string;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+}) =>
+  (value.status === "pending" &&
+    value.resolvedByUserId === null &&
+    value.resolvedAt === null) ||
+  (value.status !== "pending" &&
+    value.resolvedByUserId !== null &&
+    value.resolvedAt !== null);
 
 export const EnrichmentSuggestionSchema = z
   .discriminatedUnion("kind", [
-    // tag suggestion: no tax snapshot
-    z.strictObject({
-      ...BaseSuggestionFields,
-      kind: z.literal("tag"),
-      ...TaxSnapshotNullFields,
-    }),
-    // spending_category suggestion: no tax snapshot
-    z.strictObject({
-      ...BaseSuggestionFields,
-      kind: z.literal("spending_category"),
-      ...TaxSnapshotNullFields,
-    }),
-    // tax_category suggestion: full Business snapshot required
-    z.strictObject({
-      ...BaseSuggestionFields,
-      kind: z.literal("tax_category"),
-      ...TaxSnapshotPresentFields,
-    }),
+    // tag suggestion
+    z
+      .strictObject({
+        ...BaseSuggestionFields,
+        kind: z.literal("tag"),
+        tagId: z.uuid(),
+        spendingCategoryId: z.null(),
+        taxCategoryDefinitionId: z.null(),
+        ...TaxSnapshotNullFields,
+      })
+      .refine(scopeXorRefine, { message: "Exactly one scope required" })
+      .refine(resolutionStateRefine, { message: "Resolution state must match status" }),
+    // spending_category suggestion
+    z
+      .strictObject({
+        ...BaseSuggestionFields,
+        kind: z.literal("spending_category"),
+        tagId: z.null(),
+        spendingCategoryId: z.uuid(),
+        taxCategoryDefinitionId: z.null(),
+        ...TaxSnapshotNullFields,
+      })
+      .refine(scopeXorRefine, { message: "Exactly one scope required" })
+      .refine(resolutionStateRefine, { message: "Resolution state must match status" }),
+    // tax_category suggestion — requires business scope and tax snapshot
+    z
+      .strictObject({
+        ...BaseSuggestionFields,
+        kind: z.literal("tax_category"),
+        tagId: z.null(),
+        spendingCategoryId: z.null(),
+        taxCategoryDefinitionId: z.uuid(),
+        ...TaxSnapshotPresentFields,
+      })
+      .refine(scopeXorRefine, { message: "Exactly one scope required" })
+      .refine(
+        (value) => value.businessId !== null,
+        { message: "Tax category suggestions require business scope" },
+      )
+      .refine(resolutionStateRefine, { message: "Resolution state must match status" }),
   ]);
 export type EnrichmentSuggestion = z.infer<typeof EnrichmentSuggestionSchema>;
 
@@ -212,38 +318,26 @@ export const EnrichmentSuggestionListSchema = z.strictObject({
 export type EnrichmentSuggestionList = z.infer<typeof EnrichmentSuggestionListSchema>;
 
 // ------------------------------------------------------------------ //
-// Strict kind-specific candidate XOR objects (worker-facing)
+// Suggestion action schemas
 // ------------------------------------------------------------------ //
 
-export const TagCandidateSchema = z.strictObject({
-  tagId: z.uuid(),
-});
-export type TagCandidate = z.infer<typeof TagCandidateSchema>;
+const TerminalActionSchema = z.enum(["accepted", "rejected", "superseded"]);
 
-export const SpendingCategoryCandidateSchema = z.strictObject({
-  spendingCategoryId: z.uuid(),
-});
-export type SpendingCategoryCandidate = z.infer<typeof SpendingCategoryCandidateSchema>;
-
-export const TaxCategoryCandidateSchema = z.strictObject({
-  taxCategoryDefinitionId: z.uuid(),
+/**
+ * For tax_category acceptance, the human must supply tax profile and
+ * deductible percentage; automation provides only the candidate category.
+ */
+const TaxAcceptanceSchema = z.strictObject({
   businessTaxProfileId: z.uuid(),
-  businessTaxProfileVersion: VersionSchema,
-  taxonomyVersionId: z.uuid(),
-  taxYear: TaxYearSchema,
-  activeTaxCategoryIds: z.array(z.uuid()),
+  deductiblePercent: DeductiblePercentSchema,
 });
-export type TaxCategoryCandidate = z.infer<typeof TaxCategoryCandidateSchema>;
-
-// ------------------------------------------------------------------ //
-// Suggestion action schemas (resolve / merge / rerun)
-// ------------------------------------------------------------------ //
-
-const TerminalStatusSchema = z.enum(["accepted", "rejected", "superseded"]);
 
 export const SuggestionResolveRequestSchema = z.strictObject({
-  action: TerminalStatusSchema,
-  expectedVersion: VersionSchema,
+  action: TerminalActionSchema,
+  expectedSuggestionVersion: VersionSchema,
+  expectedExpenseVersion: VersionSchema,
+  idempotencyKey: z.string().trim().min(1).max(255),
+  taxAcceptance: TaxAcceptanceSchema.optional(),
 });
 export type SuggestionResolveRequest = z.infer<typeof SuggestionResolveRequestSchema>;
 
@@ -253,12 +347,6 @@ export const SuggestionResolveResponseSchema = z.strictObject({
   version: VersionSchema,
 });
 export type SuggestionResolveResponse = z.infer<typeof SuggestionResolveResponseSchema>;
-
-export const SuggestionMergeRequestSchema = z.strictObject({
-  suggestionIds: z.array(z.uuid()).min(1),
-  action: TerminalStatusSchema,
-});
-export type SuggestionMergeRequest = z.infer<typeof SuggestionMergeRequestSchema>;
 
 export const SuggestionRerunRequestSchema = z.strictObject({
   expenseId: z.uuid(),

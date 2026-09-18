@@ -14,7 +14,12 @@
  *
  * Docker availability is probed inside beforeAll only -- never at module
  * evaluation -- so generic runs do not pay the cost of a subprocess call.
+ *
+ * Migration 016 typecheck: importing the module at the top of this file
+ * ensures the TypeScript compiler (and vitest's esbuild transform) rejects
+ * malformed TypeScript such as a bare SQL comment outside a template literal.
  */
+import * as migration016 from "../../services/app-api/src/database/migrations/016_expense_enrichment.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -166,6 +171,12 @@ function seedPersonalScope(): void {
 
 // --- Test suite ---
 
+// Static typecheck: migration016 must export up/down; this assertion runs
+// regardless of integrationEnabled so a malformed migration always fails.
+if (typeof migration016.up !== "function" || typeof migration016.down !== "function") {
+  throw new Error("migration016 does not export up/down functions — TypeScript compilation failed");
+}
+
 describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQL integration", () => {
   beforeAll(async () => {
     // Probe Docker and Postgres here (not at module level) so generic runs
@@ -239,6 +250,82 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       adminSql(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE);`);
     }
   });
+
+  it(
+    "migration 016 UNIQUE NULLS NOT DISTINCT rejects duplicate null candidate_id binding (live PostgreSQL proof)",
+    () => {
+      // This proves that two operation key rows with identical binding and
+      // candidate_id IS NULL both collide via the PG17 UNIQUE NULLS NOT DISTINCT
+      // constraint. Standard UNIQUE would treat NULL != NULL and allow duplicates.
+      //
+      // We need a real tenant, processing_job, and expense row. Use Tenant A
+      // and a dedicated job/expense pair seeded directly via adminSql so this
+      // proof is self-contained and does not touch domain logic.
+
+      const nullProofJobId   = "3c000000-0000-4000-8000-ff0000000001";
+      const nullProofExpId   = "3c000000-0000-4000-8000-ff0000000002";
+      // Both rows share the same composite binding (same operation_key, same candidate_id=NULL).
+      // The second insert must fail because UNIQUE NULLS NOT DISTINCT treats NULL==NULL.
+      const nullProofOperationKey = "op-null-proof-shared";
+      const evidenceHash          = "a".repeat(64);
+      const payloadHash           = "b".repeat(64);
+
+      // Seed a processing job and expense for this proof
+      runtimeSql(`
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${nullProofJobId}', '${PHASE_3C_TENANT_A_ID}',
+           'EnrichmentNullProof', gen_random_uuid()::text, 'enrichment', 'PENDING',
+           '{}', '1')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${nullProofExpId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}',
+           'NullProofMerchant', '1.00', 'USD', '2026-09-12', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Insert first operation key row: candidate_id IS NULL
+      runtimeSql(`
+        INSERT INTO app.enrichment_operation_keys
+          (id, tenant_id, job_id, expense_id, kind,
+           candidate_id, evidence_hash, operation_key, payload_hash)
+        VALUES
+          (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}', '${nullProofJobId}',
+           '${nullProofExpId}', 'tag',
+           NULL, '${evidenceHash}', '${nullProofOperationKey}', '${payloadHash}');
+      `);
+
+      // Second row: same composite binding (same operation_key, same candidate_id=NULL).
+      // Under standard UNIQUE, NULL != NULL so this would succeed.
+      // Under UNIQUE NULLS NOT DISTINCT, NULL == NULL so this must fail.
+      let conflictRaised = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.enrichment_operation_keys
+            (id, tenant_id, job_id, expense_id, kind,
+             candidate_id, evidence_hash, operation_key, payload_hash)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}', '${nullProofJobId}',
+             '${nullProofExpId}', 'tag',
+             NULL, '${evidenceHash}', '${nullProofOperationKey}', '${payloadHash}');
+        `);
+      } catch {
+        conflictRaised = true;
+      }
+
+      expect(
+        conflictRaised,
+        "UNIQUE NULLS NOT DISTINCT must reject duplicate null candidate_id composite binding",
+      ).toBe(true);
+    },
+  );
 
   it(
     "createPersonal creates exactly one ExpenseEnrichmentWorkflow job and one outbox row targeting the new expense",
