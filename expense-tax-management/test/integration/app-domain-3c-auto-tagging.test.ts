@@ -11,6 +11,9 @@
  * Dedicated test:integration:3c sets PHASE_3C_INTEGRATION=1; if Docker or
  * Postgres is then unavailable, beforeAll throws rather than silently skipping.
  * The JSON inspection rejects any skipped/pending outcome as a second guard.
+ *
+ * Docker availability is probed inside beforeAll only -- never at module
+ * evaluation -- so generic runs do not pay the cost of a subprocess call.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -47,34 +50,20 @@ const _PHASE_3C_SPENDING_CATEGORY_ID = "3c000000-0000-4000-8000-000000000009";
 const _PHASE_3C_EXPENSE_V1_ID        = "3c000000-0000-4000-8000-00000000000a";
 const _PHASE_3C_EXPENSE_V2_ID        = "3c000000-0000-4000-8000-00000000000b";
 
-// --- Infrastructure detection ---
+// --- Module-level constants (no subprocess calls) ---
 
 const requested = process.env.PHASE_3C_INTEGRATION === "1";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const composeScript = path.join(repoRoot, "scripts", "compose.sh");
 const runKey = randomUUID().replaceAll("-", "").slice(0, 12);
 const databaseName = `expense_tax_3c_${runKey}`;
-const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
 interface ComposeConfig {
   readonly services: Record<string, { readonly environment?: Record<string, string | null> }>;
 }
 
-function composePostgresRunning(): boolean {
-  try {
-    return execFileSync(composeScript, ["ps", "-q", "postgres"], {
-      cwd: repoRoot,
-      env: process.env,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-// Skip condition: env not requested. When requested but prerequisites are
-// absent, beforeAll throws instead -- no silent skips under dedicated command.
+// Skip condition: env not requested only. Docker/Postgres probing happens
+// inside beforeAll so it never runs during generic pnpm test:integration.
 const integrationEnabled = requested;
 
 // --- State ---
@@ -179,10 +168,29 @@ function seedPersonalScope(): void {
 
 describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQL integration", () => {
   beforeAll(async () => {
-    // When PHASE_3C_INTEGRATION=1 but Docker or Postgres is absent, throw
-    // immediately rather than silently skipping -- the dedicated command must
-    // never produce a skipped outcome.
-    if (!dockerAvailable || !composePostgresRunning()) {
+    // Probe Docker and Postgres here (not at module level) so generic runs
+    // never spawn subprocesses. Both failure paths use the exact required
+    // message so the dedicated command always errors rather than silently
+    // skipping when infrastructure is absent.
+    const dockerAvailable =
+      spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+    if (!dockerAvailable) {
+      throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
+    }
+
+    let postgresRunning = false;
+    try {
+      postgresRunning =
+        execFileSync(composeScript, ["ps", "-q", "postgres"], {
+          cwd: repoRoot,
+          env: process.env,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim().length > 0;
+    } catch {
+      postgresRunning = false;
+    }
+    if (!postgresRunning) {
       throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
     }
 
@@ -202,7 +210,7 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
     runtimePassword = config.services.postgres?.environment?.APP_RUNTIME_DB_PASSWORD ?? "";
     migratorPassword = config.services.postgres?.environment?.APP_MIGRATOR_DB_PASSWORD ?? "";
     if (!postgresContainerId || !runtimePassword || !migratorPassword) {
-      throw new Error("Phase 3C PostgreSQL prerequisites are missing");
+      throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
     }
 
     adminSql(`CREATE DATABASE ${databaseName};`);
