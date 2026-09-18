@@ -29,10 +29,6 @@ const TENANT_ID = "22222222-2222-4222-8222-222222222222";
 const PROFILE_ID = "33333333-3333-4333-8333-333333333333";
 const TIMESTAMP = "2026-09-08T00:00:00.000Z";
 
-// Phase 3C enrichment workflow type constant — defines the exact workflow
-// name that the auto-tagging enrichment job must use.
-export const EXPENSE_ENRICHMENT_WORKFLOW_TYPE = "ExpenseEnrichmentWorkflow" as const;
-
 const JOB = {
   id: JOB_ID,
   tenantId: TENANT_ID,

@@ -1,11 +1,11 @@
 /**
  * Zero-skip regression guard for Phase 3C integration tests.
  *
- * Wrapped in describe.skipIf(!PHASE_3C) so it is skipped (and not counted
- * as pending/failed) when the generic `pnpm test:integration` command runs
- * without PHASE_3C_INTEGRATION=1.
+ * Wrapped in describe.skipIf(!phase3cEnabled) so it is skipped (and not
+ * counted as pending/failed) when the generic pnpm test:integration command
+ * runs without PHASE_3C_INTEGRATION=1.
  *
- * When the dedicated `test:integration:3c` command runs, PHASE_3C_INTEGRATION
+ * When the dedicated test:integration:3c command runs, PHASE_3C_INTEGRATION
  * is set to "1", the describe block executes, and the JSON inspection script
  * rejects any skipped/pending outcome as a second enforcement layer.
  */

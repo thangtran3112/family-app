@@ -1,5 +1,5 @@
 /**
- * Phase 3C integration test — auto-tagging enrichment boundary.
+ * Phase 3C integration test -- auto-tagging enrichment boundary.
  *
  * RED until Task 4 wires the enrichment job into insertExpenseInTransaction.
  *
@@ -7,10 +7,10 @@
  * Fixture scope is isolated to PHASE_3C_TENANT_A_ID so Task 11's multi-expense
  * seeds cannot change this test's exact-one job/outbox count.
  *
- * Generic `pnpm test:integration` skips this suite when PHASE_3C_INTEGRATION
- * is not set; the dedicated `test:integration:3c` command sets the env, throws
- * on missing prerequisites (rather than silently skipping), and the JSON
- * inspection rejects any skipped/pending outcome as a second enforcement layer.
+ * Generic pnpm test:integration skips when PHASE_3C_INTEGRATION is unset.
+ * Dedicated test:integration:3c sets PHASE_3C_INTEGRATION=1; if Docker or
+ * Postgres is then unavailable, beforeAll throws rather than silently skipping.
+ * The JSON inspection rejects any skipped/pending outcome as a second guard.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -25,11 +25,11 @@ import type { AppDatabase } from "../../services/app-api/src/database/types.js";
 import { runMigrations } from "../../services/app-api/src/database/migrate.js";
 import { createExpenseDomain } from "../../services/app-api/src/domain/expenses.js";
 
-// ── Deterministic Phase 3C fixture UUIDs ─────────────────────────────────────
+// --- Deterministic Phase 3C fixture UUIDs ---
 // Kept here (not in a shared module) so later tasks cannot accidentally
 // cross scopes by importing a convenience re-export.
 //
-// Schema note: personal_profiles has UNIQUE (tenant_id) — only one profile
+// Schema note: personal_profiles has UNIQUE (tenant_id) -- only one profile
 // per tenant. Profile A belongs to Tenant A; Profile B is reserved for Tenant B
 // (a second isolated scope used in Task 11 multi-expense scenarios).
 
@@ -47,7 +47,7 @@ const _PHASE_3C_SPENDING_CATEGORY_ID = "3c000000-0000-4000-8000-000000000009";
 const _PHASE_3C_EXPENSE_V1_ID        = "3c000000-0000-4000-8000-00000000000a";
 const _PHASE_3C_EXPENSE_V2_ID        = "3c000000-0000-4000-8000-00000000000b";
 
-// ── Infrastructure detection ──────────────────────────────────────────────────
+// --- Infrastructure detection ---
 
 const requested = process.env.PHASE_3C_INTEGRATION === "1";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,8 +60,7 @@ interface ComposeConfig {
   readonly services: Record<string, { readonly environment?: Record<string, string | null> }>;
 }
 
-function composePostgresAvailable(): boolean {
-  if (!requested || !dockerAvailable) return false;
+function composePostgresRunning(): boolean {
   try {
     return execFileSync(composeScript, ["ps", "-q", "postgres"], {
       cwd: repoRoot,
@@ -74,16 +73,18 @@ function composePostgresAvailable(): boolean {
   }
 }
 
-const integrationEnabled = composePostgresAvailable();
+// Skip condition: env not requested. When requested but prerequisites are
+// absent, beforeAll throws instead -- no silent skips under dedicated command.
+const integrationEnabled = requested;
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// --- State ---
 
 let postgresContainerId = "";
 let runtimePassword = "";
 let migratorPassword = "";
 let database: Kysely<AppDatabase> | undefined;
 
-// ── psql helpers ──────────────────────────────────────────────────────────────
+// --- psql helpers ---
 
 function dockerPsql(
   databaseNameForConnection: string,
@@ -129,10 +130,10 @@ function runtimeSql(sql: string): string {
   return dockerPsql(databaseName, "expense_app_runtime", runtimePassword, sql);
 }
 
-// ── Fixture seeding ───────────────────────────────────────────────────────────
+// --- Fixture seeding ---
 // Two isolated tenant scopes:
-//   Tenant A — Profile A, Business A, Business B (this test's scope)
-//   Tenant B — Profile B (reserved for Task 11 multi-expense scenarios)
+//   Tenant A -- Profile A, Business A, Business B (this test's scope)
+//   Tenant B -- Profile B (reserved for Task 11 multi-expense scenarios)
 //
 // Row counts for the enrichment job assertion below target Tenant A only, so
 // Task 11 adding expenses under Tenant B or a random tenant cannot inflate
@@ -174,10 +175,17 @@ function seedPersonalScope(): void {
   `);
 }
 
-// ── Test suite ────────────────────────────────────────────────────────────────
+// --- Test suite ---
 
 describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQL integration", () => {
   beforeAll(async () => {
+    // When PHASE_3C_INTEGRATION=1 but Docker or Postgres is absent, throw
+    // immediately rather than silently skipping -- the dedicated command must
+    // never produce a skipped outcome.
+    if (!dockerAvailable || !composePostgresRunning()) {
+      throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
+    }
+
     const config = JSON.parse(
       execFileSync(composeScript, ["config", "--format", "json"], {
         cwd: repoRoot,
