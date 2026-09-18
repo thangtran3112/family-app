@@ -1,24 +1,13 @@
 "use client";
 import { PageHead, Panel, Status } from "@/components/ui";
+import { PersonalScopeUnavailable } from "@/components/scope-unavailable";
 import { readOfficeSession } from "@/lib/session";
-
-function PersonalScopeUnavailable({ feature }: { feature: string }) {
-  return (
-    <main>
-      <PageHead eyebrow="Unavailable" title={feature} />
-      <Panel title={`${feature} requires Business scope`}>
-        <div className="empty" role="status" aria-label={`${feature} unavailable in Personal scope`}>
-          <p>This feature is only available in Business scope.</p>
-          <p>Switch to a Business scope to access {feature.toLowerCase()}.</p>
-        </div>
-      </Panel>
-    </main>
-  );
-}
 
 export default function Businesses() {
   const session = readOfficeSession();
-  if (session?.scope.kind === "personal") {
+  // Fail closed: null session (missing/corrupt) and personal scope both show unavailable.
+  // Never render Business content without a verified business scope.
+  if (!session || session.scope.kind !== "business") {
     return <PersonalScopeUnavailable feature="Businesses" />;
   }
   return (

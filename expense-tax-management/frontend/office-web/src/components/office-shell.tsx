@@ -14,6 +14,8 @@ const nav = [
   ["/forwarding", "Forwarding", Forward], ["/settings", "Settings", Settings],
 ] as const;
 
+const BUSINESS_ONLY_HREFS = new Set(["/businesses", "/projects", "/tax", "/exports"]);
+
 export function OfficeShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -23,7 +25,8 @@ export function OfficeShell({ children }: { children: ReactNode }) {
   const session = isLoaded && isSignedIn ? readOfficeSession() : null;
 
   const scopeLabel = session?.label ?? "Office";
-  const isPersonal = session?.scope.kind === "personal";
+  // Null session: treat as personal scope to prevent business-only nav rendering
+  const isPersonalOrNoSession = !session || session.scope.kind === "personal";
 
   useEffect(() => {
     if (!session || !organizationLoaded || !organization) return;
@@ -45,24 +48,39 @@ export function OfficeShell({ children }: { children: ReactNode }) {
         <Link className="brand" href="/dashboard"><span>O</span>ExpenseTax Office</Link>
         {session && (
           <p className="scope-label" aria-label={`Active scope: ${scopeLabel}`}>
-            <span className={`status ${isPersonal ? "ok" : "warn"}`} aria-hidden="true">{isPersonal ? "Personal" : "Business"}</span>
+            <span className={`status ${session.scope.kind === "personal" ? "ok" : "warn"}`} aria-hidden="true">
+              {session.scope.kind === "personal" ? "Personal" : "Business"}
+            </span>
             {scopeLabel}
           </p>
         )}
         <nav aria-label="Office navigation">
           {nav.map(([href, label, Icon]) => {
-            const isBusinessOnly = href === "/businesses" || href === "/projects" || href === "/tax" || href === "/exports";
-            const unavailable = isPersonal && isBusinessOnly;
+            const unavailable = isPersonalOrNoSession && BUSINESS_ONLY_HREFS.has(href);
+            const isCurrent = path.startsWith(href);
+            if (unavailable) {
+              // Render as inert span — not a link, not keyboard-focusable as a navigation target.
+              // Screen readers see it as static text; no href="#" pseudo-disabled link.
+              return (
+                <span
+                  key={href}
+                  className="nav-unavailable"
+                  aria-label={`${label} — requires Business scope`}
+                  title={`${label} requires Business scope`}
+                >
+                  <Icon size={17} aria-hidden="true" />
+                  {label}
+                  <span className="status warn" aria-hidden="true">B</span>
+                </span>
+              );
+            }
             return (
               <Link
                 key={href}
-                href={unavailable ? "#" : href}
-                aria-current={path.startsWith(href) ? "page" : undefined}
-                aria-disabled={unavailable ? "true" : undefined}
-                title={unavailable ? `${label} requires Business scope` : undefined}
+                href={href}
+                aria-current={isCurrent ? "page" : undefined}
               >
                 <Icon size={17} />{label}
-                {unavailable && <span className="status warn" aria-label="Business scope required">B</span>}
               </Link>
             );
           })}

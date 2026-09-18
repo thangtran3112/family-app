@@ -1,26 +1,13 @@
 "use client";
 import { OfficeData } from "@/components/office-data";
 import { PageHead, Panel, Status } from "@/components/ui";
+import { PersonalScopeUnavailable } from "@/components/scope-unavailable";
 import { loadTaxForOffice } from "@/lib/page-data";
 import { readOfficeSession } from "@/lib/session";
 
-function PersonalScopeUnavailable({ feature }: { feature: string }) {
-  return (
-    <main>
-      <PageHead eyebrow="Unavailable" title={feature} />
-      <Panel title={`${feature} requires Business scope`}>
-        <div className="empty" role="status" aria-label={`${feature} unavailable in Personal scope`}>
-          <p>This feature is only available in Business scope.</p>
-          <p>Switch to a Business scope to access {feature.toLowerCase()}.</p>
-        </div>
-      </Panel>
-    </main>
-  );
-}
-
 export default function Tax() {
   const session = readOfficeSession();
-  if (session?.scope.kind === "personal") {
+  if (!session || session.scope.kind !== "business") {
     return <PersonalScopeUnavailable feature="Tax" />;
   }
   return (

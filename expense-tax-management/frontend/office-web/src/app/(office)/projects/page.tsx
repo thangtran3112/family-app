@@ -1,24 +1,11 @@
 "use client";
 import { Metric, PageHead, Panel } from "@/components/ui";
+import { PersonalScopeUnavailable } from "@/components/scope-unavailable";
 import { readOfficeSession } from "@/lib/session";
-
-function PersonalScopeUnavailable({ feature }: { feature: string }) {
-  return (
-    <main>
-      <PageHead eyebrow="Unavailable" title={feature} />
-      <Panel title={`${feature} requires Business scope`}>
-        <div className="empty" role="status" aria-label={`${feature} unavailable in Personal scope`}>
-          <p>This feature is only available in Business scope.</p>
-          <p>Switch to a Business scope to access {feature.toLowerCase()}.</p>
-        </div>
-      </Panel>
-    </main>
-  );
-}
 
 export default function Projects() {
   const session = readOfficeSession();
-  if (session?.scope.kind === "personal") {
+  if (!session || session.scope.kind !== "business") {
     return <PersonalScopeUnavailable feature="Projects" />;
   }
   return (

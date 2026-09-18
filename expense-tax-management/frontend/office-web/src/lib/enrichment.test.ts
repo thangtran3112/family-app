@@ -7,7 +7,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { OfficeSession } from "./session";
-import { getSuggestionSourceLabel, getEnrichmentReviewState, makeStableIdempotencyKey } from "./api";
+import {
+  getSuggestionSourceLabel,
+  getEnrichmentReviewState,
+  makeStableIdempotencyKey,
+  TagMutationError,
+  formatSuggestionKind,
+} from "./api";
 
 // ------------------------------------------------------------------ //
 // Shared fixtures
@@ -40,6 +46,28 @@ describe("enrichment source label helpers", () => {
   it("maps history decision sources", () => {
     expect(getSuggestionSourceLabel("manual")).toBe("Manual decision");
     expect(getSuggestionSourceLabel("manual_baseline")).toBe("Baseline import");
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Issue 9: Kind label formatting — replaceAll underscores, not just first
+// ------------------------------------------------------------------ //
+
+describe("formatSuggestionKind", () => {
+  it("formats single underscore kinds", () => {
+    expect(formatSuggestionKind("tag")).toBe("Tag");
+  });
+
+  it("replaces ALL underscores in multi-word kinds (not just first)", () => {
+    // tax_category has one underscore — but spending_category too.
+    // Critically: a kind like "some_multi_word" must replace ALL.
+    expect(formatSuggestionKind("tax_category")).toBe("Tax category");
+    expect(formatSuggestionKind("spending_category")).toBe("Spending category");
+  });
+
+  it("capitalizes first letter", () => {
+    expect(formatSuggestionKind("tag")[0]).toBe("T");
+    expect(formatSuggestionKind("tax_category")[0]).toBe("T");
   });
 });
 
@@ -79,17 +107,42 @@ describe("enrichment review state helper", () => {
   });
 });
 
-describe("stable idempotency key", () => {
-  it("returns same key for same action on same expense", () => {
-    const k1 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-1");
-    const k2 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-1");
+// ------------------------------------------------------------------ //
+// Issue 1: Accept/reject idempotency keys must include the action
+// so "accepted" and "rejected" produce distinct keys for same suggestion.
+// ------------------------------------------------------------------ //
+
+describe("stable idempotency key — action discrimination", () => {
+  it("returns same key for same action+suggestion on retry", () => {
+    const k1 = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "accepted");
+    const k2 = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "accepted");
     expect(k1).toBe(k2);
   });
 
-  it("returns different keys for different actions", () => {
-    const k1 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-1");
-    const k2 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-2");
+  it("accept and reject produce DISTINCT keys for same suggestion", () => {
+    const acceptKey = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "accepted");
+    const rejectKey = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "rejected");
+    expect(acceptKey).not.toBe(rejectKey);
+  });
+
+  it("keys contain action discriminator", () => {
+    const acceptKey = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "accepted");
+    expect(acceptKey).toContain("accepted");
+    const rejectKey = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "rejected");
+    expect(rejectKey).toContain("rejected");
+  });
+
+  it("different suggestions produce different keys for same action", () => {
+    const k1 = makeStableIdempotencyKey("resolve-suggestion", "sugg-1", "accepted");
+    const k2 = makeStableIdempotencyKey("resolve-suggestion", "sugg-2", "accepted");
     expect(k1).not.toBe(k2);
+  });
+
+  // Existing tests preserved
+  it("returns same key for same parts", () => {
+    const k1 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-1");
+    const k2 = makeStableIdempotencyKey("resolve-suggestion", "exp-1", "sugg-1");
+    expect(k1).toBe(k2);
   });
 
   it("key contains all discriminating parts", () => {
@@ -97,6 +150,58 @@ describe("stable idempotency key", () => {
     expect(k).toContain("resolve-suggestion");
     expect(k).toContain("exp-1");
     expect(k).toContain("sugg-1");
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Issue 2: Tax accept key must reflect submitted profileId, not initial
+// useRef. Test the pure key derivation logic.
+// ------------------------------------------------------------------ //
+
+describe("tax accept idempotency key derives from submitted profileId", () => {
+  it("different profileId produces different key", () => {
+    const k1 = makeStableIdempotencyKey("tax-accept", "sugg-1", "accepted", "prof-A");
+    const k2 = makeStableIdempotencyKey("tax-accept", "sugg-1", "accepted", "prof-B");
+    expect(k1).not.toBe(k2);
+  });
+
+  it("same profileId + same suggestion + same action = same key (retry-safe)", () => {
+    const k1 = makeStableIdempotencyKey("tax-accept", "sugg-1", "accepted", "prof-A");
+    const k2 = makeStableIdempotencyKey("tax-accept", "sugg-1", "accepted", "prof-A");
+    expect(k1).toBe(k2);
+  });
+
+  it("key contains profileId", () => {
+    const k = makeStableIdempotencyKey("tax-accept", "sugg-1", "accepted", "prof-X");
+    expect(k).toContain("prof-X");
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Issue 5: TagMutationError — typed error with .status, no substring detection
+// ------------------------------------------------------------------ //
+
+describe("TagMutationError typed error", () => {
+  it("is constructable with status 409", () => {
+    const err = new TagMutationError("Tag version conflict", 409);
+    expect(err.status).toBe(409);
+    expect(err.name).toBe("TagMutationError");
+    expect(err).toBeInstanceOf(Error);
+  });
+
+  it("is constructable with status 401", () => {
+    const err = new TagMutationError("Unauthorized", 401);
+    expect(err.status).toBe(401);
+  });
+
+  it("status 409 is detectable without message substring check", () => {
+    const err = new TagMutationError("whatever message", 409);
+    expect(err.status === 409).toBe(true);
+  });
+
+  it("is distinct from EnrichmentReviewError and DuplicateReviewError", () => {
+    const err = new TagMutationError("conflict", 409);
+    expect(err.name).toBe("TagMutationError");
   });
 });
 

@@ -11,6 +11,7 @@ import {
   mergeTags,
   fetchCurrentUser,
   fetchTenantMembership,
+  TagMutationError,
   type TenantRole,
 } from "@/lib/api";
 import { readOfficeSession } from "@/lib/session";
@@ -213,7 +214,7 @@ export default function Settings() {
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, ...(updated as Partial<Tag>) } : t));
       setSuccessMsg(`Tag renamed to "${newName}".`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
+      if (e instanceof TagMutationError && e.status === 409) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Rename failed");
     } finally {
       setSaving(false);
@@ -230,7 +231,7 @@ export default function Settings() {
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, status: "archived" as const, version: t.version + 1 } : t));
       setSuccessMsg(`Tag "${tag.name}" archived.`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
+      if (e instanceof TagMutationError && e.status === 409) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Archive failed");
     } finally {
       setSaving(false);
@@ -246,7 +247,7 @@ export default function Settings() {
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, status: "active" as const, version: t.version + 1 } : t));
       setSuccessMsg(`Tag "${tag.name}" unarchived.`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
+      if (e instanceof TagMutationError && e.status === 409) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Unarchive failed");
     } finally {
       setSaving(false);
@@ -267,7 +268,7 @@ export default function Settings() {
       setMergeSourceId(null);
       setSuccessMsg(`Tag "${sourceTag.name}" merged into "${targetTag.name}".`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
+      if (e instanceof TagMutationError && e.status === 409) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Merge failed");
     } finally {
       setSaving(false);

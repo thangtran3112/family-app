@@ -1,7 +1,7 @@
 "use client";
 import { useAuth, useOrganization } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHead, Panel, Status } from "@/components/ui";
 import {
   EnrichmentReviewError,
@@ -10,6 +10,7 @@ import {
   resolveSuggestion,
   getSuggestionSourceLabel,
   makeStableIdempotencyKey,
+  formatSuggestionKind,
   type EnrichmentReviewState,
   getEnrichmentReviewState,
 } from "@/lib/api";
@@ -74,16 +75,22 @@ function TaxAcceptForm({
   const [profileId, setProfileId] = useState(suggestion.businessTaxProfileId ?? "");
   const [deductiblePct, setDeductiblePct] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const idemKey = useRef(makeStableIdempotencyKey("tax-accept", suggestion.id, profileId));
+  // No useRef for idemKey — key is computed at submit time from the actual
+  // submitted profileId so changing the profileId field produces a different key.
+  // Retrying the same payload reuses the same key (deterministic).
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!profileId.trim()) { setFormError("Tax profile ID is required."); return; }
+    const trimmedProfileId = profileId.trim();
+    if (!trimmedProfileId) { setFormError("Tax profile ID is required."); return; }
     const pct = Number(deductiblePct.trim());
     if (isNaN(pct) || pct < 0 || pct > 100) { setFormError("Deductible percentage must be 0-100."); return; }
     setFormError(null);
+    // Key derived from action + suggestion + profileId at submission time.
+    // Same payload → same key (idempotent retry). Changed profileId → new key (different intent).
+    const idemKey = makeStableIdempotencyKey("tax-accept", suggestion.id, "accepted", trimmedProfileId);
     // Contract requires deductiblePercent as string (regex-validated decimal)
-    onAccept(profileId.trim(), String(pct), idemKey.current);
+    onAccept(trimmedProfileId, String(pct), idemKey);
   }
 
   return (
@@ -132,22 +139,26 @@ function SuggestionCard({
   disabled: boolean;
 }) {
   const [resolving, setResolving] = useState(false);
-  const idemKey = useRef(makeStableIdempotencyKey("resolve-suggestion", suggestion.id));
   const sourceLabel = getSuggestionSourceLabel(suggestion.source as Parameters<typeof getSuggestionSourceLabel>[0]);
 
   function handleReject() {
     setResolving(true);
-    onResolve(suggestion.id, "rejected", idemKey.current);
+    // Key includes action so "accepted" and "rejected" produce distinct keys for same suggestion.
+    const idemKey = makeStableIdempotencyKey("resolve-suggestion", suggestion.id, "rejected");
+    onResolve(suggestion.id, "rejected", idemKey);
   }
 
   function handleTaxAccept(taxProfileId: string, deductiblePercent: string, taxIdemKey: string) {
     setResolving(true);
+    // taxIdemKey is computed at submit time in TaxAcceptForm from profileId+action+suggestion.
     onResolve(suggestion.id, "accepted", taxIdemKey, { businessTaxProfileId: taxProfileId, deductiblePercent });
   }
 
   function handleAccept() {
     setResolving(true);
-    onResolve(suggestion.id, "accepted", idemKey.current);
+    // Key includes action so accept and reject are distinct.
+    const idemKey = makeStableIdempotencyKey("resolve-suggestion", suggestion.id, "accepted");
+    onResolve(suggestion.id, "accepted", idemKey);
   }
 
   const isTaxCategory = suggestion.kind === "tax_category";
@@ -157,7 +168,7 @@ function SuggestionCard({
     <article className="suggestion-card panel" aria-labelledby={`sugg-${suggestion.id}`}>
       <div className="toolbar">
         <div>
-          <Status tone="warn">{suggestion.kind.replace("_", " ")}</Status>
+          <Status tone="warn">{formatSuggestionKind(suggestion.kind)}</Status>
           <Status tone={suggestion.source === "ai" ? "ok" : "warn"}>{sourceLabel}</Status>
           <ConfidenceMeter confidence={suggestion.confidence} />
         </div>

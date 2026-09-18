@@ -23,6 +23,17 @@ export class EnrichmentReviewError extends Error {
   }
 }
 
+/**
+ * Typed error for tag mutation operations (create/update/archive/unarchive/merge).
+ * Callers detect 409 via `err.status === 409`, not message substring.
+ */
+export class TagMutationError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "TagMutationError";
+  }
+}
+
 // ------------------------------------------------------------------ //
 // State helpers
 // ------------------------------------------------------------------ //
@@ -81,6 +92,16 @@ export function getSuggestionSourceLabel(source: SuggestionSource): string {
     case "manual": return "Manual decision";
     case "manual_baseline": return "Baseline import";
   }
+}
+
+/**
+ * Formats a suggestion kind enum value for display.
+ * Replaces ALL underscores (not just the first) and capitalizes the first letter.
+ * "tax_category" → "Tax category", "spending_category" → "Spending category", "tag" → "Tag".
+ */
+export function formatSuggestionKind(kind: string): string {
+  const replaced = kind.replaceAll("_", " ");
+  return replaced.charAt(0).toUpperCase() + replaced.slice(1);
 }
 
 export function getSourceBadge(matchType: "file_sha256" | "fingerprint" | "fuzzy_fields") {
@@ -419,7 +440,7 @@ export async function createTag(
     headers: await getAppAuthorization(getToken, organizationId),
     body: { name, ...(color !== undefined ? { color } : {}) },
   });
-  if (!result.data) throw new Error("Tag creation unavailable");
+  if (!result.data) throw new TagMutationError("Tag creation unavailable", result.response?.status);
   return result.data;
 }
 
@@ -443,8 +464,7 @@ export async function updateTag(
   });
   if (!result.data) {
     const status = result.response?.status;
-    if (status === 409) throw new Error("Tag version conflict. Refresh to see latest.");
-    throw new Error("Tag update unavailable");
+    throw new TagMutationError(status === 409 ? "Tag version conflict. Refresh to see latest." : "Tag update unavailable", status);
   }
   return result.data;
 }
@@ -469,8 +489,7 @@ export async function archiveTag(
   });
   if (!result.data) {
     const status = result.response?.status;
-    if (status === 409) throw new Error("Tag version conflict. Refresh to see latest.");
-    throw new Error("Tag archive unavailable");
+    throw new TagMutationError(status === 409 ? "Tag version conflict. Refresh to see latest." : "Tag archive unavailable", status);
   }
   return result.data;
 }
@@ -494,8 +513,7 @@ export async function unarchiveTag(
   });
   if (!result.data) {
     const status = result.response?.status;
-    if (status === 409) throw new Error("Tag version conflict. Refresh to see latest.");
-    throw new Error("Tag unarchive unavailable");
+    throw new TagMutationError(status === 409 ? "Tag version conflict. Refresh to see latest." : "Tag unarchive unavailable", status);
   }
   return result.data;
 }
@@ -526,8 +544,7 @@ export async function mergeTags(
   // 204 No Content: result.data is undefined, result.response.status is 204
   const status = result.response?.status;
   if (status !== 204 && !result.data) {
-    if (status === 409) throw new Error("Tag version conflict during merge. Refresh to see latest.");
-    throw new Error("Tag merge unavailable");
+    throw new TagMutationError(status === 409 ? "Tag version conflict during merge. Refresh to see latest." : "Tag merge unavailable", status);
   }
 }
 
