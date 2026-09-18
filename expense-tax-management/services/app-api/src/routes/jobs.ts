@@ -12,6 +12,8 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import type { EnrichmentJobsDomain } from "../domain/enrichment-jobs.js";
+import { EnrichmentResultSubmitRequestSchema } from "../domain/enrichment-jobs.js";
 import type { ProcessingJobsDomain } from "../domain/processing-jobs.js";
 import type { DeduplicationDomain } from "../domain/deduplication.js";
 import { DomainError } from "../errors.js";
@@ -20,8 +22,13 @@ import { registerDeduplicationRoutes } from "./deduplication.js";
 
 export interface JobRouteOptions {
   readonly processingJobsDomain: ProcessingJobsDomain;
+  readonly enrichmentJobsDomain?: EnrichmentJobsDomain;
   readonly deduplicationDomain?: DeduplicationDomain;
   readonly workerServiceSubject?: string;
+  /** Scope required on the enrichment-input route. */
+  readonly enrichmentInputScope?: string;
+  /** Scope required on the enrichment-result route. */
+  readonly enrichmentResultScope?: string;
 }
 
 const errors = {
@@ -157,6 +164,72 @@ export async function registerJobRoutes(
       return reply.code(result.statusCode).send(result.body);
     },
   );
+
+  // ---- enrichment input/result routes --------------------------------
+  // Require exact configured worker M2M subject and route-specific scopes.
+  // Independent guards per route: input scope != result scope.
+  if (options.enrichmentJobsDomain) {
+    const enrichmentSubject = options.workerServiceSubject ?? "ai-worker-app-machine";
+    const inputScope = options.enrichmentInputScope ?? "jobs:enrichment-input";
+    const resultScope = options.enrichmentResultScope ?? "jobs:enrichment-result";
+
+    const enrichmentInputGuard = [
+      serviceGuard(enrichmentSubject, [inputScope]),
+    ];
+    const enrichmentResultGuard = [
+      serviceGuard(enrichmentSubject, [resultScope]),
+    ];
+
+    typedApp.get(
+      "/internal/v1/jobs/:jobId/enrichment-input",
+      {
+        preHandler: enrichmentInputGuard,
+        schema: {
+          params: ProcessingJobParamsSchema,
+          security: [{ serviceBearer: [] }],
+          // discriminatedUnion serialized as-is; no strict response schema here
+          // because fastify-type-provider-zod does not support discriminatedUnion
+          // response schemas in all Fastify v5 configurations.
+          response: { 200: z.object({ outcome: z.string() }).passthrough(), ...errors },
+        },
+      },
+      async (request) => {
+        const clientId = request.authPrincipal?.clientId ?? request.authPrincipal?.subject;
+        if (!clientId) throw DomainError.forbidden();
+        return options.enrichmentJobsDomain!.getEnrichmentInput({
+          jobId: request.params.jobId,
+          actorServicePrincipal: clientId,
+          requestId: request.id,
+        });
+      },
+    );
+
+    typedApp.post(
+      "/internal/v1/jobs/:jobId/enrichment-result",
+      {
+        preHandler: enrichmentResultGuard,
+        schema: {
+          params: ProcessingJobParamsSchema,
+          body: EnrichmentResultSubmitRequestSchema,
+          security: [{ serviceBearer: [] }],
+          response: { 200: ProcessingJobSchema, ...errors },
+        },
+      },
+      async (request, reply) => {
+        const clientId = request.authPrincipal?.clientId ?? request.authPrincipal?.subject;
+        if (!clientId) throw DomainError.forbidden();
+        const result = await options.enrichmentJobsDomain!.submitEnrichmentResult({
+          jobId: request.params.jobId,
+          idempotencyKey: request.body.idempotencyKey,
+          expectedJobVersion: request.body.expectedJobVersion,
+          result: request.body.result,
+          actorServicePrincipal: clientId,
+          requestId: request.id,
+        });
+        return reply.code(result.statusCode).send(result.body);
+      },
+    );
+  }
 
   if (options.deduplicationDomain) {
     await registerDeduplicationRoutes(app, {

@@ -17,6 +17,7 @@ import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
 import type { AppDatabase, ExpenseTable } from "../database/types.js";
 import { DomainError } from "../errors.js";
 import { recordAuditEvent } from "./audit.js";
+import { createEnrichmentJobInTransaction } from "./enrichment-jobs.js";
 import {
   decodeLedgerCursor,
   encodeLedgerCursor,
@@ -236,6 +237,45 @@ export async function insertExpenseInTransaction(
     resourceId: created.id,
     requestId: input.requestId,
   });
+
+  // Append-only spending-category decision when category present on manual create.
+  if (
+    (input.source === undefined || input.source === "manual") &&
+    input.request.spendingCategoryId != null
+  ) {
+    await transaction
+      .insertInto("app.expense_spending_category_decisions")
+      .values({
+        id: randomUUID(),
+        tenant_id: input.tenantId,
+        personal_profile_id: input.scope.kind === "personal" ? input.scope.profileId : null,
+        business_id: input.scope.kind === "business" ? input.scope.businessId : null,
+        expense_id: created.id,
+        prior_spending_category_id: null,
+        new_spending_category_id: input.request.spendingCategoryId,
+        source: "manual",
+        actor_user_id: input.actorUserId,
+        expense_version: created.version,
+        suggestion_id: null,
+      })
+      .execute();
+  }
+
+  // Enqueue enrichment workflow when expense is created in ready state.
+  if (created.status === "ready") {
+    await createEnrichmentJobInTransaction(transaction, {
+      tenantId: input.tenantId,
+      scope:
+        input.scope.kind === "personal"
+          ? { personalProfileId: input.scope.profileId }
+          : { businessId: input.scope.businessId },
+      expenseId: created.id,
+      expectedExpenseVersion: created.version,
+      requestedByUserId: input.actorUserId,
+      requestId: input.requestId,
+    });
+  }
+
   return toExpense(created);
 }
 

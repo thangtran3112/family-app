@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { AuthPrincipal, TokenVerifier } from "../src/auth/types.js";
 import { createAppConfig } from "../src/config.js";
+import type { EnrichmentJobsDomain } from "../src/domain/enrichment-jobs.js";
 import type { ProcessingJobsDomain } from "../src/domain/processing-jobs.js";
 import type { TemporalWorkflowStarter } from "../src/temporal/client.js";
 
@@ -21,6 +22,8 @@ const TEST_ENV = {
   CLERK_FOUNDRY_SERVICE_AUDIENCE: "foundry-service-audience",
   CLERK_APP_SERVICE_SUBJECT: "ai-worker-app-machine",
   CLERK_FOUNDRY_SERVICE_SUBJECT: "ai-worker-foundry-machine",
+  CLERK_APP_ENRICHMENT_INPUT_SCOPE: "jobs:enrichment-input",
+  CLERK_APP_ENRICHMENT_RESULT_SCOPE: "jobs:enrichment-result",
   APP_DATABASE_URL: "postgresql://app-runtime.test/app",
 };
 
@@ -96,6 +99,35 @@ describe("App API job routes", () => {
       })),
       getJob: vi.fn(async () => JOB),
     };
+    const enrichmentJobsDomain: EnrichmentJobsDomain = {
+      getEnrichmentInput: vi.fn(async () => ({
+        outcome: "evaluate" as const,
+        input: {
+          schemaVersion: 1 as const,
+          jobId: JOB_ID,
+          expenseId: "55555555-5555-4555-8555-555555555555",
+          expenseVersion: 1,
+          normalizedMerchant: "market",
+          incurredOn: "2026-09-12",
+          spendingCategoryId: null,
+          rulesVersion: 1,
+          eligibleTagKeys: [],
+          eligibleSpendingCategoryIds: [],
+          eligibleTaxSnapshot: null,
+          history: {
+            exampleCount: 0,
+            candidateTagKeys: [],
+            candidateSpendingCategoryIds: [],
+            candidateTaxCategoryIds: [],
+          },
+        },
+      })),
+      submitEnrichmentResult: vi.fn(async () => ({
+        statusCode: 200 as const,
+        body: { ...JOB, status: "SUCCEEDED" as const, version: 3 },
+        replayed: false,
+      })),
+    };
     const temporalStarter: TemporalWorkflowStarter = {
       start: vi.fn(async () => ({ runId: "fake-run-id" })),
       close: vi.fn(async () => undefined),
@@ -114,6 +146,20 @@ describe("App API job routes", () => {
         if (token === "wrong-principal-token") {
           return servicePrincipal("ai-worker", ["jobs:manage"]);
         }
+        if (token === "enrichment-input-token") {
+          return servicePrincipal("ai-worker-app-machine", ["jobs:enrichment-input"]);
+        }
+        if (token === "enrichment-result-token") {
+          return servicePrincipal("ai-worker-app-machine", ["jobs:enrichment-result"]);
+        }
+        if (token === "enrichment-write-only-token") {
+          // jobs:write only — not sufficient for input or result routes
+          return servicePrincipal("ai-worker-app-machine", ["jobs:write"]);
+        }
+        if (token === "enrichment-wrong-subject-token") {
+          // wrong subject — input scope present but subject mismatch
+          return servicePrincipal("wrong-subject", ["jobs:enrichment-input"]);
+        }
         throw new Error("wrong token");
       }),
     };
@@ -125,10 +171,11 @@ describe("App API job routes", () => {
         service: serviceVerifier,
       },
       processingJobsDomain,
+      enrichmentJobsDomain,
       temporalStarter,
     });
     apps.add(app);
-    return { app, processingJobsDomain, temporalStarter };
+    return { app, processingJobsDomain, enrichmentJobsDomain, temporalStarter };
   }
 
   it("creates a foundation-echo job for an admin service principal", async () => {
@@ -285,5 +332,153 @@ describe("App API job routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().id).toBe(JOB_ID);
     expect(processingJobsDomain.getJob).toHaveBeenCalledWith(JOB_ID);
+  });
+
+  // ---- enrichment input route ----
+
+  it("serves enrichment input to the worker with exact subject + jobs:enrichment-input scope", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-input-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().outcome).toBe("evaluate");
+    expect(enrichmentJobsDomain.getEnrichmentInput).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JOB_ID }),
+    );
+  });
+
+  it("forbids enrichment input with jobs:write only (wrong scope)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-write-only-token" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.getEnrichmentInput).not.toHaveBeenCalled();
+  });
+
+  it("forbids enrichment input with wrong subject (even if scope present)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-wrong-subject-token" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.getEnrichmentInput).not.toHaveBeenCalled();
+  });
+
+  it("forbids enrichment input with result scope (wrong scope for this route)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.getEnrichmentInput).not.toHaveBeenCalled();
+  });
+
+  // ---- enrichment result route ----
+
+  it("accepts enrichment result from the worker with exact subject + jobs:enrichment-result scope", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "result-attempt-1",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JOB_ID }),
+    );
+  });
+
+  it("forbids enrichment result with jobs:write only (wrong scope)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-write-only-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "result-attempt-1",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("forbids enrichment result with input scope (wrong scope for this route)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-input-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "result-attempt-1",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("existing OCR jobs:write guard still requires jobs:write (not enrichment scopes)", async () => {
+    const { app, processingJobsDomain } = createTestApp();
+    // ai-worker-token has jobs:write and subject ai-worker-app-machine
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/status`,
+      headers: { authorization: "Bearer ai-worker-token" },
+      payload: {
+        schemaVersion: 1,
+        status: "RUNNING",
+        idempotencyKey: "attempt-1",
+        expectedJobVersion: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(processingJobsDomain.recordStatusUpdate).toHaveBeenCalled();
   });
 });

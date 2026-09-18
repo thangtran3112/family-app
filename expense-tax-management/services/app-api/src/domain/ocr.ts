@@ -22,6 +22,7 @@ import {
   type MutationResult,
 } from "./idempotency.js";
 import type { PlansDomain } from "./plans.js";
+import { createEnrichmentJobInTransaction } from "./enrichment-jobs.js";
 import { createJobInTransaction } from "./processing-jobs.js";
 import { toProcessingJob } from "./processing-job-view.js";
 
@@ -153,6 +154,21 @@ export async function applyOcrExtraction(
     .where("id", "=", file.id)
     .where("expense_id", "is", null)
     .execute();
+
+  // Enqueue enrichment job for OCR/forwarded materialization in the same
+  // transaction. Enrichment failure never rolls back or changes the ready
+  // expense, OCR job, or dedup state.
+  await createEnrichmentJobInTransaction(transaction, {
+    tenantId: job.tenant_id,
+    scope:
+      job.personal_profile_id !== null
+        ? { personalProfileId: job.personal_profile_id }
+        : { businessId: job.business_id! },
+    expenseId: expense.id,
+    expectedExpenseVersion: expense.version,
+    requestedByUserId: job.requested_by_user_id ?? undefined,
+    requestId: input.requestId,
+  });
 
   return expense.id;
 }

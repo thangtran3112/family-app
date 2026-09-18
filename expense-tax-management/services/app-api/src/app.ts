@@ -39,6 +39,10 @@ import {
 import { createTenantDomain, type TenantDomain } from "./domain/tenants.js";
 import { createPlansDomain, type PlansDomain } from "./domain/plans.js";
 import {
+  createEnrichmentJobsDomain,
+  type EnrichmentJobsDomain,
+} from "./domain/enrichment-jobs.js";
+import {
   createProcessingJobsDomain,
   type ProcessingJobsDomain,
 } from "./domain/processing-jobs.js";
@@ -177,6 +181,7 @@ export interface BuildAppOptions {
   readonly plansDomain?: PlansDomain;
   readonly temporalStarter?: TemporalWorkflowStarter;
   readonly processingJobsDomain?: ProcessingJobsDomain;
+  readonly enrichmentJobsDomain?: EnrichmentJobsDomain;
   readonly deduplicationDomain?: DeduplicationDomain;
   readonly storageAdapter?: StorageAdapter;
   readonly filesDomain?: FilesDomain;
@@ -231,6 +236,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const processingJobsDomain =
     options.processingJobsDomain ??
     createProcessingJobsDomain(database, temporalStarter);
+  const enrichmentJobsDomain =
+    options.enrichmentJobsDomain ?? createEnrichmentJobsDomain(database);
   const deduplicationDomain =
     options.deduplicationDomain ?? createDeduplicationDomain(database);
   const storageAdapter =
@@ -338,9 +345,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
   app.register(registerJobRoutes, {
     processingJobsDomain,
+    enrichmentJobsDomain,
     deduplicationDomain,
     ...(options.config.clerk?.appServiceSubject
       ? { workerServiceSubject: options.config.clerk.appServiceSubject }
+      : {}),
+    ...(options.config.clerk?.enrichmentInputScope
+      ? { enrichmentInputScope: options.config.clerk.enrichmentInputScope }
+      : {}),
+    ...(options.config.clerk?.enrichmentResultScope
+      ? { enrichmentResultScope: options.config.clerk.enrichmentResultScope }
       : {}),
   });
   app.register(registerDuplicateMatchRoutes, {

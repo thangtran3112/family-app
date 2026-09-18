@@ -69,6 +69,8 @@ describe("App API Clerk configuration", () => {
       foundryServiceAudience: "foundry-service-audience",
       appServiceSubject: "ai-worker-app-machine",
       foundryServiceSubject: "ai-worker-foundry-machine",
+      enrichmentInputScope: "jobs:enrichment-input",
+      enrichmentResultScope: "jobs:enrichment-result",
       publishableKey: "pk_test_fake",
       secretKey: "sk_test_fake",
       webhookSigningSecret: "whsec_test_fake",
