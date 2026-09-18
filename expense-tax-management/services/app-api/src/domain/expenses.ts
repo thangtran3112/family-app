@@ -216,21 +216,14 @@ export async function insertExpenseInTransaction(
     scope: Scope;
     source?: "manual" | "ocr" | "forwarded_email";
     /**
-     * Explicit mode governs initial status and enrichment job creation.
-     * Required callers must choose one of the three explicit modes; defaults
-     * to "draft" only when omitted for backward-compatibility with OCR
-     * internal paths that pre-date this enum.
+     * Required: explicit mode governs initial status and enrichment job creation.
+     * Callers must choose one of the three explicit modes — no default.
+     * Omitting mode is a TypeScript compile-time error.
      */
-    mode?: ExpenseInsertMode;
-    /** @deprecated Use mode instead. */
-    initialStatus?: "draft" | "ready";
+    mode: ExpenseInsertMode;
   },
 ): Promise<Expense> {
-  // Resolve effective mode. Legacy initialStatus is still accepted for compatibility.
-  const effectiveMode: ExpenseInsertMode =
-    input.mode ??
-    (input.initialStatus === "ready" ? "manual-ready" : "draft");
-
+  const effectiveMode = input.mode;
   const initialStatus =
     effectiveMode === "draft" ? "draft" : "ready";
 

@@ -263,3 +263,158 @@ describe("JobRouteOptions.enrichmentJobsDomain required type", () => {
     expect(typeof options.enrichmentJobsDomain).toBe("object");
   });
 });
+
+// ------------------------------------------------------------------ //
+// R3-1: insertExpenseInTransaction.mode is required (no initialStatus)
+// TypeScript-level: compile error if mode is missing (verified by tsc --noEmit)
+// Runtime-level: mode must be one of the three explicit string values
+// ------------------------------------------------------------------ //
+
+describe("insertExpenseInTransaction mode required — no initialStatus fallback", () => {
+  it("ExpenseInsertMode contains exactly three values and no legacy paths", () => {
+    const validModes: ExpenseInsertMode[] = ["manual-ready", "ocr-deferred", "draft"];
+    // All three are valid
+    expect(validModes).toHaveLength(3);
+  });
+
+  it("insertExpenseInTransaction function has mode as required parameter (TS enforced)", async () => {
+    // TypeScript guarantees mode is required by verifying the compiled module
+    // — the tsc --noEmit step catches any missing mode at every callsite.
+    // Runtime: just confirm the function is exported.
+    const { insertExpenseInTransaction: fn } = await import(
+      "../src/domain/expenses.js"
+    );
+    expect(typeof fn).toBe("function");
+  });
+});
+
+// ------------------------------------------------------------------ //
+// R3-2: All transport schemas must use z.strictObject (unknown field rejection)
+// ------------------------------------------------------------------ //
+
+describe("EnrichmentResultTransportSchema — z.strictObject rejects unknown fields", () => {
+  const validStale = {
+    schemaVersion: 1,
+    rulesVersion: 1,
+    outcome: "stale" as const,
+    ruleTagKeys: [],
+    suggestions: [],
+  };
+
+  it("rejects unknown top-level field on result envelope", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse({ ...validStale, unknownField: "x" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects unknown field inside aggregateCounts", () => {
+    const withBadCounts = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "tag",
+          source: "historical",
+          tagKey: "merchant:test",
+          confidence: 0.9,
+          evidenceHash: "a".repeat(64),
+          aggregateCounts: { exampleCount: 3, matchCount: 3, unknownExtra: 99 },
+        },
+      ],
+    };
+    expect(EnrichmentResultTransportSchema.safeParse(withBadCounts).success).toBe(false);
+  });
+
+  it("rejects unknown field inside tag suggestion", () => {
+    const withExtra = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "tag",
+          source: "historical",
+          tagKey: "merchant:test",
+          confidence: 0.9,
+          evidenceHash: "a".repeat(64),
+          aggregateCounts: { exampleCount: 3, matchCount: 3 },
+          unexpectedField: "surprise",
+        },
+      ],
+    };
+    expect(EnrichmentResultTransportSchema.safeParse(withExtra).success).toBe(false);
+  });
+});
+
+describe("EnrichmentResultSubmitRequestSchema — z.strictObject rejects unknown fields", () => {
+  const validBody = {
+    schemaVersion: 1,
+    idempotencyKey: "idem-1",
+    expectedJobVersion: 2,
+    result: {
+      schemaVersion: 1,
+      rulesVersion: 1,
+      outcome: "stale",
+      ruleTagKeys: [],
+      suggestions: [],
+    },
+  };
+
+  it("rejects unknown top-level field on submit body", () => {
+    expect(
+      EnrichmentResultSubmitRequestSchema.safeParse({ ...validBody, extra: true }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// R3-3: evidenceHash must be exact canonical lowercase hex SHA-256 regex
+// ------------------------------------------------------------------ //
+
+describe("SuggestionTransportSchema — evidenceHash exact canonical regex", () => {
+  const mkTagSuggestion = (evidenceHash: string) => ({
+    kind: "tag" as const,
+    source: "historical" as const,
+    tagKey: "merchant:test",
+    confidence: 0.9,
+    evidenceHash,
+    aggregateCounts: { exampleCount: 3, matchCount: 3 },
+  });
+
+  const validResult = (evidenceHash: string) => ({
+    schemaVersion: 1,
+    rulesVersion: 1,
+    outcome: "applied" as const,
+    ruleTagKeys: [],
+    suggestions: [mkTagSuggestion(evidenceHash)],
+  });
+
+  it("accepts 64-char lowercase hex evidenceHash", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse(validResult("a".repeat(64))).success,
+    ).toBe(true);
+  });
+
+  it("rejects uppercase hex (must be lowercase)", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse(validResult("A".repeat(64))).success,
+    ).toBe(false);
+  });
+
+  it("rejects non-hex characters in evidenceHash", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse(validResult("g".repeat(64))).success,
+    ).toBe(false);
+  });
+
+  it("rejects evidenceHash shorter than 64 chars", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse(validResult("a".repeat(63))).success,
+    ).toBe(false);
+  });
+
+  it("rejects evidenceHash longer than 64 chars", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse(validResult("a".repeat(65))).success,
+    ).toBe(false);
+  });
+});

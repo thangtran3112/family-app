@@ -710,4 +710,91 @@ describe("App API job routes", () => {
     expect(typeof history.exampleCount).toBe("number");
     expect(Array.isArray(history.candidateTagKeys)).toBe(true);
   });
+
+  // ---- R3-2: strict schema rejects unknown fields at HTTP route layer ----
+
+  it("R3-2: enrichment result route rejects submit body with unknown top-level field", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-unknown",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+        unknownTopLevelField: "should be rejected",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("R3-2: enrichment result route rejects result with unknown field inside result object", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-result-unknown",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+          surpriseField: "not allowed",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  // ---- R3-3: evidenceHash must be canonical lowercase hex SHA-256 ----
+
+  it("R3-3: enrichment result route rejects uppercase evidenceHash (not canonical hex)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-bad-hash",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "applied",
+          ruleTagKeys: [],
+          suggestions: [
+            {
+              kind: "tag",
+              source: "historical",
+              tagKey: "merchant:test",
+              confidence: 0.9,
+              evidenceHash: "A".repeat(64), // uppercase — must be rejected
+              aggregateCounts: { exampleCount: 3, matchCount: 3 },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
 });

@@ -387,30 +387,34 @@ export function createEnrichmentJobsDomain(
  * Equivalent plain `z.object` with `z.union`/`z.discriminatedUnion` (no
  * top-level refine) registers without issue and provides full field coverage.
  */
+/** Exact canonical lowercase SHA-256 regex — 64 hex chars, lowercase only. */
+const EvidenceHashTransportSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/, "evidenceHash must be a 64-char lowercase hex SHA-256");
+
+const AggregateCounts = z.strictObject({
+  exampleCount: z.number().int().min(0).max(50),
+  matchCount: z.number().int().min(0),
+});
+
 const SuggestionTransportSchema = z.union([
-  z.object({
+  z.strictObject({
     kind: z.literal("tag"),
     source: z.literal("historical"),
     tagKey: z.string().min(1).max(100),
     confidence: z.number().min(0).max(1),
-    evidenceHash: z.string().length(64),
-    aggregateCounts: z.object({
-      exampleCount: z.number().int().min(0).max(50),
-      matchCount: z.number().int().min(0),
-    }),
+    evidenceHash: EvidenceHashTransportSchema,
+    aggregateCounts: AggregateCounts,
   }),
-  z.object({
+  z.strictObject({
     kind: z.literal("spending_category"),
     source: z.literal("historical"),
     spendingCategoryId: z.string().uuid(),
     confidence: z.number().min(0).max(1),
-    evidenceHash: z.string().length(64),
-    aggregateCounts: z.object({
-      exampleCount: z.number().int().min(0).max(50),
-      matchCount: z.number().int().min(0),
-    }),
+    evidenceHash: EvidenceHashTransportSchema,
+    aggregateCounts: AggregateCounts,
   }),
-  z.object({
+  z.strictObject({
     kind: z.literal("tax_category"),
     source: z.literal("historical"),
     taxCategoryDefinitionId: z.string().uuid(),
@@ -420,15 +424,12 @@ const SuggestionTransportSchema = z.union([
     taxYear: z.number().int().min(2000).max(2100),
     expenseVersion: z.number().int().positive(),
     confidence: z.number().min(0).max(1),
-    evidenceHash: z.string().length(64),
-    aggregateCounts: z.object({
-      exampleCount: z.number().int().min(0).max(50),
-      matchCount: z.number().int().min(0),
-    }),
+    evidenceHash: EvidenceHashTransportSchema,
+    aggregateCounts: AggregateCounts,
   }),
 ]);
 
-export const EnrichmentResultTransportSchema = z.object({
+export const EnrichmentResultTransportSchema = z.strictObject({
   schemaVersion: z.literal(1),
   rulesVersion: z.number().int().positive(),
   outcome: z.enum(["applied", "stale", "skipped"]),
@@ -436,7 +437,7 @@ export const EnrichmentResultTransportSchema = z.object({
   suggestions: z.array(SuggestionTransportSchema).max(50),
 });
 
-export const EnrichmentResultSubmitRequestSchema = z.object({
+export const EnrichmentResultSubmitRequestSchema = z.strictObject({
   schemaVersion: z.literal(1),
   idempotencyKey: z.string().trim().min(1).max(255),
   expectedJobVersion: z.number().int().positive(),

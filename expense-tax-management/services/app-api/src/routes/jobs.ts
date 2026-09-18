@@ -193,17 +193,31 @@ export async function registerJobRoutes(
      * values already validated against the full canonical schema.
      * history fields mirror EnrichmentHistorySchema structure, same approach.
      */
-    const EligibleTaxSnapshotTransportSchema = z.object({
+    const EligibleTaxSnapshotTransportSchema = z.strictObject({
       businessTaxProfileId: z.string().uuid(),
       businessTaxProfileVersion: z.number().int().positive(),
       taxonomyVersionId: z.string().uuid(),
       taxYear: z.number().int().min(2000).max(2100),
       activeTaxCategoryIds: z.array(z.string().uuid()).max(100),
     });
+    const CandidateTagKeyTransport = z.strictObject({
+      key: z.string().min(1).max(100),
+      count: z.number().int().positive(),
+    });
+    const CandidateIdTransport = z.strictObject({
+      id: z.string().uuid(),
+      count: z.number().int().positive(),
+    });
+    const EnrichmentHistoryTransport = z.strictObject({
+      exampleCount: z.number().int().min(0).max(50),
+      candidateTagKeys: z.array(CandidateTagKeyTransport).max(20),
+      candidateSpendingCategoryIds: z.array(CandidateIdTransport).max(10),
+      candidateTaxCategoryIds: z.array(CandidateIdTransport).max(10),
+    });
     const EnrichmentInputResponseSchema = z.union([
-      z.object({
+      z.strictObject({
         outcome: z.literal("evaluate"),
-        input: z.object({
+        input: z.strictObject({
           schemaVersion: z.literal(1),
           jobId: z.string().uuid(),
           expenseId: z.string().uuid(),
@@ -214,19 +228,12 @@ export async function registerJobRoutes(
           rulesVersion: z.number().int().positive(),
           eligibleTagKeys: z.array(z.string().min(1).max(100)).max(100),
           eligibleSpendingCategoryIds: z.array(z.string().uuid()).max(100),
-          // Typed structure matching EligibleTaxSnapshotSchema fields without refine
           eligibleTaxSnapshot: EligibleTaxSnapshotTransportSchema.nullable(),
-          // Typed structure matching EnrichmentHistorySchema fields without refine
-          history: z.object({
-            exampleCount: z.number().int().min(0).max(50),
-            candidateTagKeys: z.array(z.object({ key: z.string().min(1).max(100), count: z.number().int().positive() })).max(20),
-            candidateSpendingCategoryIds: z.array(z.object({ id: z.string().uuid(), count: z.number().int().positive() })).max(10),
-            candidateTaxCategoryIds: z.array(z.object({ id: z.string().uuid(), count: z.number().int().positive() })).max(10),
-          }),
+          history: EnrichmentHistoryTransport,
         }),
       }),
-      z.object({ outcome: z.literal("stale") }),
-      z.object({ outcome: z.literal("skipped") }),
+      z.strictObject({ outcome: z.literal("stale") }),
+      z.strictObject({ outcome: z.literal("skipped") }),
     ]);
 
     typedApp.get(
