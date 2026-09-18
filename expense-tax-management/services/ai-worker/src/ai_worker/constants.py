@@ -14,3 +14,11 @@ FOUNDATION_ECHO_WORKFLOW_TYPE = "FoundationEchoWorkflow"
 OCR_RECEIPT_WORKFLOW_TYPE = "OcrReceiptWorkflow"
 FORWARDED_RECEIPT_WORKFLOW_TYPE = "ForwardedReceiptWorkflow"
 OCR_EXTRACTION_RESULT_SCHEMA_VERSION = "ocr-extraction-v1"
+
+# Enrichment workflow constants — mirror exact TS literals in task-queues.ts.
+EXPENSE_ENRICHMENT_WORKFLOW_TYPE = "ExpenseEnrichmentWorkflow"
+EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION = "expense-enrichment-v1"
+
+# Evaluator constants — mirror TS ENRICHMENT_RULES_VERSION / ENRICHMENT_RULE_KEYS.
+ENRICHMENT_RULES_VERSION: int = 1
+ENRICHMENT_RULE_KEYS: tuple[str, ...] = ("merchant", "weekend", "selected_category")
