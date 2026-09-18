@@ -2818,6 +2818,7 @@ export interface paths {
                     sort?: "incurredOn" | "amount" | "merchant" | "createdAt";
                     spendingCategoryId?: string;
                     status?: "draft" | "ready" | "archived";
+                    tagId?: string | string[];
                     taxReviewStatus?: "unreviewed" | "reviewed" | "excluded";
                 };
                 header?: never;
@@ -2857,6 +2858,13 @@ export interface paths {
                                 spendingCategoryId: string | null;
                                 /** @enum {string} */
                                 status: "draft" | "ready" | "archived";
+                                /** @default [] */
+                                tags: {
+                                    color: string | null;
+                                    /** Format: uuid */
+                                    id: string;
+                                    name: string;
+                                }[];
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -3015,6 +3023,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3169,6 +3184,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3448,6 +3470,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -11354,6 +11383,7 @@ export interface paths {
                     sort?: "incurredOn" | "amount" | "merchant" | "createdAt";
                     spendingCategoryId?: string;
                     status?: "draft" | "ready" | "archived";
+                    tagId?: string | string[];
                     taxReviewStatus?: "unreviewed" | "reviewed" | "excluded";
                 };
                 header?: never;
@@ -11393,6 +11423,13 @@ export interface paths {
                                 spendingCategoryId: string | null;
                                 /** @enum {string} */
                                 status: "draft" | "ready" | "archived";
+                                /** @default [] */
+                                tags: {
+                                    color: string | null;
+                                    /** Format: uuid */
+                                    id: string;
+                                    name: string;
+                                }[];
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -11551,6 +11588,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -11705,6 +11749,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -11984,6 +12035,13 @@ export interface paths {
                             spendingCategoryId: string | null;
                             /** @enum {string} */
                             status: "draft" | "ready" | "archived";
+                            /** @default [] */
+                            tags: {
+                                color: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                            }[];
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;

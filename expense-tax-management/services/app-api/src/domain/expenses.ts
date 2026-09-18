@@ -7,6 +7,7 @@ import type {
   ExpenseArchiveRequest,
   ExpenseCreateRequest,
   ExpenseList,
+  ExpenseTagChip,
   ExpenseUpdateRequest,
   LedgerQuery,
   PersonalExpenseCollectionParams,
@@ -87,7 +88,7 @@ function dateOnly(value: Date | string): string {
   ).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-function toExpense(row: Selectable<ExpenseTable>): Expense {
+function toExpense(row: Selectable<ExpenseTable>, tags: ExpenseTagChip[] = []): Expense {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -107,6 +108,7 @@ function toExpense(row: Selectable<ExpenseTable>): Expense {
     version: row.version,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    tags,
   };
 }
 
@@ -341,6 +343,10 @@ async function queryExpenses(
         }
       })()
     : null;
+
+  // Task 9: tagIds is canonical (sorted, deduped) after LedgerQuerySchema transform.
+  const tagIds = input.query.tagIds ?? [];
+
   let query = database
     .selectFrom("app.expenses as expense")
     .leftJoin("app.expense_tax_treatments as treatment", "treatment.expense_id", "expense.id")
@@ -352,6 +358,32 @@ async function queryExpenses(
   } else {
     query = query.where("expense.business_id", "=", input.scope.businessId);
   }
+
+  // Task 9: AND semantics — one EXISTS subquery per requested tagId.
+  // Each subquery checks: active association AND active tag definition AND same scope.
+  // Use sql`EXISTS(...)` directly to avoid Kysely type constraints on correlated refs.
+  for (const tagId of tagIds) {
+    const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
+    const scopeValue =
+      input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
+    const tenantId = input.tenantId;
+    query = query.where(
+      sql<boolean>`EXISTS (
+        SELECT 1
+        FROM app.expense_tags AS et2
+        INNER JOIN app.tags AS t2
+          ON t2.id = et2.tag_id
+         AND t2.status = 'active'
+         AND t2.tenant_id = ${tenantId}
+        WHERE et2.expense_id = expense.id
+          AND et2.tag_id = ${tagId}
+          AND et2.tenant_id = ${tenantId}
+          AND et2.status = 'active'
+          AND et2.${sql.raw(scopeColumn)} = ${scopeValue}
+      )`,
+    );
+  }
+
   if (input.query.incurredFrom !== undefined) {
     query = query.where(
       "expense.incurred_on",
@@ -437,7 +469,43 @@ async function queryExpenses(
         lastId: lastRow.id,
       })
     : null;
-  return { items: pageRows.map(toExpense), nextCursor };
+
+  // Task 9: project active tag chips for expenses on this page.
+  // Single bulk query — join expense_tags + tags, filter active on both sides.
+  // Order: name ASC, id ASC — deterministic chip ordering per expense.
+  const pageExpenseIds = pageRows.map((r) => r.id);
+  let tagChipsByExpenseId = new Map<string, ExpenseTagChip[]>();
+  if (pageExpenseIds.length > 0) {
+    const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
+    const scopeValue =
+      input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
+    const chipRows = await database
+      .selectFrom("app.expense_tags as et")
+      .innerJoin("app.tags as t", (join) =>
+        join
+          .onRef("t.id", "=", "et.tag_id")
+          .on("t.status", "=", "active")
+          .on("t.tenant_id", "=", input.tenantId),
+      )
+      .select(["et.expense_id", "t.id", "t.name", "t.color"])
+      .where("et.expense_id", "in", pageExpenseIds)
+      .where("et.status", "=", "active")
+      .where("et.tenant_id", "=", input.tenantId)
+      .where(`et.${scopeColumn}` as "et.personal_profile_id" | "et.business_id", "=", scopeValue as string)
+      .orderBy("t.name", "asc")
+      .orderBy("t.id", "asc")
+      .execute();
+    for (const chip of chipRows) {
+      const chips = tagChipsByExpenseId.get(chip.expense_id) ?? [];
+      chips.push({ id: chip.id, name: chip.name, color: chip.color });
+      tagChipsByExpenseId.set(chip.expense_id, chips);
+    }
+  }
+
+  return {
+    items: pageRows.map((row) => toExpense(row, tagChipsByExpenseId.get(row.id) ?? [])),
+    nextCursor,
+  };
 }
 
 async function findExpense(
@@ -607,6 +675,36 @@ async function archiveExpense(
   });
 }
 
+/**
+ * Fetch active tag chips for a single expense. Active association AND active tag
+ * definition in same tenant/exact scope. Results ordered name ASC, id ASC.
+ */
+async function projectExpenseTagChips(
+  database: Kysely<AppDatabase>,
+  input: { tenantId: string; expenseId: string; scope: Scope },
+): Promise<ExpenseTagChip[]> {
+  const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
+  const scopeValue =
+    input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
+  const chipRows = await database
+    .selectFrom("app.expense_tags as et")
+    .innerJoin("app.tags as t", (join) =>
+      join
+        .onRef("t.id", "=", "et.tag_id")
+        .on("t.status", "=", "active")
+        .on("t.tenant_id", "=", input.tenantId),
+    )
+    .select(["t.id", "t.name", "t.color"])
+    .where("et.expense_id", "=", input.expenseId)
+    .where("et.status", "=", "active")
+    .where("et.tenant_id", "=", input.tenantId)
+    .where(`et.${scopeColumn}` as "et.personal_profile_id" | "et.business_id", "=", scopeValue as string)
+    .orderBy("t.name", "asc")
+    .orderBy("t.id", "asc")
+    .execute();
+  return chipRows.map((r) => ({ id: r.id, name: r.name, color: r.color }));
+}
+
 export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomain {
   return {
     async createPersonal(input) {
@@ -653,23 +751,31 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
     },
     async getPersonal(input) {
       await personalRole(database, input);
-      return toExpense(
-        await findExpense(database, {
-          tenantId: input.tenantId,
-          expenseId: input.expenseId,
-          scope: { kind: "personal", profileId: input.profileId },
-        }),
-      );
+      const row = await findExpense(database, {
+        tenantId: input.tenantId,
+        expenseId: input.expenseId,
+        scope: { kind: "personal", profileId: input.profileId },
+      });
+      const chips = await projectExpenseTagChips(database, {
+        tenantId: input.tenantId,
+        expenseId: row.id,
+        scope: { kind: "personal", profileId: input.profileId },
+      });
+      return toExpense(row, chips);
     },
     async getBusiness(input) {
       await businessRole(database, input);
-      return toExpense(
-        await findExpense(database, {
-          tenantId: input.tenantId,
-          expenseId: input.expenseId,
-          scope: { kind: "business", businessId: input.businessId },
-        }),
-      );
+      const row = await findExpense(database, {
+        tenantId: input.tenantId,
+        expenseId: input.expenseId,
+        scope: { kind: "business", businessId: input.businessId },
+      });
+      const chips = await projectExpenseTagChips(database, {
+        tenantId: input.tenantId,
+        expenseId: row.id,
+        scope: { kind: "business", businessId: input.businessId },
+      });
+      return toExpense(row, chips);
     },
     async updatePersonal(input) {
       const role = await personalRole(database, input);

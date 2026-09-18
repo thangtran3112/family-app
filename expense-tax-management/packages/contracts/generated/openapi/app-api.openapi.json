@@ -6874,6 +6874,28 @@
             }
           },
           {
+            "in": "query",
+            "name": "tagId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
             "in": "path",
             "name": "tenantId",
             "required": true,
@@ -7013,6 +7035,37 @@
                             ],
                             "type": "string"
                           },
+                          "tags": {
+                            "default": [],
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "color"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
                           "taxYear": {
                             "maximum": 9999,
                             "minimum": 1900,
@@ -7052,7 +7105,8 @@
                           "status",
                           "version",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "tags"
                         ],
                         "type": "object"
                       },
@@ -7532,6 +7586,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -7571,7 +7656,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }
@@ -8233,6 +8319,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -8272,7 +8389,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }
@@ -8732,6 +8850,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -8771,7 +8920,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }
@@ -29950,6 +30100,28 @@
             }
           },
           {
+            "in": "query",
+            "name": "tagId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
             "in": "path",
             "name": "tenantId",
             "required": true,
@@ -30089,6 +30261,37 @@
                             ],
                             "type": "string"
                           },
+                          "tags": {
+                            "default": [],
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "color"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
                           "taxYear": {
                             "maximum": 9999,
                             "minimum": 1900,
@@ -30128,7 +30331,8 @@
                           "status",
                           "version",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "tags"
                         ],
                         "type": "object"
                       },
@@ -30608,6 +30812,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -30647,7 +30882,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }
@@ -31309,6 +31545,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -31348,7 +31615,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }
@@ -31808,6 +32076,37 @@
                       ],
                       "type": "string"
                     },
+                    "tags": {
+                      "default": [],
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "color": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -31847,7 +32146,8 @@
                     "status",
                     "version",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "tags"
                   ],
                   "type": "object"
                 }

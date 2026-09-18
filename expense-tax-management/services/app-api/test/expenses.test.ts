@@ -1,6 +1,7 @@
 import {
   ExpenseListSchema,
   ExpenseSchema,
+  LedgerQuerySchema,
   type AuthenticatedUser,
   type Expense,
 } from "@expense-tax/contracts";
@@ -54,6 +55,9 @@ export const PHASE_3C = {
   EXPENSE_V2_ID: "3c000000-0000-4000-8000-00000000000b",
 } as const;
 
+const TAG_A_ID = "99000000-0001-4000-8000-000000000001";
+const TAG_B_ID = "99000000-0001-4000-8000-000000000002";
+
 const EXPENSE: Expense = {
   id: EXPENSE_ID,
   tenantId: TENANT_ID,
@@ -73,6 +77,7 @@ const EXPENSE: Expense = {
   version: 1,
   createdAt: TIMESTAMP,
   updatedAt: TIMESTAMP,
+  tags: [],
 };
 
 function principal(subject: string): AuthPrincipal {
@@ -262,5 +267,97 @@ describe("App API expense routes", () => {
         profileId: PROFILE_ID,
       }),
     );
+  });
+
+  // ---- Task 9: Tag AND filter — route/contract tests ----
+
+  it("T9-R1: listPersonal route passes repeated tagId params to domain as canonical sorted tagIds", async () => {
+    const { app, listPersonal } = createTestApp();
+    // Send tags in reverse order — domain must receive them canonically sorted
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/tenants/${TENANT_ID}/personal-profiles/${PROFILE_ID}/expenses?tagId=${TAG_B_ID}&tagId=${TAG_A_ID}`,
+      headers: auth,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(listPersonal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          tagIds: [TAG_A_ID, TAG_B_ID], // sorted ascending
+        }),
+      }),
+    );
+  });
+
+  it("T9-R2: listPersonal with no tagId param passes empty tagIds array to domain", async () => {
+    const { app, listPersonal } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/tenants/${TENANT_ID}/personal-profiles/${PROFILE_ID}/expenses`,
+      headers: auth,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(listPersonal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ tagIds: [] }),
+      }),
+    );
+  });
+
+  it("T9-R3: listBusiness route passes repeated tagId params to domain", async () => {
+    const { app, listBusiness } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/tenants/${TENANT_ID}/businesses/${BUSINESS_ID}/expenses?tagId=${TAG_A_ID}&tagId=${TAG_B_ID}`,
+      headers: auth,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(listBusiness).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          tagIds: [TAG_A_ID, TAG_B_ID],
+        }),
+      }),
+    );
+  });
+
+  it("T9-R4: LedgerQuerySchema normalizes repeated tagId UUIDs to sorted unique tagIds", () => {
+    const parsed = LedgerQuerySchema.parse({
+      tagId: [TAG_B_ID, TAG_A_ID, TAG_B_ID], // duplicates + reverse order
+    });
+    expect(parsed.tagIds).toEqual([TAG_A_ID, TAG_B_ID]); // deduped + sorted
+  });
+
+  it("T9-R5: LedgerQuerySchema rejects non-UUID tagId values", () => {
+    expect(() =>
+      LedgerQuerySchema.parse({ tagId: ["not-a-uuid"] }),
+    ).toThrow();
+  });
+
+  it("T9-R6: reversed-order same logical tagIds produce same canonical tagIds", () => {
+    const a = LedgerQuerySchema.parse({ tagId: [TAG_A_ID, TAG_B_ID] });
+    const b = LedgerQuerySchema.parse({ tagId: [TAG_B_ID, TAG_A_ID] });
+    expect(a.tagIds).toEqual(b.tagIds);
+  });
+
+  it("T9-R7: expense list items include tags array chip on each expense", () => {
+    // ExpenseListSchema must include tags on each item
+    const parsed = ExpenseListSchema.parse({
+      items: [{ ...EXPENSE, tags: [{ id: TAG_A_ID, name: "Coffee", color: "#FF0000" }] }],
+      nextCursor: null,
+    });
+    expect(parsed.items[0]?.tags).toHaveLength(1);
+    expect(parsed.items[0]?.tags[0]?.id).toBe(TAG_A_ID);
+  });
+
+  it("T9-R8: expense item tags default to empty array if omitted", () => {
+    const parsed = ExpenseListSchema.parse({
+      items: [{ ...EXPENSE, tags: [] }],
+      nextCursor: null,
+    });
+    expect(parsed.items[0]?.tags).toEqual([]);
   });
 });
