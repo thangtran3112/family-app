@@ -592,4 +592,122 @@ describe("App API job routes", () => {
     expect(response.statusCode).toBe(400);
     expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
   });
+
+  // ---- R2-1: strict result.result schema — validates nested fields at HTTP layer ----
+
+  it("R2-1: rejects result body where result.schemaVersion is missing (HTTP schema, not just domain)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-no-schema",
+        expectedJobVersion: 2,
+        result: {
+          // Missing schemaVersion — HTTP layer must reject this
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("R2-1: rejects result body where result.rulesVersion is missing (HTTP schema)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-no-rules",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          // Missing rulesVersion — HTTP layer must reject
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("R2-1: rejects result body where result.outcome is invalid enum (HTTP schema)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-bad-outcome",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "unknown-value", // Not in enum — HTTP layer must reject
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("R2-1: rejects result body where result.ruleTagKeys is not an array (HTTP schema)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-bad-tags",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "applied",
+          ruleTagKeys: "not-an-array", // Must be array — HTTP layer must reject
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("R2-1: enrichment input response includes eligibleTaxSnapshot as typed object or null (not opaque)", async () => {
+    const { app } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-input-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Record<string, unknown>;
+    expect(body.outcome).toBe("evaluate");
+    // eligibleTaxSnapshot must be present as a typed field (not undefined/missing)
+    const input = body.input as Record<string, unknown>;
+    expect("eligibleTaxSnapshot" in input).toBe(true);
+    // history must be a typed object with required fields
+    const history = input.history as Record<string, unknown>;
+    expect(typeof history.exampleCount).toBe("number");
+    expect(Array.isArray(history.candidateTagKeys)).toBe(true);
+  });
 });

@@ -184,32 +184,44 @@ export async function registerJobRoutes(
     ];
 
     /**
-     * Enrichment input response schema — meaningful strict envelope.
+     * Enrichment input response schema — strict typed envelope.
      * Uses z.union with distinct object shapes (no cross-field refinements)
      * so Fastify/ZodTypeProvider can register the route without crashing.
-     * Domain performs full canonical ExpenseEnrichmentInputResponseV1Schema
-     * validation before returning.
+     *
+     * eligibleTaxSnapshot uses the exact field structure of EligibleTaxSnapshotSchema
+     * without the top-level .refine() (which would crash registration). Domain returns
+     * values already validated against the full canonical schema.
+     * history fields mirror EnrichmentHistorySchema structure, same approach.
      */
+    const EligibleTaxSnapshotTransportSchema = z.object({
+      businessTaxProfileId: z.string().uuid(),
+      businessTaxProfileVersion: z.number().int().positive(),
+      taxonomyVersionId: z.string().uuid(),
+      taxYear: z.number().int().min(2000).max(2100),
+      activeTaxCategoryIds: z.array(z.string().uuid()).max(100),
+    });
     const EnrichmentInputResponseSchema = z.union([
       z.object({
         outcome: z.literal("evaluate"),
         input: z.object({
           schemaVersion: z.literal(1),
-          jobId: z.string(),
-          expenseId: z.string(),
-          expenseVersion: z.number(),
-          normalizedMerchant: z.string().nullable(),
+          jobId: z.string().uuid(),
+          expenseId: z.string().uuid(),
+          expenseVersion: z.number().int().positive(),
+          normalizedMerchant: z.string().min(1).max(100).nullable(),
           incurredOn: z.string(),
-          spendingCategoryId: z.string().nullable(),
-          rulesVersion: z.number(),
-          eligibleTagKeys: z.array(z.string()),
-          eligibleSpendingCategoryIds: z.array(z.string()),
-          eligibleTaxSnapshot: z.unknown().nullable(),
+          spendingCategoryId: z.string().uuid().nullable(),
+          rulesVersion: z.number().int().positive(),
+          eligibleTagKeys: z.array(z.string().min(1).max(100)).max(100),
+          eligibleSpendingCategoryIds: z.array(z.string().uuid()).max(100),
+          // Typed structure matching EligibleTaxSnapshotSchema fields without refine
+          eligibleTaxSnapshot: EligibleTaxSnapshotTransportSchema.nullable(),
+          // Typed structure matching EnrichmentHistorySchema fields without refine
           history: z.object({
-            exampleCount: z.number(),
-            candidateTagKeys: z.array(z.object({ key: z.string(), count: z.number() })),
-            candidateSpendingCategoryIds: z.array(z.object({ id: z.string(), count: z.number() })),
-            candidateTaxCategoryIds: z.array(z.object({ id: z.string(), count: z.number() })),
+            exampleCount: z.number().int().min(0).max(50),
+            candidateTagKeys: z.array(z.object({ key: z.string().min(1).max(100), count: z.number().int().positive() })).max(20),
+            candidateSpendingCategoryIds: z.array(z.object({ id: z.string().uuid(), count: z.number().int().positive() })).max(10),
+            candidateTaxCategoryIds: z.array(z.object({ id: z.string().uuid(), count: z.number().int().positive() })).max(10),
           }),
         }),
       }),

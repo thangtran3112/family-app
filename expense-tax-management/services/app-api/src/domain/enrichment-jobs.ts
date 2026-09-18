@@ -363,24 +363,83 @@ export function createEnrichmentJobsDomain(
 }
 
 // ------------------------------------------------------------------ //
-// Wire-format request schema for the result submission route
+// Strict transport schemas for HTTP body/response
 // ------------------------------------------------------------------ //
 
 /**
- * Wire-format body schema for the enrichment result submission route.
- * Uses a strict envelope validating schemaVersion/idempotencyKey/expectedJobVersion
- * and a meaningful result object shape. Domain performs full canonical
- * ExpenseEnrichmentResultV1Schema parse before acting on result content.
+ * Transport-layer result schema for the enrichment result route body.
  *
- * Note: result is typed as z.record(z.unknown()) to avoid Fastify/ZodTypeProvider
- * limitations with deeply-nested refinements in discriminated union body schemas
- * (registration crashes on refine-heavy schemas at Fastify route setup time).
- * The domain performs full canonical parse via ExpenseEnrichmentResultV1Schema.
+ * This is a strict typed envelope that validates all required fields of
+ * ExpenseEnrichmentResultV1 at HTTP layer WITHOUT the top-level `.refine()`
+ * calls that would crash Fastify/ZodTypeProvider route registration.
+ *
+ * The domain performs a full canonical parse via ExpenseEnrichmentResultV1Schema
+ * before acting on the result. Both layers must accept the same wire format;
+ * this schema is a structural subset (no cross-field invariants).
+ *
+ * Registration proof: this schema is registered as a Fastify body schema in
+ * registerJobRoutes; if it caused a crash, all job route tests would fail
+ * with a startup error.
+ *
+ * Fastify/ZodTypeProvider limitation: top-level `.refine()` and
+ * `.discriminatedUnion()` with cross-field `.refine()` cause
+ * `isFluentSchema` undefined crashes during route setup in Fastify v5.
+ * Equivalent plain `z.object` with `z.union`/`z.discriminatedUnion` (no
+ * top-level refine) registers without issue and provides full field coverage.
  */
+const SuggestionTransportSchema = z.union([
+  z.object({
+    kind: z.literal("tag"),
+    source: z.literal("historical"),
+    tagKey: z.string().min(1).max(100),
+    confidence: z.number().min(0).max(1),
+    evidenceHash: z.string().length(64),
+    aggregateCounts: z.object({
+      exampleCount: z.number().int().min(0).max(50),
+      matchCount: z.number().int().min(0),
+    }),
+  }),
+  z.object({
+    kind: z.literal("spending_category"),
+    source: z.literal("historical"),
+    spendingCategoryId: z.string().uuid(),
+    confidence: z.number().min(0).max(1),
+    evidenceHash: z.string().length(64),
+    aggregateCounts: z.object({
+      exampleCount: z.number().int().min(0).max(50),
+      matchCount: z.number().int().min(0),
+    }),
+  }),
+  z.object({
+    kind: z.literal("tax_category"),
+    source: z.literal("historical"),
+    taxCategoryDefinitionId: z.string().uuid(),
+    businessTaxProfileId: z.string().uuid(),
+    businessTaxProfileVersion: z.number().int().positive(),
+    taxonomyVersionId: z.string().uuid(),
+    taxYear: z.number().int().min(2000).max(2100),
+    expenseVersion: z.number().int().positive(),
+    confidence: z.number().min(0).max(1),
+    evidenceHash: z.string().length(64),
+    aggregateCounts: z.object({
+      exampleCount: z.number().int().min(0).max(50),
+      matchCount: z.number().int().min(0),
+    }),
+  }),
+]);
+
+export const EnrichmentResultTransportSchema = z.object({
+  schemaVersion: z.literal(1),
+  rulesVersion: z.number().int().positive(),
+  outcome: z.enum(["applied", "stale", "skipped"]),
+  ruleTagKeys: z.array(z.string().min(1).max(100)).max(50),
+  suggestions: z.array(SuggestionTransportSchema).max(50),
+});
+
 export const EnrichmentResultSubmitRequestSchema = z.object({
   schemaVersion: z.literal(1),
   idempotencyKey: z.string().trim().min(1).max(255),
   expectedJobVersion: z.number().int().positive(),
-  result: z.record(z.string(), z.unknown()),
+  result: EnrichmentResultTransportSchema,
 });
 export type EnrichmentResultSubmitRequest = z.infer<typeof EnrichmentResultSubmitRequestSchema>;

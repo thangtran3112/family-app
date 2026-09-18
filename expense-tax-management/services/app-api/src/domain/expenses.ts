@@ -191,6 +191,21 @@ function assertRequestScope(request: ExpenseCreateRequest, scope: Scope): void {
   }
 }
 
+/**
+ * Explicit enrichment mode for insertExpenseInTransaction.
+ *
+ * - "manual-ready"  : expense is immediately ready; create enrichment job inline
+ *                     in the same transaction before returning. Used by public
+ *                     manual creates (createPersonal, createBusiness).
+ * - "ocr-deferred"  : expense is ready but caller (applyOcrExtraction) will
+ *                     create the enrichment job itself after file binding.
+ *                     Prevents a duplicate job when OCR explicitly calls
+ *                     createEnrichmentJobInTransaction.
+ * - "draft"         : expense starts as draft; no enrichment job created.
+ *                     Used by OCR draft holding and internal callers.
+ */
+export type ExpenseInsertMode = "manual-ready" | "ocr-deferred" | "draft";
+
 export async function insertExpenseInTransaction(
   transaction: Transaction<AppDatabase>,
   input: {
@@ -200,14 +215,25 @@ export async function insertExpenseInTransaction(
     requestId: string;
     scope: Scope;
     source?: "manual" | "ocr" | "forwarded_email";
-    initialStatus?: "draft" | "ready";
     /**
-     * When true, the caller (e.g. applyOcrExtraction) will create the
-     * enrichment job itself after file binding. Skip here to avoid duplicate.
+     * Explicit mode governs initial status and enrichment job creation.
+     * Required callers must choose one of the three explicit modes; defaults
+     * to "draft" only when omitted for backward-compatibility with OCR
+     * internal paths that pre-date this enum.
      */
-    skipEnrichmentJob?: boolean;
+    mode?: ExpenseInsertMode;
+    /** @deprecated Use mode instead. */
+    initialStatus?: "draft" | "ready";
   },
 ): Promise<Expense> {
+  // Resolve effective mode. Legacy initialStatus is still accepted for compatibility.
+  const effectiveMode: ExpenseInsertMode =
+    input.mode ??
+    (input.initialStatus === "ready" ? "manual-ready" : "draft");
+
+  const initialStatus =
+    effectiveMode === "draft" ? "draft" : "ready";
+
   const now = new Date();
   const created = await transaction
     .insertInto("app.expenses")
@@ -225,7 +251,7 @@ export async function insertExpenseInTransaction(
       currency: input.request.currency,
       incurred_on: input.request.incurredOn,
       source: input.source ?? "manual",
-      status: input.initialStatus ?? "draft",
+      status: initialStatus,
       version: 1,
       created_at: now,
       updated_at: now,
@@ -266,10 +292,10 @@ export async function insertExpenseInTransaction(
       .execute();
   }
 
-  // Enqueue enrichment workflow when expense is created in ready state.
-  // Skip when the caller (applyOcrExtraction) creates the enrichment job itself
-  // after file binding to avoid duplicate jobs.
-  if (created.status === "ready" && !input.skipEnrichmentJob) {
+  // Enqueue enrichment workflow for manual-ready path only.
+  // "ocr-deferred" skips here; applyOcrExtraction explicitly calls
+  // createEnrichmentJobInTransaction after file binding (avoids duplicate).
+  if (effectiveMode === "manual-ready") {
     await createEnrichmentJobInTransaction(transaction, {
       tenantId: input.tenantId,
       scope:
@@ -537,9 +563,9 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
         insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "personal", profileId: input.profileId },
-          // Public manual creates are immediately ready; enrichment is enqueued
-          // in the same transaction by insertExpenseInTransaction.
-          initialStatus: "ready",
+          // Explicit mode: public manual creates are immediately ready and
+          // the enrichment job is created inline in the same transaction.
+          mode: "manual-ready",
         }),
       );
     },
@@ -551,9 +577,9 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
         insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "business", businessId: input.businessId },
-          // Public manual creates are immediately ready; enrichment is enqueued
-          // in the same transaction by insertExpenseInTransaction.
-          initialStatus: "ready",
+          // Explicit mode: public manual creates are immediately ready and
+          // the enrichment job is created inline in the same transaction.
+          mode: "manual-ready",
         }),
       );
     },

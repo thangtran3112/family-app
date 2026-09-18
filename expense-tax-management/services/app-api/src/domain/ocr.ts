@@ -145,10 +145,9 @@ export async function applyOcrExtraction(
       job.workflow_type === FORWARDED_RECEIPT_WORKFLOW_TYPE
         ? "forwarded_email"
         : "ocr",
-    initialStatus: "ready",
-    // applyOcrExtraction creates the enrichment job itself after file binding;
-    // skip inside insertExpenseInTransaction to avoid a duplicate.
-    skipEnrichmentJob: true,
+    // ocr-deferred: applyOcrExtraction explicitly calls createEnrichmentJobInTransaction
+    // after file binding. insertExpenseInTransaction skips inline creation for this mode.
+    mode: "ocr-deferred",
   });
 
   await transaction

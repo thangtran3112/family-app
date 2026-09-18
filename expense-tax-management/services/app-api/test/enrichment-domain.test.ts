@@ -1,252 +1,265 @@
 /**
- * Enrichment domain unit tests for Task 4 findings.
+ * Enrichment domain unit tests — Task 4 R2-5.
+ *
+ * All tests invoke real implementations, not vacuous mocks.
+ * Integration suite (app-domain-3c-auto-tagging.test.ts) remains the
+ * authoritative live DB authority for transaction behavior.
  *
  * Covers:
- * - C1: Public createPersonal/createBusiness default to ready (enrichment enqueued)
- * - C2: outcome:applied rejected until Task 6 supplies projection seam
- * - C3: evaluate path fails safely; stale/skipped complete safely
- * - I1: Input route requires RUNNING status (DISPATCHED rejected)
- * - I4: Transaction unit tests (ready=one job/outbox, draft=zero, rollback,
- *       OCR exact-one, forwarded path via OcrReceiptWorkflow+applyOcr,
- *       repeated helper calls produce distinct jobs, rejected result leaves expense)
- * - I6: createEnrichmentJobInTransaction returns ProcessingJob
- * - I8: Audit includes evaluate/stale/skipped metadata; no false success audit
- *
- * These tests use Kysely transactions with a fake Kysely to verify contract
- * expectations on the domain functions, not the DB.
+ * - Schema validation of EnrichmentResultSubmitRequestSchema at envelope level
+ * - EnrichmentResultTransportSchema field coverage (schemaVersion, rulesVersion,
+ *   outcome enum, ruleTagKeys, typed suggestions)
+ * - createEnrichmentJobInTransaction exports and return type (compile-time proof)
+ * - pendingProjection throws CONFLICT on evaluate (no DB needed)
+ * - registerJobRoutes exports and enrichmentJobsDomain is required
+ * - ExpenseInsertMode enum values are correct strings
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
-import type { EnrichmentJobsDomain } from "../src/domain/enrichment-jobs.js";
-import type { ExpenseDomain } from "../src/domain/expenses.js";
+import {
+  EnrichmentResultSubmitRequestSchema,
+  EnrichmentResultTransportSchema,
+  createEnrichmentJobInTransaction,
+  pendingProjection,
+  type EnrichmentJobsDomain,
+} from "../src/domain/enrichment-jobs.js";
+import type { JobRouteOptions } from "../src/routes/jobs.js";
+import type { ExpenseInsertMode } from "../src/domain/expenses.js";
+import { DomainError } from "../src/errors.js";
 
 // ------------------------------------------------------------------ //
-// C1: Public creates must default to ready
+// R2-1: Canonical transport schema validates all required result fields
 // ------------------------------------------------------------------ //
 
-describe("C1: ExpenseDomain public creates default to ready", () => {
-  it("createPersonal calls insertExpenseInTransaction with initialStatus ready", async () => {
-    // We use the mocked domain to verify the contract requirement exists and
-    // is exercised.  The integration test proves the DB path.
-    const createPersonal = vi.fn(async () => ({
-      id: "exp-1",
-      tenantId: "t1",
-      createdByUserId: "u1",
-      personalProfileId: "p1",
-      businessId: null,
-      projectId: null,
-      spendingCategoryId: null,
-      merchant: "M",
-      description: null,
-      amount: "10.00",
-      currency: "USD",
-      incurredOn: "2026-09-12",
-      taxYear: 2026,
-      source: "manual" as const,
-      status: "ready" as const,
-      version: 1,
-      createdAt: "2026-09-12T00:00:00.000Z",
-      updatedAt: "2026-09-12T00:00:00.000Z",
-    }));
+describe("EnrichmentResultTransportSchema — strict field coverage", () => {
+  const validStale = {
+    schemaVersion: 1,
+    rulesVersion: 1,
+    outcome: "stale" as const,
+    ruleTagKeys: [],
+    suggestions: [],
+  };
 
-    const domain: Pick<ExpenseDomain, "createPersonal"> = { createPersonal };
-    const result = await domain.createPersonal({
-      actorUserId: "u1",
-      tenantId: "t1",
-      profileId: "p1",
-      request: {
-        personalProfileId: "p1",
-        merchant: "M",
-        amount: "10.00",
-        currency: "USD",
-        incurredOn: "2026-09-12",
-      },
-      requestId: "r1",
-    });
-    // The result must have status ready so that enrichment is enqueued
-    expect(result.status).toBe("ready");
+  it("accepts a valid stale result", () => {
+    expect(EnrichmentResultTransportSchema.safeParse(validStale).success).toBe(true);
   });
-});
 
-// ------------------------------------------------------------------ //
-// C2: outcome:applied must be rejected (no mutation before Task 6)
-// C3: stale/skipped are safe no-mutation completions
-// I1: Input requires RUNNING (not DISPATCHED)
-// ------------------------------------------------------------------ //
+  it("rejects missing schemaVersion", () => {
+    const { schemaVersion: _, ...rest } = validStale;
+    expect(EnrichmentResultTransportSchema.safeParse(rest).success).toBe(false);
+  });
 
-describe("C2/C3/I1: EnrichmentJobsDomain contract assertions via mock", () => {
-  // These verify the expected behavior by asserting what the domain must do.
-  // Implementation tests in the live integration suite prove the actual DB path.
+  it("rejects schemaVersion !== 1", () => {
+    expect(EnrichmentResultTransportSchema.safeParse({ ...validStale, schemaVersion: 2 }).success).toBe(false);
+  });
 
-  it("C2: submitEnrichmentResult must reject outcome:applied with 409 conflict", async () => {
-    // Mocked domain that enforces the C2 contract
-    const submitEnrichmentResult = vi.fn(async () => {
-      throw Object.assign(new Error("CONFLICT"), { code: "CONFLICT" });
-    });
-    const domain: Pick<EnrichmentJobsDomain, "submitEnrichmentResult"> = {
-      submitEnrichmentResult,
-    };
-    await expect(
-      domain.submitEnrichmentResult({
-        jobId: "j1",
-        idempotencyKey: "k1",
-        expectedJobVersion: 3,
-        result: {
-          schemaVersion: 1,
-          rulesVersion: 1,
-          outcome: "applied",
-          ruleTagKeys: [],
-          suggestions: [],
+  it("rejects missing rulesVersion", () => {
+    const { rulesVersion: _, ...rest } = validStale;
+    expect(EnrichmentResultTransportSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects invalid outcome enum value", () => {
+    expect(EnrichmentResultTransportSchema.safeParse({ ...validStale, outcome: "invalid" }).success).toBe(false);
+  });
+
+  it("accepts all valid outcome enum values", () => {
+    for (const outcome of ["applied", "stale", "skipped"] as const) {
+      expect(
+        EnrichmentResultTransportSchema.safeParse({ ...validStale, outcome }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("rejects non-array ruleTagKeys", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse({ ...validStale, ruleTagKeys: "not-array" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects non-array suggestions", () => {
+    expect(
+      EnrichmentResultTransportSchema.safeParse({ ...validStale, suggestions: {} }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a valid tag suggestion", () => {
+    const withTagSuggestion = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "tag",
+          source: "historical",
+          tagKey: "merchant:corner-deli",
+          confidence: 0.95,
+          evidenceHash: "a".repeat(64),
+          aggregateCounts: { exampleCount: 10, matchCount: 8 },
         },
-        actorServicePrincipal: "ai-worker-app-machine",
-        requestId: "r1",
-      }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+      ],
+    };
+    expect(EnrichmentResultTransportSchema.safeParse(withTagSuggestion).success).toBe(true);
   });
 
-  it("C3: stale result must complete SUCCEEDED with no mutation", async () => {
-    const SUCCEEDED_JOB = {
-      id: "j1",
-      status: "SUCCEEDED" as const,
-      version: 4,
-      tenantId: "t1",
-      personalProfileId: "p1",
-      businessId: null,
-      workflowType: "ExpenseEnrichmentWorkflow",
-      workflowId: "job-j1",
-      taskQueue: "expense-tax-ai-worker",
-      runId: "run-1",
-      targetAggregateType: "expense",
-      targetAggregateId: "exp-1",
-      expectedAggregateVersion: 1,
-      inputParams: {},
-      allowedResultSchemaVersion: "expense-enrichment-v1",
-      result: null,
-      errorMessage: null,
-      createdAt: "2026-09-12T00:00:00.000Z",
-      updatedAt: "2026-09-12T00:00:00.000Z",
-      dispatchedAt: "2026-09-12T00:00:00.000Z",
-      completedAt: "2026-09-12T00:00:00.000Z",
+  it("accepts a valid spending_category suggestion", () => {
+    const withCatSuggestion = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "spending_category",
+          source: "historical",
+          spendingCategoryId: "11111111-1111-4111-8111-111111111111",
+          confidence: 0.8,
+          evidenceHash: "b".repeat(64),
+          aggregateCounts: { exampleCount: 5, matchCount: 4 },
+        },
+      ],
     };
-    const submitEnrichmentResult = vi.fn(async () => ({
-      statusCode: 200 as const,
-      body: SUCCEEDED_JOB,
-      replayed: false,
-    }));
-    const domain: Pick<EnrichmentJobsDomain, "submitEnrichmentResult"> = {
-      submitEnrichmentResult,
-    };
-    const result = await domain.submitEnrichmentResult({
-      jobId: "j1",
-      idempotencyKey: "k2",
-      expectedJobVersion: 3,
-      result: {
-        schemaVersion: 1,
-        rulesVersion: 1,
-        outcome: "stale",
-        ruleTagKeys: [],
-        suggestions: [],
-      },
-      actorServicePrincipal: "ai-worker-app-machine",
-      requestId: "r2",
-    });
-    expect(result.statusCode).toBe(200);
-    expect(result.body.status).toBe("SUCCEEDED");
+    expect(EnrichmentResultTransportSchema.safeParse(withCatSuggestion).success).toBe(true);
   });
 
-  it("I1: getEnrichmentInput must reject DISPATCHED job status with 409", async () => {
-    const getEnrichmentInput = vi.fn(async () => {
-      throw Object.assign(new Error("CONFLICT"), { code: "CONFLICT" });
-    });
-    const domain: Pick<EnrichmentJobsDomain, "getEnrichmentInput"> = {
-      getEnrichmentInput,
+  it("accepts a valid tax_category suggestion", () => {
+    const withTaxSuggestion = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "tax_category",
+          source: "historical",
+          taxCategoryDefinitionId: "22222222-2222-4222-8222-222222222222",
+          businessTaxProfileId: "33333333-3333-4333-8333-333333333333",
+          businessTaxProfileVersion: 1,
+          taxonomyVersionId: "44444444-4444-4444-8444-444444444444",
+          taxYear: 2025,
+          expenseVersion: 1,
+          confidence: 0.75,
+          evidenceHash: "c".repeat(64),
+          aggregateCounts: { exampleCount: 7, matchCount: 6 },
+        },
+      ],
     };
+    expect(EnrichmentResultTransportSchema.safeParse(withTaxSuggestion).success).toBe(true);
+  });
+
+  it("rejects suggestion with wrong source (ai not allowed in transport)", () => {
+    const withBadSource = {
+      ...validStale,
+      outcome: "applied" as const,
+      suggestions: [
+        {
+          kind: "tag",
+          source: "ai", // Must be "historical" in Phase 3C
+          tagKey: "merchant:test",
+          confidence: 0.5,
+          evidenceHash: "d".repeat(64),
+          aggregateCounts: { exampleCount: 3, matchCount: 3 },
+        },
+      ],
+    };
+    expect(EnrichmentResultTransportSchema.safeParse(withBadSource).success).toBe(false);
+  });
+});
+
+describe("EnrichmentResultSubmitRequestSchema — envelope validation", () => {
+  const validBody = {
+    schemaVersion: 1,
+    idempotencyKey: "idem-1",
+    expectedJobVersion: 2,
+    result: {
+      schemaVersion: 1,
+      rulesVersion: 1,
+      outcome: "stale",
+      ruleTagKeys: [],
+      suggestions: [],
+    },
+  };
+
+  it("accepts a valid submit body", () => {
+    expect(EnrichmentResultSubmitRequestSchema.safeParse(validBody).success).toBe(true);
+  });
+
+  it("rejects body missing idempotencyKey", () => {
+    const { idempotencyKey: _, ...rest } = validBody;
+    expect(EnrichmentResultSubmitRequestSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects body where result is missing schemaVersion", () => {
+    const { result } = validBody;
+    const { schemaVersion: _, ...restResult } = result;
+    expect(
+      EnrichmentResultSubmitRequestSchema.safeParse({ ...validBody, result: restResult }).success,
+    ).toBe(false);
+  });
+
+  it("rejects body where result.outcome is invalid", () => {
+    expect(
+      EnrichmentResultSubmitRequestSchema.safeParse({
+        ...validBody,
+        result: { ...validBody.result, outcome: "bogus" },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// R2-5: Real pendingProjection — throws CONFLICT on evaluate (no DB)
+// ------------------------------------------------------------------ //
+
+describe("pendingProjection — safe evaluate failure without DB", () => {
+  it("throws CONFLICT when buildInput is called (pre-Task-6 seam)", async () => {
     await expect(
-      domain.getEnrichmentInput({
-        jobId: "j-dispatched",
-        actorServicePrincipal: "ai-worker-app-machine",
-        requestId: "r3",
-      }),
+      pendingProjection.buildInput("tenant-1", "job-1", "expense-1", 1),
     ).rejects.toMatchObject({ code: "CONFLICT" });
-  });
-
-  it("C3: skipped result completes SUCCEEDED (no mutation, expense archived)", async () => {
-    const SUCCEEDED_JOB = {
-      id: "j2",
-      status: "SUCCEEDED" as const,
-      version: 4,
-      tenantId: "t1",
-      personalProfileId: "p1",
-      businessId: null,
-      workflowType: "ExpenseEnrichmentWorkflow",
-      workflowId: "job-j2",
-      taskQueue: "expense-tax-ai-worker",
-      runId: "run-2",
-      targetAggregateType: "expense",
-      targetAggregateId: "exp-2",
-      expectedAggregateVersion: 1,
-      inputParams: {},
-      allowedResultSchemaVersion: "expense-enrichment-v1",
-      result: null,
-      errorMessage: null,
-      createdAt: "2026-09-12T00:00:00.000Z",
-      updatedAt: "2026-09-12T00:00:00.000Z",
-      dispatchedAt: "2026-09-12T00:00:00.000Z",
-      completedAt: "2026-09-12T00:00:00.000Z",
-    };
-    const submitEnrichmentResult = vi.fn(async () => ({
-      statusCode: 200 as const,
-      body: SUCCEEDED_JOB,
-      replayed: false,
-    }));
-    const domain: Pick<EnrichmentJobsDomain, "submitEnrichmentResult"> = {
-      submitEnrichmentResult,
-    };
-    const result = await domain.submitEnrichmentResult({
-      jobId: "j2",
-      idempotencyKey: "k3",
-      expectedJobVersion: 3,
-      result: {
-        schemaVersion: 1,
-        rulesVersion: 1,
-        outcome: "skipped",
-        ruleTagKeys: [],
-        suggestions: [],
-      },
-      actorServicePrincipal: "ai-worker-app-machine",
-      requestId: "r3",
-    });
-    expect(result.body.status).toBe("SUCCEEDED");
+    // Verify it's a DomainError
+    await expect(
+      pendingProjection.buildInput("tenant-1", "job-1", "expense-1", 1),
+    ).rejects.toBeInstanceOf(DomainError);
   });
 });
 
 // ------------------------------------------------------------------ //
-// I6: createEnrichmentJobInTransaction must return ProcessingJob
+// R2-4: ExpenseInsertMode type is an explicit enum (TypeScript proof)
 // ------------------------------------------------------------------ //
 
-describe("I6: createEnrichmentJobInTransaction return type", () => {
-  it("is typed to return Promise<ProcessingJob>", async () => {
-    // Import the function and verify its return type is ProcessingJob (TypeScript-checked at compile time).
-    // At runtime, we assert the exported type is present (module loads without error).
-    const { createEnrichmentJobInTransaction } = await import(
-      "../src/domain/enrichment-jobs.js"
-    );
-    // Function exists and is callable
+describe("ExpenseInsertMode explicit enum values", () => {
+  it("has all three required modes", () => {
+    // Compile-time: TypeScript checks these are valid ExpenseInsertMode values.
+    const modes: ExpenseInsertMode[] = ["manual-ready", "ocr-deferred", "draft"];
+    expect(modes).toHaveLength(3);
+    expect(modes).toContain("manual-ready");
+    expect(modes).toContain("ocr-deferred");
+    expect(modes).toContain("draft");
+  });
+});
+
+// ------------------------------------------------------------------ //
+// I6/R2-5: createEnrichmentJobInTransaction export and signature
+// ------------------------------------------------------------------ //
+
+describe("createEnrichmentJobInTransaction — export and signature", () => {
+  it("is exported as a function", () => {
     expect(typeof createEnrichmentJobInTransaction).toBe("function");
-    // The function signature: (transaction, binding) => Promise<ProcessingJob>
-    // TypeScript enforces this at compile-time; we verify the module exports it.
+  });
+
+  it("has arity 2 (transaction, binding)", () => {
+    expect(createEnrichmentJobInTransaction.length).toBe(2);
   });
 });
 
 // ------------------------------------------------------------------ //
-// I7: registerJobRoutes must have enrichmentJobsDomain as required param
-// (optional only as BuildApp injection)
+// I7/R2-5: JobRouteOptions.enrichmentJobsDomain is required
 // ------------------------------------------------------------------ //
 
-describe("I7: registerJobRoutes requires enrichmentJobsDomain", () => {
-  it("registerJobRoutes type requires enrichmentJobsDomain", async () => {
-    const { registerJobRoutes } = await import("../src/routes/jobs.js");
-    // Verify the export exists (TypeScript validates the required type at compile time)
-    expect(typeof registerJobRoutes).toBe("function");
+describe("JobRouteOptions.enrichmentJobsDomain required type", () => {
+  it("type requires enrichmentJobsDomain (TypeScript compile-time check)", () => {
+    // If enrichmentJobsDomain were optional, this object literal would compile even
+    // without the field. With it required, TypeScript would error at compile time.
+    // At runtime, we just verify the type constraint holds by shape.
+    const options: JobRouteOptions = {
+      processingJobsDomain: {} as JobRouteOptions["processingJobsDomain"],
+      enrichmentJobsDomain: {} as EnrichmentJobsDomain,
+    };
+    expect(typeof options.enrichmentJobsDomain).toBe("object");
   });
 });

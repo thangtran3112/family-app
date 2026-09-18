@@ -31,7 +31,7 @@ import type { Kysely } from "kysely";
 import { createAppDatabase } from "../../services/app-api/src/database/client.js";
 import type { AppDatabase } from "../../services/app-api/src/database/types.js";
 import { runMigrations } from "../../services/app-api/src/database/migrate.js";
-import { createExpenseDomain } from "../../services/app-api/src/domain/expenses.js";
+import { createExpenseDomain, insertExpenseInTransaction } from "../../services/app-api/src/domain/expenses.js";
 import { createEnrichmentJobsDomain, pendingProjection } from "../../services/app-api/src/domain/enrichment-jobs.js";
 import { createProcessingJobsDomain } from "../../services/app-api/src/domain/processing-jobs.js";
 import { createFilesDomain } from "../../services/app-api/src/domain/files.js";
@@ -852,33 +852,121 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
   );
 
   it(
-    "I4: createPersonal with explicit draft initialStatus creates zero enrichment jobs",
+    "R2-3: insertExpenseInTransaction with mode:draft creates expense with zero enrichment jobs",
     async () => {
-      // insertExpenseInTransaction with initialStatus:draft must create 0 enrichment jobs.
-      // This path is only reachable directly; public domain creates use ready.
+      // Real insertExpenseInTransaction call with mode:draft proves no job is created.
+      // This replaces the previous raw-SQL seed which bypassed the domain entirely.
       const db = database;
       if (!db) throw new Error("Integration database was not initialized");
 
-      const draftExpId = "3c000000-0000-4000-8000-ee0000000010";
+      const expense = await db.transaction().execute((tx) =>
+        insertExpenseInTransaction(tx, {
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          scope: { kind: "personal", profileId: PHASE_3C_PROFILE_A_ID },
+          request: {
+            personalProfileId: PHASE_3C_PROFILE_A_ID,
+            merchant: "DraftModeReal",
+            amount: "5.00",
+            currency: "USD",
+            incurredOn: "2026-09-12",
+          },
+          requestId: `3c-draft-real-${runKey}`,
+          mode: "draft",
+        }),
+      );
 
-      // Insert a draft expense directly (bypasses domain to isolate the path)
+      // Expense status must be draft
+      expect(expense.status).toBe("draft");
+
+      // Zero enrichment jobs created
+      const jobCount = runtimeSql(
+        `SELECT count(*) FROM app.processing_jobs
+           WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
+             AND target_aggregate_id = '${expense.id}';`,
+      );
+      expect(jobCount).toBe("0");
+
+      // Zero outbox rows
+      const outboxCount = runtimeSql(
+        `SELECT count(*) FROM app.processing_job_dispatch_outbox outbox
+           INNER JOIN app.processing_jobs job ON job.id = outbox.processing_job_id
+           WHERE job.target_aggregate_id = '${expense.id}';`,
+      );
+      expect(outboxCount).toBe("0");
+    },
+  );
+
+  it(
+    "R2-2: transaction rollback removes expense, enrichment job, outbox, and decision atomically",
+    async () => {
+      // Proves that when the transaction throws after job creation,
+      // all rows (expense, job, outbox, category decision) are rolled back.
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      // Seed a spending category for the decision row
+      const rollbackCatId = "3c000000-0000-4000-8000-ee0000000015";
       runtimeSql(`
-        INSERT INTO app.expenses
-          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
-           merchant, amount, currency, incurred_on, source, status)
+        INSERT INTO app.spending_categories
+          (id, tenant_id, name, color, icon, status)
         VALUES
-          ('${draftExpId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
-           '${PHASE_3C_PROFILE_A_ID}', NULL,
-           'DraftMerchant', '5.00', 'USD', '2026-09-12', 'manual', 'draft')
+          ('${rollbackCatId}', '${PHASE_3C_TENANT_A_ID}', '3C RollbackCat', '#112233', 'tag', 'active')
         ON CONFLICT DO NOTHING;
       `);
+
+      let capturedExpenseId: string | null = null;
+      const rollbackError = new Error("deliberate rollback");
+
+      await expect(
+        db.transaction().execute(async (tx) => {
+          const expense = await insertExpenseInTransaction(tx, {
+            actorUserId: PHASE_3C_USER_ID,
+            tenantId: PHASE_3C_TENANT_A_ID,
+            scope: { kind: "personal", profileId: PHASE_3C_PROFILE_A_ID },
+            request: {
+              personalProfileId: PHASE_3C_PROFILE_A_ID,
+              merchant: "RollbackMerchant",
+              amount: "99.00",
+              currency: "USD",
+              incurredOn: "2026-09-12",
+              spendingCategoryId: rollbackCatId,
+            },
+            requestId: `3c-rollback-${runKey}`,
+            mode: "manual-ready",
+          });
+          capturedExpenseId = expense.id;
+          throw rollbackError; // Force rollback
+        }),
+      ).rejects.toThrow("deliberate rollback");
+
+      expect(capturedExpenseId).not.toBeNull();
+
+      // All rows must be absent after rollback
+      const expenseCount = runtimeSql(
+        `SELECT count(*) FROM app.expenses WHERE id = '${capturedExpenseId}';`,
+      );
+      expect(expenseCount).toBe("0");
 
       const jobCount = runtimeSql(
         `SELECT count(*) FROM app.processing_jobs
            WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
-             AND target_aggregate_id = '${draftExpId}';`,
+             AND target_aggregate_id = '${capturedExpenseId}';`,
       );
       expect(jobCount).toBe("0");
+
+      const outboxCount = runtimeSql(
+        `SELECT count(*) FROM app.processing_job_dispatch_outbox outbox
+           INNER JOIN app.processing_jobs job ON job.id = outbox.processing_job_id
+           WHERE job.target_aggregate_id = '${capturedExpenseId}';`,
+      );
+      expect(outboxCount).toBe("0");
+
+      const decisionCount = runtimeSql(
+        `SELECT count(*) FROM app.expense_spending_category_decisions
+           WHERE expense_id = '${capturedExpenseId}';`,
+      );
+      expect(decisionCount).toBe("0");
     },
   );
 
