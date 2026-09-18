@@ -14,13 +14,19 @@ Historical inference rules (per cross-task spec):
   JSON (keys sorted, no spaces, ASCII).
 - Personal expenses (eligibleTaxSnapshot=None) produce no tax suggestion.
 - Tax suggestion carries the full snapshot + input expenseVersion.
+
+Implementation note: the generated numbered classes Suggestions/Suggestions1/
+Suggestions2 are internal generator artifacts. This module builds plain
+strict dicts and validates once through the top-level
+ExpenseEnrichmentResultV1.model_validate() so the generator naming stays
+entirely internal and never leaks into production call sites.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from uuid import UUID
+from typing import Any
 
 from expense_contracts.generated import (
     ExpenseEnrichmentInputV1,
@@ -29,13 +35,6 @@ from expense_contracts.generated import (
 from expense_contracts.generated.expense_enrichment_input_v1 import (
     EligibleTaxSnapshot,
     History,
-)
-from expense_contracts.generated.expense_enrichment_result_v1 import (
-    AggregateCounts,
-    RuleTagKey,
-    Suggestions,
-    Suggestions1,
-    Suggestions2,
 )
 
 from ai_worker.constants import ENRICHMENT_RULES_VERSION
@@ -114,7 +113,7 @@ def _leading_candidate[T](
     Return (candidate, count) if:
     - example_count >= 3
     - leading count / example_count >= 0.80
-    - no tie at the leading count
+    - no tie at the leading count (second count strictly less)
     Otherwise return None.
     """
     if example_count < 3:
@@ -136,9 +135,14 @@ def _leading_candidate[T](
     return top_val, top_count
 
 
+def _aggregate_counts(example_count: int, match_count: int) -> dict[str, Any]:
+    return {"exampleCount": example_count, "matchCount": match_count}
+
+
 def _infer_tags(
     history: History, eligible_tag_keys: frozenset[str]
-) -> list[Suggestions]:
+) -> list[dict[str, Any]]:
+    # Filter by eligibility before passing to _leading_candidate.
     candidates = [
         (ck.key, ck.count)
         for ck in history.candidateTagKeys
@@ -149,25 +153,22 @@ def _infer_tags(
         return []
     tag_key, match_count = result
     return [
-        Suggestions(
-            kind="tag",
-            source="historical",
-            tagKey=tag_key,
-            confidence=match_count / history.exampleCount,
-            aggregateCounts=AggregateCounts(
-                exampleCount=history.exampleCount,
-                matchCount=match_count,
-            ),
-            evidenceHash=_evidence_hash(
+        {
+            "kind": "tag",
+            "source": "historical",
+            "tagKey": tag_key,
+            "confidence": match_count / history.exampleCount,
+            "aggregateCounts": _aggregate_counts(history.exampleCount, match_count),
+            "evidenceHash": _evidence_hash(
                 "tag", tag_key, history.exampleCount, match_count
             ),
-        )
+        }
     ]
 
 
 def _infer_spending_categories(
     history: History, eligible_cat_ids: frozenset[str]
-) -> list[Suggestions1]:
+) -> list[dict[str, Any]]:
     candidates = [
         (str(cc.id), cc.count)
         for cc in history.candidateSpendingCategoryIds
@@ -178,19 +179,16 @@ def _infer_spending_categories(
         return []
     cat_id_str, match_count = result
     return [
-        Suggestions1(
-            kind="spending_category",
-            source="historical",
-            spendingCategoryId=UUID(cat_id_str),
-            confidence=match_count / history.exampleCount,
-            aggregateCounts=AggregateCounts(
-                exampleCount=history.exampleCount,
-                matchCount=match_count,
-            ),
-            evidenceHash=_evidence_hash(
+        {
+            "kind": "spending_category",
+            "source": "historical",
+            "spendingCategoryId": cat_id_str,
+            "confidence": match_count / history.exampleCount,
+            "aggregateCounts": _aggregate_counts(history.exampleCount, match_count),
+            "evidenceHash": _evidence_hash(
                 "spending_category", cat_id_str, history.exampleCount, match_count
             ),
-        )
+        }
     ]
 
 
@@ -198,7 +196,7 @@ def _infer_tax_categories(
     history: History,
     eligible_tax_snapshot: EligibleTaxSnapshot,
     expense_version: int,
-) -> list[Suggestions2]:
+) -> list[dict[str, Any]]:
     active_tax_cat_ids = frozenset(
         str(tc.root) for tc in eligible_tax_snapshot.activeTaxCategoryIds
     )
@@ -212,24 +210,21 @@ def _infer_tax_categories(
         return []
     tax_cat_id_str, match_count = result
     return [
-        Suggestions2(
-            kind="tax_category",
-            source="historical",
-            taxCategoryDefinitionId=UUID(tax_cat_id_str),
-            businessTaxProfileId=eligible_tax_snapshot.businessTaxProfileId,
-            businessTaxProfileVersion=eligible_tax_snapshot.businessTaxProfileVersion,
-            taxonomyVersionId=eligible_tax_snapshot.taxonomyVersionId,
-            taxYear=eligible_tax_snapshot.taxYear,
-            expenseVersion=expense_version,
-            confidence=match_count / history.exampleCount,
-            aggregateCounts=AggregateCounts(
-                exampleCount=history.exampleCount,
-                matchCount=match_count,
-            ),
-            evidenceHash=_evidence_hash(
+        {
+            "kind": "tax_category",
+            "source": "historical",
+            "taxCategoryDefinitionId": tax_cat_id_str,
+            "businessTaxProfileId": str(eligible_tax_snapshot.businessTaxProfileId),
+            "businessTaxProfileVersion": eligible_tax_snapshot.businessTaxProfileVersion,
+            "taxonomyVersionId": str(eligible_tax_snapshot.taxonomyVersionId),
+            "taxYear": eligible_tax_snapshot.taxYear,
+            "expenseVersion": expense_version,
+            "confidence": match_count / history.exampleCount,
+            "aggregateCounts": _aggregate_counts(history.exampleCount, match_count),
+            "evidenceHash": _evidence_hash(
                 "tax_category", tax_cat_id_str, history.exampleCount, match_count
             ),
-        )
+        }
     ]
 
 
@@ -239,8 +234,8 @@ def _infer_history(
     eligible_spending_category_ids: frozenset[str],
     eligible_tax_snapshot: EligibleTaxSnapshot | None,
     expense_version: int,
-) -> list[Suggestions | Suggestions1 | Suggestions2]:
-    suggestions: list[Suggestions | Suggestions1 | Suggestions2] = []
+) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
     suggestions.extend(_infer_tags(history, eligible_tag_keys))
     suggestions.extend(
         _infer_spending_categories(history, eligible_spending_category_ids)
@@ -262,13 +257,17 @@ def evaluate(inp: ExpenseEnrichmentInputV1) -> ExpenseEnrichmentResultV1:
 
     Pure function: no I/O, no randomness, no side effects.
     Always returns outcome=applied; stale/skipped are upstream branches.
+
+    Suggestions are built as plain strict dicts and validated once through
+    ExpenseEnrichmentResultV1.model_validate(); the generated numbered variant
+    classes (Suggestions/Suggestions1/Suggestions2) remain internal.
     """
     tag_strs = _deterministic_rule_tags(inp)
 
     eligible_tag_keys = frozenset(e.root for e in inp.eligibleTagKeys)
     eligible_cat_ids = frozenset(str(e.root) for e in inp.eligibleSpendingCategoryIds)
 
-    suggestions = _infer_history(
+    suggestion_dicts = _infer_history(
         history=inp.history,
         eligible_tag_keys=eligible_tag_keys,
         eligible_spending_category_ids=eligible_cat_ids,
@@ -276,10 +275,12 @@ def evaluate(inp: ExpenseEnrichmentInputV1) -> ExpenseEnrichmentResultV1:
         expense_version=inp.expenseVersion,
     )
 
-    return ExpenseEnrichmentResultV1(
-        schemaVersion=1,
-        rulesVersion=ENRICHMENT_RULES_VERSION,
-        outcome="applied",
-        ruleTagKeys=[RuleTagKey(k) for k in tag_strs],
-        suggestions=suggestions,
+    return ExpenseEnrichmentResultV1.model_validate(
+        {
+            "schemaVersion": 1,
+            "rulesVersion": ENRICHMENT_RULES_VERSION,
+            "outcome": "applied",
+            "ruleTagKeys": tag_strs,
+            "suggestions": suggestion_dicts,
+        }
     )

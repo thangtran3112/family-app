@@ -706,6 +706,7 @@ def test_suggestions_are_unique_by_kind_and_candidate():
 
 
 def test_result_passes_full_pydantic_validation_with_all_suggestion_kinds():
+    # F6: strengthen — assert three suggestions survive round-trip, not just outcome.
     snapshot = build_tax_snapshot(tax_cat_ids=[TAX_CAT_ID])
     history = History(
         exampleCount=5,
@@ -728,6 +729,112 @@ def test_result_passes_full_pydantic_validation_with_all_suggestion_kinds():
     raw = result.model_dump(mode="json")
     reparsed = ExpenseEnrichmentResultV1.model_validate(raw)
     assert reparsed.outcome.value == "applied"
+    # F6: three suggestions (tag + spending_category + tax_category) all survive
+    assert len(reparsed.suggestions) == 3
+    reparsed_kinds = sorted(s.kind for s in reparsed.suggestions)
+    assert reparsed_kinds == ["spending_category", "tag", "tax_category"]
+
+
+# ---------------------------------------------------------------------------
+# F2: hardcoded exact category-key (no f-string/UUID formatter in test)
+# ---------------------------------------------------------------------------
+
+
+def test_selected_category_key_is_exact_hardcoded_string():
+    # CAT_ID_1 = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+    # Key must be exactly this literal — not a dynamic derivation.
+    EXPECTED_KEY = "category:cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    inp = base_input(
+        spending_category_id=CAT_ID_1,
+        eligible_tag_keys=[EXPECTED_KEY],
+    )
+    result = evaluate(inp)
+    keys = [r.root for r in result.ruleTagKeys]
+    assert EXPECTED_KEY in keys
+    # No other category: key emitted
+    assert sum(1 for k in keys if k.startswith("category:")) == 1
+
+
+# ---------------------------------------------------------------------------
+# F3: eligibility-before-leading — ineligible leader, eligible follower at 80%
+# ---------------------------------------------------------------------------
+
+
+def test_tag_ineligible_leader_eligible_follower_at_80pct_emits_follower():
+    # Leader "food:snack" count=5 is NOT eligible.
+    # Follower "food:coffee" count=4, exampleCount=5 → 4/5=80%, eligible → emits.
+    history = History(
+        exampleCount=5,
+        candidateTagKeys=[
+            CandidateTagKey(key="food:snack", count=5),  # ineligible
+            CandidateTagKey(key="food:coffee", count=4),  # eligible, 80%
+        ],
+        candidateSpendingCategoryIds=[],
+        candidateTaxCategoryIds=[],
+    )
+    inp = base_input(
+        eligible_tag_keys=["food:coffee"],  # food:snack excluded
+        history=history,
+    )
+    result = evaluate(inp)
+    tag_suggs = [s for s in result.suggestions if s.kind == "tag"]
+    assert len(tag_suggs) == 1
+    assert tag_suggs[0].tagKey == "food:coffee"
+    assert tag_suggs[0].confidence == pytest.approx(4 / 5)
+
+
+# ---------------------------------------------------------------------------
+# F5: exampleCount=0 with non-empty candidate — no suggestion, no division error
+# ---------------------------------------------------------------------------
+
+
+def test_tag_no_suggestion_and_no_division_error_when_example_count_zero():
+    # exampleCount=0 but a candidate is present — must return nothing, not divide by zero.
+    history = History(
+        exampleCount=0,
+        candidateTagKeys=[CandidateTagKey(key="food:coffee", count=1)],
+        candidateSpendingCategoryIds=[],
+        candidateTaxCategoryIds=[],
+    )
+    inp = base_input(
+        eligible_tag_keys=["food:coffee"],
+        history=history,
+    )
+    result = evaluate(inp)
+    assert result.suggestions == []
+
+
+def test_spending_category_no_suggestion_when_example_count_zero_with_candidate():
+    history = History(
+        exampleCount=0,
+        candidateTagKeys=[],
+        candidateSpendingCategoryIds=[
+            CandidateSpendingCategoryId(id=CAT_ID_1, count=1)
+        ],
+        candidateTaxCategoryIds=[],
+    )
+    inp = base_input(
+        eligible_spending_category_ids=[CAT_ID_1],
+        history=history,
+    )
+    result = evaluate(inp)
+    assert result.suggestions == []
+
+
+def test_tax_no_suggestion_when_example_count_zero_with_candidate():
+    snapshot = build_tax_snapshot(tax_cat_ids=[TAX_CAT_ID])
+    history = History(
+        exampleCount=0,
+        candidateTagKeys=[],
+        candidateSpendingCategoryIds=[],
+        candidateTaxCategoryIds=[CandidateTaxCategoryId(id=TAX_CAT_ID, count=1)],
+    )
+    inp = base_input(
+        eligible_tax_snapshot=snapshot,
+        history=history,
+    )
+    result = evaluate(inp)
+    assert result.suggestions == []
 
 
 # ---------------------------------------------------------------------------
@@ -744,6 +851,29 @@ def test_enrichment_module_is_pure():
     with open(src_file) as f:
         src = f.read()
 
-    forbidden = ["httpx", "temporalio", "sqlalchemy", "foundry", "asyncpg"]
+    # F4: asyncio added to forbidden list
+    forbidden = ["httpx", "temporalio", "sqlalchemy", "foundry", "asyncpg", "asyncio"]
     for lib in forbidden:
         assert lib not in src, f"Forbidden import found: {lib}"
+
+
+# ---------------------------------------------------------------------------
+# F1: numbered generated classes must not appear in enrichment.py production source
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_module_does_not_use_numbered_generated_suggestion_classes():
+    # Suggestions/Suggestions1/Suggestions2 are generator-internal names.
+    # Production code must build plain dicts validated through the top-level
+    # ExpenseEnrichmentResultV1.model_validate(), not direct class construction.
+    spec = importlib.util.find_spec("ai_worker.enrichment")
+    assert spec is not None
+    src_file = spec.origin
+    assert src_file is not None
+    with open(src_file) as f:
+        src = f.read()
+
+    # Must not directly construct numbered variant classes
+    assert "Suggestions(" not in src, "Direct Suggestions() construction found"
+    assert "Suggestions1(" not in src, "Direct Suggestions1() construction found"
+    assert "Suggestions2(" not in src, "Direct Suggestions2() construction found"
