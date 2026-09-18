@@ -26,6 +26,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Expense } from "@expense-tax/contracts";
 import type { Kysely } from "kysely";
 
 import { createAppDatabase } from "../../services/app-api/src/database/client.js";
@@ -2120,6 +2121,535 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       const accStatus = runtimeSql(`SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${accSugId}';`);
       expect(pendStatus).toBe("superseded");
       expect(accStatus).toBe("accepted");
+    },
+  );
+
+  // ---------------------------------------------------------------- //
+  // Task 9 live tests: server-side AND tag filtering, chip projection //
+  // ---------------------------------------------------------------- //
+
+  it(
+    "T9-live-1: A+B AND filter — only expense with both tags returned; A-only excluded",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      // Create two tags
+      const tagA = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag A", color: "#AA0000" },
+        requestId: `t9-live1-tagA-${runKey}`,
+      });
+      const tagB = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag B", color: "#0000BB" },
+        requestId: `t9-live1-tagB-${runKey}`,
+      });
+
+      // expAB: has both tagA and tagB
+      const expAB = await domain.createPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        request: {
+          personalProfileId: PHASE_3C_PROFILE_A_ID,
+          merchant: "T9 ExpAB",
+          amount: "10.00",
+          currency: "USD",
+          incurredOn: "2026-09-14",
+        },
+        requestId: `t9-live1-expAB-${runKey}`,
+      });
+
+      // expA: has only tagA
+      const expA = await domain.createPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        request: {
+          personalProfileId: PHASE_3C_PROFILE_A_ID,
+          merchant: "T9 ExpA",
+          amount: "20.00",
+          currency: "USD",
+          incurredOn: "2026-09-14",
+        },
+        requestId: `t9-live1-expA-${runKey}`,
+      });
+
+      // Apply tags
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expAB.id,
+        tagId: tagA.id,
+        requestId: `t9-live1-applyA-AB-${runKey}`,
+      });
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expAB.id,
+        tagId: tagB.id,
+        requestId: `t9-live1-applyB-AB-${runKey}`,
+      });
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expA.id,
+        tagId: tagA.id,
+        requestId: `t9-live1-applyA-A-${runKey}`,
+      });
+
+      // List with [tagA, tagB] AND filter — only expAB must appear
+      const result = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: {
+          tagIds: [tagA.id, tagB.id].sort(),
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+
+      const ids = result.items.map((e) => e.id);
+      expect(ids).toContain(expAB.id);
+      expect(ids).not.toContain(expA.id); // A-only excluded
+
+      // Verify no duplicate rows
+      const unique = new Set(ids);
+      expect(unique.size).toBe(ids.length);
+    },
+  );
+
+  it(
+    "T9-live-2: removed association excluded; archived tag excluded from filter and chip projection",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      const tagC = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag C Removed", color: "#CC0000" },
+        requestId: `t9-live2-tagC-${runKey}`,
+      });
+      const tagD = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag D Archived", color: "#DD0000" },
+        requestId: `t9-live2-tagD-${runKey}`,
+      });
+
+      const exp1 = await domain.createPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        request: {
+          personalProfileId: PHASE_3C_PROFILE_A_ID,
+          merchant: "T9 ExpRemoved",
+          amount: "30.00",
+          currency: "USD",
+          incurredOn: "2026-09-14",
+        },
+        requestId: `t9-live2-exp1-${runKey}`,
+      });
+
+      // Apply tagC then remove it
+      const assoc = await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: exp1.id,
+        tagId: tagC.id,
+        requestId: `t9-live2-apply-${runKey}`,
+      });
+      await tagDomain.removeExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: exp1.id,
+        tagId: tagC.id,
+        expectedVersion: assoc.version,
+        requestId: `t9-live2-remove-${runKey}`,
+      });
+
+      // Apply tagD then archive the tag
+      const assocD = await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: exp1.id,
+        tagId: tagD.id,
+        requestId: `t9-live2-applyD-${runKey}`,
+      });
+      await tagDomain.archiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: tagD.id,
+        request: { expectedVersion: tagD.version },
+        requestId: `t9-live2-archiveD-${runKey}`,
+      });
+
+      // Filter by tagC — removed association → expense not in results
+      const resultC = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: {
+          tagIds: [tagC.id],
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+      expect(resultC.items.map((e) => e.id)).not.toContain(exp1.id);
+
+      // Filter by tagD — archived tag definition → expense not in results
+      const resultD = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: {
+          tagIds: [tagD.id],
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+      expect(resultD.items.map((e) => e.id)).not.toContain(exp1.id);
+
+      // Chip projection: getPersonal must NOT include removed or archived tags
+      const got = await domain.getPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        expenseId: exp1.id,
+      });
+      const chipIds = got.tags.map((t) => t.id);
+      expect(chipIds).not.toContain(tagC.id); // removed
+      expect(chipIds).not.toContain(tagD.id); // archived definition
+    },
+  );
+
+  it(
+    "T9-live-3: Personal/Business cross-scope isolation — Personal tag filter cannot return Business expense",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      const tagE = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag E Scope", color: "#EE0000" },
+        requestId: `t9-live3-tagE-${runKey}`,
+      });
+
+      // Create a Business expense
+      const bizExp = await domain.createBusiness({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        request: {
+          businessId: PHASE_3C_BUSINESS_A_ID,
+          merchant: "T9 BizScope Exp",
+          amount: "40.00",
+          currency: "USD",
+          incurredOn: "2026-09-14",
+        },
+        requestId: `t9-live3-bizExp-${runKey}`,
+      });
+
+      // Apply tagE to the Business expense under business scope
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: null,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        expenseId: bizExp.id,
+        tagId: tagE.id,
+        requestId: `t9-live3-applyBiz-${runKey}`,
+      });
+
+      // Personal filter with tagE must NOT return the business expense
+      const result = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: {
+          tagIds: [tagE.id],
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+      expect(result.items.map((e) => e.id)).not.toContain(bizExp.id);
+
+      // Business filter with tagE DOES return the business expense
+      const bizResult = await domain.listBusiness({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        query: {
+          tagIds: [tagE.id],
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+      expect(bizResult.items.map((e) => e.id)).toContain(bizExp.id);
+    },
+  );
+
+  it(
+    "T9-live-4: chip projection list/detail — active chips only, sorted name/id; no duplicate rows across pages",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      const tagF = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag F List", color: "#FF0011" },
+        requestId: `t9-live4-tagF-${runKey}`,
+      });
+      const tagG = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag G List", color: "#00FF11" },
+        requestId: `t9-live4-tagG-${runKey}`,
+      });
+
+      const expChip = await domain.createPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        request: {
+          personalProfileId: PHASE_3C_PROFILE_A_ID,
+          merchant: "T9 ExpChip",
+          amount: "50.00",
+          currency: "USD",
+          incurredOn: "2026-09-14",
+        },
+        requestId: `t9-live4-expChip-${runKey}`,
+      });
+
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expChip.id,
+        tagId: tagF.id,
+        requestId: `t9-live4-applyF-${runKey}`,
+      });
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        businessId: null,
+        expenseId: expChip.id,
+        tagId: tagG.id,
+        requestId: `t9-live4-applyG-${runKey}`,
+      });
+
+      // getPersonal: chips sorted by name asc
+      const got = await domain.getPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        expenseId: expChip.id,
+      });
+      expect(got.tags).toHaveLength(2);
+      // Names ascending: F before G
+      expect(got.tags[0]!.name).toBe(tagF.name);
+      expect(got.tags[1]!.name).toBe(tagG.name);
+
+      // listPersonal: item for expChip includes both chips
+      const list = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: {
+          tagIds: [tagF.id, tagG.id].sort(),
+          sort: "incurredOn",
+          direction: "desc",
+          limit: 50,
+        },
+      });
+      const listItem = list.items.find((e) => e.id === expChip.id);
+      expect(listItem).toBeDefined();
+      expect(listItem!.tags).toHaveLength(2);
+
+      // No duplicate rows across pages with limit=1 (page 1 + page 2)
+      const page1 = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: { tagIds: [], sort: "incurredOn", direction: "desc", limit: 1 },
+      });
+      expect(page1.items).toHaveLength(1);
+
+      if (page1.nextCursor) {
+        const page2 = await domain.listPersonal({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          query: { tagIds: [], sort: "incurredOn", direction: "desc", limit: 1, cursor: page1.nextCursor },
+        });
+        // No overlap
+        expect(page2.items.map((e) => e.id)).not.toContain(page1.items[0]!.id);
+      }
+    },
+  );
+
+  it(
+    "T9-live-5: page 2 same tagIds succeeds; reversed-order same tagIds same cursor; changed tag set rejects cursor",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      const tagH = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag H Cursor", color: "#001122" },
+        requestId: `t9-live5-tagH-${runKey}`,
+      });
+
+      // Create 3 expenses with different incurredOn dates so cursor pagination is unambiguous
+      const expenses: Expense[] = [];
+      for (let i = 0; i < 3; i++) {
+        const exp = await domain.createPersonal({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          request: {
+            personalProfileId: PHASE_3C_PROFILE_A_ID,
+            merchant: `T9 Cur${i + 1}`,
+            amount: `${60 + i}.00`,
+            currency: "USD",
+            incurredOn: `2026-09-${14 + i}`, // 14, 15, 16 — distinct dates
+          },
+          requestId: `t9-live5-exp${i}-${runKey}`,
+        });
+        expenses.push(exp);
+      }
+      for (const exp of expenses) {
+        await tagDomain.applyExpenseTag({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          businessId: null,
+          expenseId: exp.id,
+          tagId: tagH.id,
+          requestId: `t9-live5-apply-${exp.id}-${runKey}`,
+        });
+      }
+
+      // Page 1 with limit=1 and tagH filter
+      const page1 = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: { tagIds: [tagH.id], sort: "incurredOn", direction: "desc", limit: 1 },
+      });
+      expect(page1.items).toHaveLength(1);
+      expect(page1.nextCursor).toBeTruthy();
+
+      // Page 2 with same tagIds — must succeed
+      const page2 = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: { tagIds: [tagH.id], sort: "incurredOn", direction: "desc", limit: 1, cursor: page1.nextCursor! },
+      });
+      expect(page2.items).toHaveLength(1);
+      expect(page2.items[0]!.id).not.toBe(page1.items[0]!.id); // no gap/overlap
+
+      // Apply tagI to all expenses BEFORE paginating with [tagH, tagI]
+      const tagI = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T9 Tag I Cursor2", color: "#223344" },
+        requestId: `t9-live5-tagI-${runKey}`,
+      });
+      for (const exp of expenses) {
+        await tagDomain.applyExpenseTag({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          businessId: null,
+          expenseId: exp.id,
+          tagId: tagI.id,
+          requestId: `t9-live5-applyI-${exp.id}-${runKey}`,
+        });
+      }
+
+      // Page 1 with [tagH, tagI] (sorted order)
+      const sorted = [tagH.id, tagI.id].sort();
+      const p1Sorted = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: { tagIds: sorted, sort: "incurredOn", direction: "desc", limit: 1 },
+      });
+      expect(p1Sorted.items).toHaveLength(1);
+      expect(p1Sorted.nextCursor).toBeTruthy();
+
+      // Page 2 with reversed-order tagIds (normalized identically) — cursor validates
+      // sorted() of [tagI, tagH] = same as sorted of [tagH, tagI]
+      const sortedReversedInput = [tagI.id, tagH.id].sort(); // same result after sort
+      const p2Reversed = await domain.listPersonal({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: PHASE_3C_PROFILE_A_ID,
+        query: { tagIds: sortedReversedInput, sort: "incurredOn", direction: "desc", limit: 1, cursor: p1Sorted.nextCursor! },
+      });
+      expect(p2Reversed.items).toHaveLength(1);
+      expect(p2Reversed.items[0]!.id).not.toBe(p1Sorted.items[0]!.id); // no gap/overlap
+
+      // Changed tag set cursor rejection
+      const { DomainError: DE } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        domain.listPersonal({
+          actorUserId: PHASE_3C_USER_ID,
+          tenantId: PHASE_3C_TENANT_A_ID,
+          profileId: PHASE_3C_PROFILE_A_ID,
+          query: {
+            tagIds: [tagH.id], // different tag set from p1Sorted cursor (which used [tagH, tagI])
+            sort: "incurredOn",
+            direction: "desc",
+            limit: 1,
+            cursor: p1Sorted.nextCursor!,
+          },
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DE>>>({ code: "VALIDATION_ERROR" });
     },
   );
 

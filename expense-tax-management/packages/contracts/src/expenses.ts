@@ -20,7 +20,7 @@ export type ExpenseStatus = z.infer<typeof ExpenseStatusSchema>;
  */
 export const ExpenseTagChipSchema = z.strictObject({
   id: z.uuid(),
-  name: z.string().min(1).max(200),
+  name: z.string().min(1).max(100),
   color: z.string().nullable(),
 });
 export type ExpenseTagChip = z.infer<typeof ExpenseTagChipSchema>;

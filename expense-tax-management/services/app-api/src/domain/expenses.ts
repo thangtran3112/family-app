@@ -361,27 +361,44 @@ async function queryExpenses(
 
   // Task 9: AND semantics — one EXISTS subquery per requested tagId.
   // Each subquery checks: active association AND active tag definition AND same scope.
-  // Use sql`EXISTS(...)` directly to avoid Kysely type constraints on correlated refs.
+  // Scope column is branched explicitly so no sql.raw() or unsafe string injection is needed.
   for (const tagId of tagIds) {
-    const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
-    const scopeValue =
-      input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
     const tenantId = input.tenantId;
-    query = query.where(
-      sql<boolean>`EXISTS (
-        SELECT 1
-        FROM app.expense_tags AS et2
-        INNER JOIN app.tags AS t2
-          ON t2.id = et2.tag_id
-         AND t2.status = 'active'
-         AND t2.tenant_id = ${tenantId}
-        WHERE et2.expense_id = expense.id
-          AND et2.tag_id = ${tagId}
-          AND et2.tenant_id = ${tenantId}
-          AND et2.status = 'active'
-          AND et2.${sql.raw(scopeColumn)} = ${scopeValue}
-      )`,
-    );
+    if (input.scope.kind === "personal") {
+      const profileId = input.scope.profileId;
+      query = query.where(
+        sql<boolean>`EXISTS (
+          SELECT 1
+          FROM app.expense_tags AS et2
+          INNER JOIN app.tags AS t2
+            ON t2.id = et2.tag_id
+           AND t2.status = 'active'
+           AND t2.tenant_id = ${tenantId}
+          WHERE et2.expense_id = expense.id
+            AND et2.tag_id = ${tagId}
+            AND et2.tenant_id = ${tenantId}
+            AND et2.status = 'active'
+            AND et2.personal_profile_id = ${profileId}
+        )`,
+      );
+    } else {
+      const businessId = input.scope.businessId;
+      query = query.where(
+        sql<boolean>`EXISTS (
+          SELECT 1
+          FROM app.expense_tags AS et2
+          INNER JOIN app.tags AS t2
+            ON t2.id = et2.tag_id
+           AND t2.status = 'active'
+           AND t2.tenant_id = ${tenantId}
+          WHERE et2.expense_id = expense.id
+            AND et2.tag_id = ${tagId}
+            AND et2.tenant_id = ${tenantId}
+            AND et2.status = 'active'
+            AND et2.business_id = ${businessId}
+        )`,
+      );
+    }
   }
 
   if (input.query.incurredFrom !== undefined) {
@@ -473,13 +490,11 @@ async function queryExpenses(
   // Task 9: project active tag chips for expenses on this page.
   // Single bulk query — join expense_tags + tags, filter active on both sides.
   // Order: name ASC, id ASC — deterministic chip ordering per expense.
+  // Scope column branched explicitly — no sql.raw() or unsafe string injection.
   const pageExpenseIds = pageRows.map((r) => r.id);
   let tagChipsByExpenseId = new Map<string, ExpenseTagChip[]>();
   if (pageExpenseIds.length > 0) {
-    const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
-    const scopeValue =
-      input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
-    const chipRows = await database
+    let chipQuery = database
       .selectFrom("app.expense_tags as et")
       .innerJoin("app.tags as t", (join) =>
         join
@@ -491,10 +506,14 @@ async function queryExpenses(
       .where("et.expense_id", "in", pageExpenseIds)
       .where("et.status", "=", "active")
       .where("et.tenant_id", "=", input.tenantId)
-      .where(`et.${scopeColumn}` as "et.personal_profile_id" | "et.business_id", "=", scopeValue as string)
       .orderBy("t.name", "asc")
-      .orderBy("t.id", "asc")
-      .execute();
+      .orderBy("t.id", "asc");
+    if (input.scope.kind === "personal") {
+      chipQuery = chipQuery.where("et.personal_profile_id", "=", input.scope.profileId);
+    } else {
+      chipQuery = chipQuery.where("et.business_id", "=", input.scope.businessId);
+    }
+    const chipRows = await chipQuery.execute();
     for (const chip of chipRows) {
       const chips = tagChipsByExpenseId.get(chip.expense_id) ?? [];
       chips.push({ id: chip.id, name: chip.name, color: chip.color });
@@ -683,10 +702,8 @@ async function projectExpenseTagChips(
   database: Kysely<AppDatabase>,
   input: { tenantId: string; expenseId: string; scope: Scope },
 ): Promise<ExpenseTagChip[]> {
-  const scopeColumn = input.scope.kind === "personal" ? "personal_profile_id" : "business_id";
-  const scopeValue =
-    input.scope.kind === "personal" ? input.scope.profileId : input.scope.businessId;
-  const chipRows = await database
+  // Scope column branched explicitly — no sql.raw() or unsafe string injection.
+  let chipQuery = database
     .selectFrom("app.expense_tags as et")
     .innerJoin("app.tags as t", (join) =>
       join
@@ -698,10 +715,14 @@ async function projectExpenseTagChips(
     .where("et.expense_id", "=", input.expenseId)
     .where("et.status", "=", "active")
     .where("et.tenant_id", "=", input.tenantId)
-    .where(`et.${scopeColumn}` as "et.personal_profile_id" | "et.business_id", "=", scopeValue as string)
     .orderBy("t.name", "asc")
-    .orderBy("t.id", "asc")
-    .execute();
+    .orderBy("t.id", "asc");
+  if (input.scope.kind === "personal") {
+    chipQuery = chipQuery.where("et.personal_profile_id", "=", input.scope.profileId);
+  } else {
+    chipQuery = chipQuery.where("et.business_id", "=", input.scope.businessId);
+  }
+  const chipRows = await chipQuery.execute();
   return chipRows.map((r) => ({ id: r.id, name: r.name, color: r.color }));
 }
 

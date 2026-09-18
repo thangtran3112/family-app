@@ -337,6 +337,15 @@ describe("App API expense routes", () => {
     ).toThrow();
   });
 
+  it("T9-R5b: LedgerQuerySchema rejects unknown query fields (strict mode)", () => {
+    expect(() =>
+      LedgerQuerySchema.parse({ unknownField: "foo" }),
+    ).toThrow();
+    expect(() =>
+      LedgerQuerySchema.parse({ tagIds: ["not-via-raw-schema"] }),
+    ).toThrow(); // tagIds is not in raw schema; only tagId is accepted
+  });
+
   it("T9-R6: reversed-order same logical tagIds produce same canonical tagIds", () => {
     const a = LedgerQuerySchema.parse({ tagId: [TAG_A_ID, TAG_B_ID] });
     const b = LedgerQuerySchema.parse({ tagId: [TAG_B_ID, TAG_A_ID] });

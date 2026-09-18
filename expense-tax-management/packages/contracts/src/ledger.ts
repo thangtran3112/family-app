@@ -27,7 +27,7 @@ export type LedgerCursor = z.infer<typeof LedgerCursorSchema>;
  * query params as a string or array of strings; transform normalizes to
  * canonical sorted unique `tagIds`.
  */
-const LedgerQueryRawSchema = z.object({
+const LedgerQueryRawSchema = z.strictObject({
   incurredFrom: DateOnlySchema.optional(),
   incurredTo: DateOnlySchema.optional(),
   amountMin: DecimalMoneySchema.optional(),
