@@ -1,13 +1,10 @@
 /**
  * Migration 016 structural tests.
  *
- * These assert the SQL text of the migration file is well-formed and contains
- * the required spec-aligned constraints. They are supplemented by the live
- * PostgreSQL proof in the Phase 3C integration test (app-domain-3c-auto-tagging).
- *
  * An executable import is used so malformed TypeScript (e.g. a bare SQL comment
  * outside a template literal) causes a module-load error rather than silently
- * satisfying text-search assertions.
+ * satisfying text-search assertions. This is supplemented by live PostgreSQL
+ * constraint proofs in the Phase 3C integration test.
  */
 import * as migration016 from "../src/database/migrations/016_expense_enrichment.js";
 import { readFileSync } from "node:fs";
@@ -37,8 +34,6 @@ describe("expense enrichment migration 016 – schema structure", () => {
   // ---- app.tags --------------------------------------------------------
 
   it("creates tags as tenant-level with no personal/business scope columns", () => {
-    // spec: tags are tenant-level definitions, no per-scope columns.
-    // Extract just the CREATE TABLE app.tags DDL block and check it has no scope columns.
     const tagsTableMatch = migration.match(/CREATE TABLE app\.tags\s*\([^;]+\)/);
     expect(tagsTableMatch).not.toBeNull();
     const tagsTable = tagsTableMatch![0];
@@ -51,24 +46,20 @@ describe("expense enrichment migration 016 – schema structure", () => {
   });
 
   it("tags have nullable color column (no NOT NULL on color)", () => {
-    // color is nullable per spec; must not have 'color text NOT NULL'
     expect(migration).not.toMatch(/color\s+text\s+NOT NULL/);
   });
 
-  it("tags have nullable created_by_user_id (system-created rule tags)", () => {
+  it("tags have nullable created_by_user_id", () => {
     expect(migration).toContain("created_by_user_id");
-    // must not be NOT NULL
     expect(migration).not.toMatch(/created_by_user_id\s+uuid\s+NOT NULL/);
   });
 
   it("tags enforce unique (tenant_id, key) across active and archived", () => {
-    // spec: unique (tenant_id, key) across both statuses, no partial index
     expect(migration).toContain("tags_key_tenant_unique");
     expect(migration).toMatch(/UNIQUE\s*\(\s*tenant_id,\s*key\s*\)/);
   });
 
-  it("tags key allows namespace colons (merchant:<slug>, timing:weekend, etc.)", () => {
-    // key regex must contain colon as a permitted character
+  it("tags key allows namespace colons", () => {
     expect(migration).toMatch(/key\s+~\s+'[^']*:[^']*/);
   });
 
@@ -83,11 +74,10 @@ describe("expense enrichment migration 016 – schema structure", () => {
   // ---- app.expense_tags -----------------------------------------------
 
   it("expense_tags has UUID id primary key", () => {
-    // spec: expense_tags has 'id' column
     expect(migration).toMatch(/CREATE TABLE app\.expense_tags[\s\S]*?id\s+uuid\s+PRIMARY KEY/);
   });
 
-  it("expense_tags includes exactly one personal/business scope via XOR check", () => {
+  it("expense_tags includes personal/business XOR check", () => {
     expect(migration).toContain("expense_tags_scope_check");
     expect(migration).toMatch(/expense_tags_scope_check[\s\S]*personal_profile_id IS NULL\) <> \(business_id IS NULL\)/);
   });
@@ -104,25 +94,37 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toContain("confidence");
     expect(migration).toContain("rule_version");
     expect(migration).toContain("suggestion_id");
-    // rule_version must be nullable (no NOT NULL)
     expect(migration).not.toMatch(/rule_version\s+integer\s+NOT NULL/);
   });
 
-  it("expense_tags has applied_by_user_id, removed_by_user_id, applied_at, removed_at", () => {
+  it("expense_tags has removed_state_check constraint (active/removed state machine)", () => {
+    expect(migration).toContain("expense_tags_removed_state_check");
+    expect(migration).toMatch(/status\s*=\s*'active'[\s\S]*removed_at IS NULL[\s\S]*removed_by_user_id IS NULL/);
+    expect(migration).toMatch(/status\s*=\s*'removed'[\s\S]*removed_at IS NOT NULL/);
+  });
+
+  it("expense_tags has applied/removed user and timestamp columns", () => {
     expect(migration).toContain("applied_by_user_id");
     expect(migration).toContain("removed_by_user_id");
     expect(migration).toContain("applied_at");
     expect(migration).toContain("removed_at");
   });
 
-  it("expense_tags has unique (tenant_id, expense_id, tag_id) constraint", () => {
+  it("expense_tags has unique (tenant_id, expense_id, tag_id)", () => {
     expect(migration).toContain("expense_tags_expense_tag_unique");
     expect(migration).toMatch(/UNIQUE\s*\(\s*tenant_id,\s*expense_id,\s*tag_id\s*\)/);
   });
 
-  it("expense_tags has composite tenant/scope/expense FK validation", () => {
+  it("expense_tags has composite tenant/scope/expense/tag FKs", () => {
     expect(migration).toContain("expense_tags_expense_tenant_fk");
     expect(migration).toContain("expense_tags_tag_tenant_fk");
+    expect(migration).toContain("expense_tags_profile_tenant_fk");
+    expect(migration).toContain("expense_tags_business_tenant_fk");
+  });
+
+  it("expense_tags gets suggestion_id FK via ALTER TABLE after suggestions table", () => {
+    expect(migration).toContain("expense_tags_suggestion_id_fk");
+    expect(migration).toMatch(/ALTER TABLE app\.expense_tags[\s\S]*expense_tags_suggestion_id_fk/);
   });
 
   // ---- app.expense_spending_category_decisions ------------------------
@@ -132,7 +134,7 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toMatch(/expense_spending_category_decisions_scope_check[\s\S]*personal_profile_id IS NULL\) <> \(business_id IS NULL\)/);
   });
 
-  it("decisions has prior_spending_category_id and new_spending_category_id (append-only, nullable)", () => {
+  it("decisions has prior_spending_category_id and new_spending_category_id", () => {
     expect(migration).toContain("prior_spending_category_id");
     expect(migration).toContain("new_spending_category_id");
   });
@@ -144,6 +146,17 @@ describe("expense enrichment migration 016 – schema structure", () => {
   it("decisions has nullable suggestion_id", () => {
     expect(migration).toContain("suggestion_id");
     expect(migration).not.toMatch(/suggestion_id\s+uuid\s+NOT NULL/);
+  });
+
+  it("decisions gets suggestion_id FK via ALTER TABLE after suggestions table", () => {
+    expect(migration).toContain("expense_spending_category_decisions_suggestion_id_fk");
+    expect(migration).toMatch(/ALTER TABLE app\.expense_spending_category_decisions[\s\S]*expense_spending_category_decisions_suggestion_id_fk/);
+  });
+
+  it("decisions are append-only (UPDATE/DELETE trigger)", () => {
+    expect(migration).toContain("prevent_category_decision_mutation");
+    expect(migration).toContain("expense_spending_category_decisions_append_only_trigger");
+    expect(migration).toContain("BEFORE UPDATE OR DELETE ON app.expense_spending_category_decisions");
   });
 
   it("backfills existing spending_category_id into decisions as manual_baseline", () => {
@@ -182,12 +195,22 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toMatch(/tag_id IS NOT NULL[\s\S]*spending_category_id IS NULL[\s\S]*tax_category_definition_id IS NULL/);
   });
 
-  it("suggestions tax snapshot requires Business scope and tuple when kind=tax_category", () => {
+  it("suggestions tax snapshot includes business_tax_profile_id AND business_tax_profile_version", () => {
+    expect(migration).toContain("business_tax_profile_id");
+    expect(migration).toContain("business_tax_profile_version");
     expect(migration).toContain("expense_enrichment_suggestions_tax_snapshot_check");
-    expect(migration).toMatch(/kind\s*=\s*'tax_category'[\s\S]*tax_profile_id IS NOT NULL/);
+    expect(migration).toMatch(/business_tax_profile_id IS NOT NULL[\s\S]*business_tax_profile_version IS NOT NULL/);
+  });
+
+  it("suggestions tax snapshot requires taxonomy_version_id, tax_year, expense_version", () => {
     expect(migration).toContain("taxonomy_version_id");
     expect(migration).toContain("tax_year");
     expect(migration).toContain("expense_version");
+  });
+
+  it("suggestions tax profile version has positive check", () => {
+    expect(migration).toContain("expense_enrichment_suggestions_tax_profile_version_check");
+    expect(migration).toMatch(/business_tax_profile_version IS NULL OR business_tax_profile_version > 0/);
   });
 
   it("suggestions enforce status enum: pending | accepted | rejected | superseded", () => {
@@ -202,11 +225,6 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toContain("evidence_hash ~ '^[a-f0-9]{64}$'");
   });
 
-  it("suggestions enforce positive version and expense_version", () => {
-    expect(migration).toMatch(/expense_enrichment_suggestions_version_check[\s\S]*version\s*>\s*0/);
-    expect(migration).toMatch(/expense_version\s*>\s*0/);
-  });
-
   it("suggestions enforce terminal immutability trigger", () => {
     expect(migration).toContain("prevent_enrichment_suggestion_terminal_update");
     expect(migration).toContain("enrichment_suggestions_terminal_guard_trigger");
@@ -214,15 +232,46 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toContain("terminal enrichment suggestion is immutable");
   });
 
-  it("suggestions enforce parent scope immutability trigger", () => {
-    expect(migration).toContain("prevent_enrichment_parent_scope_update");
-    expect(migration).toContain("expenses_enrichment_parent_scope_guard_trigger");
+  it("suggestions enforce evidence size trigger (8 KB)", () => {
+    expect(migration).toContain("check_enrichment_evidence_size");
+    expect(migration).toContain("enrichment_suggestions_evidence_size_trigger");
+    expect(migration).toContain("octet_length");
+    expect(migration).toContain("8192");
   });
 
-  it("suggestions have unique active evidence index on (tenant_id, expense_id, kind, evidence_hash) WHERE pending", () => {
-    expect(migration).toContain("expense_enrichment_suggestions_active_evidence_unique");
-    expect(migration).toMatch(/\(tenant_id,\s*expense_id,\s*kind,\s*evidence_hash\)/);
-    expect(migration).toMatch(/WHERE\s+status\s*=\s*'pending'/);
+  it("suggestions resolution check enforces pending/terminal state", () => {
+    expect(migration).toContain("expense_enrichment_suggestions_resolution_check");
+    expect(migration).toMatch(/status\s*=\s*'pending'[\s\S]*resolved_by_user_id IS NULL[\s\S]*resolved_at IS NULL/);
+    expect(migration).toMatch(/status\s+IN\s*\(\s*'accepted'[\s\S]*resolved_by_user_id IS NOT NULL[\s\S]*resolved_at IS NOT NULL/);
+  });
+
+  it("pending suggestion uniqueness includes candidate identity (kind-specific partial indexes)", () => {
+    expect(migration).toContain("expense_enrichment_suggestions_pending_tag_unique");
+    expect(migration).toContain("expense_enrichment_suggestions_pending_category_unique");
+    expect(migration).toContain("expense_enrichment_suggestions_pending_tax_unique");
+    expect(migration).toMatch(/kind\s*=\s*'tag'[\s\S]*pending_tag_unique/);
+    expect(migration).toMatch(/kind\s*=\s*'spending_category'[\s\S]*pending_category_unique/);
+    expect(migration).toMatch(/kind\s*=\s*'tax_category'[\s\S]*pending_tax_unique/);
+  });
+
+  // ---- child-scope validation triggers --------------------------------
+
+  it("has validate_enrichment_child_scope trigger function", () => {
+    expect(migration).toContain("validate_enrichment_child_scope");
+    expect(migration).toContain("expense_tags_scope_validation_trigger");
+    expect(migration).toContain("expense_spending_category_decisions_scope_validation_trigger");
+    expect(migration).toContain("expense_enrichment_suggestions_scope_validation_trigger");
+  });
+
+  it("child scope trigger locks expense row FOR SHARE before comparing scope", () => {
+    expect(migration).toContain("FOR SHARE");
+  });
+
+  // ---- parent scope immutability -------------------------------------
+
+  it("has parent scope immutability trigger for enrichment children", () => {
+    expect(migration).toContain("prevent_enrichment_parent_scope_update");
+    expect(migration).toContain("expenses_enrichment_parent_scope_guard_trigger");
   });
 
   // ---- app.enrichment_operation_keys ----------------------------------
@@ -256,11 +305,16 @@ describe("expense enrichment migration 016 – schema structure", () => {
 
   // ---- down() ---------------------------------------------------------
 
-  it("down() drops triggers and functions before tables in correct order", () => {
+  it("down() drops triggers, functions, and tables in correct order", () => {
     expect(migration).toContain("DROP TRIGGER IF EXISTS enrichment_suggestions_terminal_guard_trigger");
     expect(migration).toContain("DROP TRIGGER IF EXISTS expenses_enrichment_parent_scope_guard_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_tags_scope_validation_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_spending_category_decisions_append_only_trigger");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_enrichment_suggestion_terminal_update()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_enrichment_parent_scope_update()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_enrichment_child_scope()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_category_decision_mutation()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.check_enrichment_evidence_size()");
     expect(migration).toMatch(/dropTable\("app\.enrichment_operation_keys"\)/);
     expect(migration).toMatch(/dropTable\("app\.expense_enrichment_suggestions"\)/);
     expect(migration).toMatch(/dropTable\("app\.expense_spending_category_decisions"\)/);

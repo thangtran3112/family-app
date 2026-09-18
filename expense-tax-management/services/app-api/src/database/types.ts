@@ -658,7 +658,8 @@ export interface ExpenseEnrichmentSuggestionTable {
   tag_id: string | null;
   spending_category_id: string | null;
   tax_category_definition_id: string | null;
-  tax_profile_id: string | null;
+  business_tax_profile_id: string | null;
+  business_tax_profile_version: number | null;
   taxonomy_version_id: string | null;
   tax_year: number | null;
   source: "historical" | "ai";

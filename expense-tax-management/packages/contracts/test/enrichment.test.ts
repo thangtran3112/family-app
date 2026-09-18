@@ -32,6 +32,7 @@ import {
   EnrichmentSuggestionSourceSchema,
   EnrichmentSuggestionSchema,
   EnrichmentSuggestionListSchema,
+  EnrichmentEvidenceSchema,
   // Suggestion actions
   SuggestionResolveRequestSchema,
   SuggestionResolveResponseSchema,
@@ -395,7 +396,8 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
     tagId: ids.tagId,
     spendingCategoryId: null,
     taxCategoryDefinitionId: null,
-    taxProfileId: null,
+    businessTaxProfileId: null,
+    businessTaxProfileVersion: null,
     taxonomyVersionId: null,
     taxYear: null,
     source: "historical" as const,
@@ -502,7 +504,7 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
     ).toBe(false);
   });
 
-  it("tax_category suggestion requires business scope and full snapshot", () => {
+  it("tax_category suggestion requires business scope and full snapshot including businessTaxProfileVersion", () => {
     const taxSuggestion = {
       ...baseTagSuggestion,
       personalProfileId: null,
@@ -511,7 +513,8 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
       tagId: null,
       spendingCategoryId: null,
       taxCategoryDefinitionId: ids.taxCategoryId,
-      taxProfileId: ids.taxProfileId,
+      businessTaxProfileId: ids.taxProfileId,
+      businessTaxProfileVersion: 3,
       taxonomyVersionId: ids.taxonomyVersionId,
       taxYear: 2025,
     };
@@ -520,9 +523,17 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
     expect(
       EnrichmentSuggestionSchema.safeParse({ ...taxSuggestion, taxYear: null }).success,
     ).toBe(false);
-    // missing taxProfileId => fail
+    // missing businessTaxProfileId => fail
     expect(
-      EnrichmentSuggestionSchema.safeParse({ ...taxSuggestion, taxProfileId: null }).success,
+      EnrichmentSuggestionSchema.safeParse({ ...taxSuggestion, businessTaxProfileId: null }).success,
+    ).toBe(false);
+    // missing businessTaxProfileVersion => fail
+    expect(
+      EnrichmentSuggestionSchema.safeParse({ ...taxSuggestion, businessTaxProfileVersion: null }).success,
+    ).toBe(false);
+    // version 0 => fail
+    expect(
+      EnrichmentSuggestionSchema.safeParse({ ...taxSuggestion, businessTaxProfileVersion: 0 }).success,
     ).toBe(false);
   });
 
@@ -530,7 +541,13 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
     expect(
       EnrichmentSuggestionSchema.safeParse({
         ...baseTagSuggestion,
-        taxProfileId: ids.taxProfileId,
+        businessTaxProfileId: ids.taxProfileId,
+      }).success,
+    ).toBe(false);
+    expect(
+      EnrichmentSuggestionSchema.safeParse({
+        ...baseTagSuggestion,
+        businessTaxProfileVersion: 1,
       }).success,
     ).toBe(false);
   });
@@ -557,6 +574,59 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
 
   it("rejects extra fields (strictObject)", () => {
     expect(EnrichmentSuggestionSchema.safeParse({ ...baseTagSuggestion, extra: true }).success).toBe(false);
+  });
+});
+
+// ============================================================
+// EnrichmentEvidence bounded structure
+// ============================================================
+describe("EnrichmentEvidenceSchema – bounded aggregate facts", () => {
+  it("accepts valid bounded evidence with string/number/boolean values", () => {
+    expect(
+      EnrichmentEvidenceSchema.safeParse({
+        matchedCount: 4,
+        totalCount: 5,
+        leadingMerchant: "Starbucks",
+        isWeekend: false,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts array values bounded to 50 elements", () => {
+    expect(
+      EnrichmentEvidenceSchema.safeParse({
+        categoryIds: Array.from({ length: 50 }, (_, i) => `id-${i}`),
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects array values exceeding 50 elements", () => {
+    expect(
+      EnrichmentEvidenceSchema.safeParse({
+        categoryIds: Array.from({ length: 51 }, (_, i) => `id-${i}`),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects string values exceeding 500 characters", () => {
+    expect(
+      EnrichmentEvidenceSchema.safeParse({
+        longValue: "x".repeat(501),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects serialized evidence exceeding 8192 bytes", () => {
+    // Build a payload that exceeds 8KB when JSON-serialized
+    const bigEvidence: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) {
+      bigEvidence[`key${i}`] = "x".repeat(450);
+    }
+    expect(EnrichmentEvidenceSchema.safeParse(bigEvidence).success).toBe(false);
+  });
+
+  it("accepts null values in evidence", () => {
+    expect(EnrichmentEvidenceSchema.safeParse({ merchant: null }).success).toBe(true);
   });
 });
 

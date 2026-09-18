@@ -3,7 +3,7 @@ import { type Kysely, sql } from "kysely";
 export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // Supporting unique indexes on parent tables needed for composite FKs.
-  // These are created AFTER the tables they index already exist.
+  // Created before any child table that references them.
   // ------------------------------------------------------------------ //
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS expenses_id_tenant_unique
@@ -21,14 +21,11 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // app.tags
   //
-  // Tenant-level tag definitions. Tags have NO personal/business scope:
-  // they belong to the tenant and can be applied to any expense in scope.
-  //
-  // origin: 'custom' (created by users) | 'rule' (system-created).
-  // Unique (tenant_id, key) across ALL statuses: reusing an archived key
+  // Tenant-level tag definitions (NO personal/business scope columns).
+  // origin: 'custom' (user-created) | 'rule' (system-created).
+  // UNIQUE (tenant_id, key) across ALL statuses -- archived key reuse
   // requires explicit unarchive; rules never silently reactivate a key.
-  // color is nullable (rule tags may have none).
-  // created_by_user_id is nullable (system-created rule tags have no actor).
+  // color is nullable; created_by_user_id is nullable for rule tags.
   // ------------------------------------------------------------------ //
   await sql`
     CREATE TABLE app.tags (
@@ -72,12 +69,17 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // app.expense_tags
   //
-  // One row per expense/tag decision. Exactly one personal_profile_id OR
-  // business_id per row. A removed row is retained so rule evidence cannot
-  // recreate a user-rejected tag unchanged.
-  //
+  // One active-or-removed row per (tenant, expense, tag) pair.
+  // Exactly one personal_profile_id XOR business_id per row.
   // source: 'manual' | 'rule' | 'historical' | 'ai'
   // status: 'active' | 'removed'
+  //
+  // State constraints:
+  //   active:  removed_by_user_id IS NULL, removed_at IS NULL
+  //   removed: removed_by_user_id may be NULL for system removal (rules);
+  //            removed_at IS NOT NULL
+  // Scope of tag row must equal scope of referenced expense (validated by
+  // trigger validate_enrichment_child_scope).
   // ------------------------------------------------------------------ //
   await sql`
     CREATE TABLE app.expense_tags (
@@ -122,6 +124,11 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         CHECK (rule_version IS NULL OR rule_version > 0),
       CONSTRAINT expense_tags_version_check
         CHECK (version > 0),
+      CONSTRAINT expense_tags_removed_state_check
+        CHECK (
+          (status = 'active' AND removed_at IS NULL AND removed_by_user_id IS NULL)
+          OR (status = 'removed' AND removed_at IS NOT NULL)
+        ),
       CONSTRAINT expense_tags_expense_tag_unique
         UNIQUE (tenant_id, expense_id, tag_id)
     )
@@ -138,11 +145,15 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // app.expense_spending_category_decisions  (append-only)
   //
-  // Records every category assignment change. Exactly one scope per row.
+  // Every category change writes a new row. No updates or deletes.
+  // Exactly one personal_profile_id XOR business_id per row.
   // source: 'manual' | 'manual_baseline' | 'historical' | 'ai'
   //
-  // Backfill: every non-null expenses.spending_category_id becomes a
-  // manual_baseline decision using the expense created_by_user_id and version.
+  // Scope of decision row must equal scope of referenced expense (validated
+  // by trigger validate_enrichment_child_scope).
+  //
+  // Backfill: existing non-null expenses.spending_category_id becomes a
+  // manual_baseline row with prior=NULL, new=current, creator, version.
   // ------------------------------------------------------------------ //
   await sql`
     CREATE TABLE app.expense_spending_category_decisions (
@@ -179,6 +190,30 @@ export async function up(database: Kysely<unknown>): Promise<void> {
     CREATE INDEX expense_spending_category_decisions_expense_index
       ON app.expense_spending_category_decisions (tenant_id, expense_id, created_at DESC)
   `.execute(database);
+
+  /* Append-only guard: reject UPDATE and DELETE on decisions */
+  await sql`
+    CREATE OR REPLACE FUNCTION app.prevent_category_decision_mutation()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    BEGIN
+      IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'expense_spending_category_decisions rows are append-only and cannot be updated';
+      ELSIF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'expense_spending_category_decisions rows are append-only and cannot be deleted';
+      END IF;
+      RETURN NULL;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_spending_category_decisions_append_only_trigger
+      BEFORE UPDATE OR DELETE ON app.expense_spending_category_decisions
+      FOR EACH ROW EXECUTE FUNCTION app.prevent_category_decision_mutation()
+  `.execute(database);
+
+  /* Backfill */
   await sql`
     INSERT INTO app.expense_spending_category_decisions
       (id, tenant_id, personal_profile_id, business_id, expense_id,
@@ -203,15 +238,17 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // app.expense_enrichment_suggestions
   //
-  // One row per pending or resolved suggestion. Exactly one personal/business
-  // scope per row. Candidate column XOR by kind.
-  // Tax suggestions additionally require business scope and a tax profile/
-  // taxonomy/year tuple.
-  //
+  // One row per suggestion (pending or resolved). Exactly one scope column.
+  // Tax suggestions bind profile ID + version, taxonomy, year, category.
   // source: 'historical' | 'ai'
   // status: 'pending' | 'accepted' | 'rejected' | 'superseded'
   //
-  // Terminal (accepted/rejected/superseded) rows are immutable via trigger.
+  // evidence is bounded JSONB (aggregate facts only, no raw receipt text);
+  // octet_length checked via trigger (8 KB limit).
+  //
+  // Pending uniqueness: per (tenant, expense, kind, candidate, evidence_hash)
+  //   using UNIQUE NULLS NOT DISTINCT so same evidence for two different
+  //   candidates can coexist while exact duplicate candidate+evidence cannot.
   // ------------------------------------------------------------------ //
   await sql`
     CREATE TABLE app.expense_enrichment_suggestions (
@@ -225,7 +262,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       tag_id uuid,
       spending_category_id uuid,
       tax_category_definition_id uuid,
-      tax_profile_id uuid,
+      business_tax_profile_id uuid,
+      business_tax_profile_version integer,
       taxonomy_version_id uuid,
       tax_year integer,
       source text NOT NULL,
@@ -252,7 +290,7 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         FOREIGN KEY (job_id, tenant_id)
         REFERENCES app.processing_jobs(id, tenant_id),
       CONSTRAINT expense_enrichment_suggestions_tax_profile_tenant_fk
-        FOREIGN KEY (tax_profile_id, tenant_id)
+        FOREIGN KEY (business_tax_profile_id, tenant_id)
         REFERENCES app.business_tax_profiles(id, tenant_id),
       CONSTRAINT expense_enrichment_suggestions_taxonomy_fk
         FOREIGN KEY (taxonomy_version_id)
@@ -286,13 +324,17 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         ),
       CONSTRAINT expense_enrichment_suggestions_tax_snapshot_check
         CHECK (
-          (kind = 'tax_category' AND tax_profile_id IS NOT NULL AND business_id IS NOT NULL
+          (kind = 'tax_category' AND business_id IS NOT NULL
+            AND business_tax_profile_id IS NOT NULL AND business_tax_profile_version IS NOT NULL
             AND taxonomy_version_id IS NOT NULL AND tax_year IS NOT NULL)
-          OR (kind <> 'tax_category' AND tax_profile_id IS NULL
+          OR (kind <> 'tax_category'
+            AND business_tax_profile_id IS NULL AND business_tax_profile_version IS NULL
             AND taxonomy_version_id IS NULL AND tax_year IS NULL)
         ),
       CONSTRAINT expense_enrichment_suggestions_tax_year_check
         CHECK (tax_year IS NULL OR (tax_year >= 1900 AND tax_year <= 9999)),
+      CONSTRAINT expense_enrichment_suggestions_tax_profile_version_check
+        CHECK (business_tax_profile_version IS NULL OR business_tax_profile_version > 0),
       CONSTRAINT expense_enrichment_suggestions_resolution_check
         CHECK (
           (status = 'pending' AND resolved_by_user_id IS NULL AND resolved_at IS NULL)
@@ -300,16 +342,33 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         )
     )
   `.execute(database);
+
+  /* Pending suggestion uniqueness includes candidate identity.
+     PostgreSQL 17 UNIQUE NULLS NOT DISTINCT: within each kind, the nullable
+     candidate column (tag_id / spending_category_id / tax_category_definition_id)
+     is treated as equal when NULL, preventing exact duplicate candidate+evidence
+     while allowing same evidence_hash for two distinct candidates. */
   await sql`
-    CREATE UNIQUE INDEX expense_enrichment_suggestions_active_evidence_unique
-      ON app.expense_enrichment_suggestions (tenant_id, expense_id, kind, evidence_hash)
-      WHERE status = 'pending'
+    CREATE UNIQUE INDEX expense_enrichment_suggestions_pending_tag_unique
+      ON app.expense_enrichment_suggestions (tenant_id, expense_id, kind, tag_id, evidence_hash)
+      WHERE status = 'pending' AND kind = 'tag'
+  `.execute(database);
+  await sql`
+    CREATE UNIQUE INDEX expense_enrichment_suggestions_pending_category_unique
+      ON app.expense_enrichment_suggestions (tenant_id, expense_id, kind, spending_category_id, evidence_hash)
+      WHERE status = 'pending' AND kind = 'spending_category'
+  `.execute(database);
+  await sql`
+    CREATE UNIQUE INDEX expense_enrichment_suggestions_pending_tax_unique
+      ON app.expense_enrichment_suggestions (tenant_id, expense_id, kind, tax_category_definition_id, evidence_hash)
+      WHERE status = 'pending' AND kind = 'tax_category'
   `.execute(database);
   await sql`
     CREATE INDEX expense_enrichment_suggestions_pending_lookup_index
       ON app.expense_enrichment_suggestions (tenant_id, expense_id, kind, status)
   `.execute(database);
 
+  /* Terminal-immutability trigger */
   await sql`
     CREATE OR REPLACE FUNCTION app.prevent_enrichment_suggestion_terminal_update()
     RETURNS trigger
@@ -329,6 +388,111 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       FOR EACH ROW EXECUTE FUNCTION app.prevent_enrichment_suggestion_terminal_update()
   `.execute(database);
 
+  /* Evidence size check: reject evidence JSONB > 8192 bytes */
+  await sql`
+    CREATE OR REPLACE FUNCTION app.check_enrichment_evidence_size()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    BEGIN
+      IF octet_length(NEW.evidence::text) > 8192 THEN
+        RAISE EXCEPTION 'enrichment suggestion evidence exceeds 8192 byte limit';
+      END IF;
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER enrichment_suggestions_evidence_size_trigger
+      BEFORE INSERT OR UPDATE ON app.expense_enrichment_suggestions
+      FOR EACH ROW EXECUTE FUNCTION app.check_enrichment_evidence_size()
+  `.execute(database);
+
+  // ------------------------------------------------------------------ //
+  // Covering index needed before deferred suggestion_id FKs can reference
+  // expense_enrichment_suggestions(id, tenant_id).
+  // ------------------------------------------------------------------ //
+  await sql`
+    CREATE UNIQUE INDEX expense_enrichment_suggestions_id_tenant_unique
+      ON app.expense_enrichment_suggestions (id, tenant_id)
+  `.execute(database);
+
+  // ------------------------------------------------------------------ //
+  // Deferred suggestion_id FK: add nullable FK from expense_tags and
+  // expense_spending_category_decisions to expense_enrichment_suggestions
+  // now that the suggestions table and its covering index exist.
+  // ------------------------------------------------------------------ //
+  await sql`
+    ALTER TABLE app.expense_tags
+      ADD CONSTRAINT expense_tags_suggestion_id_fk
+        FOREIGN KEY (suggestion_id, tenant_id)
+        REFERENCES app.expense_enrichment_suggestions(id, tenant_id)
+  `.execute(database);
+  await sql`
+    ALTER TABLE app.expense_spending_category_decisions
+      ADD CONSTRAINT expense_spending_category_decisions_suggestion_id_fk
+        FOREIGN KEY (suggestion_id, tenant_id)
+        REFERENCES app.expense_enrichment_suggestions(id, tenant_id)
+  `.execute(database);
+
+  // ------------------------------------------------------------------ //
+  // Child-row scope validation trigger
+  //
+  // Ensures every expense_tag, category decision, and suggestion row has
+  // the same (tenant_id, personal_profile_id, business_id) as the expense
+  // it references. Parent-immutability alone is insufficient because it
+  // only guards post-hoc scope changes; this guards initial inserts.
+  // ------------------------------------------------------------------ //
+  await sql`
+    CREATE OR REPLACE FUNCTION app.validate_enrichment_child_scope()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      exp_tenant_id uuid;
+      exp_personal_profile_id uuid;
+      exp_business_id uuid;
+    BEGIN
+      SELECT tenant_id, personal_profile_id, business_id
+        INTO exp_tenant_id, exp_personal_profile_id, exp_business_id
+        FROM app.expenses
+        WHERE id = NEW.expense_id
+        FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'enrichment child row references non-existent expense %', NEW.expense_id;
+      END IF;
+
+      IF exp_tenant_id IS DISTINCT FROM NEW.tenant_id
+        OR exp_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+        OR exp_business_id IS DISTINCT FROM NEW.business_id THEN
+        RAISE EXCEPTION
+          'enrichment child row scope (%, %, %) does not match expense scope (%, %, %)',
+          NEW.tenant_id, NEW.personal_profile_id, NEW.business_id,
+          exp_tenant_id, exp_personal_profile_id, exp_business_id;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_tags_scope_validation_trigger
+      BEFORE INSERT ON app.expense_tags
+      FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_spending_category_decisions_scope_validation_trigger
+      BEFORE INSERT ON app.expense_spending_category_decisions
+      FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_enrichment_suggestions_scope_validation_trigger
+      BEFORE INSERT ON app.expense_enrichment_suggestions
+      FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
+  `.execute(database);
+
+  /* Parent scope immutability: prevent scope changes on expenses once enrichment data exists */
   await sql`
     CREATE OR REPLACE FUNCTION app.prevent_enrichment_parent_scope_update()
     RETURNS trigger
@@ -341,13 +505,9 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         RETURN NEW;
       END IF;
 
-      IF EXISTS (
-        SELECT 1 FROM app.expense_enrichment_suggestions WHERE expense_id = OLD.id
-      ) OR EXISTS (
-        SELECT 1 FROM app.expense_spending_category_decisions WHERE expense_id = OLD.id
-      ) OR EXISTS (
-        SELECT 1 FROM app.expense_tags WHERE expense_id = OLD.id
-      ) THEN
+      IF EXISTS (SELECT 1 FROM app.expense_enrichment_suggestions WHERE expense_id = OLD.id)
+        OR EXISTS (SELECT 1 FROM app.expense_spending_category_decisions WHERE expense_id = OLD.id)
+        OR EXISTS (SELECT 1 FROM app.expense_tags WHERE expense_id = OLD.id) THEN
         RAISE EXCEPTION 'referenced expense scope is immutable once enrichment data exists';
       END IF;
 
@@ -364,13 +524,10 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   // ------------------------------------------------------------------ //
   // app.enrichment_operation_keys  (permanent replay / conflict dedup)
   //
-  // Identical replay (same composite binding + payload_hash) returns stored
-  // response_json. Same operation_key with different binding or payload_hash
-  // is a permanent conflict.
-  //
-  // PostgreSQL 17: UNIQUE NULLS NOT DISTINCT ensures two rows with identical
-  // binding and candidate_id IS NULL both collide (standard UNIQUE would
-  // treat NULL != NULL and allow duplicates).
+  // UNIQUE (tenant_id, operation_key): simple uniqueness per operation key.
+  // UNIQUE NULLS NOT DISTINCT composite: two rows with null candidate_id
+  // and otherwise identical binding are treated as equal (duplicate replay).
+  // Standard UNIQUE would treat NULL != NULL and allow phantom duplicates.
   // ------------------------------------------------------------------ //
   await sql`
     CREATE TABLE app.enrichment_operation_keys (
@@ -411,9 +568,17 @@ export async function up(database: Kysely<unknown>): Promise<void> {
 
 export async function down(database: Kysely<unknown>): Promise<void> {
   await sql`DROP TRIGGER IF EXISTS expenses_enrichment_parent_scope_guard_trigger ON app.expenses`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_enrichment_suggestions_scope_validation_trigger ON app.expense_enrichment_suggestions`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_spending_category_decisions_scope_validation_trigger ON app.expense_spending_category_decisions`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_tags_scope_validation_trigger ON app.expense_tags`.execute(database);
   await sql`DROP TRIGGER IF EXISTS enrichment_suggestions_terminal_guard_trigger ON app.expense_enrichment_suggestions`.execute(database);
-  await sql`DROP FUNCTION IF EXISTS app.prevent_enrichment_suggestion_terminal_update()`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS enrichment_suggestions_evidence_size_trigger ON app.expense_enrichment_suggestions`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_spending_category_decisions_append_only_trigger ON app.expense_spending_category_decisions`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.prevent_enrichment_parent_scope_update()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.validate_enrichment_child_scope()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.prevent_enrichment_suggestion_terminal_update()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.check_enrichment_evidence_size()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.prevent_category_decision_mutation()`.execute(database);
   await database.schema.dropTable("app.enrichment_operation_keys").ifExists().execute();
   await database.schema.dropTable("app.expense_enrichment_suggestions").ifExists().execute();
   await database.schema.dropTable("app.expense_spending_category_decisions").ifExists().execute();

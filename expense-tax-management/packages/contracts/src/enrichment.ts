@@ -218,6 +218,28 @@ export type EnrichmentSuggestionSource = z.infer<typeof EnrichmentSuggestionSour
 
 const EvidenceHashSchema = z.string().regex(/^[a-f0-9]{64}$/, "Evidence hash must be a 64-char lowercase hex SHA-256");
 
+/**
+ * Bounded evidence: aggregate facts only, no raw receipt text.
+ * All string values are bounded to prevent unbounded payloads.
+ * Total JSON size is bounded at 8 KB by the database trigger.
+ */
+export const EnrichmentEvidenceSchema = z
+  .record(
+    z.string().max(100),
+    z.union([
+      z.string().max(500),
+      z.number(),
+      z.boolean(),
+      z.null(),
+      z.array(z.union([z.string().max(500), z.number(), z.boolean(), z.null()])).max(50),
+    ]),
+  )
+  .refine(
+    (value) => JSON.stringify(value).length <= 8192,
+    { message: "Evidence must not exceed 8192 bytes when serialized" },
+  );
+export type EnrichmentEvidence = z.infer<typeof EnrichmentEvidenceSchema>;
+
 // Base fields shared by all kinds
 const BaseSuggestionFields = {
   id: z.uuid(),
@@ -229,7 +251,7 @@ const BaseSuggestionFields = {
   kind: EnrichmentSuggestionKindSchema,
   source: EnrichmentSuggestionSourceSchema,
   confidence: z.number().min(0).max(1),
-  evidence: z.record(z.string(), z.unknown()),
+  evidence: EnrichmentEvidenceSchema,
   evidenceHash: EvidenceHashSchema,
   status: EnrichmentSuggestionStatusSchema,
   version: VersionSchema,
@@ -240,15 +262,18 @@ const BaseSuggestionFields = {
   createdAt: TimestampSchema,
 };
 
-// Tax snapshot fields — present for tax_category, null for others
+// Tax snapshot fields — present for tax_category, null for others.
+// businessTaxProfileVersion is required for stale detection on acceptance.
 const TaxSnapshotPresentFields = {
-  taxProfileId: z.uuid(),
+  businessTaxProfileId: z.uuid(),
+  businessTaxProfileVersion: VersionSchema,
   taxonomyVersionId: z.uuid(),
   taxYear: TaxYearSchema,
 };
 
 const TaxSnapshotNullFields = {
-  taxProfileId: z.null(),
+  businessTaxProfileId: z.null(),
+  businessTaxProfileVersion: z.null(),
   taxonomyVersionId: z.null(),
   taxYear: z.null(),
 };
@@ -292,7 +317,8 @@ export const EnrichmentSuggestionSchema = z
       })
       .refine(scopeXorRefine, { message: "Exactly one scope required" })
       .refine(resolutionStateRefine, { message: "Resolution state must match status" }),
-    // tax_category suggestion — requires business scope and tax snapshot
+    // tax_category suggestion — requires business scope and full tax snapshot.
+    // businessTaxProfileVersion is required for stale-detection on acceptance.
     z
       .strictObject({
         ...BaseSuggestionFields,
