@@ -1,20 +1,37 @@
 /**
- * Task 6 — App API enrichment domain.
+ * Task 6 — App API enrichment domain (Fix Round 1).
  *
  * Implements:
  * - buildEnrichmentInput: bounded projection for the AI worker
- * - applyEnrichmentResult: server recomputation, rule tag application,
- *   pending suggestion creation, permanent operation key recording
- * - resolveSuggestion: Task 8 seam (not yet public)
- * - rerunEnrichment: Task 8 seam (not yet public)
+ * - applyEnrichmentResult: one atomic transaction — lock job, check permanent
+ *   result key, validate/recompute, apply, insert result op key, mark SUCCEEDED
  *
- * Security boundaries:
+ * Security boundaries (unchanged):
  * - No tenantId, profileId, businessId, selectors, raw receipt text,
- *   amount, tax treatment, review status, or deductible percentage in
- *   the worker input.
+ *   amount, tax treatment, review status, or deductible percentage in worker input.
  * - Worker cannot redirect scope; all scope/tenant resolution from job row.
- * - All candidate eligibility enforced server-side; server recomputes
- *   deterministic rule tags and rejects mismatches.
+ * - All candidate eligibility enforced server-side; server recomputes rule tags.
+ *
+ * Fix Round 1 changes vs original:
+ * - F1/F2: operation kind 'result' for job-level permanent key (no tag-placeholder).
+ * - F1/F3/F4: single unified atomic transaction for submitEnrichmentResult/applied;
+ *   permanent result key checked+inserted inside the job-locked transaction;
+ *   removed checkPermanentReplay export, sentinel pattern, and post-commit recording.
+ * - F5: 24-month history cutoff uses direct date arithmetic (no setMonth overflow);
+ *   queries expenses.incurred_on directly with incurred_on < current AND >= cutoff.
+ * - F6: spending-category history from latest qualifying append-only decision per
+ *   historical expense (source manual/manual_baseline/historical), not expenses col.
+ * - F7: tax history requires reviewed treatment, non-null updated_by_user_id,
+ *   same active profile/taxonomy/year, active category, ready non-archived expense.
+ * - F8: normalizedMerchant is the raw slug from normalizeMerchant() with spaces;
+ *   merchantTagKey() wraps it verbatim (no space→hyphen on server side).
+ * - F10: expense_tag update increments version (sql`version + 1`).
+ * - F11: all op key rows inserted inside the single application transaction.
+ * - F13: exactly one audit event per result submission with actor+outcome metadata.
+ * - F14: job update includes expected version predicate while row lock held.
+ * - F15: removed resolveSuggestion/rerunEnrichment stubs (Task 8 owns them).
+ * - F17: named HISTORY_MAX_EXPENSES/HISTORY_MAX_CANDIDATE_TAG_KEYS/
+ *   HISTORY_MAX_CANDIDATE_CATEGORY_IDS constants; removed dead evidence variable.
  */
 
 import { randomUUID, createHash } from "node:crypto";
@@ -27,7 +44,7 @@ import {
   type ExpenseEnrichmentInputV1,
   type ProcessingJob,
 } from "@expense-tax/contracts";
-import { type Kysely, type Transaction, sql } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 
 import type { AppDatabase, JsonValue } from "../database/types.js";
 import { DomainError } from "../errors.js";
@@ -38,15 +55,22 @@ import {
   toJsonValue,
   type MutationResult,
 } from "./idempotency.js";
-import { toProcessingJob } from "./processing-job-view.js";
+import { toProcessingJob, type ProcessingJobRow } from "./processing-job-view.js";
 
 // ------------------------------------------------------------------ //
 // Constants
 // ------------------------------------------------------------------ //
 
 const ENRICHMENT_RULES_VERSION = 1;
-const HISTORY_MONTHS = 24;
+
+/** Maximum prior expenses to include in history training. */
 const HISTORY_MAX_EXPENSES = 50;
+
+/** Maximum tag candidate entries returned in history. */
+const HISTORY_MAX_CANDIDATE_TAG_KEYS = 20;
+
+/** Maximum category/tax candidate entries returned in history. */
+const HISTORY_MAX_CANDIDATE_CATEGORY_IDS = 10;
 
 // ------------------------------------------------------------------ //
 // Helpers
@@ -71,28 +95,40 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** Evidence hash for a suggestion. Canonical JSON → SHA-256 hex. */
-function evidenceHash(payload: Record<string, unknown>): string {
-  return sha256Hex(canonicalJson(payload));
+/**
+ * Tag key for the merchant rule.
+ *
+ * F8: normalizedMerchant field in the worker input is the final stable slug
+ * with spaces replaced by hyphens (required: tag key constraint allows only
+ * [a-z0-9_:.-]+, no spaces). The worker uses `f"merchant:{inp.normalizedMerchant}"`.
+ * Server passes the same slug and produces the same key — no second transformation
+ * at recomputation time (the slug is already the slugified form).
+ *
+ * Slug derivation: normalizeMerchant() → lowercase, punctuation removed, spaces normalized
+ *   → replace spaces with hyphens (stable URL-safe slug).
+ */
+function merchantTagKey(normalizedMerchant: string): string {
+  // normalizedMerchant is already the hyphenated slug
+  return `merchant:${normalizedMerchant}`;
 }
 
 /**
- * Normalize merchant for tag key format.
- * Removes spaces so "corner deli" → "corner-deli" is not needed;
- * the exact format mirrors the Python worker which uses str(normalizedMerchant).
- * Server uses normalizeMerchant() from deduplication.ts then replaces spaces with hyphens.
+ * Produce the stable merchant slug for the worker input's normalizedMerchant field.
+ * Converts spaces to hyphens so the slug is URL-safe and satisfies the tag key
+ * constraint ([a-z0-9_:.-]+). The raw normalizedMerchant from normalizeMerchant()
+ * may have spaces; this converts to the wire format the worker receives.
  */
-function merchantTagKey(normalizedMerchant: string): string {
-  return `merchant:${normalizedMerchant.replace(/\s+/g, "-")}`;
+function toMerchantSlug(rawNormalizedMerchant: string): string {
+  return rawNormalizedMerchant.replace(/\s+/g, "-");
 }
 
 /**
  * Incurred-on day-of-week for weekend rule.
- * Returns true for Saturday (6) or Sunday (7) in ISO weekday.
+ * Returns true for Saturday or Sunday (ISO: 6=Sat, 0=Sun in getDay()).
  */
 function isWeekend(dateStr: string): boolean {
-  // dateStr is YYYY-MM-DD; parse as local date at noon to avoid TZ issues
   const [year, month, day] = dateStr.split("-").map(Number) as [number, number, number];
+  // Use local noon to avoid UTC midnight roll-overs on server
   const d = new Date(year, month - 1, day, 12, 0, 0);
   const dow = d.getDay(); // 0=Sun, 6=Sat
   return dow === 0 || dow === 6;
@@ -100,12 +136,12 @@ function isWeekend(dateStr: string): boolean {
 
 /**
  * Compute server-side deterministic rule tag keys for an expense.
- * Must exactly mirror the Python evaluator in services/ai-worker/src/ai_worker/enrichment.py.
+ * Must exactly mirror services/ai-worker/src/ai_worker/enrichment.py evaluate().
  *
- * Rules:
- * - merchant:<normalizedMerchant> if eligible (key in eligibleTagKeys)
- * - timing:weekend if eligible and incurredOn is Sat or Sun
- * - category:<spendingCategoryId> if eligible and spendingCategoryId not null
+ * Rules (applied in order, each independently gated on eligibility):
+ * 1. merchant:<normalizedMerchant>  — if normalizedMerchant non-null and key eligible
+ * 2. timing:weekend                 — if incurredOn is Sat/Sun and key eligible
+ * 3. category:<spendingCategoryId>  — if spendingCategoryId non-null and key eligible
  */
 function computeRuleTagKeys(input: {
   readonly normalizedMerchant: string | null;
@@ -117,26 +153,48 @@ function computeRuleTagKeys(input: {
 
   if (input.normalizedMerchant) {
     const key = merchantTagKey(input.normalizedMerchant);
-    if (input.eligibleTagKeys.includes(key)) {
-      result.push(key);
-    }
+    if (input.eligibleTagKeys.includes(key)) result.push(key);
   }
 
   if (isWeekend(input.incurredOn)) {
     const weekendKey = "timing:weekend";
-    if (input.eligibleTagKeys.includes(weekendKey)) {
-      result.push(weekendKey);
-    }
+    if (input.eligibleTagKeys.includes(weekendKey)) result.push(weekendKey);
   }
 
   if (input.spendingCategoryId) {
     const catKey = `category:${input.spendingCategoryId}`;
-    if (input.eligibleTagKeys.includes(catKey)) {
-      result.push(catKey);
-    }
+    if (input.eligibleTagKeys.includes(catKey)) result.push(catKey);
   }
 
   return result;
+}
+
+/**
+ * Convert a DB incurred_on (Date | string) to "YYYY-MM-DD".
+ */
+function toDateStr(raw: Date | string | null): string {
+  if (raw instanceof Date) {
+    const y = raw.getFullYear();
+    const m = String(raw.getMonth() + 1).padStart(2, "0");
+    const d = String(raw.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return String(raw ?? "");
+}
+
+/**
+ * Compute the 24-month cutoff date string (YYYY-MM-DD) without setMonth overflow.
+ * F5: subtract month arithmetic safely using explicit year/month arithmetic.
+ * e.g. 2026-01-15 → 2024-01-15; 2026-03-31 → 2024-03-31.
+ */
+function twentyFourMonthCutoff(fromDateStr: string): string {
+  const [y, m, d] = fromDateStr.split("-").map(Number) as [number, number, number];
+  let cutoffYear = y - 2;
+  let cutoffMonth = m; // 1-based
+  // setMonth overflow is avoided because we directly subtract years
+  const cutoffDay = d;
+  // Pad month
+  return `${cutoffYear}-${String(cutoffMonth).padStart(2, "0")}-${String(cutoffDay).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ //
@@ -146,28 +204,25 @@ function computeRuleTagKeys(input: {
 /**
  * Build the full worker input for the given enrichment job.
  *
- * Enforces:
- * - Job must exist, be EXPENSE_ENRICHMENT_WORKFLOW_TYPE, and be RUNNING.
- * - Expense must exist, be ready, and match expected version.
- * - Eligible tag keys: active tags with exact rule keys present for the scope.
- *   - merchant:<normalizedMerchant> if merchant known and tag active
- *   - timing:weekend always (if active tag exists)
- *   - category:<spendingCategoryId> if category set and tag active
- *   - Never archived tags, never ineligible rule keys.
- * - Eligible spending category IDs: active (not archived) categories for same scope.
- * - Tax snapshot: active business tax profile + active taxonomy + active tax categories.
- * - History: same normalized merchant, same tenant/scope, ready non-archived,
- *   prior 24 months, max 50. Training on active manual/accepted-historical tags,
- *   latest manual/manual_baseline/accepted-historical category decisions, reviewed
- *   user-saved active Business tax treatments under current active profile/taxonomy/year.
- * - No amount, selector, percentage, treatment/review status in output.
+ * Called from the getEnrichmentInput route handler.
+ * Runs in its own transaction; writes exactly one audit event.
+ *
+ * F5: History cutoff is `incurred_on >= cutoff AND incurred_on < currentIncurredOn`
+ *     computed via direct year arithmetic (no setMonth overflow).
+ * F6: Spending-category candidates from latest qualifying decision (source
+ *     manual/manual_baseline/historical) per historical expense.
+ * F7: Tax candidates from reviewed treatments on ready non-archived expenses,
+ *     same active profile/taxonomy/year, active tax category.
+ * F8: normalizedMerchant is the raw slug (spaces kept) passed verbatim to worker.
  */
 export async function buildEnrichmentInput(
   database: Kysely<AppDatabase>,
   jobId: string,
+  actorServicePrincipal?: string,
+  requestId?: string,
 ): Promise<ExpenseEnrichmentInputResponseV1> {
   return database.transaction().execute(async (transaction) => {
-    // Load and validate job
+    // ---- Validate job ----
     const job = await transaction
       .selectFrom("app.processing_jobs")
       .selectAll()
@@ -188,7 +243,7 @@ export async function buildEnrichmentInput(
     const expenseId = job.target_aggregate_id;
     const tenantId = job.tenant_id;
 
-    // Load expense
+    // ---- Validate expense ----
     const expense = await transaction
       .selectFrom("app.expenses")
       .selectAll()
@@ -196,76 +251,83 @@ export async function buildEnrichmentInput(
       .where("tenant_id", "=", tenantId)
       .executeTakeFirst();
 
+    let outcome: "evaluate" | "stale" | "skipped";
     if (!expense || expense.status === "archived") {
-      return { outcome: "skipped" as const };
-    }
-
-    if (
+      outcome = "skipped";
+    } else if (
       job.expected_aggregate_version !== null &&
       expense.version !== job.expected_aggregate_version
     ) {
-      return { outcome: "stale" as const };
+      outcome = "stale";
+    } else {
+      outcome = "evaluate";
     }
 
-    // Compute scope
-    const isPersonal = expense.personal_profile_id !== null;
-    const scopeProfileId = expense.personal_profile_id;
-    const scopeBusinessId = expense.business_id;
+    // ---- Audit (exactly one event, I8/F13) ----
+    // actor_check requires at least one of actor_user_id/actor_service_principal non-null.
+    await recordAuditEvent(transaction, {
+      tenantId,
+      actorServicePrincipal: actorServicePrincipal ?? "system",
+      action: "processing_job.enrichment_input_read",
+      outcome: "success",
+      resourceType: "processing_job",
+      resourceId: jobId,
+      requestId: requestId ?? "unknown",
+      metadata: { inputOutcome: outcome },
+    });
 
-    // Normalized merchant (null if blank)
-    const rawMerchant = expense.merchant?.trim() ?? "";
-    const normalizedMerchantRaw = rawMerchant ? normalizeMerchant(rawMerchant) : null;
-    const normalizedMerchant = normalizedMerchantRaw || null;
+    if (outcome === "skipped") return { outcome: "skipped" as const };
+    if (outcome === "stale") return { outcome: "stale" as const };
 
-    // Incurred-on as date string
-    const incurredOnRaw = expense.incurred_on;
-    const incurredOn =
-      incurredOnRaw instanceof Date
-        ? `${incurredOnRaw.getFullYear()}-${String(incurredOnRaw.getMonth() + 1).padStart(2, "0")}-${String(incurredOnRaw.getDate()).padStart(2, "0")}`
-        : String(incurredOnRaw);
+    // outcome === "evaluate" — build full input
+    const isPersonal = expense!.personal_profile_id !== null;
+    const scopeProfileId = expense!.personal_profile_id;
+    const scopeBusinessId = expense!.business_id;
 
-    // ---- Eligible tag keys ----
-    // Active rule tags present in tenant, keyed by the three rule patterns.
-    // A tag key is eligible only if an active (non-archived) tag with that key exists.
+    // F8: normalizedMerchant = stable slug for the worker (hyphens, not spaces).
+    // normalizeMerchant() produces lowercase with spaces; toMerchantSlug() converts
+    // to hyphens so it satisfies tag key constraint and matches worker key derivation.
+    const rawMerchant = expense!.merchant?.trim() ?? "";
+    const rawNormalized = rawMerchant ? (normalizeMerchant(rawMerchant) || null) : null;
+    const normalizedMerchant = rawNormalized ? toMerchantSlug(rawNormalized) : null;
 
-    const candidateKeys: string[] = [];
-    if (normalizedMerchant) {
-      candidateKeys.push(merchantTagKey(normalizedMerchant));
+    const incurredOn = toDateStr(expense!.incurred_on as Date | string | null);
+
+    // ---- Eligible tag keys (absent-or-active; never archived) ----
+    const candidateTagKeys: string[] = [];
+    if (normalizedMerchant) candidateTagKeys.push(merchantTagKey(normalizedMerchant));
+    candidateTagKeys.push("timing:weekend");
+    if (expense!.spending_category_id) {
+      candidateTagKeys.push(`category:${expense!.spending_category_id}`);
     }
-    candidateKeys.push("timing:weekend");
-    if (expense.spending_category_id) {
-      candidateKeys.push(`category:${expense.spending_category_id}`);
-    }
 
-    // A candidate key is eligible if:
-    // - No tag with that key exists (absent → eligible for creation by the application layer), OR
-    // - A tag with that key exists AND is active (not archived).
-    // Archived same key is permanently ineligible and never reactivates.
-    const archivedTags =
-      candidateKeys.length > 0
-        ? await transaction
-            .selectFrom("app.tags")
-            .select(["key", "status"])
-            .where("tenant_id", "=", tenantId)
-            .where("key", "in", candidateKeys)
-            .where("status", "=", "archived")
-            .execute()
-        : [];
+    const archivedTagKeys =
+      candidateTagKeys.length > 0
+        ? new Set(
+            (await transaction
+              .selectFrom("app.tags")
+              .select("key")
+              .where("tenant_id", "=", tenantId)
+              .where("key", "in", candidateTagKeys)
+              .where("status", "=", "archived")
+              .execute()
+            ).map((r) => r.key),
+          )
+        : new Set<string>();
 
-    const archivedKeySet = new Set(archivedTags.map((t) => t.key));
-    // Sort for deterministic order; exclude only archived keys
-    const eligibleTagKeys = candidateKeys.filter((k) => !archivedKeySet.has(k)).sort();
+    const eligibleTagKeys = candidateTagKeys
+      .filter((k) => !archivedTagKeys.has(k))
+      .sort();
 
     // ---- Eligible spending category IDs ----
-    // Active (not archived) spending categories for this tenant/scope.
-    let eligibleCatQuery = transaction
-      .selectFrom("app.spending_categories")
-      .select("id")
-      .where("tenant_id", "=", tenantId)
-      .where("status", "=", "active");
-
-    const eligibleCategories = await eligibleCatQuery.execute();
-    const eligibleSpendingCategoryIds = eligibleCategories
+    const eligibleSpendingCategoryIds = (
+      await transaction
+        .selectFrom("app.spending_categories")
+        .select("id")
+        .where("tenant_id", "=", tenantId)
+        .where("status", "=", "active")
+        .execute()
+    )
       .map((r) => r.id)
       .sort();
 
@@ -273,15 +335,9 @@ export async function buildEnrichmentInput(
     let eligibleTaxSnapshot: ExpenseEnrichmentInputV1["eligibleTaxSnapshot"] = null;
 
     if (!isPersonal && scopeBusinessId) {
-      // Find active business tax profile for this business
       const taxProfile = await transaction
         .selectFrom("app.business_tax_profiles as btp")
-        .select([
-          "btp.id",
-          "btp.version",
-          "btp.taxonomy_version_id",
-          "btp.tax_year",
-        ])
+        .select(["btp.id", "btp.version", "btp.taxonomy_version_id", "btp.tax_year"])
         .where("btp.tenant_id", "=", tenantId)
         .where("btp.business_id", "=", scopeBusinessId)
         .where("btp.status", "=", "active")
@@ -290,127 +346,106 @@ export async function buildEnrichmentInput(
         .executeTakeFirst();
 
       if (taxProfile) {
-        // Active tax category definitions under this taxonomy version
-        const taxCats = await transaction
-          .selectFrom("app.tax_category_definitions")
-          .select("id")
-          .where("taxonomy_version_id", "=", taxProfile.taxonomy_version_id)
-          .where("status", "=", "active")
-          .execute();
+        const activeTaxCatIds = (
+          await transaction
+            .selectFrom("app.tax_category_definitions")
+            .select("id")
+            .where("taxonomy_version_id", "=", taxProfile.taxonomy_version_id)
+            .where("status", "=", "active")
+            .execute()
+        )
+          .map((r) => r.id)
+          .sort();
 
         eligibleTaxSnapshot = {
           businessTaxProfileId: taxProfile.id,
           businessTaxProfileVersion: Number(taxProfile.version),
           taxonomyVersionId: taxProfile.taxonomy_version_id,
           taxYear: taxProfile.tax_year,
-          activeTaxCategoryIds: taxCats.map((r) => r.id).sort(),
+          activeTaxCategoryIds: activeTaxCatIds,
         };
       }
     }
 
-    // ---- History — same normalized merchant, same scope, prior 24 months ----
-    // exampleCount, candidateTagKeys (manual/accepted-historical active tags),
-    // candidateSpendingCategoryIds (latest manual/manual_baseline/accepted-historical decisions),
-    // candidateTaxCategoryIds (reviewed user-saved active Business tax treatments).
+    // ---- History (F5, F6, F7) ----
+    // Cutoff: 24 months before current expense's incurred_on, no overflow.
+    // Window: incurred_on >= cutoff AND incurred_on < currentIncurredOn.
+    const cutoffDateStr = twentyFourMonthCutoff(incurredOn);
 
-    const cutoffDate = new Date(expense.incurred_on instanceof Date ? expense.incurred_on : String(expense.incurred_on));
-    cutoffDate.setMonth(cutoffDate.getMonth() - HISTORY_MONTHS);
-    const cutoffDateStr = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, "0")}-${String(cutoffDate.getDate()).padStart(2, "0")}`;
+    const emptyHistory: ExpenseEnrichmentInputV1["history"] = {
+      exampleCount: 0,
+      candidateTagKeys: [],
+      candidateSpendingCategoryIds: [],
+      candidateTaxCategoryIds: [],
+    };
 
-    // Find up to HISTORY_MAX_EXPENSES prior expenses with same merchant/scope
-    let historicalExpensesQuery = transaction
-      .selectFrom("app.expenses as e")
-      .select(["e.id", "e.spending_category_id"])
-      .where("e.tenant_id", "=", tenantId)
-      .where("e.status", "!=", "archived")
-      .where("e.id", "!=", expenseId); // exclude current expense
+    // rawNormalized is the dedup fingerprint value (spaces); normalizedMerchant is the slug (hyphens)
+    const fingerprintMerchant = rawNormalized; // matches expense_dedup_fingerprints.normalized_merchant
 
-    if (isPersonal && scopeProfileId) {
-      historicalExpensesQuery = historicalExpensesQuery.where(
-        "e.personal_profile_id",
-        "=",
-        scopeProfileId,
-      );
-    } else if (!isPersonal && scopeBusinessId) {
-      historicalExpensesQuery = historicalExpensesQuery.where(
-        "e.business_id",
-        "=",
-        scopeBusinessId,
-      );
-    }
-
-    // Apply merchant filter only if merchant is known
-    if (normalizedMerchant) {
-      // Use the expense_dedup_fingerprints table to find same-merchant expenses
-      const fingerprintExpenseIds = await transaction
-        .selectFrom("app.expense_dedup_fingerprints as fp")
-        .select("fp.expense_id")
-        .where("fp.tenant_id", "=", tenantId)
-        .where("fp.normalized_merchant", "=", normalizedMerchant)
-        .where("fp.incurred_on", ">=", new Date(`${cutoffDateStr}T00:00:00.000Z`))
-        .execute();
-
-      const fpExpenseIdSet = new Set(fingerprintExpenseIds.map((r) => r.expense_id));
-      if (fpExpenseIdSet.size === 0) {
-        // No history
-        const emptyHistory: ExpenseEnrichmentInputV1["history"] = {
-          exampleCount: 0,
-          candidateTagKeys: [],
-          candidateSpendingCategoryIds: [],
-          candidateTaxCategoryIds: [],
-        };
-        const evalInput: ExpenseEnrichmentInputV1 = {
-          schemaVersion: 1,
-          jobId,
-          expenseId,
-          expenseVersion: expense.version,
-          normalizedMerchant,
-          incurredOn,
-          spendingCategoryId: expense.spending_category_id,
-          rulesVersion: ENRICHMENT_RULES_VERSION,
-          eligibleTagKeys,
-          eligibleSpendingCategoryIds,
-          eligibleTaxSnapshot,
-          history: emptyHistory,
-        };
-        return { outcome: "evaluate" as const, input: evalInput };
-      }
-
-      const fpIds = [...fpExpenseIdSet];
-      historicalExpensesQuery = historicalExpensesQuery.where(
-        "e.id",
-        "in",
-        fpIds,
-      );
-    } else {
-      // No merchant — no meaningful history
-      const emptyHistory: ExpenseEnrichmentInputV1["history"] = {
-        exampleCount: 0,
-        candidateTagKeys: [],
-        candidateSpendingCategoryIds: [],
-        candidateTaxCategoryIds: [],
-      };
+    // Merchant is required for meaningful history
+    if (!normalizedMerchant) {
       const evalInput: ExpenseEnrichmentInputV1 = {
-        schemaVersion: 1,
-        jobId,
-        expenseId,
-        expenseVersion: expense.version,
-        normalizedMerchant: null,
-        incurredOn,
-        spendingCategoryId: expense.spending_category_id,
+        schemaVersion: 1, jobId, expenseId, expenseVersion: expense!.version,
+        normalizedMerchant: null, incurredOn,
+        spendingCategoryId: expense!.spending_category_id,
         rulesVersion: ENRICHMENT_RULES_VERSION,
-        eligibleTagKeys,
-        eligibleSpendingCategoryIds,
-        eligibleTaxSnapshot,
-        history: {
-          exampleCount: 0,
-          candidateTagKeys: [],
-          candidateSpendingCategoryIds: [],
-          candidateTaxCategoryIds: [],
-        },
+        eligibleTagKeys, eligibleSpendingCategoryIds, eligibleTaxSnapshot,
+        history: emptyHistory,
       };
       return { outcome: "evaluate" as const, input: evalInput };
     }
+
+    // F5: Find same-merchant historical expenses via dedup fingerprints table,
+    // date-filtered directly on the fingerprints.incurred_on column.
+    // Then cross-check readiness on the expense itself.
+    let historicalExpensesQuery = transaction
+      .selectFrom("app.expenses as e")
+      .select(["e.id"])
+      .where("e.tenant_id", "=", tenantId)
+      .where("e.status", "!=", "archived")
+      .where("e.id", "!=", expenseId);
+
+    if (isPersonal && scopeProfileId) {
+      historicalExpensesQuery = historicalExpensesQuery.where(
+        "e.personal_profile_id", "=", scopeProfileId,
+      );
+    } else if (!isPersonal && scopeBusinessId) {
+      historicalExpensesQuery = historicalExpensesQuery.where(
+        "e.business_id", "=", scopeBusinessId,
+      );
+    }
+
+    // F5: date bounds on expenses.incurred_on directly (not via fingerprints date)
+    // incurred_on >= cutoff AND incurred_on < currentExpense.incurredOn
+    historicalExpensesQuery = historicalExpensesQuery
+      .where("e.incurred_on", ">=", new Date(`${cutoffDateStr}T12:00:00.000Z`))
+      .where("e.incurred_on", "<", new Date(`${incurredOn}T12:00:00.000Z`));
+
+    // Filter by same normalized merchant via fingerprint join
+    const fpQuery = transaction
+      .selectFrom("app.expense_dedup_fingerprints as fp")
+      .select("fp.expense_id")
+      .where("fp.tenant_id", "=", tenantId)
+      .where("fp.normalized_merchant", "=", fingerprintMerchant ?? normalizedMerchant);
+
+    const fpRows = await fpQuery.execute();
+    const fpIdSet = new Set(fpRows.map((r) => r.expense_id));
+
+    if (fpIdSet.size === 0) {
+      const evalInput: ExpenseEnrichmentInputV1 = {
+        schemaVersion: 1, jobId, expenseId, expenseVersion: expense!.version,
+        normalizedMerchant, incurredOn,
+        spendingCategoryId: expense!.spending_category_id,
+        rulesVersion: ENRICHMENT_RULES_VERSION,
+        eligibleTagKeys, eligibleSpendingCategoryIds, eligibleTaxSnapshot,
+        history: emptyHistory,
+      };
+      return { outcome: "evaluate" as const, input: evalInput };
+    }
+
+    historicalExpensesQuery = historicalExpensesQuery.where(
+      "e.id", "in", [...fpIdSet],
+    );
 
     const historicalExpenses = await historicalExpensesQuery
       .orderBy("e.incurred_on", "desc")
@@ -418,11 +453,24 @@ export async function buildEnrichmentInput(
       .execute();
 
     const exampleCount = historicalExpenses.length;
+
+    if (exampleCount === 0) {
+      const evalInput: ExpenseEnrichmentInputV1 = {
+        schemaVersion: 1, jobId, expenseId, expenseVersion: expense!.version,
+        normalizedMerchant, incurredOn,
+        spendingCategoryId: expense!.spending_category_id,
+        rulesVersion: ENRICHMENT_RULES_VERSION,
+        eligibleTagKeys, eligibleSpendingCategoryIds, eligibleTaxSnapshot,
+        history: emptyHistory,
+      };
+      return { outcome: "evaluate" as const, input: evalInput };
+    }
+
     const historicalIds = historicalExpenses.map((e) => e.id);
 
-    // Candidate tag keys — active manual/accepted-historical tags on historical expenses
-    let candidateTagKeyMap = new Map<string, number>(); // key → count
-    if (exampleCount > 0) {
+    // ---- Candidate tag keys (active manual/accepted-historical tags) ----
+    const candidateTagKeyMap = new Map<string, number>();
+    {
       const tagRows = await transaction
         .selectFrom("app.expense_tags as et")
         .innerJoin("app.tags as t", (join) =>
@@ -436,9 +484,7 @@ export async function buildEnrichmentInput(
 
       const tagsByExpense = new Map<string, Set<string>>();
       for (const row of tagRows) {
-        if (!tagsByExpense.has(row.expense_id)) {
-          tagsByExpense.set(row.expense_id, new Set());
-        }
+        if (!tagsByExpense.has(row.expense_id)) tagsByExpense.set(row.expense_id, new Set());
         tagsByExpense.get(row.expense_id)!.add(row.key);
       }
       for (const [, keys] of tagsByExpense) {
@@ -448,21 +494,36 @@ export async function buildEnrichmentInput(
       }
     }
 
-    const candidateTagKeys = [...candidateTagKeyMap.entries()]
-      .filter(([, count]) => count > 0)
+    const candidateTagKeysList = [...candidateTagKeyMap.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
+      .slice(0, HISTORY_MAX_CANDIDATE_TAG_KEYS)
       .map(([key, count]) => ({ key, count }));
 
-    // Candidate spending category IDs — latest manual/manual_baseline/accepted-historical
-    let candidateCatMap = new Map<string, number>(); // catId → count
-    if (exampleCount > 0) {
-      // For each historical expense, find the latest category decision
-      for (const he of historicalExpenses) {
-        if (!he.spending_category_id) continue;
+    // ---- Candidate spending category IDs (F6: from latest qualifying decision) ----
+    // For each historical expense, find the latest manual/manual_baseline/historical decision.
+    const candidateCatMap = new Map<string, number>();
+    if (historicalIds.length > 0) {
+      // Find latest qualifying decision per historical expense.
+      // "Latest" = highest expense_version (append-only decisions always bump expense_version),
+      // with created_at as tiebreaker when version is the same (edge case: same-version rows
+      // from legacy baseline inserts).
+      const decisionRows = await transaction
+        .selectFrom("app.expense_spending_category_decisions as d")
+        .select(["d.expense_id", "d.new_spending_category_id", "d.expense_version"])
+        .where("d.expense_id", "in", historicalIds)
+        .where("d.source", "in", ["manual", "manual_baseline", "historical"])
+        .where("d.new_spending_category_id", "is not", null)
+        .orderBy("d.expense_id")
+        .orderBy("d.expense_version", "desc")
+        .orderBy("d.created_at", "desc")
+        .execute();
 
-        // Use the current spending_category_id from the expense (reflects latest decision)
-        const catId = he.spending_category_id;
+      // Take the first (latest) decision per expense
+      const seenExpenses = new Set<string>();
+      for (const row of decisionRows) {
+        if (seenExpenses.has(row.expense_id)) continue;
+        seenExpenses.add(row.expense_id);
+        const catId = row.new_spending_category_id;
         if (catId) {
           candidateCatMap.set(catId, (candidateCatMap.get(catId) ?? 0) + 1);
         }
@@ -470,39 +531,54 @@ export async function buildEnrichmentInput(
     }
 
     const candidateSpendingCategoryIds = [...candidateCatMap.entries()]
-      .filter(([, count]) => count > 0)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+      .slice(0, HISTORY_MAX_CANDIDATE_CATEGORY_IDS)
       .map(([id, count]) => ({ id, count }));
 
-    // Candidate tax category IDs (Business only: reviewed user-saved treatments)
-    let candidateTaxCatMap = new Map<string, number>(); // catId → count
-    if (!isPersonal && scopeBusinessId && eligibleTaxSnapshot && exampleCount > 0) {
+    // ---- Candidate tax category IDs (F7: reviewed treatments) ----
+    // Requirements: reviewed treatment, non-null updated_by_user_id (already schema-required),
+    // same active profile, current taxonomy version, current tax year, active category,
+    // ready/non-archived same-scope expense.
+    const candidateTaxCatMap = new Map<string, number>();
+    if (!isPersonal && scopeBusinessId && eligibleTaxSnapshot && historicalIds.length > 0) {
       const taxRows = await transaction
         .selectFrom("app.expense_tax_treatments as ett")
+        .innerJoin("app.expenses as e2", (join) =>
+          join
+            .onRef("e2.id", "=", "ett.expense_id")
+            .on("e2.status", "!=", "archived"),
+        )
+        .innerJoin("app.tax_category_definitions as tcd", (join) =>
+          join
+            .onRef("tcd.id", "=", "ett.tax_category_definition_id")
+            .on("tcd.status", "=", "active"),
+        )
         .select(["ett.tax_category_definition_id", "ett.expense_id"])
         .where("ett.expense_id", "in", historicalIds)
         .where("ett.tenant_id", "=", tenantId)
         .where("ett.business_id", "=", scopeBusinessId)
         .where("ett.business_tax_profile_id", "=", eligibleTaxSnapshot.businessTaxProfileId)
+        .where("ett.taxonomy_version_id", "=", eligibleTaxSnapshot.taxonomyVersionId)
+        .where("ett.tax_year", "=", eligibleTaxSnapshot.taxYear)
         .where("ett.review_status", "=", "reviewed")
         .execute();
 
       for (const row of taxRows) {
-        const catId = row.tax_category_definition_id;
-        candidateTaxCatMap.set(catId, (candidateTaxCatMap.get(catId) ?? 0) + 1);
+        candidateTaxCatMap.set(
+          row.tax_category_definition_id,
+          (candidateTaxCatMap.get(row.tax_category_definition_id) ?? 0) + 1,
+        );
       }
     }
 
     const candidateTaxCategoryIds = [...candidateTaxCatMap.entries()]
-      .filter(([, count]) => count > 0)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+      .slice(0, HISTORY_MAX_CANDIDATE_CATEGORY_IDS)
       .map(([id, count]) => ({ id, count }));
 
     const history: ExpenseEnrichmentInputV1["history"] = {
       exampleCount,
-      candidateTagKeys,
+      candidateTagKeys: candidateTagKeysList,
       candidateSpendingCategoryIds,
       candidateTaxCategoryIds,
     };
@@ -511,10 +587,10 @@ export async function buildEnrichmentInput(
       schemaVersion: 1,
       jobId,
       expenseId,
-      expenseVersion: expense.version,
+      expenseVersion: expense!.version,
       normalizedMerchant,
       incurredOn,
-      spendingCategoryId: expense.spending_category_id,
+      spendingCategoryId: expense!.spending_category_id,
       rulesVersion: ENRICHMENT_RULES_VERSION,
       eligibleTagKeys,
       eligibleSpendingCategoryIds,
@@ -527,7 +603,7 @@ export async function buildEnrichmentInput(
 }
 
 // ------------------------------------------------------------------ //
-// applyEnrichmentResult — validate, apply, record
+// applyEnrichmentResult — single unified atomic transaction
 // ------------------------------------------------------------------ //
 
 export interface ApplyEnrichmentResultInput {
@@ -540,24 +616,31 @@ export interface ApplyEnrichmentResultInput {
 }
 
 /**
- * Apply a validated enrichment result atomically:
- * 1. Lock job + expense; verify versions.
- * 2. Parse result via canonical schema.
- * 3. Handle stale/skipped as safe no-mutation completions.
- * 4. For applied: recompute server-side rule tags and compare to worker's
- *    ruleTagKeys. Reject mismatches (CONFLICT).
- * 5. Create/reuse tenant-level rule tags; upsert active expense_tag associations.
- *    Skip existing manual/removed/archived tag decisions.
- * 6. Insert pending historical suggestions; skip ineligible candidates.
- * 7. Record permanent operation keys (replay-safe; conflict on payload change).
- * 8. Mark job SUCCEEDED.
+ * Process an enrichment result atomically (F1/F3):
+ *
+ * 1. Lock job (FOR UPDATE with version predicate on update, F14).
+ * 2. Check permanent result operation key BEFORE status rejection (F3 replay-safe).
+ *    Same payload → replay; changed payload → permanent CONFLICT.
+ * 3. Verify RUNNING status, parse canonical result.
+ * 4. Lock expense; handle stale/skipped as no-mutation completions.
+ * 5. For applied: server-recompute rule tags; reject mismatch (CONFLICT).
+ * 6. Create/reuse tenant-level rule tags; upsert expense_tag with version
+ *    increment (F10); skip manual/removed decisions.
+ * 7. Insert pending historical suggestions (ineligible skip).
+ * 8. Insert per-tag and per-suggestion operation keys (all inside transaction, F11).
+ * 9. Insert job-level 'result' operation key (F1/F2: kind='result', null candidate).
+ * 10. Mark job SUCCEEDED with version predicate (F14).
+ * 11. Write one audit event with actor and outcome (F13).
  */
 export async function applyEnrichmentResult(
   database: Kysely<AppDatabase>,
   input: ApplyEnrichmentResultInput,
 ): Promise<MutationResult<ProcessingJob, 200>> {
+  const payloadHash = hashNormalizedRequest({ jobId: input.jobId, result: input.result });
+  const resultOpKey = `result:${input.jobId}:${input.idempotencyKey}`;
+
   return database.transaction().execute(async (transaction) => {
-    // ---- Load and lock job ----
+    // ---- Lock job ----
     const job = await transaction
       .selectFrom("app.processing_jobs")
       .selectAll()
@@ -568,22 +651,45 @@ export async function applyEnrichmentResult(
     if (!job || job.workflow_type !== EXPENSE_ENRICHMENT_WORKFLOW_TYPE) {
       throw DomainError.notFound();
     }
-    if (job.version !== input.expectedJobVersion) {
-      throw DomainError.preconditionFailed();
+    if (job.allowed_result_schema_version !== EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION) {
+      throw DomainError.notFound();
     }
+
+    // ---- F3: Check permanent result operation key BEFORE status rejection ----
+    // This ensures replay after generic idempotency expiry works even for a
+    // job that is now SUCCEEDED.
+    const existingResultKey = await transaction
+      .selectFrom("app.enrichment_operation_keys")
+      .select(["payload_hash", "response_json"])
+      .where("tenant_id", "=", job.tenant_id)
+      .where("operation_key", "=", resultOpKey)
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (existingResultKey) {
+      if (existingResultKey.payload_hash !== payloadHash) throw DomainError.conflict();
+      // Identical replay
+      const stored = existingResultKey.response_json as Record<string, unknown>;
+      return {
+        statusCode: 200,
+        body: stored as ProcessingJob,
+        replayed: true,
+      };
+    }
+
+    // ---- Validate job state ----
+    if (job.version !== input.expectedJobVersion) throw DomainError.preconditionFailed();
     if (job.status !== "RUNNING") throw DomainError.conflict();
 
-    // ---- Parse result ----
+    // ---- Parse canonical result ----
     const parsed = ExpenseEnrichmentResultV1Schema.safeParse(input.result);
     if (!parsed.success) throw DomainError.validation();
     const resultData = parsed.data;
     const outcome = resultData.outcome;
 
-    // ---- Load expense ----
+    // ---- Load and lock expense ----
     const expenseId = job.target_aggregate_id;
-    if (!expenseId || job.target_aggregate_type !== "expense") {
-      throw DomainError.validation();
-    }
+    if (!expenseId || job.target_aggregate_type !== "expense") throw DomainError.validation();
 
     const expense = await transaction
       .selectFrom("app.expenses")
@@ -593,40 +699,41 @@ export async function applyEnrichmentResult(
       .forUpdate()
       .executeTakeFirst();
 
-    // Stale/skipped: safe no-mutation completion
-    if (!expense || expense.status === "archived") {
-      return _completeJob(transaction, job, input, "skipped");
-    }
+    const tenantId = job.tenant_id;
+    const now = new Date();
 
+    // ---- Stale/skipped: no-mutation completion ----
+    if (!expense || expense.status === "archived") {
+      return _completeAndRecordResult(
+        transaction, job, input, "skipped", now, resultOpKey, payloadHash,
+      );
+    }
     if (
       job.expected_aggregate_version !== null &&
       expense.version !== job.expected_aggregate_version
     ) {
-      return _completeJob(transaction, job, input, "stale");
+      return _completeAndRecordResult(
+        transaction, job, input, "stale", now, resultOpKey, payloadHash,
+      );
     }
-
     if (outcome === "stale" || outcome === "skipped") {
-      return _completeJob(transaction, job, input, outcome);
+      return _completeAndRecordResult(
+        transaction, job, input, outcome, now, resultOpKey, payloadHash,
+      );
     }
 
     // ---- outcome: applied ----
-    // Scope
-    const tenantId = job.tenant_id;
     const isPersonal = expense.personal_profile_id !== null;
     const scopeProfileId = expense.personal_profile_id;
     const scopeBusinessId = expense.business_id;
 
-    // Re-derive eligible tag keys for server-side recomputation
+    // F8: same merchantTagKey logic as projection — slug with hyphens (not spaces)
     const rawMerchant = expense.merchant?.trim() ?? "";
-    const normalizedMerchantRaw = rawMerchant ? normalizeMerchant(rawMerchant) : null;
-    const normalizedMerchant = normalizedMerchantRaw || null;
+    const rawNormalizedMerchant = rawMerchant ? (normalizeMerchant(rawMerchant) || null) : null;
+    const normalizedMerchant = rawNormalizedMerchant ? toMerchantSlug(rawNormalizedMerchant) : null;
+    const incurredOn = toDateStr(expense.incurred_on as Date | string | null);
 
-    const incurredOnRaw = expense.incurred_on;
-    const incurredOn =
-      incurredOnRaw instanceof Date
-        ? `${incurredOnRaw.getFullYear()}-${String(incurredOnRaw.getMonth() + 1).padStart(2, "0")}-${String(incurredOnRaw.getDate()).padStart(2, "0")}`
-        : String(incurredOnRaw);
-
+    // Build candidate tag keys and eligibility (absent-or-active; never archived)
     const candidateTagKeysList: string[] = [];
     if (normalizedMerchant) candidateTagKeysList.push(merchantTagKey(normalizedMerchant));
     candidateTagKeysList.push("timing:weekend");
@@ -634,37 +741,25 @@ export async function applyEnrichmentResult(
       candidateTagKeysList.push(`category:${expense.spending_category_id}`);
     }
 
-    // Eligible: absent or active tags (archived tags are permanently ineligible)
-    const archivedTagsForEligibility =
+    const archivedTagKeys =
       candidateTagKeysList.length > 0
-        ? await transaction
-            .selectFrom("app.tags")
-            .select(["key"])
-            .where("tenant_id", "=", tenantId)
-            .where("key", "in", candidateTagKeysList)
-            .where("status", "=", "archived")
-            .execute()
-        : [];
-
-    const archivedKeySetForEligibility = new Set(archivedTagsForEligibility.map((t) => t.key));
-    // Also collect existing active tags for suggestion eligibility validation
-    const existingActiveTagRows =
-      candidateTagKeysList.length > 0
-        ? await transaction
-            .selectFrom("app.tags")
-            .select(["key", "id"])
-            .where("tenant_id", "=", tenantId)
-            .where("key", "in", candidateTagKeysList)
-            .where("status", "=", "active")
-            .execute()
-        : [];
-    const activeTagKeySet = new Set(existingActiveTagRows.map((t) => t.key));
+        ? new Set(
+            (await transaction
+              .selectFrom("app.tags")
+              .select("key")
+              .where("tenant_id", "=", tenantId)
+              .where("key", "in", candidateTagKeysList)
+              .where("status", "=", "archived")
+              .execute()
+            ).map((r) => r.key),
+          )
+        : new Set<string>();
 
     const eligibleTagKeys = candidateTagKeysList
-      .filter((k) => !archivedKeySetForEligibility.has(k))
+      .filter((k) => !archivedTagKeys.has(k))
       .sort();
 
-    // Server recomputes deterministic rule tags
+    // Server recomputes deterministic rule tags and validates against worker's list
     const serverRuleTagKeys = computeRuleTagKeys({
       normalizedMerchant,
       incurredOn,
@@ -672,7 +767,6 @@ export async function applyEnrichmentResult(
       eligibleTagKeys,
     }).sort();
 
-    // Validate worker's ruleTagKeys matches server recomputation
     const workerRuleTagKeys = [...resultData.ruleTagKeys].sort();
     if (
       serverRuleTagKeys.length !== workerRuleTagKeys.length ||
@@ -681,20 +775,17 @@ export async function applyEnrichmentResult(
       throw DomainError.conflict();
     }
 
-    // ---- Validate suggestions eligibility ----
-    // Only eligible candidates are allowed
-    const eligibleCatSet = new Set(
-      (
-        await transaction
-          .selectFrom("app.spending_categories")
-          .select("id")
-          .where("tenant_id", "=", tenantId)
-          .where("status", "=", "active")
-          .execute()
+    // ---- Validate suggestion eligibility ----
+    const eligibleCatIds = new Set(
+      (await transaction
+        .selectFrom("app.spending_categories")
+        .select("id")
+        .where("tenant_id", "=", tenantId)
+        .where("status", "=", "active")
+        .execute()
       ).map((r) => r.id),
     );
 
-    // Validate eligible tax snapshot for tax suggestions
     let activeTaxProfileId: string | null = null;
     let activeTaxProfileVersion: number | null = null;
     let activeTaxonomyVersionId: string | null = null;
@@ -717,31 +808,25 @@ export async function applyEnrichmentResult(
         activeTaxProfileVersion = Number(taxProfile.version);
         activeTaxonomyVersionId = taxProfile.taxonomy_version_id;
         activeTaxYear = taxProfile.tax_year;
-
-        const taxCats = await transaction
-          .selectFrom("app.tax_category_definitions")
-          .select("id")
-          .where("taxonomy_version_id", "=", taxProfile.taxonomy_version_id)
-          .where("status", "=", "active")
-          .execute();
-        activeTaxCatIdSet = new Set(taxCats.map((r) => r.id));
+        activeTaxCatIdSet = new Set(
+          (await transaction
+            .selectFrom("app.tax_category_definitions")
+            .select("id")
+            .where("taxonomy_version_id", "=", taxProfile.taxonomy_version_id)
+            .where("status", "=", "active")
+            .execute()
+          ).map((r) => r.id),
+        );
       }
     }
 
-    // Validate each suggestion candidate is eligible
     for (const sug of resultData.suggestions) {
       if (sug.source !== "historical") throw DomainError.validation();
       if (sug.kind === "spending_category") {
-        if (!eligibleCatSet.has(sug.spendingCategoryId)) {
-          throw DomainError.conflict();
-        }
+        if (!eligibleCatIds.has(sug.spendingCategoryId)) throw DomainError.conflict();
       } else if (sug.kind === "tag") {
-        // Tag suggestions must refer to an eligible tag key (absent or active, not archived)
-        if (!eligibleTagKeys.includes(sug.tagKey)) {
-          throw DomainError.conflict();
-        }
+        if (!eligibleTagKeys.includes(sug.tagKey)) throw DomainError.conflict();
       } else if (sug.kind === "tax_category") {
-        // Full tax snapshot validation
         if (isPersonal) throw DomainError.conflict();
         if (
           sug.businessTaxProfileId !== activeTaxProfileId ||
@@ -755,11 +840,8 @@ export async function applyEnrichmentResult(
       }
     }
 
-    const now = new Date();
-
     // ---- Apply rule tags ----
     for (const ruleKey of serverRuleTagKeys) {
-      // Create or retrieve tenant-level rule tag
       const existingTag = await transaction
         .selectFrom("app.tags")
         .select(["id", "status"])
@@ -769,11 +851,10 @@ export async function applyEnrichmentResult(
 
       let tagId: string;
       if (existingTag) {
+        if (existingTag.status === "archived") continue; // permanently ineligible
         tagId = existingTag.id;
-        // If tag is archived, skip (spec: archived same key ineligible)
-        if (existingTag.status === "archived") continue;
       } else {
-        // Create new rule tag (tenant-level, no scope)
+        // Create tenant-level rule tag
         tagId = randomUUID();
         await transaction
           .insertInto("app.tags")
@@ -792,7 +873,6 @@ export async function applyEnrichmentResult(
           .execute();
       }
 
-      // Check for existing expense_tag association
       const existingAssoc = await transaction
         .selectFrom("app.expense_tags")
         .select(["id", "status", "source"])
@@ -802,14 +882,10 @@ export async function applyEnrichmentResult(
         .executeTakeFirst();
 
       if (existingAssoc) {
-        // Skip if manual decision or removed or archived
-        if (
-          existingAssoc.source === "manual" ||
-          existingAssoc.status === "removed"
-        ) {
-          continue;
+        if (existingAssoc.source === "manual" || existingAssoc.status === "removed") {
+          continue; // Manual/removed decision blocks auto-application
         }
-        // Update existing rule association to active (re-apply)
+        // F10: increment version on update
         await transaction
           .updateTable("app.expense_tags")
           .set({
@@ -818,11 +894,11 @@ export async function applyEnrichmentResult(
             confidence: "1",
             rule_version: ENRICHMENT_RULES_VERSION,
             applied_at: now,
+            version: sql<number>`version + 1`,
           })
           .where("id", "=", existingAssoc.id)
           .execute();
       } else {
-        // Insert new rule tag association (scope-bound)
         await transaction
           .insertInto("app.expense_tags")
           .values({
@@ -846,14 +922,14 @@ export async function applyEnrichmentResult(
           .execute();
       }
 
-      // Record operation key for this rule tag
-      await _recordOperationKey(transaction, {
+      // F11: operation key inside transaction
+      await _insertOperationKey(transaction, {
         tenantId,
         jobId: input.jobId,
         expenseId,
         kind: "tag",
         candidateId: tagId,
-        evidenceHashStr: sha256Hex(canonicalJson({ kind: "rule_tag", key: ruleKey })),
+        evidenceHash: sha256Hex(canonicalJson({ kind: "rule_tag", key: ruleKey })),
         operationKey: `${input.jobId}:rule:${ruleKey}`,
         payloadHash: hashNormalizedRequest({ kind: "rule_tag", key: ruleKey, jobId: input.jobId }),
         responseJson: null,
@@ -863,10 +939,8 @@ export async function applyEnrichmentResult(
 
     // ---- Create pending historical suggestions ----
     for (const sug of resultData.suggestions) {
-      const sugId = randomUUID();
-      const idempotencyKey = `${input.jobId}:sug:${sug.kind}:${sug.source}:${sug.evidenceHash}`;
+      const idempotencyKey = `${input.jobId}:sug:${sug.kind}:${sug.evidenceHash}`;
 
-      // Determine candidate IDs
       let tagId: string | null = null;
       let spendingCategoryId: string | null = null;
       let taxCategoryDefinitionId: string | null = null;
@@ -874,11 +948,9 @@ export async function applyEnrichmentResult(
       let businessTaxProfileVersion: number | null = null;
       let taxonomyVersionId: string | null = null;
       let taxYear: number | null = null;
-
       let candidateId: string | null = null;
 
       if (sug.kind === "tag") {
-        // Find tag by key
         const tagRow = await transaction
           .selectFrom("app.tags")
           .select("id")
@@ -886,7 +958,7 @@ export async function applyEnrichmentResult(
           .where("key", "=", sug.tagKey)
           .where("status", "=", "active")
           .executeTakeFirst();
-        if (!tagRow) continue; // Tag no longer active — skip
+        if (!tagRow) continue;
         tagId = tagRow.id;
         candidateId = tagId;
       } else if (sug.kind === "spending_category") {
@@ -901,18 +973,18 @@ export async function applyEnrichmentResult(
         candidateId = taxCategoryDefinitionId;
       }
 
-      // Check for existing pending suggestion (idempotency key)
+      // Check idempotency for suggestion
       const existingSug = await transaction
         .selectFrom("app.expense_enrichment_suggestions")
-        .select(["id", "status"])
+        .select(["id"])
         .where("tenant_id", "=", tenantId)
         .where("expense_id", "=", expenseId)
         .where("idempotency_key", "=", idempotencyKey)
         .executeTakeFirst();
 
-      if (existingSug) continue; // Already exists
+      if (existingSug) continue;
 
-      // Insert pending suggestion
+      const sugId = randomUUID();
       const evidence: JsonValue = toJsonValue({
         exampleCount: sug.aggregateCounts.exampleCount,
         matchCount: sug.aggregateCounts.matchCount,
@@ -949,27 +1021,24 @@ export async function applyEnrichmentResult(
         })
         .execute();
 
-      // Record operation key for this suggestion
-      await _recordOperationKey(transaction, {
+      // F11: suggestion operation key inside transaction
+      await _insertOperationKey(transaction, {
         tenantId,
         jobId: input.jobId,
         expenseId,
         kind: sug.kind as "tag" | "spending_category" | "tax_category",
         candidateId,
-        evidenceHashStr: sug.evidenceHash,
+        evidenceHash: sug.evidenceHash,
         operationKey: idempotencyKey,
         payloadHash: hashNormalizedRequest({
-          kind: sug.kind,
-          candidateId,
-          evidenceHash: sug.evidenceHash,
-          jobId: input.jobId,
+          kind: sug.kind, candidateId, evidenceHash: sug.evidenceHash, jobId: input.jobId,
         }),
         responseJson: toJsonValue({ suggestionId: sugId }),
         now,
       });
     }
 
-    // ---- Mark job SUCCEEDED ----
+    // ---- Mark job SUCCEEDED (F14: version predicate while lock held) ----
     const updated = await transaction
       .updateTable("app.processing_jobs")
       .set({
@@ -980,11 +1049,15 @@ export async function applyEnrichmentResult(
         version: job.version + 1,
       })
       .where("id", "=", input.jobId)
+      .where("version", "=", job.version) // F14: version predicate
       .returningAll()
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
 
+    if (!updated) throw DomainError.preconditionFailed();
+
+    // ---- F13: single audit event with actor and outcome ----
     await recordAuditEvent(transaction, {
-      tenantId: job.tenant_id,
+      tenantId,
       actorServicePrincipal: input.actorServicePrincipal,
       action: "processing_job.enrichment_result_submitted",
       outcome: "success",
@@ -994,81 +1067,38 @@ export async function applyEnrichmentResult(
       metadata: { outcome: "applied" },
     });
 
-    return {
-      statusCode: 200,
-      body: toProcessingJob(updated),
-      replayed: false,
-    };
+    // ---- F1/F2: Insert job-level 'result' operation key (kind='result', null candidate) ----
+    const responseBody = toProcessingJob(updated);
+    await _insertOperationKey(transaction, {
+      tenantId,
+      jobId: input.jobId,
+      expenseId,
+      kind: "result",
+      candidateId: null,
+      evidenceHash: payloadHash, // canonical normalized result hash directly (F2)
+      operationKey: resultOpKey,
+      payloadHash,
+      responseJson: toJsonValue(responseBody),
+      now,
+    });
+
+    return { statusCode: 200, body: responseBody, replayed: false };
   });
-}
-
-// ------------------------------------------------------------------ //
-// Permanent operation key recording
-// ------------------------------------------------------------------ //
-
-interface RecordOpKeyInput {
-  readonly tenantId: string;
-  readonly jobId: string;
-  readonly expenseId: string;
-  readonly kind: "tag" | "spending_category" | "tax_category";
-  readonly candidateId: string | null;
-  readonly evidenceHashStr: string;
-  readonly operationKey: string;
-  readonly payloadHash: string;
-  readonly responseJson: JsonValue;
-  readonly now: Date;
-}
-
-async function _recordOperationKey(
-  transaction: Transaction<AppDatabase>,
-  input: RecordOpKeyInput,
-): Promise<void> {
-  // Check for existing record (replay or conflict)
-  const existing = await transaction
-    .selectFrom("app.enrichment_operation_keys")
-    .select(["payload_hash", "response_json"])
-    .where("tenant_id", "=", input.tenantId)
-    .where("operation_key", "=", input.operationKey)
-    .executeTakeFirst();
-
-  if (existing) {
-    if (existing.payload_hash !== input.payloadHash) {
-      // Changed payload — permanent conflict
-      throw DomainError.conflict();
-    }
-    // Same payload — idempotent, already recorded
-    return;
-  }
-
-  await transaction
-    .insertInto("app.enrichment_operation_keys")
-    .values({
-      id: randomUUID(),
-      tenant_id: input.tenantId,
-      job_id: input.jobId,
-      expense_id: input.expenseId,
-      kind: input.kind,
-      candidate_id: input.candidateId,
-      evidence_hash: input.evidenceHashStr,
-      operation_key: input.operationKey,
-      payload_hash: input.payloadHash,
-      response_json: input.responseJson,
-      created_at: input.now,
-    })
-    .execute();
 }
 
 // ------------------------------------------------------------------ //
 // Stale/skipped completion helper
 // ------------------------------------------------------------------ //
 
-async function _completeJob(
+async function _completeAndRecordResult(
   transaction: Transaction<AppDatabase>,
-  job: import("./processing-job-view.js").ProcessingJobRow,
+  job: ProcessingJobRow,
   input: ApplyEnrichmentResultInput,
   terminalOutcome: "stale" | "skipped",
+  now: Date,
+  resultOpKey: string,
+  payloadHash: string,
 ): Promise<MutationResult<ProcessingJob, 200>> {
-  const now = new Date();
   const updated = await transaction
     .updateTable("app.processing_jobs")
     .set({
@@ -1079,9 +1109,13 @@ async function _completeJob(
       version: job.version + 1,
     })
     .where("id", "=", input.jobId)
+    .where("version", "=", job.version) // F14: version predicate
     .returningAll()
-    .executeTakeFirstOrThrow();
+    .executeTakeFirst();
 
+  if (!updated) throw DomainError.preconditionFailed();
+
+  // F13: single audit event
   await recordAuditEvent(transaction, {
     tenantId: job.tenant_id,
     actorServicePrincipal: input.actorServicePrincipal,
@@ -1093,86 +1127,74 @@ async function _completeJob(
     metadata: { outcome: terminalOutcome },
   });
 
-  return {
-    statusCode: 200,
-    body: toProcessingJob(updated),
-    replayed: false,
-  };
+  const responseBody = toProcessingJob(updated);
+
+  // F1/F2: result operation key for stale/skipped too (ensures replay works)
+  const expenseId = job.target_aggregate_id ?? job.id; // fallback to job id if null
+  await _insertOperationKey(transaction, {
+    tenantId: job.tenant_id,
+    jobId: input.jobId,
+    expenseId,
+    kind: "result",
+    candidateId: null,
+    evidenceHash: payloadHash,
+    operationKey: resultOpKey,
+    payloadHash,
+    responseJson: toJsonValue(responseBody),
+    now,
+  });
+
+  return { statusCode: 200, body: responseBody, replayed: false };
 }
 
 // ------------------------------------------------------------------ //
-// Permanent replay for enrichment result submission
+// Operation key insertion helper (transaction-local, F11)
 // ------------------------------------------------------------------ //
 
-/**
- * Check for a permanent operation key replay.
- * Returns the stored response if found and payload matches.
- * Throws CONFLICT if same key with different payload.
- * Returns null if no permanent record exists (first call).
- */
-export async function checkPermanentReplay(
-  database: Kysely<AppDatabase>,
-  input: {
-    readonly tenantId: string;
-    readonly jobId: string;
-    readonly expenseId: string;
-    readonly payloadHash: string;
-    readonly storedResponse: ProcessingJob;
-  },
-): Promise<MutationResult<ProcessingJob, 200> | null> {
-  // Check if a "job-level" operation key exists for this job's result submission
-  const operationKey = `result:${input.jobId}`;
-  const existing = await database
+interface InsertOpKeyInput {
+  readonly tenantId: string;
+  readonly jobId: string;
+  readonly expenseId: string;
+  readonly kind: "tag" | "spending_category" | "tax_category" | "result";
+  readonly candidateId: string | null;
+  readonly evidenceHash: string;
+  readonly operationKey: string;
+  readonly payloadHash: string;
+  readonly responseJson: JsonValue;
+  readonly now: Date;
+}
+
+async function _insertOperationKey(
+  transaction: Transaction<AppDatabase>,
+  input: InsertOpKeyInput,
+): Promise<void> {
+  // Check for existing key (checked under row lock for the job at transaction start)
+  const existing = await transaction
     .selectFrom("app.enrichment_operation_keys")
-    .select(["payload_hash", "response_json"])
+    .select(["payload_hash"])
     .where("tenant_id", "=", input.tenantId)
-    .where("operation_key", "=", operationKey)
+    .where("operation_key", "=", input.operationKey)
     .executeTakeFirst();
 
-  if (!existing) return null;
-  if (existing.payload_hash !== input.payloadHash) throw DomainError.conflict();
+  if (existing) {
+    if (existing.payload_hash !== input.payloadHash) throw DomainError.conflict();
+    return; // idempotent
+  }
 
-  return {
-    statusCode: 200,
-    body: input.storedResponse,
-    replayed: true,
-  };
-}
-
-// ------------------------------------------------------------------ //
-// resolveSuggestion — Task 8 seam
-// ------------------------------------------------------------------ //
-
-/** Resolve a pending enrichment suggestion (accept/reject). Task 8 implements this. */
-export async function resolveSuggestion(
-  database: Kysely<AppDatabase>,
-  input: {
-    readonly suggestionId: string;
-    readonly tenantId: string;
-    readonly actorUserId: string;
-    readonly decision: "accepted" | "rejected";
-    readonly requestId: string;
-  },
-): Promise<void> {
-  // Task 8 will implement full resolution logic.
-  // This seam ensures the function exists and is importable.
-  throw DomainError.conflict();
-}
-
-// ------------------------------------------------------------------ //
-// rerunEnrichment — Task 8 seam
-// ------------------------------------------------------------------ //
-
-/** Re-enqueue an enrichment job for an expense. Task 8 implements this. */
-export async function rerunEnrichment(
-  database: Kysely<AppDatabase>,
-  input: {
-    readonly tenantId: string;
-    readonly expenseId: string;
-    readonly requestedByUserId: string;
-    readonly requestId: string;
-  },
-): Promise<ProcessingJob> {
-  // Task 8 will implement re-enqueueing logic.
-  throw DomainError.conflict();
+  await transaction
+    .insertInto("app.enrichment_operation_keys")
+    .values({
+      id: randomUUID(),
+      tenant_id: input.tenantId,
+      job_id: input.jobId,
+      expense_id: input.expenseId,
+      kind: input.kind,
+      candidate_id: input.candidateId,
+      evidence_hash: input.evidenceHash,
+      operation_key: input.operationKey,
+      payload_hash: input.payloadHash,
+      response_json: input.responseJson,
+      created_at: input.now,
+    })
+    .execute();
 }

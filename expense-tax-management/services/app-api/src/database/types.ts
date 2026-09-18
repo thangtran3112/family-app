@@ -680,7 +680,7 @@ export interface EnrichmentOperationKeyTable {
   readonly tenant_id: string;
   readonly job_id: string;
   readonly expense_id: string;
-  readonly kind: "tag" | "spending_category" | "tax_category";
+  readonly kind: "tag" | "spending_category" | "tax_category" | "result";
   readonly candidate_id: string | null;
   readonly evidence_hash: string;
   readonly operation_key: string;

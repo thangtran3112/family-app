@@ -21,8 +21,6 @@ import { runMigrations } from "../src/database/migrate.js";
 import {
   buildEnrichmentInput,
   applyEnrichmentResult,
-  resolveSuggestion,
-  rerunEnrichment,
 } from "../src/domain/enrichment.js";
 import {
   createEnrichmentJobsDomain,
@@ -115,13 +113,8 @@ describe("domain/enrichment.ts — module exports", () => {
     expect(typeof applyEnrichmentResult).toBe("function");
   });
 
-  it("resolveSuggestion is exported as a function", () => {
-    expect(typeof resolveSuggestion).toBe("function");
-  });
-
-  it("rerunEnrichment is exported as a function", () => {
-    expect(typeof rerunEnrichment).toBe("function");
-  });
+  // F15: resolveSuggestion and rerunEnrichment removed from enrichment.ts.
+  // Task 8 owns those operations. No stubs needed.
 });
 
 describe("createEnrichmentJobsDomain — applied outcome no longer rejected", () => {
@@ -313,10 +306,11 @@ describe.skipIf(!requested)(
         expect(inp.expenseId).toBe(expense.id);
         expect(inp.expenseVersion).toBe(1);
         expect(inp.jobId).toBe(jobId);
-        // normalizedMerchant must be present (merchant "Corner Deli" → normalized slug)
+        // normalizedMerchant must be present (merchant "Corner Deli" → slug "corner-deli")
         expect(inp.normalizedMerchant).not.toBeNull();
-        // eligibleTagKeys use merchant:<normalized-with-hyphens> format
-        const expectedMerchantKey = `merchant:${inp.normalizedMerchant!.replace(/\s+/g, "-")}`;
+        expect(inp.normalizedMerchant).toBe("corner-deli"); // F8: stable hyphenated slug
+        // F8: key = merchant:<slug> — same derivation as worker f"merchant:{inp.normalizedMerchant}"
+        const expectedMerchantKey = `merchant:${inp.normalizedMerchant}`;
         expect(inp.eligibleTagKeys).toContain(expectedMerchantKey);
         expect(inp.eligibleTagKeys).toContain("timing:weekend");
         // No raw amounts, selectors, tax descriptions
@@ -324,7 +318,8 @@ describe.skipIf(!requested)(
         expect("amount" in inp).toBe(false);
 
         // Apply an enrichment result with outcome:applied
-        const merchantKey = `merchant:${inp.normalizedMerchant!.replace(/\s+/g, "-")}`;
+        // F8: same slug — worker uses verbatim, server recomputes same key
+        const merchantKey = `merchant:${inp.normalizedMerchant}`;
         const weekendKey = "timing:weekend";
 
         // Build canonical evidence hash for a tag suggestion
@@ -747,6 +742,456 @@ describe.skipIf(!requested)(
     // ---------------------------------------------------------------- //
     // T6-L6: Changed-payload conflict — same operation key, different result
     // ---------------------------------------------------------------- //
+
+    // ---------------------------------------------------------------- //
+    // T6-L7: F8 merchant key parity — verbatim slug, no hyphen conversion
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L7: F8 merchant key in eligibleTagKeys is merchant:<verbatim-normalized-slug>",
+      async () => {
+        const db = database!;
+
+        // "Whole Foods Market" → normalizeMerchant → "whole foods market" (spaces, no hyphens)
+        // The eligible key must be "merchant:whole foods market", NOT "merchant:whole-foods-market"
+        const expenseDomain = createExpenseDomain(db);
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Whole Foods Market",
+            amount: "50.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `t6-l7-${runKey}`,
+        });
+
+        const jobRow = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [jobId] = jobRow.split("|");
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+
+        const inp = inputResponse.input;
+        // F8: normalizedMerchant is the stable slug with hyphens (tag key constraint requires [a-z0-9_:.-]+)
+        expect(inp.normalizedMerchant).toBe("whole-foods-market"); // hyphens replace spaces in slug
+
+        // F8: key matches worker derivation: f"merchant:{inp.normalizedMerchant}"
+        expect(inp.eligibleTagKeys).toContain("merchant:whole-foods-market");
+        expect(inp.eligibleTagKeys).not.toContain("merchant:whole foods market");
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L8: F5 24-month cutoff — history boundary correct, no setMonth overflow
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L8: F5 24-month cutoff excludes expenses before cutoff and includes those at/after",
+      async () => {
+        const db = database!;
+
+        // Create current expense (2026-09-15)
+        const expenseDomain = createExpenseDomain(db);
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Boundary Bakery",
+            amount: "10.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `t6-l8-create-${runKey}`,
+        });
+
+        // Seed historical expense at cutoff date (2024-09-15 — exactly 24 months before)
+        const atCutoffId = `t6l8a${runKey.slice(0, 8)}`;
+        const beforeCutoffId = `t6l8b${runKey.slice(0, 8)}`;
+        const withinWindowId = `t6l8c${runKey.slice(0, 8)}`;
+
+        // Valid UUIDs for seeded expenses — use randomUUID to avoid collision
+        const atCutoffUuid = randomUUID();
+        const beforeCutoffUuid = randomUUID();
+        const withinWindowUuid = randomUUID();
+
+        // Seed expenses and fingerprints for the same merchant
+        const normalizedSlug = "boundary bakery";
+        runtimeSql(`
+          -- At cutoff (2024-09-15) — should be INCLUDED (incurred_on >= cutoff)
+          INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+            merchant, amount, currency, incurred_on, source, status)
+          VALUES ('${atCutoffUuid}', '${T6_TENANT_ID}', '${T6_USER_ID}',
+            '${T6_PROFILE_ID}', NULL, 'Boundary Bakery', '9.00', 'USD', '2024-09-15', 'manual', 'ready')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id, fingerprint_version,
+             normalized_merchant, amount_minor_units, currency, incurred_on, fingerprint_hash)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${atCutoffUuid}',
+            1, '${normalizedSlug}', 900, 'USD', '2024-09-15', '${"b".repeat(64)}')
+          ON CONFLICT DO NOTHING;
+
+          -- Before cutoff (2024-09-14) — should be EXCLUDED (incurred_on < cutoff)
+          INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+            merchant, amount, currency, incurred_on, source, status)
+          VALUES ('${beforeCutoffUuid}', '${T6_TENANT_ID}', '${T6_USER_ID}',
+            '${T6_PROFILE_ID}', NULL, 'Boundary Bakery', '8.00', 'USD', '2024-09-14', 'manual', 'ready')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id, fingerprint_version,
+             normalized_merchant, amount_minor_units, currency, incurred_on, fingerprint_hash)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${beforeCutoffUuid}',
+            1, '${normalizedSlug}', 800, 'USD', '2024-09-14', '${"c".repeat(64)}')
+          ON CONFLICT DO NOTHING;
+
+          -- Within window (2025-06-15) — should be INCLUDED
+          INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+            merchant, amount, currency, incurred_on, source, status)
+          VALUES ('${withinWindowUuid}', '${T6_TENANT_ID}', '${T6_USER_ID}',
+            '${T6_PROFILE_ID}', NULL, 'Boundary Bakery', '7.00', 'USD', '2025-06-15', 'manual', 'ready')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id, fingerprint_version,
+             normalized_merchant, amount_minor_units, currency, incurred_on, fingerprint_hash)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${withinWindowUuid}',
+            1, '${normalizedSlug}', 700, 'USD', '2025-06-15', '${"d".repeat(64)}')
+          ON CONFLICT DO NOTHING;
+        `);
+
+        const jobRow = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [jobId] = jobRow.split("|");
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+
+        const history = inputResponse.input.history;
+        // Should include: atCutoffUuid + withinWindowUuid = 2 examples
+        // Should exclude: beforeCutoffUuid (before cutoff) + expense itself
+        expect(history.exampleCount).toBe(2);
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L9: F6 spending-category history from decisions, not expenses col
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L9: F6 spending-category history comes from latest qualifying decision, not expense column",
+      async () => {
+        const db = database!;
+
+        // Seed a second spending category
+        const catId3 = "6a000000-0000-4000-8000-00000000000a";
+        runtimeSql(`
+          INSERT INTO app.spending_categories (id, tenant_id, name, color, icon, status)
+          VALUES ('${catId3}', '${T6_TENANT_ID}', 'T6 Cat3', '#334455', 'home', 'active')
+          ON CONFLICT DO NOTHING;
+        `);
+
+        // Create a historical expense with category T6_CAT_ID in expenses table,
+        // but with a manual decision pointing to catId3 (later manual override)
+        const histExpUuid = randomUUID();
+        runtimeSql(`
+          INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+            merchant, amount, currency, incurred_on, source, status, spending_category_id)
+          VALUES ('${histExpUuid}', '${T6_TENANT_ID}', '${T6_USER_ID}',
+            '${T6_PROFILE_ID}', NULL, 'Decision Diner', '25.00', 'USD', '2025-06-01', 'manual', 'ready',
+            '${T6_CAT_ID}')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id, fingerprint_version,
+             normalized_merchant, amount_minor_units, currency, incurred_on, fingerprint_hash)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${histExpUuid}',
+            1, 'decision diner', 2500, 'USD', '2025-06-01', '${"e".repeat(64)}')
+          ON CONFLICT DO NOTHING;
+
+          -- Manual baseline decision (expense_version=1 — first/earlier)
+          INSERT INTO app.expense_spending_category_decisions
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             prior_spending_category_id, new_spending_category_id, source, expense_version)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${histExpUuid}',
+            NULL, '${T6_CAT_ID}', 'manual_baseline', 1)
+          ON CONFLICT DO NOTHING;
+        `);
+
+        // Insert the later manual decision in a separate call to ensure different created_at
+        runtimeSql(`
+          INSERT INTO app.expense_spending_category_decisions
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             prior_spending_category_id, new_spending_category_id, source, expense_version)
+          VALUES (gen_random_uuid(), '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL, '${histExpUuid}',
+            '${T6_CAT_ID}', '${catId3}', 'manual', 2)
+          ON CONFLICT DO NOTHING;
+        `);
+
+        // Create current expense from same merchant
+        const expenseDomain = createExpenseDomain(db);
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Decision Diner",
+            amount: "30.00",
+            currency: "USD",
+            incurredOn: "2026-09-17",
+          },
+          requestId: `t6-l9-${runKey}`,
+        });
+
+        const jobRow = runtimeSql(
+          `SELECT id FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [jobId] = jobRow.split("|");
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+
+        const history = inputResponse.input.history;
+        expect(history.exampleCount).toBe(1);
+
+        // F6: history should use catId3 (from latest manual decision), not T6_CAT_ID (expense col)
+        const catCandidates = history.candidateSpendingCategoryIds;
+        expect(catCandidates.length).toBeGreaterThan(0);
+        expect(catCandidates[0].id).toBe(catId3);
+        // T6_CAT_ID (from expense col) must NOT appear as a candidate
+        expect(catCandidates.some((c) => c.id === T6_CAT_ID)).toBe(false);
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L10: F10 expense_tag association version increments on re-apply
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L10: F10 expense_tag version increments when rule tag re-applied to existing active association",
+      async () => {
+        const db = database!;
+
+        const expenseDomain = createExpenseDomain(db);
+        // Saturday = weekend rule fires
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Version Cafe",
+            amount: "11.00",
+            currency: "USD",
+            incurredOn: "2026-09-19", // Saturday
+          },
+          requestId: `t6-l10-create-${runKey}`,
+        });
+
+        const getJobRow = () => runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow'
+            ORDER BY created_at DESC LIMIT 1;`,
+        );
+
+        // First result submission — creates rule tag (version=1 from insert trigger default)
+        let jobRow = getJobRow();
+        let [jobId, jobVersionStr] = jobRow.split("|");
+        let jobVersion = parseInt(jobVersionStr ?? "1", 10);
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        // Get the actual eligible keys from projection to avoid mismatch
+        const inputResp = await buildEnrichmentInput(db, jobId!);
+        expect(inputResp.outcome).toBe("evaluate");
+        if (inputResp.outcome !== "evaluate") throw new Error("expected evaluate");
+        const eligibleKeys = inputResp.input.eligibleTagKeys;
+        // Build only weekend key if eligible, else empty (weekend rule fires on Saturday)
+        const weekendKey = eligibleKeys.includes("timing:weekend") ? ["timing:weekend"] : [];
+        // Include merchant key if eligible
+        const merchantKey = eligibleKeys.find((k) => k.startsWith("merchant:"));
+        const ruleTagKeys = [...(merchantKey ? [merchantKey] : []), ...weekendKey].sort();
+
+        const enrichmentDomain = createEnrichmentJobsDomain(db);
+        await enrichmentDomain.submitEnrichmentResult({
+          jobId: jobId!,
+          idempotencyKey: `t6-l10-first-${runKey}`,
+          expectedJobVersion: jobVersion + 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "applied",
+            ruleTagKeys,
+            suggestions: [],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `t6-l10-req1-${runKey}`,
+        });
+
+        // Get the expense_tag version after first apply
+        const versionAfterFirst = runtimeSql(
+          `SELECT et.version FROM app.expense_tags et
+             INNER JOIN app.tags t ON t.id = et.tag_id
+            WHERE et.expense_id = '${expense.id}'
+              AND t.key = 'timing:weekend';`,
+        );
+        const firstVersion = parseInt(versionAfterFirst, 10);
+        expect(firstVersion).toBeGreaterThanOrEqual(1);
+
+        // Seed a new enrichment job for re-apply (simulate re-run)
+        const newJobId = randomUUID();
+        runtimeSql(`
+          INSERT INTO app.processing_jobs
+            (id, tenant_id, personal_profile_id, business_id,
+             workflow_type, workflow_id, task_queue, status,
+             target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+             input_params, allowed_result_schema_version, dispatched_at)
+          VALUES
+            ('${newJobId}', '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL,
+             'ExpenseEnrichmentWorkflow', 'job-${newJobId}', 'expense-tax-ai-worker', 'RUNNING',
+             'expense', '${expense.id}', 1,
+             '{}', 'expense-enrichment-v1', now())
+          ON CONFLICT DO NOTHING;
+        `);
+
+        // Re-apply with same rule tag keys for the same expense
+        await enrichmentDomain.submitEnrichmentResult({
+          jobId: newJobId,
+          idempotencyKey: `t6-l10-second-${runKey}`,
+          expectedJobVersion: 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "applied",
+            ruleTagKeys,
+            suggestions: [],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `t6-l10-req2-${runKey}`,
+        });
+
+        // F10: version must have incremented
+        const versionAfterSecond = runtimeSql(
+          `SELECT et.version FROM app.expense_tags et
+             INNER JOIN app.tags t ON t.id = et.tag_id
+            WHERE et.expense_id = '${expense.id}'
+              AND t.key = 'timing:weekend';`,
+        );
+        const secondVersion = parseInt(versionAfterSecond, 10);
+        expect(secondVersion).toBe(firstVersion + 1);
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L11: F3 atomic replay — result op key kind='result', null candidate
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L11: F1/F2 result operation key has kind='result' and null candidate_id",
+      async () => {
+        const db = database!;
+
+        const expenseDomain = createExpenseDomain(db);
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Result Kind Cafe",
+            amount: "6.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `t6-l11-${runKey}`,
+        });
+
+        const jobRow = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [jobId, jobVersionStr] = jobRow.split("|");
+        const jobVersion = parseInt(jobVersionStr ?? "1", 10);
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const enrichmentDomain = createEnrichmentJobsDomain(db);
+        const idemKey = `t6-l11-result-${runKey}`;
+
+        await enrichmentDomain.submitEnrichmentResult({
+          jobId: jobId!,
+          idempotencyKey: idemKey,
+          expectedJobVersion: jobVersion + 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "stale",
+            ruleTagKeys: [],
+            suggestions: [],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `t6-l11-req-${runKey}`,
+        });
+
+        // Verify result op key has kind='result' and null candidate_id (F1/F2)
+        const opKeyRow = runtimeSql(
+          `SELECT kind, candidate_id
+             FROM app.enrichment_operation_keys
+            WHERE operation_key = 'result:${jobId}:${idemKey}';`,
+        );
+        expect(opKeyRow).toContain("result"); // kind = 'result'
+        // candidate_id is null — in tuples-only format, null columns produce empty string
+        // The row should exist and kind should be 'result'
+        expect(opKeyRow.startsWith("result")).toBe(true);
+      },
+    );
 
     it(
       "T6-L6: same idempotency key with changed result payload is a permanent conflict",

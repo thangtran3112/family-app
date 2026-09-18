@@ -681,7 +681,7 @@ export async function up(database: Kysely<unknown>): Promise<void> {
         FOREIGN KEY (expense_id, tenant_id)
         REFERENCES app.expenses(id, tenant_id) ON DELETE CASCADE,
       CONSTRAINT enrichment_operation_keys_kind_check
-        CHECK (kind IN ('tag', 'spending_category', 'tax_category')),
+        CHECK (kind IN ('tag', 'spending_category', 'tax_category', 'result')),
       CONSTRAINT enrichment_operation_keys_evidence_hash_check
         CHECK (evidence_hash ~ '^[a-f0-9]{64}$'),
       CONSTRAINT enrichment_operation_keys_payload_hash_check

@@ -1,10 +1,9 @@
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import {
   EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
   EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
   AI_WORKER_TASK_QUEUE,
-  ExpenseEnrichmentResultV1Schema,
   type JobReferenceV1,
   type ExpenseEnrichmentInputResponseV1,
   type ExpenseEnrichmentInputV1,
@@ -17,8 +16,6 @@ import type { AppDatabase } from "../database/types.js";
 import { DomainError } from "../errors.js";
 import { recordAuditEvent } from "./audit.js";
 import {
-  executeIdempotentMutation,
-  hashNormalizedRequest,
   toJsonValue,
   type MutationResult,
 } from "./idempotency.js";
@@ -193,15 +190,6 @@ export interface EnrichmentJobsDomain {
  * Worker must call the status update route (mark RUNNING) before requesting
  * input. DISPATCHED is rejected to enforce the spec flow order.
  */
-const RUNNING_STATUS = "RUNNING" as const;
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: string }).code === "23505"
-  );
-}
 
 export function createEnrichmentJobsDomain(
   database: Kysely<AppDatabase>,
@@ -210,225 +198,31 @@ export function createEnrichmentJobsDomain(
 ): EnrichmentJobsDomain {
   return {
     async getEnrichmentInput(input) {
-      // I8: Audit is written inside buildEnrichmentInput's transaction for
-      // evaluate path. For non-evaluate (stale/skipped), audit is below.
-      const response = await buildEnrichmentInput(database, input.jobId);
-
-      // Write audit event (we re-use the domain function's audit for evaluate;
-      // here we add one for stale/skipped at the route level using the job id).
-      // Note: buildEnrichmentInput writes audit inside its transaction for all
-      // outcomes — but we need actorServicePrincipal. We add a second audit
-      // event for the HTTP-layer actor attribution.
-      await database.transaction().execute(async (transaction) => {
-        await recordAuditEvent(transaction, {
-          actorServicePrincipal: input.actorServicePrincipal,
-          action: "processing_job.enrichment_input_served",
-          outcome: "success",
-          resourceType: "processing_job",
-          resourceId: input.jobId,
-          requestId: input.requestId,
-          metadata: { servedOutcome: response.outcome },
-        });
-      });
-
-      return response;
+      // F13: buildEnrichmentInput writes exactly one audit event inside its
+      // transaction using the actor principal and requestId passed here.
+      return buildEnrichmentInput(
+        database,
+        input.jobId,
+        input.actorServicePrincipal,
+        input.requestId,
+      );
     },
 
     async submitEnrichmentResult(input) {
-      // Canonical payload hash for permanent replay key.
-      const payloadHash = hashNormalizedRequest({ jobId: input.jobId, result: input.result });
-
-      // --- Step 1: Check permanent operation key (replay-safe; never expires) ---
-      // Must be checked BEFORE the job-status guard so replay after generic
-      // idempotency expiry returns the original response.
-      const permanentOpKey = `result:${input.jobId}:${input.idempotencyKey}`;
-
-      const permanentRecord = await database
-        .selectFrom("app.enrichment_operation_keys")
-        .select(["payload_hash", "response_json"])
-        .where("operation_key", "=", permanentOpKey)
-        .executeTakeFirst();
-
-      if (permanentRecord) {
-        if (permanentRecord.payload_hash !== payloadHash) {
-          throw DomainError.conflict();
-        }
-        // Replay: parse stored response
-        const stored = permanentRecord.response_json as Record<string, unknown>;
-        return {
-          statusCode: 200,
-          body: stored as ProcessingJob,
-          replayed: true,
-        };
-      }
-
-      // --- Step 2: Generic idempotency (short-lived, 24h TTL) ---
-      try {
-        const result = await executeIdempotentMutation(database, {
-          actorKey: `service:${input.actorServicePrincipal}`,
-          operationKey: "enrichment-job.result-submit",
-          idempotencyKey: input.idempotencyKey,
-          requestHash: payloadHash,
-          statusCode: 200,
-          parseBody: (value) => value as ProcessingJob,
-          execute: async (transaction) => {
-            const job = await transaction
-              .selectFrom("app.processing_jobs")
-              .selectAll()
-              .where("id", "=", input.jobId)
-              .forUpdate()
-              .executeTakeFirst();
-
-            if (!job || job.workflow_type !== EXPENSE_ENRICHMENT_WORKFLOW_TYPE) {
-              throw DomainError.notFound();
-            }
-            if (job.version !== input.expectedJobVersion) {
-              throw DomainError.preconditionFailed();
-            }
-            // I1: Only RUNNING accepted for result submission.
-            if (job.status !== RUNNING_STATUS) {
-              throw DomainError.conflict();
-            }
-
-            // Validate the result schema
-            const parsed = ExpenseEnrichmentResultV1Schema.safeParse(input.result);
-            if (!parsed.success) throw DomainError.validation();
-
-            const outcome = parsed.data.outcome;
-
-            if (outcome === "stale" || outcome === "skipped") {
-              // Safe no-mutation completion
-              const now = new Date();
-              const updated = await transaction
-                .updateTable("app.processing_jobs")
-                .set({
-                  status: "SUCCEEDED",
-                  result: toJsonValue(input.result as Record<string, unknown>),
-                  updated_at: now,
-                  completed_at: now,
-                  version: job.version + 1,
-                })
-                .where("id", "=", input.jobId)
-                .returningAll()
-                .executeTakeFirstOrThrow();
-
-              await recordAuditEvent(transaction, {
-                tenantId: job.tenant_id,
-                actorServicePrincipal: input.actorServicePrincipal,
-                action: "processing_job.enrichment_result_submitted",
-                outcome: "success",
-                resourceType: "processing_job",
-                resourceId: input.jobId,
-                requestId: input.requestId,
-                metadata: { outcome },
-              });
-
-              return toProcessingJob(updated);
-            }
-
-            // outcome === "applied": delegate to real application
-            // applyEnrichmentResult opens its own transaction — we must NOT
-            // be inside executeIdempotentMutation's transaction here.
-            // Throw a sentinel to break out and call applyEnrichmentResult below.
-            throw _AppliedSentinel;
-          },
-        });
-
-        // Stale/skipped succeeded via idempotency — record permanent key
-        await _recordPermanentResultKey(database, {
-          tenantId: result.body.tenantId ?? "",
-          jobId: input.jobId,
-          expenseId: result.body.targetAggregateId ?? "",
-          operationKey: permanentOpKey,
-          payloadHash,
-          responseJson: toJsonValue(result.body),
-        });
-
-        return result;
-      } catch (error: unknown) {
-        if (error === _AppliedSentinel) {
-          // Route to real application (own transaction)
-          const appliedResult = await applyEnrichmentResult(database, {
-            jobId: input.jobId,
-            idempotencyKey: input.idempotencyKey,
-            expectedJobVersion: input.expectedJobVersion,
-            result: input.result,
-            actorServicePrincipal: input.actorServicePrincipal,
-            requestId: input.requestId,
-          });
-
-          // Record permanent key after successful application
-          await _recordPermanentResultKey(database, {
-            tenantId: appliedResult.body.tenantId ?? "",
-            jobId: input.jobId,
-            expenseId: appliedResult.body.targetAggregateId ?? "",
-            operationKey: permanentOpKey,
-            payloadHash,
-            responseJson: toJsonValue(appliedResult.body),
-          });
-
-          return appliedResult;
-        }
-        if (isUniqueViolation(error)) throw DomainError.conflict();
-        throw error;
-      }
+      // F1/F3: applyEnrichmentResult is a single unified atomic transaction.
+      // It checks the permanent result key first (before job-status guard),
+      // processes the result, inserts the result op key, and marks the job
+      // SUCCEEDED — all in one commit. No sentinel, no post-commit recording.
+      return applyEnrichmentResult(database, {
+        jobId: input.jobId,
+        idempotencyKey: input.idempotencyKey,
+        expectedJobVersion: input.expectedJobVersion,
+        result: input.result,
+        actorServicePrincipal: input.actorServicePrincipal,
+        requestId: input.requestId,
+      });
     },
   };
-}
-
-/** Sentinel used to escape the idempotency wrapper for applied results. */
-const _AppliedSentinel = Symbol("applied-sentinel");
-
-async function _recordPermanentResultKey(
-  database: Kysely<AppDatabase>,
-  input: {
-    readonly tenantId: string;
-    readonly jobId: string;
-    readonly expenseId: string;
-    readonly operationKey: string;
-    readonly payloadHash: string;
-    readonly responseJson: import("../database/types.js").JsonValue;
-  },
-): Promise<void> {
-  const existing = await database
-    .selectFrom("app.enrichment_operation_keys")
-    .select("payload_hash")
-    .where("operation_key", "=", input.operationKey)
-    .executeTakeFirst();
-
-  if (existing) {
-    if (existing.payload_hash !== input.payloadHash) throw DomainError.conflict();
-    return; // Already recorded
-  }
-
-  try {
-    await database
-      .insertInto("app.enrichment_operation_keys")
-      .values({
-        id: randomUUID(),
-        tenant_id: input.tenantId,
-        job_id: input.jobId,
-        expense_id: input.expenseId,
-        kind: "tag", // job-level result key uses "tag" kind as placeholder
-        candidate_id: null,
-        evidence_hash: createHash("sha256").update(input.payloadHash).digest("hex"),
-        operation_key: input.operationKey,
-        payload_hash: input.payloadHash,
-        response_json: input.responseJson,
-        created_at: new Date(),
-      })
-      .execute();
-  } catch (err: unknown) {
-    // Unique violation on (tenant_id, operation_key) — already recorded, safe to ignore
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      (err as { code?: string }).code === "23505"
-    ) {
-      return;
-    }
-    throw err;
-  }
 }
 
 // ------------------------------------------------------------------ //
