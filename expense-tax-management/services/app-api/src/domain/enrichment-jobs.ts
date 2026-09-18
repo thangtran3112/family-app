@@ -7,6 +7,7 @@ import {
   ExpenseEnrichmentResultV1Schema,
   type JobReferenceV1,
   type ExpenseEnrichmentInputResponseV1,
+  type ExpenseEnrichmentInputV1,
   type ProcessingJob,
 } from "@expense-tax/contracts";
 import { type Kysely, type Transaction } from "kysely";
@@ -43,6 +44,8 @@ export interface EnrichmentJobBinding {
  * atomically inside the caller's transaction. Must be called only when the
  * expense is already inserted and status === "ready".
  *
+ * Returns the created ProcessingJob for callers that need to inspect it.
+ *
  * Exported so ocr.ts can call it from applyOcrExtraction's transaction.
  * The caller owns the transaction boundary; this function must NOT open a
  * nested transaction.
@@ -53,12 +56,12 @@ export interface EnrichmentJobBinding {
 export async function createEnrichmentJobInTransaction(
   transaction: Transaction<AppDatabase>,
   binding: EnrichmentJobBinding,
-): Promise<void> {
+): Promise<ProcessingJob> {
   const jobId = randomUUID();
   const workflowId = `job-${jobId}`;
   const now = new Date();
 
-  await transaction
+  const created = await transaction
     .insertInto("app.processing_jobs")
     .values({
       id: jobId,
@@ -85,7 +88,8 @@ export async function createEnrichmentJobInTransaction(
       dispatched_at: null,
       completed_at: null,
     })
-    .execute();
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   const jobReference: JobReferenceV1 = {
     schemaVersion: 1,
@@ -117,7 +121,45 @@ export async function createEnrichmentJobInTransaction(
     resourceId: jobId,
     requestId: binding.requestId,
   });
+
+  return toProcessingJob(created);
 }
+
+// ------------------------------------------------------------------ //
+// EnrichmentInputProjection — explicit seam for Task 6
+// ------------------------------------------------------------------ //
+
+/**
+ * Task 6 injects a real projection by implementing this interface and wiring
+ * it into createEnrichmentJobsDomain. Until Task 6 supplies the projection,
+ * evaluate requests fail safely (CONFLICT) — stale/skipped proceed without
+ * projection.
+ */
+export interface EnrichmentInputProjection {
+  /**
+   * Build the full ExpenseEnrichmentInputV1 for the given job and expense.
+   * Called only when the job is RUNNING and the expense is ready and
+   * version-current.
+   * Task 6 implements eligible tag/category IDs and bounded history here.
+   */
+  buildInput(
+    tenantId: string,
+    jobId: string,
+    expenseId: string,
+    expenseVersion: number,
+  ): Promise<ExpenseEnrichmentInputV1>;
+}
+
+/**
+ * Sentinel projection used until Task 6 supplies the real implementation.
+ * Throws CONFLICT for evaluate path so the worker retries rather than
+ * receiving an invalid empty input.
+ */
+export const pendingProjection: EnrichmentInputProjection = {
+  async buildInput() {
+    throw DomainError.conflict();
+  },
+};
 
 // ------------------------------------------------------------------ //
 // EnrichmentJobsDomain — input and result routes
@@ -147,7 +189,12 @@ export interface EnrichmentJobsDomain {
   ): Promise<MutationResult<ProcessingJob, 200>>;
 }
 
-const RUNNING_STATUSES = ["DISPATCHED", "RUNNING"] as const;
+/**
+ * Job status RUNNING is required for both input and result operations.
+ * Worker must call the status update route (mark RUNNING) before requesting
+ * input. DISPATCHED is rejected to enforce the spec flow order.
+ */
+const RUNNING_STATUS = "RUNNING" as const;
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -159,6 +206,7 @@ function isUniqueViolation(error: unknown): boolean {
 
 export function createEnrichmentJobsDomain(
   database: Kysely<AppDatabase>,
+  projection: EnrichmentInputProjection = pendingProjection,
 ): EnrichmentJobsDomain {
   return {
     async getEnrichmentInput(input) {
@@ -175,7 +223,9 @@ export function createEnrichmentJobsDomain(
         if (job.allowed_result_schema_version !== EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION) {
           throw DomainError.notFound();
         }
-        if (!RUNNING_STATUSES.includes(job.status as typeof RUNNING_STATUSES[number])) {
+        // I1: Only RUNNING is accepted; DISPATCHED is rejected (409).
+        // Worker must mark RUNNING before reading input.
+        if (job.status !== RUNNING_STATUS) {
           throw DomainError.conflict();
         }
         if (!job.target_aggregate_id || job.target_aggregate_type !== "expense") {
@@ -190,6 +240,20 @@ export function createEnrichmentJobsDomain(
           .where("tenant_id", "=", job.tenant_id)
           .executeTakeFirst();
 
+        // Determine outcome before writing the audit event (I8).
+        let outcome: "evaluate" | "stale" | "skipped";
+        if (!expense || expense.status === "archived") {
+          outcome = "skipped";
+        } else if (
+          job.expected_aggregate_version !== null &&
+          expense.version !== job.expected_aggregate_version
+        ) {
+          outcome = "stale";
+        } else {
+          outcome = "evaluate";
+        }
+
+        // I8: audit after outcome is known; include evaluate/stale/skipped metadata.
         await recordAuditEvent(transaction, {
           tenantId: job.tenant_id,
           actorServicePrincipal: input.actorServicePrincipal,
@@ -198,50 +262,26 @@ export function createEnrichmentJobsDomain(
           resourceType: "processing_job",
           resourceId: job.id,
           requestId: input.requestId,
+          metadata: { inputOutcome: outcome },
         });
 
-        if (!expense) {
+        if (outcome === "skipped") {
           return { outcome: "skipped" as const };
         }
-        if (expense.status === "archived") {
-          return { outcome: "skipped" as const };
-        }
-        if (
-          job.expected_aggregate_version !== null &&
-          expense.version !== job.expected_aggregate_version
-        ) {
+        if (outcome === "stale") {
           return { outcome: "stale" as const };
         }
 
-        // Task 6 owns full input projection. Return a job-bound stub for now
-        // that Task 6 can implement without weakening validation seams.
-        return {
-          outcome: "evaluate" as const,
-          input: {
-            schemaVersion: 1 as const,
-            jobId: job.id,
-            expenseId: expense.id,
-            expenseVersion: expense.version,
-            normalizedMerchant: expense.merchant?.trim().toLowerCase() || null,
-            incurredOn:
-              typeof expense.incurred_on === "string"
-                ? expense.incurred_on
-                : expense.incurred_on instanceof Date
-                  ? expense.incurred_on.toISOString().slice(0, 10)
-                  : "1970-01-01",
-            spendingCategoryId: expense.spending_category_id ?? null,
-            rulesVersion: 1,
-            eligibleTagKeys: [],
-            eligibleSpendingCategoryIds: [],
-            eligibleTaxSnapshot: null,
-            history: {
-              exampleCount: 0,
-              candidateTagKeys: [],
-              candidateSpendingCategoryIds: [],
-              candidateTaxCategoryIds: [],
-            },
-          },
-        };
+        // C3: Only evaluate reaches this path. Task 6's projection builds the
+        // full input. Until then, pendingProjection throws CONFLICT safely.
+        const evaluateInput = await projection.buildInput(
+          job.tenant_id,
+          job.id,
+          expense!.id,
+          expense!.version,
+        );
+
+        return { outcome: "evaluate" as const, input: evaluateInput };
       });
     },
 
@@ -268,7 +308,8 @@ export function createEnrichmentJobsDomain(
             if (job.version !== input.expectedJobVersion) {
               throw DomainError.preconditionFailed();
             }
-            if (!RUNNING_STATUSES.includes(job.status as typeof RUNNING_STATUSES[number])) {
+            // I1: Only RUNNING accepted for result submission.
+            if (job.status !== RUNNING_STATUS) {
               throw DomainError.conflict();
             }
 
@@ -277,9 +318,14 @@ export function createEnrichmentJobsDomain(
             if (!parsed.success) throw DomainError.validation();
 
             const outcome = parsed.data.outcome;
-            // stale/skipped outcomes mark job SUCCEEDED with no customer mutation.
-            // "applied" outcome: Task 6 owns full result application.
-            // For now, all outcomes mark SUCCEEDED (no mutation placeholder).
+
+            // C2: Reject outcome:applied until Task 6 injects real application.
+            // stale and skipped are safe no-mutation completions.
+            if (outcome === "applied") {
+              throw DomainError.conflict();
+            }
+
+            // stale/skipped: mark SUCCEEDED with empty result, no customer mutation.
             const now = new Date();
             const updated = await transaction
               .updateTable("app.processing_jobs")
@@ -322,14 +368,19 @@ export function createEnrichmentJobsDomain(
 
 /**
  * Wire-format body schema for the enrichment result submission route.
- * The `result` field is typed as unknown here; domain validates it against
- * ExpenseEnrichmentResultV1Schema internally to avoid Fastify/ZodTypeProvider
- * issues with deeply nested discriminated-union schemas as body schemas.
+ * Uses a strict envelope validating schemaVersion/idempotencyKey/expectedJobVersion
+ * and a meaningful result object shape. Domain performs full canonical
+ * ExpenseEnrichmentResultV1Schema parse before acting on result content.
+ *
+ * Note: result is typed as z.record(z.unknown()) to avoid Fastify/ZodTypeProvider
+ * limitations with deeply-nested refinements in discriminated union body schemas
+ * (registration crashes on refine-heavy schemas at Fastify route setup time).
+ * The domain performs full canonical parse via ExpenseEnrichmentResultV1Schema.
  */
 export const EnrichmentResultSubmitRequestSchema = z.object({
   schemaVersion: z.literal(1),
   idempotencyKey: z.string().trim().min(1).max(255),
   expectedJobVersion: z.number().int().positive(),
-  result: z.unknown(),
+  result: z.record(z.string(), z.unknown()),
 });
 export type EnrichmentResultSubmitRequest = z.infer<typeof EnrichmentResultSubmitRequestSchema>;

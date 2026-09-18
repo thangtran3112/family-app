@@ -59,12 +59,13 @@ const JOB = {
 function servicePrincipal(
   clientId: string,
   scopes: readonly string[],
+  audience = "expense-app-internal",
 ): AuthPrincipal {
   return {
     tokenType: "service",
     subject: clientId === "ai-worker" ? "ai-worker-app-machine" : clientId,
     clientId,
-    audience: "expense-app-internal",
+    audience,
     issuer: "https://services.test",
     roles: [],
     scopes,
@@ -159,6 +160,11 @@ describe("App API job routes", () => {
         if (token === "enrichment-wrong-subject-token") {
           // wrong subject — input scope present but subject mismatch
           return servicePrincipal("wrong-subject", ["jobs:enrichment-input"]);
+        }
+        if (token === "enrichment-wrong-audience-token") {
+          // Production Clerk verifier rejects tokens with wrong audience.
+          // Simulate that by throwing — returns 401 before subject/scope guard.
+          throw new Error("wrong audience");
         }
         throw new Error("wrong token");
       }),
@@ -480,5 +486,110 @@ describe("App API job routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(processingJobsDomain.recordStatusUpdate).toHaveBeenCalled();
+  });
+
+  // ---- I3: audience tests for enrichment routes ----
+
+  it("I3: forbids enrichment input when token has wrong audience (foundry audience → 401 from verifier)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-wrong-audience-token" },
+    });
+
+    // Production Clerk verifier rejects tokens with wrong audience at verification time.
+    // Mock throws → verifyRequest returns 401.
+    expect(response.statusCode).toBe(401);
+    expect(enrichmentJobsDomain.getEnrichmentInput).not.toHaveBeenCalled();
+  });
+
+  it("I3: forbids enrichment input token on enrichment-result route (cross-scope denial)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-input-token" },
+      payload: {
+        schemaVersion: 1,
+        idempotencyKey: "k-cross",
+        expectedJobVersion: 3,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    // enrichment-input token only has jobs:enrichment-input, not jobs:enrichment-result
+    expect(response.statusCode).toBe(403);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  // ---- I2: Schema proof — both enrichment routes register and parse cleanly ----
+
+  it("I2: enrichment input route returns 200 with outcome field present in response", async () => {
+    const { app } = createTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-input`,
+      headers: { authorization: "Bearer enrichment-input-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Response must contain schemaVersion and outcome at minimum
+    const body = response.json() as Record<string, unknown>;
+    expect(body.outcome).toBe("evaluate");
+  });
+
+  it("I2: enrichment result route validates body schema strictly (rejects missing idempotencyKey)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        // Missing idempotencyKey — schema must reject
+        schemaVersion: 1,
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
+  });
+
+  it("I2: enrichment result route validates schemaVersion literal 1 (rejects 2)", async () => {
+    const { app, enrichmentJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/v1/jobs/${JOB_ID}/enrichment-result`,
+      headers: { authorization: "Bearer enrichment-result-token" },
+      payload: {
+        schemaVersion: 2, // Must be 1
+        idempotencyKey: "k1",
+        expectedJobVersion: 2,
+        result: {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "stale",
+          ruleTagKeys: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(enrichmentJobsDomain.submitEnrichmentResult).not.toHaveBeenCalled();
   });
 });

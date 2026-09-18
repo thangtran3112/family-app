@@ -146,6 +146,9 @@ export async function applyOcrExtraction(
         ? "forwarded_email"
         : "ocr",
     initialStatus: "ready",
+    // applyOcrExtraction creates the enrichment job itself after file binding;
+    // skip inside insertExpenseInTransaction to avoid a duplicate.
+    skipEnrichmentJob: true,
   });
 
   await transaction

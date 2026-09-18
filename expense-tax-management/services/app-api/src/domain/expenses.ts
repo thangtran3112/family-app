@@ -201,6 +201,11 @@ export async function insertExpenseInTransaction(
     scope: Scope;
     source?: "manual" | "ocr" | "forwarded_email";
     initialStatus?: "draft" | "ready";
+    /**
+     * When true, the caller (e.g. applyOcrExtraction) will create the
+     * enrichment job itself after file binding. Skip here to avoid duplicate.
+     */
+    skipEnrichmentJob?: boolean;
   },
 ): Promise<Expense> {
   const now = new Date();
@@ -262,7 +267,9 @@ export async function insertExpenseInTransaction(
   }
 
   // Enqueue enrichment workflow when expense is created in ready state.
-  if (created.status === "ready") {
+  // Skip when the caller (applyOcrExtraction) creates the enrichment job itself
+  // after file binding to avoid duplicate jobs.
+  if (created.status === "ready" && !input.skipEnrichmentJob) {
     await createEnrichmentJobInTransaction(transaction, {
       tenantId: input.tenantId,
       scope:
@@ -530,6 +537,9 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
         insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "personal", profileId: input.profileId },
+          // Public manual creates are immediately ready; enrichment is enqueued
+          // in the same transaction by insertExpenseInTransaction.
+          initialStatus: "ready",
         }),
       );
     },
@@ -541,6 +551,9 @@ export function createExpenseDomain(database: Kysely<AppDatabase>): ExpenseDomai
         insertExpenseInTransaction(transaction, {
           ...input,
           scope: { kind: "business", businessId: input.businessId },
+          // Public manual creates are immediately ready; enrichment is enqueued
+          // in the same transaction by insertExpenseInTransaction.
+          initialStatus: "ready",
         }),
       );
     },

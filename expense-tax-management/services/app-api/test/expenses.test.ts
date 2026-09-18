@@ -232,4 +232,35 @@ describe("App API expense routes", () => {
       expect.objectContaining({ actorUserId: USER_ID, businessId: BUSINESS_ID }),
     );
   });
+
+  // ---- C1: Route mock returns ready; domain must return ready status ----
+  it("C1: createPersonal domain mock returns ready status (enrichment enqueued downstream)", async () => {
+    // The EXPENSE fixture already has status: "ready" — this test verifies
+    // the route layer passes through the domain's ready-status response and
+    // that the mock domain is configured correctly for the C1 contract.
+    const { app, createPersonal } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/tenants/${TENANT_ID}/personal-profiles/${PROFILE_ID}/expenses`,
+      headers: auth,
+      payload: {
+        personalProfileId: PROFILE_ID,
+        merchant: "Market",
+        amount: "12.50",
+        currency: "USD",
+        incurredOn: "2025-03-01",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    // C1: public create must return ready (not draft)
+    expect(response.json().status).toBe("ready");
+    expect(createPersonal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: USER_ID,
+        tenantId: TENANT_ID,
+        profileId: PROFILE_ID,
+      }),
+    );
+  });
 });

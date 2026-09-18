@@ -22,7 +22,9 @@ import { registerDeduplicationRoutes } from "./deduplication.js";
 
 export interface JobRouteOptions {
   readonly processingJobsDomain: ProcessingJobsDomain;
-  readonly enrichmentJobsDomain?: EnrichmentJobsDomain;
+  /** Required: enrichment routes are always registered. Production misconfiguration
+   *  is prevented at app startup rather than silently omitting routes. */
+  readonly enrichmentJobsDomain: EnrichmentJobsDomain;
   readonly deduplicationDomain?: DeduplicationDomain;
   readonly workerServiceSubject?: string;
   /** Scope required on the enrichment-input route. */
@@ -168,7 +170,8 @@ export async function registerJobRoutes(
   // ---- enrichment input/result routes --------------------------------
   // Require exact configured worker M2M subject and route-specific scopes.
   // Independent guards per route: input scope != result scope.
-  if (options.enrichmentJobsDomain) {
+  // enrichmentJobsDomain is required in JobRouteOptions; routes always registered.
+  {
     const enrichmentSubject = options.workerServiceSubject ?? "ai-worker-app-machine";
     const inputScope = options.enrichmentInputScope ?? "jobs:enrichment-input";
     const resultScope = options.enrichmentResultScope ?? "jobs:enrichment-result";
@@ -180,6 +183,40 @@ export async function registerJobRoutes(
       serviceGuard(enrichmentSubject, [resultScope]),
     ];
 
+    /**
+     * Enrichment input response schema — meaningful strict envelope.
+     * Uses z.union with distinct object shapes (no cross-field refinements)
+     * so Fastify/ZodTypeProvider can register the route without crashing.
+     * Domain performs full canonical ExpenseEnrichmentInputResponseV1Schema
+     * validation before returning.
+     */
+    const EnrichmentInputResponseSchema = z.union([
+      z.object({
+        outcome: z.literal("evaluate"),
+        input: z.object({
+          schemaVersion: z.literal(1),
+          jobId: z.string(),
+          expenseId: z.string(),
+          expenseVersion: z.number(),
+          normalizedMerchant: z.string().nullable(),
+          incurredOn: z.string(),
+          spendingCategoryId: z.string().nullable(),
+          rulesVersion: z.number(),
+          eligibleTagKeys: z.array(z.string()),
+          eligibleSpendingCategoryIds: z.array(z.string()),
+          eligibleTaxSnapshot: z.unknown().nullable(),
+          history: z.object({
+            exampleCount: z.number(),
+            candidateTagKeys: z.array(z.object({ key: z.string(), count: z.number() })),
+            candidateSpendingCategoryIds: z.array(z.object({ id: z.string(), count: z.number() })),
+            candidateTaxCategoryIds: z.array(z.object({ id: z.string(), count: z.number() })),
+          }),
+        }),
+      }),
+      z.object({ outcome: z.literal("stale") }),
+      z.object({ outcome: z.literal("skipped") }),
+    ]);
+
     typedApp.get(
       "/internal/v1/jobs/:jobId/enrichment-input",
       {
@@ -187,16 +224,13 @@ export async function registerJobRoutes(
         schema: {
           params: ProcessingJobParamsSchema,
           security: [{ serviceBearer: [] }],
-          // discriminatedUnion serialized as-is; no strict response schema here
-          // because fastify-type-provider-zod does not support discriminatedUnion
-          // response schemas in all Fastify v5 configurations.
-          response: { 200: z.object({ outcome: z.string() }).passthrough(), ...errors },
+          response: { 200: EnrichmentInputResponseSchema, ...errors },
         },
       },
       async (request) => {
         const clientId = request.authPrincipal?.clientId ?? request.authPrincipal?.subject;
         if (!clientId) throw DomainError.forbidden();
-        return options.enrichmentJobsDomain!.getEnrichmentInput({
+        return options.enrichmentJobsDomain.getEnrichmentInput({
           jobId: request.params.jobId,
           actorServicePrincipal: clientId,
           requestId: request.id,
@@ -218,7 +252,7 @@ export async function registerJobRoutes(
       async (request, reply) => {
         const clientId = request.authPrincipal?.clientId ?? request.authPrincipal?.subject;
         if (!clientId) throw DomainError.forbidden();
-        const result = await options.enrichmentJobsDomain!.submitEnrichmentResult({
+        const result = await options.enrichmentJobsDomain.submitEnrichmentResult({
           jobId: request.params.jobId,
           idempotencyKey: request.body.idempotencyKey,
           expectedJobVersion: request.body.expectedJobVersion,
