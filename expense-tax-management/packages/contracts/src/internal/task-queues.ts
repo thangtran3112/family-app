@@ -14,3 +14,5 @@ export const FOUNDATION_ECHO_WORKFLOW_TYPE = "FoundationEchoWorkflow";
 export const OCR_RECEIPT_WORKFLOW_TYPE = "OcrReceiptWorkflow";
 export const FORWARDED_RECEIPT_WORKFLOW_TYPE = "ForwardedReceiptWorkflow";
 export const OCR_EXTRACTION_RESULT_SCHEMA_VERSION = "ocr-extraction-v1";
+export const EXPENSE_ENRICHMENT_WORKFLOW_TYPE = "ExpenseEnrichmentWorkflow";
+export const EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION = "expense-enrichment-v1";

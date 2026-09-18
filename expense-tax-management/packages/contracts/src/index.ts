@@ -28,7 +28,25 @@ export {
   OCR_RECEIPT_WORKFLOW_TYPE,
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+  EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
+  EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
 } from "./internal/task-queues.js";
+export {
+  EligibleTaxSnapshotSchema,
+  EnrichmentHistorySchema,
+  ExpenseEnrichmentInputV1Schema,
+  ExpenseEnrichmentInputResponseV1Schema,
+  type EligibleTaxSnapshot,
+  type EnrichmentHistory,
+  type ExpenseEnrichmentInputV1,
+  type ExpenseEnrichmentInputResponseV1,
+} from "./internal/expense-enrichment-input-v1.js";
+export {
+  ExpenseEnrichmentResultV1Schema,
+  EnrichmentSuggestionResultSchema,
+  type ExpenseEnrichmentResultV1,
+  type EnrichmentSuggestionResult,
+} from "./internal/expense-enrichment-result-v1.js";
 export {
   AuthenticatedUserSchema,
   CurrentUserResponseSchema,
