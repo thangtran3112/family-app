@@ -13,9 +13,14 @@ Activity names registered:
 Exception sanitization contract:
   Every exception raised from these activities must have a FIXED message string
   -- no job IDs, URLs, response bodies, raw outcome strings, Pydantic input
-  values, or any customer fact. Causes are never chained (no `from exc`).
-  Callers identify the failure category via `ApplicationError.type`, not the
-  message text.
+  values, or any customer fact. Both `__cause__` and `__context__` must be None
+  on every raised ApplicationError. `from None` alone is insufficient: it sets
+  `__suppress_context__=True` (controls display only) but `__context__` still
+  references the active exception Python captured at the raise site. To guarantee
+  `__context__ is None`, sanitized errors are BUILT inside the except block and
+  RAISED after the except scope exits -- at that point no exception is active
+  and Python cannot set `__context__`. Callers identify the failure category
+  via `ApplicationError.type`, not the message text.
 
 Retry behaviour for enrichment_process:
   Both the GET (enrichment-input) and POST (enrichment-result) calls live
@@ -117,31 +122,40 @@ class EnrichmentActivities:
         replayed successful POST is a safe no-op. See module docstring.
 
         Exception contract: all raised ApplicationError instances carry FIXED
-        messages -- no customer data, URLs, or response bodies. Causes are
-        never chained (no `from exc`).
+        messages -- no customer data, URLs, or response bodies. To ensure both
+        `__cause__` and `__context__` are None, sanitized errors are built
+        inside the except block but raised *after* the except scope exits, so
+        Python never captures the original exception as `__context__`.
+        `from None` alone is insufficient: it sets `__suppress_context__=True`
+        for display purposes but `__context__` still references the original
+        exception (Python always captures it on `raise inside except`).
         """
         # --- GET enrichment input -------------------------------------------
+        _input_err: ApplicationError | None = None
         try:
             raw = await self._input_client.get_enrichment_input(job_id)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             if 400 <= status < 500 and status not in {408, 429}:
-                raise ApplicationError(
+                _input_err = ApplicationError(
                     _MSG_INPUT_GET_4XX,
                     type="EnrichmentInputNonRetryable",
                     non_retryable=True,
                 )
-            raise ApplicationError(
-                _MSG_INPUT_GET_TRANSPORT,
-                type="EnrichmentInputTransient",
-                non_retryable=False,
-            )
+            else:
+                _input_err = ApplicationError(
+                    _MSG_INPUT_GET_TRANSPORT,
+                    type="EnrichmentInputTransient",
+                    non_retryable=False,
+                )
         except httpx.HTTPError:
-            raise ApplicationError(
+            _input_err = ApplicationError(
                 _MSG_INPUT_GET_TRANSPORT,
                 type="EnrichmentInputTransient",
                 non_retryable=False,
             )
+        if _input_err is not None:
+            raise _input_err
 
         # --- Validate outcome and build result payload ----------------------
         outcome = raw.get("outcome")
@@ -157,26 +171,35 @@ class EnrichmentActivities:
             }
         elif outcome == "evaluate":
             # Parse the input through the generated model (stays here, never
-            # serialised). Sanitize any validation or evaluator failures.
+            # serialised). Build sanitized error inside except, raise outside.
+            _parse_err: ApplicationError | None = None
             try:
                 inp = ExpenseEnrichmentInputV1.model_validate(raw.get("input") or {})
-            except Exception:  # noqa: BLE001 -- covers ValidationError + any unexpected parse failure; sanitized below
-                raise ApplicationError(
+            except Exception:  # noqa: BLE001 -- covers ValidationError + any unexpected parse failure
+                _parse_err = ApplicationError(
                     _MSG_INPUT_MALFORMED,
                     type="EnrichmentInputMalformed",
                     non_retryable=True,
                 )
+            if _parse_err is not None:
+                raise _parse_err
+
+            _eval_err: ApplicationError | None = None
             try:
                 enrichment_result = evaluate(inp)
             except Exception:  # noqa: BLE001
-                raise ApplicationError(
+                _eval_err = ApplicationError(
                     _MSG_EVALUATOR,
                     type="EnrichmentEvaluatorError",
                     non_retryable=True,
                 )
+            if _eval_err is not None:
+                raise _eval_err
+
             result_payload = enrichment_result.model_dump(mode="json")
         else:
             # Unknown outcome -- fixed message, outcome value never interpolated.
+            # Not inside an except block so no __context__ to suppress.
             raise ApplicationError(
                 _MSG_OUTCOME_UNEXPECTED,
                 type="EnrichmentInputUnexpectedOutcome",
@@ -185,6 +208,7 @@ class EnrichmentActivities:
 
         # --- POST enrichment result -----------------------------------------
         idempotency_key = f"{job_id}:enrichment:result:v1"
+        _result_err: ApplicationError | None = None
         try:
             await self._result_client.submit_enrichment_result(
                 job_id=job_id,
@@ -195,22 +219,25 @@ class EnrichmentActivities:
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             if 400 <= status < 500 and status not in {408, 429}:
-                raise ApplicationError(
+                _result_err = ApplicationError(
                     _MSG_RESULT_POST_4XX,
                     type="EnrichmentResultNonRetryable",
                     non_retryable=True,
                 )
-            raise ApplicationError(
-                _MSG_RESULT_POST_TRANSPORT,
-                type="EnrichmentResultTransient",
-                non_retryable=False,
-            )
+            else:
+                _result_err = ApplicationError(
+                    _MSG_RESULT_POST_TRANSPORT,
+                    type="EnrichmentResultTransient",
+                    non_retryable=False,
+                )
         except httpx.HTTPError:
-            raise ApplicationError(
+            _result_err = ApplicationError(
                 _MSG_RESULT_POST_TRANSPORT,
                 type="EnrichmentResultTransient",
                 non_retryable=False,
             )
+        if _result_err is not None:
+            raise _result_err
 
         return str(outcome)
 

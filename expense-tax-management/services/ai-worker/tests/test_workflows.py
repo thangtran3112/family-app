@@ -188,8 +188,9 @@ async def test_enrichment_process_sanitizes_4xx_input_get_error():
     assert BASE_URL not in msg
     assert "forbidden" not in msg
     assert "403" not in msg
-    # No cause chained
+    # Neither explicit cause nor implicit context must leak the original exc
     assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 @respx.mock
@@ -221,6 +222,7 @@ async def test_enrichment_process_sanitizes_503_input_get_error():
     # Response body content must not leak into the error message
     assert "service_overloaded_detail" not in msg
     assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 @respx.mock
@@ -253,6 +255,7 @@ async def test_enrichment_process_sanitizes_malformed_input_response():
     assert "secret-customer-value" not in msg
     assert str(JOB_ID) not in msg
     assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 @respx.mock
@@ -276,6 +279,7 @@ async def test_enrichment_process_sanitizes_unexpected_outcome():
     assert "EVIL_OUTCOME_WITH_SECRETS" not in msg
     assert str(JOB_ID) not in msg
     assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 @respx.mock
@@ -305,6 +309,7 @@ async def test_enrichment_process_sanitizes_4xx_result_post_error():
     assert "secret" not in msg
     assert "422" not in msg
     assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 @respx.mock
@@ -336,6 +341,42 @@ async def test_enrichment_process_sanitizes_503_result_post_error():
     # Response body content must not leak into the error message
     assert "result_server_overloaded_detail" not in msg
     assert err.__cause__ is None
+    assert err.__context__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_evaluator_error():
+    """Temporal-visible error for evaluator failure: fixed message, no cause, no context.
+
+    The evaluator is a pure function; an unexpected exception from it must be
+    wrapped into a fixed-message ApplicationError with both __cause__ and
+    __context__ suppressed via `raise ... from None`.
+    """
+    from unittest import mock
+
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(200, json=_base_evaluate_input())
+    )
+
+    with mock.patch(
+        "ai_worker.enrichment_activities.evaluate",
+        side_effect=RuntimeError("secret-customer-trace-detail"),
+    ):
+        activities = _make_activities()
+        err: ApplicationError | None = None
+        try:
+            await activities.enrichment_process(str(JOB_ID), 3)
+        except ApplicationError as exc:
+            err = exc
+
+    assert err is not None
+    assert err.non_retryable is True
+    assert err.type == "EnrichmentEvaluatorError"
+    msg = err.message or ""
+    assert "secret-customer-trace-detail" not in msg
+    assert str(JOB_ID) not in msg
+    assert err.__cause__ is None
+    assert err.__context__ is None
 
 
 # ---------------------------------------------------------------------------
