@@ -105,30 +105,24 @@ def test_worker_config_allows_optional_secrets_to_be_absent():
 
 
 # ---------------------------------------------------------------------------
-# Enrichment M2M scope config
+# Enrichment M2M scope: all three clients share CLERK_APP_MACHINE_SECRET_KEY
 # ---------------------------------------------------------------------------
 
-ENV_WITH_ENRICHMENT = {
-    **ENV,
-    "CLERK_ENRICHMENT_INPUT_MACHINE_SECRET_KEY": " ak_test_enr_input_secret ",
-    "CLERK_ENRICHMENT_RESULT_MACHINE_SECRET_KEY": " ak_test_enr_result_secret ",
-}
 
+def test_worker_config_enrichment_clients_use_same_machine_key():
+    """Enrichment input/result clients share CLERK_APP_MACHINE_SECRET_KEY.
 
-def test_worker_config_parses_enrichment_scope_secrets():
-    config = worker_config_from_env(ENV_WITH_ENRICHMENT)
-
-    assert (
-        config.clerk.enrichment_input_machine_secret_key == "ak_test_enr_input_secret"
-    )
-    assert (
-        config.clerk.enrichment_result_machine_secret_key == "ak_test_enr_result_secret"
-    )
-
-
-def test_worker_config_allows_enrichment_secrets_to_be_absent():
-    """When enrichment secrets are absent the fields are None (optional)."""
+    No separate enrichment secret keys exist in config. The factories create
+    separate CachedM2MTokenProvider instances per scope using the single
+    CLERK_APP_MACHINE_SECRET_KEY and CLERK_APP_SERVICE_SUBJECT.
+    This test asserts the config field does NOT exist (no invented key).
+    """
     config = worker_config_from_env(ENV)
-
-    assert config.clerk.enrichment_input_machine_secret_key is None
-    assert config.clerk.enrichment_result_machine_secret_key is None
+    assert not hasattr(config.clerk, "enrichment_input_machine_secret_key"), (
+        "Invented config key must not exist; enrichment clients reuse CLERK_APP_MACHINE_SECRET_KEY"
+    )
+    assert not hasattr(config.clerk, "enrichment_result_machine_secret_key"), (
+        "Invented config key must not exist; enrichment clients reuse CLERK_APP_MACHINE_SECRET_KEY"
+    )
+    # The shared key is present under its real name
+    assert config.clerk.app_machine_secret_key == "ak_test_app_machine_secret"

@@ -13,6 +13,7 @@ with workflow.unsafe.imports_passed_through():
         MarkRunningInput,
         SubmitEchoResultInput,
     )
+    from ai_worker.constants import DISPATCHED_JOB_VERSION
     from ai_worker.enrichment_activities import EnrichmentActivities
     from ai_worker.ocr_activities import (
         OcrCallStartedArgs,
@@ -29,14 +30,6 @@ with workflow.unsafe.imports_passed_through():
         OcrSubmitExtractionArgs,
         OcrSubmitFailedArgs,
     )
-
-# A freshly created ProcessingJob starts at version 1 (createJob) and is
-# always bumped to version 2 by dispatchPendingJobs before the workflow
-# starts (see services/app-api/src/domain/processing-jobs.ts). This
-# workflow's only job is to prove the full loop end to end, so it can
-# safely assume that fixed starting version rather than threading a version
-# field through the deliberately minimal JobReferenceV1 contract.
-DISPATCHED_JOB_VERSION = 2
 
 
 @workflow.defn(name="FoundationEchoWorkflow")
@@ -274,9 +267,12 @@ class ExpenseEnrichmentWorkflow:
         http_retry = RetryPolicy(maximum_attempts=5)
         job_id = str(job_reference.jobId)
 
+        # Pass DISPATCHED_JOB_VERSION as an explicit primitive arg so the
+        # constant is visible in Temporal's workflow-history event log rather
+        # than hidden inside the activity implementation.
         running_version = await workflow.execute_activity(
             EnrichmentActivities.enrichment_mark_running,
-            job_id,
+            args=[job_id, DISPATCHED_JOB_VERSION],
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=http_retry,
         )
@@ -296,6 +292,6 @@ class ExpenseEnrichmentWorkflow:
                     start_to_close_timeout=timedelta(seconds=30),
                     retry_policy=http_retry,
                 )
-            except Exception:  # noqa: BLE001, S110
+            except Exception:  # noqa: BLE001, S110 -- best-effort; never shadow the original process failure
                 pass
             raise

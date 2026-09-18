@@ -7,6 +7,7 @@ from expense_contracts.generated import JobReferenceV1
 from httpx import Response
 from temporalio.client import WorkflowFailureError
 from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
@@ -130,6 +131,213 @@ def test_enrichment_mark_running_returns_int():
     )
 
 
+def test_enrichment_mark_running_accepts_dispatched_version_as_primitive():
+    """enrichment_mark_running must accept dispatched_version as int, not hidden constant.
+
+    Passing the dispatched version as an explicit primitive arg means Temporal
+    records it in the workflow-history event log rather than hiding it inside
+    the activity body.
+    """
+    from ai_worker.enrichment_activities import EnrichmentActivities
+
+    act = EnrichmentActivities.__dict__["enrichment_mark_running"]
+    sig = inspect.signature(act)
+    params = list(sig.parameters.keys())
+    assert "dispatched_version" in params, (
+        "enrichment_mark_running must declare dispatched_version as an explicit arg"
+    )
+    ann = sig.parameters["dispatched_version"].annotation
+    assert ann is int or ann == "int", (
+        f"dispatched_version must be annotated as int, got {ann}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sanitized exception tests (finding 1/2)
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_4xx_input_get_error():
+    """Temporal-visible error for 4xx on GET enrichment-input must have fixed message.
+
+    No job ID, URL, response body, or customer fact may appear in the
+    ApplicationError message or its cause.
+    """
+    respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/status").mock(
+        return_value=Response(200, json={"version": 3})
+    )
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(403, json={"error": "forbidden", "jobId": str(JOB_ID)})
+    )
+
+    activities = _make_activities()
+    job_id = str(JOB_ID)
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(job_id, 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is True
+    assert err.type == "EnrichmentInputNonRetryable"
+    # Message must not contain job ID, URL, or response body content
+    msg = err.message or ""
+    assert str(JOB_ID) not in msg
+    assert BASE_URL not in msg
+    assert "forbidden" not in msg
+    assert "403" not in msg
+    # No cause chained
+    assert err.__cause__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_503_input_get_error():
+    """Temporal-visible error for 503 on GET enrichment-input: fixed message, no cause.
+
+    The response body value ("service_overloaded_detail") must not appear
+    in the error message -- only the fixed sanitized string is allowed.
+    """
+    respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/status").mock(
+        return_value=Response(200, json={"version": 3})
+    )
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(503, json={"error": "service_overloaded_detail"})
+    )
+
+    activities = _make_activities()
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(str(JOB_ID), 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is False
+    assert err.type == "EnrichmentInputTransient"
+    msg = err.message or ""
+    assert str(JOB_ID) not in msg
+    # Response body content must not leak into the error message
+    assert "service_overloaded_detail" not in msg
+    assert err.__cause__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_malformed_input_response():
+    """Temporal-visible error for Pydantic validation failure: fixed message, no raw input values."""
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(
+            200,
+            json={
+                "outcome": "evaluate",
+                "input": {
+                    "schemaVersion": 99,
+                    "INVALID_FIELD": "secret-customer-value",
+                },
+            },
+        )
+    )
+
+    activities = _make_activities()
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(str(JOB_ID), 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is True
+    assert err.type == "EnrichmentInputMalformed"
+    msg = err.message or ""
+    assert "secret-customer-value" not in msg
+    assert str(JOB_ID) not in msg
+    assert err.__cause__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_unexpected_outcome():
+    """Unexpected outcome string: fixed message, outcome value never interpolated."""
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(200, json={"outcome": "EVIL_OUTCOME_WITH_SECRETS"})
+    )
+
+    activities = _make_activities()
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(str(JOB_ID), 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is True
+    assert err.type == "EnrichmentInputUnexpectedOutcome"
+    msg = err.message or ""
+    assert "EVIL_OUTCOME_WITH_SECRETS" not in msg
+    assert str(JOB_ID) not in msg
+    assert err.__cause__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_4xx_result_post_error():
+    """Temporal-visible error for 4xx on POST enrichment-result: fixed message, no cause."""
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(200, json=_base_evaluate_input())
+    )
+    respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-result").mock(
+        return_value=Response(
+            422, json={"error": "schema_violation", "detail": "secret"}
+        )
+    )
+
+    activities = _make_activities()
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(str(JOB_ID), 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is True
+    assert err.type == "EnrichmentResultNonRetryable"
+    msg = err.message or ""
+    assert str(JOB_ID) not in msg
+    assert "secret" not in msg
+    assert "422" not in msg
+    assert err.__cause__ is None
+
+
+@respx.mock
+async def test_enrichment_process_sanitizes_503_result_post_error():
+    """Temporal-visible error for 503 on POST enrichment-result: fixed message, no cause.
+
+    The response body value ("result_server_overloaded_detail") must not appear
+    in the error message.
+    """
+    respx.get(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input").mock(
+        return_value=Response(200, json=_base_evaluate_input())
+    )
+    respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-result").mock(
+        return_value=Response(503, json={"error": "result_server_overloaded_detail"})
+    )
+
+    activities = _make_activities()
+    err: ApplicationError | None = None
+    try:
+        await activities.enrichment_process(str(JOB_ID), 3)
+    except ApplicationError as exc:
+        err = exc
+
+    assert err is not None
+    assert err.non_retryable is False
+    assert err.type == "EnrichmentResultTransient"
+    msg = err.message or ""
+    assert str(JOB_ID) not in msg
+    # Response body content must not leak into the error message
+    assert "result_server_overloaded_detail" not in msg
+    assert err.__cause__ is None
+
+
 # ---------------------------------------------------------------------------
 # Original FoundationEcho workflow test (unchanged)
 # ---------------------------------------------------------------------------
@@ -227,7 +435,8 @@ async def test_enrichment_workflow_marks_running_then_processes_and_succeeds():
         f"{JOB_ID}:enrichment:result:v1".encode()
         in result_route.calls[0].request.content
     )
-    # mark_running called with version=2 (DISPATCHED_JOB_VERSION)
+    # Workflow passes DISPATCHED_JOB_VERSION (2) as explicit primitive arg to mark_running.
+    # This appears in the status POST body as expectedJobVersion=2.
     assert b'"expectedJobVersion":2' in status_route.calls[0].request.content
     assert b'"status":"RUNNING"' in status_route.calls[0].request.content
 
@@ -455,8 +664,19 @@ async def test_enrichment_process_activity_nonretryable_4xx_fails_fast():
 
 
 @respx.mock
-async def test_enrichment_workflow_marks_failed_when_process_activity_exhausts_retries():
-    """After all retries fail (503), workflow calls enrichment_mark_failed and ends SUCCEEDED."""
+async def test_enrichment_workflow_marks_job_failed_then_re_raises_as_workflow_failure():
+    """After all retries fail (503), workflow POSTs job FAILED callback then re-raises.
+
+    Controller ruling (finding 6): the workflow calls enrichment_mark_failed to
+    mark the App job as FAILED, then re-raises the original process exception so
+    Temporal also records a workflow failure. Both outcomes are intentional and
+    must happen in order: App job marked FAILED first, then Temporal workflow fails.
+
+    Test asserts:
+    - status_route called at least twice (RUNNING then FAILED)
+    - exactly one FAILED status POST
+    - Temporal workflow also fails (WorkflowFailureError)
+    """
     status_route = respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/status").mock(
         return_value=Response(200, json={"version": 3})
     )
@@ -491,10 +711,70 @@ async def test_enrichment_workflow_marks_failed_when_process_activity_exhausts_r
                 task_queue=TASK_QUEUE,
             )
 
-    # mark_failed must POST status FAILED
-    # The status route is called twice: once for RUNNING, once for FAILED
+    # mark_failed must POST status=FAILED; status route called >=2 times (RUNNING + FAILED)
     assert status_route.call_count >= 2
     failed_calls = [
         c for c in status_route.calls if b'"status":"FAILED"' in c.request.content
     ]
     assert len(failed_calls) == 1
+    running_calls = [
+        c for c in status_route.calls if b'"status":"RUNNING"' in c.request.content
+    ]
+    assert len(running_calls) == 1
+    # RUNNING must come before FAILED in call order
+    assert status_route.calls.index(running_calls[0]) < status_route.calls.index(
+        failed_calls[0]
+    )
+
+
+@respx.mock
+async def test_enrichment_process_get_retried_on_each_attempt_when_post_fails():
+    """When the result POST fails transiently, Temporal re-runs the full activity.
+
+    On each attempt, the GET is re-executed before the POST (the activity body
+    runs from the top). Both operations must be idempotent:
+    - GET is read-only (safe to repeat).
+    - POST carries a fixed idempotency key so a replayed successful POST is a no-op.
+
+    This test proves the GET call count matches the POST call count (one GET
+    per attempt), confirming the retry-from-top behaviour.
+    """
+    respx.post(f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/status").mock(
+        return_value=Response(200, json={"version": 3})
+    )
+    # All GET calls succeed
+    get_route = respx.get(
+        f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-input"
+    ).mock(return_value=Response(200, json=_base_evaluate_input()))
+    # All POST calls fail transiently (triggers 5 retries)
+    post_route = respx.post(
+        f"{BASE_URL}/internal/v1/jobs/{JOB_ID}/enrichment-result"
+    ).mock(return_value=Response(503, json={"error": "transient"}))
+
+    activities = _make_activities()
+    async with (
+        await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter,
+        ) as env,
+        Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[ExpenseEnrichmentWorkflow],
+            activities=[
+                activities.enrichment_mark_running,
+                activities.enrichment_process,
+                activities.enrichment_mark_failed,
+            ],
+        ),
+    ):
+        with pytest.raises(WorkflowFailureError):
+            await env.client.execute_workflow(
+                ExpenseEnrichmentWorkflow.run,
+                job_reference(),
+                id=f"enrichment-get-retry-{JOB_ID}",
+                task_queue=TASK_QUEUE,
+            )
+
+    # 5 POST attempts (maximum_attempts=5); GET re-executed once per attempt
+    assert post_route.call_count == 5
+    assert get_route.call_count == 5

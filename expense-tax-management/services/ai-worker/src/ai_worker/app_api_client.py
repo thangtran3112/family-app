@@ -209,7 +209,14 @@ class EnrichmentInputClient:
 
 
 def enrichment_input_client_from_env() -> EnrichmentInputClient:
-    """Enrichment input client. Scope: jobs:enrichment-input. Subject: ai-worker-app-machine."""
+    """Enrichment input client.
+
+    Scope: jobs:enrichment-input only.
+    Same machine credential (CLERK_APP_MACHINE_SECRET_KEY) and subject
+    (CLERK_APP_SERVICE_SUBJECT) as the OCR client; a separate
+    CachedM2MTokenProvider instance is created so the token cache and
+    scope tuple stay fully independent.
+    """
     base_url = os.environ["APP_API_BASE_URL"]
     service_token = os.environ.get("APP_API_SERVICE_TOKEN")
     if service_token:
@@ -217,13 +224,9 @@ def enrichment_input_client_from_env() -> EnrichmentInputClient:
 
     audience = os.environ["CLERK_APP_SERVICE_AUDIENCE"]
     scopes = ("jobs:enrichment-input",)
-    machine_secret = (
-        os.environ.get("CLERK_ENRICHMENT_INPUT_MACHINE_SECRET_KEY")
-        or os.environ["CLERK_APP_MACHINE_SECRET_KEY"]
-    )
     subject = os.environ["CLERK_APP_SERVICE_SUBJECT"]
     issuer = ClerkM2MTokenIssuer(
-        machine_secret_key=machine_secret,
+        machine_secret_key=os.environ["CLERK_APP_MACHINE_SECRET_KEY"],
         issuer=os.environ["CLERK_ISSUER_URL"],
         audience=audience,
         scopes=scopes,
@@ -294,7 +297,14 @@ class EnrichmentResultClient:
 
 
 def enrichment_result_client_from_env() -> EnrichmentResultClient:
-    """Enrichment result client. Scope: jobs:enrichment-result. Subject: ai-worker-app-machine."""
+    """Enrichment result client.
+
+    Scope: jobs:enrichment-result only.
+    Same machine credential (CLERK_APP_MACHINE_SECRET_KEY) and subject
+    (CLERK_APP_SERVICE_SUBJECT) as the OCR client; a separate
+    CachedM2MTokenProvider instance is created so the token cache and
+    scope tuple stay fully independent.
+    """
     base_url = os.environ["APP_API_BASE_URL"]
     service_token = os.environ.get("APP_API_SERVICE_TOKEN")
     if service_token:
@@ -302,13 +312,9 @@ def enrichment_result_client_from_env() -> EnrichmentResultClient:
 
     audience = os.environ["CLERK_APP_SERVICE_AUDIENCE"]
     scopes = ("jobs:enrichment-result",)
-    machine_secret = (
-        os.environ.get("CLERK_ENRICHMENT_RESULT_MACHINE_SECRET_KEY")
-        or os.environ["CLERK_APP_MACHINE_SECRET_KEY"]
-    )
     subject = os.environ["CLERK_APP_SERVICE_SUBJECT"]
     issuer = ClerkM2MTokenIssuer(
-        machine_secret_key=machine_secret,
+        machine_secret_key=os.environ["CLERK_APP_MACHINE_SECRET_KEY"],
         issuer=os.environ["CLERK_ISSUER_URL"],
         audience=audience,
         scopes=scopes,

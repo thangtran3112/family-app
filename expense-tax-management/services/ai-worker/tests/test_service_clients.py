@@ -12,6 +12,7 @@ from ai_worker.app_api_client import (
     enrichment_input_client_from_env,
     enrichment_result_client_from_env,
 )
+from ai_worker.auth.client import CachedM2MTokenProvider
 from ai_worker.foundry_client import FoundryClient, foundry_client_from_env
 from ai_worker.ocr_activities import DeduplicationEvidenceV1
 
@@ -230,51 +231,110 @@ async def test_enrichment_result_client_posts_result():
 
 
 # ---------------------------------------------------------------------------
-# Separate scope factories
+# Separate scope factories -- M2M provider path (finding 5)
 # ---------------------------------------------------------------------------
 
-
-def test_enrichment_input_client_factory_uses_correct_scope(monkeypatch):
-    """enrichment_input_client_from_env produces a client with jobs:enrichment-input scope."""
-    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
-    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "inp-svc-token")
-
-    client = enrichment_input_client_from_env()
-    # Service-token path: no token provider
-    assert client._service_token == "inp-svc-token"
-    assert client._token_provider is None
+_M2M_ENV = {
+    "APP_API_BASE_URL": "http://app.test",
+    "CLERK_APP_SERVICE_AUDIENCE": "mch_audience",
+    "CLERK_APP_MACHINE_SECRET_KEY": "ak_test_machine_secret",
+    "CLERK_ISSUER_URL": "https://clerk.test",
+    "CLERK_APP_SERVICE_SUBJECT": "mch_subject",
+}
 
 
-def test_enrichment_result_client_factory_uses_correct_scope(monkeypatch):
-    """enrichment_result_client_from_env produces a client with jobs:enrichment-result scope."""
-    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
-    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "res-svc-token")
-
-    client = enrichment_result_client_from_env()
-    assert client._service_token == "res-svc-token"
-    assert client._token_provider is None
+def _provider_from(client) -> CachedM2MTokenProvider:
+    """Unwrap the bound-method token_provider to the CachedM2MTokenProvider."""
+    assert client._token_provider is not None, (
+        "Expected M2M provider path, got service-token"
+    )
+    return client._token_provider.__self__
 
 
-def test_ocr_client_does_not_carry_enrichment_scopes(monkeypatch):
-    """The existing OCR/status client keeps exactly jobs:write + files:read.
-
-    Specifically it must NOT gain enrichment-input or enrichment-result scopes.
-    The test inspects the factory path that builds a M2M token provider;
-    when APP_API_SERVICE_TOKEN is absent the factory wires CachedM2MTokenProvider
-    with explicit scopes -- those scopes are stored on the provider and returned
-    when we access the internal _token_provider attribute.
-    """
-    # Use legacy service token path -- ensures the client object is created
-    # without enrichment scopes mixed in.
-    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
-    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "ocr-token")
+def test_ocr_client_m2m_provider_scopes_exactly_jobs_write_and_files_read(monkeypatch):
+    """OCR/status factory (M2M path) must produce scopes=(jobs:write, files:read) only."""
+    for k, v in _M2M_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("APP_API_SERVICE_TOKEN", raising=False)
 
     client = app_api_client_from_env()
-    # Legacy path: no token provider wired at all
-    assert client._service_token == "ocr-token"
-    assert client._token_provider is None
-    # The enrichment clients are separate objects entirely
+    provider = _provider_from(client)
+
+    assert isinstance(provider, CachedM2MTokenProvider)
+    assert set(provider._scopes) == {"jobs:write", "files:read"}
+    assert "jobs:enrichment-input" not in provider._scopes
+    assert "jobs:enrichment-result" not in provider._scopes
+
+
+def test_enrichment_input_client_m2m_provider_scope_is_enrichment_input_only(
+    monkeypatch,
+):
+    """Enrichment input factory (M2M path) must produce scopes=(jobs:enrichment-input,) only."""
+    for k, v in _M2M_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("APP_API_SERVICE_TOKEN", raising=False)
+
+    client = enrichment_input_client_from_env()
+    provider = _provider_from(client)
+
+    assert isinstance(provider, CachedM2MTokenProvider)
+    assert set(provider._scopes) == {"jobs:enrichment-input"}
+    assert "jobs:write" not in provider._scopes
+    assert "files:read" not in provider._scopes
+    assert "jobs:enrichment-result" not in provider._scopes
+
+
+def test_enrichment_result_client_m2m_provider_scope_is_enrichment_result_only(
+    monkeypatch,
+):
+    """Enrichment result factory (M2M path) must produce scopes=(jobs:enrichment-result,) only."""
+    for k, v in _M2M_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("APP_API_SERVICE_TOKEN", raising=False)
+
+    client = enrichment_result_client_from_env()
+    provider = _provider_from(client)
+
+    assert isinstance(provider, CachedM2MTokenProvider)
+    assert set(provider._scopes) == {"jobs:enrichment-result"}
+    assert "jobs:write" not in provider._scopes
+    assert "files:read" not in provider._scopes
+    assert "jobs:enrichment-input" not in provider._scopes
+
+
+def test_three_m2m_providers_are_independent_instances(monkeypatch):
+    """Each factory must create a separate CachedM2MTokenProvider instance.
+
+    All three share CLERK_APP_MACHINE_SECRET_KEY and CLERK_APP_SERVICE_SUBJECT
+    (one Clerk App machine credential) but must NOT share a provider instance
+    so their token caches and scope tuples remain fully independent.
+    """
+    for k, v in _M2M_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("APP_API_SERVICE_TOKEN", raising=False)
+
+    ocr_client = app_api_client_from_env()
     inp_client = enrichment_input_client_from_env()
     res_client = enrichment_result_client_from_env()
-    assert inp_client is not client
-    assert res_client is not client
+
+    ocr_prov = _provider_from(ocr_client)
+    inp_prov = _provider_from(inp_client)
+    res_prov = _provider_from(res_client)
+
+    # Three distinct provider instances
+    assert ocr_prov is not inp_prov
+    assert ocr_prov is not res_prov
+    assert inp_prov is not res_prov
+
+    # All share same audience and subject (one Clerk App machine credential)
+    assert ocr_prov._audience == inp_prov._audience == res_prov._audience
+    assert (
+        ocr_prov._source_machine_id
+        == inp_prov._source_machine_id
+        == res_prov._source_machine_id
+    )
+
+    # Each carries only its own scope
+    assert set(ocr_prov._scopes) == {"jobs:write", "files:read"}
+    assert set(inp_prov._scopes) == {"jobs:enrichment-input"}
+    assert set(res_prov._scopes) == {"jobs:enrichment-result"}

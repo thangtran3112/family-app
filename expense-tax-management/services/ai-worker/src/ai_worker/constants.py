@@ -22,3 +22,8 @@ EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION = "expense-enrichment-v1"
 # Evaluator constants — mirror TS ENRICHMENT_RULES_VERSION / ENRICHMENT_RULE_KEYS.
 ENRICHMENT_RULES_VERSION: int = 1
 ENRICHMENT_RULE_KEYS: tuple[str, ...] = ("merchant", "weekend", "selected_category")
+
+# Dispatcher version: dispatchPendingJobs always bumps the job from version 1
+# (createJob) to version 2 before the workflow starts. Defined here so
+# workflows, activities, and tests can all import without circular deps.
+DISPATCHED_JOB_VERSION: int = 2
