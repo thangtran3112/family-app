@@ -36,6 +36,7 @@ class Suggestions(BaseModel):
     confidence: confloat(ge=0.0, le=1.0)
     evidenceHash: constr(pattern=r"^[a-f0-9]{64}$")
     kind: Literal["tag"]
+    source: Literal["historical"]
     tagKey: constr(min_length=1, max_length=100)
 
 
@@ -47,6 +48,7 @@ class Suggestions1(BaseModel):
     confidence: confloat(ge=0.0, le=1.0)
     evidenceHash: constr(pattern=r"^[a-f0-9]{64}$")
     kind: Literal["spending_category"]
+    source: Literal["historical"]
     spendingCategoryId: UUID
 
 
@@ -61,6 +63,7 @@ class Suggestions2(BaseModel):
     evidenceHash: constr(pattern=r"^[a-f0-9]{64}$")
     expenseVersion: conint(le=9007199254740991, gt=0)
     kind: Literal["tax_category"]
+    source: Literal["historical"]
     taxCategoryDefinitionId: UUID
     taxonomyVersionId: UUID
     taxYear: conint(ge=1900, le=9999)

@@ -67,6 +67,10 @@
                 "const": "tag",
                 "type": "string"
               },
+              "source": {
+                "const": "historical",
+                "type": "string"
+              },
               "tagKey": {
                 "maxLength": 100,
                 "minLength": 1,
@@ -75,6 +79,7 @@
             },
             "required": [
               "kind",
+              "source",
               "tagKey",
               "confidence",
               "evidenceHash",
@@ -118,6 +123,10 @@
                 "const": "spending_category",
                 "type": "string"
               },
+              "source": {
+                "const": "historical",
+                "type": "string"
+              },
               "spendingCategoryId": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -126,6 +135,7 @@
             },
             "required": [
               "kind",
+              "source",
               "spendingCategoryId",
               "confidence",
               "evidenceHash",
@@ -184,6 +194,10 @@
                 "const": "tax_category",
                 "type": "string"
               },
+              "source": {
+                "const": "historical",
+                "type": "string"
+              },
               "taxCategoryDefinitionId": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -202,6 +216,7 @@
             },
             "required": [
               "kind",
+              "source",
               "taxCategoryDefinitionId",
               "businessTaxProfileId",
               "businessTaxProfileVersion",

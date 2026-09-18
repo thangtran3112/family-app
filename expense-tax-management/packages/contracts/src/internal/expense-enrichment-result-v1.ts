@@ -58,10 +58,14 @@ const AggregateCounts = z
 
 // ------------------------------------------------------------------ //
 // Suggestion variants — strictly discriminated by kind
+// source:"historical" is required on every variant; "ai" is reserved and
+// must not be emitted by Phase 3C v1 workers.
 // ------------------------------------------------------------------ //
 
 const TagSuggestionSchema = z.strictObject({
   kind: z.literal("tag"),
+  /** Phase 3C v1 workers must always emit "historical". "ai" is reserved. */
+  source: z.literal("historical"),
   tagKey: z.string().min(1).max(100),
   confidence: z.number().min(0).max(1),
   evidenceHash: EvidenceHashSchema,
@@ -70,6 +74,8 @@ const TagSuggestionSchema = z.strictObject({
 
 const SpendingCategorySuggestionSchema = z.strictObject({
   kind: z.literal("spending_category"),
+  /** Phase 3C v1 workers must always emit "historical". "ai" is reserved. */
+  source: z.literal("historical"),
   spendingCategoryId: z.uuid(),
   confidence: z.number().min(0).max(1),
   evidenceHash: EvidenceHashSchema,
@@ -83,6 +89,8 @@ const SpendingCategorySuggestionSchema = z.strictObject({
  */
 const TaxCategorySuggestionSchema = z.strictObject({
   kind: z.literal("tax_category"),
+  /** Phase 3C v1 workers must always emit "historical". "ai" is reserved. */
+  source: z.literal("historical"),
   taxCategoryDefinitionId: z.uuid(),
   businessTaxProfileId: z.uuid(),
   businessTaxProfileVersion: VersionSchema,
@@ -121,7 +129,7 @@ function suggestionIdentity(s: ParsedSuggestion): string {
 export const ExpenseEnrichmentResultV1Schema = z
   .strictObject({
     schemaVersion: z.literal(1),
-    rulesVersion: z.number().int().positive(),
+    rulesVersion: VersionSchema,
     /**
      * applied: rules ran and result is actionable
      * stale:   expense version changed before worker submitted result

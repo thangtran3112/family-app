@@ -489,6 +489,7 @@ const validResultWithSuggestions: ExpenseEnrichmentResultV1 = {
   suggestions: [
     {
       kind: "tag",
+      source: "historical",
       tagKey: "merchant:starbucks",
       confidence: 0.9,
       evidenceHash: "a".repeat(64),
@@ -496,6 +497,7 @@ const validResultWithSuggestions: ExpenseEnrichmentResultV1 = {
     },
     {
       kind: "spending_category",
+      source: "historical",
       spendingCategoryId: ids.categoryId,
       confidence: 0.85,
       evidenceHash: "b".repeat(64),
@@ -503,6 +505,7 @@ const validResultWithSuggestions: ExpenseEnrichmentResultV1 = {
     },
     {
       kind: "tax_category",
+      source: "historical",
       taxCategoryDefinitionId: ids.taxCategoryId,
       businessTaxProfileId: ids.taxProfileId,
       businessTaxProfileVersion: 2,
@@ -1172,6 +1175,7 @@ describe("ExpenseEnrichmentResultV1Schema – unique suggestions by kind+candida
         suggestions: [
           {
             kind: "tag",
+            source: "historical",
             tagKey: "merchant:starbucks",
             confidence: 0.9,
             evidenceHash: "a".repeat(64),
@@ -1179,6 +1183,7 @@ describe("ExpenseEnrichmentResultV1Schema – unique suggestions by kind+candida
           },
           {
             kind: "tag",
+            source: "historical",
             tagKey: "timing:weekend",
             confidence: 0.8,
             evidenceHash: "b".repeat(64),
@@ -1279,6 +1284,7 @@ describe("ExpenseEnrichmentResultV1Schema – unique suggestions by kind+candida
         suggestions: [
           {
             kind: "tag",
+            source: "historical",
             tagKey: "merchant:starbucks",
             confidence: 0.9,
             evidenceHash: "a".repeat(64),
@@ -1286,6 +1292,7 @@ describe("ExpenseEnrichmentResultV1Schema – unique suggestions by kind+candida
           },
           {
             kind: "spending_category",
+            source: "historical",
             spendingCategoryId: ids.categoryId,
             confidence: 0.85,
             evidenceHash: "b".repeat(64),
@@ -1308,6 +1315,7 @@ describe("ExpenseEnrichmentResultV1Schema – aggregateCounts matchCount <= exam
         suggestions: [
           {
             kind: "tag",
+            source: "historical",
             tagKey: "merchant:starbucks",
             confidence: 1.0,
             evidenceHash: "a".repeat(64),
@@ -1325,6 +1333,7 @@ describe("ExpenseEnrichmentResultV1Schema – aggregateCounts matchCount <= exam
         suggestions: [
           {
             kind: "tag",
+            source: "historical",
             tagKey: "merchant:starbucks",
             confidence: 0.5,
             evidenceHash: "a".repeat(64),
@@ -1512,11 +1521,344 @@ describe("ExpenseEnrichmentResultV1Schema – no-mutation semantics for stale an
           {
             kind: "tag",
             tagKey: "timing:weekend",
+            source: "historical",
             confidence: 0.9,
             evidenceHash: "a".repeat(64),
             aggregateCounts: { exampleCount: 5, matchCount: 4 },
           },
         ],
+      }).success,
+    ).toBe(true);
+  });
+});
+
+// ================================================================== //
+// Fix round 1/5: source literal, VersionSchema rulesVersion,
+//                empty eligible-tag-key negative test
+// ================================================================== //
+
+// ------------------------------------------------------------------ //
+// Result: source:"historical" required on every suggestion variant
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – source:historical binding on suggestions", () => {
+  const hashA = "a".repeat(64);
+
+  it("accepts tag suggestion with source:historical", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            source: "historical",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects tag suggestion missing source field", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects tag suggestion with source:ai (reserved, not emitted by Phase 3C v1)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            source: "ai",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects tag suggestion with unknown source value", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            source: "rule",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("still rejects extra unknown fields on tag suggestion with valid source", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            source: "historical",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+            extraField: "leaked",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts spending_category suggestion with source:historical", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "spending_category",
+            source: "historical",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.85,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects spending_category suggestion missing source field", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.85,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects spending_category suggestion with source:ai", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "spending_category",
+            source: "ai",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.85,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts tax_category suggestion with source:historical", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tax_category",
+            source: "historical",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 3, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects tax_category suggestion missing source field", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tax_category",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 3, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects tax_category suggestion with source:ai", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tax_category",
+            source: "ai",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.9,
+            evidenceHash: hashA,
+            aggregateCounts: { exampleCount: 3, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Result: rulesVersion uses VersionSchema (positive integer, not float)
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – rulesVersion uses VersionSchema", () => {
+  it("accepts rulesVersion=1 (minimum positive integer)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects rulesVersion=0", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 0,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects rulesVersion negative", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: -1,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects non-integer rulesVersion (float)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1.5,
+        outcome: "applied",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Input: empty string rejected in eligibleTagKeys
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentInputV1Schema – empty string rejected in eligibleTagKeys", () => {
+  it("rejects eligibleTagKeys containing an empty string", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTagKeys: ["merchant:starbucks", ""],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts eligibleTagKeys with all non-empty strings", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTagKeys: ["merchant:starbucks", "timing:weekend"],
       }).success,
     ).toBe(true);
   });
