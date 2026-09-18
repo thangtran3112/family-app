@@ -305,16 +305,52 @@ describe("expense enrichment migration 016 – schema structure", () => {
 
   // ---- down() ---------------------------------------------------------
 
+  // ---- suggestion_id deep validation triggers ----------------------------
+
+  it("expense_tags has suggestion_id linkage trigger validating expense/scope/kind/tag_id", () => {
+    expect(migration).toContain("validate_expense_tag_suggestion_linkage");
+    expect(migration).toContain("expense_tags_suggestion_linkage_trigger");
+    expect(migration).toMatch(/sug_kind IS DISTINCT FROM 'tag'/);
+    expect(migration).toMatch(/sug_tag_id IS DISTINCT FROM NEW\.tag_id/);
+    expect(migration).toMatch(/sug_expense_id IS DISTINCT FROM NEW\.expense_id/);
+  });
+
+  it("expense_spending_category_decisions has suggestion_id linkage trigger validating expense/scope/kind/spending_category_id", () => {
+    expect(migration).toContain("validate_category_decision_suggestion_linkage");
+    expect(migration).toContain("expense_spending_category_decisions_suggestion_linkage_trigger");
+    expect(migration).toMatch(/sug_kind IS DISTINCT FROM 'spending_category'/);
+    expect(migration).toMatch(/sug_spending_category_id IS DISTINCT FROM NEW\.new_spending_category_id/);
+    expect(migration).toMatch(/sug_expense_id IS DISTINCT FROM NEW\.expense_id/);
+  });
+
+  // ---- resolution state check -------------------------------------------
+
+  it("resolution check allows superseded with null resolver (system supersession)", () => {
+    expect(migration).toContain("expense_enrichment_suggestions_resolution_check");
+    // superseded only requires resolved_at, not resolved_by_user_id
+    expect(migration).toMatch(/status\s*=\s*'superseded'[\s\S]*resolved_at IS NOT NULL/);
+    // accepted/rejected require both
+    expect(migration).toMatch(/status\s+IN\s*\(\s*'accepted',\s*'rejected'\s*\)[\s\S]*resolved_by_user_id IS NOT NULL[\s\S]*resolved_at IS NOT NULL/);
+    // pending requires both null
+    expect(migration).toMatch(/status\s*=\s*'pending'[\s\S]*resolved_by_user_id IS NULL[\s\S]*resolved_at IS NULL/);
+  });
+
+  // ---- down() -------------------------------------------------------------
+
   it("down() drops triggers, functions, and tables in correct order", () => {
     expect(migration).toContain("DROP TRIGGER IF EXISTS enrichment_suggestions_terminal_guard_trigger");
     expect(migration).toContain("DROP TRIGGER IF EXISTS expenses_enrichment_parent_scope_guard_trigger");
     expect(migration).toContain("DROP TRIGGER IF EXISTS expense_tags_scope_validation_trigger");
     expect(migration).toContain("DROP TRIGGER IF EXISTS expense_spending_category_decisions_append_only_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_tags_suggestion_linkage_trigger");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS expense_spending_category_decisions_suggestion_linkage_trigger");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_enrichment_suggestion_terminal_update()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_enrichment_parent_scope_update()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_enrichment_child_scope()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.prevent_category_decision_mutation()");
     expect(migration).toContain("DROP FUNCTION IF EXISTS app.check_enrichment_evidence_size()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_expense_tag_suggestion_linkage()");
+    expect(migration).toContain("DROP FUNCTION IF EXISTS app.validate_category_decision_suggestion_linkage()");
     expect(migration).toMatch(/dropTable\("app\.enrichment_operation_keys"\)/);
     expect(migration).toMatch(/dropTable\("app\.expense_enrichment_suggestions"\)/);
     expect(migration).toMatch(/dropTable\("app\.expense_spending_category_decisions"\)/);

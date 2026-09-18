@@ -279,6 +279,9 @@ const TaxSnapshotNullFields = {
 };
 
 // Resolution state refine
+// pending:            resolver=null, time=null
+// accepted/rejected:  resolver IS NOT NULL (human action required), time IS NOT NULL
+// superseded:         time IS NOT NULL, resolver may be null (system invalidation)
 const resolutionStateRefine = (value: {
   status: string;
   resolvedByUserId: string | null;
@@ -287,7 +290,9 @@ const resolutionStateRefine = (value: {
   (value.status === "pending" &&
     value.resolvedByUserId === null &&
     value.resolvedAt === null) ||
-  (value.status !== "pending" &&
+  (value.status === "superseded" &&
+    value.resolvedAt !== null) ||
+  ((value.status === "accepted" || value.status === "rejected") &&
     value.resolvedByUserId !== null &&
     value.resolvedAt !== null);
 

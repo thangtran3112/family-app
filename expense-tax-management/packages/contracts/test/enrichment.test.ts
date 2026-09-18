@@ -463,20 +463,58 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
     expect(EnrichmentSuggestionSchema.safeParse({ ...baseTagSuggestion, idempotencyKey: "" }).success).toBe(false);
   });
 
-  it("resolved state: accepted/rejected/superseded require resolvedByUserId + resolvedAt", () => {
-    const resolved = {
+  it("accepted/rejected require both resolvedByUserId (human) and resolvedAt", () => {
+    const humanResolved = {
       resolvedByUserId: ids.userId,
       resolvedAt: "2026-09-13T00:00:00.000Z",
     };
-    for (const status of ["accepted", "rejected", "superseded"] as const) {
+    for (const status of ["accepted", "rejected"] as const) {
       expect(
-        EnrichmentSuggestionSchema.safeParse({ ...baseTagSuggestion, status, ...resolved }).success,
-        `status '${status}' with resolution should be valid`,
+        EnrichmentSuggestionSchema.safeParse({ ...baseTagSuggestion, status, ...humanResolved }).success,
+        `status '${status}' with human resolver should be valid`,
       ).toBe(true);
+      // missing resolvedByUserId => fail
+      expect(
+        EnrichmentSuggestionSchema.safeParse({
+          ...baseTagSuggestion,
+          status,
+          resolvedByUserId: null,
+          resolvedAt: humanResolved.resolvedAt,
+        }).success,
+        `status '${status}' without resolver should fail`,
+      ).toBe(false);
     }
-    // pending must NOT have resolved fields
+  });
+
+  it("superseded requires resolvedAt but resolvedByUserId may be null (system supersession)", () => {
+    // System supersession: resolver null, time present
     expect(
-      EnrichmentSuggestionSchema.safeParse({ ...baseTagSuggestion, ...resolved }).success,
+      EnrichmentSuggestionSchema.safeParse({
+        ...baseTagSuggestion,
+        status: "superseded",
+        resolvedByUserId: null,
+        resolvedAt: "2026-09-13T00:00:00.000Z",
+      }).success,
+    ).toBe(true);
+
+    // User-driven supersession: both present
+    expect(
+      EnrichmentSuggestionSchema.safeParse({
+        ...baseTagSuggestion,
+        status: "superseded",
+        resolvedByUserId: ids.userId,
+        resolvedAt: "2026-09-13T00:00:00.000Z",
+      }).success,
+    ).toBe(true);
+
+    // Missing resolvedAt => fail even for superseded
+    expect(
+      EnrichmentSuggestionSchema.safeParse({
+        ...baseTagSuggestion,
+        status: "superseded",
+        resolvedByUserId: null,
+        resolvedAt: null,
+      }).success,
     ).toBe(false);
   });
 
@@ -485,6 +523,12 @@ describe("EnrichmentSuggestion schemas – spec alignment", () => {
       EnrichmentSuggestionSchema.safeParse({
         ...baseTagSuggestion,
         resolvedByUserId: ids.userId,
+      }).success,
+    ).toBe(false);
+    expect(
+      EnrichmentSuggestionSchema.safeParse({
+        ...baseTagSuggestion,
+        resolvedAt: "2026-09-13T00:00:00.000Z",
       }).success,
     ).toBe(false);
   });

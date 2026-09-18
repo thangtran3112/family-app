@@ -512,6 +512,277 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
   );
 
   it(
+    "suggestion_id linkage trigger rejects expense_tag with wrong-kind/wrong-expense/wrong-candidate suggestion",
+    () => {
+      // IDs scoped to this test
+      const linkExpId    = "3c000000-0000-4000-8000-bb0000000001";
+      const linkJobId    = "3c000000-0000-4000-8000-bb0000000002";
+      const linkTagId    = "3c000000-0000-4000-8000-bb0000000003";
+      const linkTag2Id   = "3c000000-0000-4000-8000-bb0000000004";
+      const linkSugId    = "3c000000-0000-4000-8000-bb0000000005";
+      const linkCatId    = "3c000000-0000-4000-8000-bb0000000006";
+      const linkCatSugId = "3c000000-0000-4000-8000-bb0000000007";
+      const evidenceHash = "c".repeat(64);
+
+      // Seed expense + job + two tags + a valid tag suggestion + a spending_category suggestion
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${linkExpId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'LinkTestMerchant', '3.00', 'USD', '2026-09-12', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      runtimeSql(`
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${linkJobId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'EnrichmentLinkTest', gen_random_uuid()::text, 'enrichment', 'PENDING',
+           '{}', '1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      runtimeSql(`
+        INSERT INTO app.tags
+          (id, tenant_id, key, name, origin, status)
+        VALUES
+          ('${linkTagId}',  '${PHASE_3C_TENANT_A_ID}', 'link-test-tag-a', 'Link Test A', 'rule', 'active'),
+          ('${linkTag2Id}', '${PHASE_3C_TENANT_A_ID}', 'link-test-tag-b', 'Link Test B', 'rule', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // A valid tag suggestion (kind=tag, tag_id=linkTagId)
+      runtimeSql(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${linkSugId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL, '${linkExpId}', '${linkJobId}',
+           'tag', '${linkTagId}', NULL, NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.9, '${evidenceHash}', 'pending', 1, 1, 'link-test-sug-1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // A spending_category suggestion for same expense
+      runtimeSql(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${linkCatSugId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL, '${linkExpId}', '${linkJobId}',
+           'spending_category', NULL, '${linkCatId}', NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.8, '${"d".repeat(64)}', 'pending', 1, 1, 'link-test-sug-2')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Case 1: wrong kind — expense_tag linked to spending_category suggestion => rejected
+      let wrongKindRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, suggestion_id, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${linkExpId}', '${linkTagId}', 'historical', 0.9,
+             '${linkCatSugId}', 'active');
+        `);
+      } catch {
+        wrongKindRejected = true;
+      }
+      expect(wrongKindRejected, "expense_tag with wrong-kind (spending_category) suggestion must be rejected").toBe(true);
+
+      // Case 2: wrong candidate — expense_tag linked to correct-kind suggestion but different tag_id => rejected
+      let wrongCandidateRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, suggestion_id, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${linkExpId}', '${linkTag2Id}', 'historical', 0.9,
+             '${linkSugId}', 'active');
+        `);
+      } catch {
+        wrongCandidateRejected = true;
+      }
+      expect(wrongCandidateRejected, "expense_tag with wrong tag_id vs suggestion candidate must be rejected").toBe(true);
+
+      // Case 3: correct linkage — should succeed
+      let validTagInserted = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, suggestion_id, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${linkExpId}', '${linkTagId}', 'historical', 0.9,
+             '${linkSugId}', 'active');
+        `);
+        validTagInserted = true;
+      } catch {
+        validTagInserted = false;
+      }
+      expect(validTagInserted, "expense_tag with correct suggestion linkage must succeed").toBe(true);
+    },
+  );
+
+  it(
+    "suggestion_id linkage trigger rejects category decision with wrong-kind/wrong-candidate suggestion",
+    () => {
+      const decLinkExpId  = "3c000000-0000-4000-8000-aa0000000001";
+      const decLinkJobId  = "3c000000-0000-4000-8000-aa0000000002";
+      const decLinkTagId  = "3c000000-0000-4000-8000-aa0000000003";
+      const decLinkCatId  = "3c000000-0000-4000-8000-aa0000000004";
+      const decLinkCat2Id = "3c000000-0000-4000-8000-aa0000000005";
+      const decTagSugId   = "3c000000-0000-4000-8000-aa0000000006";
+      const decCatSugId   = "3c000000-0000-4000-8000-aa0000000007";
+
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${decLinkExpId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'DecLinkMerchant', '4.00', 'USD', '2026-09-12', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      runtimeSql(`
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${decLinkJobId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'EnrichmentDecLinkTest', gen_random_uuid()::text, 'enrichment', 'PENDING',
+           '{}', '1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      runtimeSql(`
+        INSERT INTO app.tags
+          (id, tenant_id, key, name, origin, status)
+        VALUES
+          ('${decLinkTagId}', '${PHASE_3C_TENANT_A_ID}', 'dec-link-tag', 'Dec Link Tag', 'rule', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Tag suggestion for the expense
+      runtimeSql(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${decTagSugId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL, '${decLinkExpId}', '${decLinkJobId}',
+           'tag', '${decLinkTagId}', NULL, NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.9, '${"e".repeat(64)}', 'pending', 1, 1, 'dec-link-tag-sug')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Category suggestion for decLinkCatId
+      runtimeSql(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${decCatSugId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL, '${decLinkExpId}', '${decLinkJobId}',
+           'spending_category', NULL, '${decLinkCatId}', NULL,
+           NULL, NULL, NULL, NULL,
+           'historical', 0.8, '${"f".repeat(64)}', 'pending', 1, 1, 'dec-link-cat-sug')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Case 1: wrong kind — decision linked to tag suggestion => rejected
+      let wrongKindRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_spending_category_decisions
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             prior_spending_category_id, new_spending_category_id,
+             source, expense_version, suggestion_id)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL, '${decLinkExpId}',
+             NULL, '${decLinkCatId}',
+             'historical', 1, '${decTagSugId}');
+        `);
+      } catch {
+        wrongKindRejected = true;
+      }
+      expect(wrongKindRejected, "category decision with tag-kind suggestion must be rejected").toBe(true);
+
+      // Case 2: wrong candidate — decision new_spending_category_id != suggestion spending_category_id => rejected
+      let wrongCandidateRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_spending_category_decisions
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             prior_spending_category_id, new_spending_category_id,
+             source, expense_version, suggestion_id)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL, '${decLinkExpId}',
+             NULL, '${decLinkCat2Id}',
+             'historical', 1, '${decCatSugId}');
+        `);
+      } catch {
+        wrongCandidateRejected = true;
+      }
+      expect(wrongCandidateRejected, "category decision with mismatched spending_category_id must be rejected").toBe(true);
+
+      // Case 3: correct linkage => success
+      let validDecInserted = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_spending_category_decisions
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             prior_spending_category_id, new_spending_category_id,
+             source, expense_version, suggestion_id)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL, '${decLinkExpId}',
+             NULL, '${decLinkCatId}',
+             'historical', 1, '${decCatSugId}');
+        `);
+        validDecInserted = true;
+      } catch {
+        validDecInserted = false;
+      }
+      expect(validDecInserted, "category decision with correct suggestion linkage must succeed").toBe(true);
+    },
+  );
+
+  it(
     "createPersonal creates exactly one ExpenseEnrichmentWorkflow job and one outbox row targeting the new expense",
     async () => {
       const db = database;

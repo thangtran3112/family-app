@@ -338,7 +338,8 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       CONSTRAINT expense_enrichment_suggestions_resolution_check
         CHECK (
           (status = 'pending' AND resolved_by_user_id IS NULL AND resolved_at IS NULL)
-          OR (status IN ('accepted', 'rejected', 'superseded') AND resolved_by_user_id IS NOT NULL AND resolved_at IS NOT NULL)
+          OR (status IN ('accepted', 'rejected') AND resolved_by_user_id IS NOT NULL AND resolved_at IS NOT NULL)
+          OR (status = 'superseded' AND resolved_at IS NOT NULL)
         )
     )
   `.execute(database);
@@ -433,6 +434,137 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       ADD CONSTRAINT expense_spending_category_decisions_suggestion_id_fk
         FOREIGN KEY (suggestion_id, tenant_id)
         REFERENCES app.expense_enrichment_suggestions(id, tenant_id)
+  `.execute(database);
+
+  // ------------------------------------------------------------------ //
+  // suggestion_id deep-validation trigger
+  //
+  // The FK from expense_tags/expense_spending_category_decisions to
+  // expense_enrichment_suggestions validates only (suggestion_id, tenant_id).
+  // This trigger enforces that when suggestion_id IS NOT NULL:
+  //
+  //   expense_tags: linked suggestion must match the row's expense_id,
+  //     exact personal/business scope, kind='tag', and tag_id.
+  //
+  //   expense_spending_category_decisions: linked suggestion must match the
+  //     row's expense_id, exact scope, kind='spending_category', and the
+  //     suggestion's spending_category_id must equal new_spending_category_id
+  //     (NULL=NULL counts as match for explicit clear-category decisions).
+  // ------------------------------------------------------------------ //
+  await sql`
+    CREATE OR REPLACE FUNCTION app.validate_expense_tag_suggestion_linkage()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      sug_expense_id uuid;
+      sug_personal_profile_id uuid;
+      sug_business_id uuid;
+      sug_kind text;
+      sug_tag_id uuid;
+    BEGIN
+      IF NEW.suggestion_id IS NULL THEN
+        RETURN NEW;
+      END IF;
+
+      SELECT expense_id, personal_profile_id, business_id, kind, tag_id
+        INTO sug_expense_id, sug_personal_profile_id, sug_business_id, sug_kind, sug_tag_id
+        FROM app.expense_enrichment_suggestions
+        WHERE id = NEW.suggestion_id AND tenant_id = NEW.tenant_id
+        FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'expense_tag suggestion_id % not found for tenant %',
+          NEW.suggestion_id, NEW.tenant_id;
+      END IF;
+
+      IF sug_expense_id IS DISTINCT FROM NEW.expense_id
+        OR sug_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+        OR sug_business_id IS DISTINCT FROM NEW.business_id THEN
+        RAISE EXCEPTION
+          'expense_tag suggestion scope/expense does not match row: suggestion expense=%, scope=(%, %), row expense=%, scope=(%, %)',
+          sug_expense_id, sug_personal_profile_id, sug_business_id,
+          NEW.expense_id, NEW.personal_profile_id, NEW.business_id;
+      END IF;
+
+      IF sug_kind IS DISTINCT FROM 'tag' THEN
+        RAISE EXCEPTION
+          'expense_tag suggestion_id % has kind %, must be tag',
+          NEW.suggestion_id, sug_kind;
+      END IF;
+
+      IF sug_tag_id IS DISTINCT FROM NEW.tag_id THEN
+        RAISE EXCEPTION
+          'expense_tag suggestion_id % candidate tag_id % does not match row tag_id %',
+          NEW.suggestion_id, sug_tag_id, NEW.tag_id;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_tags_suggestion_linkage_trigger
+      BEFORE INSERT OR UPDATE OF suggestion_id ON app.expense_tags
+      FOR EACH ROW EXECUTE FUNCTION app.validate_expense_tag_suggestion_linkage()
+  `.execute(database);
+
+  await sql`
+    CREATE OR REPLACE FUNCTION app.validate_category_decision_suggestion_linkage()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      sug_expense_id uuid;
+      sug_personal_profile_id uuid;
+      sug_business_id uuid;
+      sug_kind text;
+      sug_spending_category_id uuid;
+    BEGIN
+      IF NEW.suggestion_id IS NULL THEN
+        RETURN NEW;
+      END IF;
+
+      SELECT expense_id, personal_profile_id, business_id, kind, spending_category_id
+        INTO sug_expense_id, sug_personal_profile_id, sug_business_id, sug_kind, sug_spending_category_id
+        FROM app.expense_enrichment_suggestions
+        WHERE id = NEW.suggestion_id AND tenant_id = NEW.tenant_id
+        FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'category decision suggestion_id % not found for tenant %',
+          NEW.suggestion_id, NEW.tenant_id;
+      END IF;
+
+      IF sug_expense_id IS DISTINCT FROM NEW.expense_id
+        OR sug_personal_profile_id IS DISTINCT FROM NEW.personal_profile_id
+        OR sug_business_id IS DISTINCT FROM NEW.business_id THEN
+        RAISE EXCEPTION
+          'category decision suggestion scope/expense mismatch: suggestion expense=%, scope=(%, %), row expense=%, scope=(%, %)',
+          sug_expense_id, sug_personal_profile_id, sug_business_id,
+          NEW.expense_id, NEW.personal_profile_id, NEW.business_id;
+      END IF;
+
+      IF sug_kind IS DISTINCT FROM 'spending_category' THEN
+        RAISE EXCEPTION
+          'category decision suggestion_id % has kind %, must be spending_category',
+          NEW.suggestion_id, sug_kind;
+      END IF;
+
+      IF sug_spending_category_id IS DISTINCT FROM NEW.new_spending_category_id THEN
+        RAISE EXCEPTION
+          'category decision suggestion_id % candidate spending_category_id % does not match new_spending_category_id %',
+          NEW.suggestion_id, sug_spending_category_id, NEW.new_spending_category_id;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $function$;
+  `.execute(database);
+  await sql`
+    CREATE TRIGGER expense_spending_category_decisions_suggestion_linkage_trigger
+      BEFORE INSERT ON app.expense_spending_category_decisions
+      FOR EACH ROW EXECUTE FUNCTION app.validate_category_decision_suggestion_linkage()
   `.execute(database);
 
   // ------------------------------------------------------------------ //
@@ -574,11 +706,15 @@ export async function down(database: Kysely<unknown>): Promise<void> {
   await sql`DROP TRIGGER IF EXISTS enrichment_suggestions_terminal_guard_trigger ON app.expense_enrichment_suggestions`.execute(database);
   await sql`DROP TRIGGER IF EXISTS enrichment_suggestions_evidence_size_trigger ON app.expense_enrichment_suggestions`.execute(database);
   await sql`DROP TRIGGER IF EXISTS expense_spending_category_decisions_append_only_trigger ON app.expense_spending_category_decisions`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_tags_suggestion_linkage_trigger ON app.expense_tags`.execute(database);
+  await sql`DROP TRIGGER IF EXISTS expense_spending_category_decisions_suggestion_linkage_trigger ON app.expense_spending_category_decisions`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.prevent_enrichment_parent_scope_update()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.validate_enrichment_child_scope()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.prevent_enrichment_suggestion_terminal_update()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.check_enrichment_evidence_size()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.prevent_category_decision_mutation()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.validate_expense_tag_suggestion_linkage()`.execute(database);
+  await sql`DROP FUNCTION IF EXISTS app.validate_category_decision_suggestion_linkage()`.execute(database);
   await database.schema.dropTable("app.enrichment_operation_keys").ifExists().execute();
   await database.schema.dropTable("app.expense_enrichment_suggestions").ifExists().execute();
   await database.schema.dropTable("app.expense_spending_category_decisions").ifExists().execute();
