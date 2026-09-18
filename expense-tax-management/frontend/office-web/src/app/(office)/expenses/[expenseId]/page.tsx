@@ -188,16 +188,6 @@ function SuggestionCard({
   );
 }
 
-function HistoryPanel({ expenseId, source }: { expenseId: string; source: string }) {
-  // Renders the source-tagged history label only; full history loaded server-side
-  return (
-    <section aria-label="Decision history">
-      <h3>History</h3>
-      <p className="muted">Source: <strong>{getSuggestionSourceLabel(source as Parameters<typeof getSuggestionSourceLabel>[0])}</strong></p>
-      <p className="muted">Expense ID: {expenseId}</p>
-    </section>
-  );
-}
 
 export default function ExpenseDetail() {
   const params = useParams();
@@ -367,9 +357,6 @@ export default function ExpenseDetail() {
         </Panel>
       )}
 
-      {expense && (
-        <HistoryPanel expenseId={expense.id} source="manual" />
-      )}
     </>
   );
 }

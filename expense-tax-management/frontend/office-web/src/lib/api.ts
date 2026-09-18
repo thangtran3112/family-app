@@ -6,118 +6,6 @@ type AppApiClient = ReturnType<typeof createAppApiClient>;
 export const DUPLICATE_REVIEW_UPDATED_EVENT = "expense-tax:duplicate-review-updated";
 
 // ------------------------------------------------------------------ //
-// Scope path helpers
-// ------------------------------------------------------------------ //
-
-function scopeExpensesPath(session: OfficeSession): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId },
-  };
-}
-
-function scopeDuplicatePath(session: OfficeSession): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/duplicate-matches";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/duplicate-matches",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId },
-  };
-}
-
-function scopeDuplicateResolvePath(session: OfficeSession, matchId: string): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches/{matchId}/resolve"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/duplicate-matches/{matchId}/resolve";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/duplicate-matches/{matchId}/resolve",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId, matchId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/duplicate-matches/{matchId}/resolve",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId, matchId },
-  };
-}
-
-function scopeSuggestionResolvePath(session: OfficeSession, expenseId: string, suggestionId: string): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/suggestions/{suggestionId}/resolve"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}/suggestions/{suggestionId}/resolve";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/suggestions/{suggestionId}/resolve",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId, expenseId, suggestionId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}/suggestions/{suggestionId}/resolve",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId, expenseId, suggestionId },
-  };
-}
-
-function scopeSuggestionsPath(session: OfficeSession, expenseId: string): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/suggestions"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}/suggestions";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}/suggestions",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId, expenseId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}/suggestions",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId, expenseId },
-  };
-}
-
-function scopeExpenseDetailPath(session: OfficeSession, expenseId: string): {
-  path:
-    | "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}"
-    | "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}";
-  params: Record<string, string>;
-} {
-  if (session.scope.kind === "business") {
-    return {
-      path: "/api/v1/tenants/{tenantId}/businesses/{businessId}/expenses/{expenseId}",
-      params: { tenantId: session.tenantId, businessId: session.scope.businessId, expenseId },
-    };
-  }
-  return {
-    path: "/api/v1/tenants/{tenantId}/personal-profiles/{profileId}/expenses/{expenseId}",
-    params: { tenantId: session.tenantId, profileId: session.scope.profileId, expenseId },
-  };
-}
-
-// ------------------------------------------------------------------ //
 // Error types
 // ------------------------------------------------------------------ //
 
@@ -488,19 +376,19 @@ export async function createExport(session: OfficeSession, taxYear: number, getT
 // ------------------------------------------------------------------ //
 // Tags API (tenant-scoped, Personal and Business)
 // ------------------------------------------------------------------ //
-
-export type TagQueryOptions = {
-  status?: "active" | "archived";
-  cursor?: string;
-  limit?: number;
-};
+// NOTE: The generated /tenants/{tenantId}/tags GET endpoint has query?: never.
+// No client-side filtering or pagination is claimed. fetchTags returns all tags
+// as the server returns them. Tag write operations rely on server-side
+// expectedVersion OCC (one-row-per-entity semantics). No idempotency-key is
+// sent because the generated API routes do not expose an idempotency-key header
+// for tag CRUD. Server enforces one active record per tag/expense pair at DB
+// level.
 
 export async function fetchTags(
   session: OfficeSession,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
-  _options?: TagQueryOptions,
 ) {
   const api = client ?? createAppApiClient(session.apiBaseUrl);
   const result = await api.GET("/api/v1/tenants/{tenantId}/tags", {
@@ -511,11 +399,16 @@ export async function fetchTags(
   return result.data;
 }
 
+/**
+ * Creates a custom tag. No idempotency-key: server generates custom:<uuid> key
+ * server-side and the endpoint does not expose an idempotency-key header.
+ * Retry safety: duplicate creates will produce a new tag. Caller must not retry
+ * without user intent.
+ */
 export async function createTag(
   session: OfficeSession,
   name: string,
   color: string | null | undefined,
-  _idempotencyKey: string,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
@@ -530,11 +423,14 @@ export async function createTag(
   return result.data;
 }
 
+/**
+ * Updates a tag name/color. Uses expectedVersion for OCC conflict detection.
+ * No idempotency-key: endpoint does not expose one. Stale version returns 409.
+ */
 export async function updateTag(
   session: OfficeSession,
   tagId: string,
   body: { expectedVersion: number; name?: string; color?: string | null },
-  _idempotencyKey: string,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
@@ -553,11 +449,14 @@ export async function updateTag(
   return result.data;
 }
 
+/**
+ * Archives a tag (soft-delete). Uses expectedVersion for OCC. No idempotency-key.
+ * Idempotency guaranteed by server: re-archiving an already-archived tag returns 409.
+ */
 export async function archiveTag(
   session: OfficeSession,
   tagId: string,
   expectedVersion: number,
-  _idempotencyKey: string,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
@@ -576,11 +475,13 @@ export async function archiveTag(
   return result.data;
 }
 
+/**
+ * Unarchives a tag explicitly. Uses expectedVersion for OCC. No idempotency-key.
+ */
 export async function unarchiveTag(
   session: OfficeSession,
   tagId: string,
   expectedVersion: number,
-  _idempotencyKey: string,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
@@ -599,27 +500,80 @@ export async function unarchiveTag(
   return result.data;
 }
 
+/**
+ * Merges source into target tag. Uses expectedSourceVersion/expectedTargetVersion
+ * for OCC on both tags. Server returns 204 No Content on success.
+ * No idempotency-key: endpoint does not expose one. Self-merge and archived-target
+ * are rejected 409 by server.
+ */
 export async function mergeTags(
   session: OfficeSession,
   sourceTagId: string,
   targetTagId: string,
   expectedSourceVersion: number,
   expectedTargetVersion: number,
-  _idempotencyKey: string,
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
 ) {
   const api = client ?? createAppApiClient(session.apiBaseUrl);
+  // merge returns 204 No Content — treat missing data as success (not error)
   const result = await api.POST("/api/v1/tenants/{tenantId}/tags/{tagId}/merge", {
     params: { path: { tenantId: session.tenantId, tagId: sourceTagId } },
     headers: await getAppAuthorization(getToken, organizationId),
     body: { sourceTagId, targetTagId, expectedSourceVersion, expectedTargetVersion },
   });
-  if (!result.data) {
-    const status = (result as { response?: { status: number } }).response?.status;
+  // 204 No Content: result.data is undefined, result.response.status is 204
+  const status = result.response?.status;
+  if (status !== 204 && !result.data) {
     if (status === 409) throw new Error("Tag version conflict during merge. Refresh to see latest.");
     throw new Error("Tag merge unavailable");
   }
+}
+
+// ------------------------------------------------------------------ //
+// Identity / Membership API
+// ------------------------------------------------------------------ //
+
+export type TenantRole = "owner" | "admin" | "member";
+
+/**
+ * Fetches the authenticated user's identity from the API.
+ * Used to resolve the userId before fetching membership.
+ */
+export async function fetchCurrentUser(
+  session: OfficeSession,
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
+  client?: AppApiClient,
+) {
+  const api = client ?? createAppApiClient(session.apiBaseUrl);
+  const result = await api.GET("/api/v1/users/me", {
+    headers: await getAppAuthorization(getToken, organizationId),
+  });
+  if (!result.data) throw new Error("Current user unavailable");
   return result.data;
+}
+
+/**
+ * Fetches the current user's tenant membership role.
+ * Returns the role ("owner" | "admin" | "member") or null if not a member.
+ * Backend is authoritative; the role controls tag management UI gate only.
+ */
+export async function fetchTenantMembership(
+  session: OfficeSession,
+  userId: string,
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
+  client?: AppApiClient,
+): Promise<TenantRole | null> {
+  const api = client ?? createAppApiClient(session.apiBaseUrl);
+  const result = await api.GET("/api/v1/tenants/{tenantId}/memberships", {
+    params: { path: { tenantId: session.tenantId } },
+    headers: await getAppAuthorization(getToken, organizationId),
+  });
+  if (!result.data) throw new Error("Membership unavailable");
+  const membership = result.data.items.find((m) => m.userId === userId);
+  if (!membership || membership.status !== "active") return null;
+  return membership.role as TenantRole;
 }

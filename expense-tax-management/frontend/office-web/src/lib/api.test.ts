@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchDuplicateMatches, fetchLedger, fetchTags, resolveSuggestion } from "./api";
+import {
+  fetchDuplicateMatches,
+  fetchLedger,
+  fetchTags,
+  resolveSuggestion,
+  createTag,
+  updateTag,
+  archiveTag,
+  unarchiveTag,
+  mergeTags,
+  fetchCurrentUser,
+  fetchTenantMembership,
+} from "./api";
 import type { OfficeSession } from "./session";
 
 const businessSession: OfficeSession = {
@@ -105,21 +117,17 @@ describe("Office API authorization boundary", () => {
     );
   });
 
-  it("fetches tags at tenant scope", async () => {
+  it("fetches tags at tenant scope - no query params (server does not support filtering)", async () => {
     const client = { GET: vi.fn().mockResolvedValue({ data: { items: [], nextCursor: null } }) };
     const getToken = vi.fn().mockResolvedValue("office-token");
 
     await fetchTags(businessSession, getToken, "org_123", client as never);
 
-    expect(client.GET).toHaveBeenCalledWith(
-      "/api/v1/tenants/{tenantId}/tags",
-      expect.objectContaining({
-        params: expect.objectContaining({
-          path: { tenantId: "tenant-1" },
-        }),
-        headers: { authorization: "Bearer office-token" },
-      }),
-    );
+    const call = client.GET.mock.calls[0] as [string, { params: { path: unknown; query?: unknown }; headers: unknown }];
+    // Must NOT send a query object that would imply filtering is happening
+    expect(call[0]).toBe("/api/v1/tenants/{tenantId}/tags");
+    expect(call[1].params).not.toHaveProperty("query");
+    expect(call[1].headers).toEqual({ authorization: "Bearer office-token" });
   });
 });
 
@@ -208,5 +216,153 @@ describe("suggestion resolve API", () => {
         }),
       }),
     );
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Fix 1: tag write operations carry no fake idempotency param —
+// rely on expectedVersion OCC and server-side one-row semantics
+// ------------------------------------------------------------------ //
+
+describe("tag write API — no fake idempotency param, only expectedVersion OCC", () => {
+  it("createTag sends name/color body, no idempotency-key header", async () => {
+    const client = {
+      POST: vi.fn().mockResolvedValue({ data: { id: "tag-1", name: "Travel", version: 1 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await createTag(businessSession, "Travel", "#FF0000", getToken, "org_123", client as never);
+
+    const call = client.POST.mock.calls[0] as [string, { params: unknown; headers: unknown; body: unknown }];
+    expect(call[0]).toBe("/api/v1/tenants/{tenantId}/tags");
+    // No idempotency-key in params.header or HTTP headers
+    expect(JSON.stringify(call[1])).not.toContain("idempotency-key");
+    expect(call[1].body).toMatchObject({ name: "Travel" });
+  });
+
+  it("updateTag sends expectedVersion body, no idempotency-key", async () => {
+    const client = {
+      PATCH: vi.fn().mockResolvedValue({ data: { id: "tag-1", name: "Updated", version: 2 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await updateTag(businessSession, "tag-1", { expectedVersion: 1, name: "Updated" }, getToken, "org_123", client as never);
+
+    const call = client.PATCH.mock.calls[0] as [string, { body: unknown; headers: unknown }];
+    expect(call[0]).toBe("/api/v1/tenants/{tenantId}/tags/{tagId}");
+    expect(JSON.stringify(call[1])).not.toContain("idempotency-key");
+    expect(call[1].body).toMatchObject({ expectedVersion: 1, name: "Updated" });
+  });
+
+  it("archiveTag sends expectedVersion body, no idempotency-key", async () => {
+    const client = {
+      DELETE: vi.fn().mockResolvedValue({ data: { id: "tag-1", status: "archived", version: 2 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await archiveTag(businessSession, "tag-1", 1, getToken, "org_123", client as never);
+
+    const call = client.DELETE.mock.calls[0] as [string, { body: unknown; headers: unknown }];
+    expect(JSON.stringify(call[1])).not.toContain("idempotency-key");
+    expect(call[1].body).toMatchObject({ expectedVersion: 1 });
+  });
+
+  it("unarchiveTag sends expectedVersion body, no idempotency-key", async () => {
+    const client = {
+      POST: vi.fn().mockResolvedValue({ data: { id: "tag-1", status: "active", version: 3 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await unarchiveTag(businessSession, "tag-1", 2, getToken, "org_123", client as never);
+
+    const call = client.POST.mock.calls[0] as [string, { body: unknown; headers: unknown }];
+    expect(call[0]).toBe("/api/v1/tenants/{tenantId}/tags/{tagId}/unarchive");
+    expect(JSON.stringify(call[1])).not.toContain("idempotency-key");
+    expect(call[1].body).toMatchObject({ expectedVersion: 2 });
+  });
+
+  it("mergeTags sends source/target versions body, no idempotency-key", async () => {
+    const client = {
+      POST: vi.fn().mockResolvedValue({ data: undefined, response: { status: 204 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await mergeTags(businessSession, "src-1", "tgt-1", 1, 2, getToken, "org_123", client as never);
+
+    const call = client.POST.mock.calls[0] as [string, { body: unknown; headers: unknown }];
+    expect(call[0]).toBe("/api/v1/tenants/{tenantId}/tags/{tagId}/merge");
+    expect(JSON.stringify(call[1])).not.toContain("idempotency-key");
+    expect(call[1].body).toMatchObject({
+      sourceTagId: "src-1",
+      targetTagId: "tgt-1",
+      expectedSourceVersion: 1,
+      expectedTargetVersion: 2,
+    });
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Fix 4: membership lookup — real API calls, not hardcoded role
+// ------------------------------------------------------------------ //
+
+describe("tenant membership role lookup", () => {
+  it("fetchCurrentUser calls /api/v1/users/me with bearer token", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", primaryEmail: "u@test.com", displayName: "User", status: "active" } } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    await fetchCurrentUser(businessSession, getToken, "org_123", client as never);
+
+    expect(client.GET).toHaveBeenCalledWith(
+      "/api/v1/users/me",
+      expect.objectContaining({ headers: { authorization: "Bearer office-token" } }),
+    );
+  });
+
+  it("fetchTenantMembership calls /api/v1/tenants/{tenantId}/memberships/{userId}", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({
+        data: { items: [{ userId: "user-1", tenantId: "tenant-1", role: "admin", status: "active", version: 1, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }] },
+      }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    const role = await fetchTenantMembership(businessSession, "user-1", getToken, "org_123", client as never);
+
+    expect(client.GET).toHaveBeenCalledWith(
+      "/api/v1/tenants/{tenantId}/memberships",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: { tenantId: "tenant-1" },
+        }),
+        headers: { authorization: "Bearer office-token" },
+      }),
+    );
+    expect(role).toBe("admin");
+  });
+
+  it("fetchTenantMembership returns null when user not in membership list", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({ data: { items: [] } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    const role = await fetchTenantMembership(businessSession, "missing-user", getToken, "org_123", client as never);
+
+    expect(role).toBeNull();
+  });
+
+  it("fetchTenantMembership returns member role", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({
+        data: { items: [{ userId: "user-2", tenantId: "tenant-1", role: "member", status: "active", version: 1, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }] },
+      }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+
+    const role = await fetchTenantMembership(businessSession, "user-2", getToken, "org_123", client as never);
+
+    expect(role).toBe("member");
   });
 });

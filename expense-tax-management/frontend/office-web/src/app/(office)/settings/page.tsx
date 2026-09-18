@@ -1,8 +1,18 @@
 "use client";
 import { useAuth, useOrganization } from "@clerk/nextjs";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHead, Panel, Status } from "@/components/ui";
-import { fetchTags, createTag, updateTag, archiveTag, unarchiveTag, mergeTags, makeStableIdempotencyKey } from "@/lib/api";
+import {
+  fetchTags,
+  createTag,
+  updateTag,
+  archiveTag,
+  unarchiveTag,
+  mergeTags,
+  fetchCurrentUser,
+  fetchTenantMembership,
+  type TenantRole,
+} from "@/lib/api";
 import { readOfficeSession } from "@/lib/session";
 
 type Tag = {
@@ -15,9 +25,7 @@ type Tag = {
   origin: string;
 };
 
-type TenantRole = "owner" | "admin" | "member";
-
-function canManageTags(role: TenantRole | undefined): boolean {
+function canManageTags(role: TenantRole | null | undefined): boolean {
   return role === "owner" || role === "admin";
 }
 
@@ -59,7 +67,10 @@ function TagRow({
   return (
     <tr>
       <td>
-        <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: tag.color ?? "#aab2ad", marginRight: 6 }} aria-hidden="true" />
+        <span
+          style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: tag.color ?? "#aab2ad", marginRight: 6 }}
+          aria-hidden="true"
+        />
         {tag.key}
       </td>
       <td>
@@ -127,13 +138,34 @@ export default function Settings() {
   const [newTagColor, setNewTagColor] = useState("");
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
 
-  // Tenant role — would come from membership API; placeholder from org membership
-  const tenantRole: TenantRole = "owner"; // owner for demonstration; real impl reads from API
-
-  const createIdemKey = useRef(makeStableIdempotencyKey("create-tag", newTagName));
+  // Real tenant role from API — backend is authoritative
+  const [tenantRole, setTenantRole] = useState<TenantRole | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   const session = isLoaded && isSignedIn ? readOfficeSession() : null;
+  const isPersonal = session?.scope.kind === "personal";
 
+  // Load tenant role from API
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !organizationLoaded || !organization || !session) return;
+    let active = true;
+    void (async () => {
+      if (active) setRoleLoading(true);
+      try {
+        const me = await fetchCurrentUser(session, getToken, organization.id);
+        const role = await fetchTenantMembership(session, me.user.id, getToken, organization.id);
+        if (active) setTenantRole(role);
+      } catch {
+        // Role fetch failure: show read-only UI (controls hidden), do not expose error detail
+        if (active) setTenantRole(null);
+      } finally {
+        if (active) setRoleLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [getToken, isLoaded, isSignedIn, organization, organizationLoaded, session]);
+
+  // Load tags
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !organizationLoaded || !organization || !session) return;
     let active = true;
@@ -156,16 +188,16 @@ export default function Settings() {
     if (!session || !organization || !newTagName.trim()) return;
     setSaving(true);
     setError(null);
-    createIdemKey.current = makeStableIdempotencyKey("create-tag", newTagName.trim(), Date.now().toString());
     try {
-      const tag = await createTag(session, newTagName.trim(), newTagColor.trim() || null, createIdemKey.current, getToken, organization.id);
+      // No idempotency-key: server generates custom:<uuid> key server-side.
+      // User must not submit twice; disabled button prevents double-submit.
+      const tag = await createTag(session, newTagName.trim(), newTagColor.trim() || null, getToken, organization.id);
       setTags((prev) => [...prev, tag as Tag]);
       setNewTagName("");
       setNewTagColor("");
       setSuccessMsg(`Tag "${(tag as Tag).name}" created.`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) { setConflictMsg(e.message); }
-      else setError(e instanceof Error ? e.message : "Tag creation failed");
+      setError(e instanceof Error ? e.message : "Tag creation failed");
     } finally {
       setSaving(false);
     }
@@ -175,13 +207,13 @@ export default function Settings() {
     if (!session || !organization) return;
     setSaving(true);
     setError(null);
-    const idemKey = makeStableIdempotencyKey("rename-tag", tag.id, String(tag.version));
     try {
-      const updated = await updateTag(session, tag.id, { expectedVersion: tag.version, name: newName }, idemKey, getToken, organization.id);
+      // expectedVersion provides OCC: stale version returns 409 conflict
+      const updated = await updateTag(session, tag.id, { expectedVersion: tag.version, name: newName }, getToken, organization.id);
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, ...(updated as Partial<Tag>) } : t));
       setSuccessMsg(`Tag renamed to "${newName}".`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) { setConflictMsg(e.message); }
+      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Rename failed");
     } finally {
       setSaving(false);
@@ -192,13 +224,13 @@ export default function Settings() {
     if (!session || !organization) return;
     setSaving(true);
     setError(null);
-    const idemKey = makeStableIdempotencyKey("archive-tag", tag.id, String(tag.version));
     try {
-      await archiveTag(session, tag.id, tag.version, idemKey, getToken, organization.id);
+      // expectedVersion provides OCC: re-archiving an archived tag returns 409
+      await archiveTag(session, tag.id, tag.version, getToken, organization.id);
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, status: "archived" as const, version: t.version + 1 } : t));
       setSuccessMsg(`Tag "${tag.name}" archived.`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) { setConflictMsg(e.message); }
+      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Archive failed");
     } finally {
       setSaving(false);
@@ -209,13 +241,12 @@ export default function Settings() {
     if (!session || !organization) return;
     setSaving(true);
     setError(null);
-    const idemKey = makeStableIdempotencyKey("unarchive-tag", tag.id, String(tag.version));
     try {
-      await unarchiveTag(session, tag.id, tag.version, idemKey, getToken, organization.id);
+      await unarchiveTag(session, tag.id, tag.version, getToken, organization.id);
       setTags((prev) => prev.map((t) => t.id === tag.id ? { ...t, status: "active" as const, version: t.version + 1 } : t));
       setSuccessMsg(`Tag "${tag.name}" unarchived.`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) { setConflictMsg(e.message); }
+      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Unarchive failed");
     } finally {
       setSaving(false);
@@ -228,14 +259,15 @@ export default function Settings() {
     if (!sourceTag) return;
     setSaving(true);
     setError(null);
-    const idemKey = makeStableIdempotencyKey("merge-tag", sourceTag.id, targetTag.id, String(sourceTag.version), String(targetTag.version));
     try {
-      await mergeTags(session, sourceTag.id, targetTag.id, sourceTag.version, targetTag.version, idemKey, getToken, organization.id);
+      // expectedSourceVersion/expectedTargetVersion provide OCC for both tags.
+      // Server returns 204 No Content. Merge archives source server-side.
+      await mergeTags(session, sourceTag.id, targetTag.id, sourceTag.version, targetTag.version, getToken, organization.id);
       setTags((prev) => prev.filter((t) => t.id !== sourceTag.id));
       setMergeSourceId(null);
       setSuccessMsg(`Tag "${sourceTag.name}" merged into "${targetTag.name}".`);
     } catch (e) {
-      if (e instanceof Error && e.message.includes("conflict")) { setConflictMsg(e.message); }
+      if (e instanceof Error && e.message.includes("conflict")) setConflictMsg(e.message);
       else setError(e instanceof Error ? e.message : "Merge failed");
     } finally {
       setSaving(false);
@@ -252,15 +284,13 @@ export default function Settings() {
       .finally(() => setLoading(false));
   }
 
-  const isPersonal = session?.scope.kind === "personal";
-
   return (
     <>
       <PageHead eyebrow="Tenant settings" title="Administration without provider controls." />
 
       {/* Tag management - available for both Personal and Business scope */}
       <Panel title="Tag management">
-        {loading && <div role="status" aria-live="polite" className="empty">Loading tags...</div>}
+        {(loading || roleLoading) && <div role="status" aria-live="polite" className="empty">Loading tags...</div>}
         {error && <div role="alert" className="empty">{error}</div>}
         {conflictMsg && (
           <div role="alert" className="empty warn-note">
@@ -270,7 +300,7 @@ export default function Settings() {
         )}
         {successMsg && <div role="status" aria-live="polite" className="empty">{successMsg}</div>}
 
-        {canManageTags(tenantRole) && (
+        {!roleLoading && canManageTags(tenantRole) && (
           <form onSubmit={handleCreate} aria-label="Create new tag" className="create-form">
             <h3>Create tag</h3>
             <div className="field-row">
@@ -301,7 +331,7 @@ export default function Settings() {
             </button>
           </form>
         )}
-        {!canManageTags(tenantRole) && (
+        {!roleLoading && !canManageTags(tenantRole) && (
           <p className="muted">Tag management requires owner or admin role.</p>
         )}
 
