@@ -68,8 +68,11 @@ export const TagSchema = z
   });
 export type Tag = z.infer<typeof TagSchema>;
 
+/**
+ * Custom tag create request — key is generated server-side as `custom:<uuid>`.
+ * Clients do not choose the key namespace; only name and optional color are supplied.
+ */
 export const TagCreateRequestSchema = z.strictObject({
-  key: TagKeySchema,
   name: z.string().trim().min(1).max(100),
   color: ColorSchema.nullable().optional(),
 });
@@ -153,8 +156,10 @@ export const ExpenseTagAssociateRequestSchema = z.strictObject({
 });
 export type ExpenseTagAssociateRequest = z.infer<typeof ExpenseTagAssociateRequestSchema>;
 
+/**
+ * Tag remove body — tagId comes from route param, not body.
+ */
 export const ExpenseTagRemoveRequestSchema = z.strictObject({
-  tagId: z.uuid(),
   expectedVersion: VersionSchema,
 });
 export type ExpenseTagRemoveRequest = z.infer<typeof ExpenseTagRemoveRequestSchema>;
@@ -352,7 +357,8 @@ export type EnrichmentSuggestionList = z.infer<typeof EnrichmentSuggestionListSc
 // Suggestion action schemas
 // ------------------------------------------------------------------ //
 
-const TerminalActionSchema = z.enum(["accepted", "rejected", "superseded"]);
+// Public user actions: accepted/rejected only. Superseded is a system-only side effect.
+const TerminalActionSchema = z.enum(["accepted", "rejected"]);
 
 /**
  * For tax_category acceptance, the human must supply tax profile and

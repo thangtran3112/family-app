@@ -1163,6 +1163,533 @@ async function _completeAndRecordResult(
 }
 
 // ------------------------------------------------------------------ //
+// resolveSuggestion — Task 8 (no stubs)
+// ------------------------------------------------------------------ //
+
+export interface ResolveSuggestionInput {
+  readonly actorUserId: string;
+  readonly tenantId: string;
+  readonly profileId: string | null;
+  readonly businessId: string | null;
+  readonly expenseId: string;
+  readonly suggestionId: string;
+  readonly request: {
+    readonly action: "accepted" | "rejected";
+    readonly expectedSuggestionVersion: number;
+    readonly expectedExpenseVersion: number;
+    readonly idempotencyKey: string;
+    readonly taxAcceptance?: {
+      readonly businessTaxProfileId: string;
+      readonly deductiblePercent: string;
+    };
+  };
+  readonly requestId: string;
+}
+
+export interface ResolveSuggestionResult {
+  readonly suggestionId: string;
+  readonly status: "pending" | "accepted" | "rejected" | "superseded";
+  readonly version: number;
+}
+
+/**
+ * Resolve (accept/reject) a pending enrichment suggestion.
+ *
+ * Rules:
+ * - Require pending status, expected suggestion+expense versions, scope match.
+ * - Permanent idempotency by (tenantId, expenseId, idempotencyKey):
+ *   identical replay returns original; changed payload conflicts.
+ * - Tag accept: creates/promotes historical association unless manual/removed blocks.
+ * - Spending accept: updates expense version, appends historical decision,
+ *   supersedes competing pending category/tax suggestions in same transaction.
+ * - Tax accept: Business-only; revalidates profile ID/version, active taxonomy/year/category,
+ *   expense version/scope; user supplies deductible percentage; writes treatment as 'unreviewed'.
+ * - Reject: terminal, retained.
+ * - Automation supplies no percentage; public superseded action not allowed.
+ */
+export async function resolveSuggestion(
+  database: Kysely<AppDatabase>,
+  input: ResolveSuggestionInput,
+): Promise<ResolveSuggestionResult> {
+  const resolveOpKey = `resolve:${input.expenseId}:${input.request.idempotencyKey}`;
+  const payloadHash = hashNormalizedRequest({
+    suggestionId: input.suggestionId,
+    action: input.request.action,
+    expectedSuggestionVersion: input.request.expectedSuggestionVersion,
+    expectedExpenseVersion: input.request.expectedExpenseVersion,
+    taxAcceptance: input.request.taxAcceptance ?? null,
+  });
+
+  return database.transaction().execute(async (transaction) => {
+    // Permanent idempotency check
+    const existingKey = await transaction
+      .selectFrom("app.enrichment_operation_keys")
+      .select(["payload_hash", "response_json"])
+      .where("tenant_id", "=", input.tenantId)
+      .where("operation_key", "=", resolveOpKey)
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (existingKey) {
+      if (existingKey.payload_hash !== payloadHash) throw DomainError.conflict();
+      const stored = existingKey.response_json as unknown as ResolveSuggestionResult;
+      return stored;
+    }
+
+    // Lock and validate suggestion
+    const suggestion = await transaction
+      .selectFrom("app.expense_enrichment_suggestions")
+      .selectAll()
+      .where("id", "=", input.suggestionId)
+      .where("tenant_id", "=", input.tenantId)
+      .where("expense_id", "=", input.expenseId)
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!suggestion) throw DomainError.notFound();
+    if (suggestion.status !== "pending") throw DomainError.conflict();
+    if (suggestion.version !== input.request.expectedSuggestionVersion) throw DomainError.conflict();
+
+    // Verify scope
+    if (input.profileId !== null && suggestion.personal_profile_id !== input.profileId) {
+      throw DomainError.notFound();
+    }
+    if (input.businessId !== null && suggestion.business_id !== input.businessId) {
+      throw DomainError.notFound();
+    }
+
+    // Lock and validate expense
+    const expense = await transaction
+      .selectFrom("app.expenses")
+      .selectAll()
+      .where("id", "=", input.expenseId)
+      .where("tenant_id", "=", input.tenantId)
+      .where("status", "!=", "archived")
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!expense) throw DomainError.notFound();
+    if (expense.version !== input.request.expectedExpenseVersion) throw DomainError.conflict();
+
+    const now = new Date();
+    let finalVersion = suggestion.version + 1;
+
+    if (input.request.action === "rejected") {
+      // Reject — terminal, no side effects
+      await transaction
+        .updateTable("app.expense_enrichment_suggestions")
+        .set({
+          status: "rejected",
+          version: sql<number>`version + 1`,
+          resolved_by_user_id: input.actorUserId,
+          resolved_at: now,
+        })
+        .where("id", "=", input.suggestionId)
+        .execute();
+    } else {
+      // Accept
+      if (suggestion.kind === "tag") {
+        await _acceptTagSuggestion(transaction, {
+          suggestion,
+          tenantId: input.tenantId,
+          actorUserId: input.actorUserId,
+          now,
+        });
+      } else if (suggestion.kind === "spending_category") {
+        await _acceptSpendingCategorySuggestion(transaction, {
+          suggestion,
+          expense,
+          tenantId: input.tenantId,
+          actorUserId: input.actorUserId,
+          now,
+        });
+      } else if (suggestion.kind === "tax_category") {
+        await _acceptTaxCategorySuggestion(transaction, {
+          suggestion,
+          expense,
+          tenantId: input.tenantId,
+          businessId: input.businessId!,
+          actorUserId: input.actorUserId,
+          ...(input.request.taxAcceptance !== undefined
+            ? { taxAcceptance: input.request.taxAcceptance }
+            : {}),
+          now,
+        });
+      }
+
+      await transaction
+        .updateTable("app.expense_enrichment_suggestions")
+        .set({
+          status: "accepted",
+          version: sql<number>`version + 1`,
+          resolved_by_user_id: input.actorUserId,
+          resolved_at: now,
+        })
+        .where("id", "=", input.suggestionId)
+        .execute();
+    }
+
+    const result: ResolveSuggestionResult = {
+      suggestionId: input.suggestionId,
+      status: input.request.action,
+      version: finalVersion,
+    };
+
+    // Record permanent op key
+    await transaction
+      .insertInto("app.enrichment_operation_keys")
+      .values({
+        id: randomUUID(),
+        tenant_id: input.tenantId,
+        job_id: suggestion.job_id,
+        expense_id: input.expenseId,
+        kind: suggestion.kind,
+        candidate_id: suggestion.tag_id ?? suggestion.spending_category_id ?? suggestion.tax_category_definition_id,
+        evidence_hash: suggestion.evidence_hash,
+        operation_key: resolveOpKey,
+        payload_hash: payloadHash,
+        response_json: toJsonValue(result),
+        created_at: now,
+      })
+      .execute();
+
+    await recordAuditEvent(transaction, {
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      action: `enrichment_suggestion.${input.request.action}`,
+      outcome: "success",
+      resourceType: "enrichment_suggestion",
+      resourceId: input.suggestionId,
+      requestId: input.requestId,
+      metadata: { kind: suggestion.kind, action: input.request.action },
+    });
+
+    return result;
+  });
+}
+
+// Tag accept
+async function _acceptTagSuggestion(
+  transaction: Transaction<AppDatabase>,
+  {
+    suggestion,
+    tenantId,
+    actorUserId,
+    now,
+  }: {
+    suggestion: { expense_id: string; tag_id: string | null; personal_profile_id: string | null; business_id: string | null; };
+    tenantId: string;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<void> {
+  if (!suggestion.tag_id) return;
+
+  // Check for existing association — if manual or removed, don't overwrite
+  const existingAssoc = await transaction
+    .selectFrom("app.expense_tags")
+    .select(["id", "source", "status"])
+    .where("tenant_id", "=", tenantId)
+    .where("expense_id", "=", suggestion.expense_id)
+    .where("tag_id", "=", suggestion.tag_id)
+    .executeTakeFirst();
+
+  if (existingAssoc) {
+    // Manual/removed decision blocks historical promotion
+    if (existingAssoc.source === "manual" || existingAssoc.status === "removed") return;
+    // Promote existing to historical active
+    await transaction
+      .updateTable("app.expense_tags")
+      .set({
+        source: "historical",
+        status: "active",
+        applied_by_user_id: actorUserId,
+        applied_at: now,
+        version: sql<number>`version + 1`,
+      })
+      .where("id", "=", existingAssoc.id)
+      .execute();
+  } else {
+    // Create new historical active association
+    await transaction
+      .insertInto("app.expense_tags")
+      .values({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        personal_profile_id: suggestion.personal_profile_id,
+        business_id: suggestion.business_id,
+        expense_id: suggestion.expense_id,
+        tag_id: suggestion.tag_id,
+        source: "historical",
+        confidence: "1",
+        rule_version: null,
+        suggestion_id: null,
+        status: "active",
+        applied_by_user_id: actorUserId,
+        removed_by_user_id: null,
+        applied_at: now,
+        removed_at: null,
+        created_at: now,
+      })
+      .execute();
+  }
+}
+
+// Spending category accept
+async function _acceptSpendingCategorySuggestion(
+  transaction: Transaction<AppDatabase>,
+  {
+    suggestion,
+    expense,
+    tenantId,
+    actorUserId,
+    now,
+  }: {
+    suggestion: {
+      expense_id: string;
+      spending_category_id: string | null;
+      personal_profile_id: string | null;
+      business_id: string | null;
+    };
+    expense: { id: string; spending_category_id: string | null; version: number; personal_profile_id: string | null; business_id: string | null; };
+    tenantId: string;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<void> {
+  const newCatId = suggestion.spending_category_id;
+  if (!newCatId) return;
+
+  // Validate category still active
+  const cat = await transaction
+    .selectFrom("app.spending_categories")
+    .select("id")
+    .where("id", "=", newCatId)
+    .where("tenant_id", "=", tenantId)
+    .where("status", "=", "active")
+    .executeTakeFirst();
+  if (!cat) throw DomainError.conflict();
+
+  const priorCatId = expense.spending_category_id;
+  const newExpenseVersion = expense.version + 1;
+
+  // Update expense spending_category_id + bump version
+  await transaction
+    .updateTable("app.expenses")
+    .set({
+      spending_category_id: newCatId,
+      version: sql<number>`version + 1`,
+      updated_at: now,
+    })
+    .where("id", "=", expense.id)
+    .where("version", "=", expense.version)
+    .execute();
+
+  // Append historical decision
+  await transaction
+    .insertInto("app.expense_spending_category_decisions")
+    .values({
+      id: randomUUID(),
+      tenant_id: tenantId,
+      personal_profile_id: expense.personal_profile_id,
+      business_id: expense.business_id,
+      expense_id: expense.id,
+      prior_spending_category_id: priorCatId,
+      new_spending_category_id: newCatId,
+      source: "historical",
+      actor_user_id: actorUserId,
+      expense_version: newExpenseVersion,
+      suggestion_id: null,
+      created_at: now,
+    })
+    .execute();
+
+  // Supersede competing pending category and tax suggestions for this expense
+  await transaction
+    .updateTable("app.expense_enrichment_suggestions")
+    .set({
+      status: "superseded",
+      resolved_at: now,
+      resolved_by_user_id: null,
+    })
+    .where("tenant_id", "=", tenantId)
+    .where("expense_id", "=", expense.id)
+    .where("status", "=", "pending")
+    .where("kind", "in", ["spending_category", "tax_category"])
+    .execute();
+}
+
+// Tax category accept
+async function _acceptTaxCategorySuggestion(
+  transaction: Transaction<AppDatabase>,
+  {
+    suggestion,
+    expense,
+    tenantId,
+    businessId,
+    actorUserId,
+    taxAcceptance,
+    now,
+  }: {
+    suggestion: {
+      expense_id: string;
+      tax_category_definition_id: string | null;
+      business_tax_profile_id: string | null;
+      business_tax_profile_version: number | null;
+      taxonomy_version_id: string | null;
+      tax_year: number | null;
+      personal_profile_id: string | null;
+      business_id: string | null;
+    };
+    expense: { id: string; business_id: string | null; personal_profile_id: string | null; tax_year: number; version: number; };
+    tenantId: string;
+    businessId: string;
+    actorUserId: string;
+    taxAcceptance?: { businessTaxProfileId: string; deductiblePercent: string };
+    now: Date;
+  },
+): Promise<void> {
+  // Tax suggestions require Business scope
+  if (!suggestion.business_id) throw DomainError.conflict();
+  if (!taxAcceptance) throw DomainError.validation();
+
+  const { businessTaxProfileId, deductiblePercent } = taxAcceptance;
+
+  // Revalidate: active profile with same ID and expected version
+  const profile = await transaction
+    .selectFrom("app.business_tax_profiles")
+    .selectAll()
+    .where("id", "=", businessTaxProfileId)
+    .where("tenant_id", "=", tenantId)
+    .where("business_id", "=", businessId)
+    .where("status", "=", "active")
+    .executeTakeFirst();
+
+  if (!profile) throw DomainError.conflict();
+  if (profile.id !== suggestion.business_tax_profile_id) throw DomainError.conflict();
+  if (Number(profile.version) !== suggestion.business_tax_profile_version) throw DomainError.conflict();
+  if (profile.taxonomy_version_id !== suggestion.taxonomy_version_id) throw DomainError.conflict();
+  if (profile.tax_year !== suggestion.tax_year) throw DomainError.conflict();
+
+  // Validate tax category still active in current taxonomy
+  const taxCat = await transaction
+    .selectFrom("app.tax_category_definitions")
+    .select("id")
+    .where("id", "=", suggestion.tax_category_definition_id!)
+    .where("taxonomy_version_id", "=", suggestion.taxonomy_version_id!)
+    .where("status", "=", "active")
+    .executeTakeFirst();
+  if (!taxCat) throw DomainError.conflict();
+
+  // Upsert tax treatment as 'unreviewed'
+  await transaction
+    .insertInto("app.expense_tax_treatments")
+    .values({
+      expense_id: expense.id,
+      tenant_id: tenantId,
+      business_id: businessId,
+      tax_year: expense.tax_year,
+      business_tax_profile_id: businessTaxProfileId,
+      taxonomy_version_id: suggestion.taxonomy_version_id!,
+      tax_category_definition_id: suggestion.tax_category_definition_id!,
+      deductible_percent: deductiblePercent,
+      review_status: "unreviewed",
+      note: null,
+      version: 1,
+      created_by_user_id: actorUserId,
+      updated_by_user_id: actorUserId,
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflict((conflict) =>
+      conflict.column("expense_id").doUpdateSet({
+        business_tax_profile_id: businessTaxProfileId,
+        taxonomy_version_id: suggestion.taxonomy_version_id!,
+        tax_category_definition_id: suggestion.tax_category_definition_id!,
+        deductible_percent: deductiblePercent,
+        review_status: "unreviewed",
+        version: sql<number>`expense_tax_treatments.version + 1`,
+        updated_by_user_id: actorUserId,
+        updated_at: now,
+      }),
+    )
+    .execute();
+
+  // Supersede competing pending tax suggestions for this expense
+  await transaction
+    .updateTable("app.expense_enrichment_suggestions")
+    .set({
+      status: "superseded",
+      resolved_at: now,
+      resolved_by_user_id: null,
+    })
+    .where("tenant_id", "=", tenantId)
+    .where("expense_id", "=", expense.id)
+    .where("status", "=", "pending")
+    .where("kind", "=", "tax_category")
+    .execute();
+}
+
+// ------------------------------------------------------------------ //
+// rerunEnrichment — Task 8 (no stubs)
+// ------------------------------------------------------------------ //
+
+export interface RerunEnrichmentInput {
+  readonly actorUserId: string;
+  readonly tenantId: string;
+  readonly profileId: string | null;
+  readonly businessId: string | null;
+  readonly expenseId: string;
+  readonly kinds: readonly string[];
+  readonly requestId: string;
+}
+
+/**
+ * Trigger a new enrichment run for the given expense in the exact scope.
+ * Requires ready (non-archived) expense. Creates a new enrichment job + outbox.
+ * Never alters prior terminal records.
+ */
+export async function rerunEnrichment(
+  database: Kysely<AppDatabase>,
+  input: RerunEnrichmentInput,
+): Promise<void> {
+  await database.transaction().execute(async (transaction) => {
+    // Validate expense belongs to the exact scope
+    let expenseQuery = transaction
+      .selectFrom("app.expenses")
+      .select(["id", "version", "personal_profile_id", "business_id"])
+      .where("id", "=", input.expenseId)
+      .where("tenant_id", "=", input.tenantId)
+      .where("status", "!=", "archived");
+
+    if (input.profileId !== null) {
+      expenseQuery = expenseQuery.where("personal_profile_id", "=", input.profileId);
+    } else if (input.businessId !== null) {
+      expenseQuery = expenseQuery.where("business_id", "=", input.businessId);
+    }
+
+    const expense = await expenseQuery.executeTakeFirst();
+    if (!expense) throw DomainError.notFound();
+
+    // Create enrichment job via the helper
+    const { createEnrichmentJobInTransaction } = await import("./enrichment-jobs.js");
+    const scope =
+      input.profileId !== null
+        ? { personalProfileId: input.profileId }
+        : { businessId: input.businessId! };
+
+    await createEnrichmentJobInTransaction(transaction, {
+      tenantId: input.tenantId,
+      scope,
+      expenseId: input.expenseId,
+      expectedExpenseVersion: expense.version,
+      requestedByUserId: input.actorUserId,
+      requestId: input.requestId,
+    });
+  });
+}
+
+// ------------------------------------------------------------------ //
 // Operation key insertion helper (transaction-local, F11)
 // ------------------------------------------------------------------ //
 

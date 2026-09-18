@@ -65,6 +65,8 @@ import { registerTenantRoutes } from "./routes/tenants.js";
 import { registerPlanRoutes } from "./routes/plans.js";
 import { registerJobRoutes } from "./routes/jobs.js";
 import { createDeduplicationDomain, type DeduplicationDomain } from "./domain/deduplication.js";
+import { createTagDomain, type TagDomain } from "./domain/tags.js";
+import { registerTagRoutes } from "./routes/tags.js";
 import { registerExportRoutes } from "./routes/exports.js";
 import { createExportsDomain, type ExportsDomain } from "./domain/exports.js";
 import { registerFileRoutes } from "./routes/files.js";
@@ -193,6 +195,7 @@ export interface BuildAppOptions {
   readonly clerkWebhookHandler?: ClerkWebhookHandler;
   readonly clerkWebhookVerifySignature?: ClerkWebhookRouteOptions["verifySignature"];
   readonly clerkIdentityDomain?: ClerkIdentityMappingDomain;
+  readonly tagDomain?: TagDomain;
 }
 
 function loggerWithRedaction(logger: BuildAppOptions["logger"]): LoggerOption {
@@ -240,6 +243,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.enrichmentJobsDomain ?? createEnrichmentJobsDomain(database);
   const deduplicationDomain =
     options.deduplicationDomain ?? createDeduplicationDomain(database);
+  const tagDomain = options.tagDomain ?? createTagDomain(database);
   const storageAdapter =
     options.storageAdapter ??
     createStorageAdapter({
@@ -356,6 +360,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     ...(options.config.clerk?.enrichmentResultScope
       ? { enrichmentResultScope: options.config.clerk.enrichmentResultScope }
       : {}),
+  });
+  app.register(registerTagRoutes, {
+    identityResolver: identityDomain,
+    tagDomain,
   });
   app.register(registerDuplicateMatchRoutes, {
     identityResolver: identityDomain,

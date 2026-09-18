@@ -1,3 +1,8 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   BusinessTaxProfileSchema,
   TaxCategoryDefinitionListSchema,
@@ -9,7 +14,13 @@ import {
   type TaxCategoryDefinition,
   type TaxonomyVersion,
 } from "@expense-tax/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Kysely } from "kysely";
+
+import { createAppDatabase } from "../src/database/client.js";
+import type { AppDatabase } from "../src/database/types.js";
+import { runMigrations } from "../src/database/migrate.js";
+import { createTaxDomain } from "../src/domain/tax.js";
 
 import { buildApp } from "../src/app.js";
 import type { AuthPrincipal, TokenVerifier } from "../src/auth/types.js";
@@ -110,6 +121,418 @@ function principal(subject: string): AuthPrincipal {
     displayName: subject,
   };
 }
+
+// ------------------------------------------------------------------ //
+// Live PostgreSQL tests — tax profile/treatment mutation supersedes pending tax suggestions
+// ------------------------------------------------------------------ //
+
+const requested = process.env.PHASE_3C_INTEGRATION === "1";
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
+const composeScript = path.join(repoRoot, "scripts", "compose.sh");
+const runKey = randomUUID().replaceAll("-", "").slice(0, 12);
+const databaseName = `expense_tax_tx_${runKey}`;
+
+interface ComposeConfig {
+  readonly services: Record<
+    string,
+    { readonly environment?: Record<string, string | null> }
+  >;
+}
+
+const TX_TENANT_ID   = "7f000000-0000-4000-8000-000000000001";
+const TX_USER_ID     = "7f000000-0000-4000-8000-000000000002";
+const TX_PROFILE_ID  = "7f000000-0000-4000-8000-000000000003";
+const TX_BIZ_ID      = "7f000000-0000-4000-8000-000000000004";
+const TX_TAXVER_ID   = "7f000000-0000-4000-8000-000000000005";
+const TX_TAXCAT_ID   = "7f000000-0000-4000-8000-000000000006";
+
+let postgresContainerId = "";
+let runtimePassword = "";
+let migratorPassword = "";
+let database: Kysely<AppDatabase> | undefined;
+
+function dockerPsql(dbName: string, username: string, password: string, sqlStatement: string): string {
+  const result = spawnSync(
+    "docker",
+    ["exec", "-e", `PGPASSWORD=${password}`, postgresContainerId,
+     "psql", "-X", "-v", "ON_ERROR_STOP=1",
+     "--host", "127.0.0.1", "--username", username, "--dbname", dbName,
+     "--tuples-only", "--no-align", "--pset", "footer=off", "--command", sqlStatement],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error(result.stderr);
+  return result.stdout.trim();
+}
+
+function adminSqlTx(sqlStatement: string, db = "postgres"): string {
+  return dockerPsql(db, "postgres", "postgrespassword", sqlStatement);
+}
+
+function runtimeSqlTx(sqlStatement: string): string {
+  return dockerPsql(databaseName, "expense_app_runtime", runtimePassword, sqlStatement);
+}
+
+describe.skipIf(!requested)(
+  "Task 8 — tax profile mutation supersedes pending tax suggestions",
+  () => {
+    beforeAll(async () => {
+      const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+      if (!dockerAvailable) throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
+
+      let postgresRunning = false;
+      try {
+        postgresRunning = execFileSync(composeScript, ["ps", "-q", "postgres"], {
+          cwd: repoRoot, env: process.env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        }).trim().length > 0;
+      } catch { postgresRunning = false; }
+      if (!postgresRunning) throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
+
+      const config = JSON.parse(
+        execFileSync(composeScript, ["config", "--format", "json"], {
+          cwd: repoRoot, env: process.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        }),
+      ) as ComposeConfig;
+      postgresContainerId = execFileSync(composeScript, ["ps", "-q", "postgres"], {
+        cwd: repoRoot, env: process.env, encoding: "utf8",
+      }).trim();
+      runtimePassword = config.services.postgres?.environment?.APP_RUNTIME_DB_PASSWORD ?? "";
+      migratorPassword = config.services.postgres?.environment?.APP_MIGRATOR_DB_PASSWORD ?? "";
+      if (!postgresContainerId || !runtimePassword || !migratorPassword) {
+        throw new Error("Phase 3C PostgreSQL prerequisites unavailable");
+      }
+
+      adminSqlTx(`CREATE DATABASE ${databaseName};`);
+      adminSqlTx(
+        `CREATE SCHEMA app AUTHORIZATION expense_app_migrator;
+         CREATE SCHEMA app_migrations AUTHORIZATION expense_app_migrator;
+         GRANT USAGE ON SCHEMA app TO expense_app_runtime;`,
+        databaseName,
+      );
+      const migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+      const runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/${databaseName}`;
+      await runMigrations(migrationDatabaseUrl);
+      adminSqlTx(
+        `GRANT USAGE ON SCHEMA app TO expense_app_runtime;
+         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO expense_app_runtime;
+         GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO expense_app_runtime;`,
+        databaseName,
+      );
+      database = createAppDatabase(runtimeDatabaseUrl);
+
+      runtimeSqlTx(`
+        INSERT INTO app.users (id, primary_email, display_name)
+        VALUES ('${TX_USER_ID}', 'tx-owner-${runKey}@example.test', 'TX Owner')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.tenants (id, name, slug, status)
+        VALUES ('${TX_TENANT_ID}', 'TX Tenant', 'tx-tenant-${runKey}', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.tenant_memberships (tenant_id, user_id, role, status)
+        VALUES ('${TX_TENANT_ID}', '${TX_USER_ID}', 'owner', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.personal_profiles (id, tenant_id, name)
+        VALUES ('${TX_PROFILE_ID}', '${TX_TENANT_ID}', 'TX Profile')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.personal_memberships (personal_profile_id, tenant_id, user_id, role, status)
+        VALUES ('${TX_PROFILE_ID}', '${TX_TENANT_ID}', '${TX_USER_ID}', 'owner', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.businesses (id, tenant_id, name, industry_code, timezone, base_currency, status)
+        VALUES ('${TX_BIZ_ID}', '${TX_TENANT_ID}', 'TX Biz', 'restaurant', 'UTC', 'USD', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.business_memberships (business_id, tenant_id, user_id, role, status)
+        VALUES ('${TX_BIZ_ID}', '${TX_TENANT_ID}', '${TX_USER_ID}', 'owner', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.taxonomy_versions (id, jurisdiction_code, tax_year, code, name, status, source_url, source_revision, source_checksum)
+        VALUES ('${TX_TAXVER_ID}', 'US-FEDERAL', 2025, 'tx-v1', 'TX Taxonomy', 'active', 'https://test.local', 'rev1', '${"a".repeat(64)}')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.tax_category_definitions (id, taxonomy_version_id, code, name, status, sort_order)
+        VALUES ('${TX_TAXCAT_ID}', '${TX_TAXVER_ID}', 'MEALS', 'Meals', 'active', 1)
+        ON CONFLICT DO NOTHING;
+      `);
+    });
+
+    afterAll(async () => {
+      await database?.destroy();
+      if (postgresContainerId && databaseName) {
+        adminSqlTx(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE);`);
+      }
+    });
+
+    function seedTaxSuggestion(opts: {
+      sugId: string; expId: string; fakeJobId: string;
+      profileId: string; profileVersion: number; taxCatId: string;
+      status?: string; idemKey: string;
+    }): void {
+      runtimeSqlTx(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${opts.sugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           '${opts.expId}', '${opts.fakeJobId}', 'tax_category', NULL, NULL, '${opts.taxCatId}',
+           '${opts.profileId}', ${opts.profileVersion}, '${TX_TAXVER_ID}', 2025,
+           'historical', 0.8, '${"f".repeat(64)}', '${opts.status ?? "pending"}', 1, 1, '${opts.idemKey}')
+        ON CONFLICT DO NOTHING;
+      `);
+    }
+
+    it("TX-L1: updateProfile supersedes pending tax suggestions whose snapshot no longer matches", async () => {
+      const domain = createTaxDomain(database!);
+
+      // Create a tax profile
+      const profileId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2025, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${TX_TENANT_ID}', '${TX_USER_ID}',
+          NULL, '${TX_BIZ_ID}', 'Tax Meals', '50.00', 'USD', '2025-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const pendingSugId = randomUUID();
+      seedTaxSuggestion({
+        sugId: pendingSugId, expId, fakeJobId,
+        profileId, profileVersion: 1, taxCatId: TX_TAXCAT_ID,
+        idemKey: `tx-l1-sug-${runKey}`,
+      });
+
+      // Update the profile version — must supersede pending suggestion referencing old version
+      await domain.updateProfile({
+        actorUserId: TX_USER_ID,
+        tenantId: TX_TENANT_ID,
+        businessId: TX_BIZ_ID,
+        taxYear: 2025,
+        request: { expectedVersion: 1, accountingMethod: "accrual" },
+        requestId: `tx-l1-update-${runKey}`,
+      });
+
+      const sugStatus = runtimeSqlTx(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendingSugId}';`,
+      );
+      expect(sugStatus).toBe("superseded");
+    });
+
+    it("TX-L2: closeProfile supersedes pending tax suggestions for that profile", async () => {
+      const domain = createTaxDomain(database!);
+
+      const profileId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2024, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${TX_TENANT_ID}', '${TX_USER_ID}',
+          NULL, '${TX_BIZ_ID}', 'Close Meals', '40.00', 'USD', '2024-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const pendingSugId = randomUUID();
+      seedTaxSuggestion({
+        sugId: pendingSugId, expId, fakeJobId,
+        profileId, profileVersion: 1, taxCatId: TX_TAXCAT_ID,
+        idemKey: `tx-l2-sug-${runKey}`,
+      });
+
+      // Close the profile
+      await domain.closeProfile({
+        actorUserId: TX_USER_ID,
+        tenantId: TX_TENANT_ID,
+        businessId: TX_BIZ_ID,
+        taxYear: 2024,
+        expectedVersion: 1,
+        requestId: `tx-l2-close-${runKey}`,
+      });
+
+      const sugStatus = runtimeSqlTx(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendingSugId}';`,
+      );
+      expect(sugStatus).toBe("superseded");
+    });
+
+    it("TX-L3: upsertTreatment supersedes pending tax suggestions for the same expense", async () => {
+      const domain = createTaxDomain(database!);
+
+      const profileId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2023, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${TX_TENANT_ID}', '${TX_USER_ID}',
+          NULL, '${TX_BIZ_ID}', 'Treatment Meals', '60.00', 'USD', '2023-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const pendingSugId = randomUUID();
+      seedTaxSuggestion({
+        sugId: pendingSugId, expId, fakeJobId,
+        profileId, profileVersion: 1, taxCatId: TX_TAXCAT_ID,
+        idemKey: `tx-l3-sug-${runKey}`,
+      });
+
+      // Upsert a treatment — supersedes pending tax suggestions for the expense
+      await domain.upsertTreatment({
+        actorUserId: TX_USER_ID,
+        tenantId: TX_TENANT_ID,
+        businessId: TX_BIZ_ID,
+        expenseId: expId,
+        request: {
+          businessTaxProfileId: profileId,
+          taxonomyVersionId: TX_TAXVER_ID,
+          taxCategoryDefinitionId: TX_TAXCAT_ID,
+          deductiblePercent: "100.00",
+          reviewStatus: "reviewed",
+        },
+        requestId: `tx-l3-upsert-${runKey}`,
+      });
+
+      const sugStatus = runtimeSqlTx(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${pendingSugId}';`,
+      );
+      expect(sugStatus).toBe("superseded");
+    });
+
+    it("TX-L4: accepted/rejected tax suggestions not affected by profile update", async () => {
+      const domain = createTaxDomain(database!);
+
+      const profileId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES
+          ('${profileId}', '${TX_TENANT_ID}', '${TX_BIZ_ID}', 2022, '${TX_TAXVER_ID}', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${TX_TENANT_ID}', '${TX_USER_ID}',
+          NULL, '${TX_BIZ_ID}', 'Terminal Tax Meals', '70.00', 'USD', '2022-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version)
+        VALUES
+          ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+           'expense', '${expId}', 1, '{}', 'expense-enrichment-v1')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const acceptedSugId = randomUUID();
+      const rejectedSugId = randomUUID();
+      // Seed accepted suggestion
+      runtimeSqlTx(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key,
+           resolved_by_user_id, resolved_at)
+        VALUES
+          ('${acceptedSugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL, '${TX_TAXCAT_ID}',
+           '${profileId}', 1, '${TX_TAXVER_ID}', 2022,
+           'historical', 0.8, '${"g".repeat(64)}', 'accepted', 2, 1, 'tx-l4-accepted-${runKey}',
+           '${TX_USER_ID}', now()),
+          ('${rejectedSugId}', '${TX_TENANT_ID}', NULL, '${TX_BIZ_ID}',
+           '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL, '${TX_TAXCAT_ID}',
+           '${profileId}', 1, '${TX_TAXVER_ID}', 2022,
+           'historical', 0.7, '${"h".repeat(64)}', 'rejected', 2, 1, 'tx-l4-rejected-${runKey}',
+           '${TX_USER_ID}', now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Update profile
+      await domain.updateProfile({
+        actorUserId: TX_USER_ID,
+        tenantId: TX_TENANT_ID,
+        businessId: TX_BIZ_ID,
+        taxYear: 2022,
+        request: { expectedVersion: 1, accountingMethod: "accrual" },
+        requestId: `tx-l4-update-${runKey}`,
+      });
+
+      const acceptedStatus = runtimeSqlTx(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${acceptedSugId}';`,
+      );
+      const rejectedStatus = runtimeSqlTx(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${rejectedSugId}';`,
+      );
+      expect(acceptedStatus).toBe("accepted");
+      expect(rejectedStatus).toBe("rejected");
+    });
+  },
+);
 
 describe("App API taxonomy and tax routes", () => {
   const apps = new Set<ReturnType<typeof buildApp>>();
