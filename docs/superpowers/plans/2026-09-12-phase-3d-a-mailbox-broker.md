@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Not started; blocked by Phase 3C. Execute first within Phase 3D from a fresh `feature/*` worktree based on current `origin/dev`.
+
 **Goal:** Build protected Gmail connection lifecycle, dedicated Cloud Run broker, App-owned connection metadata, OAuth state consumption, Secret Manager token CAS, and Office mailbox administration base.
 
 **Architecture:** App API owns tenant/scope authorization, connection records, OAuth attempt state, reviewer grants, and all persisted customer metadata. Broker owns Google OAuth, provider calls, short-lived credentials, and per-connection Secret Manager versions. Temporal and the Python worker are not involved in OAuth or mailbox credential handling.

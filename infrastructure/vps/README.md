@@ -4,7 +4,7 @@ Reusable, idempotent provisioning for a family-app VPS: SSH hardening,
 firewall, Docker, and a **shared** PostgreSQL cluster (one Postgres
 container, one database per app — see `../README.md` "why not per-app
 postgres"). Written so switching VPS providers (OVH → Database Mart,
-Hetzner, etc. — see `expense-tax-management/plans/ROADMAP.md` Phase B,
+Hetzner, etc. — see `../../expense-tax-management/plans/ROADMAP.md`,
 Feb 2027) takes a script run instead of a rediscovery exercise like the
 one that produced this directory.
 
@@ -131,10 +131,13 @@ disposable test instance fight over the same local port.
 - **Backup/restore/`migrate-vps.sh`** (pg_dump → GCS, restore on a new
   box): deferred until GCP Storage credentials are actually configured
   (`expense-tax-management/.env.example`'s GCS vars are still blank).
-  `plans/ROADMAP.md` describes the intended flow; not built yet.
-- **Traefik / app deployment / gateway hardening**: App API and Foundry
-  still run locally against the VPS Postgres over the SSH tunnel above.
-  No app or gateway traffic is exposed from the VPS yet.
+  `../../expense-tax-management/plans/ROADMAP.md` describes the intended flow;
+  not built yet.
+- **Application deployment**: this base bootstrap does not install application
+  containers. Production deployment is live through
+  `.github/workflows/expense-tax-deploy.yml` and
+  `expense-tax-management/deploy/production/`; Cloudflare Tunnel reaches only
+  loopback application origins. Traefik is not the current production edge.
 - **Provider VM creation itself** (no Terraform): OVH/Database
   Mart-tier VPS purchases are typically manual control-panel actions,
   not API/Terraform-driven, so this starts from "you already have a

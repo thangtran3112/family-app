@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Ready; not started. Execute before any Phase 3D plan from a fresh `feature/*` worktree based on current `origin/dev`.
+
 **Goal:** Add deterministic rule tagging and review-only historical enrichment for Personal and Business expenses, delivered through a separate durable Temporal workflow with scope-safe App API ownership and Office review.
 
 **Architecture:** App API creates ready expenses and enrichment jobs/outbox rows in the same PostgreSQL transaction for manual, OCR, and forwarded-email paths. Temporal history stores only `JobReferenceV1`; the Python worker fetches minimized, job-bound input, evaluates pure rules/history, and submits a versioned result. App API recomputes and validates all output, auto-applies rule tags, stores pending historical suggestions, and exposes scope-authorized tag/suggestion APIs to Office Web.

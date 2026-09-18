@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Not started; blocked by Phase 3D-B. Refresh `origin/dev` and use a new `feature/*` worktree after Phase 3D-B merges.
+
 **Goal:** Stream Gmail attachments through direct broker-to-App callbacks, create storage-backed OCR jobs without bytes in Temporal, materialize bounded structured receipts, preserve connected provenance and Phase 3B pending dedup, and finish Office status UI.
 
 **Architecture:** Broker owns Gmail refetch and streams bytes directly to an App signed upload endpoint. App stages into bounded storage, scans before READY, then creates a normal storage-backed OCR job using immutable owner/service actor and deterministic entitlement-selected `modeKey`. Structured fields use a direct broker-to-App callback and transaction-level expense/dedup path. Worker orchestrates opaque candidate IDs/counts only.
@@ -20,7 +22,7 @@
 - Parser consumes bounded byte stream/buffer with pre-allocation length check, bounded decode, node/depth/deadline checks; no unbounded string conversion, external fetch, script execution, XML DTD/entity expansion, or decompression beyond Gmail bound.
 - Connected source is App-owned, `expense_sources.source_type = "connected_mailbox"`, includes `mailbox_candidate_id`, and remains pending-review through Phase 3B dedup. No automatic merge.
 - A creates mailbox Office page/API base; B modifies it for scan/review; C modifies it only for ingestion status. A creates broker/worker base; B creates scan modules; C creates ingestion modules.
-- Remote GCP/Clerk writes require explicit execution-time confirmation. No commit.
+- Remote GCP/Clerk writes require explicit execution-time confirmation. Local commits and all remote git operations follow `AGENTS.md`.
 
 ---
 
