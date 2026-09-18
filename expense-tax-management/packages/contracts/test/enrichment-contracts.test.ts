@@ -869,3 +869,655 @@ describe("ExpenseEnrichmentResultV1Schema – security rejections", () => {
     ).toBe(false);
   });
 });
+
+// ================================================================== //
+// Task 3 correctness addendum: uniqueness + no-mutation invariants
+// ================================================================== //
+
+// ------------------------------------------------------------------ //
+// Input: unique eligibleTagKeys
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentInputV1Schema – unique eligibleTagKeys", () => {
+  it("accepts eligibleTagKeys with all distinct values", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTagKeys: ["merchant:starbucks", "timing:weekend"],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects eligibleTagKeys with duplicate entries", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTagKeys: ["merchant:starbucks", "merchant:starbucks"],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Input: unique eligibleSpendingCategoryIds
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentInputV1Schema – unique eligibleSpendingCategoryIds", () => {
+  it("accepts eligibleSpendingCategoryIds with all distinct UUIDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleSpendingCategoryIds: [ids.categoryId, ids.taxCategoryId],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects eligibleSpendingCategoryIds with duplicate UUIDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleSpendingCategoryIds: [ids.categoryId, ids.categoryId],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Input: unique activeTaxCategoryIds within eligibleTaxSnapshot
+// ------------------------------------------------------------------ //
+describe("EligibleTaxSnapshot – unique activeTaxCategoryIds", () => {
+  it("accepts activeTaxCategoryIds with all distinct UUIDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTaxSnapshot: {
+          businessTaxProfileId: ids.taxProfileId,
+          businessTaxProfileVersion: 2,
+          taxonomyVersionId: ids.taxonomyVersionId,
+          taxYear: 2025,
+          activeTaxCategoryIds: [ids.taxCategoryId, ids.categoryId],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects activeTaxCategoryIds with duplicate UUIDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        eligibleTaxSnapshot: {
+          businessTaxProfileId: ids.taxProfileId,
+          businessTaxProfileVersion: 2,
+          taxonomyVersionId: ids.taxonomyVersionId,
+          taxYear: 2025,
+          activeTaxCategoryIds: [ids.taxCategoryId, ids.taxCategoryId],
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Input: unique history candidate keys/IDs
+// ------------------------------------------------------------------ //
+describe("EnrichmentHistorySchema – unique candidate keys/IDs", () => {
+  it("accepts candidateTagKeys with all distinct keys", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [
+            { key: "merchant:starbucks", count: 3 },
+            { key: "timing:weekend", count: 2 },
+          ],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects candidateTagKeys with duplicate keys", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [
+            { key: "merchant:starbucks", count: 3 },
+            { key: "merchant:starbucks", count: 2 },
+          ],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts candidateSpendingCategoryIds with all distinct IDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [
+            { id: ids.categoryId, count: 5 },
+            { id: ids.taxCategoryId, count: 3 },
+          ],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects candidateSpendingCategoryIds with duplicate IDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [
+            { id: ids.categoryId, count: 5 },
+            { id: ids.categoryId, count: 3 },
+          ],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts candidateTaxCategoryIds with all distinct IDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [
+            { id: ids.taxCategoryId, count: 4 },
+            { id: ids.categoryId, count: 2 },
+          ],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects candidateTaxCategoryIds with duplicate IDs", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [
+            { id: ids.taxCategoryId, count: 4 },
+            { id: ids.taxCategoryId, count: 2 },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Input: aggregate evidence counts bounded to 50 and matchCount <= exampleCount
+// ------------------------------------------------------------------ //
+describe("EnrichmentHistorySchema – aggregate evidence count bounds", () => {
+  it("accepts exampleCount=50 (boundary)", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 50,
+          candidateTagKeys: [{ key: "merchant:starbucks", count: 40 }],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects candidate count exceeding exampleCount", () => {
+    // candidateTagKey count 6 > exampleCount 5
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [{ key: "merchant:starbucks", count: 6 }],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects spendingCategory candidate count exceeding exampleCount", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 3,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [{ id: ids.categoryId, count: 4 }],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects taxCategory candidate count exceeding exampleCount", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 2,
+          candidateTagKeys: [],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [{ id: ids.taxCategoryId, count: 3 }],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts candidate count equal to exampleCount (100% match)", () => {
+    expect(
+      ExpenseEnrichmentInputV1Schema.safeParse({
+        ...validPersonalInput,
+        history: {
+          exampleCount: 5,
+          candidateTagKeys: [{ key: "merchant:starbucks", count: 5 }],
+          candidateSpendingCategoryIds: [],
+          candidateTaxCategoryIds: [],
+        },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Result: unique ruleTagKeys
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – unique ruleTagKeys", () => {
+  it("accepts ruleTagKeys with all distinct values", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        ruleTagKeys: ["merchant:starbucks", "timing:weekend"],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects ruleTagKeys with duplicate entries", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        ruleTagKeys: ["merchant:starbucks", "merchant:starbucks"],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Result: unique suggestions by kind+candidate identity
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – unique suggestions by kind+candidate", () => {
+  it("accepts suggestions with distinct kind+candidate combinations", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+          {
+            kind: "tag",
+            tagKey: "timing:weekend",
+            confidence: 0.8,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects duplicate tag suggestions (same kind+tagKey)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.7,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate spending_category suggestions (same kind+spendingCategoryId)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.8,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate tax_category suggestions (same kind+taxCategoryDefinitionId)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tax_category",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 3, matchCount: 3 },
+          },
+          {
+            kind: "tax_category",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.8,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 3, matchCount: 2 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts tag and spending_category with same underlying ID string (different kinds)", () => {
+    // tag.tagKey and spending_category are different kinds; no identity conflict
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.85,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Result: aggregateCounts – matchCount <= exampleCount
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – aggregateCounts matchCount <= exampleCount", () => {
+  it("accepts matchCount equal to exampleCount (100% match)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 1.0,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts matchCount=0 with exampleCount=0 (empty history)", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.5,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 0, matchCount: 0 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects matchCount exceeding exampleCount in tag suggestion", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 4, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects matchCount exceeding exampleCount in spending_category suggestion", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 3, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects matchCount exceeding exampleCount in tax_category suggestion", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tax_category",
+            taxCategoryDefinitionId: ids.taxCategoryId,
+            businessTaxProfileId: ids.taxProfileId,
+            businessTaxProfileVersion: 2,
+            taxonomyVersionId: ids.taxonomyVersionId,
+            taxYear: 2025,
+            expenseVersion: 1,
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 2, matchCount: 3 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects aggregateCounts exampleCount exceeding 50", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        ...validAppliedResult,
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 51, matchCount: 40 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// Result: no-mutation semantics — stale|skipped must have empty arrays
+// ------------------------------------------------------------------ //
+describe("ExpenseEnrichmentResultV1Schema – no-mutation semantics for stale and skipped", () => {
+  it("accepts stale with empty ruleTagKeys and suggestions", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "stale",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts skipped with empty ruleTagKeys and suggestions", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "skipped",
+        ruleTagKeys: [],
+        suggestions: [],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects stale with non-empty ruleTagKeys", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "stale",
+        ruleTagKeys: ["merchant:starbucks"],
+        suggestions: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects stale with non-empty suggestions", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "stale",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "merchant:starbucks",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects skipped with non-empty ruleTagKeys", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "skipped",
+        ruleTagKeys: ["timing:weekend"],
+        suggestions: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects skipped with non-empty suggestions", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "skipped",
+        ruleTagKeys: [],
+        suggestions: [
+          {
+            kind: "spending_category",
+            spendingCategoryId: ids.categoryId,
+            confidence: 0.85,
+            evidenceHash: "b".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 5 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("applied outcome may have non-empty ruleTagKeys and suggestions", () => {
+    expect(
+      ExpenseEnrichmentResultV1Schema.safeParse({
+        schemaVersion: 1,
+        rulesVersion: 1,
+        outcome: "applied",
+        ruleTagKeys: ["merchant:starbucks"],
+        suggestions: [
+          {
+            kind: "tag",
+            tagKey: "timing:weekend",
+            confidence: 0.9,
+            evidenceHash: "a".repeat(64),
+            aggregateCounts: { exampleCount: 5, matchCount: 4 },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+});

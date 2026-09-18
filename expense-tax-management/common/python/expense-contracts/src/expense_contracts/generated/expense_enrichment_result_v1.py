@@ -24,7 +24,7 @@ class AggregateCounts(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    exampleCount: conint(ge=0, le=9007199254740991)
+    exampleCount: conint(ge=0, le=50)
     matchCount: conint(ge=0, le=9007199254740991)
 
 

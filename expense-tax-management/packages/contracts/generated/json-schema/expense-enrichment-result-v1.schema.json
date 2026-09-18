@@ -38,7 +38,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "exampleCount": {
-                    "maximum": 9007199254740991,
+                    "maximum": 50,
                     "minimum": 0,
                     "type": "integer"
                   },
@@ -89,7 +89,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "exampleCount": {
-                    "maximum": 9007199254740991,
+                    "maximum": 50,
                     "minimum": 0,
                     "type": "integer"
                   },
@@ -140,7 +140,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "exampleCount": {
-                    "maximum": 9007199254740991,
+                    "maximum": 50,
                     "minimum": 0,
                     "type": "integer"
                   },
