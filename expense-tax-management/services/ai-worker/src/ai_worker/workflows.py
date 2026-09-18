@@ -13,6 +13,7 @@ with workflow.unsafe.imports_passed_through():
         MarkRunningInput,
         SubmitEchoResultInput,
     )
+    from ai_worker.enrichment_activities import EnrichmentActivities
     from ai_worker.ocr_activities import (
         OcrCallStartedArgs,
         OcrDownloadArgs,
@@ -245,3 +246,56 @@ class ForwardedReceiptWorkflow:
     @workflow.run
     async def run(self, job_reference: JobReferenceV1) -> None:
         await OcrReceiptWorkflow().run(job_reference)
+
+
+@workflow.defn(name="ExpenseEnrichmentWorkflow")
+class ExpenseEnrichmentWorkflow:
+    """Expense enrichment pipeline.
+
+    Privacy model: workflow history contains ONLY the input JobReferenceV1,
+    activity names, primitive args (job_id str, version int), and the opaque
+    outcome string. ExpenseEnrichmentInputV1 and ExpenseEnrichmentResultV1
+    never appear in history -- they live entirely inside enrichment_process.
+
+    Sequence:
+      1. enrichment_mark_running (jobs:write) -> RUNNING; returns running_version.
+      2. enrichment_process (jobs:enrichment-input + jobs:enrichment-result)
+           - internally GETs input, evaluates or bypasses, POSTs result.
+           - RetryPolicy(maximum_attempts=5); nonretryable 4xx fails fast.
+           - Returns opaque outcome string.
+      3. On process failure: enrichment_mark_failed (jobs:write) -> FAILED.
+
+    All outcomes (applied/stale/skipped) end the workflow as SUCCEEDED in
+    Temporal. Only uncaught inference/transport errors trigger mark_failed.
+    """
+
+    @workflow.run
+    async def run(self, job_reference: JobReferenceV1) -> None:
+        http_retry = RetryPolicy(maximum_attempts=5)
+        job_id = str(job_reference.jobId)
+
+        running_version = await workflow.execute_activity(
+            EnrichmentActivities.enrichment_mark_running,
+            job_id,
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=http_retry,
+        )
+
+        try:
+            await workflow.execute_activity(
+                EnrichmentActivities.enrichment_process,
+                args=[job_id, running_version],
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=http_retry,
+            )
+        except Exception:
+            try:
+                await workflow.execute_activity(
+                    EnrichmentActivities.enrichment_mark_failed,
+                    args=[job_id, running_version],
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=http_retry,
+                )
+            except Exception:  # noqa: BLE001, S110
+                pass
+            raise

@@ -23,6 +23,9 @@ class ClerkConfig:
     publishable_key: str | None = None
     secret_key: str | None = None
     webhook_signing_secret: str | None = None
+    # Separate enrichment M2M secrets (optional; fallback to app_machine_secret_key when absent)
+    enrichment_input_machine_secret_key: str | None = None
+    enrichment_result_machine_secret_key: str | None = None
 
     def __repr__(self) -> str:
         return (
@@ -34,7 +37,9 @@ class ClerkConfig:
             f"app_service_audience={self.app_service_audience!r}, "
             f"foundry_service_audience={self.foundry_service_audience!r}, "
             "publishable_key=<redacted>, secret_key=<redacted>, "
-            "webhook_signing_secret=<redacted>)"
+            "webhook_signing_secret=<redacted>, "
+            "enrichment_input_machine_secret_key=<redacted>, "
+            "enrichment_result_machine_secret_key=<redacted>)"
         )
 
 
@@ -86,5 +91,11 @@ def worker_config_from_env(
             publishable_key=_optional(values, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
             secret_key=_optional(values, "CLERK_SECRET_KEY"),
             webhook_signing_secret=_optional(values, "CLERK_WEBHOOK_SIGNING_SECRET"),
+            enrichment_input_machine_secret_key=_optional(
+                values, "CLERK_ENRICHMENT_INPUT_MACHINE_SECRET_KEY"
+            ),
+            enrichment_result_machine_secret_key=_optional(
+                values, "CLERK_ENRICHMENT_RESULT_MACHINE_SECRET_KEY"
+            ),
         )
     )

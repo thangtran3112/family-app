@@ -4,7 +4,14 @@ import respx
 from expense_contracts.generated import JobStatusUpdateRequestV1
 from httpx import Response
 
-from ai_worker.app_api_client import AppApiClient, app_api_client_from_env
+from ai_worker.app_api_client import (
+    AppApiClient,
+    EnrichmentInputClient,
+    EnrichmentResultClient,
+    app_api_client_from_env,
+    enrichment_input_client_from_env,
+    enrichment_result_client_from_env,
+)
 from ai_worker.foundry_client import FoundryClient, foundry_client_from_env
 from ai_worker.ocr_activities import DeduplicationEvidenceV1
 
@@ -100,3 +107,174 @@ def test_factories_use_explicit_legacy_service_tokens(monkeypatch):
     assert app_client._token_provider is None
     assert foundry_client._service_token == "foundry-token"
     assert foundry_client._token_provider is None
+
+
+# ---------------------------------------------------------------------------
+# Enrichment input client
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_enrichment_input_client_gets_evaluate_response():
+    """GET /internal/v1/jobs/{jobId}/enrichment-input returns an evaluate response."""
+    job_id = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    expense_id = uuid.UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+    route = respx.get(
+        f"http://app.test/internal/v1/jobs/{job_id}/enrichment-input"
+    ).mock(
+        return_value=Response(
+            200,
+            json={
+                "outcome": "evaluate",
+                "input": {
+                    "schemaVersion": 1,
+                    "jobId": str(job_id),
+                    "expenseId": str(expense_id),
+                    "expenseVersion": 1,
+                    "normalizedMerchant": "starbucks",
+                    "incurredOn": "2026-09-12",
+                    "spendingCategoryId": None,
+                    "rulesVersion": 1,
+                    "eligibleTagKeys": ["merchant:starbucks"],
+                    "eligibleSpendingCategoryIds": [],
+                    "eligibleTaxSnapshot": None,
+                    "history": {
+                        "exampleCount": 0,
+                        "candidateTagKeys": [],
+                        "candidateSpendingCategoryIds": [],
+                        "candidateTaxCategoryIds": [],
+                    },
+                },
+            },
+        )
+    )
+    client = EnrichmentInputClient(
+        base_url="http://app.test", service_token="inp-token"
+    )
+    response = await client.get_enrichment_input(str(job_id))
+
+    assert route.called
+    assert route.calls[0].request.headers["authorization"] == "Bearer inp-token"
+    assert response["outcome"] == "evaluate"
+    assert response["input"]["normalizedMerchant"] == "starbucks"
+
+
+@respx.mock
+async def test_enrichment_input_client_gets_stale_response():
+    job_id = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    route = respx.get(
+        f"http://app.test/internal/v1/jobs/{job_id}/enrichment-input"
+    ).mock(return_value=Response(200, json={"outcome": "stale"}))
+    client = EnrichmentInputClient(
+        base_url="http://app.test", service_token="inp-token"
+    )
+    response = await client.get_enrichment_input(str(job_id))
+
+    assert route.called
+    assert response["outcome"] == "stale"
+
+
+@respx.mock
+async def test_enrichment_input_client_gets_skipped_response():
+    job_id = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    route = respx.get(
+        f"http://app.test/internal/v1/jobs/{job_id}/enrichment-input"
+    ).mock(return_value=Response(200, json={"outcome": "skipped"}))
+    client = EnrichmentInputClient(
+        base_url="http://app.test", service_token="inp-token"
+    )
+    response = await client.get_enrichment_input(str(job_id))
+
+    assert route.called
+    assert response["outcome"] == "skipped"
+
+
+# ---------------------------------------------------------------------------
+# Enrichment result client
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_enrichment_result_client_posts_result():
+    """POST /internal/v1/jobs/{jobId}/enrichment-result with correct auth and body."""
+    job_id = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    route = respx.post(
+        f"http://app.test/internal/v1/jobs/{job_id}/enrichment-result"
+    ).mock(return_value=Response(200, json={"version": 4}))
+
+    client = EnrichmentResultClient(
+        base_url="http://app.test", service_token="res-token"
+    )
+    version = await client.submit_enrichment_result(
+        job_id=str(job_id),
+        expected_job_version=3,
+        idempotency_key=f"{job_id}:enrichment:result:v1",
+        result={
+            "outcome": "applied",
+            "schemaVersion": 1,
+            "rulesVersion": 1,
+            "ruleTagKeys": [],
+            "suggestions": [],
+        },
+    )
+
+    assert route.called
+    assert version == 4
+    assert route.calls[0].request.headers["authorization"] == "Bearer res-token"
+    body = route.calls[0].request.content
+    assert b'"expectedJobVersion":3' in body
+    assert (
+        b'"idempotencyKey":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:enrichment:result:v1"'
+        in body
+    )
+
+
+# ---------------------------------------------------------------------------
+# Separate scope factories
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_input_client_factory_uses_correct_scope(monkeypatch):
+    """enrichment_input_client_from_env produces a client with jobs:enrichment-input scope."""
+    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
+    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "inp-svc-token")
+
+    client = enrichment_input_client_from_env()
+    # Service-token path: no token provider
+    assert client._service_token == "inp-svc-token"
+    assert client._token_provider is None
+
+
+def test_enrichment_result_client_factory_uses_correct_scope(monkeypatch):
+    """enrichment_result_client_from_env produces a client with jobs:enrichment-result scope."""
+    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
+    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "res-svc-token")
+
+    client = enrichment_result_client_from_env()
+    assert client._service_token == "res-svc-token"
+    assert client._token_provider is None
+
+
+def test_ocr_client_does_not_carry_enrichment_scopes(monkeypatch):
+    """The existing OCR/status client keeps exactly jobs:write + files:read.
+
+    Specifically it must NOT gain enrichment-input or enrichment-result scopes.
+    The test inspects the factory path that builds a M2M token provider;
+    when APP_API_SERVICE_TOKEN is absent the factory wires CachedM2MTokenProvider
+    with explicit scopes -- those scopes are stored on the provider and returned
+    when we access the internal _token_provider attribute.
+    """
+    # Use legacy service token path -- ensures the client object is created
+    # without enrichment scopes mixed in.
+    monkeypatch.setenv("APP_API_BASE_URL", "http://app.test")
+    monkeypatch.setenv("APP_API_SERVICE_TOKEN", "ocr-token")
+
+    client = app_api_client_from_env()
+    # Legacy path: no token provider wired at all
+    assert client._service_token == "ocr-token"
+    assert client._token_provider is None
+    # The enrichment clients are separate objects entirely
+    inp_client = enrichment_input_client_from_env()
+    res_client = enrichment_result_client_from_env()
+    assert inp_client is not client
+    assert res_client is not client

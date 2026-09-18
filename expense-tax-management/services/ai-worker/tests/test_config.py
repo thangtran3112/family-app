@@ -102,3 +102,33 @@ def test_worker_config_allows_optional_secrets_to_be_absent():
     assert config.clerk.publishable_key is None
     assert config.clerk.secret_key is None
     assert config.clerk.webhook_signing_secret is None
+
+
+# ---------------------------------------------------------------------------
+# Enrichment M2M scope config
+# ---------------------------------------------------------------------------
+
+ENV_WITH_ENRICHMENT = {
+    **ENV,
+    "CLERK_ENRICHMENT_INPUT_MACHINE_SECRET_KEY": " ak_test_enr_input_secret ",
+    "CLERK_ENRICHMENT_RESULT_MACHINE_SECRET_KEY": " ak_test_enr_result_secret ",
+}
+
+
+def test_worker_config_parses_enrichment_scope_secrets():
+    config = worker_config_from_env(ENV_WITH_ENRICHMENT)
+
+    assert (
+        config.clerk.enrichment_input_machine_secret_key == "ak_test_enr_input_secret"
+    )
+    assert (
+        config.clerk.enrichment_result_machine_secret_key == "ak_test_enr_result_secret"
+    )
+
+
+def test_worker_config_allows_enrichment_secrets_to_be_absent():
+    """When enrichment secrets are absent the fields are None (optional)."""
+    config = worker_config_from_env(ENV)
+
+    assert config.clerk.enrichment_input_machine_secret_key is None
+    assert config.clerk.enrichment_result_machine_secret_key is None
