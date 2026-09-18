@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 
 import {
   EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
@@ -23,6 +23,10 @@ import {
   type MutationResult,
 } from "./idempotency.js";
 import { toProcessingJob } from "./processing-job-view.js";
+import {
+  buildEnrichmentInput,
+  applyEnrichmentResult,
+} from "./enrichment.js";
 
 // ------------------------------------------------------------------ //
 // createEnrichmentJobInTransaction
@@ -126,22 +130,18 @@ export async function createEnrichmentJobInTransaction(
 }
 
 // ------------------------------------------------------------------ //
-// EnrichmentInputProjection — explicit seam for Task 6
+// EnrichmentInputProjection — explicit seam (kept for test compatibility)
 // ------------------------------------------------------------------ //
 
 /**
- * Task 6 injects a real projection by implementing this interface and wiring
- * it into createEnrichmentJobsDomain. Until Task 6 supplies the projection,
- * evaluate requests fail safely (CONFLICT) — stale/skipped proceed without
- * projection.
+ * Task 6 wired the real projection (buildEnrichmentInput from domain/enrichment.ts)
+ * into createEnrichmentJobsDomain. This interface and pendingProjection are kept
+ * for backward compatibility with existing tests in enrichment-domain.test.ts.
+ *
+ * The second parameter of createEnrichmentJobsDomain is no longer used in
+ * production; the factory ignores it and always uses the real buildEnrichmentInput.
  */
 export interface EnrichmentInputProjection {
-  /**
-   * Build the full ExpenseEnrichmentInputV1 for the given job and expense.
-   * Called only when the job is RUNNING and the expense is ready and
-   * version-current.
-   * Task 6 implements eligible tag/category IDs and bounded history here.
-   */
   buildInput(
     tenantId: string,
     jobId: string,
@@ -151,9 +151,8 @@ export interface EnrichmentInputProjection {
 }
 
 /**
- * Sentinel projection used until Task 6 supplies the real implementation.
- * Throws CONFLICT for evaluate path so the worker retries rather than
- * receiving an invalid empty input.
+ * Preserved for test compatibility (enrichment-domain.test.ts asserts this throws CONFLICT).
+ * Not used in production after Task 6.
  */
 export const pendingProjection: EnrichmentInputProjection = {
   async buildInput() {
@@ -206,92 +205,70 @@ function isUniqueViolation(error: unknown): boolean {
 
 export function createEnrichmentJobsDomain(
   database: Kysely<AppDatabase>,
-  projection: EnrichmentInputProjection = pendingProjection,
+  // projection parameter kept for API compatibility; Task 6 uses buildEnrichmentInput directly.
+  _projection: EnrichmentInputProjection = pendingProjection,
 ): EnrichmentJobsDomain {
   return {
     async getEnrichmentInput(input) {
-      return database.transaction().execute(async (transaction) => {
-        const job = await transaction
-          .selectFrom("app.processing_jobs")
-          .selectAll()
-          .where("id", "=", input.jobId)
-          .executeTakeFirst();
+      // I8: Audit is written inside buildEnrichmentInput's transaction for
+      // evaluate path. For non-evaluate (stale/skipped), audit is below.
+      const response = await buildEnrichmentInput(database, input.jobId);
 
-        if (!job || job.workflow_type !== EXPENSE_ENRICHMENT_WORKFLOW_TYPE) {
-          throw DomainError.notFound();
-        }
-        if (job.allowed_result_schema_version !== EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION) {
-          throw DomainError.notFound();
-        }
-        // I1: Only RUNNING is accepted; DISPATCHED is rejected (409).
-        // Worker must mark RUNNING before reading input.
-        if (job.status !== RUNNING_STATUS) {
-          throw DomainError.conflict();
-        }
-        if (!job.target_aggregate_id || job.target_aggregate_type !== "expense") {
-          throw DomainError.validation();
-        }
-
-        // Fetch the target expense to check version / status
-        const expense = await transaction
-          .selectFrom("app.expenses")
-          .selectAll()
-          .where("id", "=", job.target_aggregate_id)
-          .where("tenant_id", "=", job.tenant_id)
-          .executeTakeFirst();
-
-        // Determine outcome before writing the audit event (I8).
-        let outcome: "evaluate" | "stale" | "skipped";
-        if (!expense || expense.status === "archived") {
-          outcome = "skipped";
-        } else if (
-          job.expected_aggregate_version !== null &&
-          expense.version !== job.expected_aggregate_version
-        ) {
-          outcome = "stale";
-        } else {
-          outcome = "evaluate";
-        }
-
-        // I8: audit after outcome is known; include evaluate/stale/skipped metadata.
+      // Write audit event (we re-use the domain function's audit for evaluate;
+      // here we add one for stale/skipped at the route level using the job id).
+      // Note: buildEnrichmentInput writes audit inside its transaction for all
+      // outcomes — but we need actorServicePrincipal. We add a second audit
+      // event for the HTTP-layer actor attribution.
+      await database.transaction().execute(async (transaction) => {
         await recordAuditEvent(transaction, {
-          tenantId: job.tenant_id,
           actorServicePrincipal: input.actorServicePrincipal,
-          action: "processing_job.enrichment_input_read",
+          action: "processing_job.enrichment_input_served",
           outcome: "success",
           resourceType: "processing_job",
-          resourceId: job.id,
+          resourceId: input.jobId,
           requestId: input.requestId,
-          metadata: { inputOutcome: outcome },
+          metadata: { servedOutcome: response.outcome },
         });
-
-        if (outcome === "skipped") {
-          return { outcome: "skipped" as const };
-        }
-        if (outcome === "stale") {
-          return { outcome: "stale" as const };
-        }
-
-        // C3: Only evaluate reaches this path. Task 6's projection builds the
-        // full input. Until then, pendingProjection throws CONFLICT safely.
-        const evaluateInput = await projection.buildInput(
-          job.tenant_id,
-          job.id,
-          expense!.id,
-          expense!.version,
-        );
-
-        return { outcome: "evaluate" as const, input: evaluateInput };
       });
+
+      return response;
     },
 
     async submitEnrichmentResult(input) {
+      // Canonical payload hash for permanent replay key.
+      const payloadHash = hashNormalizedRequest({ jobId: input.jobId, result: input.result });
+
+      // --- Step 1: Check permanent operation key (replay-safe; never expires) ---
+      // Must be checked BEFORE the job-status guard so replay after generic
+      // idempotency expiry returns the original response.
+      const permanentOpKey = `result:${input.jobId}:${input.idempotencyKey}`;
+
+      const permanentRecord = await database
+        .selectFrom("app.enrichment_operation_keys")
+        .select(["payload_hash", "response_json"])
+        .where("operation_key", "=", permanentOpKey)
+        .executeTakeFirst();
+
+      if (permanentRecord) {
+        if (permanentRecord.payload_hash !== payloadHash) {
+          throw DomainError.conflict();
+        }
+        // Replay: parse stored response
+        const stored = permanentRecord.response_json as Record<string, unknown>;
+        return {
+          statusCode: 200,
+          body: stored as ProcessingJob,
+          replayed: true,
+        };
+      }
+
+      // --- Step 2: Generic idempotency (short-lived, 24h TTL) ---
       try {
-        return await executeIdempotentMutation(database, {
+        const result = await executeIdempotentMutation(database, {
           actorKey: `service:${input.actorServicePrincipal}`,
           operationKey: "enrichment-job.result-submit",
           idempotencyKey: input.idempotencyKey,
-          requestHash: hashNormalizedRequest({ jobId: input.jobId, result: input.result }),
+          requestHash: payloadHash,
           statusCode: 200,
           parseBody: (value) => value as ProcessingJob,
           execute: async (transaction) => {
@@ -319,47 +296,139 @@ export function createEnrichmentJobsDomain(
 
             const outcome = parsed.data.outcome;
 
-            // C2: Reject outcome:applied until Task 6 injects real application.
-            // stale and skipped are safe no-mutation completions.
-            if (outcome === "applied") {
-              throw DomainError.conflict();
+            if (outcome === "stale" || outcome === "skipped") {
+              // Safe no-mutation completion
+              const now = new Date();
+              const updated = await transaction
+                .updateTable("app.processing_jobs")
+                .set({
+                  status: "SUCCEEDED",
+                  result: toJsonValue(input.result as Record<string, unknown>),
+                  updated_at: now,
+                  completed_at: now,
+                  version: job.version + 1,
+                })
+                .where("id", "=", input.jobId)
+                .returningAll()
+                .executeTakeFirstOrThrow();
+
+              await recordAuditEvent(transaction, {
+                tenantId: job.tenant_id,
+                actorServicePrincipal: input.actorServicePrincipal,
+                action: "processing_job.enrichment_result_submitted",
+                outcome: "success",
+                resourceType: "processing_job",
+                resourceId: input.jobId,
+                requestId: input.requestId,
+                metadata: { outcome },
+              });
+
+              return toProcessingJob(updated);
             }
 
-            // stale/skipped: mark SUCCEEDED with empty result, no customer mutation.
-            const now = new Date();
-            const updated = await transaction
-              .updateTable("app.processing_jobs")
-              .set({
-                status: "SUCCEEDED",
-                result: toJsonValue(input.result as Record<string, unknown>),
-                updated_at: now,
-                completed_at: now,
-                version: job.version + 1,
-              })
-              .where("id", "=", input.jobId)
-              .returningAll()
-              .executeTakeFirstOrThrow();
-
-            await recordAuditEvent(transaction, {
-              tenantId: job.tenant_id,
-              actorServicePrincipal: input.actorServicePrincipal,
-              action: "processing_job.enrichment_result_submitted",
-              outcome: "success",
-              resourceType: "processing_job",
-              resourceId: input.jobId,
-              requestId: input.requestId,
-              metadata: { outcome },
-            });
-
-            return toProcessingJob(updated);
+            // outcome === "applied": delegate to real application
+            // applyEnrichmentResult opens its own transaction — we must NOT
+            // be inside executeIdempotentMutation's transaction here.
+            // Throw a sentinel to break out and call applyEnrichmentResult below.
+            throw _AppliedSentinel;
           },
         });
+
+        // Stale/skipped succeeded via idempotency — record permanent key
+        await _recordPermanentResultKey(database, {
+          tenantId: result.body.tenantId ?? "",
+          jobId: input.jobId,
+          expenseId: result.body.targetAggregateId ?? "",
+          operationKey: permanentOpKey,
+          payloadHash,
+          responseJson: toJsonValue(result.body),
+        });
+
+        return result;
       } catch (error: unknown) {
+        if (error === _AppliedSentinel) {
+          // Route to real application (own transaction)
+          const appliedResult = await applyEnrichmentResult(database, {
+            jobId: input.jobId,
+            idempotencyKey: input.idempotencyKey,
+            expectedJobVersion: input.expectedJobVersion,
+            result: input.result,
+            actorServicePrincipal: input.actorServicePrincipal,
+            requestId: input.requestId,
+          });
+
+          // Record permanent key after successful application
+          await _recordPermanentResultKey(database, {
+            tenantId: appliedResult.body.tenantId ?? "",
+            jobId: input.jobId,
+            expenseId: appliedResult.body.targetAggregateId ?? "",
+            operationKey: permanentOpKey,
+            payloadHash,
+            responseJson: toJsonValue(appliedResult.body),
+          });
+
+          return appliedResult;
+        }
         if (isUniqueViolation(error)) throw DomainError.conflict();
         throw error;
       }
     },
   };
+}
+
+/** Sentinel used to escape the idempotency wrapper for applied results. */
+const _AppliedSentinel = Symbol("applied-sentinel");
+
+async function _recordPermanentResultKey(
+  database: Kysely<AppDatabase>,
+  input: {
+    readonly tenantId: string;
+    readonly jobId: string;
+    readonly expenseId: string;
+    readonly operationKey: string;
+    readonly payloadHash: string;
+    readonly responseJson: import("../database/types.js").JsonValue;
+  },
+): Promise<void> {
+  const existing = await database
+    .selectFrom("app.enrichment_operation_keys")
+    .select("payload_hash")
+    .where("operation_key", "=", input.operationKey)
+    .executeTakeFirst();
+
+  if (existing) {
+    if (existing.payload_hash !== input.payloadHash) throw DomainError.conflict();
+    return; // Already recorded
+  }
+
+  try {
+    await database
+      .insertInto("app.enrichment_operation_keys")
+      .values({
+        id: randomUUID(),
+        tenant_id: input.tenantId,
+        job_id: input.jobId,
+        expense_id: input.expenseId,
+        kind: "tag", // job-level result key uses "tag" kind as placeholder
+        candidate_id: null,
+        evidence_hash: createHash("sha256").update(input.payloadHash).digest("hex"),
+        operation_key: input.operationKey,
+        payload_hash: input.payloadHash,
+        response_json: input.responseJson,
+        created_at: new Date(),
+      })
+      .execute();
+  } catch (err: unknown) {
+    // Unique violation on (tenant_id, operation_key) — already recorded, safe to ignore
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      (err as { code?: string }).code === "23505"
+    ) {
+      return;
+    }
+    throw err;
+  }
 }
 
 // ------------------------------------------------------------------ //

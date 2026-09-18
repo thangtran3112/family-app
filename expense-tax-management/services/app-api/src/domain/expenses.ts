@@ -13,6 +13,7 @@ import type {
   PersonalExpenseParams,
 } from "@expense-tax/contracts";
 import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
+import type { JsonValue } from "../database/types.js";
 
 import type { AppDatabase, ExpenseTable } from "../database/types.js";
 import { DomainError } from "../errors.js";
@@ -463,14 +464,31 @@ async function updateExpense(
   input: ExpenseUpdateCommand & { readonly scope: Scope },
 ): Promise<Expense> {
   return database.transaction().execute(async (transaction) => {
-    const current = await findExpense(transaction, {
-      tenantId: input.tenantId,
-      expenseId: input.expenseId,
-      scope: input.scope,
-    });
+    // Lock expense for update
+    const current = await transaction
+      .selectFrom("app.expenses")
+      .selectAll()
+      .where("id", "=", input.expenseId)
+      .where("tenant_id", "=", input.tenantId)
+      .where("status", "!=", "archived")
+      .$if(input.scope.kind === "personal", (q) =>
+        q.where("personal_profile_id", "=", (input.scope as { profileId: string }).profileId),
+      )
+      .$if(input.scope.kind === "business", (q) =>
+        q.where("business_id", "=", (input.scope as { businessId: string }).businessId),
+      )
+      .forUpdate()
+      .executeTakeFirst();
+    if (!current) throw DomainError.notFound();
+
     if (input.scope.kind === "personal" && input.request.projectId !== undefined) {
       if (input.request.projectId !== null) throw DomainError.validation();
     }
+
+    const categoryChanging =
+      input.request.spendingCategoryId !== undefined &&
+      input.request.spendingCategoryId !== current.spending_category_id;
+
     const updated = await transaction
       .updateTable("app.expenses")
       .set({
@@ -497,6 +515,49 @@ async function updateExpense(
       .returningAll()
       .executeTakeFirst();
     if (!updated) throw DomainError.conflict();
+
+    // Manual spendingCategoryId change: append decision row + supersede pending suggestions
+    if (categoryChanging) {
+      await transaction
+        .insertInto("app.expense_spending_category_decisions")
+        .values({
+          id: randomUUID(),
+          tenant_id: input.tenantId,
+          personal_profile_id:
+            input.scope.kind === "personal"
+              ? (input.scope as { profileId: string }).profileId
+              : null,
+          business_id:
+            input.scope.kind === "business"
+              ? (input.scope as { businessId: string }).businessId
+              : null,
+          expense_id: input.expenseId,
+          prior_spending_category_id: current.spending_category_id,
+          new_spending_category_id: input.request.spendingCategoryId ?? null,
+          source: "manual",
+          actor_user_id: input.actorUserId,
+          // expense_version is the NEW version after the update
+          expense_version: updated.version,
+          suggestion_id: null,
+        })
+        .execute();
+
+      // Supersede all pending spending_category suggestions for this expense
+      const now = new Date();
+      await transaction
+        .updateTable("app.expense_enrichment_suggestions")
+        .set({
+          status: "superseded",
+          resolved_at: now,
+          resolved_by_user_id: null, // system supersession — resolver may be null
+        })
+        .where("expense_id", "=", input.expenseId)
+        .where("tenant_id", "=", input.tenantId)
+        .where("kind", "=", "spending_category")
+        .where("status", "=", "pending")
+        .execute();
+    }
+
     await recordAuditEvent(transaction, {
       tenantId: input.tenantId,
       actorUserId: input.actorUserId,
