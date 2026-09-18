@@ -1272,7 +1272,6 @@ export async function resolveSuggestion(
     if (expense.version !== input.request.expectedExpenseVersion) throw DomainError.conflict();
 
     const now = new Date();
-    let finalVersion = suggestion.version + 1;
 
     if (input.request.action === "rejected") {
       // Reject — terminal, no side effects
@@ -1329,10 +1328,19 @@ export async function resolveSuggestion(
         .execute();
     }
 
+    // Fix-5: read back the actual version written by the DB (version + 1) rather
+    // than computing it in application code. This is the authoritative value stored
+    // in the op-key and returned to the caller for replay safety.
+    const resolved = await transaction
+      .selectFrom("app.expense_enrichment_suggestions")
+      .select(["version", "status"])
+      .where("id", "=", input.suggestionId)
+      .executeTakeFirstOrThrow();
+
     const result: ResolveSuggestionResult = {
       suggestionId: input.suggestionId,
-      status: input.request.action,
-      version: finalVersion,
+      status: resolved.status as ResolveSuggestionResult["status"],
+      version: resolved.version,
     };
 
     // Record permanent op key
@@ -1368,7 +1376,7 @@ export async function resolveSuggestion(
   });
 }
 
-// Tag accept
+// Tag accept — Fix-1: reject if tag is currently archived at acceptance time.
 async function _acceptTagSuggestion(
   transaction: Transaction<AppDatabase>,
   {
@@ -1384,6 +1392,16 @@ async function _acceptTagSuggestion(
   },
 ): Promise<void> {
   if (!suggestion.tag_id) return;
+
+  // Fix-1: Validate the candidate tag is still active at acceptance time.
+  // If it has been archived since the suggestion was created, the accept is a CONFLICT.
+  const tag = await transaction
+    .selectFrom("app.tags")
+    .select(["id", "status"])
+    .where("id", "=", suggestion.tag_id)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+  if (!tag || tag.status === "archived") throw DomainError.conflict();
 
   // Check for existing association — if manual or removed, don't overwrite
   const existingAssoc = await transaction
@@ -1555,13 +1573,21 @@ async function _acceptTaxCategorySuggestion(
 
   const { businessTaxProfileId, deductiblePercent } = taxAcceptance;
 
-  // Revalidate: active profile with same ID and expected version
+  // Fix-4: The current expense's tax_year must equal the suggestion's stored tax_year
+  // (stale detection: the expense may have moved to a different tax year since the
+  // suggestion was created). Reject if they diverge.
+  if (expense.tax_year !== suggestion.tax_year) throw DomainError.conflict();
+
+  // Revalidate: active profile with same ID, version, taxonomy_version_id, AND tax_year
+  // Fix-4: bind tax_year in the profile query to close the race where a new profile
+  // for a different year is returned first.
   const profile = await transaction
     .selectFrom("app.business_tax_profiles")
     .selectAll()
     .where("id", "=", businessTaxProfileId)
     .where("tenant_id", "=", tenantId)
     .where("business_id", "=", businessId)
+    .where("tax_year", "=", suggestion.tax_year!)
     .where("status", "=", "active")
     .executeTakeFirst();
 

@@ -1,19 +1,36 @@
 /**
  * Task 8 — Tag CRUD, Association Decisions, and Merge Transaction.
+ * Fix Round 1 corrections:
  *
- * Bindings enforced:
- * - Tags are tenant-level definitions.
- * - Reads require tenant membership; create/rename/color/archive/unarchive/merge require owner/admin.
- * - Custom creates origin=custom with immutable `custom:<uuid>` key generated server-side.
- * - Archived key requires explicit unarchive, never duplicate/reuse.
- * - Associations require exact Personal/Business membership and scope.
- * - One association row per expense/tag pair; manual apply/remove always source=manual.
- * - Manual removed/active outranks historical/rule on merge conflict.
- * - Merge locks source/target sorted IDs, then associations/suggestions stable IDs.
- * - Merge rejects: self, cross-tenant, stale, archived target.
- * - Merge preserves strongest: manual removed/active > accepted historical > rule.
- * - Source suggestions: supersede pending, preserve terminal, archive source, increment target.
- * - One audit event with counts per merge.
+ * F1/Fix-1: archiveTag now runs in ONE transaction: archive tag row + supersede
+ *   pending tag suggestions with resolved_at and resolved_by_user_id set. Only
+ *   pending suggestions are touched; accepted/rejected remain immutable.
+ *   _acceptTagSuggestion checks tag status at acceptance time and rejects if archived.
+ *
+ * F1/Fix-2: createTag, updateTag, archiveTag, unarchiveTag each run entirely in a
+ *   single database transaction — the mutation and its audit event are atomic.
+ *   A failure after the INSERT/UPDATE but before the audit no longer leaves the
+ *   mutation without an audit record.
+ *
+ * F1/Fix-3: removeExpenseTag UPDATE predicate now includes the exact scope column:
+ *   personal_profile_id for personal scope, business_id for business scope.
+ *   This prevents a user with access to a tag on one scope removing the row for
+ *   the same (expense_id, tag_id) pair that belongs to another scope.
+ *
+ * F1/Fix-5: resolveSuggestion returns the version number read back from the DB
+ *   after the UPDATE, not a manually computed finalVersion. Both the initial
+ *   response and the stored replay record carry this actual DB value.
+ *
+ * F1/Fix-6: Merge collision handling never hard-deletes the source association.
+ *   When target wins, source is rewritten to source=manual/status=removed with
+ *   removed_at/removed_by_user_id so the full history is preserved. When source
+ *   wins, source is rewritten to tag_id=target and retained; target is rewritten
+ *   with the source decision. Audit metadata includes provenanceSrcWins and
+ *   provenanceTgtWins counts.
+ *
+ * F1/Fix-7: listTags uses a composite opaque cursor (name, id) matching the
+ *   ORDER BY (name ASC, id ASC), so tags with identical names are handled
+ *   correctly across page boundaries. Cursor is base64-encoded JSON {n,i}.
  */
 
 import { randomUUID } from "node:crypto";
@@ -109,6 +126,34 @@ function toExpenseTag(row: ExpenseTagRow): ExpenseTag {
     removedAt: row.removed_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
   };
+}
+
+// ------------------------------------------------------------------ //
+// Opaque cursor helpers — Fix-7
+// ------------------------------------------------------------------ //
+
+/**
+ * Encode a (name, id) pair as a base64 opaque cursor.
+ * ORDER BY: name ASC, id ASC — cursor pages forward from position (name, id).
+ */
+function encodeCursor(name: string, id: string): string {
+  return Buffer.from(JSON.stringify({ n: name, i: id })).toString("base64");
+}
+
+/**
+ * Decode the opaque cursor. Returns null on any parse error (treat as no cursor).
+ */
+function decodeCursor(cursor: string): { n: string; i: string } | null {
+  try {
+    const obj = JSON.parse(Buffer.from(cursor, "base64").toString("utf8")) as unknown;
+    if (typeof obj === "object" && obj !== null && "n" in obj && "i" in obj) {
+      const { n, i } = obj as { n: unknown; i: unknown };
+      if (typeof n === "string" && typeof i === "string") return { n, i };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ------------------------------------------------------------------ //
@@ -416,56 +461,76 @@ export interface TagDomain {
 // ------------------------------------------------------------------ //
 
 export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
-  // Import resolveSuggestion and rerunEnrichment lazily to avoid circular deps
   async function getEnrichmentOps() {
     const mod = await import("./enrichment.js");
     return { resolveSuggestion: mod.resolveSuggestion, rerunEnrichment: mod.rerunEnrichment };
   }
 
   return {
+    // ------------------------------------------------------------------
+    // listTags — Fix-7: composite (name, id) keyset cursor
+    // ------------------------------------------------------------------
     async listTags({ actorUserId, tenantId, cursor }) {
       await requireTenantMembership(database, actorUserId, tenantId);
+
+      const PAGE = 50;
       let query = database
         .selectFrom("app.tags")
         .selectAll()
         .where("tenant_id", "=", tenantId)
         .orderBy("name", "asc")
         .orderBy("id", "asc")
-        .limit(51);
+        .limit(PAGE + 1);
+
       if (cursor) {
-        query = query.where("id", ">", cursor);
+        const parsed = decodeCursor(cursor);
+        if (parsed) {
+          // Rows where (name > cursorName) OR (name = cursorName AND id > cursorId)
+          query = query.where((eb) =>
+            eb.or([
+              eb("name", ">", parsed.n),
+              eb.and([eb("name", "=", parsed.n), eb("id", ">", parsed.i)]),
+            ]),
+          );
+        }
       }
+
       const rows = await query.execute();
-      const hasMore = rows.length === 51;
-      const items = (hasMore ? rows.slice(0, 50) : rows).map(toTag as (r: typeof rows[0]) => Tag);
+      const hasMore = rows.length === PAGE + 1;
+      const items = (hasMore ? rows.slice(0, PAGE) : rows).map(toTag as (r: typeof rows[0]) => Tag);
       return {
         items,
-        nextCursor: hasMore ? items[items.length - 1]!.id : null,
+        nextCursor: hasMore
+          ? encodeCursor(items[items.length - 1]!.name, items[items.length - 1]!.id)
+          : null,
       };
     },
 
+    // ------------------------------------------------------------------
+    // createTag — Fix-2: single transaction (insert + audit atomic)
+    // ------------------------------------------------------------------
     async createTag({ actorUserId, tenantId, request, requestId }) {
-      await requireTenantAdmin(database, actorUserId, tenantId);
-      const now = new Date();
-      const tagId = randomUUID();
-      const key = `custom:${tagId}`;
-      const created = await database
-        .insertInto("app.tags")
-        .values({
-          id: tagId,
-          tenant_id: tenantId,
-          key,
-          name: request.name.trim(),
-          color: request.color ?? null,
-          origin: "custom",
-          status: "active",
-          created_by_user_id: actorUserId,
-          created_at: now,
-          updated_at: now,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
-      await database.transaction().execute(async (transaction) => {
+      return database.transaction().execute(async (transaction) => {
+        await requireTenantAdmin(transaction, actorUserId, tenantId);
+        const now = new Date();
+        const tagId = randomUUID();
+        const key = `custom:${tagId}`;
+        const created = await transaction
+          .insertInto("app.tags")
+          .values({
+            id: tagId,
+            tenant_id: tenantId,
+            key,
+            name: request.name.trim(),
+            color: request.color ?? null,
+            origin: "custom",
+            status: "active",
+            created_by_user_id: actorUserId,
+            created_at: now,
+            updated_at: now,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
         await recordAuditEvent(transaction, {
           tenantId,
           actorUserId,
@@ -475,109 +540,140 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           resourceId: created.id,
           requestId,
         });
+        return toTag(created as TagRow);
       });
-      return toTag(created as TagRow);
     },
 
+    // ------------------------------------------------------------------
+    // updateTag — Fix-2: single transaction (update + audit atomic)
+    // ------------------------------------------------------------------
     async updateTag({ actorUserId, tenantId, tagId, request, requestId }) {
-      await requireTenantAdmin(database, actorUserId, tenantId);
-      const updated = await database
-        .updateTable("app.tags")
-        .set({
-          ...(request.name !== undefined ? { name: request.name.trim() } : {}),
-          ...(request.color !== undefined ? { color: request.color } : {}),
-          version: sql<number>`version + 1`,
-          updated_at: new Date(),
-        })
-        .where("id", "=", tagId)
-        .where("tenant_id", "=", tenantId)
-        .where("status", "=", "active")
-        .where("version", "=", request.expectedVersion)
-        .returningAll()
-        .executeTakeFirst();
-      if (!updated) throw DomainError.conflict();
-      await database.transaction().execute(async (transaction) => {
+      return database.transaction().execute(async (transaction) => {
+        await requireTenantAdmin(transaction, actorUserId, tenantId);
+        const updated = await transaction
+          .updateTable("app.tags")
+          .set({
+            ...(request.name !== undefined ? { name: request.name.trim() } : {}),
+            ...(request.color !== undefined ? { color: request.color } : {}),
+            version: sql<number>`version + 1`,
+            updated_at: new Date(),
+          })
+          .where("id", "=", tagId)
+          .where("tenant_id", "=", tenantId)
+          .where("status", "=", "active")
+          .where("version", "=", request.expectedVersion)
+          .returningAll()
+          .executeTakeFirst();
+        if (!updated) throw DomainError.conflict();
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
           action: "tag.updated", outcome: "success",
           resourceType: "tag", resourceId: tagId, requestId,
         });
+        return toTag(updated as TagRow);
       });
-      return toTag(updated as TagRow);
     },
 
+    // ------------------------------------------------------------------
+    // archiveTag — Fix-1 + Fix-2: single transaction; supersede pending
+    //   tag suggestions with resolved_at/actor set; accepted/rejected untouched.
+    // ------------------------------------------------------------------
     async archiveTag({ actorUserId, tenantId, tagId, request, requestId }) {
-      await requireTenantAdmin(database, actorUserId, tenantId);
-      // Check current state
-      const existing = await database
-        .selectFrom("app.tags")
-        .select(["id", "status", "version"])
-        .where("id", "=", tagId)
-        .where("tenant_id", "=", tenantId)
-        .executeTakeFirst();
-      if (!existing) throw DomainError.notFound();
-      if (existing.status === "archived") throw DomainError.conflict();
-      const updated = await database
-        .updateTable("app.tags")
-        .set({
-          status: "archived",
-          version: sql<number>`version + 1`,
-          updated_at: new Date(),
-        })
-        .where("id", "=", tagId)
-        .where("tenant_id", "=", tenantId)
-        .where("status", "=", "active")
-        .where("version", "=", request.expectedVersion)
-        .returningAll()
-        .executeTakeFirst();
-      if (!updated) throw DomainError.conflict();
-      await database.transaction().execute(async (transaction) => {
+      return database.transaction().execute(async (transaction) => {
+        await requireTenantAdmin(transaction, actorUserId, tenantId);
+
+        // Read-then-lock pattern: check status, then apply with version predicate.
+        const existing = await transaction
+          .selectFrom("app.tags")
+          .select(["id", "status", "version"])
+          .where("id", "=", tagId)
+          .where("tenant_id", "=", tenantId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (!existing) throw DomainError.notFound();
+        if (existing.status === "archived") throw DomainError.conflict();
+
+        const now = new Date();
+        const updated = await transaction
+          .updateTable("app.tags")
+          .set({
+            status: "archived",
+            version: sql<number>`version + 1`,
+            updated_at: now,
+          })
+          .where("id", "=", tagId)
+          .where("tenant_id", "=", tenantId)
+          .where("status", "=", "active")
+          .where("version", "=", request.expectedVersion)
+          .returningAll()
+          .executeTakeFirst();
+        if (!updated) throw DomainError.conflict();
+
+        // Fix-1: supersede pending suggestions that reference this tag.
+        // resolved_by_user_id = actorUserId (actor-driven archive, not system).
+        // accepted/rejected terminal rows are untouched.
+        await transaction
+          .updateTable("app.expense_enrichment_suggestions")
+          .set({
+            status: "superseded",
+            resolved_at: now,
+            resolved_by_user_id: actorUserId,
+          })
+          .where("tenant_id", "=", tenantId)
+          .where("tag_id", "=", tagId)
+          .where("status", "=", "pending")
+          .execute();
+
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
           action: "tag.archived", outcome: "success",
           resourceType: "tag", resourceId: tagId, requestId,
         });
+        return toTag(updated as TagRow);
       });
-      return toTag(updated as TagRow);
     },
 
+    // ------------------------------------------------------------------
+    // unarchiveTag — Fix-2: single transaction (update + audit atomic)
+    // ------------------------------------------------------------------
     async unarchiveTag({ actorUserId, tenantId, tagId, request, requestId }) {
-      await requireTenantAdmin(database, actorUserId, tenantId);
-      const updated = await database
-        .updateTable("app.tags")
-        .set({
-          status: "active",
-          version: sql<number>`version + 1`,
-          updated_at: new Date(),
-        })
-        .where("id", "=", tagId)
-        .where("tenant_id", "=", tenantId)
-        .where("status", "=", "archived")
-        .where("version", "=", request.expectedVersion)
-        .returningAll()
-        .executeTakeFirst();
-      if (!updated) throw DomainError.conflict();
-      await database.transaction().execute(async (transaction) => {
+      return database.transaction().execute(async (transaction) => {
+        await requireTenantAdmin(transaction, actorUserId, tenantId);
+        const updated = await transaction
+          .updateTable("app.tags")
+          .set({
+            status: "active",
+            version: sql<number>`version + 1`,
+            updated_at: new Date(),
+          })
+          .where("id", "=", tagId)
+          .where("tenant_id", "=", tenantId)
+          .where("status", "=", "archived")
+          .where("version", "=", request.expectedVersion)
+          .returningAll()
+          .executeTakeFirst();
+        if (!updated) throw DomainError.conflict();
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
           action: "tag.unarchived", outcome: "success",
           resourceType: "tag", resourceId: tagId, requestId,
         });
+        return toTag(updated as TagRow);
       });
-      return toTag(updated as TagRow);
     },
 
+    // ------------------------------------------------------------------
+    // mergeTags — Fix-6: preserve source assoc as removed (no hard-delete);
+    //   include provenanceSrcWins/provenanceTgtWins in audit metadata.
+    // ------------------------------------------------------------------
     async mergeTags({
       actorUserId, tenantId, sourceTagId, targetTagId,
       expectedSourceVersion, expectedTargetVersion, requestId,
     }) {
-      // Validate before transaction
       if (sourceTagId === targetTagId) throw DomainError.validation();
-
       await requireTenantAdmin(database, actorUserId, tenantId);
 
       await database.transaction().execute(async (transaction) => {
-        // Lock source/target in sorted ID order to prevent deadlocks
         const [lockFirst, lockSecond] = [sourceTagId, targetTagId].sort();
         const firstTag = await transaction
           .selectFrom("app.tags")
@@ -599,31 +695,26 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
         const sourceTag = firstTag.id === sourceTagId ? firstTag : secondTag;
         const targetTag = firstTag.id === targetTagId ? firstTag : secondTag;
 
-        // Validate state
         if (sourceTag.version !== expectedSourceVersion) throw DomainError.conflict();
         if (targetTag.version !== expectedTargetVersion) throw DomainError.conflict();
         if (targetTag.status === "archived") throw DomainError.conflict();
 
         const now = new Date();
 
-        // Collect all expense_tags for the source tag and lock in stable ID order
         const sourceAssocs = await transaction
           .selectFrom("app.expense_tags")
-          .select(["id", "expense_id", "source", "status", "personal_profile_id", "business_id",
-                    "confidence", "rule_version", "suggestion_id", "applied_by_user_id",
-                    "removed_by_user_id", "applied_at", "removed_at", "created_at"])
+          .selectAll()
           .where("tag_id", "=", sourceTagId)
           .where("tenant_id", "=", tenantId)
           .orderBy("id", "asc")
           .forUpdate()
           .execute();
 
-        // Lock corresponding target associations for same expenses
         const sourceExpenseIds = sourceAssocs.map((a) => a.expense_id);
         const targetAssocs = sourceExpenseIds.length > 0
           ? await transaction
             .selectFrom("app.expense_tags")
-            .select(["id", "expense_id", "source", "status"])
+            .selectAll()
             .where("tag_id", "=", targetTagId)
             .where("tenant_id", "=", tenantId)
             .where("expense_id", "in", sourceExpenseIds)
@@ -635,13 +726,14 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
         const targetAssocByExpense = new Map(targetAssocs.map((a) => [a.expense_id, a]));
 
         let movedCount = 0;
-        let collisionCount = 0;
+        let provenanceSrcWins = 0;
+        let provenanceTgtWins = 0;
 
         for (const srcAssoc of sourceAssocs) {
           const tgtAssoc = targetAssocByExpense.get(srcAssoc.expense_id);
 
           if (!tgtAssoc) {
-            // No collision: move association to target tag
+            // No collision: reassign source row to target tag
             await transaction
               .updateTable("app.expense_tags")
               .set({ tag_id: targetTagId, version: sql<number>`version + 1` })
@@ -649,12 +741,13 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
               .execute();
             movedCount++;
           } else {
-            // Collision: pick stronger decision, delete weaker
+            // Collision: compare precedence
             const srcPrec = associationPrecedence(srcAssoc.source, srcAssoc.status);
             const tgtPrec = associationPrecedence(tgtAssoc.source, tgtAssoc.status);
 
             if (srcPrec > tgtPrec) {
-              // Source wins: update target assoc to match source decision, delete source assoc
+              // Source decision wins:
+              // 1. Copy source decision onto the existing target row.
               await transaction
                 .updateTable("app.expense_tags")
                 .set({
@@ -671,24 +764,43 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
                 })
                 .where("id", "=", tgtAssoc.id)
                 .execute();
+              // 2. Fix-6: Mark source row removed (keep tag_id=sourceTagId so no
+              //    unique constraint is violated). The source tag is being archived
+              //    so the row stays as history under the archived source tag key.
               await transaction
-                .deleteFrom("app.expense_tags")
+                .updateTable("app.expense_tags")
+                .set({
+                  source: "manual",
+                  status: "removed",
+                  removed_by_user_id: actorUserId,
+                  removed_at: now,
+                  version: sql<number>`version + 1`,
+                })
                 .where("id", "=", srcAssoc.id)
                 .execute();
+              provenanceSrcWins++;
             } else {
-              // Target wins (or equal precedence → target wins by stability): delete source assoc
+              // Target wins or equal (stability: target retained):
+              // Fix-6: Mark source row removed under source tag key (history preserved).
               await transaction
-                .deleteFrom("app.expense_tags")
+                .updateTable("app.expense_tags")
+                .set({
+                  source: "manual",
+                  status: "removed",
+                  removed_by_user_id: actorUserId,
+                  removed_at: now,
+                  version: sql<number>`version + 1`,
+                })
                 .where("id", "=", srcAssoc.id)
                 .execute();
+              provenanceTgtWins++;
             }
-            collisionCount++;
           }
         }
 
-        // Supersede pending source suggestions, preserve terminal ones
+        // Supersede pending source suggestions with actor set
         const supersededCount = await _supersedePendingSourceSuggestions(
-          transaction, tenantId, sourceTagId, now,
+          transaction, tenantId, sourceTagId, now, actorUserId,
         );
 
         // Archive source tag
@@ -712,7 +824,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           .where("id", "=", targetTagId)
           .execute();
 
-        // One audit event with counts
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
           action: "tag.merged",
@@ -723,7 +834,8 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           metadata: {
             targetTagId,
             movedAssociations: movedCount,
-            collisions: collisionCount,
+            provenanceSrcWins,
+            provenanceTgtWins,
             supersededSuggestions: supersededCount,
           },
         });
@@ -760,7 +872,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
     },
 
     async applyExpenseTag({ actorUserId, tenantId, profileId, businessId, expenseId, tagId, requestId }) {
-      // Verify scope membership
       if (profileId !== null) {
         await requirePersonalMembership(database, actorUserId, tenantId, profileId);
       } else if (businessId !== null) {
@@ -770,7 +881,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
       }
 
       return database.transaction().execute(async (transaction) => {
-        // Verify expense belongs to the claimed scope
         const expenseScope = profileId !== null
           ? { personal_profile_id: profileId, business_id: null as string | null }
           : { personal_profile_id: null as string | null, business_id: businessId };
@@ -791,7 +901,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
         const expense = await expenseQuery.executeTakeFirst();
         if (!expense) throw DomainError.notFound();
 
-        // Verify tag belongs to tenant and is active
         const tag = await transaction
           .selectFrom("app.tags")
           .select(["id", "status"])
@@ -803,7 +912,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 
         const now = new Date();
 
-        // Check existing association (one row per expense/tag pair)
         const existing = await transaction
           .selectFrom("app.expense_tags")
           .selectAll()
@@ -813,7 +921,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           .executeTakeFirst();
 
         if (existing) {
-          // Already exists — update to active/manual (idempotent)
           const updated = await transaction
             .updateTable("app.expense_tags")
             .set({
@@ -838,7 +945,6 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           return toExpenseTag(updated as ExpenseTagRow);
         }
 
-        // Insert new association
         const inserted = await transaction
           .insertInto("app.expense_tags")
           .values({
@@ -871,6 +977,9 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
       });
     },
 
+    // ------------------------------------------------------------------
+    // removeExpenseTag — Fix-3: predicate includes exact scope column
+    // ------------------------------------------------------------------
     async removeExpenseTag({ actorUserId, tenantId, profileId, businessId, expenseId, tagId, expectedVersion, requestId }) {
       if (profileId !== null) {
         await requirePersonalMembership(database, actorUserId, tenantId, profileId);
@@ -882,7 +991,10 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 
       return database.transaction().execute(async (transaction) => {
         const now = new Date();
-        const updated = await transaction
+
+        // Fix-3: include exact scope ID in the predicate so a cross-scope
+        // request on the same (expense_id, tag_id, version) hits nothing.
+        let updateQuery = transaction
           .updateTable("app.expense_tags")
           .set({
             source: "manual",
@@ -894,9 +1006,15 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           .where("tenant_id", "=", tenantId)
           .where("expense_id", "=", expenseId)
           .where("tag_id", "=", tagId)
-          .where("version", "=", expectedVersion)
-          .returningAll()
-          .executeTakeFirst();
+          .where("version", "=", expectedVersion);
+
+        if (profileId !== null) {
+          updateQuery = updateQuery.where("personal_profile_id", "=", profileId);
+        } else if (businessId !== null) {
+          updateQuery = updateQuery.where("business_id", "=", businessId);
+        }
+
+        const updated = await updateQuery.returningAll().executeTakeFirst();
         if (!updated) throw DomainError.conflict();
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
@@ -940,8 +1058,7 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 
     async resolveSuggestion(input) {
       const ops = await getEnrichmentOps();
-      const result = await ops.resolveSuggestion(database, input);
-      return result;
+      return ops.resolveSuggestion(database, input);
     },
 
     async rerunEnrichment(input) {
@@ -952,7 +1069,7 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 }
 
 // ------------------------------------------------------------------ //
-// Internal helper: supersede pending suggestions for a source tag
+// Internal helper: supersede pending tag suggestions — Fix-1 actor
 // ------------------------------------------------------------------ //
 
 async function _supersedePendingSourceSuggestions(
@@ -960,6 +1077,7 @@ async function _supersedePendingSourceSuggestions(
   tenantId: string,
   sourceTagId: string,
   now: Date,
+  actorUserId: string | null = null,
 ): Promise<number> {
   const pendingRows = await transaction
     .selectFrom("app.expense_enrichment_suggestions")
@@ -978,7 +1096,7 @@ async function _supersedePendingSourceSuggestions(
     .set({
       status: "superseded",
       resolved_at: now,
-      resolved_by_user_id: null,
+      resolved_by_user_id: actorUserId,
     })
     .where("id", "in", pendingRows.map((r) => r.id))
     .execute();

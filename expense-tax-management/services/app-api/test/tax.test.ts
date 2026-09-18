@@ -552,6 +552,101 @@ describe.skipIf(!requested)(
       expect(acceptedStatus).toBe("accepted");
       expect(rejectedStatus).toBe("rejected");
     });
+
+    // ---------------------------------------------------------------- //
+    // Fix-4: Tax accept with stale expense tax_year → CONFLICT
+    // ---------------------------------------------------------------- //
+
+    it("TX-Fix4: accept tax suggestion when expense.tax_year != suggestion.tax_year → CONFLICT", async () => {
+      const { resolveSuggestion } = await import("../src/domain/enrichment.js");
+
+      // Use a dedicated second business to avoid collisions with other tests (TX-L1 uses 2025).
+      const biz2Id = randomUUID();
+      const profileId = randomUUID();
+      runtimeSqlTx(`
+        -- Second business for isolation
+        INSERT INTO app.businesses
+          (id, tenant_id, name, industry_code, timezone, base_currency, status)
+        VALUES ('${biz2Id}', '${TX_TENANT_ID}', 'TX Fix4 Biz', 'restaurant', 'UTC', 'USD', 'active')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.business_memberships (business_id, tenant_id, user_id, role, status)
+        VALUES ('${biz2Id}', '${TX_TENANT_ID}', '${TX_USER_ID}', 'owner', 'active')
+        ON CONFLICT DO NOTHING;
+
+        -- Profile for year 2026 (fresh tax year for this biz — no collision)
+        INSERT INTO app.taxonomy_versions (id, jurisdiction_code, tax_year, code, name, status, source_url, source_revision, source_checksum)
+        VALUES ('7f000000-0000-4000-8000-000000000013', 'US-FEDERAL', 2026, 'tx-v5', 'TX 2026', 'active', 'https://test.local', 'rev1', '${"a".repeat(64)}')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.business_tax_profiles
+          (id, tenant_id, business_id, tax_year, taxonomy_version_id, tax_form, accounting_method, status)
+        VALUES ('${profileId}', '${TX_TENANT_ID}', '${biz2Id}', 2026, '7f000000-0000-4000-8000-000000000013', 'schedule_c', 'cash', 'active')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.tax_category_definitions (id, taxonomy_version_id, code, name, status, sort_order)
+        VALUES ('7f000000-0000-4000-8000-000000000023', '7f000000-0000-4000-8000-000000000013', 'FIX4', 'Fix4 Cat', 'active', 1)
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Expense for 2026 (tax_year=2026)
+      const expId = randomUUID();
+      const fakeJobId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${TX_TENANT_ID}', '${TX_USER_ID}',
+          NULL, '${biz2Id}', 'Stale Year Meals', '30.00', 'USD', '2026-06-01', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES ('${fakeJobId}', '${TX_TENANT_ID}', NULL, '${biz2Id}',
+          'ExpenseEnrichmentWorkflow', 'job-${fakeJobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+          'expense', '${expId}', 1, '{}', 'expense-enrichment-v1', now(), now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Suggestion with tax_year=2025 (stale — expense.tax_year=2026)
+      // The suggestion references the profile correctly but the year diverges from expense.
+      const sugId = randomUUID();
+      runtimeSqlTx(`
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES ('${sugId}', '${TX_TENANT_ID}', NULL, '${biz2Id}',
+          '${expId}', '${fakeJobId}', 'tax_category', NULL, NULL, '7f000000-0000-4000-8000-000000000023',
+          '${profileId}', 1, '7f000000-0000-4000-8000-000000000013', 2025,
+          'historical', 0.8, '${"e".repeat(64)}', 'pending', 1, 1, 'fix4-stale-sug-${runKey}')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Accept must fail: expense.tax_year (2026) != suggestion.tax_year (2025)
+      await expect(
+        resolveSuggestion(database!, {
+          actorUserId: TX_USER_ID,
+          tenantId: TX_TENANT_ID,
+          profileId: null,
+          businessId: biz2Id,
+          expenseId: expId,
+          suggestionId: sugId,
+          request: {
+            action: "accepted",
+            expectedSuggestionVersion: 1,
+            expectedExpenseVersion: 1,
+            idempotencyKey: `fix4-stale-${runKey}`,
+            taxAcceptance: {
+              businessTaxProfileId: profileId,
+              deductiblePercent: "100.00",
+            },
+          },
+          requestId: `fix4-stale-req-${runKey}`,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
   },
 );
 
