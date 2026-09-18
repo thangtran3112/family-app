@@ -183,17 +183,26 @@ function toDateStr(raw: Date | string | null): string {
 }
 
 /**
- * Compute the 24-month cutoff date string (YYYY-MM-DD) without setMonth overflow.
- * F5: subtract month arithmetic safely using explicit year/month arithmetic.
- * e.g. 2026-01-15 → 2024-01-15; 2026-03-31 → 2024-03-31.
+ * Compute the 24-month cutoff date string (YYYY-MM-DD).
+ *
+ * Subtracts exactly 2 years from the given date, then clamps the day to the last
+ * valid day in the resulting year/month so leap-year boundaries are handled correctly.
+ *
+ * Examples:
+ *   2026-09-15 → 2024-09-15  (same day, same month)
+ *   2028-02-29 → 2026-02-28  (2026 is not a leap year → clamp to Feb 28)
+ *   2026-03-31 → 2024-03-31  (2024 has 31 days in March)
+ *
+ * Exported for unit testing.
  */
-function twentyFourMonthCutoff(fromDateStr: string): string {
+export function twentyFourMonthCutoff(fromDateStr: string): string {
   const [y, m, d] = fromDateStr.split("-").map(Number) as [number, number, number];
-  let cutoffYear = y - 2;
-  let cutoffMonth = m; // 1-based
-  // setMonth overflow is avoided because we directly subtract years
-  const cutoffDay = d;
-  // Pad month
+  const cutoffYear = y - 2;
+  const cutoffMonth = m; // 1-based, unchanged
+  // Clamp day to last valid day in cutoffYear/cutoffMonth.
+  // new Date(year, month, 0) returns the last day of month-1, i.e. last day of cutoffMonth.
+  const lastDay = new Date(cutoffYear, cutoffMonth, 0).getDate();
+  const cutoffDay = Math.min(d, lastDay);
   return `${cutoffYear}-${String(cutoffMonth).padStart(2, "0")}-${String(cutoffDay).padStart(2, "0")}`;
 }
 
@@ -218,8 +227,8 @@ function twentyFourMonthCutoff(fromDateStr: string): string {
 export async function buildEnrichmentInput(
   database: Kysely<AppDatabase>,
   jobId: string,
-  actorServicePrincipal?: string,
-  requestId?: string,
+  actorServicePrincipal: string,
+  requestId: string,
 ): Promise<ExpenseEnrichmentInputResponseV1> {
   return database.transaction().execute(async (transaction) => {
     // ---- Validate job ----
@@ -264,10 +273,9 @@ export async function buildEnrichmentInput(
     }
 
     // ---- Audit (exactly one event, I8/F13) ----
-    // actor_check requires at least one of actor_user_id/actor_service_principal non-null.
     await recordAuditEvent(transaction, {
       tenantId,
-      actorServicePrincipal: actorServicePrincipal ?? "system",
+      actorServicePrincipal,
       action: "processing_job.enrichment_input_read",
       outcome: "success",
       resourceType: "processing_job",
@@ -654,6 +662,11 @@ export async function applyEnrichmentResult(
     if (job.allowed_result_schema_version !== EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION) {
       throw DomainError.notFound();
     }
+    // Require non-null expense target before any replay/mutation so malformed
+    // enrichment jobs cannot create result keys or complete (Fix 2).
+    if (!job.target_aggregate_id || job.target_aggregate_type !== "expense") {
+      throw DomainError.validation();
+    }
 
     // ---- F3: Check permanent result operation key BEFORE status rejection ----
     // This ensures replay after generic idempotency expiry works even for a
@@ -688,8 +701,8 @@ export async function applyEnrichmentResult(
     const outcome = resultData.outcome;
 
     // ---- Load and lock expense ----
-    const expenseId = job.target_aggregate_id;
-    if (!expenseId || job.target_aggregate_type !== "expense") throw DomainError.validation();
+    // target_aggregate_id is already validated non-null above.
+    const expenseId = job.target_aggregate_id!;
 
     const expense = await transaction
       .selectFrom("app.expenses")
@@ -1129,8 +1142,10 @@ async function _completeAndRecordResult(
 
   const responseBody = toProcessingJob(updated);
 
-  // F1/F2: result operation key for stale/skipped too (ensures replay works)
-  const expenseId = job.target_aggregate_id ?? job.id; // fallback to job id if null
+  // F1/F2: result operation key for stale/skipped too (ensures replay works).
+  // target_aggregate_id must be non-null for any enrichment job completion;
+  // the caller validates this before reaching here.
+  const expenseId = job.target_aggregate_id!;
   await _insertOperationKey(transaction, {
     tenantId: job.tenant_id,
     jobId: input.jobId,

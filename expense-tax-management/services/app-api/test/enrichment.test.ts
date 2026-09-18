@@ -21,6 +21,7 @@ import { runMigrations } from "../src/database/migrate.js";
 import {
   buildEnrichmentInput,
   applyEnrichmentResult,
+  twentyFourMonthCutoff,
 } from "../src/domain/enrichment.js";
 import {
   createEnrichmentJobsDomain,
@@ -46,6 +47,12 @@ interface ComposeConfig {
     { readonly environment?: Record<string, string | null> }
   >;
 }
+
+// ------------------------------------------------------------------ //
+// Test constants
+// ------------------------------------------------------------------ //
+/** Actor principal used for direct buildEnrichmentInput() calls in tests. */
+const TEST_ACTOR = "test-enrichment-worker";
 
 // ------------------------------------------------------------------ //
 // Deterministic fixture UUIDs (Task 6 scope)
@@ -124,6 +131,43 @@ describe("createEnrichmentJobsDomain — applied outcome no longer rejected", ()
     expect(typeof createEnrichmentJobsDomain).toBe("function");
     // arity is 1 because second parameter has a default value (Task 6 ignores it)
     expect(createEnrichmentJobsDomain.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// twentyFourMonthCutoff unit tests — Fix 1
+// ------------------------------------------------------------------ //
+
+describe("twentyFourMonthCutoff — 24-month arithmetic with day clamping", () => {
+  it("ordinary date: 2026-09-15 → 2024-09-15", () => {
+    expect(twentyFourMonthCutoff("2026-09-15")).toBe("2024-09-15");
+  });
+
+  it("leap-day source: 2028-02-29 → 2026-02-28 (2026 not a leap year)", () => {
+    // 2028 is a leap year (divisible by 4, not by 100), so 2028-02-29 is valid.
+    // 2026 is not a leap year, so the cutoff must clamp to 2026-02-28.
+    expect(twentyFourMonthCutoff("2028-02-29")).toBe("2026-02-28");
+  });
+
+  it("end-of-month: 2026-03-31 → 2024-03-31 (March always has 31 days)", () => {
+    expect(twentyFourMonthCutoff("2026-03-31")).toBe("2024-03-31");
+  });
+
+  it("January 31 → stays 31 in cutoff year (Jan always has 31 days)", () => {
+    expect(twentyFourMonthCutoff("2026-01-31")).toBe("2024-01-31");
+  });
+
+  it("2026-02-28 → 2024-02-28 (2024 is a leap year so Feb 28 is valid)", () => {
+    expect(twentyFourMonthCutoff("2026-02-28")).toBe("2024-02-28");
+  });
+
+  it("2025-02-28 → 2023-02-28 (2023 not leap, day 28 always valid)", () => {
+    expect(twentyFourMonthCutoff("2025-02-28")).toBe("2023-02-28");
+  });
+
+  it("2024-02-29 → 2022-02-28 (2022 not a leap year → clamp)", () => {
+    // 2024 is a leap year (divisible by 4); 2022 is not.
+    expect(twentyFourMonthCutoff("2024-02-29")).toBe("2022-02-28");
   });
 });
 
@@ -298,7 +342,7 @@ describe.skipIf(!requested)(
         `);
 
         // Build enrichment input — must return a real evaluate response
-        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        const inputResponse = await buildEnrichmentInput(db, jobId!, TEST_ACTOR, `t6-input-${runKey}`);
         expect(inputResponse.outcome).toBe("evaluate");
         if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
 
@@ -744,16 +788,17 @@ describe.skipIf(!requested)(
     // ---------------------------------------------------------------- //
 
     // ---------------------------------------------------------------- //
-    // T6-L7: F8 merchant key parity — verbatim slug, no hyphen conversion
+    // T6-L7: F8 merchant slug parity — hyphenated slug satisfies tag key constraint
     // ---------------------------------------------------------------- //
 
     it(
-      "T6-L7: F8 merchant key in eligibleTagKeys is merchant:<verbatim-normalized-slug>",
+      "T6-L7: F8 merchant key uses hyphenated slug: normalizedMerchant='whole-foods-market', key='merchant:whole-foods-market'",
       async () => {
         const db = database!;
 
-        // "Whole Foods Market" → normalizeMerchant → "whole foods market" (spaces, no hyphens)
-        // The eligible key must be "merchant:whole foods market", NOT "merchant:whole-foods-market"
+        // "Whole Foods Market" → normalizeMerchant → "whole foods market" (spaces)
+        // → toMerchantSlug → "whole-foods-market" (hyphens, satisfies tag key constraint [a-z0-9_:.-]+)
+        // normalizedMerchant in input = slug form; worker: f"merchant:{inp.normalizedMerchant}" = "merchant:whole-foods-market"
         const expenseDomain = createExpenseDomain(db);
         const expense = await expenseDomain.createPersonal({
           actorUserId: T6_USER_ID,
@@ -782,7 +827,7 @@ describe.skipIf(!requested)(
            WHERE id = '${jobId}';
         `);
 
-        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        const inputResponse = await buildEnrichmentInput(db, jobId!, TEST_ACTOR, `t6-input-${runKey}`);
         expect(inputResponse.outcome).toBe("evaluate");
         if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
 
@@ -890,7 +935,7 @@ describe.skipIf(!requested)(
            WHERE id = '${jobId}';
         `);
 
-        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        const inputResponse = await buildEnrichmentInput(db, jobId!, TEST_ACTOR, `t6-input-${runKey}`);
         expect(inputResponse.outcome).toBe("evaluate");
         if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
 
@@ -984,7 +1029,7 @@ describe.skipIf(!requested)(
            WHERE id = '${jobId}';
         `);
 
-        const inputResponse = await buildEnrichmentInput(db, jobId!);
+        const inputResponse = await buildEnrichmentInput(db, jobId!, TEST_ACTOR, `t6-input-${runKey}`);
         expect(inputResponse.outcome).toBe("evaluate");
         if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
 
@@ -1044,7 +1089,7 @@ describe.skipIf(!requested)(
         `);
 
         // Get the actual eligible keys from projection to avoid mismatch
-        const inputResp = await buildEnrichmentInput(db, jobId!);
+        const inputResp = await buildEnrichmentInput(db, jobId!, TEST_ACTOR, `t6-input-${runKey}`);
         expect(inputResp.outcome).toBe("evaluate");
         if (inputResp.outcome !== "evaluate") throw new Error("expected evaluate");
         const eligibleKeys = inputResp.input.eligibleTagKeys;
@@ -1270,6 +1315,190 @@ describe.skipIf(!requested)(
             requestId: `t6-l6-req2-${runKey}`,
           }),
         ).rejects.toMatchObject({ code: "CONFLICT" });
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L12: Fix 2 — malformed RUNNING enrichment job (null target_aggregate_id)
+    //         cannot create result key or complete
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L12: Fix2 malformed enrichment job (null target_aggregate_id) is rejected with validation error",
+      async () => {
+        const db = database!;
+
+        // Seed a malformed enrichment job with no target_aggregate_id
+        const malformedJobId = randomUUID();
+        runtimeSql(`
+          INSERT INTO app.processing_jobs
+            (id, tenant_id, personal_profile_id, business_id,
+             workflow_type, workflow_id, task_queue, status,
+             target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+             input_params, allowed_result_schema_version, dispatched_at)
+          VALUES
+            ('${malformedJobId}', '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL,
+             'ExpenseEnrichmentWorkflow', 'job-${malformedJobId}', 'expense-tax-ai-worker', 'RUNNING',
+             NULL, NULL, NULL,
+             '{}', 'expense-enrichment-v1', now())
+          ON CONFLICT DO NOTHING;
+        `);
+
+        const enrichmentDomain = createEnrichmentJobsDomain(db);
+
+        // submitEnrichmentResult must throw VALIDATION_ERROR before creating any op key or completing
+        await expect(
+          enrichmentDomain.submitEnrichmentResult({
+            jobId: malformedJobId,
+            idempotencyKey: `t6-l12-malformed-${runKey}`,
+            expectedJobVersion: 1,
+            result: {
+              schemaVersion: 1,
+              rulesVersion: 1,
+              outcome: "stale",
+              ruleTagKeys: [],
+              suggestions: [],
+            },
+            actorServicePrincipal: "ai-worker-app-machine",
+            requestId: `t6-l12-req-${runKey}`,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+        // No result op key must be created
+        const opKeyCount = runtimeSql(
+          `SELECT count(*) FROM app.enrichment_operation_keys
+            WHERE job_id = '${malformedJobId}';`,
+        );
+        expect(opKeyCount).toBe("0");
+
+        // Job must remain RUNNING (no completion attempted)
+        const jobStatus = runtimeSql(
+          `SELECT status FROM app.processing_jobs WHERE id = '${malformedJobId}';`,
+        );
+        expect(jobStatus).toBe("RUNNING");
+      },
+    );
+
+    // ---------------------------------------------------------------- //
+    // T6-L13: Fix 5 — version predicate + decision expense_version equality
+    // ---------------------------------------------------------------- //
+
+    it(
+      "T6-L13: Fix5 decision row expense_version equals new expense version after manual update",
+      async () => {
+        const db = database!;
+
+        const catId4 = "6a000000-0000-4000-8000-00000000000b";
+        runtimeSql(`
+          INSERT INTO app.spending_categories (id, tenant_id, name, color, icon, status)
+          VALUES ('${catId4}', '${T6_TENANT_ID}', 'T6 Cat4', '#556677', 'pencil', 'active')
+          ON CONFLICT DO NOTHING;
+        `);
+
+        const expenseDomain = createExpenseDomain(db);
+        // Create expense at version 1 with T6_CAT_ID
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Version Dec Diner",
+            amount: "15.00",
+            currency: "USD",
+            incurredOn: "2026-09-17",
+            spendingCategoryId: T6_CAT_ID,
+          },
+          requestId: `t6-l13-create-${runKey}`,
+        });
+
+        expect(expense.version).toBe(1);
+
+        // Update category → creates decision, bumps expense version to 2
+        const updated = await expenseDomain.updatePersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          expenseId: expense.id,
+          profileId: T6_PROFILE_ID,
+          request: {
+            expectedVersion: 1,
+            spendingCategoryId: catId4,
+          },
+          requestId: `t6-l13-update-${runKey}`,
+        });
+
+        expect(updated.version).toBe(2);
+
+        // Fix 5: decision.expense_version must equal the NEW expense version (2)
+        const decVersion = runtimeSql(
+          `SELECT expense_version FROM app.expense_spending_category_decisions
+            WHERE expense_id = '${expense.id}'
+              AND source = 'manual'
+              AND new_spending_category_id = '${catId4}';`,
+        );
+        expect(parseInt(decVersion, 10)).toBe(2);
+      },
+    );
+
+    it(
+      "T6-L14: Fix5 job update version predicate — wrong expectedJobVersion is rejected",
+      async () => {
+        const db = database!;
+
+        const expenseDomain = createExpenseDomain(db);
+        const expense = await expenseDomain.createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Version Pred Cafe",
+            amount: "8.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `t6-l14-${runKey}`,
+        });
+
+        const jobRow = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+            WHERE target_aggregate_id = '${expense.id}'
+              AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [jobId, jobVersionStr] = jobRow.split("|");
+        const jobVersion = parseInt(jobVersionStr ?? "1", 10);
+
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const enrichmentDomain = createEnrichmentJobsDomain(db);
+
+        // Submit with WRONG expectedJobVersion (still job version 1, not 2)
+        await expect(
+          enrichmentDomain.submitEnrichmentResult({
+            jobId: jobId!,
+            idempotencyKey: `t6-l14-wrong-ver-${runKey}`,
+            expectedJobVersion: jobVersion, // wrong — job is now at version jobVersion+1
+            result: {
+              schemaVersion: 1,
+              rulesVersion: 1,
+              outcome: "stale",
+              ruleTagKeys: [],
+              suggestions: [],
+            },
+            actorServicePrincipal: "ai-worker-app-machine",
+            requestId: `t6-l14-req-${runKey}`,
+          }),
+        ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+
+        // Job must still be RUNNING
+        const jobStatus = runtimeSql(
+          `SELECT status FROM app.processing_jobs WHERE id = '${jobId}';`,
+        );
+        expect(jobStatus).toBe("RUNNING");
       },
     );
   },
