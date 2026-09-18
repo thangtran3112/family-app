@@ -733,7 +733,9 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           const tgtAssoc = targetAssocByExpense.get(srcAssoc.expense_id);
 
           if (!tgtAssoc) {
-            // No collision: reassign source row to target tag
+            // No collision: reassign source row to target tag.
+            // If source is already removed, keep all fields as-is (just tag_id + version).
+            // If source is active, move it intact.
             await transaction
               .updateTable("app.expense_tags")
               .set({ tag_id: targetTagId, version: sql<number>`version + 1` })
@@ -741,13 +743,13 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
               .execute();
             movedCount++;
           } else {
-            // Collision: compare precedence
+            // Collision: compare precedence.
             const srcPrec = associationPrecedence(srcAssoc.source, srcAssoc.status);
             const tgtPrec = associationPrecedence(tgtAssoc.source, tgtAssoc.status);
 
             if (srcPrec > tgtPrec) {
               // Source decision wins:
-              // 1. Copy source decision onto the existing target row.
+              // 1. Copy source decision (provenance intact) onto the target row.
               await transaction
                 .updateTable("app.expense_tags")
                 .set({
@@ -764,35 +766,51 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
                 })
                 .where("id", "=", tgtAssoc.id)
                 .execute();
-              // 2. Fix-6: Mark source row removed (keep tag_id=sourceTagId so no
-              //    unique constraint is violated). The source tag is being archived
-              //    so the row stays as history under the archived source tag key.
-              await transaction
-                .updateTable("app.expense_tags")
-                .set({
-                  source: "manual",
-                  status: "removed",
-                  removed_by_user_id: actorUserId,
-                  removed_at: now,
-                  version: sql<number>`version + 1`,
-                })
-                .where("id", "=", srcAssoc.id)
-                .execute();
+
+              // 2. Source row: preserve provenance truthfully under archived source tag.
+              //    N1/N2 rules:
+              //    - If source row is already removed: do NOT touch it (original remover/time/version preserved).
+              //    - If source row is active: mark removed by this merge (actor/time),
+              //      but keep original source/confidence/rule/suggestion/applied provenance.
+              if (srcAssoc.status === "removed") {
+                // Already removed — preserve entirely (no update).
+              } else {
+                // Active → superseded by merge: set status=removed, merge actor as remover,
+                // keep all original source/confidence/rule/suggestion/applied fields.
+                await transaction
+                  .updateTable("app.expense_tags")
+                  .set({
+                    // Provenance fields: preserved verbatim from source association.
+                    // source, confidence, rule_version, suggestion_id, applied_by_user_id,
+                    // applied_at are NOT changed — they record what was applied originally.
+                    status: "removed",
+                    removed_by_user_id: actorUserId,
+                    removed_at: now,
+                    version: sql<number>`version + 1`,
+                  })
+                  .where("id", "=", srcAssoc.id)
+                  .execute();
+              }
               provenanceSrcWins++;
             } else {
-              // Target wins or equal (stability: target retained):
-              // Fix-6: Mark source row removed under source tag key (history preserved).
-              await transaction
-                .updateTable("app.expense_tags")
-                .set({
-                  source: "manual",
-                  status: "removed",
-                  removed_by_user_id: actorUserId,
-                  removed_at: now,
-                  version: sql<number>`version + 1`,
-                })
-                .where("id", "=", srcAssoc.id)
-                .execute();
+              // Target wins (or equal — target retained by stability):
+              // Source row preserved under archived source tag, truthfully.
+              // Same N1/N2 rules apply:
+              if (srcAssoc.status === "removed") {
+                // Already removed — preserve entirely (no update).
+              } else {
+                // Active → superseded by merge.
+                await transaction
+                  .updateTable("app.expense_tags")
+                  .set({
+                    status: "removed",
+                    removed_by_user_id: actorUserId,
+                    removed_at: now,
+                    version: sql<number>`version + 1`,
+                  })
+                  .where("id", "=", srcAssoc.id)
+                  .execute();
+              }
               provenanceTgtWins++;
             }
           }

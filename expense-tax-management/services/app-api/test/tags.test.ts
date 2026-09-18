@@ -1705,20 +1705,22 @@ describe.skipIf(!requested)(
     // Fix-6: merge preserves source assoc as removed row — no hard-delete.
     // ---------------------------------------------------------------- //
 
-    it("T8-Fix6a: merge collision — source assoc preserved as removed row with tag_id=targetTagId", async () => {
+    // ---------------------------------------------------------------- //
+    // N1/N2 merge provenance: correct source/status preservation.
+    // ---------------------------------------------------------------- //
+
+    it("T8-N1a: src-wins — manual active source assoc: target gets manual decision; source row gets status=removed with merge actor, original source field preserved", async () => {
       const domain = createTagDomain(database!);
 
       const srcTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6 Src Tag", color: "#AAAAFF" },
-        requestId: `t8-fix6a-src-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1a Src", color: "#AAAAFF" },
+        requestId: `t8-n1a-src-${runKey}`,
       });
       const tgtTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6 Tgt Tag", color: "#FFAAAA" },
-        requestId: `t8-fix6a-tgt-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1a Tgt", color: "#FFAAAA" },
+        requestId: `t8-n1a-tgt-${runKey}`,
       });
 
       const expId = randomUUID();
@@ -1726,76 +1728,65 @@ describe.skipIf(!requested)(
         INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
           merchant, amount, currency, incurred_on, source, status)
         VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
-          '${T8_PROFILE_ID}', NULL, 'Fix6 Diner', '12.00', 'USD', '2026-09-02', 'manual', 'ready')
+          '${T8_PROFILE_ID}', NULL, 'N1a Diner', '12.00', 'USD', '2026-09-02', 'manual', 'ready')
         ON CONFLICT DO NOTHING;
       `);
 
-      // Apply srcTag (manual) + tgtTag (rule) to same expense
+      // src = manual active (prec 3)
       await domain.applyExpenseTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        profileId: T8_PROFILE_ID,
-        businessId: null,
-        expenseId: expId,
-        tagId: srcTag.id,
-        requestId: `t8-fix6a-apply-src-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID, businessId: null,
+        expenseId: expId, tagId: srcTag.id,
+        requestId: `t8-n1a-apply-src-${runKey}`,
       });
 
-      // Rule association via direct INSERT
+      // tgt = rule active (prec 1)
       runtimeSql(`
         INSERT INTO app.expense_tags
           (id, tenant_id, personal_profile_id, business_id, expense_id, tag_id,
-           source, confidence, status, applied_at)
+           source, confidence, rule_version, status, applied_at)
         VALUES (gen_random_uuid(), '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
-          '${expId}', '${tgtTag.id}', 'rule', '1', 'active', now())
+          '${expId}', '${tgtTag.id}', 'rule', '1', 1, 'active', now())
         ON CONFLICT DO NOTHING;
       `);
 
-      // Merge srcTag → tgtTag (srcTag has manual, wins over rule)
       await domain.mergeTags({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        sourceTagId: srcTag.id,
-        targetTagId: tgtTag.id,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        sourceTagId: srcTag.id, targetTagId: tgtTag.id,
         expectedSourceVersion: srcTag.version,
         expectedTargetVersion: tgtTag.version,
-        requestId: `t8-fix6a-merge-${runKey}`,
+        requestId: `t8-n1a-merge-${runKey}`,
       });
 
-      // After merge collision where src wins:
-      // - Target row (tgtTag) is updated to carry the manual decision
-      // - Source row (srcTag) is preserved as removed (under srcTag key, which is archived)
-      // The unique constraint (expense_id, tag_id) is preserved: one row per pair.
-
-      const activeRow = runtimeSql(
-        `SELECT source FROM app.expense_tags
+      // Target row: receives manual decision from source (src wins)
+      const tgtRow = runtimeSql(
+        `SELECT source, status FROM app.expense_tags
           WHERE expense_id = '${expId}' AND tag_id = '${tgtTag.id}' AND status = 'active';`,
       );
-      expect(activeRow).toBe("manual");
+      expect(tgtRow).toContain("manual");
 
-      // Source row preserved as removed under source tag key
-      const srcRemovedRow = runtimeSql(
-        `SELECT status, removed_by_user_id FROM app.expense_tags
-          WHERE expense_id = '${expId}' AND tag_id = '${srcTag.id}' AND status = 'removed';`,
+      // Source row: status=removed with merge actor, original source PRESERVED as "manual"
+      const srcRow = runtimeSql(
+        `SELECT source, status, removed_by_user_id FROM app.expense_tags
+          WHERE expense_id = '${expId}' AND tag_id = '${srcTag.id}';`,
       );
-      expect(srcRemovedRow).toContain("removed");
-      expect(srcRemovedRow).toContain(T8_USER_ID);
+      expect(srcRow).toContain("removed");
+      expect(srcRow).toContain("manual"); // source field preserved — NOT overwritten
+      expect(srcRow).toContain(T8_USER_ID); // merge actor as remover
     });
 
-    it("T8-Fix6b: merge no-collision — source assoc moved to targetTagId; one active row", async () => {
+    it("T8-N1b: tgt-wins — rule active source assoc: target keeps manual decision; source row gets status=removed with merge actor, original source=rule preserved", async () => {
       const domain = createTagDomain(database!);
 
       const srcTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6b Src", color: "#BBBBBB" },
-        requestId: `t8-fix6b-src-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1b Src", color: "#BBBBFF" },
+        requestId: `t8-n1b-src-${runKey}`,
       });
       const tgtTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6b Tgt", color: "#CCCCCC" },
-        requestId: `t8-fix6b-tgt-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1b Tgt", color: "#FFBBBB" },
+        requestId: `t8-n1b-tgt-${runKey}`,
       });
 
       const expId = randomUUID();
@@ -1803,76 +1794,157 @@ describe.skipIf(!requested)(
         INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
           merchant, amount, currency, incurred_on, source, status)
         VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
-          '${T8_PROFILE_ID}', NULL, 'Fix6b Diner', '8.00', 'USD', '2026-09-02', 'manual', 'ready')
+          '${T8_PROFILE_ID}', NULL, 'N1b Diner', '9.00', 'USD', '2026-09-02', 'manual', 'ready')
         ON CONFLICT DO NOTHING;
       `);
 
-      // Apply srcTag only
+      // src = rule active (prec 1)
+      runtimeSql(`
+        INSERT INTO app.expense_tags
+          (id, tenant_id, personal_profile_id, business_id, expense_id, tag_id,
+           source, confidence, rule_version, status, applied_at)
+        VALUES (gen_random_uuid(), '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
+          '${expId}', '${srcTag.id}', 'rule', '1', 1, 'active', now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // tgt = manual active (prec 3)
       await domain.applyExpenseTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        profileId: T8_PROFILE_ID,
-        businessId: null,
-        expenseId: expId,
-        tagId: srcTag.id,
-        requestId: `t8-fix6b-apply-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID, businessId: null,
+        expenseId: expId, tagId: tgtTag.id,
+        requestId: `t8-n1b-apply-tgt-${runKey}`,
       });
 
       await domain.mergeTags({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        sourceTagId: srcTag.id,
-        targetTagId: tgtTag.id,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        sourceTagId: srcTag.id, targetTagId: tgtTag.id,
         expectedSourceVersion: srcTag.version,
         expectedTargetVersion: tgtTag.version,
-        requestId: `t8-fix6b-merge-${runKey}`,
+        requestId: `t8-n1b-merge-${runKey}`,
       });
 
-      // No-collision: the source row is moved (tag_id changed to tgtTag) — one row for tgtTag
-      const count = runtimeSql(
-        `SELECT count(*) FROM app.expense_tags
-          WHERE expense_id = '${expId}' AND tag_id = '${tgtTag.id}';`,
+      // Target row: still holds manual decision (target won)
+      const tgtRow = runtimeSql(
+        `SELECT source, status FROM app.expense_tags
+          WHERE expense_id = '${expId}' AND tag_id = '${tgtTag.id}' AND status = 'active';`,
       );
-      expect(count).toBe("1");
+      expect(tgtRow).toContain("manual");
 
-      // Source tag must have zero rows
-      const srcCount = runtimeSql(
-        `SELECT count(*) FROM app.expense_tags
+      // Source row: status=removed with merge actor, source field preserved as "rule" — NOT "manual"
+      const srcRow = runtimeSql(
+        `SELECT source, status, removed_by_user_id FROM app.expense_tags
           WHERE expense_id = '${expId}' AND tag_id = '${srcTag.id}';`,
       );
-      expect(srcCount).toBe("0");
+      expect(srcRow).toContain("removed");
+      expect(srcRow).toContain("rule");  // original source preserved
+      expect(srcRow).not.toContain("manual"); // must NOT be overwritten
+      expect(srcRow).toContain(T8_USER_ID);  // merge actor as remover
     });
 
-    it("T8-Fix6c: merge audit includes provenanceSrcWins and provenanceTgtWins counts", async () => {
+    it("T8-N1c: already-removed source assoc — merge preserves original remover, removed_at, version, source unchanged", async () => {
       const domain = createTagDomain(database!);
 
       const srcTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6c Src", color: "#DDDDDD" },
-        requestId: `t8-fix6c-src-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1c Src", color: "#CCCCFF" },
+        requestId: `t8-n1c-src-${runKey}`,
       });
       const tgtTag = await domain.createTag({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        request: { name: "Fix6c Tgt", color: "#EEEEEE" },
-        requestId: `t8-fix6c-tgt-${runKey}`,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1c Tgt", color: "#FFCCCC" },
+        requestId: `t8-n1c-tgt-${runKey}`,
       });
 
-      // Create two expenses: one where src wins, one where tgt wins
-      const expA = randomUUID(); // src=manual, tgt=rule → src wins
-      const expB = randomUUID(); // src=rule, tgt=manual → tgt wins
+      const expId = randomUUID();
+      const otherUserId = randomUUID();
+      // Seed a different user for the original remover
+      runtimeSql(`
+        INSERT INTO app.users (id, primary_email, display_name)
+        VALUES ('${otherUserId}', 'other-remover-${runKey}@example.test', 'Other Remover')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
+          '${T8_PROFILE_ID}', NULL, 'N1c Diner', '6.00', 'USD', '2026-09-02', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Source assoc: already removed by otherUser, source=historical, version=5
+      const srcAssocId = randomUUID();
+      const originalRemovedAt = "2026-01-01T10:00:00.000Z";
+      runtimeSql(`
+        INSERT INTO app.expense_tags
+          (id, tenant_id, personal_profile_id, business_id, expense_id, tag_id,
+           source, confidence, status, version,
+           applied_by_user_id, applied_at,
+           removed_by_user_id, removed_at)
+        VALUES ('${srcAssocId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
+          '${expId}', '${srcTag.id}',
+          'historical', '0.9', 'removed', 5,
+          '${otherUserId}', '2025-12-01T00:00:00.000Z',
+          '${otherUserId}', '${originalRemovedAt}')
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Target: no association for this expense (no collision)
+      await domain.mergeTags({
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        sourceTagId: srcTag.id, targetTagId: tgtTag.id,
+        expectedSourceVersion: srcTag.version,
+        expectedTargetVersion: tgtTag.version,
+        requestId: `t8-n1c-merge-${runKey}`,
+      });
+
+      // The already-removed source assoc must be moved to targetTagId with version+1
+      // (no-collision path: tag_id reassigned, version incremented).
+      // source, status, removed_by_user_id, removed_at must all be preserved from original.
+      const movedRow = runtimeSql(
+        `SELECT tag_id, source, status, version, removed_by_user_id, removed_at::text
+          FROM app.expense_tags WHERE id = '${srcAssocId}';`,
+      );
+      // tag_id reassigned to targetTagId (no collision path)
+      expect(movedRow).toContain(tgtTag.id);
+      // source preserved as "historical"
+      expect(movedRow).toContain("historical");
+      // status preserved as "removed"
+      expect(movedRow).toContain("removed");
+      // removed_by_user_id preserved as otherUserId (NOT overwritten with actorUserId)
+      expect(movedRow).toContain(otherUserId);
+      // version incremented exactly once (5+1=6)
+      expect(movedRow).toContain("6");
+    });
+
+    it("T8-N1d: merge audit includes provenanceSrcWins and provenanceTgtWins counts", async () => {
+      const domain = createTagDomain(database!);
+
+      const srcTag = await domain.createTag({
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1d Src", color: "#DDDDDD" },
+        requestId: `t8-n1d-src-${runKey}`,
+      });
+      const tgtTag = await domain.createTag({
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        request: { name: "N1d Tgt", color: "#EEEEEE" },
+        requestId: `t8-n1d-tgt-${runKey}`,
+      });
+
+      // Two expenses: expA src wins; expB tgt wins
+      const expA = randomUUID();
+      const expB = randomUUID();
       runtimeSql(`
         INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
           merchant, amount, currency, incurred_on, source, status)
         VALUES
           ('${expA}', '${T8_TENANT_ID}', '${T8_USER_ID}',
-           '${T8_PROFILE_ID}', NULL, 'ExpA', '1.00', 'USD', '2026-09-02', 'manual', 'ready'),
+           '${T8_PROFILE_ID}', NULL, 'N1d ExpA', '1.00', 'USD', '2026-09-02', 'manual', 'ready'),
           ('${expB}', '${T8_TENANT_ID}', '${T8_USER_ID}',
-           '${T8_PROFILE_ID}', NULL, 'ExpB', '2.00', 'USD', '2026-09-02', 'manual', 'ready')
+           '${T8_PROFILE_ID}', NULL, 'N1d ExpB', '2.00', 'USD', '2026-09-02', 'manual', 'ready')
         ON CONFLICT DO NOTHING;
 
-        -- expA: src=manual (precedence 3), tgt=rule (precedence 1)
+        -- expA: src=manual (prec 3) tgt=rule (prec 1) → src wins
+        -- expB: src=rule (prec 1) tgt=manual (prec 3) → tgt wins
         INSERT INTO app.expense_tags
           (id, tenant_id, personal_profile_id, business_id, expense_id, tag_id,
            source, confidence, status, applied_at)
@@ -1881,7 +1953,6 @@ describe.skipIf(!requested)(
            '${expA}', '${srcTag.id}', 'manual', '1', 'active', now()),
           (gen_random_uuid(), '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            '${expA}', '${tgtTag.id}', 'rule', '1', 'active', now()),
-          -- expB: src=rule (precedence 1), tgt=manual (precedence 3)
           (gen_random_uuid(), '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
            '${expB}', '${srcTag.id}', 'rule', '1', 'active', now()),
           (gen_random_uuid(), '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
@@ -1890,16 +1961,28 @@ describe.skipIf(!requested)(
       `);
 
       await domain.mergeTags({
-        actorUserId: T8_USER_ID,
-        tenantId: T8_TENANT_ID,
-        sourceTagId: srcTag.id,
-        targetTagId: tgtTag.id,
+        actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+        sourceTagId: srcTag.id, targetTagId: tgtTag.id,
         expectedSourceVersion: srcTag.version,
         expectedTargetVersion: tgtTag.version,
-        requestId: `t8-fix6c-merge-${runKey}`,
+        requestId: `t8-n1d-merge-${runKey}`,
       });
 
-      // Audit must include provenanceSrcWins=1, provenanceTgtWins=1
+      // N1a: expA source row must still have source="manual" (not overwritten)
+      const srcRowA = runtimeSql(
+        `SELECT source FROM app.expense_tags
+          WHERE expense_id = '${expA}' AND tag_id = '${srcTag.id}';`,
+      );
+      expect(srcRowA).toBe("manual"); // preserved
+
+      // N1b: expB source row must have source="rule" (not overwritten with "manual")
+      const srcRowB = runtimeSql(
+        `SELECT source FROM app.expense_tags
+          WHERE expense_id = '${expB}' AND tag_id = '${srcTag.id}';`,
+      );
+      expect(srcRowB).toBe("rule"); // preserved
+
+      // Audit: provenanceSrcWins=1, provenanceTgtWins=1
       const auditRow = runtimeSql(
         `SELECT metadata FROM app.app_audit_events
           WHERE action = 'tag.merged' AND resource_id = '${srcTag.id}'
@@ -1911,48 +1994,54 @@ describe.skipIf(!requested)(
     });
 
     // ---------------------------------------------------------------- //
-    // Fix-7: listTags composite cursor — same-name boundary test.
+    // Fix-7 (strengthened): composite cursor forces actual page boundary
+    //   with >50 same-name tags; collects all pages; asserts no skip/dupe.
     // ---------------------------------------------------------------- //
 
-    it("T8-Fix7: listTags composite cursor handles same-name tags across page boundaries", async () => {
+    it("T8-Fix7: listTags composite cursor collects all >50 same-name tags without skip or duplicate across real page boundaries", async () => {
       const domain = createTagDomain(database!);
-      // Create 3 tags all named "PaginationTag" (different keys via uuid)
-      const names = ["PaginationTag", "PaginationTag", "PaginationTag"];
-      for (let i = 0; i < names.length; i++) {
+      // Create 55 tags all named "ZZPaginationTag" — alphabetically last, so they
+      // appear together at the end of the tenant tag list, guaranteeing a full page
+      // of 50 + a remainder page for these tags alone.
+      const PAGE_NAME = "ZZPaginationTag";
+      const TOTAL = 55;
+      for (let i = 0; i < TOTAL; i++) {
         await domain.createTag({
-          actorUserId: T8_USER_ID,
-          tenantId: T8_TENANT_ID,
-          request: { name: names[i]!, color: `#${String(i + 1).padStart(6, "0")}` },
+          actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID,
+          request: { name: PAGE_NAME, color: "#001122" },
           requestId: `t8-fix7-tag${i}-${runKey}`,
         });
       }
 
-      // Fetch page 1 of size 1 (only first item)
-      // We do this by asking for all tags and checking at least 3 are returned
-      // (there may be more tags from other tests in this suite)
-      const all = await domain.listTags({ actorUserId: T8_USER_ID, tenantId: T8_TENANT_ID });
-      const paginationTags = all.items.filter((t) => t.name === "PaginationTag");
-      // All 3 must appear without duplication
-      expect(paginationTags.length).toBeGreaterThanOrEqual(3);
-      // IDs must be unique
-      const ids = new Set(paginationTags.map((t) => t.id));
-      expect(ids.size).toBe(paginationTags.length);
-
-      // Cursor pagination: collect tags across 2 pages with limit=1 internal
-      // (simulate by checking cursor round-trip from first page)
-      if (all.nextCursor) {
-        // Fetch page 2 using cursor — must not repeat items from page 1
-        const page2 = await domain.listTags({
+      // Paginate exhaustively, collecting all items.
+      const collected: Array<{ id: string; name: string }> = [];
+      let cursor: string | null = undefined as unknown as string | null;
+      let pages = 0;
+      do {
+        const page = await domain.listTags({
           actorUserId: T8_USER_ID,
           tenantId: T8_TENANT_ID,
-          cursor: all.nextCursor,
+          ...(cursor ? { cursor } : {}),
         });
-        // No ID from page 1 should appear in page 2
-        const page1Ids = new Set(all.items.map((t) => t.id));
-        for (const item of page2.items) {
-          expect(page1Ids.has(item.id)).toBe(false);
-        }
-      }
+        collected.push(...page.items);
+        cursor = page.nextCursor;
+        pages++;
+        if (pages > 20) throw new Error("Pagination loop guard exceeded");
+      } while (cursor !== null);
+
+      // Filter to just the same-name tags we created
+      const pagTags = collected.filter((t) => t.name === PAGE_NAME);
+
+      // Must find all TOTAL tags
+      expect(pagTags.length).toBeGreaterThanOrEqual(TOTAL);
+
+      // No duplicates
+      const ids = pagTags.map((t) => t.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(ids.length);
+
+      // At least two pages were needed (55 same-name items fill more than one 50-item page)
+      expect(pages).toBeGreaterThanOrEqual(2);
     });
   },
 );
