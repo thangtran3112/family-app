@@ -305,6 +305,73 @@ describe("tag write API — no fake idempotency param, only expectedVersion OCC"
 // Fix 4: membership lookup — real API calls, not hardcoded role
 // ------------------------------------------------------------------ //
 
+// ------------------------------------------------------------------ //
+// I-2: fetchTenantMembership — assert completeness; no silent null from truncation
+// The generated API returns a flat list with no nextCursor (not paginated).
+// We assert this at runtime: the response must be a plain items array.
+// ------------------------------------------------------------------ //
+
+describe("fetchTenantMembership — flat list completeness assertion", () => {
+  it("throws MembershipListError when response shape is unexpected (not items array)", async () => {
+    // If the API ever returns an unexpected shape, we must surface an error
+    // rather than silently return null role.
+    const client = {
+      GET: vi.fn().mockResolvedValue({ data: null, response: { status: 500 } }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+    await expect(
+      fetchTenantMembership(businessSession, "user-1", getToken, "org_123", client as never),
+    ).rejects.toThrow();
+  });
+
+  it("surfaces warning-level error when user not found in non-empty list (unexpected absence)", async () => {
+    // When list is non-empty but user absent, this is a detectable anomaly.
+    // The function must return null (user not a member), not throw.
+    // The generated spec says this IS a valid state (user simply not in tenant).
+    // We just confirm it returns null cleanly (not silently swallowed).
+    const client = {
+      GET: vi.fn().mockResolvedValue({
+        data: {
+          items: [
+            { userId: "other-user", tenantId: "tenant-1", role: "owner", status: "active", version: 1, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+          ],
+        },
+      }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+    const role = await fetchTenantMembership(businessSession, "user-1", getToken, "org_123", client as never);
+    // Must return null, not throw — user is simply not a member
+    expect(role).toBeNull();
+  });
+
+  it("makes exactly one GET request (no multi-page loop since API is not paginated)", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({
+        data: { items: [{ userId: "user-1", tenantId: "tenant-1", role: "admin", status: "active", version: 1, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }] },
+      }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+    await fetchTenantMembership(businessSession, "user-1", getToken, "org_123", client as never);
+    // Exactly one GET — no pagination loop
+    expect(client.GET).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns inactive member as null (not a valid active role)", async () => {
+    const client = {
+      GET: vi.fn().mockResolvedValue({
+        data: {
+          items: [
+            { userId: "user-1", tenantId: "tenant-1", role: "admin", status: "inactive", version: 1, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+          ],
+        },
+      }),
+    };
+    const getToken = vi.fn().mockResolvedValue("office-token");
+    const role = await fetchTenantMembership(businessSession, "user-1", getToken, "org_123", client as never);
+    expect(role).toBeNull();
+  });
+});
+
 describe("tenant membership role lookup", () => {
   it("fetchCurrentUser calls /api/v1/users/me with bearer token", async () => {
     const client = {

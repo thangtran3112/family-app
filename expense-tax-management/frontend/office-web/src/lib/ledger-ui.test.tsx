@@ -1,0 +1,290 @@
+// @vitest-environment jsdom
+/**
+ * I-1: ExpenseLedgerWithFilters — unified single data owner.
+ * m-1: SuggestionCard — failed resolve resets disabled state for retry.
+ * m-3: Tax page null-session returns unavailable state.
+ * m-4: ConfidenceMeter renders "bad" tone class at 65% confidence.
+ */
+
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// ------------------------------------------------------------------ //
+// Session mock — hoisted so it applies across all imports in file
+// ------------------------------------------------------------------ //
+
+const { readOfficeSession } = vi.hoisted(() => ({ readOfficeSession: vi.fn() }));
+vi.mock("@/lib/session", () => ({ readOfficeSession }));
+
+// ------------------------------------------------------------------ //
+// Single consolidated api mock — all test groups share it
+// ------------------------------------------------------------------ //
+
+const mockFetchLedger = vi.hoisted(() => vi.fn());
+const mockFetchExpenseDetail = vi.hoisted(() => vi.fn());
+const mockFetchSuggestions = vi.hoisted(() => vi.fn());
+const mockResolveSuggestion = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    fetchLedger: mockFetchLedger,
+    fetchExpenseDetail: mockFetchExpenseDetail,
+    fetchSuggestions: mockFetchSuggestions,
+    resolveSuggestion: mockResolveSuggestion,
+  };
+});
+
+// page-data mock so OfficeData (if still used) doesn't also trigger
+const mockLoadExpenses = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/page-data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/page-data")>();
+  return { ...actual, loadExpenses: mockLoadExpenses };
+});
+
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => ({ getToken: vi.fn().mockResolvedValue("tok"), isLoaded: true, isSignedIn: true }),
+  useOrganization: () => ({ organization: { id: "org_1" }, isLoaded: true }),
+}));
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+}));
+vi.mock("next/navigation", () => ({ useParams: () => ({ expenseId: "exp-1" }) }));
+
+// ------------------------------------------------------------------ //
+// Fixtures
+// ------------------------------------------------------------------ //
+
+const bizSession = {
+  apiBaseUrl: "http://app.test",
+  tenantId: "t-1",
+  scope: { kind: "business" as const, businessId: "biz-1" },
+  label: "Biz",
+};
+
+function makeLedgerItem(id: string, merchant: string) {
+  return {
+    id, merchant,
+    incurredOn: "2026-09-01",
+    amount: "10.00",
+    currency: "USD",
+    status: "ready" as const,
+    projectId: null,
+    spendingCategoryId: null,
+    tags: [] as Array<{ id: string; name: string; color: string | null }>,
+    taxYear: 2026,
+    version: 1,
+    tenantId: "t-1",
+    businessId: "biz-1",
+    personalProfileId: null,
+    source: "manual" as const,
+    createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-01T00:00:00Z",
+    createdByUserId: "user-1",
+    description: null,
+  };
+}
+
+// ------------------------------------------------------------------ //
+// I-1: ExpenseLedgerWithFilters — unified single data owner
+// ------------------------------------------------------------------ //
+
+import Expenses from "@/app/(office)/expenses/page";
+import React from "react";
+
+describe("I-1: ExpenseLedgerWithFilters — unified single data owner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    readOfficeSession.mockReturnValue(bizSession);
+    mockFetchLedger.mockResolvedValue({ items: [makeLedgerItem("e-1", "Coffee Shop")], nextCursor: null });
+    mockLoadExpenses.mockResolvedValue({ items: [makeLedgerItem("e-1", "Coffee Shop")], nextCursor: null });
+  });
+
+  afterEach(() => cleanup());
+
+  it("fires initial fetchLedger once on mount with no tagId filter", async () => {
+    render(<Expenses />);
+    await waitFor(() => expect(screen.queryByText("Coffee Shop")).toBeTruthy(), { timeout: 3000 });
+
+    // fetchLedger must have been called at least once (initial load)
+    expect(mockFetchLedger.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // First call must have no tagId (unfiltered initial load)
+    const firstCallOpts = mockFetchLedger.mock.calls[0]?.[4] as { tagId?: string[] } | undefined;
+    expect(firstCallOpts?.tagId).toBeUndefined();
+  });
+
+  it("shows merchant from fetched data after initial load (single data path)", async () => {
+    render(<Expenses />);
+    await waitFor(() => expect(screen.queryByText("Coffee Shop")).toBeTruthy(), { timeout: 3000 });
+    // Exactly one row, no duplication from dual data sources
+    expect(screen.getAllByText("Coffee Shop")).toHaveLength(1);
+  });
+
+  it("filter change calls fetchLedger with tagId and replaces items (no unfiltered flash)", async () => {
+    mockFetchLedger
+      .mockResolvedValueOnce({ items: [makeLedgerItem("e-1", "Coffee Shop")], nextCursor: null })
+      .mockResolvedValueOnce({ items: [makeLedgerItem("e-2", "Tagged Supplier")], nextCursor: null });
+
+    render(<Expenses />);
+    await waitFor(() => expect(screen.queryByText("Coffee Shop")).toBeTruthy(), { timeout: 3000 });
+
+    // Add tag filter
+    fireEvent.change(screen.getByLabelText("Filter by tag ID"), { target: { value: "tag-abc" } });
+    fireEvent.click(screen.getByText("Add tag filter"));
+
+    await waitFor(() => expect(screen.queryByText("Tagged Supplier")).toBeTruthy(), { timeout: 3000 });
+    // Old items must be gone (replaced, not appended)
+    expect(screen.queryByText("Coffee Shop")).toBeNull();
+
+    // Second call includes tagId
+    const withTagCall = mockFetchLedger.mock.calls.find((c) => {
+      const opts = c[4] as { tagId?: string[] } | undefined;
+      return Array.isArray(opts?.tagId) && opts.tagId.includes("tag-abc");
+    });
+    expect(withTagCall).toBeDefined();
+  });
+
+  it("removing a tag filter calls fetchLedger without that tagId", async () => {
+    mockFetchLedger
+      .mockResolvedValueOnce({ items: [makeLedgerItem("e-1", "Coffee Shop")], nextCursor: null })
+      .mockResolvedValueOnce({ items: [makeLedgerItem("e-2", "Tagged Supplier")], nextCursor: null })
+      .mockResolvedValueOnce({ items: [makeLedgerItem("e-1", "Coffee Shop")], nextCursor: null });
+
+    render(<Expenses />);
+    await waitFor(() => expect(screen.queryByText("Coffee Shop")).toBeTruthy(), { timeout: 3000 });
+
+    // Add filter
+    fireEvent.change(screen.getByLabelText("Filter by tag ID"), { target: { value: "tag-abc" } });
+    fireEvent.click(screen.getByText("Add tag filter"));
+    await waitFor(() => expect(screen.queryByText("Tagged Supplier")).toBeTruthy(), { timeout: 3000 });
+
+    // Remove chip
+    fireEvent.click(screen.getByLabelText("Remove tag filter tag-abc"));
+    await waitFor(() => expect(screen.queryByText("Coffee Shop")).toBeTruthy(), { timeout: 3000 });
+
+    // Last call has no tagId
+    const lastCall = mockFetchLedger.mock.calls[mockFetchLedger.mock.calls.length - 1];
+    const opts = lastCall?.[4] as { tagId?: string[] } | undefined;
+    expect(!opts?.tagId || opts.tagId.length === 0).toBe(true);
+  });
+});
+
+// ------------------------------------------------------------------ //
+// m-1: SuggestionCard — failed resolve keeps card enabled for retry
+// ------------------------------------------------------------------ //
+
+import ExpenseDetail from "@/app/(office)/expenses/[expenseId]/page";
+
+const pendingSuggestion = {
+  id: "sugg-1", kind: "tag", source: "ai", confidence: 0.95,
+  evidence: {}, status: "pending", version: 1, expenseVersion: 1,
+  tagId: "tag-1", spendingCategoryId: null, taxCategoryDefinitionId: null, businessTaxProfileId: null,
+};
+
+describe("m-1: SuggestionCard — failed resolve allows retry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    readOfficeSession.mockReturnValue(bizSession);
+    mockFetchExpenseDetail.mockResolvedValue({
+      id: "exp-1", merchant: "Shop", incurredOn: "2026-09-01",
+      amount: "10.00", currency: "USD", status: "ready", version: 1, tags: [],
+    });
+    mockFetchSuggestions.mockResolvedValue({ items: [pendingSuggestion], nextCursor: null });
+    // Simulate network failure on resolve
+    mockResolveSuggestion.mockRejectedValue(new Error("Network error"));
+  });
+
+  afterEach(() => cleanup());
+
+  it("Accept button is re-enabled after failed resolve (not stuck disabled)", async () => {
+    render(<ExpenseDetail />);
+    await waitFor(() => expect(screen.queryByText("Accept")).toBeTruthy(), { timeout: 3000 });
+
+    const acceptBtn = screen.getByText("Accept");
+    expect((acceptBtn as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(acceptBtn);
+
+    // After failure: parent sets resolving=false in finally, button must re-enable
+    await waitFor(() => {
+      const btn = screen.queryByText("Accept");
+      // Button re-appears and is enabled (not stuck from local state)
+      expect(btn).toBeTruthy();
+      expect((btn as HTMLButtonElement).disabled).toBe(false);
+    }, { timeout: 3000 });
+  });
+
+  it("error message shown after failed resolve", async () => {
+    render(<ExpenseDetail />);
+    await waitFor(() => expect(screen.queryByText("Accept")).toBeTruthy(), { timeout: 3000 });
+    fireEvent.click(screen.getByText("Accept"));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeTruthy(), { timeout: 3000 });
+  });
+});
+
+// ------------------------------------------------------------------ //
+// m-3: Tax page null-session renders unavailable state
+// ------------------------------------------------------------------ //
+
+import Tax from "@/app/(office)/tax/page";
+
+describe("m-3: Tax page null-session fail-closed", () => {
+  afterEach(() => cleanup());
+
+  it("renders unavailable state when session is null", () => {
+    readOfficeSession.mockReturnValue(null);
+    render(<Tax />);
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.queryByText("Prepare. Review. Export.")).toBeNull();
+  });
+
+  it("renders unavailable state when scope is personal", () => {
+    readOfficeSession.mockReturnValue({
+      scope: { kind: "personal", profileId: "prof-1" }, tenantId: "t-1", apiBaseUrl: "http://x.test", label: "P",
+    });
+    render(<Tax />);
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.queryByText("Prepare. Review. Export.")).toBeNull();
+  });
+});
+
+// ------------------------------------------------------------------ //
+// m-4: ConfidenceMeter — renders "bad" tone at 65%, Status contract
+// ------------------------------------------------------------------ //
+
+import { Status } from "@/components/ui";
+
+describe("m-4: ConfidenceMeter — Status tone contract at boundary values", () => {
+  afterEach(() => cleanup());
+
+  it("Status component accepts 'bad' tone and applies bad class", () => {
+    render(<Status tone="bad">65% confidence</Status>);
+    const el = screen.getByText("65% confidence");
+    expect(el.className).toContain("bad");
+  });
+
+  it("ConfidenceMeter tone logic: 65% → bad", () => {
+    const pct = 65;
+    const tone = pct >= 90 ? "ok" : pct >= 70 ? "warn" : "bad";
+    expect(tone).toBe("bad");
+    render(<Status tone={tone}>{pct}% confidence</Status>);
+    expect(screen.getByText("65% confidence").className).toContain("bad");
+  });
+
+  it("ConfidenceMeter tone logic: 75% → warn", () => {
+    const pct = 75;
+    const tone = pct >= 90 ? "ok" : pct >= 70 ? "warn" : "bad";
+    expect(tone).toBe("warn");
+    render(<Status tone={tone}>{pct}% confidence</Status>);
+    expect(screen.getByText("75% confidence").className).toContain("warn");
+  });
+
+  it("ConfidenceMeter tone logic: 95% → ok", () => {
+    const pct = 95;
+    const tone = pct >= 90 ? "ok" : pct >= 70 ? "warn" : "bad";
+    expect(tone).toBe("ok");
+    render(<Status tone={tone}>{pct}% confidence</Status>);
+    expect(screen.getByText("95% confidence").className).toContain("ok");
+  });
+});

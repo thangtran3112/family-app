@@ -129,6 +129,13 @@ function TaxAcceptForm({
   );
 }
 
+/**
+ * SuggestionCard does NOT manage its own resolving/disabled state.
+ * The `disabled` prop from the parent (ExpenseDetail.resolving) is the sole
+ * source of truth for whether buttons are enabled. This prevents local
+ * `resolving=true` getting stuck on failure — the parent's finally block
+ * always resets its own state regardless of outcome.
+ */
 function SuggestionCard({
   suggestion,
   onResolve,
@@ -138,31 +145,27 @@ function SuggestionCard({
   onResolve: (suggId: string, action: "accepted" | "rejected", idemKey: string, taxAcceptance?: { businessTaxProfileId: string; deductiblePercent: string }) => void;
   disabled: boolean;
 }) {
-  const [resolving, setResolving] = useState(false);
   const sourceLabel = getSuggestionSourceLabel(suggestion.source as Parameters<typeof getSuggestionSourceLabel>[0]);
 
   function handleReject() {
-    setResolving(true);
     // Key includes action so "accepted" and "rejected" produce distinct keys for same suggestion.
     const idemKey = makeStableIdempotencyKey("resolve-suggestion", suggestion.id, "rejected");
     onResolve(suggestion.id, "rejected", idemKey);
   }
 
   function handleTaxAccept(taxProfileId: string, deductiblePercent: string, taxIdemKey: string) {
-    setResolving(true);
     // taxIdemKey is computed at submit time in TaxAcceptForm from profileId+action+suggestion.
     onResolve(suggestion.id, "accepted", taxIdemKey, { businessTaxProfileId: taxProfileId, deductiblePercent });
   }
 
   function handleAccept() {
-    setResolving(true);
     // Key includes action so accept and reject are distinct.
     const idemKey = makeStableIdempotencyKey("resolve-suggestion", suggestion.id, "accepted");
     onResolve(suggestion.id, "accepted", idemKey);
   }
 
   const isTaxCategory = suggestion.kind === "tax_category";
-  const isWorking = resolving || disabled;
+  const isWorking = disabled;
 
   return (
     <article className="suggestion-card panel" aria-labelledby={`sugg-${suggestion.id}`}>
@@ -210,7 +213,10 @@ export default function ExpenseDetail() {
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [unauthorized, setUnauthorized] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // loadError: fatal page-level load failure → triggers full-page error state
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // resolveError: inline transient resolve error → displayed within suggestion panel, card stays enabled
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [stale, setStale] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -223,7 +229,8 @@ export default function ExpenseDetail() {
     hasSession,
     hasOrganization: !!organization,
     suggestions: suggestions ?? undefined,
-    error: error ?? undefined,
+    // Only load errors drive the page-level error state; resolve errors are inline
+    error: loadError ?? undefined,
     conflict,
     stale,
   });
@@ -249,7 +256,7 @@ export default function ExpenseDetail() {
         if (e instanceof EnrichmentReviewError && (e.status === 401 || e.status === 403)) {
           setUnauthorized(true);
         } else {
-          setError(e instanceof Error ? e.message : "Failed to load expense");
+          setLoadError(e instanceof Error ? e.message : "Failed to load expense");
         }
       }
     }
@@ -268,6 +275,7 @@ export default function ExpenseDetail() {
     setResolving(true);
     setConflict(false);
     setStale(false);
+    setResolveError(null);
     try {
       const sugg = suggestions?.find((s) => s.id === suggId);
       if (!sugg) throw new Error("Suggestion not found");
@@ -284,9 +292,11 @@ export default function ExpenseDetail() {
       if (e instanceof EnrichmentReviewError) {
         if (e.status === 409) setConflict(true);
         else if (e.status === 401 || e.status === 403) setUnauthorized(true);
-        else setError(e.message);
+        // Inline resolve error — does not switch to page-level error state
+        else setResolveError(e.message);
       } else {
-        setError(e instanceof Error ? e.message : "Resolution failed");
+        // Inline transient error — card stays enabled for retry
+        setResolveError(e instanceof Error ? e.message : "Resolution failed");
       }
     } finally {
       setResolving(false);
@@ -301,7 +311,7 @@ export default function ExpenseDetail() {
     return <main className="auth" role="alert"><p>Office authorization required. Sign in and select a scope before reviewing expenses.</p></main>;
   }
   if (reviewState === "error") {
-    return <main className="auth"><div role="alert">{error ?? "Failed to load expense."}</div><button type="button" onClick={() => { setError(null); }}>Retry</button></main>;
+    return <main className="auth"><div role="alert">{loadError ?? "Failed to load expense."}</div><button type="button" onClick={() => { setLoadError(null); }}>Retry</button></main>;
   }
   if (reviewState === "conflict") {
     return (
@@ -349,7 +359,7 @@ export default function ExpenseDetail() {
       {resolvedMessage && (
         <div role="status" aria-live="polite" className="empty">{resolvedMessage}</div>
       )}
-      {error && <div role="alert" className="empty">{error}</div>}
+      {resolveError && <div role="alert" className="empty">{resolveError}</div>}
 
       {reviewState === "empty" || pendingSuggestions.length === 0 ? (
         <Panel title="No pending suggestions">

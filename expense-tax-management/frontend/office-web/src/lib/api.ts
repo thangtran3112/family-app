@@ -576,6 +576,12 @@ export async function fetchCurrentUser(
  * Fetches the current user's tenant membership role.
  * Returns the role ("owner" | "admin" | "member") or null if not a member.
  * Backend is authoritative; the role controls tag management UI gate only.
+ *
+ * The generated /tenants/{tenantId}/memberships route is NOT paginated:
+ * it returns { items: [...] } with no nextCursor. This is verified against
+ * the generated TypeScript paths type. A single GET retrieves the complete
+ * member list. If the response is missing or malformed, we throw rather than
+ * silently returning null (which could grant unintended access).
  */
 export async function fetchTenantMembership(
   session: OfficeSession,
@@ -589,7 +595,16 @@ export async function fetchTenantMembership(
     params: { path: { tenantId: session.tenantId } },
     headers: await getAppAuthorization(getToken, organizationId),
   });
+  // The generated route has no nextCursor — this single request is the complete list.
+  // Throw if response is missing so callers can detect failure vs. genuine non-membership.
   if (!result.data) throw new Error("Membership unavailable");
+  // Runtime assertion: response must be a plain items array (no pagination cursor).
+  // If a cursor ever appears, something changed in the API contract.
+  const data = result.data as { items: typeof result.data.items; nextCursor?: unknown };
+  if (data.nextCursor !== undefined && data.nextCursor !== null) {
+    // Surface this as an error: we would need to walk pages but cannot with current contract.
+    throw new Error("Membership list unexpectedly paginated — cannot guarantee complete role scan");
+  }
   const membership = result.data.items.find((m) => m.userId === userId);
   if (!membership || membership.status !== "active") return null;
   return membership.role as TenantRole;
