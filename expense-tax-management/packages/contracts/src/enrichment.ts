@@ -31,7 +31,7 @@ const ColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color must be a 6-dig
  * Allows namespace syntax: merchant:<slug>, timing:weekend, category:<key>, custom:<uuid>
  * Characters: a-z 0-9 _ : . -
  */
-const TagKeySchema = z
+export const TagKeySchema = z
   .string()
   .trim()
   .min(1)
@@ -56,7 +56,7 @@ export const TagSchema = z
   .strictObject({
     id: z.uuid(),
     tenantId: z.uuid(),
-    key: z.string().min(1).max(100),
+    key: TagKeySchema,
     name: z.string().min(1).max(100),
     color: ColorSchema.nullable(),
     origin: TagOriginSchema,

@@ -5,6 +5,7 @@ import {
   ScopeSchema,
   type Scope,
   // Tag
+  TagKeySchema,
   TagStatusSchema,
   TagOriginSchema,
   TagSchema,
@@ -150,16 +151,18 @@ describe("Tag schemas – spec alignment", () => {
       `custom:${ids.tagId}`,
     ];
     for (const key of keys) {
-      expect(TagCreateRequestSchema.safeParse({ key, name: "Test", color: null }).success, `key '${key}' should be valid`).toBe(true);
+      expect(TagKeySchema.safeParse(key).success, `key '${key}' should be valid`).toBe(true);
+      // TagSchema.key uses TagKeySchema — verify passthrough
+      expect(TagSchema.safeParse({ ...baseTag, key }).success, `TagSchema key '${key}' should be valid`).toBe(true);
     }
   });
 
   it("rejects key with uppercase letters", () => {
-    expect(TagCreateRequestSchema.safeParse({ key: "Merchant:Test", name: "T", color: null }).success).toBe(false);
+    expect(TagKeySchema.safeParse("Merchant:Test").success).toBe(false);
   });
 
   it("rejects key with spaces", () => {
-    expect(TagCreateRequestSchema.safeParse({ key: "my tag", name: "T", color: null }).success).toBe(false);
+    expect(TagKeySchema.safeParse("my tag").success).toBe(false);
   });
 
   it("accepts TagUpdateRequestSchema with at least one change", () => {
@@ -310,8 +313,9 @@ describe("ExpenseTag schemas – spec alignment", () => {
   });
 
   it("accepts ExpenseTagRemoveRequestSchema", () => {
+    // tagId travels in route param, not request body
     expect(
-      ExpenseTagRemoveRequestSchema.safeParse({ tagId: ids.tagId, expectedVersion: 1 }).success,
+      ExpenseTagRemoveRequestSchema.safeParse({ expectedVersion: 1 }).success,
     ).toBe(true);
   });
 
