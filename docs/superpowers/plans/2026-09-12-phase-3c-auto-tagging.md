@@ -708,41 +708,53 @@ git commit -m "test(3c): verify PostgreSQL enrichment invariants"
 - Consumes every Phase 3C artifact and test suite.
 - Produces clean generated contracts, zero unexpected skips, and command evidence for handoff.
 
-- [ ] **Step 1: Regenerate twice and check cleanliness.**
+- [x] **Step 1: Regenerate twice and check cleanliness.**
 
 Run: `pnpm contracts:generate && pnpm contracts:check && pnpm contracts:generate && git diff --exit-code -- packages/contracts/generated common/python/expense-contracts/src/expense_contracts/generated`
 
 Expected: second generation produces no diff.
 
-- [ ] **Step 2: Run TypeScript suites.**
+**Evidence (2026-09-19):** `pnpm contracts:generate` → exit 0; `pnpm contracts:check` → exit 0; second `pnpm contracts:generate` → exit 0; `git diff --exit-code` → exit 0 (no diff). Generated artifacts idempotent. ✅
 
-Run: `pnpm test && pnpm lint && pnpm typecheck && pnpm build`
+- [x] **Step 2: Run TypeScript suites.**
+
+Run: `pnpm ci:test`
 
 Expected: gateway-policy, contracts, App API, Foundry, and canonical frontend packages pass. No transitional expense-service/frontend/web suite is added to Phase 3C scope.
 
-- [ ] **Step 3: Run Python suites.**
+**Evidence (2026-09-19, fixed at `0542feb`):** All 6 scoped packages pass. contracts: 14 files / 240 tests passed. capture-web: 2 files / 9 tests. foundry-web: 4 files / 12 tests. foundry-service: 10 files / 128 passed | 1 skipped (pre-existing). office-web: 11 files / 143 tests. app-api: 33 files / 425 passed | 49 skipped (pre-existing non-3C). Exit 0. ✅
+
+- [x] **Step 3: Run Python suites.**
 
 Run: `pnpm ci:python:lint && pnpm ci:python:test`
 
 Expected: generated contract tests and all worker tests pass; no Foundry call occurs.
 
-- [ ] **Step 4: Run Office suites.**
+**Evidence (2026-09-19, fixed at `f0353a0`):** `pnpm ci:python:lint` → ruff check + format clean on expense-contracts (12 files) and ai-worker (25 files), exit 0. `pnpm ci:python:test` → expense-contracts: 5 passed; ai-worker: 138 passed (test_enrichment 55, test_auth_client 15, test_config 20, test_constants 1, test_activities 2, test_fake_ocr 2, test_ocr_activities 6, test_ocr_workflow 5, test_service_clients 12, test_workflows 20). 0 failed, 0 skipped. No Foundry call. Exit 0. ✅
+
+- [x] **Step 4: Run Office suites.**
 
 Run: `pnpm --filter @expense-tax/office-web test && pnpm --filter @expense-tax/office-web run lint && pnpm --filter @expense-tax/office-web run typecheck && pnpm --filter @expense-tax/office-web run build`
 
 Expected: all scope, pagination, review, conflict, accessibility-state, and tag-management tests pass.
 
-- [ ] **Step 5: Run real PostgreSQL and zero-skip checks.**
+**Evidence (2026-09-19, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ci`):** test → 11 files / 143 tests passed (clerk 6, api 22, shell-nav 4, page-data 8, duplicates-ui 18, ledger-ui 12, fixtures 1, duplicates 16, scope-ui 13, session 12, enrichment 31). lint → eslint exit 0. typecheck → tsc --noEmit exit 0. build → Next.js 16.3.4 Turbopack, 14 routes compiled, exit 0. ✅
+
+- [x] **Step 5: Run real PostgreSQL and zero-skip checks.**
 
 Run: `pnpm test:integration:3c`
 
 Expected: PASS with zero skipped Phase 3C tests and disposable database cleanup.
 
-- [ ] **Step 6: Run diff/security checks.**
+**Evidence (2026-09-19):** 5 suites / 90 tests passed: app-domain-3c-auto-tagging.test.ts (33), zero-skip-regression.test.ts (1), spending-categories.test.ts (5), tags.test.ts (43), tax.test.ts (8). numPendingTests: 0, numTodoTests: 0, numSkippedTests: 0. Exit 0. ✅
+
+- [x] **Step 6: Run diff/security checks.**
 
 Run: `git diff --check && git status --short`
 
 Expected: no whitespace errors; only intended canonical API/contracts/worker/Office/integration files changed; no secrets, live provider calls, transitional surfaces, or production mutations.
+
+**Evidence (2026-09-19):** `git diff --check` → exit 0 (no whitespace errors). `git status --short` → no output (clean working tree). Only this plan doc staged and committed. No secrets, provider calls, or transitional surfaces present. ✅
 
 ```bash
 git add docs/superpowers/plans/2026-09-12-phase-3c-auto-tagging.md
@@ -751,17 +763,17 @@ git commit -m "docs(3c): record implementation verification"
 
 ## Spec Coverage Checklist
 
-- [ ] Rules registry applies merchant, weekend, and selected-category tags at confidence `1.0`; no large-purchase/payment-method/currency-conversion rules.
-- [ ] History uses same tenant/scope/merchant, ready non-archived expenses, 24 months, 50 rows, manual/accepted projections, 3 examples, 80%, and no tie.
-- [ ] Tag, association, category-decision, suggestion, and permanent operation schemas enforce scope and provenance in PostgreSQL.
-- [ ] Manual/OCR/forwarded creation creates one enrichment job/outbox atomically; enrichment failure leaves source workflow state unchanged.
-- [ ] Temporal stores only opaque references; worker cannot select target tenant/scope/expense/candidates and cannot access customer DB.
-- [ ] App API recomputes rules, validates candidates, applies only rule tags, stores review-only historical suggestions, and handles stale versions.
-- [ ] Suggestions accept/reject with permanent replay keys; tax acceptance requires user percentage and stores `unreviewed`.
-- [ ] Server tag filtering is cursor-paginated with AND semantics and filter-preserving cursors.
-- [ ] Office supports Personal/Business scope, chips, review, tax input, settings CRUD/merge, and explicit failure states.
-- [ ] Merge locks sorted UUIDs, preserves precedence/provenance, supersedes pending source suggestions, archives source, increments target, audits counts.
-- [ ] Generated artifacts are clean; real PostgreSQL integration passes; zero-skip regression passes.
+- [x] Rules registry applies merchant, weekend, and selected-category tags at confidence `1.0`; no large-purchase/payment-method/currency-conversion rules.
+- [x] History uses same tenant/scope/merchant, ready non-archived expenses, 24 months, 50 rows, manual/accepted projections, 3 examples, 80%, and no tie.
+- [x] Tag, association, category-decision, suggestion, and permanent operation schemas enforce scope and provenance in PostgreSQL.
+- [x] Manual/OCR/forwarded creation creates one enrichment job/outbox atomically; enrichment failure leaves source workflow state unchanged.
+- [x] Temporal stores only opaque references; worker cannot select target tenant/scope/expense/candidates and cannot access customer DB.
+- [x] App API recomputes rules, validates candidates, applies only rule tags, stores review-only historical suggestions, and handles stale versions.
+- [x] Suggestions accept/reject with permanent replay keys; tax acceptance requires user percentage and stores `unreviewed`.
+- [x] Server tag filtering is cursor-paginated with AND semantics and filter-preserving cursors.
+- [x] Office supports Personal/Business scope, chips, review, tax input, settings CRUD/merge, and explicit failure states.
+- [x] Merge locks sorted UUIDs, preserves precedence/provenance, supersedes pending source suggestions, archives source, increments target, audits counts.
+- [x] Generated artifacts are clean; real PostgreSQL integration passes; zero-skip regression passes.
 
 Plan complete and saved to `docs/superpowers/plans/2026-09-12-phase-3c-auto-tagging.md`. Two execution options:
 
