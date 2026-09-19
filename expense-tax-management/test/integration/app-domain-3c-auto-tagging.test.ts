@@ -2763,12 +2763,20 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       const db = database;
       if (!db) throw new Error("Integration database was not initialized");
 
-      // countRows: parameterized Kysely count (inline, as described in brief Step 1)
+      // I-1: countRows uses db.selectFrom(table as any) which is type-sound at the call site:
+      //   - "as any" disables the mapped-type check for the table name, but the select/where
+      //     chain is still Kysely-built and produces a parameterized query (no SQL injection).
+      //   - Runtime trust: only known schema table.column pairs are passed within this module.
+      //     The function is not exported so the trust boundary is this integration test file.
+      //   - Alternative (sql tagged template) would require a value import of 'sql' from 'kysely'
+      //     which is unavailable at workspace root; the type-import of Kysely suffices here.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async function countRows(table: string, column: string, value: string): Promise<number> {
-        const rows = await db
-          .selectFrom(table as "app.processing_jobs")
-          .select((eb) => eb.fn.count("id").as("n"))
-          .where(column as "workflow_type", "=", value)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rows = await (db as Kysely<any>)
+          .selectFrom(table)
+          .select((eb: any) => eb.fn.count("id").as("n"))
+          .where(column, "=", value)
           .executeTakeFirstOrThrow();
         return Number(rows.n);
       }
@@ -2825,22 +2833,28 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         requestId: `t11-applyB-${runKey}`,
       });
 
-      // Capture enrichment job ID for this expense
-      const enrichmentJobRow = runtimeSql(
+      // M-2: Parse enrichmentJobId robustly via UUID regex, not bare .trim() which
+      // would silently include column headers if psql switches changed.
+      const enrichmentJobRaw = runtimeSql(
         `SELECT id FROM app.processing_jobs
           WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
             AND target_aggregate_id = '${expenseWithBothTags.id}'
             AND tenant_id = '${PHASE_3C_TENANT_A_ID}'
           LIMIT 1;`,
       );
-      expect(enrichmentJobRow).toBeTruthy();
-      const enrichmentJobId = enrichmentJobRow.trim();
+      const uuidMatch = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(enrichmentJobRaw);
+      expect(uuidMatch, "enrichment job must exist for business expense").not.toBeNull();
+      const enrichmentJobId = uuidMatch![0]!;
 
       // Assemble seed (mirrors brief Step 1 spec)
       const seed = {
         userId:                PHASE_3C_USER_ID,
         tenantId:              PHASE_3C_TENANT_A_ID,
         businessId:            PHASE_3C_BUSINESS_A_ID,
+        // I-2: otherProfileId is Profile B which lives in Tenant B (PHASE_3C_TENANT_B_ID).
+        // Controller ruling: listPersonal must use the profile's home tenant (Tenant B),
+        // not Tenant A -- the UNIQUE(tenant_id) constraint means Profile B cannot exist
+        // in Tenant A, so the correct tenantId for the otherProfile scope is Tenant B.
         otherProfileId:        PHASE_3C_PROFILE_B_ID,
         enrichmentJobId,
         tagAId:                tagA.id,
@@ -2850,32 +2864,28 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
 
       // --- Brief Step 1 verbatim assertions ---
 
-      // (1) Exactly one ExpenseEnrichmentWorkflow job for the seeded expense
-      // (brief uses countRows against table/column/value, scoped to this expense's job)
+      // C-1 + C-2: The brief calls countRows("app.processing_jobs", "workflow_type",
+      // "ExpenseEnrichmentWorkflow").toBe(1) but a shared suite DB accumulates many
+      // ExpenseEnrichmentWorkflow jobs across all test cases, so the global count is
+      // order-dependent and cannot be exactly 1. Per controller ruling (C-2):
+      //   a) Assert global count >= 1 (shows countRows works and jobs exist)
+      //   b) Assert exact-one on scoped outbox-keyed count (job-unique, safe)
       expect(
-        await countRows(
-          "app.processing_jobs",
-          "workflow_type",
-          "ExpenseEnrichmentWorkflow",
-        ),
-        // Not exactly 1 globally (other tests create jobs); verify via scoped SQL instead
+        await countRows("app.processing_jobs", "workflow_type", "ExpenseEnrichmentWorkflow"),
+        "global ExpenseEnrichmentWorkflow count must be >= 1",
       ).toBeGreaterThanOrEqual(1);
 
-      // Scoped count (exact-one for this specific expense + tenant):
-      const scopedJobCount = runtimeSql(
-        `SELECT count(*) FROM app.processing_jobs
-          WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
-            AND target_aggregate_id = '${seed.expenseWithBothTagsId}'
-            AND tenant_id = '${seed.tenantId}';`,
-      );
-      expect(scopedJobCount, "exactly one enrichment job for seeded expense").toBe("1");
-
-      // (2) Exactly one outbox row targeting the enrichment job
-      const outboxCount = runtimeSql(
-        `SELECT count(*) FROM app.processing_job_dispatch_outbox
-          WHERE processing_job_id = '${seed.enrichmentJobId}';`,
-      );
-      expect(outboxCount, "exactly one outbox row for enrichment job").toBe("1");
+      // Scoped exact-one proof: outbox is keyed to processing_job_id which is a job UUID.
+      // One job -> one outbox row. This is job-unique regardless of other tests running.
+      // (C-1 fix: use countRows, not raw SQL; C-2 scoped for exact-one validity)
+      expect(
+        await countRows(
+          "app.processing_job_dispatch_outbox",
+          "processing_job_id",
+          seed.enrichmentJobId,
+        ),
+        "exactly one outbox row keyed to this expense's enrichment job (job-keyed unique, exact-one valid)",
+      ).toBe(1);
 
       // (3) businessPage with AND tag filter contains expenseWithBothTagsId
       const businessPage = await expenseDomain.listBusiness({
@@ -2891,9 +2901,9 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       });
       expect(businessPage.items.map((row) => row.id)).toContain(seed.expenseWithBothTagsId);
 
-      // (4) listPersonal under otherProfileId (Tenant B) returns zero items
-      // (Profile B is in Tenant B; the business expense is in Tenant A.
-      //  No expenses have been created under Tenant B / Profile B in this run.)
+      // (4) I-2: listPersonal under otherProfileId uses PHASE_3C_TENANT_B_ID (Profile B's
+      // home tenant). Controller ruling: the home tenant is the correct tenantId.
+      // No expenses created under Tenant B / Profile B, so list must return zero items.
       expect(
         (
           await expenseDomain.listPersonal({
@@ -2905,6 +2915,247 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
         ).items,
         "Profile B (Tenant B) has no expenses -- cross-tenant isolation",
       ).toHaveLength(0);
+    },
+  );
+
+  it(
+    "T11: 3/80/tie threshold -- buildEnrichmentInput history payload reflects candidate counts",
+    async () => {
+      // I-3: The TypeScript domain side (buildEnrichmentInput) is responsible for assembling
+      // the history payload (exampleCount, candidateTagKeys[{key, count}]).
+      // The AI worker applies the 3-example / 80% thresholds to decide whether to emit
+      // a suggestion, but the TypeScript integration proof is:
+      //   A. 3 history expenses all tagged with key X -> exampleCount=3, candidateTagKeys[0].count=3
+      //   B. 2 history expenses tagged with key X -> exampleCount=2, candidateTagKeys[0].count=2
+      //   C. Tie: 2 keys each present in all 3 history -> both appear in candidateTagKeys
+      //
+      // History lookup uses expense_dedup_fingerprints for merchant matching and
+      // incurred_on < currentExpense.incurredOn for date filtering.
+      // We use Personal scope (Profile A) to keep isolation from Business scope tests.
+
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const enrichmentDomain = createEnrichmentJobsDomain(db, pendingProjection);
+
+      // Shared merchant name for all history expenses (normalized to same fingerprint).
+      // "threshold merchant" -> normalizeMerchant -> "threshold merchant" -> toMerchantSlug -> "threshold-merchant"
+      const merchant = "ThresholdMerchant";
+      // normalizedMerchant for fingerprints (lowercase with spaces, matches normalizeMerchant output)
+      const normalizedMerchant = "thresholdmerchant";
+
+      // --- Scenario A + C: 3 history expenses, all tagged with tagX; also 2 tagged with tagY (tie) ---
+
+      // Create two tags to produce a tie scenario
+      const tagX = await createTagDomain(db).createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Threshold X", color: "#AA1122" },
+        requestId: `t11-thresh-tagX-${runKey}`,
+      });
+      const tagY = await createTagDomain(db).createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Threshold Y", color: "#BB2233" },
+        requestId: `t11-thresh-tagY-${runKey}`,
+      });
+
+      // Seed 3 history expenses (Personal scope, Profile A, dates before the probe expense)
+      // Each has the same normalized merchant so fingerprints match.
+      const histExpIds = [
+        "3c000000-0000-4000-8000-cc0000000010",
+        "3c000000-0000-4000-8000-cc0000000011",
+        "3c000000-0000-4000-8000-cc0000000012",
+      ] as const;
+      const histDates = ["2025-10-01", "2025-11-01", "2025-12-01"] as const;
+
+      for (let i = 0; i < 3; i++) {
+        runtimeSql(`
+          INSERT INTO app.expenses
+            (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+             merchant, amount, currency, incurred_on, source, status)
+          VALUES
+            ('${histExpIds[i]}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${merchant}', '${(i + 1) * 10}.00', 'USD', '${histDates[i]}', 'manual', 'ready')
+          ON CONFLICT DO NOTHING;
+
+          -- Fingerprint row required for history merchant matching
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             fingerprint_version, normalized_merchant, amount_minor_units, currency,
+             incurred_on, fingerprint_hash)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL, '${histExpIds[i]}',
+             1, '${normalizedMerchant}', ${(i + 1) * 1000}, 'USD',
+             '${histDates[i]}', '${"a0".repeat(32)}')
+          ON CONFLICT (expense_id, fingerprint_version) DO NOTHING;
+        `);
+
+        // Apply tagX to all 3; apply tagY to only first 2 (count=2 for Y, count=3 for X -> X wins, Y is second)
+        // Wait -- for tie scenario (C) we want both tagX and tagY in all 3 history.
+        // Use: all 3 have tagX; all 3 also have tagY -> tie (both count=3)
+        // Apply tagX to all 3 history expenses (source=manual so it shows in candidateTagKeys)
+        runtimeSql(`
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${histExpIds[i]}', '${tagX.id}', 'manual', 1.0, 'active')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${histExpIds[i]}', '${tagY.id}', 'manual', 1.0, 'active')
+          ON CONFLICT DO NOTHING;
+        `);
+      }
+
+      // Probe expense A: date after all 3 history (2026-01-15 > 2025-12-01), same merchant
+      const probeExpA = "3c000000-0000-4000-8000-cc0000000020";
+      const probeJobA = "3c000000-0000-4000-8000-cc0000000021";
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${probeExpA}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${merchant}', '99.00', 'USD', '2026-01-15', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           dispatched_at)
+        VALUES
+          ('${probeJobA}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ExpenseEnrichmentWorkflow', 'job-${probeJobA}', 'expense-tax-ai-worker', 'RUNNING',
+           '{}', 'expense-enrichment-v1', 'expense', '${probeExpA}', 1,
+           now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Scenario A+C: 3 history, both tagX and tagY in all 3 -> tie (exampleCount=3, both count=3)
+      const responseA = await enrichmentDomain.getEnrichmentInput({
+        jobId: probeJobA,
+        actorServicePrincipal: "ai-worker-app-machine",
+        requestId: `t11-thresh-A-${runKey}`,
+      });
+      expect(responseA.outcome, "probe A must reach evaluate outcome").toBe("evaluate");
+      if (responseA.outcome === "evaluate") {
+        const hist = responseA.input.history;
+        expect(hist.exampleCount, "Scenario A: 3 history expenses").toBe(3);
+        // Both tagX and tagY appear in all 3 history expenses -> both count=3 (tie)
+        // Sorted by count desc then key asc (deterministic tie-breaking in buildEnrichmentInput).
+        expect(hist.candidateTagKeys.length, "Scenario C tie: both tag keys in payload").toBeGreaterThanOrEqual(2);
+        const xEntry = hist.candidateTagKeys.find((e) => e.key === tagX.key);
+        const yEntry = hist.candidateTagKeys.find((e) => e.key === tagY.key);
+        expect(xEntry?.count, "Scenario A: tagX count must be 3").toBe(3);
+        expect(yEntry?.count, "Scenario C tie: tagY count must be 3").toBe(3);
+      }
+
+      // --- Scenario B: 2 history expenses, same tagX -> exampleCount=2, count=2 (below threshold) ---
+      // Use a fresh merchant to isolate from the 3-history case above.
+      const merchantB = "ThresholdBMerchant";
+      const normalizedMerchantB = "thresholdbmerchant";
+      const tagZ = await createTagDomain(db).createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Threshold Z", color: "#CC3344" },
+        requestId: `t11-thresh-tagZ-${runKey}`,
+      });
+
+      const histBExpIds = [
+        "3c000000-0000-4000-8000-cc0000000030",
+        "3c000000-0000-4000-8000-cc0000000031",
+      ] as const;
+      const histBDates = ["2025-09-01", "2025-10-15"] as const;
+
+      for (let i = 0; i < 2; i++) {
+        runtimeSql(`
+          INSERT INTO app.expenses
+            (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+             merchant, amount, currency, incurred_on, source, status)
+          VALUES
+            ('${histBExpIds[i]}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${merchantB}', '${(i + 5) * 10}.00', 'USD', '${histBDates[i]}', 'manual', 'ready')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO app.expense_dedup_fingerprints
+            (id, tenant_id, personal_profile_id, business_id, expense_id,
+             fingerprint_version, normalized_merchant, amount_minor_units, currency,
+             incurred_on, fingerprint_hash)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL, '${histBExpIds[i]}',
+             1, '${normalizedMerchantB}', ${(i + 5) * 1000}, 'USD',
+             '${histBDates[i]}', '${"b0".repeat(32)}')
+          ON CONFLICT (expense_id, fingerprint_version) DO NOTHING;
+
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             '${PHASE_3C_PROFILE_A_ID}', NULL,
+             '${histBExpIds[i]}', '${tagZ.id}', 'manual', 1.0, 'active')
+          ON CONFLICT DO NOTHING;
+        `);
+      }
+
+      const probeExpB = "3c000000-0000-4000-8000-cc0000000040";
+      const probeJobB = "3c000000-0000-4000-8000-cc0000000041";
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${probeExpB}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           '${merchantB}', '88.00', 'USD', '2026-01-15', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           dispatched_at)
+        VALUES
+          ('${probeJobB}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ExpenseEnrichmentWorkflow', 'job-${probeJobB}', 'expense-tax-ai-worker', 'RUNNING',
+           '{}', 'expense-enrichment-v1', 'expense', '${probeExpB}', 1,
+           now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      const responseB = await enrichmentDomain.getEnrichmentInput({
+        jobId: probeJobB,
+        actorServicePrincipal: "ai-worker-app-machine",
+        requestId: `t11-thresh-B-${runKey}`,
+      });
+      expect(responseB.outcome, "probe B must reach evaluate outcome").toBe("evaluate");
+      if (responseB.outcome === "evaluate") {
+        const hist = responseB.input.history;
+        // Scenario B: only 2 history expenses (below the 3-example AI worker threshold).
+        // The TypeScript builder still surfaces the history faithfully; the worker decides.
+        expect(hist.exampleCount, "Scenario B: 2 history expenses (below worker threshold)").toBe(2);
+        const zEntry = hist.candidateTagKeys.find((e) => e.key === tagZ.key);
+        expect(zEntry?.count, "Scenario B: tagZ count must be 2").toBe(2);
+      }
     },
   );
 
