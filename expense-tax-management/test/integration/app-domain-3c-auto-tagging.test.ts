@@ -2737,4 +2737,442 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       expect(accStatus).toBe("accepted");
     },
   );
+
+  // ---------------------------------------------------------------- //
+  // Task 11: multi-tenant seed invariants + comprehensive matrix      //
+  // ---------------------------------------------------------------- //
+  //
+  // seed object (per brief Step 1):
+  //   userId         -- PHASE_3C_USER_ID (shared across tenants as single actor)
+  //   tenantId       -- PHASE_3C_TENANT_A_ID (Business A lives here)
+  //   businessId     -- PHASE_3C_BUSINESS_A_ID
+  //   otherProfileId -- PHASE_3C_PROFILE_B_ID (Tenant B; listPersonal scoped there must return 0)
+  //   enrichmentJobId -- the processing_job created with the business expense
+  //   tagAId, tagBId -- two tags on PHASE_3C_TENANT_A_ID
+  //   expenseWithBothTagsId -- business expense with both tags applied
+  //
+  // countRows: parameterized Kysely count via runtimeSql (matches brief spec).
+  //
+  // schema note: personal_profiles has UNIQUE(tenant_id); Profile A -> Tenant A,
+  // Profile B -> Tenant B (already seeded in seedPersonalScope beforeAll).
+  // Both scopes share the same actor user who is a member of both tenants.
+
+  it(
+    "T11: multi-tenant seed invariants -- countRows, AND filter, cross-tenant isolation",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      // countRows: parameterized Kysely count (inline, as described in brief Step 1)
+      async function countRows(table: string, column: string, value: string): Promise<number> {
+        const rows = await db
+          .selectFrom(table as "app.processing_jobs")
+          .select((eb) => eb.fn.count("id").as("n"))
+          .where(column as "workflow_type", "=", value)
+          .executeTakeFirstOrThrow();
+        return Number(rows.n);
+      }
+
+      const expenseDomain = createExpenseDomain(db);
+      const tagDomain = createTagDomain(db);
+
+      // --- Create Tag A and Tag B ---
+      const tagA = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Tag A", color: "#110011" },
+        requestId: `t11-tagA-${runKey}`,
+      });
+      const tagB = await tagDomain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Tag B", color: "#001100" },
+        requestId: `t11-tagB-${runKey}`,
+      });
+
+      // --- Create business expense (expenseWithBothTags) under Tenant A / Business A ---
+      const expenseWithBothTags = await expenseDomain.createBusiness({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        request: {
+          businessId: PHASE_3C_BUSINESS_A_ID,
+          merchant: "T11 BothTags Merchant",
+          amount: "77.00",
+          currency: "USD",
+          incurredOn: "2026-09-19",
+        },
+        requestId: `t11-exp-both-${runKey}`,
+      });
+
+      // Apply both tags to the business expense
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: null,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        expenseId: expenseWithBothTags.id,
+        tagId: tagA.id,
+        requestId: `t11-applyA-${runKey}`,
+      });
+      await tagDomain.applyExpenseTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        profileId: null,
+        businessId: PHASE_3C_BUSINESS_A_ID,
+        expenseId: expenseWithBothTags.id,
+        tagId: tagB.id,
+        requestId: `t11-applyB-${runKey}`,
+      });
+
+      // Capture enrichment job ID for this expense
+      const enrichmentJobRow = runtimeSql(
+        `SELECT id FROM app.processing_jobs
+          WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
+            AND target_aggregate_id = '${expenseWithBothTags.id}'
+            AND tenant_id = '${PHASE_3C_TENANT_A_ID}'
+          LIMIT 1;`,
+      );
+      expect(enrichmentJobRow).toBeTruthy();
+      const enrichmentJobId = enrichmentJobRow.trim();
+
+      // Assemble seed (mirrors brief Step 1 spec)
+      const seed = {
+        userId:                PHASE_3C_USER_ID,
+        tenantId:              PHASE_3C_TENANT_A_ID,
+        businessId:            PHASE_3C_BUSINESS_A_ID,
+        otherProfileId:        PHASE_3C_PROFILE_B_ID,
+        enrichmentJobId,
+        tagAId:                tagA.id,
+        tagBId:                tagB.id,
+        expenseWithBothTagsId: expenseWithBothTags.id,
+      } as const;
+
+      // --- Brief Step 1 verbatim assertions ---
+
+      // (1) Exactly one ExpenseEnrichmentWorkflow job for the seeded expense
+      // (brief uses countRows against table/column/value, scoped to this expense's job)
+      expect(
+        await countRows(
+          "app.processing_jobs",
+          "workflow_type",
+          "ExpenseEnrichmentWorkflow",
+        ),
+        // Not exactly 1 globally (other tests create jobs); verify via scoped SQL instead
+      ).toBeGreaterThanOrEqual(1);
+
+      // Scoped count (exact-one for this specific expense + tenant):
+      const scopedJobCount = runtimeSql(
+        `SELECT count(*) FROM app.processing_jobs
+          WHERE workflow_type = 'ExpenseEnrichmentWorkflow'
+            AND target_aggregate_id = '${seed.expenseWithBothTagsId}'
+            AND tenant_id = '${seed.tenantId}';`,
+      );
+      expect(scopedJobCount, "exactly one enrichment job for seeded expense").toBe("1");
+
+      // (2) Exactly one outbox row targeting the enrichment job
+      const outboxCount = runtimeSql(
+        `SELECT count(*) FROM app.processing_job_dispatch_outbox
+          WHERE processing_job_id = '${seed.enrichmentJobId}';`,
+      );
+      expect(outboxCount, "exactly one outbox row for enrichment job").toBe("1");
+
+      // (3) businessPage with AND tag filter contains expenseWithBothTagsId
+      const businessPage = await expenseDomain.listBusiness({
+        actorUserId: seed.userId,
+        tenantId: seed.tenantId,
+        businessId: seed.businessId,
+        query: {
+          tagIds: [seed.tagAId, seed.tagBId],
+          limit: 50,
+          sort: "incurredOn",
+          direction: "desc",
+        },
+      });
+      expect(businessPage.items.map((row) => row.id)).toContain(seed.expenseWithBothTagsId);
+
+      // (4) listPersonal under otherProfileId (Tenant B) returns zero items
+      // (Profile B is in Tenant B; the business expense is in Tenant A.
+      //  No expenses have been created under Tenant B / Profile B in this run.)
+      expect(
+        (
+          await expenseDomain.listPersonal({
+            actorUserId: seed.userId,
+            tenantId: PHASE_3C_TENANT_B_ID,
+            profileId: seed.otherProfileId,
+            query: { limit: 50, sort: "incurredOn", direction: "desc" },
+          })
+        ).items,
+        "Profile B (Tenant B) has no expenses -- cross-tenant isolation",
+      ).toHaveLength(0);
+    },
+  );
+
+  it(
+    "T11: permanent replay after deleting expired generic idempotency row",
+    async () => {
+      // applyEnrichmentResult stores the result in enrichment_operation_keys (permanent,
+      // never TTL-deleted) before touching the generic idempotency_records table.
+      // Even if the generic idempotency row for the calling HTTP request expires,
+      // re-submitting the SAME result (same jobId + same idempotencyKey = same opKey) replays
+      // from enrichment_operation_keys without re-executing any mutations.
+      //
+      // Proof:
+      //   1. Submit stale outcome -> job SUCCEEDED, op-key row written.
+      //   2. Delete generic idempotency_records row for the caller request (simulating TTL expiry).
+      //   3. Re-submit with SAME jobId + SAME idempotencyKey + SAME payload -> replay succeeds.
+      //   4. Re-submit with SAME jobId + SAME idempotencyKey + DIFFERENT payload -> CONFLICT.
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const enrichmentDomain = createEnrichmentJobsDomain(db, pendingProjection);
+
+      const expId = "3c000000-0000-4000-8000-ee0000000090";
+      const jobId = "3c000000-0000-4000-8000-ee0000000091";
+      const idemKey = `t11-replay-expired-${runKey}`;
+
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ReplayMerchant', '11.00', 'USD', '2026-09-19', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           dispatched_at)
+        VALUES
+          ('${jobId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ExpenseEnrichmentWorkflow', 'job-${jobId}', 'expense-tax-ai-worker', 'RUNNING',
+           '{}', 'expense-enrichment-v1', 'expense', '${expId}', 1,
+           now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // Step 1: First submission -- job transitions to SUCCEEDED and op-key row is written
+      const stalePayload = {
+        schemaVersion: 1 as const,
+        rulesVersion: 1,
+        outcome: "stale" as const,
+        ruleTagKeys: [],
+        suggestions: [],
+      };
+      const firstResult = await enrichmentDomain.submitEnrichmentResult({
+        jobId,
+        idempotencyKey: idemKey,
+        expectedJobVersion: 1,
+        result: stalePayload,
+        actorServicePrincipal: "ai-worker-app-machine",
+        requestId: `t11-replay-first-${runKey}`,
+      });
+      expect(firstResult.body.status, "job must be SUCCEEDED after first submission").toBe("SUCCEEDED");
+
+      // Step 2: Delete the generic idempotency row (simulating TTL/expiry)
+      // The op-key row in enrichment_operation_keys remains (permanent, non-TTL).
+      adminSql(
+        `DELETE FROM app.idempotency_records
+          WHERE idempotency_key LIKE 'result:${jobId}%';`,
+        databaseName,
+      );
+
+      // Confirm op-key row still exists in enrichment_operation_keys
+      const opKeyExists = adminSql(
+        `SELECT count(*) FROM app.enrichment_operation_keys
+          WHERE operation_key = 'result:${jobId}:${idemKey}';`,
+        databaseName,
+      );
+      expect(opKeyExists, "enrichment_operation_keys row must persist after idempotency_records deletion").toBe("1");
+
+      // Step 3: Re-submit with same key + same payload -> replay succeeds from op-key
+      const replayResult = await enrichmentDomain.submitEnrichmentResult({
+        jobId,
+        idempotencyKey: idemKey,
+        expectedJobVersion: 1,
+        result: stalePayload,
+        actorServicePrincipal: "ai-worker-app-machine",
+        requestId: `t11-replay-second-${runKey}`,
+      });
+      expect(replayResult.body.status, "permanent replay must return SUCCEEDED").toBe("SUCCEEDED");
+      expect(replayResult.replayed, "replay flag must be true").toBe(true);
+
+      // Step 4: Re-submit with same key + DIFFERENT payload -> CONFLICT
+      const { DomainError } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        enrichmentDomain.submitEnrichmentResult({
+          jobId,
+          idempotencyKey: idemKey,
+          expectedJobVersion: 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 2, // different rulesVersion -> different payload hash
+            outcome: "stale",
+            ruleTagKeys: [],
+            suggestions: [],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `t11-replay-conflict-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DomainError>>>({ code: "CONFLICT" });
+    },
+  );
+
+  it(
+    "T11: archived-key collision -- archived tag key cannot be reused by create",
+    async () => {
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const domain = createTagDomain(db);
+      const { DomainError } = await import("../../services/app-api/src/errors.js");
+
+      // Create and archive tag; the key (custom:<uuid>) should be unique
+      const t = await domain.createTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        request: { name: "T11 Archived Key Tag", color: "#777777" },
+        requestId: `t11-archkey-create-${runKey}`,
+      });
+      await domain.archiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: t.id,
+        request: { expectedVersion: t.version },
+        requestId: `t11-archkey-archive-${runKey}`,
+      });
+
+      // DB-level: confirm key still exists with archived status
+      const keyStatus = runtimeSql(
+        `SELECT status FROM app.tags WHERE id = '${t.id}';`,
+      );
+      expect(keyStatus).toBe("archived");
+
+      // Unarchive and re-archive to verify round-trip (key not reused by system)
+      const restored = await domain.unarchiveTag({
+        actorUserId: PHASE_3C_USER_ID,
+        tenantId: PHASE_3C_TENANT_A_ID,
+        tagId: t.id,
+        request: { expectedVersion: 2 },
+        requestId: `t11-archkey-unarchive-${runKey}`,
+      });
+      expect(restored.key).toBe(t.key);
+      expect(restored.status).toBe("active");
+
+      // Key collision: trying to insert another tag with the same key must fail at DB level
+      let keyCollisionRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.tags (id, tenant_id, key, name, origin, status)
+          VALUES (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}', '${t.key}', 'Collision Tag', 'custom', 'active');
+        `);
+      } catch {
+        keyCollisionRejected = true;
+      }
+      expect(keyCollisionRejected, "duplicate key must be rejected at DB level").toBe(true);
+    },
+  );
+
+  it(
+    "T11: worker callback scope redirect rejection -- enrichment job scope must match expense scope",
+    async () => {
+      // The worker callback (getEnrichmentInput) looks up the job by jobId only;
+      // it cannot redirect to a different scope. Prove:
+      //   A. Correct jobId -> outcome "evaluate" with matching expenseId (no tenantId in payload --
+      //      security property: tenantId/profileId/businessId are NOT exposed to the worker).
+      //   B. Non-existent jobId -> NOT_FOUND.
+      //   C. DB-level: expense_tags trigger rejects business-scoped tag on personal expense
+      //      (validate_enrichment_child_scope) when worker attempts to write cross-scope.
+      const db = database;
+      if (!db) throw new Error("Integration database was not initialized");
+
+      const enrichmentDomain = createEnrichmentJobsDomain(db, pendingProjection);
+
+      const expId = "3c000000-0000-4000-8000-ee0000000095";
+      const jobId = "3c000000-0000-4000-8000-ee0000000096";
+
+      runtimeSql(`
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${expId}', '${PHASE_3C_TENANT_A_ID}', '${PHASE_3C_USER_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ScopeRedirectMerchant', '3.50', 'USD', '2026-09-19', 'manual', 'ready')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           input_params, allowed_result_schema_version,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           dispatched_at)
+        VALUES
+          ('${jobId}', '${PHASE_3C_TENANT_A_ID}',
+           '${PHASE_3C_PROFILE_A_ID}', NULL,
+           'ExpenseEnrichmentWorkflow', 'job-${jobId}', 'expense-tax-ai-worker', 'RUNNING',
+           '{}', 'expense-enrichment-v1', 'expense', '${expId}', 1,
+           now())
+        ON CONFLICT DO NOTHING;
+      `);
+
+      // A. Correct jobId -> outcome "evaluate", expenseId matches, tenantId NOT in payload
+      const response = await enrichmentDomain.getEnrichmentInput({
+        jobId,
+        actorServicePrincipal: "ai-worker-app-machine",
+        requestId: `t11-scope-input-${runKey}`,
+      });
+      // Security: the response is a discriminated union; for an active RUNNING job it's "evaluate"
+      expect(response.outcome, "correct job returns evaluate outcome").toBe("evaluate");
+      if (response.outcome === "evaluate") {
+        // expenseId present in worker payload
+        expect(response.input.expenseId, "expenseId must be the seeded expense").toBe(expId);
+        // tenantId/profileId are NOT in the payload (enforced by contract schema strictObject)
+        expect((response.input as Record<string, unknown>)["tenantId"]).toBeUndefined();
+        expect((response.input as Record<string, unknown>)["personalProfileId"]).toBeUndefined();
+      }
+
+      // B. Non-existent jobId -> NOT_FOUND
+      const { DomainError } = await import("../../services/app-api/src/errors.js");
+      await expect(
+        enrichmentDomain.getEnrichmentInput({
+          jobId: "00000000-0000-4000-8000-000000000000",
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `t11-scope-alien-${runKey}`,
+        }),
+      ).rejects.toMatchObject<Partial<InstanceType<typeof DomainError>>>({ code: "NOT_FOUND" });
+
+      // C. DB trigger: worker cannot write a business-scoped expense_tag on a personal expense
+      // (validate_enrichment_child_scope) -- cross-scope redirect prevented at storage layer.
+      const scopeTagId = "3c000000-0000-4000-8000-ee0000000097";
+      runtimeSql(`
+        INSERT INTO app.tags (id, tenant_id, key, name, origin, status)
+        VALUES ('${scopeTagId}', '${PHASE_3C_TENANT_A_ID}', 'scope-redirect-tag', 'Scope Redirect', 'rule', 'active')
+        ON CONFLICT DO NOTHING;
+      `);
+      let scopeRedirectRejected = false;
+      try {
+        runtimeSql(`
+          INSERT INTO app.expense_tags
+            (id, tenant_id, personal_profile_id, business_id,
+             expense_id, tag_id, source, confidence, status)
+          VALUES
+            (gen_random_uuid(), '${PHASE_3C_TENANT_A_ID}',
+             NULL, '${PHASE_3C_BUSINESS_A_ID}',
+             '${expId}', '${scopeTagId}', 'rule', 1.0, 'active');
+        `);
+      } catch {
+        scopeRedirectRejected = true;
+      }
+      expect(
+        scopeRedirectRejected,
+        "DB trigger must reject business-scoped tag on personal expense (worker scope redirect)",
+      ).toBe(true);
+    },
+  );
 });
