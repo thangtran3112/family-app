@@ -357,4 +357,29 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toMatch(/dropTable\("app\.expense_tags"\)/);
     expect(migration).toMatch(/dropTable\("app\.tags"\)/);
   });
+
+  it("down() drops child tables before expense_enrichment_suggestions to satisfy FK constraints", () => {
+    // expense_tags and expense_spending_category_decisions hold non-cascading FKs to
+    // expense_enrichment_suggestions (suggestion_id). PostgreSQL rejects DROP TABLE on
+    // the parent while children still exist. Correct order: children first, parent last.
+    const expenseTagsPos = migration.indexOf('dropTable("app.expense_tags")');
+    const expenseDecisionsPos = migration.indexOf('dropTable("app.expense_spending_category_decisions")');
+    const suggestionsPos = migration.indexOf('dropTable("app.expense_enrichment_suggestions")');
+    const tagsPos = migration.indexOf('dropTable("app.tags")');
+    const operationKeysPos = migration.indexOf('dropTable("app.enrichment_operation_keys")');
+
+    expect(expenseTagsPos).toBeGreaterThan(-1);
+    expect(expenseDecisionsPos).toBeGreaterThan(-1);
+    expect(suggestionsPos).toBeGreaterThan(-1);
+    expect(tagsPos).toBeGreaterThan(-1);
+    expect(operationKeysPos).toBeGreaterThan(-1);
+
+    // Children must appear before the parent they reference
+    expect(expenseTagsPos).toBeLessThan(suggestionsPos);
+    expect(expenseDecisionsPos).toBeLessThan(suggestionsPos);
+
+    // expenses_id_tenant_unique is a UNIQUE CONSTRAINT from migration 005, not a
+    // standalone index created by this migration — must NOT be dropped here.
+    expect(migration).not.toMatch(/DROP INDEX.*expenses_id_tenant_unique/);
+  });
 });

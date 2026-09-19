@@ -715,12 +715,21 @@ export async function down(database: Kysely<unknown>): Promise<void> {
   await sql`DROP FUNCTION IF EXISTS app.prevent_category_decision_mutation()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.validate_expense_tag_suggestion_linkage()`.execute(database);
   await sql`DROP FUNCTION IF EXISTS app.validate_category_decision_suggestion_linkage()`.execute(database);
+  // Drop child tables before their parents to satisfy FK constraints:
+  //   expense_tags → expense_enrichment_suggestions (expense_tags_suggestion_id_fk)
+  //   expense_spending_category_decisions → expense_enrichment_suggestions
+  //     (expense_spending_category_decisions_suggestion_id_fk)
+  // enrichment_operation_keys has no FK to other 016 tables; it goes before
+  // expense_enrichment_suggestions to keep all 016 tables together in order.
+  // tags is created first in up() and holds no FK to 016 tables, so it drops last.
+  await database.schema.dropTable("app.expense_tags").ifExists().execute();
+  await database.schema.dropTable("app.expense_spending_category_decisions").ifExists().execute();
   await database.schema.dropTable("app.enrichment_operation_keys").ifExists().execute();
   await database.schema.dropTable("app.expense_enrichment_suggestions").ifExists().execute();
-  await database.schema.dropTable("app.expense_spending_category_decisions").ifExists().execute();
-  await database.schema.dropTable("app.expense_tags").ifExists().execute();
   await database.schema.dropTable("app.tags").ifExists().execute();
   await sql`DROP INDEX IF EXISTS app.business_tax_profiles_id_tenant_unique`.execute(database);
   await sql`DROP INDEX IF EXISTS app.processing_jobs_id_tenant_unique`.execute(database);
-  await sql`DROP INDEX IF EXISTS app.expenses_id_tenant_unique`.execute(database);
+  // expenses_id_tenant_unique is a UNIQUE CONSTRAINT created inline by migration 005,
+  // not a standalone index created by this migration. DO NOT DROP here — the constraint
+  // belongs to migration 005 and must survive this migration's rollback.
 }

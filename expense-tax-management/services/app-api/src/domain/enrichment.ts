@@ -280,7 +280,7 @@ export async function buildEnrichmentInput(
       outcome: "success",
       resourceType: "processing_job",
       resourceId: jobId,
-      requestId: requestId ?? "unknown",
+      requestId,
       metadata: { inputOutcome: outcome },
     });
 

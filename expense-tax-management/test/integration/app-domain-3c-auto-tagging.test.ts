@@ -31,7 +31,7 @@ import type { Kysely } from "kysely";
 
 import { createAppDatabase } from "../../services/app-api/src/database/client.js";
 import type { AppDatabase } from "../../services/app-api/src/database/types.js";
-import { runMigrations } from "../../services/app-api/src/database/migrate.js";
+import { createMigratorDatabase, runMigrations } from "../../services/app-api/src/database/migrate.js";
 import { createExpenseDomain, insertExpenseInTransaction } from "../../services/app-api/src/domain/expenses.js";
 import { createEnrichmentJobsDomain, pendingProjection } from "../../services/app-api/src/domain/enrichment-jobs.js";
 import { resolveSuggestion, rerunEnrichment } from "../../services/app-api/src/domain/enrichment.js";
@@ -400,6 +400,66 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
           `ALTER TABLE app.enrichment_operation_keys
              ADD CONSTRAINT enrichment_operation_keys_operation_key_unique
                UNIQUE (tenant_id, operation_key);`,
+          databaseName,
+        );
+      }
+    },
+  );
+
+  it(
+    "migration 016 down() then up() completes without FK error (live down-migration proof)",
+    async () => {
+      // TDD proof: verifies the FK drop order fix.
+      //
+      // Background: expense_tags and expense_spending_category_decisions hold non-cascading
+      // FKs to expense_enrichment_suggestions (suggestion_id). The original down() dropped
+      // expense_enrichment_suggestions before the child tables, causing PostgreSQL to reject
+      // with "cannot drop table ... because other objects depend on it".
+      //
+      // This test runs down() then up() on the SAME disposable DB used by the suite.
+      // The DB already has 016 applied. We call the functions directly (bypassing Kysely
+      // migration tracking) to prove the fixed drop order works end-to-end.
+      //
+      // After down()+up(), the suite DB is restored to its original state so subsequent
+      // tests continue normally.
+      const migrationUrl =
+        `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+
+      const migratorDb = createMigratorDatabase(migrationUrl);
+
+      try {
+        // Step 1: down() — must not throw FK constraint error
+        await expect(
+          migration016.down(migratorDb),
+          "down() must complete without FK constraint error",
+        ).resolves.toBeUndefined();
+
+        // Step 2: up() — must restore all 5 tables
+        await expect(
+          migration016.up(migratorDb),
+          "up() after down() must succeed (re-migration)",
+        ).resolves.toBeUndefined();
+
+        // Step 3: verify 5 tables are present after re-migration
+        const tableCheck = adminSql(
+          `SELECT tablename FROM pg_tables
+            WHERE schemaname = 'app'
+              AND tablename IN (
+                'tags','expense_tags','expense_spending_category_decisions',
+                'expense_enrichment_suggestions','enrichment_operation_keys'
+              )
+            ORDER BY tablename;`,
+          databaseName,
+        );
+        const tables = tableCheck.split("\n").filter(Boolean);
+        expect(tables, "all 5 migration 016 tables must exist after re-migration").toHaveLength(5);
+      } finally {
+        await migratorDb.destroy().catch(() => {});
+        // Restore suite-level grants so subsequent tests can continue
+        adminSql(
+          `GRANT USAGE ON SCHEMA app TO expense_app_runtime;
+           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO expense_app_runtime;
+           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO expense_app_runtime;`,
           databaseName,
         );
       }
@@ -2993,8 +3053,7 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
           ON CONFLICT (expense_id, fingerprint_version) DO NOTHING;
         `);
 
-        // Apply tagX to all 3; apply tagY to only first 2 (count=2 for Y, count=3 for X -> X wins, Y is second)
-        // Wait -- for tie scenario (C) we want both tagX and tagY in all 3 history.
+        // Tie scenario (C): both tagX and tagY appear in all 3 history expenses (count=3 each).
         // Use: all 3 have tagX; all 3 also have tagY -> tie (both count=3)
         // Apply tagX to all 3 history expenses (source=manual so it shows in candidateTagKeys)
         runtimeSql(`
