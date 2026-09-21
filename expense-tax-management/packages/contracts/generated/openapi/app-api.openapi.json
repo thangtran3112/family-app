@@ -45574,6 +45574,7 @@
                           "key": {
                             "maxLength": 100,
                             "minLength": 1,
+                            "pattern": "^[a-z0-9_:.-]+$",
                             "type": "string"
                           },
                           "name": {
@@ -45992,6 +45993,7 @@
                     "key": {
                       "maxLength": 100,
                       "minLength": 1,
+                      "pattern": "^[a-z0-9_:.-]+$",
                       "type": "string"
                     },
                     "name": {
@@ -46396,6 +46398,7 @@
                     "key": {
                       "maxLength": 100,
                       "minLength": 1,
+                      "pattern": "^[a-z0-9_:.-]+$",
                       "type": "string"
                     },
                     "name": {
@@ -46814,6 +46817,7 @@
                     "key": {
                       "maxLength": 100,
                       "minLength": 1,
+                      "pattern": "^[a-z0-9_:.-]+$",
                       "type": "string"
                     },
                     "name": {
@@ -47545,6 +47549,7 @@
                     "key": {
                       "maxLength": 100,
                       "minLength": 1,
+                      "pattern": "^[a-z0-9_:.-]+$",
                       "type": "string"
                     },
                     "name": {

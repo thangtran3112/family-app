@@ -505,7 +505,7 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   `.execute(database);
   await sql`
     CREATE TRIGGER expense_tags_suggestion_linkage_trigger
-      BEFORE INSERT OR UPDATE OF suggestion_id ON app.expense_tags
+      BEFORE INSERT OR UPDATE ON app.expense_tags
       FOR EACH ROW EXECUTE FUNCTION app.validate_expense_tag_suggestion_linkage()
   `.execute(database);
 
@@ -610,17 +610,17 @@ export async function up(database: Kysely<unknown>): Promise<void> {
   `.execute(database);
   await sql`
     CREATE TRIGGER expense_tags_scope_validation_trigger
-      BEFORE INSERT ON app.expense_tags
+      BEFORE INSERT OR UPDATE ON app.expense_tags
       FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
   `.execute(database);
   await sql`
     CREATE TRIGGER expense_spending_category_decisions_scope_validation_trigger
-      BEFORE INSERT ON app.expense_spending_category_decisions
+      BEFORE INSERT OR UPDATE ON app.expense_spending_category_decisions
       FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
   `.execute(database);
   await sql`
     CREATE TRIGGER expense_enrichment_suggestions_scope_validation_trigger
-      BEFORE INSERT ON app.expense_enrichment_suggestions
+      BEFORE INSERT OR UPDATE ON app.expense_enrichment_suggestions
       FOR EACH ROW EXECUTE FUNCTION app.validate_enrichment_child_scope()
   `.execute(database);
 

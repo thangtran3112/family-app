@@ -267,6 +267,18 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toContain("FOR SHARE");
   });
 
+  it("child scope validation covers mutable child-row updates", () => {
+    expect(migration).toMatch(
+      /CREATE TRIGGER expense_tags_scope_validation_trigger\s+BEFORE INSERT OR UPDATE ON app\.expense_tags/,
+    );
+    expect(migration).toMatch(
+      /CREATE TRIGGER expense_enrichment_suggestions_scope_validation_trigger\s+BEFORE INSERT OR UPDATE ON app\.expense_enrichment_suggestions/,
+    );
+    expect(migration).toMatch(
+      /CREATE TRIGGER expense_spending_category_decisions_scope_validation_trigger\s+BEFORE INSERT OR UPDATE ON app\.expense_spending_category_decisions/,
+    );
+  });
+
   // ---- parent scope immutability -------------------------------------
 
   it("has parent scope immutability trigger for enrichment children", () => {
@@ -313,6 +325,12 @@ describe("expense enrichment migration 016 – schema structure", () => {
     expect(migration).toMatch(/sug_kind IS DISTINCT FROM 'tag'/);
     expect(migration).toMatch(/sug_tag_id IS DISTINCT FROM NEW\.tag_id/);
     expect(migration).toMatch(/sug_expense_id IS DISTINCT FROM NEW\.expense_id/);
+  });
+
+  it("expense_tags suggestion linkage covers mutable linkage updates", () => {
+    expect(migration).toMatch(
+      /CREATE TRIGGER expense_tags_suggestion_linkage_trigger\s+BEFORE INSERT OR UPDATE ON app\.expense_tags/,
+    );
   });
 
   it("expense_spending_category_decisions has suggestion_id linkage trigger validating expense/scope/kind/spending_category_id", () => {

@@ -14,7 +14,6 @@ import type {
   PersonalExpenseParams,
 } from "@expense-tax/contracts";
 import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
-import type { JsonValue } from "../database/types.js";
 
 import type { AppDatabase, ExpenseTable } from "../database/types.js";
 import { DomainError } from "../errors.js";
@@ -492,7 +491,7 @@ async function queryExpenses(
   // Order: name ASC, id ASC — deterministic chip ordering per expense.
   // Scope column branched explicitly — no sql.raw() or unsafe string injection.
   const pageExpenseIds = pageRows.map((r) => r.id);
-  let tagChipsByExpenseId = new Map<string, ExpenseTagChip[]>();
+  const tagChipsByExpenseId = new Map<string, ExpenseTagChip[]>();
   if (pageExpenseIds.length > 0) {
     let chipQuery = database
       .selectFrom("app.expense_tags as et")

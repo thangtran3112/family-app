@@ -21,6 +21,7 @@ import { runMigrations } from "../src/database/migrate.js";
 import {
   buildEnrichmentInput,
   applyEnrichmentResult,
+  toDateStr,
   twentyFourMonthCutoff,
   resolveSuggestion,
   rerunEnrichment,
@@ -214,6 +215,22 @@ describe("twentyFourMonthCutoff — 24-month arithmetic with day clamping", () =
   it("2024-02-29 → 2022-02-28 (2022 not a leap year → clamp)", () => {
     // 2024 is a leap year (divisible by 4); 2022 is not.
     expect(twentyFourMonthCutoff("2024-02-29")).toBe("2022-02-28");
+  });
+});
+
+describe("toDateStr — PostgreSQL date conversion", () => {
+  it("uses UTC calendar fields for Date values", () => {
+    const originalTimezone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(toDateStr(new Date("2026-01-01T00:00:00.000Z"))).toBe("2026-01-01");
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
+  });
+
+  it("preserves PostgreSQL date strings", () => {
+    expect(toDateStr("2026-01-01")).toBe("2026-01-01");
   });
 });
 
@@ -413,17 +430,6 @@ describe.skipIf(!requested)(
         const weekendKey = "timing:weekend";
 
         // Build canonical evidence hash for a tag suggestion
-        const evidencePayload = JSON.stringify(
-          {
-            kind: "tag",
-            candidate: merchantKey,
-            exampleCount: 3,
-            matchCount: 3,
-          },
-          Object.keys({
-            kind: "", candidate: "", exampleCount: 0, matchCount: 0,
-          }).sort(),
-        );
         // Re-sort keys canonically
         const canonicalEvidence = JSON.stringify(
           { candidate: merchantKey, exampleCount: 3, kind: "tag", matchCount: 3 },
@@ -913,10 +919,6 @@ describe.skipIf(!requested)(
         });
 
         // Seed historical expense at cutoff date (2024-09-15 — exactly 24 months before)
-        const atCutoffId = `t6l8a${runKey.slice(0, 8)}`;
-        const beforeCutoffId = `t6l8b${runKey.slice(0, 8)}`;
-        const withinWindowId = `t6l8c${runKey.slice(0, 8)}`;
-
         // Valid UUIDs for seeded expenses — use randomUUID to avoid collision
         const atCutoffUuid = randomUUID();
         const beforeCutoffUuid = randomUUID();
@@ -1124,9 +1126,9 @@ describe.skipIf(!requested)(
         );
 
         // First result submission — creates rule tag (version=1 from insert trigger default)
-        let jobRow = getJobRow();
-        let [jobId, jobVersionStr] = jobRow.split("|");
-        let jobVersion = parseInt(jobVersionStr ?? "1", 10);
+        const jobRow = getJobRow();
+        const [jobId, jobVersionStr] = jobRow.split("|");
+        const jobVersion = parseInt(jobVersionStr ?? "1", 10);
 
         runtimeSql(`
           UPDATE app.processing_jobs
@@ -1545,6 +1547,407 @@ describe.skipIf(!requested)(
           `SELECT status FROM app.processing_jobs WHERE id = '${jobId}';`,
         );
         expect(jobStatus).toBe("RUNNING");
+      },
+    );
+
+    it(
+      "uses the active tax profile matching the expense tax year for projection and result validation",
+      async () => {
+        const db = database!;
+        const newerTaxonomyId = randomUUID();
+        const newerTaxCategoryId = randomUUID();
+        const newerTaxProfileId = randomUUID();
+        runtimeSql(`
+          INSERT INTO app.taxonomy_versions
+            (id, jurisdiction_code, tax_year, code, name, status,
+             source_url, source_revision, source_checksum)
+          VALUES
+            ('${newerTaxonomyId}', 'US-FEDERAL', 2026, 'test-v2-${runKey}',
+             'Newer Test Taxonomy', 'active', 'https://test.local', 'rev2', '${"b".repeat(64)}');
+          INSERT INTO app.tax_category_definitions
+            (id, taxonomy_version_id, code, name, status, sort_order)
+          VALUES
+            ('${newerTaxCategoryId}', '${newerTaxonomyId}', 'NEWER', 'Newer Category', 'active', 1);
+          INSERT INTO app.business_tax_profiles
+            (id, tenant_id, business_id, tax_year, taxonomy_version_id,
+             tax_form, accounting_method, status)
+          VALUES
+            ('${newerTaxProfileId}', '${T6_TENANT_ID}', '${T6_BIZ_ID}', 2026,
+             '${newerTaxonomyId}', 'schedule_c', 'cash', 'active');
+        `);
+
+        const expense = await createExpenseDomain(db).createBusiness({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          businessId: T6_BIZ_ID,
+          request: {
+            businessId: T6_BIZ_ID,
+            merchant: "Tax Year Supplier",
+            amount: "24.00",
+            currency: "USD",
+            incurredOn: "2025-09-15",
+          },
+          requestId: `tax-year-expense-${runKey}`,
+        });
+        const [jobId, initialVersion] = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+             WHERE target_aggregate_id = '${expense.id}'
+               AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        ).split("|");
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1,
+                 dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+
+        const inputResponse = await buildEnrichmentInput(
+          db,
+          jobId!,
+          TEST_ACTOR,
+          `tax-year-input-${runKey}`,
+        );
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+        expect(inputResponse.input.eligibleTaxSnapshot).toMatchObject({
+          businessTaxProfileId: T6_TAX_PROF_ID,
+          taxonomyVersionId: T6_TAXVER_ID,
+          taxYear: 2025,
+          activeTaxCategoryIds: [T6_TAXCAT_ID],
+        });
+
+        const merchantKey = `merchant:${inputResponse.input.normalizedMerchant}`;
+        await createEnrichmentJobsDomain(db).submitEnrichmentResult({
+          jobId: jobId!,
+          idempotencyKey: `tax-year-result-${runKey}`,
+          expectedJobVersion: Number(initialVersion) + 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "applied",
+            ruleTagKeys: [merchantKey],
+            suggestions: [{
+              kind: "tax_category",
+              source: "historical",
+              taxCategoryDefinitionId: T6_TAXCAT_ID,
+              businessTaxProfileId: T6_TAX_PROF_ID,
+              businessTaxProfileVersion: 1,
+              taxonomyVersionId: T6_TAXVER_ID,
+              taxYear: 2025,
+              expenseVersion: 1,
+              confidence: 0.9,
+              evidenceHash: "f".repeat(64),
+              aggregateCounts: { exampleCount: 2, matchCount: 2 },
+            }],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `tax-year-result-${runKey}`,
+        });
+
+        expect(runtimeSql(
+          `SELECT business_tax_profile_id FROM app.expense_enrichment_suggestions
+             WHERE expense_id = '${expense.id}' AND kind = 'tax_category';`,
+        )).toBe(T6_TAX_PROF_ID);
+      },
+    );
+
+    it(
+      "reuses a concurrently committed tenant rule tag instead of failing uniqueness",
+      async () => {
+        const db = database!;
+        const expense = await createExpenseDomain(db).createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Concurrent Rule Merchant",
+            amount: "16.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `rule-race-expense-${runKey}`,
+        });
+        const [jobId, initialVersion] = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+             WHERE target_aggregate_id = '${expense.id}'
+               AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        ).split("|");
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1,
+                 dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+        const inputResponse = await buildEnrichmentInput(
+          db,
+          jobId!,
+          TEST_ACTOR,
+          `rule-race-input-${runKey}`,
+        );
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+        const merchantKey = `merchant:${inputResponse.input.normalizedMerchant}`;
+        const blockerTagId = randomUUID();
+        let announceInserted!: () => void;
+        let releaseInsert!: () => void;
+        const inserted = new Promise<void>((resolve) => { announceInserted = resolve; });
+        const release = new Promise<void>((resolve) => { releaseInsert = resolve; });
+        const blocker = db.transaction().execute(async (transaction) => {
+          await transaction
+            .insertInto("app.tags")
+            .values({
+              id: blockerTagId,
+              tenant_id: T6_TENANT_ID,
+              key: merchantKey,
+              name: merchantKey,
+              color: null,
+              origin: "rule",
+              status: "active",
+              version: 1,
+              created_by_user_id: null,
+              created_at: new Date(),
+              updated_at: new Date(),
+            })
+            .execute();
+          announceInserted();
+          await release;
+        });
+        await inserted;
+
+        const submission = createEnrichmentJobsDomain(db).submitEnrichmentResult({
+          jobId: jobId!,
+          idempotencyKey: `rule-race-result-${runKey}`,
+          expectedJobVersion: Number(initialVersion) + 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "applied",
+            ruleTagKeys: [merchantKey],
+            suggestions: [],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `rule-race-result-${runKey}`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        releaseInsert();
+        await blocker;
+        await expect(submission).resolves.toMatchObject({
+          statusCode: 200,
+          body: { status: "SUCCEEDED" },
+        });
+        expect(runtimeSql(
+          `SELECT tag_id FROM app.expense_tags
+             WHERE expense_id = '${expense.id}' AND tag_id = '${blockerTagId}';`,
+        )).toBe(blockerTagId);
+      },
+    );
+
+    it(
+      "rejects a suggestion candidate archived while the result transaction is validating it",
+      async () => {
+        const db = database!;
+        const categoryId = randomUUID();
+        runtimeSql(`
+          INSERT INTO app.spending_categories (id, tenant_id, name, color, icon, status)
+          VALUES ('${categoryId}', '${T6_TENANT_ID}', 'Archive Race Category',
+                  '#445566', 'tag', 'active');
+        `);
+        const expense = await createExpenseDomain(db).createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Archive Race Merchant",
+            amount: "18.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `archive-race-expense-${runKey}`,
+        });
+        const [jobId, initialVersion] = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+             WHERE target_aggregate_id = '${expense.id}'
+               AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        ).split("|");
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1,
+                 dispatched_at = now(), updated_at = now()
+           WHERE id = '${jobId}';
+        `);
+        const inputResponse = await buildEnrichmentInput(
+          db,
+          jobId!,
+          TEST_ACTOR,
+          `archive-race-input-${runKey}`,
+        );
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+        const merchantKey = `merchant:${inputResponse.input.normalizedMerchant}`;
+
+        let announceArchived!: () => void;
+        let releaseArchive!: () => void;
+        const archived = new Promise<void>((resolve) => { announceArchived = resolve; });
+        const release = new Promise<void>((resolve) => { releaseArchive = resolve; });
+        const blocker = db.transaction().execute(async (transaction) => {
+          await transaction
+            .updateTable("app.spending_categories")
+            .set({
+              status: "archived",
+              archived_at: new Date(),
+              updated_at: new Date(),
+            })
+            .where("id", "=", categoryId)
+            .execute();
+          announceArchived();
+          await release;
+        });
+        await archived;
+
+        const submission = createEnrichmentJobsDomain(db).submitEnrichmentResult({
+          jobId: jobId!,
+          idempotencyKey: `archive-race-result-${runKey}`,
+          expectedJobVersion: Number(initialVersion) + 1,
+          result: {
+            schemaVersion: 1,
+            rulesVersion: 1,
+            outcome: "applied",
+            ruleTagKeys: [merchantKey],
+            suggestions: [{
+              kind: "spending_category",
+              source: "historical",
+              spendingCategoryId: categoryId,
+              confidence: 0.8,
+              evidenceHash: "9".repeat(64),
+              aggregateCounts: { exampleCount: 2, matchCount: 2 },
+            }],
+          },
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `archive-race-result-${runKey}`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        releaseArchive();
+        await blocker;
+        await expect(submission).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(runtimeSql(
+          `SELECT count(*) FROM app.expense_enrichment_suggestions
+             WHERE expense_id = '${expense.id}' AND spending_category_id = '${categoryId}';`,
+        )).toBe("0");
+      },
+    );
+
+    it(
+      "suppresses matching pending and terminal suggestions across later jobs",
+      async () => {
+        const db = database!;
+        const expense = await createExpenseDomain(db).createPersonal({
+          actorUserId: T6_USER_ID,
+          tenantId: T6_TENANT_ID,
+          profileId: T6_PROFILE_ID,
+          request: {
+            personalProfileId: T6_PROFILE_ID,
+            merchant: "Suggestion Replay Cafe",
+            amount: "12.00",
+            currency: "USD",
+            incurredOn: "2026-09-15",
+          },
+          requestId: `suggestion-replay-${runKey}`,
+        });
+
+        const initialJob = runtimeSql(
+          `SELECT id, version FROM app.processing_jobs
+             WHERE target_aggregate_id = '${expense.id}'
+               AND workflow_type = 'ExpenseEnrichmentWorkflow';`,
+        );
+        const [initialJobId, initialVersion] = initialJob.split("|");
+        runtimeSql(`
+          UPDATE app.processing_jobs
+             SET status = 'RUNNING', version = version + 1, dispatched_at = now(), updated_at = now()
+           WHERE id = '${initialJobId}';
+        `);
+
+        const inputResponse = await buildEnrichmentInput(
+          db,
+          initialJobId!,
+          TEST_ACTOR,
+          `suggestion-input-${runKey}`,
+        );
+        expect(inputResponse.outcome).toBe("evaluate");
+        if (inputResponse.outcome !== "evaluate") throw new Error("expected evaluate");
+
+        const merchantKey = `merchant:${inputResponse.input.normalizedMerchant}`;
+        const evidenceHash = "e".repeat(64);
+        const result = {
+          schemaVersion: 1,
+          rulesVersion: 1,
+          outcome: "applied" as const,
+          ruleTagKeys: [merchantKey],
+          suggestions: [{
+            kind: "spending_category" as const,
+            source: "historical" as const,
+            spendingCategoryId: T6_CAT_ID,
+            confidence: 0.8,
+            evidenceHash,
+            aggregateCounts: { exampleCount: 2, matchCount: 2 },
+          }],
+        };
+        const enrichmentDomain = createEnrichmentJobsDomain(db);
+
+        await enrichmentDomain.submitEnrichmentResult({
+          jobId: initialJobId!,
+          idempotencyKey: `suggestion-first-${runKey}`,
+          expectedJobVersion: Number(initialVersion) + 1,
+          result,
+          actorServicePrincipal: "ai-worker-app-machine",
+          requestId: `suggestion-first-${runKey}`,
+        });
+
+        const createLaterJob = async (suffix: string) => {
+          const jobId = randomUUID();
+          runtimeSql(`
+            INSERT INTO app.processing_jobs
+              (id, tenant_id, personal_profile_id, business_id,
+               workflow_type, workflow_id, task_queue, status,
+               target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+               input_params, allowed_result_schema_version, dispatched_at)
+            VALUES
+              ('${jobId}', '${T6_TENANT_ID}', '${T6_PROFILE_ID}', NULL,
+               'ExpenseEnrichmentWorkflow', 'job-${jobId}', 'expense-tax-ai-worker', 'RUNNING',
+               'expense', '${expense.id}', 1, '{}', 'expense-enrichment-v1', now());
+          `);
+          await enrichmentDomain.submitEnrichmentResult({
+            jobId,
+            idempotencyKey: `suggestion-${suffix}-${runKey}`,
+            expectedJobVersion: 1,
+            result,
+            actorServicePrincipal: "ai-worker-app-machine",
+            requestId: `suggestion-${suffix}-${runKey}`,
+          });
+        };
+
+        await createLaterJob("pending");
+        expect(runtimeSql(
+          `SELECT count(*) FROM app.expense_enrichment_suggestions
+             WHERE expense_id = '${expense.id}' AND kind = 'spending_category'
+               AND spending_category_id = '${T6_CAT_ID}' AND evidence_hash = '${evidenceHash}';`,
+        )).toBe("1");
+
+        runtimeSql(`
+          UPDATE app.expense_enrichment_suggestions
+             SET status = 'rejected',
+                 resolved_by_user_id = '${T6_USER_ID}',
+                 resolved_at = now()
+           WHERE expense_id = '${expense.id}' AND kind = 'spending_category'
+             AND spending_category_id = '${T6_CAT_ID}' AND evidence_hash = '${evidenceHash}';
+        `);
+        await createLaterJob("rejected");
+        expect(runtimeSql(
+          `SELECT count(*) FROM app.expense_enrichment_suggestions
+             WHERE expense_id = '${expense.id}' AND kind = 'spending_category'
+               AND spending_category_id = '${T6_CAT_ID}' AND evidence_hash = '${evidenceHash}';`,
+        )).toBe("1");
       },
     );
   },

@@ -196,6 +196,7 @@ export function createEnrichmentJobsDomain(
   // projection parameter kept for API compatibility; Task 6 uses buildEnrichmentInput directly.
   _projection: EnrichmentInputProjection = pendingProjection,
 ): EnrichmentJobsDomain {
+  void _projection;
   return {
     async getEnrichmentInput(input) {
       // F13: buildEnrichmentInput writes exactly one audit event inside its

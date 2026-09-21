@@ -24,6 +24,8 @@ const mockFetchLedger = vi.hoisted(() => vi.fn());
 const mockFetchExpenseDetail = vi.hoisted(() => vi.fn());
 const mockFetchSuggestions = vi.hoisted(() => vi.fn());
 const mockResolveSuggestion = vi.hoisted(() => vi.fn());
+const mockGetToken = vi.hoisted(() => vi.fn().mockResolvedValue("tok"));
+const mockOrganization = vi.hoisted(() => ({ id: "org_1" }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -44,8 +46,8 @@ vi.mock("@/lib/page-data", async (importOriginal) => {
 });
 
 vi.mock("@clerk/nextjs", () => ({
-  useAuth: () => ({ getToken: vi.fn().mockResolvedValue("tok"), isLoaded: true, isSignedIn: true }),
-  useOrganization: () => ({ organization: { id: "org_1" }, isLoaded: true }),
+  useAuth: () => ({ getToken: mockGetToken, isLoaded: true, isSignedIn: true }),
+  useOrganization: () => ({ organization: mockOrganization, isLoaded: true }),
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -220,6 +222,88 @@ describe("m-1: SuggestionCard — failed resolve allows retry", () => {
     await waitFor(() => expect(screen.queryByText("Accept")).toBeTruthy(), { timeout: 3000 });
     fireEvent.click(screen.getByText("Accept"));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeTruthy(), { timeout: 3000 });
+  });
+});
+
+describe("Phase 3C expense detail fixes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    readOfficeSession.mockReturnValue(bizSession);
+  });
+
+  afterEach(() => cleanup());
+
+  it("Retry refetches expense detail and suggestions after initial load failure", async () => {
+    mockFetchExpenseDetail
+      .mockRejectedValueOnce(new Error("Initial load failed"))
+      .mockResolvedValueOnce({
+        id: "exp-1", merchant: "Reloaded Shop", incurredOn: "2026-09-01",
+        amount: "10.00", currency: "USD", status: "ready", version: 1, tags: [],
+      });
+    mockFetchSuggestions
+      .mockRejectedValueOnce(new Error("Initial load failed"))
+      .mockResolvedValueOnce({ items: [pendingSuggestion], nextCursor: null });
+
+    render(<ExpenseDetail />);
+    await waitFor(() => expect(screen.getByText("Retry")).toBeTruthy());
+    fireEvent.click(screen.getByText("Retry"));
+
+    await waitFor(() => expect(screen.getAllByText("Reloaded Shop").length).toBeGreaterThan(0));
+    expect(mockFetchExpenseDetail).toHaveBeenCalledTimes(2);
+    expect(mockFetchSuggestions).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders only server-pending suggestions", async () => {
+    mockFetchExpenseDetail.mockResolvedValue({
+      id: "exp-1", merchant: "Shop", incurredOn: "2026-09-01",
+      amount: "10.00", currency: "USD", status: "ready", version: 1, tags: [],
+    });
+    mockFetchSuggestions.mockResolvedValue({
+      items: [
+        pendingSuggestion,
+        { ...pendingSuggestion, id: "accepted", status: "accepted", tagId: "tag-accepted" },
+        { ...pendingSuggestion, id: "rejected", status: "rejected", tagId: "tag-rejected" },
+        { ...pendingSuggestion, id: "superseded", status: "superseded", tagId: "tag-superseded" },
+      ],
+      nextCursor: null,
+    });
+
+    render(<ExpenseDetail />);
+
+    await waitFor(() => expect(screen.getByText("Tag suggestion: tag-1")).toBeTruthy());
+    expect(screen.queryByText("Tag suggestion: tag-accepted")).toBeNull();
+    expect(screen.queryByText("Tag suggestion: tag-rejected")).toBeNull();
+    expect(screen.queryByText("Tag suggestion: tag-superseded")).toBeNull();
+  });
+
+  it("refreshes authoritative expense and suggestions before next resolution", async () => {
+    const refreshedSuggestion = { ...pendingSuggestion, id: "sugg-2", tagId: "tag-2", expenseVersion: 2 };
+    mockFetchExpenseDetail
+      .mockResolvedValueOnce({
+        id: "exp-1", merchant: "Shop", incurredOn: "2026-09-01",
+        amount: "10.00", currency: "USD", status: "ready", version: 1, tags: [],
+      })
+      .mockResolvedValueOnce({
+        id: "exp-1", merchant: "Shop", incurredOn: "2026-09-01",
+        amount: "10.00", currency: "USD", status: "unreviewed", version: 2, tags: [],
+      });
+    mockFetchSuggestions
+      .mockResolvedValueOnce({ items: [pendingSuggestion], nextCursor: null })
+      .mockResolvedValueOnce({ items: [refreshedSuggestion], nextCursor: null });
+    mockResolveSuggestion.mockResolvedValue({});
+
+    render(<ExpenseDetail />);
+    await waitFor(() => expect(screen.getByText("Accept")).toBeTruthy());
+    fireEvent.click(screen.getByText("Accept"));
+
+    await waitFor(() => expect(screen.getByText("Tag suggestion: tag-2")).toBeTruthy());
+    fireEvent.click(screen.getByText("Accept"));
+
+    await waitFor(() => expect(mockResolveSuggestion).toHaveBeenCalledTimes(2));
+    expect(mockResolveSuggestion.mock.calls[1]?.[3]).toMatchObject({
+      expectedSuggestionVersion: 1,
+      expectedExpenseVersion: 2,
+    });
   });
 });
 

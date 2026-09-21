@@ -184,17 +184,20 @@ describe("ExpenseEnrichmentInputV1Schema – security rejections", () => {
   });
 
   it("rejects missing jobId", () => {
-    const { jobId: _, ...rest } = validPersonalInput;
+    const { jobId, ...rest } = validPersonalInput;
+    void jobId;
     expect(ExpenseEnrichmentInputV1Schema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects missing expenseVersion", () => {
-    const { expenseVersion: _, ...rest } = validPersonalInput;
+    const { expenseVersion, ...rest } = validPersonalInput;
+    void expenseVersion;
     expect(ExpenseEnrichmentInputV1Schema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects missing rulesVersion", () => {
-    const { rulesVersion: _, ...rest } = validPersonalInput;
+    const { rulesVersion, ...rest } = validPersonalInput;
+    void rulesVersion;
     expect(ExpenseEnrichmentInputV1Schema.safeParse(rest).success).toBe(false);
   });
 
@@ -597,17 +600,20 @@ describe("ExpenseEnrichmentResultV1Schema – security rejections", () => {
   });
 
   it("rejects missing schemaVersion", () => {
-    const { schemaVersion: _, ...rest } = validAppliedResult;
+    const { schemaVersion, ...rest } = validAppliedResult;
+    void schemaVersion;
     expect(ExpenseEnrichmentResultV1Schema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects missing rulesVersion", () => {
-    const { rulesVersion: _, ...rest } = validAppliedResult;
+    const { rulesVersion, ...rest } = validAppliedResult;
+    void rulesVersion;
     expect(ExpenseEnrichmentResultV1Schema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects missing outcome", () => {
-    const { outcome: _, ...rest } = validAppliedResult;
+    const { outcome, ...rest } = validAppliedResult;
+    void outcome;
     expect(ExpenseEnrichmentResultV1Schema.safeParse(rest).success).toBe(false);
   });
 

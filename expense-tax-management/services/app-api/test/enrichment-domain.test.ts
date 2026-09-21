@@ -15,8 +15,6 @@
  * - ExpenseInsertMode enum values are correct strings
  */
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
-
 import {
   EnrichmentResultSubmitRequestSchema,
   EnrichmentResultTransportSchema,
@@ -46,7 +44,8 @@ describe("EnrichmentResultTransportSchema — strict field coverage", () => {
   });
 
   it("rejects missing schemaVersion", () => {
-    const { schemaVersion: _, ...rest } = validStale;
+    const { schemaVersion: omittedSchemaVersion, ...rest } = validStale;
+    void omittedSchemaVersion;
     expect(EnrichmentResultTransportSchema.safeParse(rest).success).toBe(false);
   });
 
@@ -55,7 +54,8 @@ describe("EnrichmentResultTransportSchema — strict field coverage", () => {
   });
 
   it("rejects missing rulesVersion", () => {
-    const { rulesVersion: _, ...rest } = validStale;
+    const { rulesVersion: omittedRulesVersion, ...rest } = validStale;
+    void omittedRulesVersion;
     expect(EnrichmentResultTransportSchema.safeParse(rest).success).toBe(false);
   });
 
@@ -180,13 +180,15 @@ describe("EnrichmentResultSubmitRequestSchema — envelope validation", () => {
   });
 
   it("rejects body missing idempotencyKey", () => {
-    const { idempotencyKey: _, ...rest } = validBody;
+    const { idempotencyKey: omittedIdempotencyKey, ...rest } = validBody;
+    void omittedIdempotencyKey;
     expect(EnrichmentResultSubmitRequestSchema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects body where result is missing schemaVersion", () => {
     const { result } = validBody;
-    const { schemaVersion: _, ...restResult } = result;
+    const { schemaVersion: omittedSchemaVersion, ...restResult } = result;
+    void omittedSchemaVersion;
     expect(
       EnrichmentResultSubmitRequestSchema.safeParse({ ...validBody, result: restResult }).success,
     ).toBe(false);

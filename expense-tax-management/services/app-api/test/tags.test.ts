@@ -22,8 +22,6 @@ import type { Kysely } from "kysely";
 import {
   TagSchema,
   TagListSchema,
-  ExpenseTagSchema,
-  EnrichmentSuggestionListSchema,
   type AuthenticatedUser,
   type Tag,
   type ExpenseTag,
@@ -542,6 +540,33 @@ describe.skipIf(!requested)(
       `);
     }
 
+    function seedPendingTagSuggestion(expenseId: string, tagId: string, suffix: string): string {
+      const jobId = randomUUID();
+      const suggestionId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.processing_jobs
+          (id, tenant_id, personal_profile_id, business_id,
+           workflow_type, workflow_id, task_queue, status,
+           target_aggregate_type, target_aggregate_id, expected_aggregate_version,
+           input_params, allowed_result_schema_version, dispatched_at, completed_at)
+        VALUES
+          ('${jobId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
+           'ExpenseEnrichmentWorkflow', 'job-${jobId}', 'expense-tax-ai-worker', 'SUCCEEDED',
+           'expense', '${expenseId}', 1, '{}', 'expense-enrichment-v1', now(), now());
+        INSERT INTO app.expense_enrichment_suggestions
+          (id, tenant_id, personal_profile_id, business_id, expense_id, job_id,
+           kind, tag_id, spending_category_id, tax_category_definition_id,
+           business_tax_profile_id, business_tax_profile_version, taxonomy_version_id, tax_year,
+           source, confidence, evidence_hash, status, version, expense_version, idempotency_key)
+        VALUES
+          ('${suggestionId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
+           '${expenseId}', '${jobId}', 'tag', '${tagId}', NULL, NULL,
+           NULL, NULL, NULL, NULL, 'historical', 0.9, '${suffix.padEnd(64, "a").slice(0, 64)}',
+           'pending', 1, 1, 'manual-${suffix}-${runKey}');
+      `);
+      return suggestionId;
+    }
+
     // ---------------------------------------------------------------- //
     // T8-L1: Tag CRUD — create (owner enforced), list, update, archive
     // ---------------------------------------------------------------- //
@@ -733,6 +758,70 @@ describe.skipIf(!requested)(
       );
       expect(row).toContain("removed");
       expect(row).toContain(T8_USER_ID);
+    });
+
+    it("manual apply and removal supersede matching pending tag suggestions", async () => {
+      const domain = createTagDomain(database!);
+      const expId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
+          '${T8_PROFILE_ID}', NULL, 'Manual Suggestion Shop', '7.00', 'USD',
+          '2026-09-01', 'manual', 'ready');
+      `);
+      const applyTag = await domain.createTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        request: { name: "Manual Apply Suggestion", color: "#101010" },
+        requestId: `manual-apply-tag-${runKey}`,
+      });
+      const removeTag = await domain.createTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        request: { name: "Manual Remove Suggestion", color: "#202020" },
+        requestId: `manual-remove-tag-${runKey}`,
+      });
+      const removeAssoc = await domain.applyExpenseTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID,
+        businessId: null,
+        expenseId: expId,
+        tagId: removeTag.id,
+        requestId: `manual-remove-seed-${runKey}`,
+      });
+      const applySuggestionId = seedPendingTagSuggestion(expId, applyTag.id, `1${runKey}`);
+      const removeSuggestionId = seedPendingTagSuggestion(expId, removeTag.id, `2${runKey}`);
+
+      await domain.applyExpenseTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID,
+        businessId: null,
+        expenseId: expId,
+        tagId: applyTag.id,
+        requestId: `manual-apply-${runKey}`,
+      });
+      await domain.removeExpenseTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID,
+        businessId: null,
+        expenseId: expId,
+        tagId: removeTag.id,
+        expectedVersion: removeAssoc.version,
+        requestId: `manual-remove-${runKey}`,
+      });
+
+      expect(runtimeSql(
+        `SELECT status FROM app.expense_enrichment_suggestions
+           WHERE id = '${applySuggestionId}';`,
+      )).toBe("superseded");
+      expect(runtimeSql(
+        `SELECT status FROM app.expense_enrichment_suggestions
+           WHERE id = '${removeSuggestionId}';`,
+      )).toBe("superseded");
     });
 
     it("T8-L3c: cross-scope denial — personal-scope route with business expense rejected", async () => {
@@ -1052,12 +1141,78 @@ describe.skipIf(!requested)(
       expect(acceptedStatus).toBe("accepted");
     });
 
+    it("merge locks expenses before associations to avoid manual mutation deadlock", async () => {
+      const domain = createTagDomain(database!);
+      const sourceTag = await domain.createTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        request: { name: "Deadlock Source", color: "#404040" },
+        requestId: `deadlock-source-${runKey}`,
+      });
+      const targetTag = await domain.createTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        request: { name: "Deadlock Target", color: "#505050" },
+        requestId: `deadlock-target-${runKey}`,
+      });
+      const expId = randomUUID();
+      const assocId = randomUUID();
+      runtimeSql(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
+          '${T8_PROFILE_ID}', NULL, 'Deadlock Shop', '13.00', 'USD',
+          '2026-09-01', 'manual', 'ready');
+        INSERT INTO app.expense_tags
+          (id, tenant_id, personal_profile_id, business_id, expense_id, tag_id,
+           source, confidence, rule_version, status, applied_at)
+        VALUES ('${assocId}', '${T8_TENANT_ID}', '${T8_PROFILE_ID}', NULL,
+          '${expId}', '${sourceTag.id}', 'rule', '1', 1, 'active', now());
+      `);
+
+      let announceExpenseLock!: () => void;
+      let releaseAssociationUpdate!: () => void;
+      const expenseLocked = new Promise<void>((resolve) => { announceExpenseLock = resolve; });
+      const updateAssociation = new Promise<void>((resolve) => { releaseAssociationUpdate = resolve; });
+      const manualMutation = database!.transaction().execute(async (transaction) => {
+        await transaction
+          .selectFrom("app.expenses")
+          .select("id")
+          .where("id", "=", expId)
+          .forUpdate()
+          .executeTakeFirstOrThrow();
+        announceExpenseLock();
+        await updateAssociation;
+        await transaction
+          .updateTable("app.expense_tags")
+          .set({ confidence: "0.8", version: 2 })
+          .where("id", "=", assocId)
+          .execute();
+      });
+      await expenseLocked;
+      const merge = domain.mergeTags({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        sourceTagId: sourceTag.id,
+        targetTagId: targetTag.id,
+        expectedSourceVersion: sourceTag.version,
+        expectedTargetVersion: targetTag.version,
+        requestId: `deadlock-merge-${runKey}`,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      releaseAssociationUpdate();
+
+      await expect(Promise.all([manualMutation, merge])).resolves.toBeDefined();
+      expect(runtimeSql(
+        `SELECT tag_id FROM app.expense_tags WHERE id = '${assocId}';`,
+      )).toBe(targetTag.id);
+    });
+
     // ---------------------------------------------------------------- //
     // T8-L5: Suggestion resolution — tag accept creates historical association
     // ---------------------------------------------------------------- //
 
     it("T8-L5: accept tag suggestion creates historical active association unless manual/removed blocks", async () => {
-      const { createEnrichmentJobInTransaction } = await import("../src/domain/enrichment-jobs.js");
       const { resolveSuggestion } = await import("../src/domain/enrichment.js");
 
       const expId = randomUUID();
@@ -1205,7 +1360,46 @@ describe.skipIf(!requested)(
       expect(assocCount).toBe("0");
     });
 
-    it("T8-L5c: replay — identical resolution returns original", async () => {
+    it("rejects a suggestion whose persisted expense version is stale", async () => {
+      const { resolveSuggestion } = await import("../src/domain/enrichment.js");
+      const expId = randomUUID();
+      const tag = await createTagDomain(database!).createTag({
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        request: { name: "Stale Expense Version", color: "#606060" },
+        requestId: `stale-version-tag-${runKey}`,
+      });
+      runtimeSql(`
+        INSERT INTO app.expenses (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+          merchant, amount, currency, incurred_on, source, status)
+        VALUES ('${expId}', '${T8_TENANT_ID}', '${T8_USER_ID}',
+          '${T8_PROFILE_ID}', NULL, 'Stale Version Shop', '10.00', 'USD',
+          '2026-09-02', 'manual', 'ready');
+      `);
+      const suggestionId = seedPendingTagSuggestion(expId, tag.id, `3${runKey}`);
+      runtimeSql(`UPDATE app.expenses SET version = 2 WHERE id = '${expId}';`);
+
+      await expect(resolveSuggestion(database!, {
+        actorUserId: T8_USER_ID,
+        tenantId: T8_TENANT_ID,
+        profileId: T8_PROFILE_ID,
+        businessId: null,
+        expenseId: expId,
+        suggestionId,
+        request: {
+          action: "accepted",
+          expectedSuggestionVersion: 1,
+          expectedExpenseVersion: 2,
+          idempotencyKey: `stale-version-resolve-${runKey}`,
+        },
+        requestId: `stale-version-resolve-${runKey}`,
+      })).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(runtimeSql(
+        `SELECT status FROM app.expense_enrichment_suggestions WHERE id = '${suggestionId}';`,
+      )).toBe("pending");
+    });
+
+    it("T8-L5c: concurrent identical resolutions return original result", async () => {
       const { resolveSuggestion } = await import("../src/domain/enrichment.js");
 
       const expId = randomUUID();
@@ -1268,8 +1462,34 @@ describe.skipIf(!requested)(
         },
       };
 
-      const first = await resolveSuggestion(database!, { ...commonInput, requestId: `t8-l5c-req1-${runKey}` });
-      const second = await resolveSuggestion(database!, { ...commonInput, requestId: `t8-l5c-req2-${runKey}` });
+      let announceExpenseLock!: () => void;
+      let releaseExpenseLock!: () => void;
+      const expenseLocked = new Promise<void>((resolve) => { announceExpenseLock = resolve; });
+      const releaseBlocker = new Promise<void>((resolve) => { releaseExpenseLock = resolve; });
+      const blocker = database!.transaction().execute(async (transaction) => {
+        await transaction
+          .selectFrom("app.expenses")
+          .select("id")
+          .where("id", "=", expId)
+          .forUpdate()
+          .executeTakeFirstOrThrow();
+        announceExpenseLock();
+        await releaseBlocker;
+      });
+
+      await expenseLocked;
+      const firstResolution = resolveSuggestion(database!, {
+        ...commonInput,
+        requestId: `t8-l5c-req1-${runKey}`,
+      });
+      const secondResolution = resolveSuggestion(database!, {
+        ...commonInput,
+        requestId: `t8-l5c-req2-${runKey}`,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      releaseExpenseLock();
+      await blocker;
+      const [first, second] = await Promise.all([firstResolution, secondResolution]);
 
       expect(second.suggestionId).toBe(first.suggestionId);
       expect(second.status).toBe("rejected");
@@ -1397,6 +1617,106 @@ describe.skipIf(!requested)(
 
       expect(afterCount).toBe(beforeCount + 1);
     });
+
+    it.each([
+      ["resolveSuggestion", "missing personal membership", "personal", "missing"],
+      ["resolveSuggestion", "inactive personal membership", "personal", "inactive"],
+      ["resolveSuggestion", "missing business membership", "business", "missing"],
+      ["resolveSuggestion", "inactive business membership", "business", "inactive"],
+      ["rerunEnrichment", "missing personal membership", "personal", "missing"],
+      ["rerunEnrichment", "inactive personal membership", "personal", "inactive"],
+      ["rerunEnrichment", "missing business membership", "business", "missing"],
+      ["rerunEnrichment", "inactive business membership", "business", "inactive"],
+    ] as const)("T8-L7: %s rejects %s without enrichment delegation", async (operation, _name, scope, membership) => {
+      const actorId = randomUUID();
+      const profileId = scope === "personal"
+        ? membership === "inactive" ? T8_PROFILE_ID : randomUUID()
+        : null;
+      const businessId = scope === "business"
+        ? membership === "inactive" ? T8_BIZ_ID : randomUUID()
+        : null;
+      runtimeSql(`
+        INSERT INTO app.users (id, primary_email, display_name)
+        VALUES ('${actorId}', '${actorId}@example.test', 'T8 Scope Test')
+        ON CONFLICT DO NOTHING;
+        INSERT INTO app.tenant_memberships (tenant_id, user_id, role, status)
+        VALUES ('${T8_TENANT_ID}', '${actorId}', 'member', 'active')
+        ON CONFLICT DO NOTHING;
+        ${profileId && membership === "inactive" ? `INSERT INTO app.personal_memberships (personal_profile_id, tenant_id, user_id, role, status)
+        VALUES ('${profileId}', '${T8_TENANT_ID}', '${actorId}', 'viewer', 'inactive');` : ""}
+        ${businessId && membership === "inactive" ? `INSERT INTO app.business_memberships (business_id, tenant_id, user_id, role, status)
+        VALUES ('${businessId}', '${T8_TENANT_ID}', '${actorId}', 'viewer', 'inactive');` : ""}
+      `);
+
+      const enrichment = await import("../src/domain/enrichment.js");
+      const operationSpy = vi.spyOn(enrichment, operation);
+      const domain = createTagDomain(database!);
+      const input = {
+        actorUserId: actorId,
+        tenantId: T8_TENANT_ID,
+        profileId,
+        businessId,
+        expenseId: randomUUID(),
+        ...(operation === "resolveSuggestion"
+          ? {
+              suggestionId: randomUUID(),
+              request: {
+                action: "rejected" as const,
+                expectedSuggestionVersion: 1,
+                expectedExpenseVersion: 1,
+                idempotencyKey: randomUUID(),
+              },
+              requestId: randomUUID(),
+            }
+          : { kinds: ["tag"], requestId: randomUUID() }),
+      };
+
+      try {
+        await expect(domain[operation](input as never)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        expect(operationSpy).not.toHaveBeenCalled();
+      } finally {
+        operationSpy.mockRestore();
+      }
+    });
+
+    it.each(["resolveSuggestion", "rerunEnrichment"] as const)(
+      "T8-L7: %s rejects null scope before enrichment delegation",
+      async (operation) => {
+        const enrichment = await import("../src/domain/enrichment.js");
+        const operationSpy = vi.spyOn(enrichment, operation);
+        const domain = createTagDomain(database!);
+        const input = {
+          actorUserId: T8_USER_ID,
+          tenantId: T8_TENANT_ID,
+          profileId: null,
+          businessId: null,
+          expenseId: randomUUID(),
+          ...(operation === "resolveSuggestion"
+            ? {
+                suggestionId: randomUUID(),
+                request: {
+                  action: "rejected" as const,
+                  expectedSuggestionVersion: 1,
+                  expectedExpenseVersion: 1,
+                  idempotencyKey: randomUUID(),
+                },
+                requestId: randomUUID(),
+              }
+            : { kinds: ["tag"], requestId: randomUUID() }),
+        };
+
+        try {
+          await expect(domain[operation](input as never)).rejects.toMatchObject({
+            code: "VALIDATION_ERROR",
+          });
+          expect(operationSpy).not.toHaveBeenCalled();
+        } finally {
+          operationSpy.mockRestore();
+        }
+      },
+    );
 
     // ---------------------------------------------------------------- //
     // Fix-1: archiveTag supersedes pending suggestions with actor set;

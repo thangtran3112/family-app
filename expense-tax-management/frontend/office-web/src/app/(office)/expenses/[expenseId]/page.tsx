@@ -221,6 +221,7 @@ export default function ExpenseDetail() {
   const [stale, setStale] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [resolvedMessage, setResolvedMessage] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const hasSession = !!(isLoaded && isSignedIn && readOfficeSession());
 
   const reviewState: EnrichmentReviewState = getEnrichmentReviewState({
@@ -262,7 +263,7 @@ export default function ExpenseDetail() {
     }
     void load();
     return () => { active = false; };
-  }, [expenseId, getToken, isLoaded, isSignedIn, organization, organizationLoaded]);
+  }, [expenseId, getToken, isLoaded, isSignedIn, organization, organizationLoaded, reloadKey]);
 
   async function handleResolve(
     suggId: string,
@@ -288,6 +289,16 @@ export default function ExpenseDetail() {
       }, getToken, organization.id);
       setResolvedIds((prev) => new Set([...prev, suggId]));
       setResolvedMessage(action === "accepted" ? "Suggestion accepted. Expense marked unreviewed pending re-evaluation." : "Suggestion rejected.");
+      try {
+        const [refreshedExpense, refreshedSuggestions] = await Promise.all([
+          fetchExpenseDetail(session, expenseId, getToken, organization.id),
+          fetchSuggestions(session, expenseId, getToken, organization.id),
+        ]);
+        setExpense(refreshedExpense as unknown as ExpenseDetail);
+        setSuggestions(refreshedSuggestions.items as Suggestion[]);
+      } catch (e) {
+        setResolveError(e instanceof Error ? `Resolution succeeded, but refresh failed: ${e.message}` : "Resolution succeeded, but refresh failed");
+      }
     } catch (e) {
       if (e instanceof EnrichmentReviewError) {
         if (e.status === 409) setConflict(true);
@@ -311,7 +322,7 @@ export default function ExpenseDetail() {
     return <main className="auth" role="alert"><p>Office authorization required. Sign in and select a scope before reviewing expenses.</p></main>;
   }
   if (reviewState === "error") {
-    return <main className="auth"><div role="alert">{loadError ?? "Failed to load expense."}</div><button type="button" onClick={() => { setLoadError(null); }}>Retry</button></main>;
+    return <main className="auth"><div role="alert">{loadError ?? "Failed to load expense."}</div><button type="button" onClick={() => { setLoadError(null); setReloadKey((key) => key + 1); }}>Retry</button></main>;
   }
   if (reviewState === "conflict") {
     return (
@@ -330,7 +341,7 @@ export default function ExpenseDetail() {
     );
   }
 
-  const pendingSuggestions = (suggestions ?? []).filter((s) => !resolvedIds.has(s.id));
+  const pendingSuggestions = (suggestions ?? []).filter((s) => s.status === "pending" && !resolvedIds.has(s.id));
 
   return (
     <>

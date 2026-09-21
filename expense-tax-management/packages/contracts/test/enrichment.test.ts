@@ -9,7 +9,6 @@ import {
   TagStatusSchema,
   TagOriginSchema,
   TagSchema,
-  TagCreateRequestSchema,
   TagUpdateRequestSchema,
   TagArchiveRequestSchema,
   TagUnarchiveRequestSchema,

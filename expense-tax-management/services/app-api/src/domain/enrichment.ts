@@ -172,11 +172,11 @@ function computeRuleTagKeys(input: {
 /**
  * Convert a DB incurred_on (Date | string) to "YYYY-MM-DD".
  */
-function toDateStr(raw: Date | string | null): string {
+export function toDateStr(raw: Date | string | null): string {
   if (raw instanceof Date) {
-    const y = raw.getFullYear();
-    const m = String(raw.getMonth() + 1).padStart(2, "0");
-    const d = String(raw.getDate()).padStart(2, "0");
+    const y = raw.getUTCFullYear();
+    const m = String(raw.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(raw.getUTCDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
   return String(raw ?? "");
@@ -348,8 +348,8 @@ export async function buildEnrichmentInput(
         .select(["btp.id", "btp.version", "btp.taxonomy_version_id", "btp.tax_year"])
         .where("btp.tenant_id", "=", tenantId)
         .where("btp.business_id", "=", scopeBusinessId)
+        .where("btp.tax_year", "=", expense!.tax_year)
         .where("btp.status", "=", "active")
-        .orderBy("btp.tax_year", "desc")
         .limit(1)
         .executeTakeFirst();
 
@@ -795,6 +795,7 @@ export async function applyEnrichmentResult(
         .select("id")
         .where("tenant_id", "=", tenantId)
         .where("status", "=", "active")
+        .forShare()
         .execute()
       ).map((r) => r.id),
     );
@@ -811,8 +812,9 @@ export async function applyEnrichmentResult(
         .select(["btp.id", "btp.version", "btp.taxonomy_version_id", "btp.tax_year"])
         .where("btp.tenant_id", "=", tenantId)
         .where("btp.business_id", "=", scopeBusinessId)
+        .where("btp.tax_year", "=", expense.tax_year)
         .where("btp.status", "=", "active")
-        .orderBy("btp.tax_year", "desc")
+        .forShare()
         .limit(1)
         .executeTakeFirst();
 
@@ -827,6 +829,7 @@ export async function applyEnrichmentResult(
             .select("id")
             .where("taxonomy_version_id", "=", taxProfile.taxonomy_version_id)
             .where("status", "=", "active")
+            .forShare()
             .execute()
           ).map((r) => r.id),
         );
@@ -860,6 +863,7 @@ export async function applyEnrichmentResult(
         .select(["id", "status"])
         .where("tenant_id", "=", tenantId)
         .where("key", "=", ruleKey)
+        .forUpdate()
         .executeTakeFirst();
 
       let tagId: string;
@@ -867,12 +871,11 @@ export async function applyEnrichmentResult(
         if (existingTag.status === "archived") continue; // permanently ineligible
         tagId = existingTag.id;
       } else {
-        // Create tenant-level rule tag
-        tagId = randomUUID();
-        await transaction
+        const proposedTagId = randomUUID();
+        const insertedTag = await transaction
           .insertInto("app.tags")
           .values({
-            id: tagId,
+            id: proposedTagId,
             tenant_id: tenantId,
             key: ruleKey,
             name: ruleKey,
@@ -883,7 +886,25 @@ export async function applyEnrichmentResult(
             created_at: now,
             updated_at: now,
           })
-          .execute();
+          .onConflict((conflict) =>
+            conflict.columns(["tenant_id", "key"]).doNothing(),
+          )
+          .returning("id")
+          .executeTakeFirst();
+
+        if (insertedTag) {
+          tagId = insertedTag.id;
+        } else {
+          const concurrentTag = await transaction
+            .selectFrom("app.tags")
+            .select(["id", "status"])
+            .where("tenant_id", "=", tenantId)
+            .where("key", "=", ruleKey)
+            .forUpdate()
+            .executeTakeFirstOrThrow();
+          if (concurrentTag.status === "archived") continue;
+          tagId = concurrentTag.id;
+        }
       }
 
       const existingAssoc = await transaction
@@ -970,6 +991,7 @@ export async function applyEnrichmentResult(
           .where("tenant_id", "=", tenantId)
           .where("key", "=", sug.tagKey)
           .where("status", "=", "active")
+          .forShare()
           .executeTakeFirst();
         if (!tagRow) continue;
         tagId = tagRow.id;
@@ -986,14 +1008,45 @@ export async function applyEnrichmentResult(
         candidateId = taxCategoryDefinitionId;
       }
 
-      // Check idempotency for suggestion
-      const existingSug = await transaction
-        .selectFrom("app.expense_enrichment_suggestions")
-        .select(["id"])
-        .where("tenant_id", "=", tenantId)
-        .where("expense_id", "=", expenseId)
-        .where("idempotency_key", "=", idempotencyKey)
-        .executeTakeFirst();
+      // Preserve prior review decisions across jobs. Tax suggestions bind the
+      // full validation snapshot so a changed profile or taxonomy can produce
+      // a new review candidate without recreating unchanged evidence.
+      const existingSug = sug.kind === "tag"
+        ? await transaction
+          .selectFrom("app.expense_enrichment_suggestions")
+          .select(["id"])
+          .where("tenant_id", "=", tenantId)
+          .where("expense_id", "=", expenseId)
+          .where("kind", "=", sug.kind)
+          .where("tag_id", "=", tagId)
+          .where("evidence_hash", "=", sug.evidenceHash)
+          .where("status", "in", ["pending", "accepted", "rejected", "superseded"])
+          .executeTakeFirst()
+        : sug.kind === "spending_category"
+          ? await transaction
+            .selectFrom("app.expense_enrichment_suggestions")
+            .select(["id"])
+            .where("tenant_id", "=", tenantId)
+            .where("expense_id", "=", expenseId)
+            .where("kind", "=", sug.kind)
+            .where("spending_category_id", "=", spendingCategoryId)
+            .where("evidence_hash", "=", sug.evidenceHash)
+            .where("status", "in", ["pending", "accepted", "rejected", "superseded"])
+            .executeTakeFirst()
+          : await transaction
+            .selectFrom("app.expense_enrichment_suggestions")
+            .select(["id"])
+            .where("tenant_id", "=", tenantId)
+            .where("expense_id", "=", expenseId)
+            .where("kind", "=", sug.kind)
+            .where("tax_category_definition_id", "=", taxCategoryDefinitionId)
+            .where("business_tax_profile_id", "=", businessTaxProfileId)
+            .where("business_tax_profile_version", "=", businessTaxProfileVersion)
+            .where("taxonomy_version_id", "=", taxonomyVersionId)
+            .where("tax_year", "=", taxYear)
+            .where("evidence_hash", "=", sug.evidenceHash)
+            .where("status", "in", ["pending", "accepted", "rejected", "superseded"])
+            .executeTakeFirst();
 
       if (existingSug) continue;
 
@@ -1236,7 +1289,35 @@ export async function resolveSuggestion(
       return stored;
     }
 
-    // Lock and validate suggestion
+    // Lock expense before suggestions so manual mutations and resolution use
+    // one deterministic lock order.
+    const expense = await transaction
+      .selectFrom("app.expenses")
+      .selectAll()
+      .where("id", "=", input.expenseId)
+      .where("tenant_id", "=", input.tenantId)
+      .where("status", "!=", "archived")
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!expense) throw DomainError.notFound();
+
+    // A concurrent identical request can create the operation key while this
+    // transaction waits for the expense lock. Recheck before state validation.
+    const concurrentKey = await transaction
+      .selectFrom("app.enrichment_operation_keys")
+      .select(["payload_hash", "response_json"])
+      .where("tenant_id", "=", input.tenantId)
+      .where("operation_key", "=", resolveOpKey)
+      .executeTakeFirst();
+
+    if (concurrentKey) {
+      if (concurrentKey.payload_hash !== payloadHash) throw DomainError.conflict();
+      return concurrentKey.response_json as unknown as ResolveSuggestionResult;
+    }
+
+    if (expense.version !== input.request.expectedExpenseVersion) throw DomainError.conflict();
+
     const suggestion = await transaction
       .selectFrom("app.expense_enrichment_suggestions")
       .selectAll()
@@ -1249,27 +1330,14 @@ export async function resolveSuggestion(
     if (!suggestion) throw DomainError.notFound();
     if (suggestion.status !== "pending") throw DomainError.conflict();
     if (suggestion.version !== input.request.expectedSuggestionVersion) throw DomainError.conflict();
+    if (suggestion.expense_version !== expense.version) throw DomainError.conflict();
 
-    // Verify scope
     if (input.profileId !== null && suggestion.personal_profile_id !== input.profileId) {
       throw DomainError.notFound();
     }
     if (input.businessId !== null && suggestion.business_id !== input.businessId) {
       throw DomainError.notFound();
     }
-
-    // Lock and validate expense
-    const expense = await transaction
-      .selectFrom("app.expenses")
-      .selectAll()
-      .where("id", "=", input.expenseId)
-      .where("tenant_id", "=", input.tenantId)
-      .where("status", "!=", "archived")
-      .forUpdate()
-      .executeTakeFirst();
-
-    if (!expense) throw DomainError.notFound();
-    if (expense.version !== input.request.expectedExpenseVersion) throw DomainError.conflict();
 
     const now = new Date();
 

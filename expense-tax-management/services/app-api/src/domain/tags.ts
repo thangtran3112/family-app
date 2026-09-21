@@ -321,6 +321,31 @@ function toSuggestion(row: SuggestionRow) {
   }
 }
 
+async function supersedePendingTagSuggestions(
+  transaction: Transaction<AppDatabase>,
+  input: {
+    readonly tenantId: string;
+    readonly expenseId: string;
+    readonly tagId: string;
+    readonly actorUserId: string;
+    readonly now: Date;
+  },
+): Promise<void> {
+  await transaction
+    .updateTable("app.expense_enrichment_suggestions")
+    .set({
+      status: "superseded",
+      resolved_at: input.now,
+      resolved_by_user_id: input.actorUserId,
+    })
+    .where("tenant_id", "=", input.tenantId)
+    .where("expense_id", "=", input.expenseId)
+    .where("kind", "=", "tag")
+    .where("tag_id", "=", input.tagId)
+    .where("status", "=", "pending")
+    .execute();
+}
+
 // ------------------------------------------------------------------ //
 // Precedence helpers for merge
 // ------------------------------------------------------------------ //
@@ -674,6 +699,26 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
       await requireTenantAdmin(database, actorUserId, tenantId);
 
       await database.transaction().execute(async (transaction) => {
+        const initialSourceExpenses = await transaction
+          .selectFrom("app.expense_tags")
+          .select("expense_id")
+          .distinct()
+          .where("tag_id", "=", sourceTagId)
+          .where("tenant_id", "=", tenantId)
+          .orderBy("expense_id", "asc")
+          .execute();
+        const lockedExpenseIds = initialSourceExpenses.map((row) => row.expense_id);
+        if (lockedExpenseIds.length > 0) {
+          await transaction
+            .selectFrom("app.expenses")
+            .select("id")
+            .where("tenant_id", "=", tenantId)
+            .where("id", "in", lockedExpenseIds)
+            .orderBy("id", "asc")
+            .forUpdate()
+            .execute();
+        }
+
         const [lockFirst, lockSecond] = [sourceTagId, targetTagId].sort();
         const firstTag = await transaction
           .selectFrom("app.tags")
@@ -711,6 +756,10 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           .execute();
 
         const sourceExpenseIds = sourceAssocs.map((a) => a.expense_id);
+        const lockedExpenseIdSet = new Set(lockedExpenseIds);
+        if (sourceExpenseIds.some((expenseId) => !lockedExpenseIdSet.has(expenseId))) {
+          throw DomainError.conflict();
+        }
         const targetAssocs = sourceExpenseIds.length > 0
           ? await transaction
             .selectFrom("app.expense_tags")
@@ -916,7 +965,7 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           expenseQuery = expenseQuery.where("business_id", "=", businessId);
         }
 
-        const expense = await expenseQuery.executeTakeFirst();
+        const expense = await expenseQuery.forUpdate().executeTakeFirst();
         if (!expense) throw DomainError.notFound();
 
         const tag = await transaction
@@ -924,6 +973,7 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           .select(["id", "status"])
           .where("id", "=", tagId)
           .where("tenant_id", "=", tenantId)
+          .forUpdate()
           .executeTakeFirst();
         if (!tag) throw DomainError.notFound();
         if (tag.status === "archived") throw DomainError.conflict();
@@ -960,6 +1010,13 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
             action: "expense_tag.applied", outcome: "success",
             resourceType: "expense_tag", resourceId: existing.id, requestId,
           });
+          await supersedePendingTagSuggestions(transaction, {
+            tenantId,
+            expenseId,
+            tagId,
+            actorUserId,
+            now,
+          });
           return toExpenseTag(updated as ExpenseTagRow);
         }
 
@@ -991,6 +1048,13 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
           action: "expense_tag.applied", outcome: "success",
           resourceType: "expense_tag", resourceId: inserted.id, requestId,
         });
+        await supersedePendingTagSuggestions(transaction, {
+          tenantId,
+          expenseId,
+          tagId,
+          actorUserId,
+          now,
+        });
         return toExpenseTag(inserted as ExpenseTagRow);
       });
     },
@@ -1009,6 +1073,20 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 
       return database.transaction().execute(async (transaction) => {
         const now = new Date();
+
+        let expenseQuery = transaction
+          .selectFrom("app.expenses")
+          .select("id")
+          .where("id", "=", expenseId)
+          .where("tenant_id", "=", tenantId)
+          .where("status", "!=", "archived");
+        if (profileId !== null) {
+          expenseQuery = expenseQuery.where("personal_profile_id", "=", profileId);
+        } else if (businessId !== null) {
+          expenseQuery = expenseQuery.where("business_id", "=", businessId);
+        }
+        const expense = await expenseQuery.forUpdate().executeTakeFirst();
+        if (!expense) throw DomainError.conflict();
 
         // Fix-3: include exact scope ID in the predicate so a cross-scope
         // request on the same (expense_id, tag_id, version) hits nothing.
@@ -1034,6 +1112,13 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
 
         const updated = await updateQuery.returningAll().executeTakeFirst();
         if (!updated) throw DomainError.conflict();
+        await supersedePendingTagSuggestions(transaction, {
+          tenantId,
+          expenseId,
+          tagId,
+          actorUserId,
+          now,
+        });
         await recordAuditEvent(transaction, {
           tenantId, actorUserId,
           action: "expense_tag.removed", outcome: "success",
@@ -1075,11 +1160,25 @@ export function createTagDomain(database: Kysely<AppDatabase>): TagDomain {
     },
 
     async resolveSuggestion(input) {
+      if (input.profileId !== null) {
+        await requirePersonalMembership(database, input.actorUserId, input.tenantId, input.profileId);
+      } else if (input.businessId !== null) {
+        await requireBusinessMembership(database, input.actorUserId, input.tenantId, input.businessId);
+      } else {
+        throw DomainError.validation();
+      }
       const ops = await getEnrichmentOps();
       return ops.resolveSuggestion(database, input);
     },
 
     async rerunEnrichment(input) {
+      if (input.profileId !== null) {
+        await requirePersonalMembership(database, input.actorUserId, input.tenantId, input.profileId);
+      } else if (input.businessId !== null) {
+        await requireBusinessMembership(database, input.actorUserId, input.tenantId, input.businessId);
+      } else {
+        throw DomainError.validation();
+      }
       const ops = await getEnrichmentOps();
       await ops.rerunEnrichment(database, input);
     },
