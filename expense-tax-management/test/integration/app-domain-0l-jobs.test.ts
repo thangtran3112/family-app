@@ -13,13 +13,14 @@ import type { TemporalWorkflowStarter } from "../../services/app-api/src/tempora
 import { DomainError } from "../../services/app-api/src/errors.js";
 import type { Kysely } from "kysely";
 import { Client, Connection } from "@temporalio/client";
+import { FOUNDATION_ECHO_WORKFLOW_TYPE } from "../../packages/contracts/src/index.js";
 
 const integrationEnabled = process.env.PHASE_0L_INTEGRATION === "1";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const composeScript = path.join(repoRoot, "scripts", "compose.sh");
 const runKey = randomUUID().slice(0, 8);
 const TASK_QUEUE = `test-0l-${runKey}`;
-const WORKFLOW_TYPE = "TestNeverRegisteredWorkflow";
+const WORKFLOW_TYPE = FOUNDATION_ECHO_WORKFLOW_TYPE;
 
 let postgresContainerId = "";
 let runtimePassword = "";

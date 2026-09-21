@@ -24,7 +24,7 @@ plan remains the source of truth for scope and acceptance criteria.
 - Deployment or production mutation performed: none
 - Python worker removal performed: none
 
-On the new machine:
+For a fresh clone on the new machine:
 
 ```bash
 git clone https://github.com/thangtran3112/family-app.git
@@ -33,6 +33,50 @@ git switch dev
 cd expense-tax-management
 pnpm install --frozen-lockfile
 ```
+
+For USB transfer, copy the real repository root, including hidden files:
+
+`/Users/toby.tran/personal/family-app`
+
+Do not copy only `.worktrees/dev`; its `.git` file points back to the real
+repository and is not independently portable. The real repository contains
+the local `dev` branch, Git object database, uncommitted local planning work,
+and ignored `expense-tax-management/.env` file.
+
+After copying the real repository to the new machine, preserve the dirty main
+checkout and create a separate development worktree:
+
+```bash
+cd family-app
+git worktree prune
+git worktree add ../family-app-dev dev
+cp expense-tax-management/.env ../family-app-dev/expense-tax-management/.env
+cd ../family-app-dev/expense-tax-management
+pnpm install --frozen-lockfile
+```
+
+The `.env` file is intentionally ignored and is not available from GitHub.
+Copy it only through the trusted USB transfer; never commit it.
+
+Ignored-file audit found this one local environment file:
+
+- `expense-tax-management/.env`
+
+It currently contains `TEMPORAL_HOST` and `TEMPORAL_NAMESPACE`, but not the
+new worker-specific keys below. Provision real local values before Task 5 runs
+the TypeScript worker; do not invent or commit credentials:
+
+- `AI_WORKER_TASK_QUEUE`
+- `APP_API_BASE_URL`
+- `FOUNDRY_BASE_URL`
+- `CLERK_ISSUER_URL`
+- `CLERK_JWKS_URL`
+- `CLERK_APP_SERVICE_AUDIENCE`
+- `CLERK_APP_MACHINE_SECRET_KEY`
+- `CLERK_APP_SERVICE_SUBJECT`
+- `CLERK_FOUNDRY_SERVICE_AUDIENCE`
+- `CLERK_FOUNDRY_MACHINE_SECRET_KEY`
+- `CLERK_FOUNDRY_SERVICE_SUBJECT`
 
 ## Frozen Decisions
 
@@ -222,7 +266,7 @@ Python parity references:
 
 ## Remaining Plan
 
-Complete Tasks 4 through 10 in the authoritative plan:
+Complete Tasks 4 through 7 in the authoritative plan:
 
 1. Port workflows and activities.
 2. Add worker image and CI.
@@ -291,7 +335,7 @@ legacy constants, or parity logic changes.
 
 ## Completion Definition
 
-Migration is complete only when all ten tasks in the authoritative plan are
+Migration is complete only when all seven tasks in the authoritative plan are
 checked, CI is green, TypeScript dispatch is active, rollback evidence exists,
 and Python worker removal has been verified. Task 3 completion alone is not a
 runtime cutover.
