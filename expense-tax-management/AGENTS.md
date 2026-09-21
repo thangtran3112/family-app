@@ -44,15 +44,16 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 
 ## Git Safety
 
-- Every coding-harness implementation session must use a git worktree.
-- Refresh `origin/dev` before creating the worktree.
-- Create a `feature/*` branch from `origin/dev`.
+- Default working branch is `feature/toby`; work directly on it permanently, across sessions.
+- Use a separate git worktree with its own throwaway `feature/*` branch only when a worktree is explicitly requested for that session.
+- Before starting new work on `feature/toby`: `git fetch origin`, then fast-forward `feature/toby` onto `origin/dev` (it carries no unmerged unique history once its prior PR is merged).
 - Never commit directly on `dev` or `main`.
-- Push only the feature branch, then open a pull request to `dev`.
+- Push `feature/toby` (or the explicitly requested worktree's branch), then open a pull request to `dev`.
 - Unit/quality check must succeed before merge.
 - Integration result is advisory and must be reported when red.
-- GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the feature branch includes current `origin/dev`; use squash merge.
-- Never bypass branch protection or force-push.
+- GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge.
+- After a squash merge, `feature/toby` diverges from its now-merged commits; fast-forward it onto the new `origin/dev` tip (or reset+force-push `feature/toby` specifically if fast-forward is not possible) before the next round of work. Never force-push `dev` or `main`.
+- Never bypass branch protection.
 - `main` remains outside the development flow until a later release phase.
 - No GitHub or Git remote write may run without explicit execution-time confirmation immediately before the command, including push, workflow dispatch, ref creation, ruleset activation, default-branch change, pull-request creation, and merge.
 - Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
