@@ -191,7 +191,7 @@ export async function up(database: Kysely<unknown>): Promise<void> {
       ON app.expense_spending_category_decisions (tenant_id, expense_id, created_at DESC)
   `.execute(database);
 
-  /* Append-only guard: reject UPDATE and DELETE on decisions */
+  /* Append-only guard: reject direct mutation but preserve declared FK cascades */
   await sql`
     CREATE OR REPLACE FUNCTION app.prevent_category_decision_mutation()
     RETURNS trigger
@@ -200,10 +200,10 @@ export async function up(database: Kysely<unknown>): Promise<void> {
     BEGIN
       IF TG_OP = 'UPDATE' THEN
         RAISE EXCEPTION 'expense_spending_category_decisions rows are append-only and cannot be updated';
-      ELSIF TG_OP = 'DELETE' THEN
+      ELSIF TG_OP = 'DELETE' AND pg_trigger_depth() = 1 THEN
         RAISE EXCEPTION 'expense_spending_category_decisions rows are append-only and cannot be deleted';
       END IF;
-      RETURN NULL;
+      RETURN OLD;
     END;
     $function$;
   `.execute(database);

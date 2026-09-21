@@ -582,6 +582,50 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
   );
 
   it(
+    "expense_spending_category_decisions permits deletion through its tenant cascade",
+    () => {
+      const cascadeTenantId = "3c000000-0000-4000-8000-cc0000000010";
+      const cascadeProfileId = "3c000000-0000-4000-8000-cc0000000011";
+      const cascadeExpId = "3c000000-0000-4000-8000-cc0000000012";
+      const cascadeDecId = "3c000000-0000-4000-8000-cc0000000013";
+
+      runtimeSql(`
+        INSERT INTO app.tenants (id, name, slug, status)
+        VALUES ('${cascadeTenantId}', 'Cascade Tenant', 'cascade-${runKey}', 'active');
+
+        INSERT INTO app.personal_profiles (id, tenant_id, name)
+        VALUES ('${cascadeProfileId}', '${cascadeTenantId}', 'Cascade Profile');
+
+        INSERT INTO app.expenses
+          (id, tenant_id, created_by_user_id, personal_profile_id, business_id,
+           merchant, amount, currency, incurred_on, source, status)
+        VALUES
+          ('${cascadeExpId}', '${cascadeTenantId}', '${PHASE_3C_USER_ID}',
+           '${cascadeProfileId}', NULL,
+           'CascadeMerchant', '10.00', 'USD', '2026-09-12', 'manual', 'ready');
+
+        INSERT INTO app.expense_spending_category_decisions
+          (id, tenant_id, personal_profile_id, business_id, expense_id,
+           prior_spending_category_id, new_spending_category_id,
+           source, expense_version)
+        VALUES
+          ('${cascadeDecId}', '${cascadeTenantId}',
+           '${cascadeProfileId}', NULL, '${cascadeExpId}',
+           NULL, NULL, 'manual_baseline', 1);
+      `);
+
+      adminSql(`DELETE FROM app.tenants WHERE id = '${cascadeTenantId}';`, databaseName);
+
+      const decisionCount = runtimeSql(`
+        SELECT count(*)
+          FROM app.expense_spending_category_decisions
+         WHERE id = '${cascadeDecId}';
+      `);
+      expect(decisionCount).toBe("0");
+    },
+  );
+
+  it(
     "suggestion_id linkage trigger rejects expense_tag with wrong-kind/wrong-expense/wrong-candidate suggestion",
     () => {
       // IDs scoped to this test
