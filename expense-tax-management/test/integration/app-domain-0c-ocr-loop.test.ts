@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { AI_WORKER_TASK_QUEUE } from "../../packages/contracts/src/index.js";
 import { buildApp as buildAppApi } from "../../services/app-api/src/app.js";
 import { createAppConfig } from "../../services/app-api/src/config.js";
 import { createAppDatabase } from "../../services/app-api/src/database/client.js";
@@ -44,7 +45,7 @@ const runKey = randomUUID().slice(0, 8);
 // dev compose worker (old code, no OcrReceiptWorkflow) must be stopped
 // first or it races for our tasks and poison-fails them as unknown type.
 // beforeAll stops it; afterAll restarts it.
-const TASK_QUEUE = "expense-tax-ai-worker";
+const TASK_QUEUE = AI_WORKER_TASK_QUEUE;
 const WORKER_TOKEN = `test-ocr-worker-token-${runKey}`;
 const SIGNING_KEY = `0c-loop-signing-${runKey}`;
 

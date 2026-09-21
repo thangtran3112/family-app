@@ -598,6 +598,97 @@ export interface EntitlementSnapshotOutboxTable {
   readonly created_at: GeneratedTimestamp;
 }
 
+export interface TagTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  key: string;
+  name: string;
+  color: NullableText;
+  origin: "custom" | "rule";
+  status: "active" | "archived";
+  version: Generated<number>;
+  created_by_user_id: string | null;
+  readonly created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface ExpenseTagTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly expense_id: string;
+  readonly tag_id: string;
+  source: "manual" | "rule" | "historical" | "ai";
+  confidence: string;
+  rule_version: number | null;
+  suggestion_id: string | null;
+  status: "active" | "removed";
+  version: Generated<number>;
+  applied_by_user_id: string | null;
+  removed_by_user_id: string | null;
+  applied_at: NullableTimestamp;
+  removed_at: NullableTimestamp;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface ExpenseSpendingCategoryDecisionTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly expense_id: string;
+  prior_spending_category_id: string | null;
+  new_spending_category_id: string | null;
+  source: "manual" | "manual_baseline" | "historical" | "ai";
+  actor_user_id: string | null;
+  expense_version: number;
+  suggestion_id: string | null;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface ExpenseEnrichmentSuggestionTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly personal_profile_id: string | null;
+  readonly business_id: string | null;
+  readonly expense_id: string;
+  readonly job_id: string;
+  readonly kind: "tag" | "spending_category" | "tax_category";
+  tag_id: string | null;
+  spending_category_id: string | null;
+  tax_category_definition_id: string | null;
+  business_tax_profile_id: string | null;
+  business_tax_profile_version: number | null;
+  taxonomy_version_id: string | null;
+  tax_year: number | null;
+  source: "historical" | "ai";
+  confidence: string;
+  evidence: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
+  evidence_hash: string;
+  status: "pending" | "accepted" | "rejected" | "superseded";
+  version: Generated<number>;
+  expense_version: number;
+  idempotency_key: string;
+  resolved_by_user_id: string | null;
+  resolved_at: NullableTimestamp;
+  readonly created_at: GeneratedTimestamp;
+}
+
+export interface EnrichmentOperationKeyTable {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly job_id: string;
+  readonly expense_id: string;
+  readonly kind: "tag" | "spending_category" | "tax_category" | "result";
+  readonly candidate_id: string | null;
+  readonly evidence_hash: string;
+  readonly operation_key: string;
+  readonly payload_hash: string;
+  response_json: ColumnType<JsonValue | null, JsonValue | null | undefined, JsonValue | null>;
+  readonly created_at: GeneratedTimestamp;
+}
+
 export interface AppDatabase {
   readonly "app.service_metadata": ServiceMetadataTable;
   readonly "app.users": UserTable;
@@ -644,4 +735,9 @@ export interface AppDatabase {
   readonly "app.expense_sources": ExpenseSourceTable;
   readonly "app.expense_dedup_fingerprints": ExpenseDedupFingerprintTable;
   readonly "app.expense_duplicate_matches": ExpenseDuplicateMatchTable;
+  readonly "app.tags": TagTable;
+  readonly "app.expense_tags": ExpenseTagTable;
+  readonly "app.expense_spending_category_decisions": ExpenseSpendingCategoryDecisionTable;
+  readonly "app.expense_enrichment_suggestions": ExpenseEnrichmentSuggestionTable;
+  readonly "app.enrichment_operation_keys": EnrichmentOperationKeyTable;
 }

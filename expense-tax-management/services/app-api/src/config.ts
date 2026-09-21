@@ -22,6 +22,10 @@ export interface ClerkConfig {
   readonly foundryServiceAudience: string;
   readonly appServiceSubject: string;
   readonly foundryServiceSubject: string;
+  /** Scope required on the enrichment-input route. Default: "jobs:enrichment-input" */
+  readonly enrichmentInputScope: string;
+  /** Scope required on the enrichment-result route. Default: "jobs:enrichment-result" */
+  readonly enrichmentResultScope: string;
   readonly publishableKey?: string | undefined;
   readonly secretKey?: string | undefined;
   readonly webhookSigningSecret?: string | undefined;
@@ -183,6 +187,12 @@ export function createAppConfig(options: AppConfigOptions = {}): AppConfig {
             env,
             "CLERK_FOUNDRY_SERVICE_SUBJECT",
           ),
+          enrichmentInputScope:
+            env.CLERK_APP_ENRICHMENT_INPUT_SCOPE?.trim() ||
+            "jobs:enrichment-input",
+          enrichmentResultScope:
+            env.CLERK_APP_ENRICHMENT_RESULT_SCOPE?.trim() ||
+            "jobs:enrichment-result",
           publishableKey: optionalEnvironmentValue(
             env,
             "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",

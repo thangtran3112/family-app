@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import {
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+  JobReferenceV1Schema,
   OcrExtractionResultV1Schema,
   type JobReferenceV1,
   type JobResultSubmitRequestV1,
   type JobStatusUpdateRequestV1,
   type ProcessingJob,
   type ProcessingJobStatus,
+  type WorkflowType,
 } from "@expense-tax/contracts";
 import { type Kysely, type Transaction } from "kysely";
 
@@ -33,7 +35,7 @@ export interface CreateProcessingJobInput {
   readonly scope:
     | { readonly personalProfileId: string; readonly businessId?: undefined }
     | { readonly businessId: string; readonly personalProfileId?: undefined };
-  readonly workflowType: string;
+  readonly workflowType: WorkflowType;
   readonly taskQueue: string;
   readonly allowedResultSchemaVersion: string;
   readonly targetAggregateType?: string;
@@ -228,14 +230,14 @@ export function createProcessingJobsDomain(
       let dispatchedCount = 0;
       for (const row of pending) {
         try {
-          const jobReference: JobReferenceV1 = {
+          const jobReference = JobReferenceV1Schema.parse({
             schemaVersion: 1,
             jobId: row.jobId,
             workflowType: row.workflowType,
             workflowId: row.workflowId,
-          };
+          });
           const result = await temporalStarter.start({
-            workflowType: row.workflowType,
+            workflowType: jobReference.workflowType,
             workflowId: row.workflowId,
             taskQueue: row.taskQueue,
             args: [jobReference],

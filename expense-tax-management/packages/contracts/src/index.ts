@@ -28,7 +28,29 @@ export {
   OCR_RECEIPT_WORKFLOW_TYPE,
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+  EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
+  EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
+  WorkflowResultSchema,
+  WorkflowTypeSchema,
+  type WorkflowResult,
+  type WorkflowType,
 } from "./internal/task-queues.js";
+export {
+  EligibleTaxSnapshotSchema,
+  EnrichmentHistorySchema,
+  ExpenseEnrichmentInputV1Schema,
+  ExpenseEnrichmentInputResponseV1Schema,
+  type EligibleTaxSnapshot,
+  type EnrichmentHistory,
+  type ExpenseEnrichmentInputV1,
+  type ExpenseEnrichmentInputResponseV1,
+} from "./internal/expense-enrichment-input-v1.js";
+export {
+  ExpenseEnrichmentResultV1Schema,
+  EnrichmentSuggestionResultSchema,
+  type ExpenseEnrichmentResultV1,
+  type EnrichmentSuggestionResult,
+} from "./internal/expense-enrichment-result-v1.js";
 export {
   AuthenticatedUserSchema,
   CurrentUserResponseSchema,
@@ -113,6 +135,7 @@ export * from "./inbound-email.js";
 export * from "./files.js";
 export * from "./ocr.js";
 export * from "./duplicate-matches.js";
+export * from "./enrichment.js";
 export {
   IdempotencyKeyHeaderSchema,
   PersonalProfileSchema,

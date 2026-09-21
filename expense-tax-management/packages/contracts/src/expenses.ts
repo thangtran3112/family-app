@@ -13,6 +13,18 @@ export const DecimalMoneySchema = z
 export const ExpenseStatusSchema = z.enum(["draft", "ready", "archived"]);
 export type ExpenseStatus = z.infer<typeof ExpenseStatusSchema>;
 
+/**
+ * Lightweight tag chip included on expense responses. Carries only
+ * the fields needed to render a chip (id, name, optional color).
+ * Only active associations + active tag definitions are projected.
+ */
+export const ExpenseTagChipSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string().min(1).max(100),
+  color: z.string().nullable(),
+});
+export type ExpenseTagChip = z.infer<typeof ExpenseTagChipSchema>;
+
 export const ExpenseSourceSchema = z.enum(["manual", "ocr", "forwarded_email"]);
 export type ExpenseSource = z.infer<typeof ExpenseSourceSchema>;
 
@@ -67,6 +79,8 @@ export const ExpenseSchema = z.strictObject({
   version: VersionSchema,
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  /** Active tag chips attached to this expense (sorted by name asc, id asc). */
+  tags: z.array(ExpenseTagChipSchema).default([]),
 });
 export type Expense = z.infer<typeof ExpenseSchema>;
 

@@ -1,8 +1,8 @@
 import { Client, Connection } from "@temporalio/client";
-import type { JobReferenceV1 } from "@expense-tax/contracts";
+import type { JobReferenceV1, WorkflowType } from "@expense-tax/contracts";
 
 export interface StartWorkflowInput {
-  readonly workflowType: string;
+  readonly workflowType: WorkflowType;
   readonly workflowId: string;
   readonly taskQueue: string;
   readonly args: readonly [JobReferenceV1];
