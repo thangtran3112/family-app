@@ -39,7 +39,7 @@ const JOB = {
   businessId: null,
   workflowType: "FoundationEchoWorkflow",
   workflowId: `job-${JOB_ID}`,
-  taskQueue: "expense-tax-ai-worker",
+  taskQueue: "expense-tax-processing",
   runId: null,
   status: "PENDING" as const,
   targetAggregateType: null,
@@ -199,7 +199,7 @@ describe("App API job routes", () => {
         tenantId: TENANT_ID,
         scope: { personalProfileId: PROFILE_ID },
         workflowType: "FoundationEchoWorkflow",
-        taskQueue: "expense-tax-ai-worker",
+        taskQueue: "expense-tax-processing",
         actorServicePrincipal: "platform-admin",
       }),
     );

@@ -16,7 +16,12 @@
       "type": "string"
     },
     "workflowType": {
-      "minLength": 1,
+      "enum": [
+        "FoundationEchoWorkflow",
+        "OcrReceiptWorkflow",
+        "ForwardedReceiptWorkflow",
+        "ExpenseEnrichmentWorkflow"
+      ],
       "type": "string"
     }
   },

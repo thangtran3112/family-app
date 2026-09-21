@@ -50,7 +50,9 @@ export interface CreateOcrJobCommand {
   readonly modeKey: OcrModeKey;
   readonly idempotencyKey: string;
   readonly requestId: string;
-  readonly workflowType?: string;
+  readonly workflowType?:
+    | typeof OCR_RECEIPT_WORKFLOW_TYPE
+    | typeof FORWARDED_RECEIPT_WORKFLOW_TYPE;
   readonly extraInputParams?: Readonly<Record<string, unknown>>;
 }
 

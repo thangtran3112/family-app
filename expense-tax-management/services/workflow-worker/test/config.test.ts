@@ -1,0 +1,92 @@
+import { describe, expect, it } from "vitest";
+
+import { workerConfigFromEnv } from "../src/config.js";
+
+const ENV = {
+  TEMPORAL_HOST: " temporal:7233 ",
+  TEMPORAL_NAMESPACE: " expense-tax ",
+  AI_WORKER_TASK_QUEUE: " expense-tax-processing ",
+  APP_API_BASE_URL: " http://app-api:8100/ ",
+  FOUNDRY_BASE_URL: " https://foundry.test/ ",
+  CLERK_ISSUER_URL: " https://clerk.test/ ",
+  CLERK_JWKS_URL: " https://clerk.test/.well-known/jwks.json ",
+  CLERK_APP_SERVICE_AUDIENCE: " mch_appAudience ",
+  CLERK_APP_MACHINE_SECRET_KEY: " ak_test_app_secret ",
+  CLERK_APP_SERVICE_SUBJECT: " mch_app ",
+  CLERK_FOUNDRY_SERVICE_AUDIENCE: " mch_foundryAudience ",
+  CLERK_FOUNDRY_MACHINE_SECRET_KEY: " ak_test_foundry_secret ",
+  CLERK_FOUNDRY_SERVICE_SUBJECT: " mch_foundry ",
+} as const;
+
+const REQUIRED_KEYS = Object.keys(ENV) as (keyof typeof ENV)[];
+
+describe("workerConfigFromEnv", () => {
+  it("parses and normalizes worker configuration", () => {
+    expect(workerConfigFromEnv(ENV)).toEqual({
+      temporal: {
+        address: "temporal:7233",
+        namespace: "expense-tax",
+        taskQueue: "expense-tax-processing",
+      },
+      services: {
+        appApiBaseUrl: "http://app-api:8100",
+        foundryBaseUrl: "https://foundry.test",
+      },
+      clerk: {
+        issuerUrl: "https://clerk.test",
+        jwksUrl: "https://clerk.test/.well-known/jwks.json",
+        app: {
+          audience: "mch_appAudience",
+          machineSecretKey: "ak_test_app_secret",
+          subject: "mch_app",
+        },
+        foundry: {
+          audience: "mch_foundryAudience",
+          machineSecretKey: "ak_test_foundry_secret",
+          subject: "mch_foundry",
+        },
+      },
+    });
+  });
+
+  it.each(REQUIRED_KEYS)("rejects missing %s", (key) => {
+    const env: Record<string, string | undefined> = { ...ENV };
+    delete env[key];
+
+    expect(() => workerConfigFromEnv(env)).toThrow(key);
+  });
+
+  it.each([
+    ["TEMPORAL_HOST", "temporal"],
+    ["TEMPORAL_HOST", "temporal:0"],
+    ["TEMPORAL_HOST", "temporal:65536"],
+    ["TEMPORAL_NAMESPACE", "default"],
+    ["AI_WORKER_TASK_QUEUE", "expense-tax-ai-worker"],
+  ] as const)("rejects invalid %s", (key, value) => {
+    expect(() => workerConfigFromEnv({ ...ENV, [key]: value })).toThrow(key);
+  });
+
+  it.each([
+    ["APP_API_BASE_URL", "file:///tmp/app"],
+    ["APP_API_BASE_URL", "http://user:secret@app-api:8100"],
+    ["FOUNDRY_BASE_URL", "data:text/plain,foundry"],
+    ["FOUNDRY_BASE_URL", "https://foundry.test/api"],
+    ["CLERK_ISSUER_URL", "http://clerk.test"],
+    ["CLERK_ISSUER_URL", "https://user:secret@clerk.test"],
+    ["CLERK_JWKS_URL", "http://clerk.test/.well-known/jwks.json"],
+  ] as const)("rejects unsafe %s", (key, value) => {
+    expect(() => workerConfigFromEnv({ ...ENV, [key]: value })).toThrow(key);
+  });
+
+  it.each([
+    ["CLERK_APP_SERVICE_AUDIENCE", "app-audience"],
+    ["CLERK_APP_MACHINE_SECRET_KEY", "not-yet-issued"],
+    ["CLERK_APP_MACHINE_SECRET_KEY", "ak_test_not-configured"],
+    ["CLERK_APP_SERVICE_SUBJECT", "app-subject"],
+    ["CLERK_FOUNDRY_SERVICE_AUDIENCE", "foundry-audience"],
+    ["CLERK_FOUNDRY_MACHINE_SECRET_KEY", "secret"],
+    ["CLERK_FOUNDRY_SERVICE_SUBJECT", "foundry-subject"],
+  ] as const)("rejects invalid machine credential %s", (key, value) => {
+    expect(() => workerConfigFromEnv({ ...ENV, [key]: value })).toThrow(key);
+  });
+});

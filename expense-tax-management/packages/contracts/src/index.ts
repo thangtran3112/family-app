@@ -30,6 +30,10 @@ export {
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
   EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
   EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
+  WorkflowResultSchema,
+  WorkflowTypeSchema,
+  type WorkflowResult,
+  type WorkflowType,
 } from "./internal/task-queues.js";
 export {
   EligibleTaxSnapshotSchema,

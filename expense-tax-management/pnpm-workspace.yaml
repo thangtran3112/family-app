@@ -3,6 +3,7 @@ packages:
   - 'services/*'
   - 'packages/*'
 allowBuilds:
+  '@swc/core': true
   esbuild: true
   protobufjs: false
   unrs-resolver: true
