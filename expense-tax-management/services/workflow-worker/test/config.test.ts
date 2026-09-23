@@ -49,6 +49,17 @@ describe("workerConfigFromEnv", () => {
     });
   });
 
+  it("accepts Clerk-generated machine secret keys", () => {
+    const config = workerConfigFromEnv({
+      ...ENV,
+      CLERK_APP_MACHINE_SECRET_KEY: "ak_devAppMachine",
+      CLERK_FOUNDRY_MACHINE_SECRET_KEY: "ak_devFoundryMachine",
+    });
+
+    expect(config.clerk.app.machineSecretKey).toBe("ak_devAppMachine");
+    expect(config.clerk.foundry.machineSecretKey).toBe("ak_devFoundryMachine");
+  });
+
   it.each(REQUIRED_KEYS)("rejects missing %s", (key) => {
     const env: Record<string, string | undefined> = { ...ENV };
     delete env[key];

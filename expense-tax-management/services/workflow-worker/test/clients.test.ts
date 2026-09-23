@@ -201,6 +201,51 @@ describe("machine token provider", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("accepts Clerk M2M responses without a not-before claim", async () => {
+    const token = await signedJwt(
+      validClaims({
+        nbf: undefined,
+        iat: 900,
+        scopes: ["jobs:write", "files:read"],
+      }),
+    );
+    const getToken = createMachineTokenProvider(
+      {
+        issuerUrl: config.clerk.issuerUrl,
+        jwksUrl: config.clerk.jwksUrl,
+        credentials: config.clerk.app,
+        scopes: ["jobs:write", "files:read"],
+      },
+      {
+        fetch: vi.fn().mockResolvedValue(
+          jsonResponse(
+            {
+              object: "m2m_token",
+              id: "m2m_123",
+              subject: config.clerk.app.subject,
+              scopes: [],
+              claims: { scope: "jobs:write files:read" },
+              secret: "provider-machine-secret",
+              token,
+              created_at: 900,
+              updated_at: 900,
+              last_used_at: null,
+              expiration: 1_300,
+              expired: false,
+              revoked: false,
+              revocation_reason: null,
+            },
+            201,
+          ),
+        ),
+        keyResolver,
+        nowSeconds: () => 1_000,
+      },
+    );
+
+    await expect(getToken()).resolves.toBe(token);
+  });
+
   it.each([
     ["issuer", { iss: "https://wrong.test" }],
     ["audience", { aud: ["mch_wrong"] }],

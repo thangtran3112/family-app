@@ -37,7 +37,7 @@ function machineIdSchema(key: string): z.ZodType<string> {
 
 function machineSecretSchema(key: string): z.ZodType<string> {
   return RequiredStringSchema.regex(
-    /^ak_(?:test|live)_[A-Za-z0-9_-]+$/,
+    /^ak_[A-Za-z0-9_-]+$/,
     `${key} must be a Clerk machine secret key`,
   ).refine(
     (value) => !PlaceholderPattern.test(value),
