@@ -56,7 +56,7 @@ export interface MachineTokenProviderOptions {
   readonly jwksFetch?: FetchImplementation;
 }
 
-const TokenResponseSchema = z.strictObject({ token: z.string().min(1) });
+const TokenResponseSchema = z.object({ token: z.string().min(1) });
 
 async function withAbort<T>(
   operation: Promise<T>,
@@ -99,7 +99,7 @@ async function validateToken(
       audience: config.credentials.audience,
       currentDate: new Date(nowSeconds * 1_000),
       issuer: config.issuerUrl,
-      requiredClaims: ["exp", "jti", "nbf", "sub"],
+      requiredClaims: ["exp", "jti", "sub"],
       subject: config.credentials.subject,
     });
     if (payload.iss !== config.issuerUrl) {
@@ -130,7 +130,10 @@ async function validateToken(
     if (typeof payload.jti !== "string" || !payload.jti.trim()) {
       throw new Error("invalid token ID");
     }
-    if (typeof payload.nbf !== "number" || payload.nbf > nowSeconds + 30) {
+    if (
+      payload.nbf !== undefined &&
+      (typeof payload.nbf !== "number" || payload.nbf > nowSeconds + 30)
+    ) {
       throw new Error("invalid not-before");
     }
     if (typeof payload.exp !== "number" || payload.exp <= nowSeconds) {
