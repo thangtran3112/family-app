@@ -339,6 +339,23 @@ export function createAppApiClient(
       let downloadUrl: URL;
       try {
         downloadUrl = new URL(url);
+        const internalOrigin = new URL(config.services.appApiBaseUrl);
+        if (
+          downloadUrl.origin !== appApiOrigin &&
+          downloadUrl.protocol === "http:" &&
+          downloadUrl.hostname === "127.0.0.1" &&
+          downloadUrl.port !== "" &&
+          downloadUrl.port === internalOrigin.port &&
+          !downloadUrl.username &&
+          !downloadUrl.password &&
+          !downloadUrl.hash &&
+          downloadUrl.pathname === `/api/v1/file-content/${fileId}` &&
+          /^\d+$/u.test(downloadUrl.searchParams.get("expires") ?? "") &&
+          /^[a-f0-9]{64}$/u.test(downloadUrl.searchParams.get("signature") ?? "")
+        ) {
+          // The signature binds method, file ID, and expiry, not the public origin.
+          downloadUrl = new URL(`${downloadUrl.pathname}${downloadUrl.search}`, appApiOrigin);
+        }
         if (
           downloadUrl.username ||
           downloadUrl.password ||

@@ -56,7 +56,10 @@ describe("workflow worker process", () => {
       namespace: "expense-tax",
       taskQueue: "expense-tax-processing",
       workflowsPath: expect.stringMatching(/workflows\/index\.js$/),
-      activities: {},
+      activities: expect.objectContaining({
+        mark_running: expect.any(Function),
+        submit_echo_result: expect.any(Function),
+      }),
       shutdownGraceTime: "30s",
     });
     expect(fakes.run).toHaveBeenCalledOnce();

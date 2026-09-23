@@ -109,12 +109,12 @@ await worker.run();
 - Consumes: service clients from Task 3 and canonical contracts from Task 1.
 - Produces: workflow types matching current production names and activity behavior.
 
-- [ ] Write failing Temporal test-environment cases for success, retryable provider failure, permanent validation failure, duplicate dispatch, cancellation, and callback idempotency.
-- [ ] Port workflow control flow without importing Node I/O, random values, wall-clock APIs, or service clients into workflow modules.
-- [ ] Port activities as thin orchestration around typed clients and provider adapters.
-- [ ] Preserve workflow retry, timeout, and failure-code semantics from Python tests.
-- [ ] Port deterministic enrichment logic and prove TypeScript output equals existing Python fixtures.
-- [ ] Run workflow tests twice to catch nondeterministic behavior.
+- [x] Write failing Temporal test-environment cases for success, retryable provider failure, permanent validation failure, duplicate dispatch, cancellation, and callback idempotency.
+- [x] Port workflow control flow without importing Node I/O, random values, wall-clock APIs, or service clients into workflow modules.
+- [x] Port activities as thin orchestration around typed clients and provider adapters.
+- [x] Preserve workflow retry, timeout, and failure-code semantics from Python tests.
+- [x] Port deterministic enrichment logic and prove TypeScript output equals existing Python fixtures.
+- [x] Run workflow tests twice to catch nondeterministic behavior.
 
 ### Task 5: Add Worker Image and CI
 
@@ -132,6 +132,7 @@ await worker.run();
 - [ ] Write deployment-boundary tests that require the new Dockerfile and image matrix entry.
 - [ ] Build the image locally and run it against local Temporal with fake provider adapters.
 - [ ] Add worker image to deployment matrix without removing Python image until cutover task succeeds.
+- [ ] Wire worker-to-App internal origin and explicitly allowlist any external signed-file origins when that storage backend is enabled; retain signed URL verification and reject arbitrary origins.
 - [ ] Run all TypeScript CI commands and integration tests.
 
 ### Task 6: Promote Temporal to Shared Infrastructure

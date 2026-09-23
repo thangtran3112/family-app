@@ -689,6 +689,41 @@ describe("App API client", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("downloads loopback-published App content through the internal App origin", async () => {
+    const path = `/api/v1/file-content/${FILE_ID}?expires=1000000000&signature=${"a".repeat(64)}`;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        url: `http://127.0.0.1:8100${path}`,
+        expiresAt: TIMESTAMP,
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3])));
+    const client = createAppApiClient(config, {
+      fetch: fetchMock,
+      tokenProviders: appTokenProviders(),
+    });
+
+    await expect(client.downloadFile(FILE_ID)).resolves.toEqual(new Uint8Array([1, 2, 3]));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${config.services.appApiBaseUrl}${path}`);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "GET", redirect: "error" });
+  });
+
+  it.each([
+    `/api/v1/file-content/${JOB_ID}`,
+    "/admin",
+  ])("does not rewrite loopback signed URL for %s", async (path) => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      url: `http://127.0.0.1:8100${path}?expires=1000000000&signature=${"a".repeat(64)}`,
+      expiresAt: TIMESTAMP,
+    }));
+    const client = createAppApiClient(config, {
+      fetch: fetchMock,
+      tokenProviders: appTokenProviders(),
+    });
+
+    await expect(client.downloadFile(FILE_ID)).rejects.toMatchObject({ code: "invalid_response" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("never includes signed file URLs in download errors", async () => {
     const signedUrl = `https://storage.test/file?signature=provider-secret`;
     const fetchMock = vi
