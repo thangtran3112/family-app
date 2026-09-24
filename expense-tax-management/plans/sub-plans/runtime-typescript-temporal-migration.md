@@ -133,7 +133,7 @@ await worker.run();
 - [x] Build the image locally and run it against local Temporal with fake provider adapters (startup/poll smoke; no App callback dispatched).
 - [x] Add worker image to deployment matrix without removing Python image until cutover task succeeds.
 - [x] Wire worker-to-App internal origin and explicitly allowlist any external signed-file origins when that storage backend is enabled; retain signed URL verification and reject arbitrary origins. Current storage backend is local; external origin configuration is conditional on enabling another backend.
-- [ ] Run all TypeScript CI commands and integration tests.
+- [x] Run all TypeScript CI commands and integration tests. Local zero-skip integration hit Docker Desktop host-port `ECONNRESET`; disposable GitHub integration passed in PR #11.
 
 ### Task 6: Promote Temporal to Shared Infrastructure
 
