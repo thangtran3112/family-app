@@ -2,7 +2,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { NativeConnection, Worker } from "@temporalio/worker";
 
+import { createActivities } from "./activities/index.js";
+import { createAppApiClient } from "./clients/app-api.js";
+import { createFoundryClient } from "./clients/foundry.js";
 import { workerConfigFromEnv, type WorkerConfig } from "./config.js";
+import { extractFakeReceipt } from "./providers/fake-ocr.js";
 
 export interface WorkerFactories {
   readonly connect: typeof NativeConnection.connect;
@@ -14,8 +18,6 @@ const defaultFactories: WorkerFactories = {
   create: (options) => Worker.create(options),
 };
 
-const activities = {};
-
 export async function runWorker(
   config: WorkerConfig,
   factories: WorkerFactories = defaultFactories,
@@ -25,6 +27,11 @@ export async function runWorker(
   });
 
   try {
+    const activities = createActivities({
+      appApi: createAppApiClient(config),
+      foundry: createFoundryClient(config),
+      extractReceipt: extractFakeReceipt,
+    });
     const worker = await factories.create({
       connection,
       namespace: config.temporal.namespace,
