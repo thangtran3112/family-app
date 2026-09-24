@@ -1,12 +1,12 @@
 # Expense Tax Management - Master Plan
 
-> **Status:** Production foundation complete. Runtime TypeScript Temporal migration Task 4 implemented and verified locally, pending merge; Task 5 next. Phase 3C and 3D remain on the product roadmap.
-> **Last updated:** 2026-09-23
+> **Status:** Production foundation complete. Runtime TypeScript Temporal migration Task 4 merged; Task 5 image and CI implemented locally, integration verification pending. Phase 3C and 3D remain on the product roadmap.
+> **Last updated:** 2026-09-24
 > **Source of truth:** This file tracks phase state. Completed implementation details were removed after verification and remain available in git history.
 
 ## Handoff
 
-- Runtime migration Task 4 is complete; Task 5 adds the worker image and CI. Reconcile the older Phase 3C status entry against merged implementation evidence before starting another product phase.
+- Runtime migration Task 4 merged through PR #10; Task 5 adds the worker image and CI. Reconcile the older Phase 3C status entry against merged implementation evidence before starting another product phase.
 - Execute Phase 3D-A, Phase 3D-B, then Phase 3D-C only after Phase 3C completes.
 - Work on `feature/toby` from current `origin/dev`; create a separate worktree only when explicitly requested.
 - Merge only through a pull request to protected `dev`; required quality CI must pass. Integration CI is advisory and must be reported when red.
@@ -64,7 +64,7 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 
 | Order | Phase | Status | Canonical documents |
 |---|---|---|---|
-| Parallel | **TypeScript Temporal worker migration** | Tasks 1-3 merged; Task 4 verified locally, pending merge; Task 5 worker image/CI next; no cutover | [migration plan](sub-plans/runtime-typescript-temporal-migration.md) / [historical handoff](HANDOFF.md) |
+| Parallel | **TypeScript Temporal worker migration** | Tasks 1-4 merged; Task 5 image/CI verified locally, integration pending; no cutover | [migration plan](sub-plans/runtime-typescript-temporal-migration.md) / [historical handoff](HANDOFF.md) |
 | Parallel | **Local Clerk development bootstrap** | Development credentials and M2M checks complete; local sign-in, webhook, and scoped data flow pending | [sub-plan](sub-plans/local-clerk-development-bootstrap.md) |
 | 1 | **3C - Auto-tagging and categorization** | Ready; not started | [spec](../../docs/superpowers/specs/2026-09-12-phase-3c-auto-tagging-design.md) / [implementation plan](../../docs/superpowers/plans/2026-09-12-phase-3c-auto-tagging.md) |
 | 2 | **3D-A - Mailbox broker and connection lifecycle** | Blocked by 3C | [shared spec](../../docs/superpowers/specs/2026-09-12-phase-3d-connected-mailbox-design.md) / [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-a-mailbox-broker.md) |

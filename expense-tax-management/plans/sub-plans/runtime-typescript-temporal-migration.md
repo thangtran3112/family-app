@@ -128,11 +128,11 @@ await worker.run();
 **Interfaces:**
 - Produces: immutable `expense-tax-workflow-worker:<sha>` image and worker CI gates.
 
-- [ ] Add worker lint, typecheck, test, and build scripts to canonical CI commands.
-- [ ] Write deployment-boundary tests that require the new Dockerfile and image matrix entry.
-- [ ] Build the image locally and run it against local Temporal with fake provider adapters.
-- [ ] Add worker image to deployment matrix without removing Python image until cutover task succeeds.
-- [ ] Wire worker-to-App internal origin and explicitly allowlist any external signed-file origins when that storage backend is enabled; retain signed URL verification and reject arbitrary origins.
+- [x] Add worker lint, typecheck, test, and build scripts to canonical CI commands.
+- [x] Write deployment-boundary tests that require the new Dockerfile and image matrix entry.
+- [x] Build the image locally and run it against local Temporal with fake provider adapters (startup/poll smoke; no App callback dispatched).
+- [x] Add worker image to deployment matrix without removing Python image until cutover task succeeds.
+- [x] Wire worker-to-App internal origin and explicitly allowlist any external signed-file origins when that storage backend is enabled; retain signed URL verification and reject arbitrary origins. Current storage backend is local; external origin configuration is conditional on enabling another backend.
 - [ ] Run all TypeScript CI commands and integration tests.
 
 ### Task 6: Promote Temporal to Shared Infrastructure
