@@ -103,6 +103,11 @@ class Store:
         finally:
             conn.close()
 
+    @property
+    def research_dir(self) -> Path:
+        """``root/research``: the one directory reports/import may write under."""
+        return self._dir
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
