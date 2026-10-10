@@ -1,83 +1,71 @@
-# Handoff: Family Desk v1, Phase 0 Spike and Phase 1 Planning
+# Handoff: Family Desk v1 (Phase 1b Done, Phase 2 Next)
 
 **Date:** 2026-10-10
-**From:** the ai-trading main session that designed Desk v1 and started the spike (session root was the repository root)
-**For:** the next ai-trading main session, started with the working directory `ai-trading/`
+**From:** the ai-trading main session that designed Desk v1 and ran Phases 1 and 1b
+**For:** the next Desk-lane main session, started with the working directory `ai-trading/`
 **Read first:**
 - `../AGENTS.md` (shared checkout)
 - `AGENTS.md`
 - `plans/subplans/02a-desk-v1-strategies-design.md`
+- `plans/subplans/02b-desk-market-data-options.md`
 - `plans/subplans/02c-desk-v1-implementation-plan.md`
-- `plans/subplans/02c-desk-v1-tasks/phase-0-spike.md`
 - `plans/subplans/02d-desk-spike-results.md`
 
 Paths below are relative to `ai-trading/` unless they start with `../`.
 
-## Where Things Stand (updated 2026-10-10, evening)
+## Where Things Stand (updated 2026-10-10, night)
 
 | Item | State |
 |---|---|
-| Design | Approved and on `dev`: `02a` (Desk v1), `02b` (market data); decisions in `STATUS.md` (2026-10-10 rows), including the Desk layout row. |
-| Layout | The Desk lives in `packages/family-desk/` (`contracts/`, `backend/`, `frontend/` from Phase 4). Packages never import each other; code shared by two or more ai-trading packages (provider clients such as Alpaca and IBKR, a shared database schema, shared types) goes in `ai-trading/common/`. Upstream code is copied in with attribution (`AGENTS.md` "Our Code"). |
-| Mockups | Paper file "TobyTest", page "Family Desk · R2 mockups": D1 Today, D2 Strategies, D3 Paper, D8 New from template (row 1); D4 Watchlists, D5 Holdings, D6 Ask, D7 Settings (row 2); mobile M2, M3, M5, M6 More. Indexed in `02a` §16. |
-| Phase 0 spike | Tasks 0.1–0.4 done; the owner created the IBKR data user and is waiting for IBKR's approval. Tasks 0.5–0.6 (probes, gateway layout) wait on that. Owner guide: `plans/subplans/02e-ibkr-data-user-setup.md`. |
-| Phase 1 strategy core | Done, merged to `dev` (PR #95), then moved to `packages/family-desk/` (on `feature/toby`, not yet on `dev`). Contracts 38 tests, backend 107 tests, CI job "Desk contracts and backend". |
-| Git | `feature/toby` holds the move, the mockup index, and rule edits (root and package `AGENTS.md`, expense rules); they ship with the next phase PR (one PR per finished phase). |
+| Design | Approved: `02a` (Desk v1) and `02b` (market data). `02` keeps only the base sections they still cite (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12). Decisions are in `STATUS.md` (2026-10-10 rows). |
+| Layout | `packages/family-desk/` (`contracts/`, `backend/`, and `frontend/` from Phase 4). Packages never import each other; code that two or more ai-trading packages share (provider clients, a shared schema, shared types) goes in `ai-trading/common/` (`AGENTS.md` "Our Code"). |
+| Mockups | Paper file "TobyTest", page "Family Desk · R2 mockups": desktop D1–D8, mobile M2, M3, M5, M6. Indexed in `02a` §16. |
+| Phase 0 spike | Tasks 0.1–0.4 done. The owner set up the IBKR data user (guide `plans/subplans/02e-ibkr-data-user-setup.md`, $14.50 a month) and is waiting for IBKR's approval. Tasks 0.5–0.6 wait on that. |
+| Phase 1 strategy core | Done (PR #95). |
+| Phase 1b ported quant core | Done ([phase-1b-ported-quant-core.md](../subplans/02c-desk-v1-tasks/phase-1b-ported-quant-core.md)): option math, covered-call math, the support/resistance level, and paper-order sizing. Contracts 40 tests, backend 169. |
+| Reuse | `02a` §11 maps what to copy from Vibe-Trading, ai-hedge-fund, and TradingAgents. TradingAgents was surveyed on 2026-10-10: its vendor router and typed errors, SEC EDGAR and FRED clients, and analyst and debate prompts are worth adapting; its LangGraph and LangChain code is not. |
 
 ## Next Steps, in Order
 
-The owner chose, in order: more mockups (done), port quant tools, Phase 2 data without IBKR, and the Desk frontend shell. Each gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`.
+The owner's order: more mockups (done), port quant tools (done), Phase 2 data without IBKR, then the Desk frontend shell. Each phase gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill, written from a tested prototype in `temp/`), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`, and one pull request to `dev`.
 
-1. **Port quant tools** (pure, in `packages/family-desk/backend/src/ai_trading/core/`, with `packages/family-desk/THIRD_PARTY_NOTICES.md`):
-   - Black-Scholes price, greeks, and the implied-volatility solver from Vibe-Trading `agent/src/quantlib/options.py` (MIT), on the standard library instead of scipy; no barrier options;
-   - covered-call math from 02 §6.3 (eligibility, filters, metrics, flags, score, roll candidates, short-call risk rules);
-   - support/resistance from Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT), with pivots confirmed only after `window` closed bars (the upstream centered window would repaint), wired into the spec as a level operand;
-   - order sizing with clamps and an audit trail, after ai-hedge-fund `hedge_fund/risk/limits.py` (MIT). Persona prompts wait for Phase 5's LLM call.
-2. **Phase 2 data without IBKR**: Postgres schema, bar store, Alpaca/Stooq/SEC EDGAR/FRED/Finnhub clients in `ai-trading/common/` (start from `ai-trading/market-data/`'s Alpaca and SEC clients), futures roll map, streaming-slot logic. The IBKR adapter follows the Phase 0 probe.
-3. **Desk frontend shell** in `packages/family-desk/frontend` from the mockups, on fixture data.
-4. **When IBKR approves the data user:** run Task 0.5 with the owner on a weekday in US regular hours, then Task 0.6.
+1. **Phase 2 plan, without IBKR** (02c "Phase 2: Data foundation"):
+   - `ai-trading/common/`: the provider layer (fallback chains, typed "no data" versus "provider unavailable" errors, as-of guards), Alpaca with a Stooq fallback, SEC EDGAR, FRED, and Finnhub;
+   - the open-source lane's `ai-trading/market-data/` (on `dev` since #99) already has Alpaca and SEC clients for ai-hedge-fund: copy from it, or move it into `common/` together with that lane, never alone;
+   - the Desk's Postgres schema, bar store, futures roll map, and streaming slots.
+2. **Desk frontend shell plan** (02c Phase 4): `packages/family-desk/frontend`, a static Next.js app built from the mockups, on fixture data.
+3. **When IBKR approves the data user:** run Task 0.5 with the owner on a weekday, 09:30–16:00 ET, with IB Gateway logged in; then Task 0.6 and the IBKR client.
+
+Open questions for the owner: close the superseded docs PR #81? Remove `temp/.env` once its values are in Firestore (`AGENTS.md` forbids `.env` files inside `ai-trading/`)?
 
 ## Decisions Already Made (do not reopen without the owner)
 
 - **Strategy-first:** every alert and paper order comes from a user-owned, versioned strategy. There are no manual price alerts.
-- **Strategy specs:** JSON, with Zod v4 in `ai-trading/contracts` as the source of truth, generating JSON Schema and then Pydantic. YAML was rejected (YAML 1.1 reads `15:55` as a number). The API re-validates every save.
-- **Live data:** one IBKR data username, shared by both users across all ai-trading apps. The owner accepted the per-person licensing gray area.
-- **History:** free sources (Alpaca historical bars since 2016, Stooq, SEC EDGAR, FRED, Finnhub).
-- **Data budget:** at most $30 per month.
+- **Strategy specs:** JSON, with Zod v4 in `packages/family-desk/contracts` as the source of truth, generating JSON Schema and then Pydantic. YAML was rejected (YAML 1.1 reads `15:55` as a number). The API re-validates every save.
+- **Live data:** one IBKR data username (a secondary username on an existing account), shared by both users across all ai-trading apps; the owner accepted the per-person licensing gray area. Subscribed: the $10 snapshot bundle plus the $4.50 streaming add-on; OPRA ($1.50) only if Task 0.5 shows it is needed.
+- **History:** free sources (Alpaca historical bars since 2016, Stooq, SEC EDGAR, FRED, Finnhub). The data budget is at most $30 a month.
 - **Paper trading:** IBKR paper, behind the paper guard (`DU` account prefix, the paper port, and a `paper` config).
-- **Hostnames and layout:**
-  - `trading.tobytran.dev` is the Desk; the hub moves to `trading-hub.tobytran.dev`, replacing `trading-static`.
-  - Paper is a tab in the Desk under the same Clerk login.
+- **Hostnames:** the hub moved to `trading-hub.tobytran.dev` (01l, live). `trading.tobytran.dev` becomes the Desk in Phase 4 (02a §8). Paper is a Desk tab under the same Clerk login.
+- **Phase 1 and 1b rulings:** listed under "Decisions for Owner Review" in `phase-1-strategy-core.md` and `phase-1b-ported-quant-core.md`. Examples: rising-edge firing, VWAP over regular hours, option math on the standard library, coverable contracts per 100 shares, support/resistance from confirmed pivots, and sizing that returns a reason instead of an order.
 - **Parked:** Desk v2 (automated live long-term trading) and Desk v3 (automated day trading, 1–10 trades a day). v1 must not block them (02a §15).
 
 ## Things the Next Session Should Know
 
-- **Two lanes** (`AGENTS.md` Scope, from PR #77):
-  - This is the Family Desk lane: `plans/subplans/02*.md`, the Paper mockups, and the Desk's own directories.
-  - The open-source lane owns the hub, the upstream apps, and the hub's move to `trading-hub`. Phase 4 waits for that move; it does not redo it.
-  - Do not edit the other lane's files. Keep edits to `plans/STATUS.md` and `AGENTS.md` small and additive.
-  - The open-source lane's newest handoff is `plans/handoffs/*trading-hub*`.
-- **Shared checkout.** Expense and ai-trading main sessions both work on `feature/toby` in the main checkout (root `../AGENTS.md`).
-  - Stage exact paths only, and leave other sessions' changes alone.
-  - Expense rules allow resetting and force-pushing `feature/toby` after a squash merge, which drops any unmerged ai-trading commits. Push often and get Desk work to `dev` quickly.
-- **Delivery.**
-  - Pull requests to `dev` must pass the required "Contracts, services, workers, frontends" check, and auto-merge is disabled. Use `gh pr checks <n> --watch`, then `gh pr merge <n> --squash`. Never pass `--delete-branch`, `--admin`, or force pushes.
-  - The ruleset also requires the branch to be up to date with `dev`, and the expense CI takes about 15 minutes, so `dev` often moves during a run. When the merge says "not up to date", run `gh pr update-branch <n>`, wait for the checks again, then merge.
-  - Bundle a phase's commits into one pull request to save CI cycles.
+- **Two lanes** (`AGENTS.md` Scope): this is the Desk lane (`plans/subplans/02*.md`, the Paper mockups, `packages/family-desk/`). The open-source lane owns the hub, the upstream apps, and `ai-trading/market-data/`; its newest handoff is `plans/handoffs/*trading-hub*`. Do not edit its files. Keep edits to `plans/STATUS.md` and `AGENTS.md` small and additive.
+- **Shared checkout** (root `../AGENTS.md`): every main session works on `feature/toby` in the main checkout. Update it only with `git fetch origin && git merge origin/dev`; nobody resets, rebases, or force-pushes it. Stage exact paths only and leave other sessions' changes alone (for example a modified `packages/trading-agents` submodule or an untracked `../opencode.jsonc`).
+- **Delivery:**
+  - One pull request to `dev` per finished phase, from `feature/toby`. If `feature/toby` holds another lane's unmerged work, open it from a dedicated branch instead, as PR #95 did. Push to an open pull request only when its CI fails.
+  - The required check is "Contracts, services, workers, frontends", and auto-merge is off. Use `gh pr checks <n> --watch`; when the branch falls behind `dev` (the expense CI takes about 15 minutes, so `dev` moves), run `gh pr update-branch <n>` and wait again; then `gh pr merge <n> --squash`. Never pass `--delete-branch` or `--admin`, and never force-push.
   - Commit messages are a single line with no trailer.
-  - AGENTS.md's standing delivery authorization covers routine commits, pull requests, merges, scoped `main` releases, and deploys of a requested phase.
-- **IBKR facts from the docs** (see 02d):
-  - Two-factor login likely applies to paper logins too, so plan for a weekly Monday phone approval.
-  - Streaming US stocks over the API needs the $4.50 add-on.
-  - IBKR updates arrive every 250 ms (100 ms for options), not every tick.
-  - Up to 32 API clients can connect to one gateway.
-  - Pacing is 60 historical requests per 10 minutes.
+- **Subagents** (subagent-driven development): pool-sonnet for implementers, pool-terra for reviewers, `general` for the final review. pool-haiku, the `explore` agent, and the OpenCode Go pools were unavailable on 2026-10-10. The SDD `task-brief` script needs dotted task numbers (`1b.1`).
+- **IBKR facts** (02d): two-factor login likely applies to paper logins too, so plan for a weekly phone approval; streaming US stocks over the API needs the $4.50 add-on; updates arrive every 250 ms (100 ms for options), not every tick; up to 32 API clients can connect to one gateway; pacing is 60 historical requests per 10 minutes.
 - **VPS headroom** (read-only check): 6 vCPU, 11.4 GiB RAM with 9.4 GiB available, no swap, 35 GB of disk free. Phase 3 memory limits are in 02d check 6.
 - **Paper MCP quirks** (for mockup edits):
   - Text nodes do not inherit font or color, so set `font-family: Inter` and a color on every text element.
   - `get_screenshot` often lags one write; take it twice.
-  - Use `find_nodes` with `textValue` to locate text.
-  - Call `finish_working_on_nodes` when done.
+  - Empty divs become Rectangles that cannot hold children.
+  - Clone the desktop top bar and the mobile status bar from existing artboards (D1, M2) instead of redrawing them; move artboards with `update_styles` `left`/`top`.
+  - Use `find_nodes` with `textValue` to locate text, and call `finish_working_on_nodes` when done.
   - Mobbin search does not index Apple's Stocks app by name; Stake's screens are indexed.
-- **Secrets.** Read and write only through `../common/config/family_config.py`. Never print values, and never keep `.env` files inside `ai-trading/`. For VPS access, follow `../infrastructure/gcp/family-config/install-reader-key.sh` (`with-file shared/vps VPS_OPERATOR_SSH_PRIVATE_KEY`) and keep commands read-only unless a phase deploys.
-- **Upstream submodules** (`packages/*`): never edit them. The four upstream checkouts with full source live in `../.worktrees/ai-trading-hub/ai-trading/packages/`, a parallel session's worktree; read only. The main checkout's submodules are not initialized.
+- **Secrets:** read and write only through `../common/config/family_config.py`. Never print values, and never keep `.env` files inside `ai-trading/`.
+- **Upstream submodules** (`packages/*`): initialized in the main checkout; read only. Never edit them (Vibe-Trading's fork belongs to the open-source lane).
