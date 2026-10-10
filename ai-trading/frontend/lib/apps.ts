@@ -56,6 +56,7 @@ export type UpstreamSetupApp = BaseApp & {
 export type HubApp = PlannedApp | TerminalApp | ExternalApp | UpstreamSetupApp;
 
 const vibeTradingUrl = process.env.NEXT_PUBLIC_VIBE_TRADING_URL ?? "https://vibe-trading.tobytran.dev";
+const mirofishUrl = process.env.NEXT_PUBLIC_MIROFISH_URL ?? "https://mirofish.tobytran.dev";
 
 export const hubApps: readonly HubApp[] = [
   {
@@ -81,13 +82,13 @@ export const hubApps: readonly HubApp[] = [
     hostUrl: "https://ai-hedge-fund.tobytran.dev/",
     name: "AI Hedge Fund",
     category: "funds",
-    tags: ["Investor personas", "Backtests", "Paid data key"],
+    tags: ["Investor personas", "Backtests", "Free market data"],
     icon: "hedgeFund",
     device: "keyboard",
     summary:
       "Investor personas (Buffett, Munger, Graham, Lynch, Druckenmiller) and quant models run a simulated fund with backtests and a paper book.",
     goodFor: "Testing value and growth ideas against history.",
-    costNote: "Needs a paid Financial Datasets key for market data, plus LLM usage billed to the family provider keys.",
+    costNote: "Market data from free sources (Alpaca daily prices, SEC filings); the earnings-surprise model is not supported. LLM usage billed to the family provider keys.",
   },
   {
     slug: "vibe-trading",
@@ -106,8 +107,9 @@ export const hubApps: readonly HubApp[] = [
   },
   {
     slug: "mirofish",
-    kind: "upstream-setup",
-    status: "setup-required",
+    kind: "external",
+    status: "live",
+    url: mirofishUrl,
     name: "MiroFish",
     category: "simulation",
     tags: ["Multi-agent simulation", "Upload to report", "Experimental"],
@@ -116,11 +118,8 @@ export const hubApps: readonly HubApp[] = [
     summary:
       "Experimental simulation lab: upload source material and watch thousands of AI agents with independent memory interact in a digital sandbox, then read a report. Financial prediction is not shipped upstream yet.",
     goodFor: "Trying the original MiroFish simulator — not stock, futures, or broker analysis.",
-    costNote: "Needs a Zep Cloud free-tier key and an OpenAI-compatible LLM key, both kept server-side.",
-    sourceUrl: "https://github.com/666ghj/MiroFish/tree/7657031ac01184afe2cb220f5ee3545573b5e843",
-    licenseUrl: "https://github.com/666ghj/MiroFish/blob/7657031ac01184afe2cb220f5ee3545573b5e843/LICENSE",
-    pinnedCommit: "7657031ac01184afe2cb220f5ee3545573b5e843",
-    requiredKeys: ["ZEP_API_KEY", "LLM_API_KEY"],
+    costNote: "Zep Cloud free tier plus LLM usage billed to the family provider keys, both kept server-side.",
+    firstVisitNote: ["Nothing to set up: your hub sign-in also signs you in to MiroFish."],
   },
   {
     slug: "desk",

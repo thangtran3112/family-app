@@ -1,11 +1,9 @@
 # infrastructure/cloudflare/ai-trading/mirofish-variables.tf
 # Variables used only by mirofish.tf, kept out of the shared variables.tf
 # so both files can grow independently of each other and of the sibling
-# hub-static-variables.tf. Staging-only for now (task-8 brief Steps 8-9):
-# `mirofish_hostname` (the public mirofish.tobytran.dev hostname) is not
-# defined here — it belongs to the later, separately approved activation
-# task, once Steps 5-9 (Caddy auth proof, staging verification, direct-
-# origin bypass check) all pass.
+# hub-static-variables.tf. `mirofish_staging_hostname` keeps its name so the
+# DNS record and Worker route update in place, but since the owner-approved
+# cutover (2026-10-10) it holds the public mirofish.tobytran.dev hostname.
 
 variable "mirofish_origin_hostname" {
   type        = string
@@ -15,8 +13,8 @@ variable "mirofish_origin_hostname" {
 
 variable "mirofish_staging_hostname" {
   type        = string
-  description = "Staging hostname for the Worker-served MiroFish static UI, proven before mirofish.tobytran.dev is cut over."
-  default     = "mirofish-static.tobytran.dev"
+  description = "Public MiroFish hostname, served by the mirofish-static Worker from GCS (formerly the mirofish-static staging hostname)."
+  default     = "mirofish.tobytran.dev"
 }
 
 variable "mirofish_bucket_name" {
