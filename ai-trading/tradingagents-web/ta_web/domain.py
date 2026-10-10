@@ -134,25 +134,115 @@ def owner_key(identity: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+# Fields copied as-is: already fixed/validated shapes, never arbitrary
+# worker/import content. ``inputs``, ``state``, and ``settings`` are handled
+# separately below through their own allowlists, since those three are the
+# ones a worker/import can fill with whatever it wants (ta_web/store.py's
+# ``update``/``add_import`` persist them without a schema).
 _PUBLIC_FIELDS = (
     "id",
-    "inputs",
     "origin",
     "status",
     "stage",
     "created_at",
     "updated_at",
     "shared",
-    "state",
-    "settings",
     "artifacts_ready",
     "partial",
     "error_code",
 )
 
+# protocol.md "Public report state text fields": top-level scalar text plus
+# "debate/risk textual subfields only" (the per-analyst *_history fields —
+# not the raw transcript/"history", not control fields like "count" or
+# "latest_speaker"). "imported_markdown" is the one field legacy imports use
+# for content of unknown provenance (protocol.md).
+_STATE_TEXT_FIELDS = frozenset(
+    {
+        "trade_date",
+        "company_of_interest",
+        "market_report",
+        "sentiment_report",
+        "news_report",
+        "fundamentals_report",
+        "investment_plan",
+        "trader_investment_plan",
+        "final_trade_decision",
+        "imported_markdown",
+    }
+)
+_STATE_DEBATE_SUBFIELDS = {
+    "investment_debate_state": frozenset({"bull_history", "bear_history"}),
+    "risk_debate_state": frozenset({"aggressive_history", "conservative_history", "neutral_history"}),
+}
+
+# protocol.md: "defaults is fixed safe provider/model/round allowlist" — the
+# same shape is safe to echo back per-run in the public record.
+_SETTINGS_TEXT_KEYS = ("provider", "model")
+_SETTINGS_INT_KEYS = ("debate_rounds", "risk_rounds")
+
+_INPUT_KEYS = ("ticker", "analysis_date", "asset_type", "analysts", "research_depth")
+
+
+def clean_state(state: dict) -> dict:
+    """The public, text-only projection of a run's graph state.
+
+    The one allowlist shared with the report pipeline (``ta_web.reports``
+    re-exports this rather than duplicating the filter): only known report
+    text fields and known debate/risk history subfields survive; anything
+    else — raw tool messages, credentials, checkpoint/file paths a worker
+    accidentally wrote — is dropped, not merely hidden by convention.
+    """
+    if not isinstance(state, dict):
+        return {}
+    cleaned = {key: state[key] for key in _STATE_TEXT_FIELDS if isinstance(state.get(key), str)}
+    for parent, subfields in _STATE_DEBATE_SUBFIELDS.items():
+        nested = state.get(parent)
+        if not isinstance(nested, dict):
+            continue
+        nested_clean = {key: nested[key] for key in subfields if isinstance(nested.get(key), str)}
+        if nested_clean:
+            cleaned[parent] = nested_clean
+    return cleaned
+
+
+def safe_settings(settings: dict) -> dict:
+    """The public, provider/model/round-only projection of a run's settings."""
+    if not isinstance(settings, dict):
+        return {}
+    cleaned = {key: settings[key] for key in _SETTINGS_TEXT_KEYS if isinstance(settings.get(key), str)}
+    for key in _SETTINGS_INT_KEYS:
+        value = settings.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            cleaned[key] = value
+    return cleaned
+
+
+def _safe_inputs(inputs: dict) -> dict:
+    """The public projection of ``inputs``: exactly the known Inputs keys.
+
+    ``Store.add_import`` persists an operator-supplied ``inputs`` dict that
+    never passes through ``Inputs`` validation (legacy imports may have a
+    null ``analysis_date``), so this does not validate values — it only
+    drops any key/shape that isn't one of the known fields.
+    """
+    if not isinstance(inputs, dict):
+        return dict.fromkeys(_INPUT_KEYS)
+    analysts = inputs.get("analysts")
+    return {
+        "ticker": inputs.get("ticker") if isinstance(inputs.get("ticker"), str) else None,
+        "analysis_date": inputs.get("analysis_date") if isinstance(inputs.get("analysis_date"), str) else None,
+        "asset_type": inputs.get("asset_type") if isinstance(inputs.get("asset_type"), str) else None,
+        "analysts": [a for a in analysts if isinstance(a, str)] if isinstance(analysts, list) else [],
+        "research_depth": inputs.get("research_depth")
+        if isinstance(inputs.get("research_depth"), int) and not isinstance(inputs.get("research_depth"), bool)
+        else None,
+    }
+
 
 def public_view(run: Run, viewer: str) -> dict:
-    """The fixed public shape of a run: no owner key, fingerprint, or paths."""
+    """The fixed public shape of a run: no owner key, fingerprint, paths, or
+    unsanitized worker/import content."""
     is_owner = viewer == run["owner_id"]
     can_rerun = False
     if is_owner:
@@ -162,6 +252,9 @@ def public_view(run: Run, viewer: str) -> dict:
         except (ValidationError, TypeError):
             can_rerun = False
     view = {key: run[key] for key in _PUBLIC_FIELDS}
+    view["inputs"] = _safe_inputs(run["inputs"])
+    view["state"] = clean_state(run["state"])
+    view["settings"] = safe_settings(run["settings"])
     view["can_share"] = is_owner
     view["can_rerun"] = can_rerun
     return view

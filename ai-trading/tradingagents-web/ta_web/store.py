@@ -53,14 +53,23 @@ def _utc_now_iso() -> str:
 
 
 def _validate_run_id(value: str) -> str:
-    """Canonical UUID4 form, or NotFoundError — never leaks format vs. existence."""
+    """Canonical UUID4 text only, or NotFoundError — never leaks format vs. existence.
+
+    ``uuid.UUID`` itself accepts uppercase, braced, hyphenless, and URN
+    spellings and normalizes them, which would let those non-canonical
+    external spellings fetch the canonical row (protocol URLs only ever use
+    canonical lowercase-hyphenated ids). Require the input to already equal
+    its own canonical rendering.
+    """
+    if not isinstance(value, str):
+        raise NotFoundError()
     try:
-        parsed = uuid.UUID(str(value))
+        parsed = uuid.UUID(value)
     except (ValueError, AttributeError, TypeError):
         raise NotFoundError() from None
-    if parsed.version != 4:
+    if parsed.version != 4 or str(parsed) != value:
         raise NotFoundError()
-    return str(parsed)
+    return value
 
 
 def _row_to_run(row: sqlite3.Row) -> Run:

@@ -1,7 +1,9 @@
 """Tests for ta_web.domain / ta_web.store: ownership, persistence, races, inputs."""
 
+import json
 import threading
 import unittest
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
@@ -197,6 +199,95 @@ class StoreTestCase(unittest.TestCase):
         self.assertNotIn("owner_id", reader_view)
         self.assertNotIn("fingerprint", reader_view)
 
+    def test_public_view_strips_credentials_and_paths_from_shared_state(self):
+        """Regression for review High: a shared reader must never receive raw
+        worker/import content — only the text/round allowlist survives."""
+        owner = owner_key("pv-leak-owner")
+        reader = owner_key("pv-leak-reader")
+        run = self.store.create(owner, _inputs())
+
+        secret = "sk-super-secret-leaked-token"
+        path = "/etc/passwd"
+        self.store.update(
+            run["id"],
+            status="completed",
+            state={
+                "market_report": "a safe report",
+                "api_key": secret,
+                "trace": "raw tool output dump",
+                "checkpoint_path": path,
+                "investment_debate_state": {
+                    "bull_history": "safe bull text",
+                    "history": "raw transcript with " + secret,
+                    "count": 3,
+                },
+            },
+            settings={
+                "provider": "openai",
+                "model": "gpt-5",
+                "debate_rounds": 2,
+                "api_key": secret,
+                "base_url": "https://internal.example/" + secret,
+            },
+        )
+        self.store.set_shared(run["id"], owner, True)
+
+        visible = self.store.get_visible(run["id"], reader)
+        view = public_view(visible, reader)
+        blob = json.dumps(view)
+
+        self.assertNotIn(secret, blob)
+        self.assertNotIn(path, blob)
+        self.assertNotIn("api_key", blob)
+        self.assertNotIn("trace", blob)
+        self.assertNotIn("checkpoint_path", blob)
+        self.assertNotIn("base_url", blob)
+        self.assertNotIn("count", blob)
+        # The legitimate allowlisted content is preserved, not censored away.
+        self.assertEqual(view["state"]["market_report"], "a safe report")
+        self.assertEqual(view["state"]["investment_debate_state"], {"bull_history": "safe bull text"})
+        self.assertEqual(view["settings"], {"provider": "openai", "model": "gpt-5", "debate_rounds": 2})
+
+        # Same assertion straight off the owner's own view: the sanitizer is
+        # unconditional, not merely a reader-side filter.
+        owner_view = public_view(self.store.get_owned(run["id"], owner), owner)
+        owner_blob = json.dumps(owner_view)
+        self.assertNotIn(secret, owner_blob)
+        self.assertNotIn(path, owner_blob)
+
+    def test_public_view_strips_extra_keys_from_imported_inputs(self):
+        """A malformed/hostile import's ``inputs`` dict is allowlisted too."""
+        owner = owner_key("pv-import-owner")
+        run, _ = self.store.add_import(
+            owner,
+            "fp-leak",
+            {
+                "ticker": "AAPL",
+                "analysis_date": None,
+                "asset_type": "stock",
+                "analysts": ["market"],
+                "research_depth": None,
+                "config_path": "/srv/secret-config.yaml",
+            },
+            {},
+            {},
+            True,
+        )
+        view = public_view(run, owner)
+        blob = json.dumps(view)
+        self.assertNotIn("config_path", blob)
+        self.assertNotIn("secret-config", blob)
+        self.assertEqual(
+            view["inputs"],
+            {
+                "ticker": "AAPL",
+                "analysis_date": None,
+                "asset_type": "stock",
+                "analysts": ["market"],
+                "research_depth": None,
+            },
+        )
+
     # --- update / mark_interrupted ------------------------------------------
 
     def test_update_only_touches_allowed_columns(self):
@@ -288,6 +379,32 @@ class StoreTestCase(unittest.TestCase):
                 self.store.get_owned(bad_id, owner)
             with self.assertRaises(NotFoundError):
                 self.store.worker_run(bad_id)
+
+    def test_noncanonical_uuid4_spellings_denied(self):
+        """Regression for review Low: only the exact canonical spelling of an
+        existing UUID4 may fetch its row; equivalent re-spellings must not."""
+        owner = owner_key("owner-canonical")
+        run = self.store.create(owner, _inputs())
+        canonical = run["id"]
+        parsed = uuid.UUID(canonical)
+        variants = (
+            canonical.upper(),
+            canonical.replace("-", ""),
+            canonical.upper().replace("-", ""),
+            f"{{{canonical}}}",
+            f"urn:uuid:{canonical}",
+        )
+        for variant in variants:
+            with self.subTest(variant=variant):
+                with self.assertRaises(NotFoundError):
+                    self.store.get_visible(variant, owner)
+                with self.assertRaises(NotFoundError):
+                    self.store.get_owned(variant, owner)
+                with self.assertRaises(NotFoundError):
+                    self.store.worker_run(variant)
+        # Sanity: the actual canonical spelling still works.
+        self.assertEqual(self.store.worker_run(canonical)["id"], canonical)
+        self.assertEqual(str(parsed), canonical)
 
     def test_worker_run_bypasses_owner_visibility(self):
         owner = owner_key("worker-owner")
