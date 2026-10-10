@@ -93,12 +93,12 @@
 
 | Phase | Ships | Depends on | Task file | Status |
 |---|---|---|---|---|
-| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress |
+| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress: waiting for IBKR to approve the data user |
 | 1. Strategy core | Contracts package, backend scaffold, session calendar, indicators, levels, evaluator, intraday and swing templates (no I/O) | none; can run beside Phase 0 | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance level, order sizing (no I/O) | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done |
-| 2. Data foundation | Postgres schema, bar store and backfills, IBKR live adapter, futures roll, streaming slots, calendar/news/fundamentals adapters | 0, 1 | `phase-2-data.md` | Planned |
+| 2. Data foundation | Provider clients in `ai-trading/common/` (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, then IBKR), Postgres schema, bar store and backfills, futures roll, streaming slots | 1; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, alert outbox, Telegram/Slack, watchdog checks, compose services, Firestore profile, backups (deployed) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | Desk static app (Today, Strategies, Watchlists, Settings); `trading.tobytran.dev` points at the Desk after the open-source lane moves the hub to `trading-hub` | 3, plus the hub move (open-source lane) | `phase-4-web.md` | Planned |
+| 4. Desk web and hostnames | Desk static app (the shell from the mockups; Today, Strategies, Watchlists, and Settings live); `trading.tobytran.dev` points at the Desk (the hub already moved to `trading-hub`) | 3; the shell can start earlier, on fixtures | `phase-4-web.md` | Planned |
 | 5. Long-term | Fundamentals and persona-review blocks, covered-call and short-call templates, Flex and CSV import, Holdings page | 3 (UI after 4) | `phase-5-long-term.md` | Planned |
 | 6. Paper trading | Paper broker with guard, bracket orders, reconciliation, flat-by, limits, off switch, stats, Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
 | 7. Ask | PydanticAI agent over AG-UI with market, strategy, and drafting tools; budgets | 5, 6 | `phase-7-ask.md` | Planned |
@@ -109,7 +109,7 @@
 3. release the phase's ai-trading paths to `main`;
 4. deploy and verify the live result.
 
-Phases 0–2 change nothing that is deployed. Phases 3–7 deploy.
+Phases 0–2 change nothing that is deployed, so they stop at `dev` (as Phases 1 and 1b did); Desk code first goes to `main` with Phase 3. Phases 3–7 deploy.
 
 ## Execution Map
 
@@ -199,9 +199,8 @@ Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quan
 ### Phase 4: Desk web and hostnames
 
 - **Desk static app** (`packages/family-desk/frontend`, Next.js 16 static export):
-  - Today, Strategies (list, builder, versions, JSON view, new from a template), Paper, Watchlists, Holdings, Ask, and Settings (channels, quiet hours, off switch);
-  - built from the Paper mockups (D1–D8, M2–M6; 02a §16), with the PAPER badge and data-quality labels on every number and charts from lightweight-charts;
-  - the shell can start before Phase 3, on fixture data.
+  - a shell with every tab from the Paper mockups (D1–D8, M2–M6; 02a §16), with the PAPER badge and data-quality labels on every number and charts from lightweight-charts; it can start before Phase 3, on fixture data;
+  - Today, Strategies (list, builder, versions, JSON view, new from a template), Watchlists, and Settings (channels, quiet hours, off switch) wired to the API; Holdings, Paper, and Ask stay on fixtures until Phases 5–7.
 - **Infrastructure:** the hub already moved to `trading-hub` (01l). Phase 4 adds a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`), points it at the Desk, updates the hub registry's Desk card, and checks the Clerk origins and `ALLOWED_ORIGINS` (02a §8).
 - **Acceptance:**
   - a Playwright smoke test: Today → Strategies → new from a template → save a version → its alert appears;
