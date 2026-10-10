@@ -1,6 +1,6 @@
 # TradingAgents: private research history, links, and client downloads
 
-Date: 2026-10-10. Status: design sections approved; written-spec review pending.
+Date: 2026-10-10. Status: written spec approved by owner on 2026-10-10.
 
 ## 1. Intent and success criteria
 
@@ -136,7 +136,10 @@ research depth. Validate shape, length, enum/range, and date at the API boundary
 apply upstream asset/analyst compatibility rules. Provider/model defaults come
 from existing Firestore-injected environment values, never client-supplied keys,
 filesystem paths, or arbitrary backend URLs. Accept ticker strings of at most
-64 characters and research depths 1 through 5. An explicitly submitted depth
+64 characters at the request boundary and research depths 1 through 5. Upstream
+currently accepts canonical tickers of at most 32 characters; reject longer
+canonical symbols before execution and reflect that effective limit in the UI.
+An explicitly submitted depth
 sets both debate and risk rounds; when omitted, preserve server-configured round
 defaults. Display the effective values, not merely the requested ones.
 
@@ -242,6 +245,10 @@ Missing or overwritten old research cannot be recovered by this feature.
   shared read-only states, and a file actually downloaded to the client.
 - Run one real sponsored-provider research to verify the upstream integration,
   without printing keys or committing generated research.
+
+When adding the research service, retain prior Compose/Caddy/health files for
+rollback and restore them before starting an older tag that has no research
+image. Do not leave new configuration pointing at a nonexistent old image.
 
 Follow ai-trading's standing delivery policy after implementation: verify/review,
 integrate through the owning branch into dev, scoped release to main, deploy
