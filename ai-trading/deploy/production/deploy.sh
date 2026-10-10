@@ -12,6 +12,20 @@
 #                             tradingagents/ai-hedge-fund/vibe-trading/gateway values.
 #   FAMILY_CONFIG_CREDENTIALS path to the family-config-reader service account key used for
 #                             that render (default /etc/family-app/config-reader.json).
+#   APP_CONFIG_STAGING_DIR    directory the workflow staged with exactly the four known
+#                             declarative config files this script now owns end-to-end
+#                             (docker-compose.yml, docker-compose.mirofish.yml, Caddyfile,
+#                             health-check.sh) -- required. The workflow no longer
+#                             pre-installs any of these as the VPS's active config; this
+#                             script validates them (present, not a symlink), backs up
+#                             every prior version first (recording which did not exist,
+#                             same discipline as the five SECRET_FILES), and only then
+#                             atomically installs all four. A failure anywhere after
+#                             staging begins restores every one of these four files to its
+#                             prior state (or removes it, on a genuinely first deploy)
+#                             before any previous-tag rollback redeploy -- so an old
+#                             release is never started against a new Compose/Caddy/health
+#                             file it doesn't understand.
 #   DEPLOY_SH_SKIP_CHOWN      test-only: skip the root:root chown on installed/restored
 #                             secret files, so stage_secrets/rollback can be dry-run as a
 #                             non-root user. Never set this in production.
@@ -19,6 +33,10 @@
 #                             stage_secrets aborts right after installing that file, to
 #                             dry-run rollback without needing a real install failure. Never
 #                             set this in production.
+#   DEPLOY_SH_CONFIG_FAIL_AFTER test-only: name of a CONFIG_FILES entry (e.g. Caddyfile);
+#                             stage_configs aborts right after installing that file, to
+#                             dry-run config rollback without needing a real install
+#                             failure. Never set this in production.
 #   MIROFISH_ACTIVATE        operator opt-in: set to 1 to render the optional
 #                             ai-trading/mirofish Firestore profile and enable its Compose
 #                             profile for this deploy; `keep` (push deploys) does the same
@@ -52,6 +70,7 @@ APP_DIR="${APP_DIR:-/opt/family-app/ai-trading}"
 SECRETS_DIR="${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}"
 REGISTRY="${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}"
 ENV_STAGING_DIR="${ENV_STAGING_DIR:-}"
+APP_CONFIG_STAGING_DIR="${APP_CONFIG_STAGING_DIR:-}"
 RUNTIME_ENV_DIR="${AI_TRADING_RUNTIME_ENV_DIR:-/run/family-app/ai-trading}"
 MIROFISH_REQUIRED_KEYS=(ZEP_API_KEY LLM_API_KEY)
 # Prior/new-state tracking for mirofish.env, mirrors PRIOR_EXISTED/.previous/
@@ -71,9 +90,24 @@ SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
+# The four declarative config files this script now owns end-to-end (A10a):
+# the workflow only stages them into APP_CONFIG_STAGING_DIR and no longer
+# installs any of them as the VPS's active config itself.
+CONFIG_FILES=(docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh)
+# Same prior/new-state bookkeeping as PRIOR_EXISTED above, but for CONFIG_FILES.
+declare -A CONFIG_PRIOR_EXISTED=()
+# Armed by stage_configs once backups exist and the first atomic install has
+# started, so rollback() knows whether restore_or_remove_configs has
+# anything to undo (mirrors MIROFISH_INSTALLED_THIS_RUN's role for mirofish.env).
+CONFIG_STAGED=0
+# This run's own root-only scratch directory holding a pre-install copy of
+# every CONFIG_FILES entry that already existed in $APP_DIR -- a run-owned
+# `mktemp -d`, never a persistent/shared backup location. Removed on every
+# exit by cleanup_scratch_dirs, the same EXIT trap RENDER_SRC_DIR already uses.
+CONFIG_BACKUP_DIR=""
 # Root-only scratch directory this run's render_profiles() writes
 # tradingagents.env/ai-hedge-fund.env/vibe-trading.env/auth.env into, straight from
-# Firestore. Empty until render_profiles runs; cleanup_render_dir removes it on every exit.
+# Firestore. Empty until render_profiles runs; cleanup_scratch_dirs removes it on every exit.
 RENDER_SRC_DIR=""
 # A full commit SHA: the only shape a deployed image tag (and last-good-tag) ever has.
 SHA_RE='^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$'
@@ -143,15 +177,20 @@ compose() {
     docker compose --project-name "${DEPLOY_SH_COMPOSE_PROJECT:-ai-trading}" "${env_file_args[@]}" -f "$APP_DIR/docker-compose.yml" "${mirofish_compose[@]}" "$@"
 }
 
-# cleanup_render_dir: removes this run's root-only Firestore-render scratch
-# directory on every exit -- success, a render/validation failure, or a later
-# mid-stage install failure -- so no partial or final secret value ever lingers
-# anywhere outside $SECRETS_DIR itself. Armed by render_profiles once the
-# directory actually exists; a bash EXIT trap always fires exactly once, no
+# cleanup_scratch_dirs: removes this run's root-only scratch directories on
+# every exit -- success, a render/validation failure, or a later mid-stage
+# install failure -- so no partial or final secret/config value ever lingers
+# anywhere outside $SECRETS_DIR/$APP_DIR itself. Covers both RENDER_SRC_DIR
+# (render_profiles' Firestore-render scratch) and CONFIG_BACKUP_DIR
+# (stage_configs' run-owned config backup scratch); either may still be empty
+# ("") depending on how far this run got, which the guards below handle.
+# Armed by render_profiles -- the first of the two to ever exist -- once
+# RENDER_SRC_DIR is created; a bash EXIT trap always fires exactly once, no
 # matter how the script terminates, so this never depends on which later step
-# fails.
-cleanup_render_dir() {
+# fails or whether stage_configs ever ran at all.
+cleanup_scratch_dirs() {
   [[ -n "$RENDER_SRC_DIR" ]] && rm -rf "$RENDER_SRC_DIR"
+  [[ -n "$CONFIG_BACKUP_DIR" ]] && rm -rf "$CONFIG_BACKUP_DIR"
 }
 
 # render_profiles: VPS-side render of the four ai-trading Firestore profiles
@@ -173,7 +212,7 @@ render_profiles() {
   [[ -x "$family_config" ]] || die "missing $family_config; copy it alongside deploy.sh first"
   install -d -m 0700 "$SECRETS_DIR"
   RENDER_SRC_DIR="$(mktemp -d "$SECRETS_DIR/.render-XXXXXX")"
-  trap cleanup_render_dir EXIT
+  trap cleanup_scratch_dirs EXIT
   FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
     "$family_config" render ai-trading/tradingagents ai-trading/ai-hedge-fund ai-trading/vibe-trading ai-trading/gateway ai-trading/market-data \
       --out-dir "$RENDER_SRC_DIR"
@@ -531,6 +570,17 @@ require_free_space() {
 
 deploy_tag() {
   local tag="$1" tmp
+  # A10a fix: compose() exports AI_TRADING_IMAGE_TAG="$IMAGE_TAG" (the global)
+  # as an inline env var on every `docker compose` invocation, which always
+  # takes precedence over the same name in --env-file $IMAGES_ENV below --
+  # even though $IMAGES_ENV is written with the correct "$tag" a few lines
+  # down. Without this reassignment, rollback()'s own `deploy_tag "$previous"`
+  # would still pull/run the just-failed NEW tag's images (the global
+  # $IMAGE_TAG never changed), not the previous good one. Reassigning the
+  # global here, before any compose() call in this function, makes every
+  # deploy_tag call -- the normal one and a rollback's -- actually deploy the
+  # tag it was asked to deploy.
+  IMAGE_TAG="$tag"
   tmp="$(mktemp "$APP_DIR/images.env.XXXXXX")"
   printf 'AI_TRADING_REGISTRY=%s\nAI_TRADING_IMAGE_TAG=%s\nAI_TRADING_SECRETS_DIR=%s\n' "$REGISTRY" "$tag" "$SECRETS_DIR" >"$tmp"
   chmod 0644 "$tmp"
@@ -555,12 +605,75 @@ restore_or_remove_secrets() {
   done
 }
 
+# config_mode NAME: the mode CONFIG_FILES entry NAME is always installed and
+# restored with -- 0755 for the one executable script, 0644 for the three
+# declarative files, exactly task-6-brief's atomic-install core.
+config_mode() {
+  if [[ "$1" == health-check.sh ]]; then
+    printf '0755\n'
+  else
+    printf '0644\n'
+  fi
+}
+
+# install_config_file NAME SRC: installs SRC as $APP_DIR/NAME atomically (a
+# same-directory temp file with NAME's correct mode, then `mv -f` over the
+# destination -- a reader never sees a partially-written file, same
+# atomicity install_secret_file already gives the five SECRET_FILES).
+# Returns 1 on any failure (mktemp/install/mv) instead of letting a partial
+# temp file or a failed rename go unnoticed.
+install_config_file() {
+  local name="$1" src="$2" mode tmp
+  mode="$(config_mode "$name")"
+  tmp="$(mktemp "$APP_DIR/.config-${name}.XXXXXX")" || return 1
+  install -m "$mode" "$src" "$tmp" || return 1
+  mv -f "$tmp" "$APP_DIR/$name"
+}
+
+# restore_or_remove_configs: used by rollback to undo a partially- or fully-
+# applied stage_configs, the same prior/new-state discipline
+# restore_or_remove_secrets already applies to the five SECRET_FILES. A
+# no-op unless this run actually got far enough to arm CONFIG_STAGED. A file
+# that existed before this run is restored (atomically, same mode) from this
+# run's own CONFIG_BACKUP_DIR; a file that did not (first deploy, or this
+# specific file newly added) is deleted, never left behind as a leftover new
+# config. Every restore/delete step is explicitly checked: a missing backup,
+# a failed atomic install, or a failed rm is reported and this returns 1 --
+# never silently claimed as a successful recovery -- but every remaining
+# CONFIG_FILES entry is still attempted regardless of an earlier one's
+# failure, same as restore_or_remove_mirofish's own discipline.
+restore_or_remove_configs() {
+  [[ "$CONFIG_STAGED" == 1 ]] || return 0
+  CONFIG_STAGED=0
+  local name ok=0
+  for name in "${CONFIG_FILES[@]}"; do
+    if [[ "${CONFIG_PRIOR_EXISTED[$name]:-0}" == 1 ]]; then
+      if [[ ! -f "$CONFIG_BACKUP_DIR/$name" ]]; then
+        echo "deploy: config: rollback: missing backup for $APP_DIR/$name; cannot restore" >&2
+        ok=1
+        continue
+      fi
+      if ! install_config_file "$name" "$CONFIG_BACKUP_DIR/$name"; then
+        echo "deploy: config: rollback: failed to restore $APP_DIR/$name from backup" >&2
+        ok=1
+      fi
+    else
+      if ! rm -f "$APP_DIR/$name"; then
+        echo "deploy: config: rollback: failed to remove $APP_DIR/$name" >&2
+        ok=1
+      fi
+    fi
+  done
+  return "$ok"
+}
+
 rollback() {
   local status="$1" previous=""
   trap - ERR
   if [[ -n "$ENV_STAGING_DIR" ]]; then
     restore_or_remove_secrets
   fi
+  restore_or_remove_configs || echo "deploy: config: rollback error above; one or more of docker-compose.yml/docker-compose.mirofish.yml/Caddyfile/health-check.sh may be left in an inconsistent state, the rest of rollback continues" >&2
   restore_or_remove_mirofish || echo "deploy: mirofish: rollback error above; MiroFish left disabled, the rest of rollback continues" >&2
   if [[ -f "$STATE_FILE" ]]; then
     previous="$(cat "$STATE_FILE")"
@@ -609,6 +722,55 @@ stage_secrets() {
   done
 }
 
+# validate_staged_config_file FILE: the four CONFIG_FILES entries are not
+# KEY=value secrets, so this checks only what rollback correctness actually
+# needs before any backup/install touches $APP_DIR -- the staged file must
+# exist, must be a plain regular file (never a symlink: an operator or a
+# compromised staging step could otherwise point this script at an arbitrary
+# path outside its own staging directory), and must be readable.
+validate_staged_config_file() {
+  local file="$1"
+  [[ -e "$file" ]] || die "missing staged config $file"
+  [[ -L "$file" ]] && die "staged config $file must not be a symlink"
+  [[ -f "$file" ]] || die "staged config $file is not a regular file"
+  [[ -r "$file" ]] || die "staged config $file is not readable"
+}
+
+# stage_configs: the config-file analogue of stage_secrets above, called
+# right after it in main flow (by the time this runs, stage_secrets has
+# already armed `trap 'rollback "$?"' ERR`, so any failure in here already
+# rolls back both). Validates every staged file first (no side effects on
+# failure), then records which of the four CONFIG_FILES already exist in
+# $APP_DIR and backs those up into this run's own CONFIG_BACKUP_DIR scratch
+# directory, arms CONFIG_STAGED, and only then atomically installs all four
+# -- exactly task-6-brief's atomic-install core, factored through
+# install_config_file. A later, unrelated failure (secrets, MiroFish,
+# deploy_tag/health-check) still rolls these four back via
+# restore_or_remove_configs, same as the five SECRET_FILES.
+stage_configs() {
+  local name
+  for name in "${CONFIG_FILES[@]}"; do
+    validate_staged_config_file "$APP_CONFIG_STAGING_DIR/$name"
+  done
+
+  CONFIG_BACKUP_DIR="$(mktemp -d "$APP_DIR/.config-backup-XXXXXX")"
+  for name in "${CONFIG_FILES[@]}"; do
+    if [[ -f "$APP_DIR/$name" ]]; then
+      CONFIG_PRIOR_EXISTED[$name]=1
+      cp -p "$APP_DIR/$name" "$CONFIG_BACKUP_DIR/$name"
+    else
+      CONFIG_PRIOR_EXISTED[$name]=0
+    fi
+  done
+  CONFIG_STAGED=1
+
+  for name in "${CONFIG_FILES[@]}"; do
+    install_config_file "$name" "$APP_CONFIG_STAGING_DIR/$name"
+    # Same `false`-not-`return` reasoning as stage_secrets' own loop above.
+    [[ "$name" != "${DEPLOY_SH_CONFIG_FAIL_AFTER:-}" ]] || false
+  done
+}
+
 # --- main flow below this line; test-deploy-firestore.sh sources only the
 # function definitions above it and calls them directly. ---
 # Every successful deploy renders fresh Firestore profiles (no mode silently
@@ -617,6 +779,14 @@ stage_secrets() {
 # rather than let a manual/misconfigured run quietly skip rendering.
 [[ -n "$ENV_STAGING_DIR" ]] || die "ENV_STAGING_DIR is required: CI must stage cloudflared.env first"
 [[ -f "$ENV_STAGING_DIR/cloudflared.env" ]] || die "missing $ENV_STAGING_DIR/cloudflared.env; CI must stage it first"
+# A10a: the workflow stages the four known config files but no longer
+# installs any of them as the active config itself -- fail here, before
+# touching Firestore, Docker, any secret, or any active config file, if the
+# workflow never staged them (or staged an incomplete set) at all.
+[[ -n "$APP_CONFIG_STAGING_DIR" ]] || die "APP_CONFIG_STAGING_DIR is required: the workflow must stage docker-compose.yml, docker-compose.mirofish.yml, Caddyfile, and health-check.sh first"
+for name in "${CONFIG_FILES[@]}"; do
+  [[ -f "$APP_CONFIG_STAGING_DIR/$name" ]] || die "missing $APP_CONFIG_STAGING_DIR/$name; the workflow must stage it first"
+done
 # Make room, then prove the pull fits, before Firestore, any container, or any
 # secret file is touched (a failed pull on a full disk also breaks rollback).
 prune_old_images
@@ -632,6 +802,7 @@ activate_mirofish || true
 # before stage_secrets or deploy_tag touch anything.
 ensure_mirofish_stopped
 stage_secrets
+stage_configs
 
 for name in "${SECRET_FILES[@]}"; do
   file="$SECRETS_DIR/$name"
