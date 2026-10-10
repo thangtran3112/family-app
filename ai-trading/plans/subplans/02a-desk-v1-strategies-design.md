@@ -268,7 +268,7 @@ Data sources, cost, and the store layout are in [02b](02b-desk-market-data-optio
 |---|---|
 | `trading.tobytran.dev` | **Family Desk** from Phase 4: static Next.js export from GCS through the existing Worker pattern; `/api/*` goes through the tunnel to the Desk `api`. Until then it still serves the hub from `web:3000`. |
 | `trading-hub.tobytran.dev` | **Hub** (moved 2026-10-10, 01l): the registry (`/apps/*`) and the terminals (`/u/*`) |
-| `tradingagents.`, `ai-hedge-fund.`, `vibe-trading.`, `mirofish-static.` | The upstream apps (open-source lane) |
+| `tradingagents.`, `ai-hedge-fund.`, `vibe-trading.`, `mirofish.` | The upstream apps (open-source lane) |
 
 The hub move (cutover steps 1 and 2: bring up `trading-hub`, pass its staging checks) is done. Phase 4 does step 3, switching `trading.tobytran.dev` to the Desk:
 - a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`) in `infrastructure/cloudflare/ai-trading/`;
