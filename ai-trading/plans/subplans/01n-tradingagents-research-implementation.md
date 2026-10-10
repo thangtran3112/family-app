@@ -4,7 +4,7 @@
 
 **Goal:** Give family users durable private research, permanent research URLs, client downloads, and explicitly shared read-only links.
 
-**Architecture:** A maintained web extension imports the unmodified TradingAgents engine and exporter. A small internal web service owns SQLite records and access checks; a separate subprocess runs each admitted research. Existing Clerk/Caddy authentication and `ta-data` persistence remain authoritative.
+**Architecture:** A maintained web extension imports the unmodified TradingAgents engine and exporter. A small internal web service owns SQLite records and access checks; a separate subprocess runs each admitted research. Existing Clerk/Caddy authentication remains authoritative; private research uses a separate ta-research-data volume so the retained arbitrary-save-path CLI cannot modify it.
 
 **Tech Stack:** Python 3.13, Starlette 1.7.0, Uvicorn 0.54.0, Click 8.5.0, upstream-installed Pydantic and HTTPX, stdlib SQLite/subprocess/unittest, plain HTML/CSS/JavaScript, Node 24 native tests, existing Docker Bake/Caddy/Compose.
 
@@ -18,6 +18,7 @@
 - Accepted requests get a UUID before model execution; repeated ticker/date never overwrites earlier research.
 - One active research subprocess initially; `409` Busy instead of queueing. Restart means Interrupted, not an automatic model rerun.
 - Per-user memory and per-run results/checkpoints. No raw tool messages, internal logs, credentials, or config files in responses/archives.
+- Use a separate ta-research-data volume. Preserve legacy ta-data unchanged; mount it read-only only for explicit operator import.
 - JSON bodies limited to 16 KiB; research depths 1 through 5; history defaults to 25 records and caps at 100.
 - Spec's ticker boundary is at most 64 characters; upstream imposes 32 on canonical symbols. Reject upstream-incompatible length before admission; UI uses effective 32-character maximum.
 - Preserve server-configured rounds when depth omitted; explicit depth sets both debate/risk rounds. Provider/model/endpoints remain server-controlled.
@@ -387,7 +388,7 @@ Hub CTA, conditional on `app.slug === 'tradingagents'`, uses `new URL('research'
 
 **Files:** Create `deploy/upstream/trading-agents/web.Dockerfile` and `deploy/ci/test-tradingagents-research.sh`. Modify `deploy/docker-bake.hcl`, `deploy/docker-bake.ci.hcl`, `deploy/production/docker-compose.yml`, `deploy/production/Caddyfile`, `deploy/production/health-check.sh`, `deploy/production/deploy.sh`, `deploy/local/Caddyfile`, `deploy/local/docker-compose.override.yml`, `deploy/ci/smoke-test.sh`, `deploy/ci/test-deploy-firestore.sh`, `.github/workflows/ai-trading-ci.yml`, `.github/workflows/ai-trading-deploy.yml`. Create extension DIVERGENCE.md; update extension README and production/local runbooks; append small phase result to STATUS.md only when verified.
 
-**Interfaces:** `ta-research` internal service at port 8182, image `${REGISTRY}/ai-trading-ta-research:${TAG}`. Same `tradingagents.env`, appuser UID, and `ta-data` volume; no published port. `APP_CONFIG_STAGING_DIR` is directory supplied by deploy workflow containing four known declarative files; `stage_configs()` and `restore_or_remove_configs()` own their exact files and per-run prior-existence bookkeeping.
+**Interfaces:** `ta-research` internal service at port 8182, image `${REGISTRY}/ai-trading-ta-research:${TAG}`. Same `tradingagents.env` and appuser UID, separate `ta-research-data` volume; no published port. `APP_CONFIG_STAGING_DIR` is directory supplied by deploy workflow containing four known declarative files; `stage_configs()` and `restore_or_remove_configs()` own their exact files and per-run prior-existence bookkeeping.
 
 - [ ] **Step 1: Write failing real-gateway and first-rollout regression.** Extend existing smoke using two synthetic allowed identities built from fixture names/domain parts rather than logging/literal real emails. Caddy/auth remain real, research service is real; seed synthetic completed records through local Store, not a production fake-provider mode. Assert missing/expired cookie and forged identity denied; owner sees own record; other user fails until sharing; non-owner write remains denied; revoke denies fresh download; root/hub-prefix paths and reserved sibling paths route correctly; existing ttyd WebSocket still returns 101.
 
@@ -410,7 +411,7 @@ target "ta-research" {
 
 Add target to default group/cache overlay. Wrapper inherits `base`, temporarily root for hash-pinned `--no-deps` additions; compare full installed distribution versions before/after and fail on an upstream upgrade/downgrade, then pip check. Copy package/static/manifest via named web context; manifest also at `/home/appuser/app/DIVERGENCE.md`. Restore nonroot appuser. Start one Uvicorn process on 8182 with no reload/access log/server header, trusted proxy headers only on internal network. Use research root under existing home volume, not arbitrary browser env/path.
 
-Compose adds service with 1 GiB limit, pids limit, no-new-privileges and healthcheck on internal `/__healthz`; gateway depends on service and already joins ta network. Add to production health SERVICES. Local overlay adds dependency and fixed local identity/prefix forwarding; local mock is never evidence of production authentication.
+Compose adds service with 1 GiB limit, pids limit, no-new-privileges and healthcheck on internal `/__healthz`; gateway depends on service and already joins ta network. Its own named ta-research-data volume mounts at /home/appuser/.tradingagents; never mount it into the terminal. Add to production health SERVICES. Local overlay adds dependency and fixed local identity/prefix forwarding; local mock is never evidence of production authentication.
 
 Caddy research matchers precede terminal rewrite. Dedicated host paths are exact `/research`, `/research/*`, `/api/research`, `/api/research/*`. Hub's four exact roots/descendants appear in snippet below; strip only `/u/tradingagents` and overwrite `X-Family-App-Prefix`. Dedicated route removes that header to establish empty prefix. Both use an explicit route block ordering identity-header removal, forward_auth, then reverse_proxy. Overwrite forwarded scheme/Host; no browser header establishes prefix/identity. Do not use bare `/research*` or `/api/research*` sibling wildcards.
 
@@ -505,4 +506,4 @@ Do not import actual historical private reports until explicit owner key/source 
 
 Documentation consulted: [Starlette routing](https://www.starlette.io/routing/), [ASGI middleware](https://www.starlette.io/middleware/), [Uvicorn settings](https://www.uvicorn.org/settings/), [HTTPX 0.28.1 ASGI transport](https://www.python-httpx.org/advanced/transports/#asgi-transport), [Caddy path_regexp](https://caddyserver.com/docs/caddyfile/matchers#path_regexp), [Caddy redir](https://caddyserver.com/docs/caddyfile/directives/redir). HTTPX transport does not run lifespan; enter Starlette lifespan explicitly. Current Starlette TestClient uses HTTPX2, so use already-installed HTTPX ASGITransport instead of adding a second client stack.
 
-Execution method/review approval: pending owner selection. No product implementation started.
+Execution method/review approval: owner approved plan and selected parallel subagent-driven implementation on 2026-10-10. Independent work uses separate worker worktrees and disjoint file ownership; dependent backend tasks wait for reviewed interfaces. Preflight rulings and progress live in this plan's SDD workspace.

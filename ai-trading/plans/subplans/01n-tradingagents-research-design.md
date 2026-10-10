@@ -55,7 +55,7 @@ browser
   -> research web service: owner checks, API, UI, SQLite index
   -> isolated Python research subprocess
   -> unmodified TradingAgents graph and report exporter
-  -> existing persistent ta-data volume
+  -> private persistent ta-research-data volume
 ```
 
 Use a small Python web service with a maintained production HTTP framework and
@@ -65,8 +65,12 @@ dependencies. Exact framework versions and build wiring belong in the execution
 plan. Reuse the upstream report appearance, including light/dark support.
 
 Run the service as a separate internal `ta-research` container, using the same
-upstream base and persistent volume as the terminal. Do not publish its port to
-the host. Keep the existing terminal available and give the app's launch surface
+upstream base but a separate `ta-research-data` volume. The retained CLI accepts
+arbitrary save paths and runs as the same OS user, so sharing its writable data
+volume would allow terminal users to overwrite private/read-only report files.
+Leave existing `ta-data` unchanged. Explicit legacy imports use a read-only
+operator mount, not a permanent mount in the research service. Do not publish its
+port to the host. Keep the existing terminal available and give the app's launch surface
 a discoverable research link. Deploy routing changes through tracked application
 configuration, with no console infrastructure changes.
 
@@ -93,7 +97,7 @@ update times, lifecycle status, current stage, sharing flag, origin (`web` or
 whether exported artifacts are ready. Persist no provider credentials or browser
 sessions. All user-facing settings use a fixed allowlist.
 
-Files live under a new research subtree of the existing volume. Derive paths
+Files live under a new research subtree of the private volume. Derive paths
 from database ownership and validated UUIDs, never browser paths. Each run has its
 own results/checkpoint directory. Agent memory belongs to its owner, separate
 from other users and the existing terminal's shared legacy memory. Nonsecret
