@@ -18,6 +18,8 @@ import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import { expect, it } from "vitest";
 
+import { MAILBOX_OCR_ZERO_AMOUNT_MESSAGE } from "@expense-tax/contracts";
+
 import { MAILBOX_DISCOVER_TIMEOUT_MS } from "../src/clients/mailbox-client.js";
 
 const TASK_QUEUE = "expense-tax-processing";
@@ -534,6 +536,52 @@ it("MailboxOcrReceiptWorkflow marks the job failed (best-effort) when the combin
     // most at risk of a future "helpful" regression (forwarding
     // error.message instead of this fixed constant) -- checks the REAL
     // fetched history, not just `calls`.
+    expect(await forbiddenFieldsInHistory(env, workflowId)).toBe(false);
+  } finally {
+    await env.teardown();
+  }
+}, 60_000);
+
+it("MailboxOcrReceiptWorkflow reports a zero-total document with the contract's fixed zero-amount message, so App skips the candidate", async () => {
+  const calls: unknown[] = [];
+  const env = await TestWorkflowEnvironment.createTimeSkipping();
+  const workflowId = "mailbox-ocr-zero-amount";
+  try {
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace,
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: {
+        async mark_running() {
+          return 2;
+        },
+        async mailbox_ocr_receipt() {
+          const { ApplicationFailure } = await import("@temporalio/activity");
+          throw ApplicationFailure.nonRetryable("Document total is zero", "OcrZeroAmount");
+        },
+        async ocr_mark_failed(input: unknown) {
+          calls.push(["ocr_mark_failed", input]);
+          return 5;
+        },
+      },
+    });
+    const jobReference = {
+      schemaVersion: 1,
+      jobId: "33333333-3333-4333-8333-333333333333",
+      workflowType: "MailboxOcrReceiptWorkflow",
+      workflowId,
+    };
+    await worker.runUntil(() =>
+      env.client.workflow.execute("MailboxOcrReceiptWorkflow", {
+        workflowId,
+        taskQueue: TASK_QUEUE,
+        args: [jobReference],
+      }),
+    );
+    expect(calls).toEqual([
+      ["ocr_mark_failed", { jobReference, expectedJobVersion: 2, message: MAILBOX_OCR_ZERO_AMOUNT_MESSAGE }],
+    ]);
     expect(await forbiddenFieldsInHistory(env, workflowId)).toBe(false);
   } finally {
     await env.teardown();
