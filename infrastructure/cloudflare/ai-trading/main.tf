@@ -141,9 +141,9 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
           # for the staging/public hostnames' HTML paths; this ingress line
           # is what makes mirofish-origin.tobytran.dev's /api/* reachable at
           # all, gated the same way hub_origin's /u/* and /__auth/* are
-          # gated above. Public mirofish.tobytran.dev/mirofish-static Worker
-          # routes remain unprovisioned; the existing public hub/Vibe-Trading
-          # routes above are unchanged by this entry.
+          # gated above. The public mirofish.tobytran.dev Worker route
+          # (mirofish.tf) serves the static UI and proxies /api/* here; the
+          # existing public hub/Vibe-Trading routes are unchanged by this entry.
           hostname = var.mirofish_origin_hostname
           service  = "http://gateway:8080"
         },
