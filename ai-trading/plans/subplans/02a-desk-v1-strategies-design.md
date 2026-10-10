@@ -406,3 +406,9 @@ All mockups are in the file "TobyTest", page "Family Desk · R2 mockups". Dark i
 | M3 · Today (mobile) | Signal feed: paper fill, VWAP alert, short-call risk with a roll idea, persona review |
 | M2 · ES chart (mobile) | Futures strategy armed at the overnight high |
 | M5 · Watchlist (mobile) | Lists as strategy inputs, rows tagged with signals |
+| D4 · Watchlists (desktop) | Lists with horizon tags; symbols with live/delayed labels and today's signals; a new symbol backfilling (`/ES` style for futures); strategies using the list; streaming slots 41 of 70; where each number comes from |
+| D5 · Holdings (desktop) | Accounts from IBKR Flex and Robinhood CSV; positions with covered-call coverage under each symbol's cap; tax lots with the short-term flag; open short calls; the strategy watching the position |
+| D6 · Ask (desktop) | Threads; a covered-call candidate table rendered from a tool result with its data label; a `draft_strategy` diff (v5 → draft v6) that saves only on "Save as v6"; the monthly budget |
+| D7 · Settings (desktop) | Telegram/Slack channels and quiet hours; the family-wide off switch, daily cap, and paper guard checks; Ask budget; gateway re-login, data sources, reconciliation, and backups status |
+| D8 · New strategy from a template (desktop) | The ten intraday and swing templates (`packages/family-desk/contracts/templates`), alert-only versus alert + paper, a plain-English preview, the list picker, and "Use this template" creating draft v1 |
+| M6 · More (mobile) | The off switch first, then Watchlists, Holdings, and Settings; the next IBKR phone approval |
