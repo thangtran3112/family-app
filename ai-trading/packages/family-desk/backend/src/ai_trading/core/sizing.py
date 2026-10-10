@@ -41,7 +41,7 @@ def _floor(value: float) -> int:
 
 
 def _known(value: float | None) -> bool:
-    return value is not None and not math.isnan(value)
+    return value is not None and math.isfinite(value)
 
 
 def plan_order(
@@ -63,6 +63,9 @@ def plan_order(
 
     def no(reason: str) -> OrderPlan:
         return OrderPlan(None, reason)
+
+    if not _known(entry) or entry <= 0:
+        return no("entry price is unknown or not positive")
 
     side: Side = paper_order["side"]
     sign = 1.0 if side == "buy" else -1.0
@@ -102,6 +105,8 @@ def plan_order(
     if max_position_usd is not None:
         cap = _floor(max_position_usd / (entry * multiplier))
         if quantity > cap:
+            if cap < 1:
+                return no("maxPositionUsd allows less than one share or contract")
             clamps.append(Clamp("maxPositionUsd", quantity, cap))
             quantity = cap
     if quantity < 1:

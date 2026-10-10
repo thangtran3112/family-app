@@ -1049,7 +1049,7 @@ git commit -m "feat(ai-trading): support and resistance level for Desk strategie
 - Produces (the Phase 6 broker relies on these):
   - `Clamp(limit, before, after)`, `Bracket(side, quantity, entry, stop, target, clamps)`, `OrderPlan(bracket, reason)`
   - `plan_order(paper_order, *, entry, stop_level=None, target_level=None, atr=None, book_equity=None, multiplier=1.0, max_position_usd=None) -> OrderPlan`
-- Reasons: `ATR is unknown`, `stop level is unknown`, `stop is not on the losing side of the entry`, `target level is unknown`, `target is not on the winning side of the entry`, `book equity is unknown`, `size rounds to zero`.
+- Reasons: `entry price is unknown or not positive`, `ATR is unknown`, `stop level is unknown`, `stop is not on the losing side of the entry`, `target level is unknown`, `target is not on the winning side of the entry`, `book equity is unknown`, `maxPositionUsd allows less than one share or contract`, `size rounds to zero`.
 
 - [ ] **Step 1: Write the failing test** `backend/tests/test_sizing.py`:
 
@@ -1124,6 +1124,27 @@ def test_binary_floating_point_does_not_lose_a_share():
             "target is not on the winning side of the entry",
         ),
         ({"entry": 100.0, "stop_level": 98.0}, order(size={"pctOfBook": 5}), "book equity is unknown"),
+        (
+            {"entry": math.nan, "stop_level": 187.31},
+            order(size={"shares": 25}),
+            "entry price is unknown or not positive",
+        ),
+        (
+            {"entry": math.nan, "stop_level": 98.0},
+            order(),
+            "entry price is unknown or not positive",
+        ),
+        (
+            {"entry": 0.0, "stop_level": -1.0, "book_equity": 100_000.0},
+            order(size={"pctOfBook": 10}),
+            "entry price is unknown or not positive",
+        ),
+        ({"entry": 100.0, "stop_level": math.inf}, order(), "stop level is unknown"),
+        (
+            {"entry": 100.0, "stop_level": 98.0, "max_position_usd": 50.0},
+            order(size={"shares": 10}),
+            "maxPositionUsd allows less than one share or contract",
+        ),
     ],
 )
 def test_no_order_and_why(kwargs, paper, reason):
@@ -1182,7 +1203,7 @@ def _floor(value: float) -> int:
 
 
 def _known(value: float | None) -> bool:
-    return value is not None and not math.isnan(value)
+    return value is not None and math.isfinite(value)
 
 
 def plan_order(
@@ -1204,6 +1225,9 @@ def plan_order(
 
     def no(reason: str) -> OrderPlan:
         return OrderPlan(None, reason)
+
+    if not _known(entry) or entry <= 0:
+        return no("entry price is unknown or not positive")
 
     side: Side = paper_order["side"]
     sign = 1.0 if side == "buy" else -1.0
@@ -1243,6 +1267,8 @@ def plan_order(
     if max_position_usd is not None:
         cap = _floor(max_position_usd / (entry * multiplier))
         if quantity > cap:
+            if cap < 1:
+                return no("maxPositionUsd allows less than one share or contract")
             clamps.append(Clamp("maxPositionUsd", quantity, cap))
             quantity = cap
     if quantity < 1:
@@ -1254,7 +1280,7 @@ def plan_order(
 - [ ] **Step 4: Run every suite.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_sizing.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `14 passed`, ruff clean, then `164 passed`.
+Expected: `19 passed`, ruff clean, then `169 passed`.
 
 Run (in `contracts/`): `pnpm typecheck && pnpm test`
 Expected: `# pass 40`, `# fail 0`.

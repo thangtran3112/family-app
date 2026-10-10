@@ -68,6 +68,27 @@ def test_binary_floating_point_does_not_lose_a_share():
             "target is not on the winning side of the entry",
         ),
         ({"entry": 100.0, "stop_level": 98.0}, order(size={"pctOfBook": 5}), "book equity is unknown"),
+        (
+            {"entry": math.nan, "stop_level": 187.31},
+            order(size={"shares": 25}),
+            "entry price is unknown or not positive",
+        ),
+        (
+            {"entry": math.nan, "stop_level": 98.0},
+            order(),
+            "entry price is unknown or not positive",
+        ),
+        (
+            {"entry": 0.0, "stop_level": -1.0, "book_equity": 100_000.0},
+            order(size={"pctOfBook": 10}),
+            "entry price is unknown or not positive",
+        ),
+        ({"entry": 100.0, "stop_level": math.inf}, order(), "stop level is unknown"),
+        (
+            {"entry": 100.0, "stop_level": 98.0, "max_position_usd": 50.0},
+            order(size={"shares": 10}),
+            "maxPositionUsd allows less than one share or contract",
+        ),
     ],
 )
 def test_no_order_and_why(kwargs, paper, reason):
