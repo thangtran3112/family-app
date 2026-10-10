@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": { "universe": { "watchlist": "Swing" }, "session": "regular", "runOn": "daily_close" },
+  "when": {
+    "any": [
+      { "op": "crosses_below", "left": { "series": "close" }, "right": { "level": "support", "days": 60 } },
+      { "op": "within_pct", "left": { "series": "close" }, "right": { "level": "resistance", "days": 120 }, "pct": 1 }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox"], "severity": "risk" } }
+}

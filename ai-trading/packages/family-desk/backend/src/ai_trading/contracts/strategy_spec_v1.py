@@ -67,6 +67,14 @@ class LevelOperand3(SpecModel):
     level: Literal["n_day_high", "n_day_low"]
 
 
+class LevelOperand4(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    days: Annotated[int, Field(ge=20, le=260)]
+    level: Literal["support", "resistance"]
+
+
 class Limits(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -127,8 +135,8 @@ class PaperOrder(SpecModel):
     )
     side: Literal["buy", "sell"]
     size: Size | Size1 | Size2 | Size3
-    stop: Stop | LevelOperand1 | LevelOperand2 | LevelOperand3
-    target: Target | LevelOperand1 | LevelOperand2 | LevelOperand3
+    stop: Stop | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    target: Target | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
 
 
 class SeriesOperand1(SpecModel):
@@ -182,19 +190,19 @@ class WithinPctCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3
+    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
     op: Literal["within_pct"]
     pct: Annotated[float, Field(gt=0.0, le=100.0)]
-    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3
+    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
 
 
 class CompareCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3
+    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
     op: Literal["gt", "gte", "lt", "lte", "crosses_above", "crosses_below"]
-    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3
+    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
 
 
 class StrategySpecV1(SpecModel):
