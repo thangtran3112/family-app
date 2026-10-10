@@ -1227,7 +1227,7 @@ Run (in `contracts/`): `pnpm typecheck && pnpm test`
 Expected: `# pass 40`, `# fail 0`.
 
 - [ ] **Step 5: Record the phase.**
-  - In 02c's Phases table, add this row after Phase 1: `| 1b. Ported quant core | Option math, covered-call math, support/resistance level, order sizing (no I/O) | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done |`
+  - In 02c's Phases table, set the status of the "1b. Ported quant core" row to `Done`.
   - In `STATUS.md`'s "5+" row, append: "Phase 1b (ported quant core) done: option math, covered-call math, support/resistance, order sizing."
 
 - [ ] **Step 6: Commit.**
