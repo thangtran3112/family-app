@@ -34,6 +34,17 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
           <ExternalLink aria-hidden size={16} />
           Open in new tab
         </a>
+        {app.slug === "tradingagents" && (
+          <a
+            href={new URL("research", app.hostUrl).toString()}
+            target="_blank"
+            rel="noopener"
+            className="flex h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <ExternalLink aria-hidden size={16} />
+            Research dashboard
+          </a>
+        )}
         <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
           Closing this page keeps your session running.
         </span>
