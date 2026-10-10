@@ -13,37 +13,29 @@
 
 Paths below are relative to `ai-trading/` unless they start with `../`.
 
-## Where Things Stand
+## Where Things Stand (updated 2026-10-10, evening)
 
 | Item | State |
 |---|---|
-| Design | Approved section by section in conversation, then merged to `dev`. Specs: `02a` (Desk v1), `02b` (market data), and a pointer in `02`; decisions are in `STATUS.md` (2026-10-10 rows). |
-| Mockups | Paper file "TobyTest" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG), page "Family Desk · R2 mockups". Six artboards: D1 Today, D2 Strategies, D3 Paper (desktop); M3 Today, M2 ES chart, M5 Watchlist (mobile). |
-| Plan | `02c` master plan with phases 0–7, Global Constraints, Review Focus, Shared Interfaces, and phase outlines. Only Phase 0 has a detailed task file. Each later phase gets its own task file, written with the writing-plans skill and reviewed by the owner before it starts. |
-| Phase 0 spike | Tasks 0.1–0.3 are done: desk-side checks, docs research, and the probe tools in `tools/ibkr-probe/` (9 tests, ruff clean). Task 0.4 (owner IBKR setup) is open, and Tasks 0.5–0.6 wait on it. |
-| Research notes | Local and gitignored, under `temp/research/`: vendors, brokers, IBKR docs, upstream tools, upstream strategy models |
-| Git | Everything this session produced is merged to `dev` (PR #74). No branch, worktree, or uncommitted work is handed over; this file and the merged files are the whole handoff. The main session works in the main checkout on `feature/toby` (owner direction, 2026-10-10). |
+| Design | Approved and on `dev`: `02a` (Desk v1), `02b` (market data); decisions in `STATUS.md` (2026-10-10 rows), including the Desk layout row. |
+| Layout | The Desk lives in `packages/family-desk/` (`contracts/`, `backend/`, `frontend/` from Phase 4). Packages never import each other; code shared by two or more ai-trading packages (provider clients such as Alpaca and IBKR, a shared database schema, shared types) goes in `ai-trading/common/`. Upstream code is copied in with attribution (`AGENTS.md` "Our Code"). |
+| Mockups | Paper file "TobyTest", page "Family Desk · R2 mockups": D1 Today, D2 Strategies, D3 Paper, D8 New from template (row 1); D4 Watchlists, D5 Holdings, D6 Ask, D7 Settings (row 2); mobile M2, M3, M5, M6 More. Indexed in `02a` §16. |
+| Phase 0 spike | Tasks 0.1–0.4 done; the owner created the IBKR data user and is waiting for IBKR's approval. Tasks 0.5–0.6 (probes, gateway layout) wait on that. Owner guide: `plans/subplans/02e-ibkr-data-user-setup.md`. |
+| Phase 1 strategy core | Done, merged to `dev` (PR #95), then moved to `packages/family-desk/` (on `feature/toby`, not yet on `dev`). Contracts 38 tests, backend 107 tests, CI job "Desk contracts and backend". |
+| Git | `feature/toby` holds the move, the mockup index, and rule edits (root and package `AGENTS.md`, expense rules); they ship with the next phase PR (one PR per finished phase). |
 
 ## Next Steps, in Order
 
-0. **Work on `feature/toby` in the main checkout.** A worktree for the main session is opt-in: only with the owner's explicit instruction or approval (root `../AGENTS.md`).
-   - Run `git -C .. status --short --branch`. It should show `## feature/toby`. If there are changes you did not make, stop and tell the owner.
-   - Run `git -C .. fetch origin && git -C .. merge origin/dev`.
-1. **Ask the owner for Task 0.4** (`phase-0-spike.md`):
-   - create the data username and its subscriptions (about $16 per month: $10 + $4.50 + $1.50);
-   - check whether that username has its own paper account, and switch on data sharing;
-   - create the Flex query and token per IBKR account, and store them in `ai-trading/desk` with `family_config.py set` (the README shows a no-echo way);
-   - install IB Gateway on the Mac.
-2. **Run Task 0.5** on a weekday in US regular hours, with the owner logged into IB Gateway: the probe commands are in `phase-0-spike.md` and `tools/ibkr-probe/README.md`. Record only masked or aggregate values in `02d`.
-3. **Run Task 0.6:**
-   - choose one gateway or two (02d check 1);
-   - correct 02b's cost line after the first bill;
-   - mark Phase 0 done in `02c` and `STATUS.md`;
-   - ship it as a pull request to `dev`.
-4. **Write `plans/subplans/02c-desk-v1-tasks/phase-1-strategy-core.md`** with the writing-plans skill, from the Phase 1 outline in `02c`.
-   - It needs no IBKR access, so write it while Task 0.4 is pending.
-   - Get owner review, then execute it with a subagent in a `.worktrees/` worktree (subagent-driven development).
-   - Merge the subagent's branch into the main checkout's branch, then remove the worktree.
+The owner chose, in order: more mockups (done), port quant tools, Phase 2 data without IBKR, and the Desk frontend shell. Each gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`.
+
+1. **Port quant tools** (pure, in `packages/family-desk/backend/src/ai_trading/core/`, with `packages/family-desk/THIRD_PARTY_NOTICES.md`):
+   - Black-Scholes price, greeks, and the implied-volatility solver from Vibe-Trading `agent/src/quantlib/options.py` (MIT), on the standard library instead of scipy; no barrier options;
+   - covered-call math from 02 §6.3 (eligibility, filters, metrics, flags, score, roll candidates, short-call risk rules);
+   - support/resistance from Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT), with pivots confirmed only after `window` closed bars (the upstream centered window would repaint), wired into the spec as a level operand;
+   - order sizing with clamps and an audit trail, after ai-hedge-fund `hedge_fund/risk/limits.py` (MIT). Persona prompts wait for Phase 5's LLM call.
+2. **Phase 2 data without IBKR**: Postgres schema, bar store, Alpaca/Stooq/SEC EDGAR/FRED/Finnhub clients in `ai-trading/common/` (start from `ai-trading/market-data/`'s Alpaca and SEC clients), futures roll map, streaming-slot logic. The IBKR adapter follows the Phase 0 probe.
+3. **Desk frontend shell** in `packages/family-desk/frontend` from the mockups, on fixture data.
+4. **When IBKR approves the data user:** run Task 0.5 with the owner on a weekday in US regular hours, then Task 0.6.
 
 ## Decisions Already Made (do not reopen without the owner)
 
