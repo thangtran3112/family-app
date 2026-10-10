@@ -317,26 +317,34 @@ These add to 02 §7. The 02 `users.role` column is dropped.
 
 ## 11. Reuse Map
 
-| Source | Item | Use |
-|---|---|---|
-| Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes price, greeks, IV solver | Adapt into `core/options_math.py` with attribution |
-| Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | Adapt for covered-call metrics |
-| Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Support/resistance clustering | Adapt for the levels block |
-| ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Position clamps | Adapt for strategy limits |
-| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | Adapt for `persona_review` |
-| ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills |
-| Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery |
-| Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences |
-| Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | IBKR connection profiles | Reference for the IBKR adapter |
-| TradingAgents `dataflows/router.py` (Apache-2.0) | Typed vendor-fallback errors | Pattern for `data/` interfaces |
-| deer-flow notification delivery (MIT) | Secret redaction patterns | Adapt for the notifier |
-| Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies |
+Code from the upstream apps is copied into the Desk (or into `ai-trading/common/` when two packages need it), never imported (`AGENTS.md` "Our Code"). Adapted files carry an attribution header and a row in the receiving package's `THIRD_PARTY_NOTICES.md` with the upstream license text; Apache-2.0 files (TradingAgents) are also marked as modified.
+
+| Source | Item | Use | Phase |
+|---|---|---|---|
+| Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes price, greeks, IV solver | `core/options_math.py`, ported to the standard library | 1b |
+| Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Peak/valley clustering | `levels.support_resistance` with confirmed pivots, and the `support`/`resistance` level | 1b |
+| ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Clamps with an audit trail | Pattern for `core/sizing.py` | 1b |
+| TradingAgents `tradingagents/dataflows/router.py`, `errors.py`, `date_window.py` (Apache-2.0) | Explicit vendor fallback chains; typed "no data" versus "provider unavailable" errors; as-of date guards against look-ahead | Adapt for the shared provider layer in `ai-trading/common/` | 2 |
+| TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py` (Apache-2.0) | SEC company facts with a compliant User-Agent, a daily cache, filing-period selection, and point-in-time filtering | Adapt for the fundamentals client in `ai-trading/common/`; compare with `ai-trading/market-data/sec.py` and keep one | 2 (the fundamentals block in 5) |
+| TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache-2.0) | FRED series with the realtime vintage pinned to the as-of date | Adapt for macro observations in `ai-trading/common/`; release dates come from FRED's release-dates endpoint | 2 |
+| TradingAgents news and social fetchers (Apache-2.0) | Publication-window filtering; "unavailable" kept apart from "no news" | Pattern for the Finnhub news client | 2 |
+| `ai-trading/market-data/` (ours, open-source lane) | Alpaca daily bars, SEC metrics | Move into `ai-trading/common/` when Phase 2 needs them, with the open-source lane | 2 |
+| Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | IBKR connection profiles | Reference for the IBKR client in `ai-trading/common/` | 2 |
+| Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery | 3 |
+| Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences | 3 |
+| deer-flow notification delivery (MIT) | Secret redaction | Adapt for the notifier | 3 |
+| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | `persona_review` | 5 |
+| TradingAgents `agents/analysts/*`, `researchers/*`, `risk_mgmt/*`, `agents/schemas.py` (Apache-2.0) | Evidence-first analyst prompts, bull/bear and risk debate, explicit missing-data language, Pydantic output schemas | Adapt for `persona_review` and Ask prompts, with the `{signal, confidence, reasoning}` output | 5, 7 |
+| ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills | 6 |
+| Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | The `collar_quote` tool | 7 |
+| TradingAgents `dataflows/vendors/yahoo/market.py` indicator catalog (Apache-2.0) | Plain descriptions of SMA, EMA, MACD, RSI, Bollinger Bands, ATR | Pattern for the `indicators` tool's descriptions | 7 |
+| TradingAgents `memory/log.py`, `settlement.py`, `reflection.py` (Apache-2.0) | Idempotent decision log, single settlement, outcome dates, bounded reflection | Pattern for a trade journal | Later |
+| Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies | — |
 
 Skipped:
-- Vibe-Trading's LLM-written strategy code and its sandbox (documented escape gaps; unacceptable once strategies place orders)
-- anything from MiroFish (AGPL-3.0)
-
-All adapted code carries attribution headers and is listed in the receiving package's `THIRD_PARTY_NOTICES.md` (the Desk's is `ai-trading/packages/family-desk/THIRD_PARTY_NOTICES.md`).
+- Vibe-Trading's LLM-written strategy code and its sandbox (documented escape gaps; unacceptable once strategies place orders);
+- TradingAgents' LangGraph orchestration and LangChain tools (`graph/*`, `agents/state.py`, `agents/tools.py`), its CLI, its Yahoo, Alpha Vantage, and Polymarket clients, and its LLM-sampled backtest: the Desk takes no LangChain or LangGraph dependency;
+- anything from MiroFish (AGPL-3.0).
 
 ## 12. Verification Spike (First Implementation Task)
 
