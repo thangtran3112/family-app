@@ -34,7 +34,7 @@ Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.
 ## Decisions for Owner Review
 
 1. **Standard library instead of scipy.** `options_math` uses `math.erf` and bisection. Before writing this plan, it was checked against Vibe-Trading's scipy implementation on 20,000 random inputs: prices agree within 2e-13, greeks within 4e-15, implied volatilities within 5e-10, and NaN and error cases match exactly. Barrier options and option-type aliases (`"c"`, `"calls"`, Chinese terms) are dropped.
-2. **The coverable-contracts formula follows 02's example, not its text.** 02 §6.3 writes `floor(shares × cap% / 100) − open contracts`. Its own example (1,000 shares, 50%, 3 open, so 2 more) only works per 100-share contract: `floor(shares × cap% / 100 / 100) − open contracts`.
+2. **The coverable-contracts formula follows 02's example.** 02 §6.3 first wrote `floor(shares × cap% / 100) − open contracts`, which contradicts its own example (1,000 shares, 50%, 3 open, so 2 more). The per-contract formula `floor(shares × cap% / 100 / 100) − open contracts` matches the example, and 02 §6.3 now says so.
 3. **Covered-call details 02 leaves open:**
    - average cost is per account;
    - `cover_tax_advantaged_first` flags a taxable-account candidate while tax-advantaged accounts still have coverable contracts;

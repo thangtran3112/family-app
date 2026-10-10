@@ -1,10 +1,10 @@
 # Release 2 Addendum A: Family Desk v1 (Strategies, Alerts, Paper Trading)
 
-Status: Designed and approved in conversation on 2026-10-10, section by section (scope, data architecture, hostnames and layout, mockups, reuse, spike, testing). The implementation plan is the next step. Where this addendum conflicts with [02](02-release-2-desk-design.md), this addendum wins.
+Status: approved in conversation on 2026-10-10, section by section. The phased plan is [02c](02c-desk-v1-implementation-plan.md). [02](02-release-2-desk-design.md) keeps only the base sections this design still cites.
 
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision
-- [02-release-2-desk-design.md](02-release-2-desk-design.md): base design; still valid where unchanged
+- [02-release-2-desk-design.md](02-release-2-desk-design.md): the kept base sections (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12)
 - [STATUS.md](../STATUS.md): decisions log
 - Mockups: Paper file "TobyTest", page "Family Desk · R2 mockups" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG)
 
@@ -21,7 +21,7 @@ Related:
 | Holdings | Form and CSV | IBKR Flex read-only import, plus form and CSV (Robinhood) |
 | Roles | `investor` / `trader` | Gone. Each watchlist has a horizon and each strategy has an owner. |
 | Auth | Cloudflare Access JWT | The Clerk/Caddy gate from Release 1 (STATUS, 2026-10-07) |
-| Address | `trading.tobytran.dev/desk` | `trading.tobytran.dev` is the Desk; the hub moves to `trading-hub.tobytran.dev` |
+| Address | `trading.tobytran.dev/desk` | `trading.tobytran.dev` is the Desk; the hub moved to `trading-hub.tobytran.dev` (01l, live 2026-10-10) |
 | Push channel | Telegram | Telegram or Slack, chosen per user |
 
 Still valid from 02:
@@ -264,23 +264,16 @@ Data sources, cost, and the store layout are in [02b](02b-desk-market-data-optio
 
 ## 8. Hostnames and App Layout
 
-| Host | After the change |
+| Host | Role |
 |---|---|
-| `trading.tobytran.dev` | **Family Desk**: static Next.js export from GCS through the existing Worker pattern; `/api/*` goes through the tunnel to the Desk `api` |
-| `trading-hub.tobytran.dev` | **Hub**, replacing `trading-static`. The production hub moves off `trading.tobytran.dev`. Terminal pages (`/apps/*`, `/u/*`) move with it. |
-| `vibe-trading.`, `mirofish.` | Unchanged |
+| `trading.tobytran.dev` | **Family Desk** from Phase 4: static Next.js export from GCS through the existing Worker pattern; `/api/*` goes through the tunnel to the Desk `api`. Until then it still serves the hub from `web:3000`. |
+| `trading-hub.tobytran.dev` | **Hub** (moved 2026-10-10, 01l): the registry (`/apps/*`) and the terminals (`/u/*`) |
+| `tradingagents.`, `ai-hedge-fund.`, `vibe-trading.`, `mirofish-static.` | The upstream apps (open-source lane) |
 
-What changes:
-- Cloudflare Terraform (DNS records, Worker routes)
-- Clerk allowed origins and the session cookie domain
-- the `ai-trading/gateway` profile's `ALLOWED_ORIGINS`
-- ttyd origin checks
-- the hub registry's Desk card, which links to `trading.tobytran.dev`
-
-Cutover order:
-1. Bring up `trading-hub`.
-2. Pass the existing staging checks on it.
-3. Switch `trading.tobytran.dev` to the Desk.
+The hub move (cutover steps 1 and 2: bring up `trading-hub`, pass its staging checks) is done. Phase 4 does step 3, switching `trading.tobytran.dev` to the Desk:
+- a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`) in `infrastructure/cloudflare/ai-trading/`;
+- the hub registry's Desk card, which links to `trading.tobytran.dev`;
+- a check that the Clerk origins and the `ai-trading/gateway` profile's `ALLOWED_ORIGINS` (set by the hub move) still admit `trading.tobytran.dev`.
 
 Tabs:
 - Desktop: **Today · Strategies · Paper · Ask · Watchlists · Holdings**
@@ -347,7 +340,7 @@ All adapted code carries attribution headers and is listed in the receiving pack
 
 ## 12. Verification Spike (First Implementation Task)
 
-These replace 02 §13 where they overlap. Each item has a decided fallback, so the design does not change if a check fails.
+Each item has a decided fallback, so the design does not change if a check fails. Results: [02d](02d-desk-spike-results.md).
 
 | Check | Fallback |
 |---|---|
@@ -358,7 +351,7 @@ These replace 02 §13 where they overlap. Each item has a decided fallback, so t
 | The Vibe-Trading IBKR connector's host and port can be configured | Vibe-Trading keeps its own data |
 | Host headroom for IB Gateway, Postgres, `api`, and `scheduler` on the VPS | Move the ai-trading stack to the home Ubuntu server |
 | An IBKR Flex Web Service token pulls positions and open options read-only | CSV upload |
-| The `trading-hub` hostname move (Clerk origins, cookies, ttyd origin) | Stay on `trading-static` until it passes on staging |
+| The `trading-hub` hostname move (Clerk origins, cookies, ttyd origin) | Done by the open-source lane (01l, live 2026-10-10) |
 | Paper account ID prefix | Record the observed prefix as the guard value |
 
 ## 13. Testing
@@ -385,7 +378,7 @@ Each slice ships on its own:
 3. IBKR paper trading, the guard, reconciliation, and performance tracking (Paper tab).
 4. Ask (chat) with `draft_strategy`, `explain_signal`, and `strategy_performance`.
 
-The hostname move to `trading-hub` happens before slice 1 goes live on `trading.tobytran.dev`.
+The hub already moved to `trading-hub` (01l), so `trading.tobytran.dev` is free for the Desk once Phase 4 ships.
 
 ## 15. What v1 Must Not Block (for v2 and v3)
 
