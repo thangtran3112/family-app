@@ -121,12 +121,24 @@ class ReportsTestCase(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             download(self.store, "../etc/passwd", self.owner, "md")
 
+    # --- owner-scoped artifact layout ---------------------------------------
+
+    def test_exports_live_under_owner_scoped_path(self):
+        """Protocol's locked layout: research_dir/users/{owner}/runs/{id}/exports
+        — never a shared, ID-only `runs/` namespace across owners."""
+        run = self._completed_run()
+        publish(self.store, run["id"])
+        owner_scoped = self.store.research_dir / "users" / self.owner / "runs" / run["id"] / "exports"
+        self.assertTrue((owner_scoped / "complete_report.md").is_file())
+        shared_namespace = self.store.research_dir / "runs"
+        self.assertFalse(shared_namespace.exists())
+
     # --- symlink in exports is never followed/zipped ------------------------
 
     def test_symlink_in_exports_excluded(self):
         run = self._completed_run()
         publish(self.store, run["id"])
-        exports_dir = self.store.research_dir / "runs" / run["id"] / "exports"
+        exports_dir = self.store.research_dir / "users" / self.owner / "runs" / run["id"] / "exports"
         secret = self.root / "secret.txt"
         secret.write_text("private", encoding="utf-8")
         evil = exports_dir / "1_analysts" / "evil.md"
@@ -152,7 +164,7 @@ class ReportsTestCase(unittest.TestCase):
     def test_archive_excludes_injected_config_log_files(self):
         run = self._completed_run()
         publish(self.store, run["id"])
-        exports_dir = self.store.research_dir / "runs" / run["id"] / "exports"
+        exports_dir = self.store.research_dir / "users" / self.owner / "runs" / run["id"] / "exports"
         (exports_dir / "config.yaml").write_text("api_key: leak", encoding="utf-8")
         (exports_dir / "run.log").write_text("raw tool trace", encoding="utf-8")
         (exports_dir / "1_analysts" / "memory.ckpt").write_text("checkpoint", encoding="utf-8")
@@ -177,6 +189,22 @@ class ReportsTestCase(unittest.TestCase):
         still = self.store.get_owned(run["id"], self.owner)
         self.assertEqual(still["state"]["market_report"], "safe market text")
 
+    def test_zip_total_byte_accounting_across_files(self):
+        """Multiple individually-small files whose sum exceeds the ceiling are
+        refused — the ZIP bound is a total, not a per-file check."""
+        run = self._completed_run(
+            state={
+                "trade_date": "2026-10-09",
+                "market_report": "market text long enough",
+                "final_trade_decision": "a decision long enough to add up",
+            }
+        )
+        publish(self.store, run["id"])
+        with mock.patch("ta_web.reports._MAX_BYTES", 20):
+            with self.assertRaises(ReportError) as ctx:
+                download(self.store, run["id"], self.owner, "zip")
+            self.assertEqual(ctx.exception.code, "REPORT_TOO_LARGE")
+
     # --- publish is immutable / failure leaves no partial artifacts ---------
 
     def test_publish_failure_leaves_no_ready_metadata(self):
@@ -188,10 +216,24 @@ class ReportsTestCase(unittest.TestCase):
         reloaded = self.store.worker_run(run["id"])
         self.assertFalse(reloaded["artifacts_ready"])
         self.assertEqual(reloaded["state"]["market_report"], "safe market text")
-        exports_dir = self.store.research_dir / "runs" / run["id"] / "exports"
+        exports_dir = self.store.research_dir / "users" / self.owner / "runs" / run["id"] / "exports"
         self.assertFalse(exports_dir.exists())
-        stage_dirs = list((self.store.research_dir / "runs" / run["id"]).glob(".exports-*"))
+        stage_dirs = list((self.store.research_dir / "users" / self.owner / "runs" / run["id"]).glob(".exports-*"))
         self.assertEqual(stage_dirs, [])
+
+    def test_publish_fsync_failure_leaves_no_ready_metadata(self):
+        """Injected fsync failure must abort publish: no readiness, no
+        truncated/renamed artifact — only a durability error propagated."""
+        run = self._completed_run()
+        with mock.patch("ta_web.reports.os.fsync", side_effect=OSError("fsync failed")):
+            with self.assertRaises(ReportError) as ctx:
+                publish(self.store, run["id"])
+            self.assertEqual(ctx.exception.code, "EXPORT_FAILED")
+        reloaded = self.store.worker_run(run["id"])
+        self.assertFalse(reloaded["artifacts_ready"])
+        run_dir = self.store.research_dir / "users" / self.owner / "runs" / run["id"]
+        self.assertFalse((run_dir / "exports").exists())
+        self.assertEqual(list(run_dir.glob(".exports-*")), [])
 
     def test_publish_header_only_state_refused(self):
         run = self.store.create(self.owner, _inputs())
@@ -217,7 +259,7 @@ class ReportsTestCase(unittest.TestCase):
     def test_publish_is_immutable_once_written(self):
         run = self._completed_run()
         publish(self.store, run["id"])
-        exports_dir = self.store.research_dir / "runs" / run["id"] / "exports"
+        exports_dir = self.store.research_dir / "users" / self.owner / "runs" / run["id"] / "exports"
         marker = exports_dir / "complete_report.md"
         original = marker.read_bytes()
         marker.write_bytes(original + b"\ntampered")
@@ -254,6 +296,74 @@ class LegacyImportTestCase(unittest.TestCase):
 
         md.write_text("# Imported research\n\nChanged content.", encoding="utf-8")
         self.assertNotEqual(import_folder(self.store, source, self.owner)["id"], first["id"])
+
+    def test_irrelevant_files_do_not_change_fingerprint(self):
+        """Dedupe identity is the recognized report content only — an
+        unrelated config/log/checkpoint file alongside it must never change
+        the fingerprint (review Important: reports.py:82)."""
+        source = self.root / "legacy-irrelevant"
+        source.mkdir()
+        (source / "complete_report.md").write_text("# Stable content", encoding="utf-8")
+
+        first = import_folder(self.store, source, self.owner)
+
+        (source / "config.json").write_text('{"api_key": "leak"}', encoding="utf-8")
+        (source / "run.log").write_text("raw tool trace", encoding="utf-8")
+        (source / "memory.ckpt").write_text("checkpoint blob", encoding="utf-8")
+
+        again = import_folder(self.store, source, self.owner)
+        self.assertEqual(again["id"], first["id"])
+
+    def test_flat_cli_section_files_recognized(self):
+        """cli/run.py's live-display decorator writes flat reports/<section>.md
+        even when 'Save report?' is declined — recognize that exact layout."""
+        source = self.root / "legacy-flat"
+        (source / "reports").mkdir(parents=True)
+        (source / "reports" / "market_report.md").write_text("Flat market section text.", encoding="utf-8")
+        (source / "reports" / "final_trade_decision.md").write_text("Flat decision text.", encoding="utf-8")
+        (source / "message_tool.log").write_text("raw tool trace", encoding="utf-8")
+
+        run = import_folder(self.store, source, self.owner)
+        self.assertTrue(run["partial"])
+        md, _, _ = download(self.store, run["id"], self.owner, "md")
+        self.assertIn(b"Flat market section text.", md)
+        self.assertIn(b"Flat decision text.", md)
+        self.assertNotIn(b"raw tool trace", md)
+
+    def test_oversized_import_rejected_before_persistence(self):
+        """Over-budget content is refused before store.add_import ever runs —
+        no row allocated, no unbounded read."""
+        source = self.root / "legacy-oversized"
+        source.mkdir()
+        (source / "complete_report.md").write_text("x" * 1000, encoding="utf-8")
+        before = self.store.list_owned(self.owner)
+        with mock.patch("ta_web.import_reports._MAX_BYTES", 10):
+            with self.assertRaises(ReportError) as ctx:
+                import_folder(self.store, source, self.owner)
+            self.assertEqual(ctx.exception.code, "REPORT_TOO_LARGE")
+        self.assertEqual(self.store.list_owned(self.owner), before)
+
+    def test_import_section_symlink_not_followed(self):
+        """A symlinked section file is skipped outright, never read/hashed."""
+        secret = self.root / "secret.txt"
+        secret.write_text("private contents", encoding="utf-8")
+        source = self.root / "legacy-symlinked-section"
+        (source / "1_analysts").mkdir(parents=True)
+        os.symlink(secret, source / "1_analysts" / "market.md")
+        with self.assertRaises(ReportError):
+            import_folder(self.store, source, self.owner)
+
+    def test_import_write_failure_cleans_stage_and_rolls_back(self):
+        source = self.root / "legacy-replace-fail"
+        source.mkdir()
+        (source / "complete_report.md").write_text("# will fail on replace", encoding="utf-8")
+        before = self.store.list_owned(self.owner)
+        with mock.patch("ta_web.import_reports.os.replace", side_effect=OSError("boom")), self.assertRaises(OSError):
+            import_folder(self.store, source, self.owner)
+        self.assertEqual(self.store.list_owned(self.owner), before)
+        runs_root = self.store.research_dir / "users" / self.owner / "runs"
+        leftover_stages = list(runs_root.glob("*/.exports-*")) if runs_root.exists() else []
+        self.assertEqual(leftover_stages, [])
 
     def test_import_rejects_malformed_owner_key(self):
         source = self.root / "legacy-bad-owner"

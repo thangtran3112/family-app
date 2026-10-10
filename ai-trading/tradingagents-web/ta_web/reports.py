@@ -82,28 +82,33 @@ def preview(run: Run) -> str:
     return render_report(_ticker(run), state, settings, _report_parts(state))
 
 
-def run_directory(store: Store, run_id: str) -> Path:
-    """Where this run's own files live, beneath the store's one research_dir."""
-    return store.research_dir / "runs" / run_id
+def run_directory(store: Store, owner: str, run_id: str) -> Path:
+    """Where this run's own files live: owner-scoped, beneath research_dir.
+
+    Protocol's locked layout: ``research_dir/users/{owner}/runs/{id}`` — never
+    a shared/ID-only ``runs/`` namespace across owners. ``owner`` must come
+    from the run's own validated, persisted ``owner_id`` (never a caller-
+    supplied value), so this can't be pointed at another owner's tree.
+    """
+    return store.research_dir / "users" / owner / "runs" / run_id
 
 
 def _fsync_tree(path: Path) -> None:
-    """Best-effort durability before the atomic rename; never fails publish."""
+    """Durability before the atomic rename. Raises on failure — a storage
+    error here must abort the publish, not advertise a possibly-truncated
+    artifact as ready."""
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            fd = os.open(os.path.join(root, name), os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+    dfd = os.open(path, os.O_RDONLY)
     try:
-        for root, _dirs, files in os.walk(path):
-            for name in files:
-                fd = os.open(os.path.join(root, name), os.O_RDONLY)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
-        dfd = os.open(path, os.O_RDONLY)
-        try:
-            os.fsync(dfd)
-        finally:
-            os.close(dfd)
-    except OSError:
-        pass
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 
 
 def publish(store: Store, id: str) -> None:
@@ -123,7 +128,7 @@ def publish(store: Store, id: str) -> None:
     if not parts and not state.get("final_trade_decision"):
         raise ReportError("EXPORT_FAILED")
 
-    target_dir = run_directory(store, run["id"])
+    target_dir = run_directory(store, run["owner_id"], run["id"])
     exports_dir = target_dir / "exports"
     if exports_dir.exists():
         return
@@ -213,7 +218,7 @@ def download(store: Store, id: str, viewer: str, format: str) -> tuple[bytes, st
     if run["status"] == "running" or not run["artifacts_ready"]:
         raise ReportError("REPORT_NOT_READY")
 
-    exports_dir = run_directory(store, run["id"]) / "exports"
+    exports_dir = run_directory(store, run["owner_id"], run["id"]) / "exports"
     label = f"{run['id']}-partial" if run["partial"] else run["id"]
     if format == "md":
         return _safe_read(exports_dir, "complete_report.md"), "text/markdown; charset=utf-8", f"{label}.md"
