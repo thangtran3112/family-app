@@ -176,10 +176,26 @@ _STATE_DEBATE_SUBFIELDS = {
     "risk_debate_state": frozenset({"aggressive_history", "conservative_history", "neutral_history"}),
 }
 
-# protocol.md: "defaults is fixed safe provider/model/round allowlist" — the
-# same shape is safe to echo back per-run in the public record.
-_SETTINGS_TEXT_KEYS = ("provider", "model")
-_SETTINGS_INT_KEYS = ("debate_rounds", "risk_rounds")
+# Exact keys of upstream TradingAgentsGraph.run_settings()
+# (tradingagents/graph/trading_graph.py): "version", both model/provider
+# tiers, the analyst list, both round counts, and output_language — already
+# an allowlist upstream ("endpoints ... keys and local paths are never
+# recorded"), so this mirrors it rather than inventing new field names. The
+# config also carries optional "data_vendors"/"tool_vendors" label maps; no
+# task brief defines a vendor-name allowlist yet, and the known exporter/UI
+# fields below are already enough to explain a run, so they're omitted here
+# rather than passed through — add an explicit vendor-label/category
+# allowlist later if a task needs to surface them publicly.
+_SETTINGS_STR_KEYS = (
+    "version",
+    "llm_provider",
+    "deep_think_provider",
+    "deep_think_llm",
+    "quick_think_provider",
+    "quick_think_llm",
+    "output_language",
+)
+_SETTINGS_INT_KEYS = ("max_debate_rounds", "max_risk_discuss_rounds")
 
 _INPUT_KEYS = ("ticker", "analysis_date", "asset_type", "analysts", "research_depth")
 
@@ -207,14 +223,20 @@ def clean_state(state: dict) -> dict:
 
 
 def safe_settings(settings: dict) -> dict:
-    """The public, provider/model/round-only projection of a run's settings."""
+    """The public projection of a run's settings: exactly the upstream
+    ``run_settings()`` metadata fields (version, model/provider tiers,
+    analysts, round counts, output language) — never vendor maps,
+    credentials, endpoints, or any other key."""
     if not isinstance(settings, dict):
         return {}
-    cleaned = {key: settings[key] for key in _SETTINGS_TEXT_KEYS if isinstance(settings.get(key), str)}
+    cleaned = {key: settings[key] for key in _SETTINGS_STR_KEYS if isinstance(settings.get(key), str)}
     for key in _SETTINGS_INT_KEYS:
         value = settings.get(key)
         if isinstance(value, int) and not isinstance(value, bool):
             cleaned[key] = value
+    analysts = settings.get("analysts")
+    if isinstance(analysts, list):
+        cleaned["analysts"] = [a for a in analysts if isinstance(a, str)]
     return cleaned
 
 

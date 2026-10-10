@@ -10,7 +10,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pydantic import ValidationError
-from ta_web.domain import BusyError, Inputs, NotFoundError, owner_key, public_view
+from ta_web.domain import (
+    BusyError,
+    Inputs,
+    NotFoundError,
+    owner_key,
+    public_view,
+    safe_settings,
+)
 from ta_web.store import Store
 
 
@@ -223,9 +230,16 @@ class StoreTestCase(unittest.TestCase):
                 },
             },
             settings={
-                "provider": "openai",
-                "model": "gpt-5",
-                "debate_rounds": 2,
+                "version": "1.2.3",
+                "llm_provider": "openai",
+                "deep_think_provider": "openai",
+                "deep_think_llm": "gpt-5",
+                "quick_think_provider": "openai",
+                "quick_think_llm": "gpt-5-mini",
+                "analysts": ["market"],
+                "max_debate_rounds": 2,
+                "max_risk_discuss_rounds": 1,
+                "output_language": "en",
                 "api_key": secret,
                 "base_url": "https://internal.example/" + secret,
             },
@@ -246,7 +260,21 @@ class StoreTestCase(unittest.TestCase):
         # The legitimate allowlisted content is preserved, not censored away.
         self.assertEqual(view["state"]["market_report"], "a safe report")
         self.assertEqual(view["state"]["investment_debate_state"], {"bull_history": "safe bull text"})
-        self.assertEqual(view["settings"], {"provider": "openai", "model": "gpt-5", "debate_rounds": 2})
+        self.assertEqual(
+            view["settings"],
+            {
+                "version": "1.2.3",
+                "llm_provider": "openai",
+                "deep_think_provider": "openai",
+                "deep_think_llm": "gpt-5",
+                "quick_think_provider": "openai",
+                "quick_think_llm": "gpt-5-mini",
+                "analysts": ["market"],
+                "max_debate_rounds": 2,
+                "max_risk_discuss_rounds": 1,
+                "output_language": "en",
+            },
+        )
 
         # Same assertion straight off the owner's own view: the sanitizer is
         # unconditional, not merely a reader-side filter.
@@ -287,6 +315,59 @@ class StoreTestCase(unittest.TestCase):
                 "research_depth": None,
             },
         )
+
+    def test_safe_settings_matches_producer_schema(self):
+        """Fixture test against the exact upstream ``run_settings()`` shape
+        (tradingagents/graph/trading_graph.py): legitimate metadata survives,
+        vendor maps/credentials/paths/unknown nested extras never do."""
+        producer_settings = {
+            # Exact upstream TradingAgentsGraph.run_settings() fields.
+            "version": "1.9.0",
+            "llm_provider": "openai",
+            "deep_think_provider": "openai",
+            "deep_think_llm": "gpt-5",
+            "quick_think_provider": "openai",
+            "quick_think_llm": "gpt-5-mini",
+            "analysts": ["market", "social", "news", "fundamentals"],
+            "max_debate_rounds": 2,
+            "max_risk_discuss_rounds": 1,
+            "output_language": "en",
+            "data_vendors": {"core_stock_apis": "yfinance", "macro_data": "fred"},
+            "tool_vendors": {"get_stock_data": "alpha_vantage"},
+            # What a producer must never leak publicly.
+            "api_key": "sk-leak",
+            "backend_url": "https://internal.example/sk-leak",
+            "base_url": "https://internal.example/sk-leak",
+            "checkpoint_path": "/var/data/checkpoints/run-1",
+            "nested_extra": {"anything": "goes", "credentials": {"token": "sk-leak"}},
+        }
+
+        cleaned = safe_settings(producer_settings)
+
+        self.assertEqual(
+            cleaned,
+            {
+                "version": "1.9.0",
+                "llm_provider": "openai",
+                "deep_think_provider": "openai",
+                "deep_think_llm": "gpt-5",
+                "quick_think_provider": "openai",
+                "quick_think_llm": "gpt-5-mini",
+                "analysts": ["market", "social", "news", "fundamentals"],
+                "max_debate_rounds": 2,
+                "max_risk_discuss_rounds": 1,
+                "output_language": "en",
+            },
+        )
+        blob = json.dumps(cleaned)
+        for leaked in ("sk-leak", "/var/data/checkpoints", "api_key", "backend_url",
+                       "base_url", "checkpoint_path", "nested_extra",
+                       "data_vendors", "tool_vendors", "alpha_vantage"):
+            self.assertNotIn(leaked, blob)
+
+    def test_safe_settings_non_dict_input_is_empty(self):
+        self.assertEqual(safe_settings(None), {})
+        self.assertEqual(safe_settings("not-a-dict"), {})
 
     # --- update / mark_interrupted ------------------------------------------
 
