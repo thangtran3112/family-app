@@ -718,7 +718,7 @@ def candidates(
             continue
         spread_pct = _r((quote.ask - quote.bid) / mid * 100)
         if (
-            _r(quote.bid) < filters.min_bid
+            _r(quote.bid) < _r(filters.min_bid)
             or quote.open_interest < filters.min_open_interest
             or spread_pct > filters.max_spread_pct
             or (earnings is not None and today <= earnings <= quote.expiry)
@@ -730,7 +730,7 @@ def candidates(
         flags = []
         if ex_dividend is not None and today <= ex_dividend <= quote.expiry:
             flags.append("ex_dividend_before_expiry")
-        if average_cost is not None and quote.strike < _r(average_cost):
+        if average_cost is not None and _r(quote.strike) < _r(average_cost):
             flags.append("strike_below_cost_basis")
         if short_term:
             flags.append("short_term_lots")
