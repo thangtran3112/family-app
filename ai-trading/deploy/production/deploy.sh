@@ -728,29 +728,116 @@ stage_secrets() {
 # exist, must be a plain regular file (never a symlink: an operator or a
 # compromised staging step could otherwise point this script at an arbitrary
 # path outside its own staging directory), and must be readable.
+#
+# Fix round 1 (review): this is always called from inside stage_configs(),
+# which always runs AFTER stage_secrets() has already installed the five
+# SECRET_FILES and armed `trap 'rollback "$?"' ERR` -- calling die() (a bare
+# `exit 1`) here would terminate the script WITHOUT ever running that trap,
+# silently leaving the already-staged secrets un-rolled-back. An ERR trap
+# only fires for a *command* that fails, never for an explicit `exit`
+# (verified empirically), so this reports the error and returns 1 instead;
+# every call site below is a bare statement (no `||`/`if`), which -- under
+# `set -Ee` -- does correctly fire an already-armed ERR trap.
 validate_staged_config_file() {
   local file="$1"
-  [[ -e "$file" ]] || die "missing staged config $file"
-  [[ -L "$file" ]] && die "staged config $file must not be a symlink"
-  [[ -f "$file" ]] || die "staged config $file is not a regular file"
-  [[ -r "$file" ]] || die "staged config $file is not readable"
+  if [[ ! -e "$file" ]]; then
+    echo "deploy: missing staged config $file" >&2
+    return 1
+  fi
+  if [[ -L "$file" ]]; then
+    echo "deploy: staged config $file must not be a symlink" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo "deploy: staged config $file is not a regular file" >&2
+    return 1
+  fi
+  if [[ ! -r "$file" ]]; then
+    echo "deploy: staged config $file is not readable" >&2
+    return 1
+  fi
+}
+
+# validate_active_config_path NAME: before this run's stage_configs() ever
+# records NAME's prior existence or backs it up, refuse an active
+# $APP_DIR/NAME that is a symlink (valid-target or dangling) or any other
+# non-regular existing path (directory, FIFO, device). `[[ -f ]]` alone
+# follows symlinks and treats every other existing-but-wrong-type path as
+# indistinguishable from genuine absence -- conflating those would let
+# rollback replace a symlink's target silently, or record CONFIG_PRIOR_EXISTED=0
+# for a path that is not actually absent, so a later `rm -f` could remove a
+# non-regular path rollback could never have correctly restored anyway.
+# Genuine absence (nothing at all at this path) remains the only
+# CONFIG_PRIOR_EXISTED=0 case -- an untouched first-ever bootstrap is
+# unaffected. Same die()-avoids-bypassing-the-rollback-trap reasoning as
+# validate_staged_config_file above: reports and returns 1, never exits.
+validate_active_config_path() {
+  local name="$1" path="$APP_DIR/$1"
+  if [[ -L "$path" ]]; then
+    echo "deploy: active config $path is a symlink; refusing to proceed" >&2
+    return 1
+  fi
+  if [[ -e "$path" && ! -f "$path" ]]; then
+    echo "deploy: active config $path exists but is not a regular file; refusing to proceed" >&2
+    return 1
+  fi
+}
+
+# validate_staged_compose: parses the two staged Compose files together --
+# the same merged base+mirofish inputs, project-name override, and
+# REGISTRY/IMAGE_TAG/SECRETS_DIR/Caddyfile-sha256 environment the real
+# compose() helper already applies to the *active* files -- via
+# `docker compose ... config --quiet` against the *staged* files, so a
+# malformed staged release is rejected before any backup or active-config
+# mutation, not merely recovered later by a failed pull/up + rollback.
+# `--quiet` suppresses Compose's own resolved (secret-interpolated) output;
+# only its parse/merge error, if any, reaches stderr. Never reads or prints
+# a real secret value itself (SECRETS_DIR is passed only so env_file paths
+# resolve the same way deploy_tag()'s own compose() calls already do). Same
+# die()-avoids-bypassing-the-rollback-trap reasoning as the two functions
+# above: reports and returns 1, never exits.
+validate_staged_compose() {
+  local caddyfile_sha=unset
+  [[ -f "$APP_CONFIG_STAGING_DIR/Caddyfile" ]] && caddyfile_sha="$(sha256sum "$APP_CONFIG_STAGING_DIR/Caddyfile")" && caddyfile_sha="${caddyfile_sha%% *}"
+  if ! AI_TRADING_CADDYFILE_SHA256="$caddyfile_sha" \
+      AI_TRADING_REGISTRY="$REGISTRY" \
+      AI_TRADING_IMAGE_TAG="$IMAGE_TAG" \
+      AI_TRADING_SECRETS_DIR="$SECRETS_DIR" \
+      docker compose --project-name "${DEPLOY_SH_COMPOSE_PROJECT:-ai-trading}" \
+        -f "$APP_CONFIG_STAGING_DIR/docker-compose.yml" \
+        -f "$APP_CONFIG_STAGING_DIR/docker-compose.mirofish.yml" \
+        config --quiet; then
+    echo "deploy: staged Compose configuration is invalid -- docker compose config rejected the staged docker-compose.yml/docker-compose.mirofish.yml" >&2
+    return 1
+  fi
 }
 
 # stage_configs: the config-file analogue of stage_secrets above, called
 # right after it in main flow (by the time this runs, stage_secrets has
 # already armed `trap 'rollback "$?"' ERR`, so any failure in here already
-# rolls back both). Validates every staged file first (no side effects on
-# failure), then records which of the four CONFIG_FILES already exist in
-# $APP_DIR and backs those up into this run's own CONFIG_BACKUP_DIR scratch
-# directory, arms CONFIG_STAGED, and only then atomically installs all four
-# -- exactly task-6-brief's atomic-install core, factored through
-# install_config_file. A later, unrelated failure (secrets, MiroFish,
-# deploy_tag/health-check) still rolls these four back via
+# rolls back both). Validates every staged file first (existence/type/
+# readability, then the merged staged Compose configuration itself -- review
+# round 1: a malformed staged release must be rejected here, not discovered
+# later via a failed pull/up + rollback), then validates every CURRENTLY
+# ACTIVE config path is either genuinely absent or a plain regular file
+# (review round 1: a symlink or other non-regular active path must never be
+# silently conflated with absence) -- all with no side effects on failure.
+# Only once every one of those checks passes does it record which of the
+# four CONFIG_FILES already exist in $APP_DIR and back those up into this
+# run's own CONFIG_BACKUP_DIR scratch directory, arm CONFIG_STAGED, and
+# atomically install all four -- exactly task-6-brief's atomic-install core,
+# factored through install_config_file. A later, unrelated failure (secrets,
+# MiroFish, deploy_tag/health-check) still rolls these four back via
 # restore_or_remove_configs, same as the five SECRET_FILES.
 stage_configs() {
   local name
   for name in "${CONFIG_FILES[@]}"; do
     validate_staged_config_file "$APP_CONFIG_STAGING_DIR/$name"
+  done
+  validate_staged_compose
+
+  for name in "${CONFIG_FILES[@]}"; do
+    validate_active_config_path "$name"
   done
 
   CONFIG_BACKUP_DIR="$(mktemp -d "$APP_DIR/.config-backup-XXXXXX")"

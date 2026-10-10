@@ -227,6 +227,20 @@ run_scenario() {
     export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
     # shellcheck source=/dev/null
     source "$LIB_FILE"
+    # Fix round 1: stage_configs() now runs `docker compose ... config
+    # --quiet` against the staged Compose files (review's required Compose
+    # preflight). Most scenarios here are not testing Compose *parsing*
+    # itself (a dedicated real-docker case below is), so default to a no-op
+    # "compose always succeeds" fake -- never require live Docker for every
+    # scenario. Only define it if the caller hasn't already provided its own
+    # `docker` (e.g. Case 48's tag-logging fake, wrapped around this call).
+    if ! declare -f docker >/dev/null 2>&1; then
+      # shellcheck disable=SC2329
+      docker() {
+        [[ "${1:-}" == compose ]] && return 0
+        command docker "$@"
+      }
+    fi
     render_profiles
     stage_secrets
     stage_configs
@@ -273,6 +287,17 @@ run_scenario_mirofish() {
     export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
     # shellcheck source=/dev/null
     source "$LIB_FILE"
+    # Same reasoning and guard as run_scenario's own default fake above --
+    # only define it if the caller hasn't already (e.g. run_keep_scenario's
+    # own `docker` fake for MIROFISH_ACTIVATE=keep's `compose ps` check,
+    # which this must never clobber).
+    if ! declare -f docker >/dev/null 2>&1; then
+      # shellcheck disable=SC2329
+      docker() {
+        [[ "${1:-}" == compose ]] && return 0
+        command docker "$@"
+      }
+    fi
     render_profiles
     activate_mirofish || true
     if [[ -n "${TEST_CHMOD_RUNTIME_DIR_AFTER_ACTIVATE:-}" ]]; then
@@ -1705,6 +1730,14 @@ result45="$(
     export APP_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
     # shellcheck source=/dev/null
     source "$LIB_FILE"
+    # stage_configs()'s new Compose-parse validation doesn't need real
+    # Docker for this case (it's testing restore/remove failure, not
+    # Compose parsing -- Case 49 below is the dedicated real-docker probe).
+    # shellcheck disable=SC2329
+    docker() {
+      [[ "${1:-}" == compose ]] && return 0
+      command docker "$@"
+    }
     stage_configs
     chmod 0500 "$APP_DIR"
     restore_or_remove_configs && echo OK || echo FAILED
@@ -1841,6 +1874,109 @@ last_tag48="$(grep '^fake docker tag=' "$s48/app/docker.log" 2>/dev/null | tail 
 echo "$last_tag48" | grep -q "tag=$good48 " || fail "case48: rollback's previous-tag redeploy must use AI_TRADING_IMAGE_TAG=$good48 (effective Compose precedence), got: $last_tag48"
 echo "$last_tag48" | grep -q "tag=$new48" && fail "case48: rollback must never carry the stale new tag ($new48) into compose, got: $last_tag48"
 echo "    exit=$status last=$last_tag48"
+
+# Cases 49-51 (A10a fix round 1, review): the required staged-Compose
+# preflight, and the active-config symlink/non-regular-path rejection both
+# findings called for. All three also double as the "failures must safely
+# roll back any already-staged secrets, never bypass the trap via an
+# unchecked exit" regression: each seeds real secrets content via the
+# existing render/stage path, then asserts those secrets actually roll back
+# when the NEW validation fails -- which only holds if validate_staged_
+# config_file/validate_active_config_path/validate_staged_compose report
+# via `return 1`, never `die()`'s raw `exit 1` (empirically confirmed to
+# bypass an already-armed ERR trap entirely).
+
+echo "=== Case 49 (RED, REAL docker compose, A10a fix round 1): a genuinely malformed staged Compose file is rejected by the real 'docker compose config' parser BEFORE any active-config mutation -- the one real-Docker probe proving stage_configs() actually parses, not a fake 'always succeeds' stand-in -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s49="$(new_scratch case49)"
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s49/ci-staging/cloudflared.env"
+  for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+    printf 'OLD_ACTIVE_CONFIG=%s\n' "$name" >"$s49/app/$name"
+  done
+  chmod 0755 "$s49/app/health-check.sh"
+  # Deliberately invalid YAML (not merely semantically wrong) so the real
+  # parser, not a schema-aware linter, is what rejects it.
+  printf 'name: ai-trading-fixture\nservices:\n  web:\n  : not valid yaml :::\n' >"$s49/config-staging/docker-compose.yml"
+  status="$(
+    (
+      APP_DIR="$s49/app"
+      AI_TRADING_SECRETS_DIR="$s49/secrets"
+      ENV_STAGING_DIR="$s49/ci-staging"
+      APP_CONFIG_STAGING_DIR="$s49/config-staging"
+      FAMILY_CONFIG_CREDENTIALS="$s49/fake-reader-key.json"
+      DEPLOY_SH_SKIP_CHOWN=1
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      # Deliberately NO fake `docker` here -- this is the one case that must
+      # exercise the real parser.
+      render_profiles
+      stage_secrets
+      stage_configs
+    )
+    echo "$?"
+  )"
+  if [[ "$status" == 0 ]]; then
+    fail "case49: expected non-zero exit for a malformed staged Compose file, got 0"
+  fi
+  for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+    grep -q "OLD_ACTIVE_CONFIG=$name" "$s49/app/$name" 2>/dev/null || fail "case49: $name must stay completely untouched -- Compose validation must reject before any backup/install"
+  done
+  shopt -s nullglob
+  leftover49=("$s49/app"/.config-backup-*)
+  shopt -u nullglob
+  [[ ${#leftover49[@]} -eq 0 ]] || fail "case49: no config backup scratch should exist -- validation runs before CONFIG_STAGED/backups: ${leftover49[*]}"
+  shopt -s nullglob
+  leftover_secrets49=("$s49/secrets"/*.env)
+  shopt -u nullglob
+  [[ ${#leftover_secrets49[@]} -eq 0 ]] || fail "case49: secrets staged earlier in this same run must roll back too (a validation failure must not bypass the already-armed rollback trap via an unchecked exit): ${leftover_secrets49[*]}"
+  echo "    exit=$status"
+fi
+
+echo "=== Case 50 (RED, A10a fix round 1): an existing ACTIVE config path that is a symlink is rejected before any backup/CONFIG_STAGED -- genuine absence is the only CONFIG_PRIOR_EXISTED=0 case, a symlink is never silently treated as absent or backed up -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s50="$(new_scratch case50)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s50/ci-staging/cloudflared.env"
+printf 'REAL_OLD_TARGET=1\n' >"$s50/real-old-caddyfile-target"
+ln -s "$s50/real-old-caddyfile-target" "$s50/app/Caddyfile"
+status="$(run_scenario "$s50")"
+if [[ "$status" == 0 ]]; then
+  fail "case50: expected non-zero exit when an active config path is a symlink, got 0"
+fi
+[[ -L "$s50/app/Caddyfile" ]] || fail "case50: the active Caddyfile symlink must be left exactly as it was -- rejection happens before any mutation"
+shopt -s nullglob
+leftover50=("$s50/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover50[@]} -eq 0 ]] || fail "case50: no config backup scratch should exist -- the symlink check runs before CONFIG_STAGED/backups: ${leftover50[*]}"
+shopt -s nullglob
+leftover_secrets50=("$s50/secrets"/*.env)
+shopt -u nullglob
+[[ ${#leftover_secrets50[@]} -eq 0 ]] || fail "case50: secrets staged earlier in this same run must roll back too: ${leftover_secrets50[*]}"
+echo "    exit=$status"
+
+echo "=== Case 51 (RED, A10a fix round 1): an existing ACTIVE config path that is a directory (not a regular file) is rejected before any backup/CONFIG_STAGED -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s51="$(new_scratch case51)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s51/ci-staging/cloudflared.env"
+mkdir -p "$s51/app/health-check.sh"
+status="$(run_scenario "$s51")"
+if [[ "$status" == 0 ]]; then
+  fail "case51: expected non-zero exit when an active config path is a directory, got 0"
+fi
+[[ -d "$s51/app/health-check.sh" ]] || fail "case51: the active directory must be left exactly as it was -- rejection happens before any mutation"
+shopt -s nullglob
+leftover51=("$s51/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover51[@]} -eq 0 ]] || fail "case51: no config backup scratch should exist: ${leftover51[*]}"
+shopt -s nullglob
+leftover_secrets51=("$s51/secrets"/*.env)
+shopt -u nullglob
+[[ ${#leftover_secrets51[@]} -eq 0 ]] || fail "case51: secrets staged earlier in this same run must roll back too: ${leftover_secrets51[*]}"
+echo "    exit=$status"
 
 echo
 cleanup
