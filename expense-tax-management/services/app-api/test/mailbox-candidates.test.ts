@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MailboxCandidateV1Schema } from "@expense-tax/contracts";
+import { MAILBOX_OCR_ZERO_AMOUNT_MESSAGE, MailboxCandidateV1Schema } from "@expense-tax/contracts";
 import type { Kysely } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -257,6 +257,7 @@ describe.skipIf(!requested)(
       candidateId: string,
       workflowType: "MailboxMaterializeWorkflow" | "MailboxOcrReceiptWorkflow",
       status: "DISPATCHED" | "RUNNING" | "PENDING" | "SUCCEEDED" | "FAILED" = "DISPATCHED",
+      options: { readonly minutesAgo?: number; readonly errorMessage?: string } = {},
     ): string {
       const jobId = randomUUID();
       const resultSchemaVersion =
@@ -272,13 +273,16 @@ describe.skipIf(!requested)(
           id, tenant_id, personal_profile_id, workflow_type, workflow_id, task_queue,
           dispatch_generation, dispatch_namespace, run_id, status,
           ${workflowType === "MailboxMaterializeWorkflow" ? "target_aggregate_type, target_aggregate_id," : ""}
-          input_params, allowed_result_schema_version, version, created_at, updated_at, dispatched_at, completed_at
+          input_params, allowed_result_schema_version, version, created_at, updated_at, dispatched_at, completed_at${
+            options.errorMessage === undefined ? "" : ", error_message"
+          }
         ) VALUES (
           '${jobId}', '${TENANT_ID}', '${PROFILE_ID}', '${workflowType}', 'job-${jobId}',
           'expense-tax-processing', 1, 'expense-tax', 'fake-run-${jobId}', '${status}',
           ${workflowType === "MailboxMaterializeWorkflow" ? `'${targetAggregateType}', '${candidateId}',` : ""}
-          '{"mailboxCandidateId": "${candidateId}"}', '${resultSchemaVersion}', 2, now(), now(), now(),
-          ${isTerminal ? "now()" : "NULL"}
+          '{"mailboxCandidateId": "${candidateId}"}', '${resultSchemaVersion}', 2,
+          now() - interval '${options.minutesAgo ?? 0} minutes', now(), now(),
+          ${isTerminal ? "now()" : "NULL"}${options.errorMessage === undefined ? "" : `, '${options.errorMessage}'`}
         );
       `);
       return jobId;
@@ -896,6 +900,108 @@ describe.skipIf(!requested)(
 
       const row = runtimeSql(`SELECT status, error_code FROM app.mailbox_candidates WHERE id = '${candidateId}'`);
       expect(row).toBe("failed|OCR_EXTRACTION_FAILED");
+    });
+
+    // ---------------------------------------------------------------- //
+    // Zero-total documents (owner ruling 2026-10-10): a document whose OCR
+    // total is 0.00 is not an expense, so the candidate is skipped, not
+    // failed -- but only when EVERY attachment-OCR job of the current
+    // ingest attempt failed that way.
+    // ---------------------------------------------------------------- //
+
+    async function failOcrJob(jobId: string, message?: string): Promise<void> {
+      const processingJobsDomain = createProcessingJobsDomain(database!, noopStarter());
+      await processingJobsDomain.recordStatusUpdate({
+        jobId,
+        request: {
+          schemaVersion: 1, status: "FAILED", idempotencyKey: `zero-${jobId}`, expectedJobVersion: 2,
+          ...(message === undefined ? {} : { message }),
+        },
+        actorServicePrincipal: "workflow-worker",
+        requestId: randomUUID(),
+      });
+    }
+
+    function candidateRow(candidateId: string): string {
+      return runtimeSql(`SELECT status, error_code FROM app.mailbox_candidates WHERE id = '${candidateId}'`);
+    }
+
+    it("a zero-total OCR failure skips the candidate instead of failing it", async () => {
+      const { connectionId, scanRunId } = createConnectionAndScanRun();
+      const candidateId = insertCandidate(connectionId, scanRunId, { status: "queued" });
+      const jobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+
+      await failOcrJob(jobId, MAILBOX_OCR_ZERO_AMOUNT_MESSAGE);
+
+      expect(candidateRow(candidateId)).toBe("skipped|");
+    });
+
+    it("skips only once every attachment is a zero-total failure", async () => {
+      const { connectionId, scanRunId } = createConnectionAndScanRun();
+      const candidateId = insertCandidate(connectionId, scanRunId, { status: "queued" });
+      const firstJobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+      const secondJobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+
+      await failOcrJob(firstJobId, MAILBOX_OCR_ZERO_AMOUNT_MESSAGE);
+      expect(candidateRow(candidateId)).toBe("queued|"); // a sibling is still in flight
+
+      await failOcrJob(secondJobId, MAILBOX_OCR_ZERO_AMOUNT_MESSAGE);
+      expect(candidateRow(candidateId)).toBe("skipped|");
+    });
+
+    it.each([
+      ["zero first, other failure last", true],
+      ["other failure first, zero last", false],
+    ])("fails the candidate when one attachment failed for another reason (%s)", async (_label, zeroFirst) => {
+      const { connectionId, scanRunId } = createConnectionAndScanRun();
+      const candidateId = insertCandidate(connectionId, scanRunId, { status: "queued" });
+      const zeroJobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+      const otherJobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+
+      const failures: [string, string | undefined][] = [
+        [zeroJobId, MAILBOX_OCR_ZERO_AMOUNT_MESSAGE],
+        [otherJobId, "MAILBOX_OCR_FAILED: extraction or submission error"],
+      ];
+      for (const [jobId, message] of zeroFirst ? failures : failures.reverse()) await failOcrJob(jobId, message);
+
+      expect(candidateRow(candidateId)).toBe("failed|OCR_EXTRACTION_FAILED");
+    });
+
+    it("after a retry, an earlier attempt's failures do not stop a zero-total document from being skipped", async () => {
+      const { connectionId, scanRunId } = createConnectionAndScanRun();
+      const candidateId = insertCandidate(connectionId, scanRunId, { status: "queued" });
+      // First attempt, an hour ago: materialized, then its OCR failed for another reason.
+      insertMailboxJob(candidateId, "MailboxMaterializeWorkflow", "SUCCEEDED", { minutesAgo: 61 });
+      insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow", "FAILED", {
+        minutesAgo: 60, errorMessage: "MAILBOX_OCR_FAILED: extraction or submission error",
+      });
+      // Second attempt (after retry + ingest).
+      insertMailboxJob(candidateId, "MailboxMaterializeWorkflow", "SUCCEEDED");
+      const jobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+
+      await failOcrJob(jobId, MAILBOX_OCR_ZERO_AMOUNT_MESSAGE);
+
+      expect(candidateRow(candidateId)).toBe("skipped|");
+    });
+
+    it("submitResult's FAILED path skips a zero-total document the same way", async () => {
+      const { connectionId, scanRunId } = createConnectionAndScanRun();
+      const candidateId = insertCandidate(connectionId, scanRunId, { status: "queued" });
+      const jobId = insertMailboxJob(candidateId, "MailboxOcrReceiptWorkflow");
+
+      const processingJobsDomain = createProcessingJobsDomain(database!, noopStarter());
+      await processingJobsDomain.submitResult({
+        jobId,
+        request: {
+          schemaVersion: 1, status: "FAILED", idempotencyKey: `zero-submit-${jobId}`, expectedJobVersion: 2,
+          resultSchemaVersion: "ocr-extraction-v1", result: { error: "OCR_FAILED" },
+          message: MAILBOX_OCR_ZERO_AMOUNT_MESSAGE,
+        },
+        actorServicePrincipal: "workflow-worker",
+        requestId: randomUUID(),
+      });
+
+      expect(candidateRow(candidateId)).toBe("skipped|");
     });
 
     it("retry on a processing-caused failure (OCR_EXTRACTION_FAILED) clears to review, same as a Gmail-transient one -- migration 019 allows no other transition out of 'failed'", async () => {

@@ -259,3 +259,11 @@ export interface MailboxIngestionAppClient
 export interface MailboxIngestionProviderAdapter extends MailboxDiscoveryProviderAdapter {
   materialize(input: MaterializeInput): Promise<MailboxMaterializationResultV1>;
 }
+
+/**
+ * The fixed failure message a mailbox OCR job reports (status FAILED) for a
+ * document whose total is zero. App API skips the candidate instead of
+ * failing it: a zero-total document is not an expense. The worker sends this
+ * constant, never the extraction itself (no fields cross into Temporal).
+ */
+export const MAILBOX_OCR_ZERO_AMOUNT_MESSAGE = "MAILBOX_OCR_ZERO_AMOUNT: the document total is zero";

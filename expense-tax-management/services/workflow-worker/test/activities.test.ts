@@ -229,7 +229,7 @@ it("legacy ocr_run_extraction still returns the fake result directly, ignoring t
 // and a fake `fetch`, not a stubbed extractor -- pins the whole classification
 // chain from a fake OpenAI response through ocr_extract_receipt.
 it.each([
-  ["a zero amount", { merchant: "Acme", amount: "0.00", currency: "USD", incurredOn: "2026-09-09", orderNumber: null, notes: null, confidence: 0.9 }],
+  ["an unreadable amount", { merchant: "Acme", amount: "abc", currency: "USD", incurredOn: "2026-09-09", orderNumber: null, notes: null, confidence: 0.9 }],
   ["a date with a time component", { merchant: "Acme", amount: "9.99", currency: "USD", incurredOn: "2019-11-20 11:05 AM", orderNumber: null, notes: null, confidence: 0.9 }],
 ])("rejects a malformed real OpenAI result (%s) as retryable OcrExtractionMalformed, unchanged", async (_label, raw) => {
   const downloadFile = vi.fn().mockResolvedValue(VALID_JPEG_BYTES);
@@ -250,6 +250,30 @@ it.each([
     .catch((error: unknown) => error);
   expect(failure).toBeInstanceOf(ApplicationFailure);
   expect(failure).toMatchObject({ type: "OcrExtractionMalformed", nonRetryable: false });
+  expect(fakeOcrSpy).not.toHaveBeenCalled();
+});
+
+it("fails non-retryably with OcrZeroAmount for a real OpenAI result whose total is zero, never retrying or falling back to the fake extractor", async () => {
+  const downloadFile = vi.fn().mockResolvedValue(VALID_JPEG_BYTES);
+  const fakeFetch = vi.fn().mockResolvedValue(openAiMessageResponse(
+    { merchant: "Acme", amount: "0.00", currency: "USD", incurredOn: "2026-09-09", orderNumber: null, notes: null, confidence: 0.9 },
+  ));
+  const fakeOcrSpy = vi.fn(extractFakeReceipt);
+  const extractReceipt = createReceiptExtractor({
+    openai: createOpenAiReceiptExtractor({ apiKeys: ["test-key"], fetch: fakeFetch, log: () => undefined }),
+    fake: fakeOcrSpy,
+  });
+  const activities = createActivities({
+    appApi: { downloadFile } as unknown as AppApiClient,
+    foundry: {} as FoundryClient,
+    extractReceipt,
+  });
+
+  const failure = await activities
+    .ocr_extract_receipt({ fileId: JOB_ID, expectedSha256: null, route: OPENAI_ROUTE })
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ApplicationFailure);
+  expect(failure).toMatchObject({ type: "OcrZeroAmount", nonRetryable: true });
   expect(fakeOcrSpy).not.toHaveBeenCalled();
 });
 
