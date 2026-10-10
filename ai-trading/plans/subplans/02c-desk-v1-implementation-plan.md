@@ -94,6 +94,7 @@
 |---|---|---|---|---|
 | 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress |
 | 1. Strategy core | Contracts package, backend scaffold, session calendar, indicators, levels, evaluator, intraday and swing templates (no I/O) | none; can run beside Phase 0 | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done |
+| 1b. Ported quant core | Option math, covered-call math, support/resistance level, order sizing (no I/O) | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Plan written; awaiting owner review |
 | 2. Data foundation | Postgres schema, bar store and backfills, IBKR live adapter, futures roll, streaming slots, calendar/news/fundamentals adapters | 0, 1 | `phase-2-data.md` | Planned |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, alert outbox, Telegram/Slack, watchdog checks, compose services, Firestore profile, backups (deployed) | 2 | `phase-3-runtime.md` | Planned |
 | 4. Desk web and hostnames | Desk static app (Today, Strategies, Watchlists, Settings); `trading.tobytran.dev` points at the Desk after the open-source lane moves the hub to `trading-hub` | 3, plus the hub move (open-source lane) | `phase-4-web.md` | Planned |
