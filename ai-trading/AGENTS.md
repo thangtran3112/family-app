@@ -15,7 +15,7 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
 - `trading-hub.tobytran.dev`: the Trading Hub. It carries the registry (`/apps/*`) and the TradingAgents and ai-hedge-fund terminals (`/u/*`).
 - `trading.tobytran.dev`: the Family Desk, our own solution (Release 2).
 - `vibe-trading.tobytran.dev` stays a separate hostname for now. Upstream Vibe-Trading cannot run under a path prefix unmodified: its SPA and API are root-relative (`/api`, `/auth`, `/settings`, ...; the API base is a hard-coded `""`), its router has no base path, and it sends `X-Frame-Options: DENY`, so it cannot be a hub route or be framed. Making it a route would need patched upstream code or a rewriting proxy, which is the owner's decision (see `plans/STATUS.md`), not a default.
-- MiroFish's public hostname is still open (`mirofish-static.tobytran.dev` is staging today).
+- `mirofish.tobytran.dev`: MiroFish (Worker + GCS static UI, `/api/*` through the Caddy/Clerk gate). The `mirofish-static` staging hostname is retired.
 - `tradingagents.tobytran.dev` and `ai-hedge-fund.tobytran.dev`: the two terminals, full-screen, behind the same Caddy/Clerk gate (01l). They also stay `/u/*` routes on the hub.
 - The hub moved to `trading-hub.tobytran.dev` (Worker + GCS, 01l). `trading.tobytran.dev` still serves the hub from `web:3000` only until Desk Phase 4 takes it; do not link to it as the hub or put anything else there.
 
