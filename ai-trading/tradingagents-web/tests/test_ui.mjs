@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apiPath, routeFor } from '../static/app.mjs';
+import { apiPath, routeFor } from '../ta_web/static/app.mjs';
 
 test('research routes retain trusted deployment prefix', () => {
   const id = 'b3f34c8d-5cbd-49cf-a7b5-d7a2d65b1d39';

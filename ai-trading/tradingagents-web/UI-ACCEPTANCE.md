@@ -14,4 +14,4 @@ Task 5 UI checks are native and isolated from production APIs. The shell reads i
 
 ## Pending integration acceptance
 
-Task 4 must wire static shell markers, static assets, and the locked API DTOs before browser verification. With that backend in place, exercise delayed stale responses across two details, recipient read-only state, clipboard rejection fallback, crypto fundamentals disablement, real attachment bytes, and desktop/mobile layout. Real auth, sharing authorization, backend-generated preview safety, and actual downloaded-file contents are not verified by this UI-only task.
+Task 4 must wire package-local `ta_web/static/` shell/assets, replace prefix markers, and connect locked API DTOs before browser verification. With that backend in place, exercise delayed stale responses across two details, recipient read-only state, clipboard rejection fallback, crypto fundamentals disablement, real attachment bytes, and desktop/mobile layout. Real auth, sharing authorization, backend-generated preview safety, and actual downloaded-file contents are not verified by this UI-only task.
