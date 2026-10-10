@@ -102,6 +102,18 @@ def test_best_score_first_and_spread_and_delta_penalties():
     assert ranked[0].quote.strike == 107.0
 
 
+def test_the_scan_keeps_the_best_three():
+    quotes = [
+        call(strike=104.0, bid=1.30, ask=1.34),
+        call(strike=105.0, bid=1.20, ask=1.24),
+        call(strike=106.0, bid=1.10, ask=1.14),
+        call(strike=107.0, bid=1.00, ask=1.04),
+    ]
+    kept = candidates(100.0, quotes, TODAY)
+    assert [c.quote.strike for c in kept] == [104.0, 105.0, 106.0]  # highest yields
+    assert len(candidates(100.0, quotes, TODAY, keep=4)) == 4
+
+
 def test_opportunity_rule():
     [c] = candidates(100.0, [call(bid=1.40, ask=1.44)], TODAY)  # 17% a year
     assert is_opportunity(c, 55)
@@ -147,3 +159,14 @@ def test_iv_rank_and_percentile():
     assert iv_percentile(year) == pytest.approx(100 * 100 / 251, abs=1e-6)  # 0.200 .. 0.299 lie below 0.30
     assert iv_rank(year[:59]) is None and iv_percentile(year[:59]) is None  # under 60 sessions: hidden
     assert iv_rank([0.25] * 100) is None  # a year that never moved has no rank
+
+
+def test_thresholds_survive_floating_point_noise():
+    lots = (Lot(1, 100.01, date(2021, 3, 1)), Lot(1, 100.03, date(2021, 3, 1)))  # average 100.02000000000001 in binary
+    [c] = candidates(100.0, [call(strike=100.02, delta=0.22)], TODAY, lots=lots, taxable=False)
+    assert "strike_below_cost_basis" not in c.flags
+    short = ShortCall(expiry=TODAY + timedelta(days=7), strike=110.0, contracts=1)
+    risks = short_call_risks(
+        short, spot=112.2, today=TODAY, delta=0.4, extrinsic=1.0, next_trading_day=TODAY + timedelta(days=1)
+    )
+    assert risks == ["near_strike_near_expiry"]  # 112.2 - 110.0 is 2.200000000000003 in binary

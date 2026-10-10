@@ -142,6 +142,13 @@ def test_implied_volatility_rejects_impossible_inputs(price, T, message):
 def test_unknown_option_type_is_refused():
     with pytest.raises(ValueError, match="'call' or 'put'"):
         bs_price(100, 100, 1.0, 0.05, 0.2, "c")  # type: ignore[arg-type]
+
+
+def test_float_noise_at_the_intrinsic_floor_is_tolerated_but_a_real_violation_raises():
+    lower = 100 - 95 * math.exp(-0.03 * 0.5)  # discounted intrinsic of a 95 call, spot 100, half a year
+    implied_volatility(lower - 5e-7, 100, 95, 0.5, 0.03)  # within tol: no error
+    with pytest.raises(ValueError, match="below the discounted intrinsic"):
+        implied_volatility(lower - 2e-6, 100, 95, 0.5, 0.03)
 ```
 
 - [ ] **Step 2: Run it and watch it fail.**
@@ -287,7 +294,8 @@ def implied_volatility(
     Returns NaN when no volatility in [MIN_SIGMA, MAX_SIGMA] reprices the quote, and also when the
     quote does not pin a volatility down (very deep in or out of the money, or right before
     expiry, where a whole band of volatilities reprices within `tol`). Raises ValueError for
-    T <= 0, a non-positive S or K, or a price outside the no-arbitrage interval.
+    T <= 0, a non-positive S or K, a price more than `tol` below the discounted intrinsic value, or
+    a price at or above the no-arbitrage ceiling.
     """
     _check(option_type)
     if T <= 0:
@@ -377,7 +385,7 @@ SOFTWARE.
 - [ ] **Step 5: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_options_math.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `9 passed`, ruff clean, then `116 passed`.
+Expected: `10 passed`, ruff clean, then `117 passed`.
 
 - [ ] **Step 6: Commit.**
 
@@ -396,7 +404,7 @@ git commit -m "feat(ai-trading): Desk option pricing, greeks, and implied volati
 - Produces (Phase 5's scan and alerts rely on these):
   - data classes `OptionQuote`, `Lot`, `Filters` (02 defaults), `DEFAULT_FILTERS`, `Candidate`, `ShortCall`
   - `coverable_contracts(shares, max_cover_pct, open_contracts) -> int`
-  - `candidates(spot, quotes, today, *, filters, lots, taxable, tax_advantaged_contracts_free, ex_dividend, earnings, iv_rank, rate) -> list[Candidate]`, best score first
+  - `candidates(spot, quotes, today, *, filters, lots, taxable, tax_advantaged_contracts_free, ex_dividend, earnings, iv_rank, rate, keep=3) -> list[Candidate]`, best score first
   - `is_opportunity(candidate, iv_rank) -> bool`
   - `extrinsic_value(call_mid, spot, strike) -> float`
   - `short_call_risks(call, *, spot, today, delta, extrinsic, next_trading_day, ex_dividend, dividend, earnings) -> list[str]`
@@ -512,6 +520,18 @@ def test_best_score_first_and_spread_and_delta_penalties():
     assert ranked[0].quote.strike == 107.0
 
 
+def test_the_scan_keeps_the_best_three():
+    quotes = [
+        call(strike=104.0, bid=1.30, ask=1.34),
+        call(strike=105.0, bid=1.20, ask=1.24),
+        call(strike=106.0, bid=1.10, ask=1.14),
+        call(strike=107.0, bid=1.00, ask=1.04),
+    ]
+    kept = candidates(100.0, quotes, TODAY)
+    assert [c.quote.strike for c in kept] == [104.0, 105.0, 106.0]  # highest yields
+    assert len(candidates(100.0, quotes, TODAY, keep=4)) == 4
+
+
 def test_opportunity_rule():
     [c] = candidates(100.0, [call(bid=1.40, ask=1.44)], TODAY)  # 17% a year
     assert is_opportunity(c, 55)
@@ -557,6 +577,17 @@ def test_iv_rank_and_percentile():
     assert iv_percentile(year) == pytest.approx(100 * 100 / 251, abs=1e-6)  # 0.200 .. 0.299 lie below 0.30
     assert iv_rank(year[:59]) is None and iv_percentile(year[:59]) is None  # under 60 sessions: hidden
     assert iv_rank([0.25] * 100) is None  # a year that never moved has no rank
+
+
+def test_thresholds_survive_floating_point_noise():
+    lots = (Lot(1, 100.01, date(2021, 3, 1)), Lot(1, 100.03, date(2021, 3, 1)))  # average 100.02000000000001 in binary
+    [c] = candidates(100.0, [call(strike=100.02, delta=0.22)], TODAY, lots=lots, taxable=False)
+    assert "strike_below_cost_basis" not in c.flags
+    short = ShortCall(expiry=TODAY + timedelta(days=7), strike=110.0, contracts=1)
+    risks = short_call_risks(
+        short, spot=112.2, today=TODAY, delta=0.4, extrinsic=1.0, next_trading_day=TODAY + timedelta(days=1)
+    )
+    assert risks == ["near_strike_near_expiry"]  # 112.2 - 110.0 is 2.200000000000003 in binary
 ```
 
 - [ ] **Step 2: Run it and watch it fail.**
@@ -667,12 +698,14 @@ def candidates(
     earnings: date | None = None,
     iv_rank: float | None = None,
     rate: float = 0.0,
+    keep: int = 3,
 ) -> list[Candidate]:
     """Calls that pass the filters for one account and symbol, best score first.
 
     `lots` are this account's lots of the symbol. `tax_advantaged_contracts_free` is how many
     contracts the same owner could still sell in tax-advantaged accounts. An unknown IV rank
-    (short history) adds nothing to the score. The scan keeps the first three.
+    (short history) adds nothing to the score. Returns at most `keep` (02: the scan keeps the top
+    three).
     """
     shares = sum(lot.shares for lot in lots)
     average_cost = sum(lot.shares * lot.cost_per_share for lot in lots) / shares if shares else None
@@ -685,7 +718,7 @@ def candidates(
             continue
         spread_pct = _r((quote.ask - quote.bid) / mid * 100)
         if (
-            quote.bid < filters.min_bid
+            _r(quote.bid) < filters.min_bid
             or quote.open_interest < filters.min_open_interest
             or spread_pct > filters.max_spread_pct
             or (earnings is not None and today <= earnings <= quote.expiry)
@@ -697,7 +730,7 @@ def candidates(
         flags = []
         if ex_dividend is not None and today <= ex_dividend <= quote.expiry:
             flags.append("ex_dividend_before_expiry")
-        if average_cost is not None and quote.strike < average_cost:
+        if average_cost is not None and quote.strike < _r(average_cost):
             flags.append("strike_below_cost_basis")
         if short_term:
             flags.append("short_term_lots")
@@ -726,7 +759,7 @@ def candidates(
                 score=_r(score),
             )
         )
-    return sorted(out, key=lambda c: c.score, reverse=True)
+    return sorted(out, key=lambda c: c.score, reverse=True)[:keep]
 
 
 def is_opportunity(candidate: Candidate, iv_rank: float | None) -> bool:
@@ -754,9 +787,9 @@ def short_call_risks(
     risks = []
     if delta > 0.50:
         risks.append("delta_above_0_50")
-    if (call.expiry - today).days <= 7 and abs(spot - call.strike) <= _r(0.02 * call.strike):
+    if (call.expiry - today).days <= 7 and _r(abs(spot - call.strike)) <= _r(0.02 * call.strike):
         risks.append("near_strike_near_expiry")
-    if ex_dividend == next_trading_day and dividend is not None and extrinsic < dividend:
+    if ex_dividend == next_trading_day and dividend is not None and _r(extrinsic) < _r(dividend):
         risks.append("early_assignment_before_dividend")
     if earnings is not None and today <= earnings <= call.expiry:
         risks.append("earnings_before_expiry")
@@ -805,7 +838,7 @@ def iv_percentile(iv30_history: list[float]) -> float | None:
 - [ ] **Step 4: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_covered_calls.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `25 passed`, ruff clean, then `141 passed`.
+Expected: `27 passed`, ruff clean, then `144 passed`.
 
 - [ ] **Step 5: Commit.**
 
@@ -996,7 +1029,7 @@ Add this row to the Vibe-Trading table in `THIRD_PARTY_NOTICES.md`:
 - [ ] **Step 5: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_levels.py tests/test_evaluate.py tests/test_contracts.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: all pass, ruff clean, then `147 passed`.
+Expected: all pass, ruff clean, then `150 passed`.
 
 - [ ] **Step 6: Commit.**
 
@@ -1221,7 +1254,7 @@ def plan_order(
 - [ ] **Step 4: Run every suite.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_sizing.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `14 passed`, ruff clean, then `161 passed`.
+Expected: `14 passed`, ruff clean, then `164 passed`.
 
 Run (in `contracts/`): `pnpm typecheck && pnpm test`
 Expected: `# pass 40`, `# fail 0`.

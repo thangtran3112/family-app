@@ -133,7 +133,8 @@ def implied_volatility(
     Returns NaN when no volatility in [MIN_SIGMA, MAX_SIGMA] reprices the quote, and also when the
     quote does not pin a volatility down (very deep in or out of the money, or right before
     expiry, where a whole band of volatilities reprices within `tol`). Raises ValueError for
-    T <= 0, a non-positive S or K, or a price outside the no-arbitrage interval.
+    T <= 0, a non-positive S or K, a price more than `tol` below the discounted intrinsic value, or
+    a price at or above the no-arbitrage ceiling.
     """
     _check(option_type)
     if T <= 0:

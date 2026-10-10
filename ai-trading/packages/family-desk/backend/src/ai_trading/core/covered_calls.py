@@ -98,12 +98,14 @@ def candidates(
     earnings: date | None = None,
     iv_rank: float | None = None,
     rate: float = 0.0,
+    keep: int = 3,
 ) -> list[Candidate]:
     """Calls that pass the filters for one account and symbol, best score first.
 
     `lots` are this account's lots of the symbol. `tax_advantaged_contracts_free` is how many
     contracts the same owner could still sell in tax-advantaged accounts. An unknown IV rank
-    (short history) adds nothing to the score. The scan keeps the first three.
+    (short history) adds nothing to the score. Returns at most `keep` (02: the scan keeps the top
+    three).
     """
     shares = sum(lot.shares for lot in lots)
     average_cost = sum(lot.shares * lot.cost_per_share for lot in lots) / shares if shares else None
@@ -116,7 +118,7 @@ def candidates(
             continue
         spread_pct = _r((quote.ask - quote.bid) / mid * 100)
         if (
-            quote.bid < filters.min_bid
+            _r(quote.bid) < filters.min_bid
             or quote.open_interest < filters.min_open_interest
             or spread_pct > filters.max_spread_pct
             or (earnings is not None and today <= earnings <= quote.expiry)
@@ -128,7 +130,7 @@ def candidates(
         flags = []
         if ex_dividend is not None and today <= ex_dividend <= quote.expiry:
             flags.append("ex_dividend_before_expiry")
-        if average_cost is not None and quote.strike < average_cost:
+        if average_cost is not None and quote.strike < _r(average_cost):
             flags.append("strike_below_cost_basis")
         if short_term:
             flags.append("short_term_lots")
@@ -157,7 +159,7 @@ def candidates(
                 score=_r(score),
             )
         )
-    return sorted(out, key=lambda c: c.score, reverse=True)
+    return sorted(out, key=lambda c: c.score, reverse=True)[:keep]
 
 
 def is_opportunity(candidate: Candidate, iv_rank: float | None) -> bool:
@@ -185,9 +187,9 @@ def short_call_risks(
     risks = []
     if delta > 0.50:
         risks.append("delta_above_0_50")
-    if (call.expiry - today).days <= 7 and abs(spot - call.strike) <= _r(0.02 * call.strike):
+    if (call.expiry - today).days <= 7 and _r(abs(spot - call.strike)) <= _r(0.02 * call.strike):
         risks.append("near_strike_near_expiry")
-    if ex_dividend == next_trading_day and dividend is not None and extrinsic < dividend:
+    if ex_dividend == next_trading_day and dividend is not None and _r(extrinsic) < _r(dividend):
         risks.append("early_assignment_before_dividend")
     if earnings is not None and today <= earnings <= call.expiry:
         risks.append("earnings_before_expiry")

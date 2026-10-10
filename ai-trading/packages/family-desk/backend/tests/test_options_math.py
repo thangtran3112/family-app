@@ -55,3 +55,10 @@ def test_implied_volatility_rejects_impossible_inputs(price, T, message):
 def test_unknown_option_type_is_refused():
     with pytest.raises(ValueError, match="'call' or 'put'"):
         bs_price(100, 100, 1.0, 0.05, 0.2, "c")  # type: ignore[arg-type]
+
+
+def test_float_noise_at_the_intrinsic_floor_is_tolerated_but_a_real_violation_raises():
+    lower = 100 - 95 * math.exp(-0.03 * 0.5)  # discounted intrinsic of a 95 call, spot 100, half a year
+    implied_volatility(lower - 5e-7, 100, 95, 0.5, 0.03)  # within tol: no error
+    with pytest.raises(ValueError, match="below the discounted intrinsic"):
+        implied_volatility(lower - 2e-6, 100, 95, 0.5, 0.03)
