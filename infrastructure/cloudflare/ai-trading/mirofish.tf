@@ -17,11 +17,10 @@
 # (plain_text env vars), matching hub-router's existing pattern so the
 # Worker script itself has no Terraform-templated placeholders.
 #
-# Staging only: this file provisions `mirofish_staging_hostname` (Worker-
-# routed) and `mirofish_origin_hostname`. It does not provision the public
-# `mirofish.tobytran.dev` DNS/Worker route — that is a later, separately
-# approved activation task, after task-8 brief Steps 5-9 (Caddy auth proof,
-# staging verification, direct-origin bypass check) all pass.
+# This file provisions `mirofish_staging_hostname` (Worker-routed; since the
+# owner-approved 2026-10-10 cutover it is the public mirofish.tobytran.dev,
+# after the staging checks passed on mirofish-static) and
+# `mirofish_origin_hostname`.
 #
 # `mirofish_origin_hostname` is unrouted BY THE WORKER only (no
 # `cloudflare_workers_route` below names it) — it is NOT network-private.
@@ -41,8 +40,7 @@
 # after the sibling `trading-origin` entry) — added only after this task's
 # local real-Caddy `/api/*` forward_auth integration test passed (A7's
 # authenticated gateway + B5's `/api/*` route, both local-only; no live
-# Cloudflare apply). Public `mirofish.tobytran.dev`/`mirofish-static`
-# Worker routes and the existing public hub/Vibe-Trading routes are
+# Cloudflare apply). The existing public hub/Vibe-Trading routes are
 # untouched by this.
 
 resource "cloudflare_dns_record" "mirofish_staging" {
@@ -52,7 +50,7 @@ resource "cloudflare_dns_record" "mirofish_staging" {
   content = "192.0.2.1" # TEST-NET-1 (RFC 5737): never dialed, the Worker route below intercepts every request first
   ttl     = 1
   proxied = true
-  comment = "ai-trading mirofish static staging (Worker-routed)"
+  comment = "ai-trading mirofish (Worker-routed)"
 }
 
 resource "cloudflare_dns_record" "mirofish_origin" {

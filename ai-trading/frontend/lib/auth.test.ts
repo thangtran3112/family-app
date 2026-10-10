@@ -419,11 +419,8 @@ test("safeReturnTo allows the public https mirofish.tobytran.dev URL with a path
 // B8's staging Worker returns this exact second hostname as returnTo
 // before public cutover (01i progress.md ruling: allow both EXACT
 // hostnames, not a prefix/suffix match against either).
-test("safeReturnTo allows the staging https mirofish-static.tobytran.dev URL with a path", () => {
-  assert.equal(
-    safeReturnTo("https://mirofish-static.tobytran.dev/projects/42"),
-    "https://mirofish-static.tobytran.dev/projects/42",
-  );
+test("safeReturnTo rejects the retired mirofish-static.tobytran.dev staging host", () => {
+  assert.equal(safeReturnTo("https://mirofish-static.tobytran.dev/projects/42"), "/");
 });
 test("safeReturnTo rejects a non-https scheme on either allowed host", () => {
   assert.equal(safeReturnTo("http://mirofish.tobytran.dev/"), "/");
@@ -467,7 +464,7 @@ test("safeReturnTo still allows either host with genuinely no port written at al
   assert.equal(safeReturnTo("https://mirofish.tobytran.dev/graph/1"), "https://mirofish.tobytran.dev/graph/1");
   assert.equal(
     safeReturnTo("https://mirofish-static.tobytran.dev/projects/1"),
-    "https://mirofish-static.tobytran.dev/projects/1",
+    "/",
   );
 });
 // Round-4 review: `new URL` strips every ASCII tab/newline anywhere in

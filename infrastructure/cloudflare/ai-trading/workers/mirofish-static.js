@@ -1,7 +1,6 @@
 // infrastructure/cloudflare/ai-trading/workers/mirofish-static.js
-// Worker for mirofish.tobytran.dev (staging only for now:
-// mirofish-static.tobytran.dev — see task-8 brief Steps 8-9; the public
-// hostname/route are a later activation task). Serves MiroFish's unmodified
+// Worker for mirofish.tobytran.dev (public since the 2026-10-10 cutover;
+// formerly staged on mirofish-static.tobytran.dev). Serves MiroFish's unmodified
 // static Vue build (01e) with Vue history-mode fallback. Hashed assets stay
 // public (01e point 5: only the backend holds private data); any other
 // GET/HEAD is treated as an HTML/SPA route and is gated on
