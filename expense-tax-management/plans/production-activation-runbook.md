@@ -258,7 +258,7 @@ health-check only; no Temporal swap, no new migrations listed in Stage C).
 
 ## 6. Phase 4 — Connected Mailbox (3D) Activation
 
-**Status:** Live 2026-10-08/09 (`main` `be7af1e`). The real Gmail e2e passed through the resolve step. The first receipt's materialization hit the attachment-query bug, which #67/#68 fixed; a re-proof needs a fresh receipt email. Fixes found by the first real run: #56/#59, #60/#62, #63/#64, #65/#66, #67/#68. Ops steps beyond the table: enable the Gmail API, and add an entitlement override for `connected_mailbox_scan`.
+**Status:** Live 2026-10-08/09 (`main` `be7af1e`). The real Gmail e2e passed through the resolve step. The first receipt's materialization hit the attachment-query bug, which #67/#68 fixed. A real Gmail receipt (a JPEG) became an expense end to end on 2026-10-10 (scan, approve, OpenAI OCR, expense). Fixes found by the first real run: #56/#59, #60/#62, #63/#64, #65/#66, #67/#68. Ops steps beyond the table: enable the Gmail API, and add an entitlement override for `connected_mailbox_scan`.
 
 **Nightly-scan findings (2026-10-10).** The first scan of a real mailbox (~100 new messages) failed for four stacked reasons, fixed in #78, #80/#82 and the quota-handling PR:
 
@@ -270,6 +270,8 @@ health-check only; no Temporal swap, no new migrations listed in Stage C).
 Re-run a scan (VPS): `docker exec family-temporal temporal schedule trigger --address temporal:7233 --namespace expense-tax --schedule-id mailbox-schedule-<connectionId>`; check `app.mailbox_scan_runs` for `completed`.
 
 **Attachment OCR finding (2026-10-10).** The first Gmail attachment to reach OCR failed with `OCR_EXTRACTION_FAILED`: the worker reads its input through the generic `GET /internal/v1/jobs/:id/ocr-input`, and that route's workflow-type allowlist lacked `MailboxOcrReceiptWorkflow` (404). Fixed. A candidate that failed this way recovers with the `retry` review action, then `ingest` again (a fresh upload and OCR job).
+
+**Zero-total documents (owner ruling 2026-10-10).** OCR often reads `0.00` from PDFs that are not expenses (the classifier calls any PDF or image attachment a receipt). Expenses must be positive, so such a document used to end `failed` (`OCR_EXTRACTION_FAILED`) after three wasted OpenAI retries. Now the extractor fails it non-retryably as `OcrZeroAmount`, the workflow reports the fixed message `MAILBOX_OCR_ZERO_AMOUNT_MESSAGE`, and App API moves the candidate to `skipped` once every attachment-OCR job of the current attempt failed that way. If any attachment failed for another reason the candidate still fails.
 
 **Precise requirement finding (code-verified, corrects any assumption that
 `advance`/drain gates this phase):** mailbox workflows

@@ -40,6 +40,7 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
   - the owner's Gmail is connected (Personal), with a daily 02:00 scan schedule;
   - Gmail's per-user quota is 6,000 units per rolling minute (a full message fetch costs ~30-60), and it answers an exhausted quota with 403 `rateLimitExceeded`; the broker retries it with a 1 s doubling backoff (63 s in total);
   - one discovery page can take minutes, so the worker's `/discover` timeout is 240 s, the activity's `startToCloseTimeout` 5 min, and the broker's socket timeout 300 s;
+  - a document whose OCR total is 0.00 is skipped automatically (candidate `skipped`, no OpenAI retries); the first real Gmail receipt became an expense on 2026-10-10;
   - re-run a scan on the VPS: `docker exec family-temporal temporal schedule trigger --address temporal:7233 --namespace expense-tax --schedule-id mailbox-schedule-<connectionId>`.
 - Receipt OCR (Capture/Office uploads and Gmail attachments) uses OpenAI through Foundry route versions: `ocr_mode_fast` and `ocr_mode_balanced` use `gpt-5.4-mini`, `ocr_mode_accurate` uses `gpt-5.4`.
   - The worker rotates `OPENAI_API_KEY`, `OPENAI_API_KEY_1`, `OPENAI_API_KEY_2` (Firestore `shared/llm`, linked into the expense profiles) with failover; only `workflow-worker` receives them.
