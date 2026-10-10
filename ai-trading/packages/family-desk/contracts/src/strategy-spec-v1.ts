@@ -43,6 +43,10 @@ export const LevelOperandSchema = z
       level: z.enum(["n_day_high", "n_day_low"]),
       days: z.int().min(2).max(260),
     }),
+    z.strictObject({
+      level: z.enum(["support", "resistance"]),
+      days: z.int().min(20).max(260),
+    }),
   ])
   .meta({ id: "LevelOperand" });
 
