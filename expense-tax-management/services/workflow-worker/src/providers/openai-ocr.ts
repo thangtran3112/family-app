@@ -56,6 +56,8 @@ export function buildOpenAiReceiptRequest(data: Uint8Array, format: ReceiptForma
 }
 
 const malformed = () => ApplicationFailure.retryable("OCR model output invalid", "OcrExtractionMalformed");
+// A document with a zero total is not an expense and re-reading it cannot change that.
+const zeroAmount = () => ApplicationFailure.nonRetryable("Document total is zero", "OcrZeroAmount");
 
 const RawReceiptSchema = z.strictObject({
   merchant: z.string(),
@@ -87,12 +89,14 @@ export function normalizeOpenAiReceipt(text: string): OcrExtractionResultV1 {
   } catch {
     throw malformed();
   }
+  const amount = normalizeAmount(raw.amount);
+  if (amount !== "" && Number(amount) === 0) throw zeroAmount();
   const orderNumber = optionalText(raw.orderNumber, 200);
   const notes = optionalText(raw.notes, 2000);
   const parsed = OcrExtractionResultV1Schema.safeParse({
     schemaVersion: 1,
     merchant: raw.merchant.trim().slice(0, 200),
-    amount: normalizeAmount(raw.amount),
+    amount,
     currency: raw.currency.trim().toUpperCase(),
     incurredOn: raw.incurredOn.trim(),
     ...(orderNumber === undefined ? {} : { orderNumber }),

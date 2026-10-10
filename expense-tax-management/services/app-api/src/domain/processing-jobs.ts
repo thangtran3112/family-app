@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   MAILBOX_MATERIALIZE_WORKFLOW_TYPE,
   MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE,
+  MAILBOX_OCR_ZERO_AMOUNT_MESSAGE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
   JobReferenceV1Schema,
   OcrExtractionResultV1Schema,
@@ -389,9 +390,43 @@ async function resolveMaterializeFailureErrorCode(
     : "MAILBOX_MATERIALIZE_FAILED";
 }
 
+/**
+ * Owner ruling 2026-10-10: a document whose OCR total is zero is not an
+ * expense, so its candidate is skipped rather than failed. True only when
+ * EVERY attachment-OCR job of the current ingest attempt (those created
+ * since the latest materialize job, so a retried candidate ignores its
+ * earlier attempts) failed with the zero-amount message; `currentMessage`
+ * stands in for the job being failed right now, whose own row may not carry
+ * its message yet.
+ */
+async function onlyZeroAmountFailures(
+  transaction: Transaction<AppDatabase>,
+  candidateId: string,
+  currentJobId: string,
+  currentMessage: string | null,
+): Promise<boolean> {
+  const attempt = await transaction
+    .selectFrom("app.processing_jobs")
+    .select((eb) => eb.fn.max("created_at").as("startedAt"))
+    .where("workflow_type", "=", MAILBOX_MATERIALIZE_WORKFLOW_TYPE)
+    .where(sql<string>`input_params ->> 'mailboxCandidateId'`, "=", candidateId)
+    .executeTakeFirst();
+  let siblings = transaction
+    .selectFrom("app.processing_jobs")
+    .select("error_message")
+    .where("workflow_type", "=", MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE)
+    .where("status", "=", "FAILED")
+    .where("id", "!=", currentJobId)
+    .where(sql<string>`input_params ->> 'mailboxCandidateId'`, "=", candidateId);
+  if (attempt?.startedAt) siblings = siblings.where("created_at", ">=", attempt.startedAt);
+  const messages = [currentMessage, ...(await siblings.execute()).map((row) => row.error_message)];
+  return messages.every((message) => message === MAILBOX_OCR_ZERO_AMOUNT_MESSAGE);
+}
+
 async function maybeFailMailboxCandidateInTransaction(
   transaction: Transaction<AppDatabase>,
   job: Pick<ProcessingJobRow, "id" | "workflow_type" | "input_params">,
+  failureMessage: string | null = null,
 ): Promise<void> {
   if (!MAILBOX_CANDIDATE_JOB_WORKFLOW_TYPES.has(job.workflow_type)) return;
   const candidateId = (job.input_params as Record<string, unknown> | null)?.mailboxCandidateId;
@@ -423,12 +458,19 @@ async function maybeFailMailboxCandidateInTransaction(
     .executeTakeFirstOrThrow();
   if (Number(outstanding.count) > 0) return;
 
+  const skipped =
+    job.workflow_type === MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE &&
+    (await onlyZeroAmountFailures(transaction, candidateId, job.id, failureMessage));
   const errorCode = job.workflow_type === MAILBOX_MATERIALIZE_WORKFLOW_TYPE
     ? await resolveMaterializeFailureErrorCode(transaction, candidateId)
     : "OCR_EXTRACTION_FAILED";
   await transaction
     .updateTable("app.mailbox_candidates")
-    .set({ status: "failed", error_code: errorCode, updated_at: new Date() })
+    .set(
+      skipped
+        ? { status: "skipped", updated_at: new Date() }
+        : { status: "failed", error_code: errorCode, updated_at: new Date() },
+    )
     .where("id", "=", candidateId)
     .where("status", "=", "queued")
     .execute();
@@ -556,7 +598,7 @@ export function createProcessingJobsDomain(
               .returningAll()
               .executeTakeFirstOrThrow();
             if (input.request.status === "FAILED") {
-              await maybeFailMailboxCandidateInTransaction(transaction, job);
+              await maybeFailMailboxCandidateInTransaction(transaction, job, input.request.message ?? null);
             }
             await recordAuditEvent(transaction, {
               tenantId: job.tenant_id,
@@ -639,7 +681,7 @@ export function createProcessingJobsDomain(
             // has also reached a terminal state with none succeeding (see
             // its own doc comment for the full multi-attachment rule).
             if (input.request.status === "FAILED") {
-              await maybeFailMailboxCandidateInTransaction(transaction, job);
+              await maybeFailMailboxCandidateInTransaction(transaction, job, input.request.message ?? null);
             }
             const now = new Date();
             const updated = await transaction

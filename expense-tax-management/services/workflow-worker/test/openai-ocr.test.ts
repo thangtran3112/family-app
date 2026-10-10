@@ -32,7 +32,15 @@ describe("normalizeOpenAiReceipt", () => {
   ])("accepts amount %j as %s", (given, expected) => {
     expect(normalizeOpenAiReceipt(JSON.stringify(fields({ amount: given }))).amount).toBe(expected);
   });
-  it.each(["0.00", "-5.00", "1e3", "$31.39", "abc", ""])("rejects amount %j as retryable malformed", (amount) => {
+  it.each(["0.00", "0", "0.0", " 0.000 "])("reports amount %j as a zero-amount document: non-retryable, not malformed output", (amount) => {
+    try { normalizeOpenAiReceipt(JSON.stringify(fields({ amount }))); throw new Error("did not throw"); }
+    catch (error) {
+      expect(error).toBeInstanceOf(ApplicationFailure);
+      expect((error as ApplicationFailure).type).toBe("OcrZeroAmount");
+      expect((error as ApplicationFailure).nonRetryable).toBe(true);
+    }
+  });
+  it.each(["-5.00", "1e3", "$31.39", "abc", ""])("rejects amount %j as retryable malformed", (amount) => {
     try { normalizeOpenAiReceipt(JSON.stringify(fields({ amount }))); throw new Error("did not throw"); }
     catch (error) {
       expect(error).toBeInstanceOf(ApplicationFailure);
