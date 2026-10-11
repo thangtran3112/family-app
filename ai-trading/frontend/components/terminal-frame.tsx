@@ -21,6 +21,17 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
         <a href={app.hostUrl} target="_blank" rel="noopener" aria-label={`Open ${app.name} full-screen (opens in a new tab)`} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-accent px-[18px] text-[13px] leading-5 font-semibold text-on-accent transition-colors duration-150 hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none">
           Open full-screen<ArrowUpRight aria-hidden size={16} strokeWidth={1.6} />
         </a>
+        {app.slug === "tradingagents" && (
+          <a
+            href={new URL("research", app.hostUrl).toString()}
+            target="_blank"
+            rel="noopener"
+            aria-label="Open TradingAgents research dashboard (opens in a new tab)"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] border border-border px-[18px] text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+          >
+            Research dashboard<ArrowUpRight aria-hidden size={16} strokeWidth={1.6} />
+          </a>
+        )}
       </div>
 
       <div className="mt-7 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_276px]">

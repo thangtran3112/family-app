@@ -30,7 +30,7 @@ variable "CLERK_PUBLISHABLE_KEY" {
 }
 
 group "default" {
-  targets = ["web", "ta-terminal", "ahf-terminal", "market-data", "vibe-trading", "mirofish-backend", "auth"]
+  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-trading", "mirofish-backend", "auth"]
 }
 
 target "web" {
@@ -57,6 +57,16 @@ target "ta-terminal" {
     tools = "target:terminal-tools"
   }
   tags = ["${REGISTRY}/ai-trading-ta-terminal:${TAG}"]
+}
+
+target "ta-research" {
+  context    = "ai-trading/deploy/upstream/trading-agents"
+  dockerfile = "web.Dockerfile"
+  contexts = {
+    base = "target:ta-upstream"
+    web  = "ai-trading/tradingagents-web"
+  }
+  tags = ["${REGISTRY}/ai-trading-ta-research:${TAG}"]
 }
 
 target "ahf-terminal" {

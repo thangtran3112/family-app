@@ -95,12 +95,14 @@ jobs:
         run: |
           node --test infrastructure/cloudflare/ai-trading/worker/*.test.js
           node --test infrastructure/cloudflare/ai-trading/workers/*.test.js
+      - name: TradingAgents research UI tests
+        run: node --test ai-trading/tradingagents-web/tests/test_ui.mjs
       - name: Validate compose files
         run: |
           set -euo pipefail
           secrets="$RUNNER_TEMP/ai-trading-secrets"
           mkdir -p "$secrets"
-          for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway cloudflared auth; do : >"$secrets/$name.env"; done
+          for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway cloudflared auth market-data; do : >"$secrets/$name.env"; done
           export AI_TRADING_SECRETS_DIR="$secrets"
           export AI_TRADING_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567
           docker compose -f ai-trading/deploy/production/docker-compose.yml \
@@ -151,3 +153,7 @@ jobs:
         env:
           TAG: ci
         run: ai-trading/deploy/ci/smoke-test.sh all
+      - name: TradingAgents research image tests
+        env:
+          TAG: ci
+        run: ai-trading/deploy/ci/test-tradingagents-research.sh
