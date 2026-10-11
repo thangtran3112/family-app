@@ -116,7 +116,7 @@ Linux unit-test command (no Docker socket or provider keys mounted):
 
 ```bash
 docker run --rm --network none \
-  -v "$PWD/ai-trading/control:/work:ro" -w /work \
+  -v "$PWD/ai-trading:/app:ro" -w /app/control \
   python:3.12-slim python -m unittest discover -s . -v
 ```
 
@@ -144,7 +144,8 @@ Runtime Python interfaces:
 Runtime(app_dir: Path, secrets_dir: Path, runtime_dir: Path,
         project: str = "ai-trading", command=subprocess.run, owner_uid: int = 0)
 Runtime.service_states(services: tuple[str, ...]) -> dict[str, dict]
-Runtime.group_status(app_id: str, enabled: bool) -> str
+Runtime.group_status(app_id: str, enabled: bool,
+                     observations: dict[str, dict] | None = None) -> str
 Runtime.converged(app_id: str, enabled: bool) -> bool
 Runtime.prepare_mirofish(lock_fd: int | None = None) -> bool
 Runtime.apply(app_id: str, enabled: bool) -> None  # fixed commands, raises RuntimeFailure
@@ -563,7 +564,7 @@ cannot deadlock a deploy which waits for helper readiness while owning the lock.
 - [ ] **4. Run all control tests GREEN and commit.**
 
 ```bash
-docker run --rm --network none -v "$PWD/ai-trading/control:/work:ro" -w /work python:3.12-slim python -m unittest discover -s . -v
+docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
 git add ai-trading/control/server.py ai-trading/control/test_server.py
 git commit -m "feat(ai-trading): private peer-checked app control helper"
 ```
@@ -1006,7 +1007,7 @@ ai-trading/deploy/ci/smoke-test.sh all
 ai-trading/deploy/ci/test-deploy-firestore.sh
 ai-trading/deploy/ci/test-app-controls-deploy.sh
 ai-trading/deploy/ci/test-app-controls-gateway.sh
- docker run --rm --network none -v "$PWD/ai-trading/control:/work:ro" -w /work python:3.12-slim python -m unittest discover -s . -v
+docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
 (cd ai-trading/auth && npm test)
 (cd ai-trading/frontend && pnpm test && pnpm typecheck && pnpm lint && pnpm build && pnpm test:export)
 ai-trading/deploy/ci/upload-hub-static.test.sh
