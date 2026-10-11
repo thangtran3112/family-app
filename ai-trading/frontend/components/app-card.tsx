@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Clock3, Settings } from "lucide-react";
+import { ArrowUpRight, Clock3, RefreshCw, Settings } from "lucide-react";
 import { appIcons, getAppLaunch, type HubApp } from "@/lib/apps";
-import { appLaunchGate, launchBlockedCopy } from "@/lib/controls";
+import { appLaunchGate, launchGuidance } from "@/lib/controls";
 import { useAppControls } from "@/components/app-controls-provider";
 
 const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -11,7 +11,7 @@ const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:
 export function AppCard({ app }: { app: HubApp }) {
   const Icon = appIcons[app.icon];
   const launch = getAppLaunch(app);
-  const { state, error } = useAppControls();
+  const { state, error, refresh } = useAppControls();
 
   if (!launch) {
     return (
@@ -37,10 +37,11 @@ export function AppCard({ app }: { app: HubApp }) {
   // (never claiming Running or Stopped beyond what the live status says). A
   // failed refresh (`error` set) must not keep presenting a now-unconfirmed
   // cached snapshot as live availability, so it's treated the same as
-  // "unknown" -- which, like the initial unloaded state, defaults to the
-  // normal CTA rather than guessing either way.
+  // "unknown" as the initial unloaded state -- and `launchGuidance` gives
+  // "unknown" its own distinct, non-launching copy (never the normal CTA,
+  // never "Stopped" either).
   const gate = appLaunchGate(error ? null : state, app.slug);
-  const blocked = gate.kind === "blocked" ? launchBlockedCopy(gate.status) : null;
+  const guidance = launchGuidance(gate);
 
   return (
     <article className="flex min-h-[232px] min-w-0 flex-col gap-4 rounded-xl border border-border bg-card p-5 md:min-h-[244px] xl:min-h-[208px] xl:px-6 xl:py-[22px]">
@@ -58,15 +59,27 @@ export function AppCard({ app }: { app: HubApp }) {
       </div>
       <p className="max-w-[450px] text-[15px] leading-[22px] text-muted-foreground">{app.summary}</p>
       <div className="mt-auto flex items-center justify-between gap-4">
-        <p className="min-w-0 text-xs leading-[18px] text-muted-foreground">{blocked ? blocked.detail : app.launchNote}</p>
-        {blocked ? (
-          <Link
-            href="/settings"
-            aria-label={`${app.name} ${blocked.headline} Open Settings.`}
-            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-muted px-4 text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
-          >
-            Open Settings<Settings aria-hidden size={15} strokeWidth={1.6} />
-          </Link>
+        <p className="min-w-0 text-xs leading-[18px] text-muted-foreground">{guidance ? guidance.detail : app.launchNote}</p>
+        {guidance ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {guidance.showRefresh && (
+              <button
+                type="button"
+                onClick={refresh}
+                aria-label={`Retry checking ${app.name}'s status`}
+                className={`flex h-11 w-11 items-center justify-center rounded-[7px] border border-border text-foreground transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}
+              >
+                <RefreshCw aria-hidden size={15} />
+              </button>
+            )}
+            <Link
+              href="/settings"
+              aria-label={`${app.name} ${guidance.headline} Open Settings.`}
+              className={`inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[7px] bg-muted px-4 text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
+            >
+              Open Settings<Settings aria-hidden size={15} strokeWidth={1.6} />
+            </Link>
+          </div>
         ) : (
           <Link
             href={launch.href}

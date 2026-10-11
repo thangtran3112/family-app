@@ -204,11 +204,10 @@ export type LaunchGate = { kind: "unknown" } | { kind: "available" } | { kind: "
 
 export function appLaunchGate(state: ControlsState | null, id: string): LaunchGate {
   const entry = state?.apps.find((app) => app.id === id);
-  // Unknown (no snapshot yet, or this id is missing from it) defaults to the
-  // same presentation as "available": never guess Stopped while uncertain,
-  // exactly as never guessing Running while uncertain. This is also what
-  // keeps static export (no live session) showing real destinations/props
-  // via the normal launch branch instead of a fabricated "off" state.
+  // "unknown" (no snapshot yet, this id is missing, or a refresh failed --
+  // callers pass `error ? null : state`) never claims Running *or* Stopped;
+  // `launchGuidance` below gives it its own distinct, non-launching copy
+  // (fix-round-2 review: it must not be rendered the same as "available").
   if (!entry) return { kind: "unknown" };
   if (entry.status === "Running") return { kind: "available" };
   return { kind: "blocked", status: entry.status };
@@ -229,6 +228,29 @@ export function launchBlockedCopy(status: Exclude<AppStatus, "Running">): { head
     case "Error":
       return { headline: "ran into a problem.", detail: "See Settings to retry." };
   }
+}
+
+// Fix-round-2 review (Important #3): "unknown" was rendered identically to
+// "available" -- for a terminal app that meant mounting the live iframe and
+// full-screen/Research actions while nothing had confirmed it was actually
+// reachable, which is not guidance at all and is indistinguishable from
+// confirmed availability. `launchGuidance` gives "unknown" (no snapshot yet,
+// or a failed refresh -- see appLaunchGate) its own distinct copy that never
+// claims Running or Stopped, with a Refresh affordance callers should wire
+// to `useAppControls().refresh`; `available` returns null so callers render
+// their normal launch UI only once status is actually confirmed Running.
+export type LaunchGuidance = { headline: string; detail: string; showRefresh: boolean };
+
+export function launchGuidance(gate: LaunchGate): LaunchGuidance | null {
+  if (gate.kind === "available") return null;
+  if (gate.kind === "unknown") {
+    return {
+      headline: "status can't be confirmed right now.",
+      detail: "Check your connection and try Refresh, or open Settings.",
+      showRefresh: true,
+    };
+  }
+  return { ...launchBlockedCopy(gate.status), showRefresh: false };
 }
 
 // --- Settings panel decisions ---------------------------------------------
@@ -269,34 +291,76 @@ export function nextPollDelayMs(state: ControlsState | null): number {
   return transitioning ? ACTIVE_POLL_MS : IDLE_POLL_MS;
 }
 
-// --- Response ordering -----------------------------------------------------
+// --- Response ordering & mutation exclusivity ------------------------------
 //
-// Fix-round-1 important finding: a GET in flight when a PUT is issued could
-// resolve after the PUT and overwrite its result, because only *prior reads*
-// were aborted (never a pending read racing a new mutation) and session
-// matching alone doesn't order two already-dispatched requests. Revision
-// can't gate this either: a completed operation doesn't bump revision by
-// itself (reconciliation does, asynchronously) -- two different async calls
-// can legitimately resolve carrying the *same* revision.
+// Fix-round-1 found a GET in flight when a PUT is issued could resolve after
+// the PUT and overwrite it -- fixed with a plain monotonic ticket ("most
+// recently begun wins"), since revision can't gate this (a completed
+// operation doesn't bump it by itself; two different calls can legitimately
+// settle with the same revision).
 //
-// `createGenerationGate` is a tiny sequence number: every read or mutation
-// calls `begin()` synchronously, before its own `await`, and only applies
-// its result if `accepts()` still says it's the most recently begun attempt
-// by the time it resolves. A newer attempt (another read OR a mutation)
-// immediately supersedes every earlier one, regardless of arrival order or
-// revision. The provider is the one production caller of this -- it is not
-// reimplemented there as a parallel/untested copy.
-export type GenerationGate = { begin(): number; accepts(ticket: number): boolean };
+// Fix-round-2 review found the plain ticket was not enough: a focus/timer
+// read could still *begin* while a PUT was pending, take a newer ticket than
+// the PUT's, and so make the PUT's own successful snapshot fail its ticket
+// check and get discarded once it settled -- "most recently begun wins" is
+// not the same guarantee as "a pending mutation's result survives". A read
+// must never even be allowed to start while a mutation is in flight, not
+// merely lose a race against one.
+//
+// `createControlsScheduler` is what the provider actually calls for every
+// decision (it is not reimplemented there as a parallel/untested copy):
+// `attemptRead()` returns null outright (no ticket taken, no effect on the
+// current generation) whenever a mutation is pending; `beginMutation()` is
+// never refused and always takes a newer ticket than anything in flight;
+// `isCurrent()` is the one check both a settling read and a settling
+// mutation use to decide whether to apply/reschedule; `endMutation()` always
+// runs (success or failure) so a new read can begin again afterward.
+export type ReadAttempt = { ticket: number };
 
-export function createGenerationGate(): GenerationGate {
-  let current = 0;
+export type ControlsScheduler = {
+  attemptRead(): ReadAttempt | null;
+  beginMutation(): number;
+  isCurrent(ticket: number): boolean;
+  endMutation(): void;
+};
+
+export function createControlsScheduler(): ControlsScheduler {
+  let generation = 0;
+  let mutating = false;
   return {
-    begin(): number {
-      current += 1;
-      return current;
+    attemptRead(): ReadAttempt | null {
+      if (mutating) return null;
+      generation += 1;
+      return { ticket: generation };
     },
-    accepts(ticket: number): boolean {
-      return ticket === current;
+    beginMutation(): number {
+      mutating = true;
+      generation += 1;
+      return generation;
+    },
+    isCurrent(ticket: number): boolean {
+      return ticket === generation;
+    },
+    endMutation(): void {
+      mutating = false;
     },
   };
+}
+
+// --- Polling cycle outcomes --------------------------------------------------
+//
+// Fix-round-2 review: an already-in-flight read that gets invalidated
+// (aborted by a new mutation, or superseded by a newer read) still resolved
+// to a bare `null` and the polling loop rescheduled anyway at the 30s idle
+// cadence -- capable of silently replacing a mutation's own just-set 2s
+// transition timer. `"stale"` is a distinct outcome from `"failed"`
+// (a genuine fetch error) specifically so the polling loop can tell "this
+// attempt was invalidated, some newer attempt already owns scheduling" apart
+// from "this attempt genuinely failed, schedule the idle cadence" -- and
+// never reschedule for the former.
+export type ReadOutcome = { kind: "applied"; state: ControlsState } | { kind: "failed" } | { kind: "stale" };
+
+export function pollDelayAfter(outcome: ReadOutcome): number | null {
+  if (outcome.kind === "stale") return null;
+  return nextPollDelayMs(outcome.kind === "applied" ? outcome.state : null);
 }

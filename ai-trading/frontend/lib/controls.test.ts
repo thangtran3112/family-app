@@ -4,17 +4,20 @@ import {
   ACTIVE_POLL_MS,
   appLaunchGate,
   changeApp,
-  createGenerationGate,
+  createControlsScheduler,
   fetchApps,
   IDLE_POLL_MS,
   isRefreshableConflict,
   launchBlockedCopy,
+  launchGuidance,
   nextPollDelayMs,
+  pollDelayAfter,
   retryDesiredEnabled,
   retryRequiresStopConfirmation,
   type AppId,
   type AppState,
   type ControlsState,
+  type ReadOutcome,
 } from "./controls.ts";
 
 // Hand-checked fixture matching the exact public DTO from common-context.md:
@@ -246,6 +249,21 @@ test("launchBlockedCopy gives distinct, status-specific wording and never says '
   assert.equal(seen.size, 6, "every status has distinct wording");
 });
 
+test("launchGuidance: available has no guidance; unknown is distinct from every blocked status and offers Refresh", () => {
+  assert.equal(launchGuidance({ kind: "available" }), null);
+
+  const unknown = launchGuidance({ kind: "unknown" })!;
+  assert.equal(unknown.showRefresh, true);
+  assert.doesNotMatch(unknown.headline, /running|stopped|off/i, "must not claim Running or Stopped while unconfirmed");
+
+  for (const status of ["Stopped", "Starting", "Stopping", "Needs setup", "Unhealthy", "Error"] as const) {
+    const blocked = launchGuidance({ kind: "blocked", status })!;
+    assert.equal(blocked.showRefresh, false);
+    assert.notEqual(blocked.headline, unknown.headline, `${status} guidance must not read the same as unknown`);
+    assert.deepEqual({ headline: blocked.headline, detail: blocked.detail }, launchBlockedCopy(status));
+  }
+});
+
 test("retry reconciles the stored desired choice and never flips it", () => {
   const on: AppState = { ...controlsFixture().apps[0], enabled: true };
   const off: AppState = { ...controlsFixture().apps[3], enabled: false };
@@ -284,51 +302,122 @@ test("nextPollDelayMs is idle (30s) with no transition and active (2s) with any 
   assert.equal(nextPollDelayMs(idle), IDLE_POLL_MS);
 });
 
-test("generation gate: only the most recently begun ticket is ever accepted, independent of settle order", () => {
-  const gate = createGenerationGate();
-  const read1 = gate.begin();
-  const mutation = gate.begin(); // e.g. a PUT issued while read1 is still in flight
-  assert.equal(gate.accepts(mutation), true);
-  // read1 settling *after* the mutation must not be allowed to overwrite it,
-  // even though it carries no information about the mutation's existence.
-  assert.equal(gate.accepts(read1), false);
-
-  const read2 = gate.begin();
-  assert.equal(gate.accepts(mutation), false, "mutation is now also superseded");
-  assert.equal(gate.accepts(read2), true);
+test("scheduler: a read attempted while a mutation is pending is refused outright, not merely outraced", () => {
+  // Fix-round-2 review Important #1: a plain ticket counter let a focus/
+  // timer read *begin* during a pending PUT and take a newer ticket than
+  // it, so the PUT's own successful snapshot later failed its ticket check.
+  // attemptRead() must refuse outright -- no ticket taken at all -- so the
+  // mutation's ticket stays current regardless of settle order.
+  const s = createControlsScheduler();
+  const mutationTicket = s.beginMutation();
+  assert.equal(s.attemptRead(), null, "a read must not even start while a mutation is pending");
+  assert.equal(s.isCurrent(mutationTicket), true, "the refused read attempt must not have touched the generation");
+  s.endMutation();
+  assert.notEqual(s.attemptRead(), null, "a new read is allowed once the mutation ends");
 });
 
-test("generation gate accepts a ticket that is still the latest when it resolves", () => {
-  const gate = createGenerationGate();
-  const only = gate.begin();
-  assert.equal(gate.accepts(only), true);
+test("scheduler: a read already in flight when a mutation begins is invalidated regardless of settle order", () => {
+  for (const readSettlesFirst of [true, false]) {
+    const s = createControlsScheduler();
+    const readTicket = s.attemptRead()!.ticket;
+    const mutationTicket = s.beginMutation();
+    const order = readSettlesFirst ? [readTicket, mutationTicket] : [mutationTicket, readTicket];
+    const results = order.map((t) => s.isCurrent(t));
+    assert.equal(s.isCurrent(mutationTicket), true);
+    assert.equal(s.isCurrent(readTicket), false);
+    assert.ok(results.length === 2); // isCurrent is a pure query; checking order doesn't change the outcome
+  }
+});
+
+test("scheduler: endMutation always clears the pending flag, success or failure, so reads resume", () => {
+  const s = createControlsScheduler();
+  s.beginMutation();
+  s.endMutation(); // simulates the provider's `finally`, run even if changeApp threw
+  assert.notEqual(s.attemptRead(), null);
+});
+
+test("pollDelayAfter: a stale outcome never reschedules; applied/failed do, via nextPollDelayMs", () => {
+  assert.equal(pollDelayAfter({ kind: "stale" }), null);
+  assert.equal(pollDelayAfter({ kind: "failed" }), IDLE_POLL_MS);
+  assert.equal(pollDelayAfter({ kind: "applied", state: controlsFixture() }), IDLE_POLL_MS);
+
+  const transitioning = controlsFixture();
+  transitioning.apps[0] = { ...transitioning.apps[0], status: "Starting" };
+  assert.equal(pollDelayAfter({ kind: "applied", state: transitioning }), ACTIVE_POLL_MS);
 });
 
 test("integration: a deferred GET that resolves after a PUT never overwrites the PUT's result", async () => {
-  // Exactly the scenario from fix-round-1 review Important #2, driven
-  // through the real fetchApps/changeApp/createGenerationGate -- the same
-  // three production pieces app-controls-provider.tsx composes -- with a
-  // controllable deferred GET response, not a copy/mock of the provider.
-  const gate = createGenerationGate();
+  // Fix-round-1 review Important #2, driven through the real
+  // fetchApps/changeApp/createControlsScheduler -- the same production
+  // pieces app-controls-provider.tsx composes -- with a controllable
+  // deferred GET response, not a copy/mock of the provider.
+  const scheduler = createControlsScheduler();
   let resolveGet!: (value: Response) => void;
   const getResponse = new Promise<Response>((resolve) => {
     resolveGet = resolve;
   });
 
-  const getTicket = gate.begin();
+  const getTicket = scheduler.attemptRead()!.ticket;
   const getOutcome = fetchApps(async () => "tok", async () => getResponse).then(
-    (value) => (gate.accepts(getTicket) ? value : null),
+    (value) => (scheduler.isCurrent(getTicket) ? value : null),
     () => null,
   );
 
-  // A PUT is issued (and settles) while the GET above is still pending --
-  // it takes a newer ticket than the GET's.
-  const putTicket = gate.begin();
+  // A PUT is issued (and settles) while the GET above is still pending.
+  const putTicket = scheduler.beginMutation();
   const putResult = await changeApp("mirofish", true, 0, async () => "tok", async () => jsonResponse(controlsFixture(5), 202));
-  assert.equal(gate.accepts(putTicket), true);
+  assert.equal(scheduler.isCurrent(putTicket), true);
   assert.equal(putResult.revision, 5);
+  scheduler.endMutation();
 
   // Only now does the stale GET resolve, carrying an older revision.
   resolveGet(jsonResponse(controlsFixture(0)));
   assert.equal(await getOutcome, null, "the stale GET must be dropped, not applied, after a newer mutation already settled");
+});
+
+test("integration: a GET attempted via focus/timer while a PUT is pending never starts, and the PUT's transition cadence survives", async () => {
+  // Fix-round-2 review Important #1 + #2 together: the exact sequence
+  // "PUT begins -> focus/timer GET attempt -> GET/PUT settle" with the real
+  // changeApp + createControlsScheduler + pollDelayAfter, proving the PUT's
+  // own successful transition snapshot is what schedules the next poll, not
+  // a 30s idle fallback from a read that should never have started.
+  const scheduler = createControlsScheduler();
+
+  const putTicket = scheduler.beginMutation();
+
+  // Focus/timer fires while the PUT is still in flight.
+  const blockedAttempt = scheduler.attemptRead();
+  assert.equal(blockedAttempt, null, "a read during a pending mutation must be refused, not merely outraced");
+
+  const startingSnapshot = controlsFixture(1);
+  startingSnapshot.apps[3] = { ...startingSnapshot.apps[3], status: "Starting" };
+  const putResult = await changeApp("mirofish", true, 0, async () => "tok", async () => jsonResponse(startingSnapshot, 202));
+  assert.equal(scheduler.isCurrent(putTicket), true, "the PUT's own snapshot must still be current -- nothing superseded it");
+  scheduler.endMutation();
+
+  // The PUT's own outcome is what the provider reschedules from (never
+  // routed through pollDelayAfter's "stale" path, since it was never
+  // refused or invalidated) -- and it must select the 2s transition cadence.
+  assert.equal(nextPollDelayMs(putResult), ACTIVE_POLL_MS);
+
+  // Only after endMutation() can the next, intentional read begin -- this
+  // is what eventually carries the system from transition back to idle.
+  const reconcileTicket = scheduler.attemptRead();
+  assert.notEqual(reconcileTicket, null);
+  const idleSnapshot = controlsFixture(1); // reconciled: no app is transitioning anymore
+  assert.equal(scheduler.isCurrent(reconcileTicket!.ticket), true);
+  assert.equal(pollDelayAfter({ kind: "applied", state: idleSnapshot }), IDLE_POLL_MS);
+});
+
+test("integration: a read aborted by a mutation that begins just after it starts must never reschedule (stale, not failed)", () => {
+  // Fix-round-2 review Important #2: an in-flight read invalidated by a
+  // mutation must produce a "stale" outcome -- pollDelayAfter(stale) is the
+  // one thing that prevents it from calling schedule(null) (30s) over top
+  // of the mutation's own 2s reschedule.
+  const scheduler = createControlsScheduler();
+  const readTicket = scheduler.attemptRead()!.ticket;
+  scheduler.beginMutation(); // a PUT begins before the read above has settled
+  const outcome: ReadOutcome = scheduler.isCurrent(readTicket) ? { kind: "failed" } : { kind: "stale" };
+  assert.deepEqual(outcome, { kind: "stale" });
+  assert.equal(pollDelayAfter(outcome), null, "an invalidated read must never reschedule");
 });

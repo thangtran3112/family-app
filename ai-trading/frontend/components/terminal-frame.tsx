@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowUpRight, ExternalLink, Info, RotateCw, Settings, Terminal } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Info, RefreshCw, RotateCw, Settings, Terminal } from "lucide-react";
 import { appIcons, type ExternalApp, type TerminalApp } from "@/lib/apps";
-import { appLaunchGate, launchBlockedCopy } from "@/lib/controls";
+import { appLaunchGate, launchGuidance } from "@/lib/controls";
 import { useAppControls } from "@/components/app-controls-provider";
 
 const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -12,11 +12,14 @@ const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:
 export function TerminalFrame({ app }: { app: TerminalApp }) {
   const [connection, setConnection] = useState(0);
   const Icon = appIcons[app.icon];
-  const { state, error } = useAppControls();
+  const { state, error, refresh } = useAppControls();
   // See app-card.tsx for why a failed refresh (`error`) is treated the same
   // as "unknown" rather than trusting a now-unconfirmed cached snapshot.
+  // `launchGuidance` gives "unknown" its own distinct, non-launching copy --
+  // the terminal is never mounted (and full-screen/Research never offered)
+  // unless status is actually confirmed Running.
   const gate = appLaunchGate(error ? null : state, app.slug);
-  const blocked = gate.kind === "blocked" ? launchBlockedCopy(gate.status) : null;
+  const guidance = launchGuidance(gate);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-6 pt-7 pb-8 md:p-8 xl:px-10 xl:pt-9 xl:pb-7">
@@ -28,14 +31,26 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
           </div>
           <p className="mt-3 text-[15px] leading-6 text-muted-foreground">{app.summary} Run the original app here.</p>
         </div>
-        {blocked ? (
-          <Link
-            href="/settings"
-            aria-label={`${app.name} ${blocked.headline} Open Settings.`}
-            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-muted px-[18px] text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
-          >
-            Open Settings<Settings aria-hidden size={16} strokeWidth={1.6} />
-          </Link>
+        {guidance ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            {guidance.showRefresh && (
+              <button
+                type="button"
+                onClick={refresh}
+                aria-label={`Retry checking ${app.name}'s status`}
+                className={`flex h-11 w-11 items-center justify-center rounded-[7px] border border-border text-foreground transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}
+              >
+                <RefreshCw aria-hidden size={16} />
+              </button>
+            )}
+            <Link
+              href="/settings"
+              aria-label={`${app.name} ${guidance.headline} Open Settings.`}
+              className={`inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[7px] bg-muted px-[18px] text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
+            >
+              Open Settings<Settings aria-hidden size={16} strokeWidth={1.6} />
+            </Link>
+          </div>
         ) : (
           <>
             <a href={app.hostUrl} target="_blank" rel="noopener" aria-label={`Open ${app.name} full-screen (opens in a new tab)`} className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-accent px-[18px] text-[13px] leading-5 font-semibold text-on-accent transition-colors duration-150 hover:bg-accent/90 motion-reduce:transition-none ${FOCUS_RING}`}>
@@ -57,13 +72,24 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
       </div>
 
       <div className="mt-7 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_276px]">
-        {blocked ? (
+        {guidance ? (
           <section aria-label={`${app.name} status`} className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-border p-8 text-center">
-            <p className="font-medium">{app.name} {blocked.headline}</p>
-            <p className="text-sm text-muted-foreground">{blocked.detail}</p>
-            <Link href="/settings" className={`mt-2 inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-border px-4 text-[13px] font-semibold transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}>
-              Open Settings<Settings aria-hidden size={16} />
-            </Link>
+            <p className="font-medium">{app.name} {guidance.headline}</p>
+            <p className="text-sm text-muted-foreground">{guidance.detail}</p>
+            <div className="mt-2 flex items-center gap-2.5">
+              {guidance.showRefresh && (
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-border px-4 text-[13px] font-semibold transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}
+                >
+                  <RefreshCw aria-hidden size={15} />Refresh
+                </button>
+              )}
+              <Link href="/settings" className={`inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-border px-4 text-[13px] font-semibold transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}>
+                Open Settings<Settings aria-hidden size={16} />
+              </Link>
+            </div>
           </section>
         ) : (
           <section aria-label={`${app.name} terminal`} className="min-w-0 overflow-hidden rounded-xl border border-border">
@@ -102,21 +128,32 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
 // generateMetadata, so the controls-aware launch CTA lives here instead,
 // alongside TerminalFrame's identical gate.
 export function ExternalLaunch({ app }: { app: ExternalApp }) {
-  const { state, error } = useAppControls();
+  const { state, error, refresh } = useAppControls();
   const gate = appLaunchGate(error ? null : state, app.slug);
-  const blocked = gate.kind === "blocked" ? launchBlockedCopy(gate.status) : null;
+  const guidance = launchGuidance(gate);
 
-  if (blocked) {
+  if (guidance) {
     return (
       <div className="mt-6 rounded-[10px] border border-border p-4 text-left">
-        <p className="text-sm font-medium text-foreground">{app.name} {blocked.headline}</p>
-        <p className="mt-2 text-sm text-muted-foreground">{blocked.detail}</p>
-        <Link
-          href="/settings"
-          className={`mt-4 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] bg-muted px-4 py-3 text-[13px] font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
-        >
-          Open Settings<Settings aria-hidden size={16} />
-        </Link>
+        <p className="text-sm font-medium text-foreground">{app.name} {guidance.headline}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{guidance.detail}</p>
+        <div className="mt-4 flex items-center gap-2.5">
+          {guidance.showRefresh && (
+            <button
+              type="button"
+              onClick={refresh}
+              className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] border border-border px-4 py-3 text-[13px] font-semibold text-foreground transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}
+            >
+              <RefreshCw aria-hidden size={16} />Refresh
+            </button>
+          )}
+          <Link
+            href="/settings"
+            className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] bg-muted px-4 py-3 text-[13px] font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
+          >
+            Open Settings<Settings aria-hidden size={16} />
+          </Link>
+        </div>
       </div>
     );
   }
