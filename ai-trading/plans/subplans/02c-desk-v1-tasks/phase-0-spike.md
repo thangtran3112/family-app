@@ -144,7 +144,7 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
 
 - [ ] **Step 1: Apply the decisions.**
   - Write the chosen gateway layout into 02d.
-  - Confirm 02b's cost line on the first bill ($14.50, or $16 with OPRA).
+  - Confirm 02b's cost line on the first bill ($14.50; the add-on includes OPRA L1, 02g §3).
 - [ ] **Step 2: Mark Phase 0 done** in 02c and STATUS.md.
 - [ ] **Step 3: Ship.**
   - Commit (one line, no trailer).

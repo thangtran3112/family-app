@@ -5,6 +5,7 @@ Status: approved in conversation on 2026-10-10, section by section. The phased p
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision
 - [02f-desk-indicators-and-ai-daily-design.md](02f-desk-indicators-and-ai-daily-design.md): technical indicators and the bias (spouse), consensus EPS and the Desk AI daily verdict (owner)
+- [02g-desk-covered-calls-and-futures-swing-design.md](02g-desk-covered-calls-and-futures-swing-design.md): covered calls (owner) and mini/micro futures swing trading (both users)
 - [02-release-2-desk-design.md](02-release-2-desk-design.md): the kept base sections (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12)
 - [STATUS.md](../STATUS.md): decisions log
 - Mockups: Paper file "TobyTest", page "Family Desk · R2 mockups" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG)
@@ -38,7 +39,7 @@ Still valid from 02:
 | User | Style | v1 value |
 |---|---|---|
 | Spouse | Day and one-week trades: US stocks/ETFs, ES/NQ/MES/MNQ, CL/GC. She executes in IBKR or Robinhood. | Live charts with key levels; intraday strategies that alert automatically; paper-testing her setups |
-| Owner | Long-term, swing, tactical; covered calls | Long-term and options strategies that alert automatically; paper-testing covered-call and swing rules |
+| Owner | Long-term, swing, tactical; covered calls; mini and micro futures swings ([02g](02g-desk-covered-calls-and-futures-swing-design.md)) | Long-term and options strategies that alert automatically; paper-testing covered-call and swing rules |
 
 The two main jobs are answering investment questions (stocks, futures, options, mostly covered calls) and watching each user's own lists through their own strategies.
 
@@ -140,7 +141,7 @@ Blocks are code. Adding a block type takes a pull request that changes the Zod s
 | Options | covered-call candidates with 02 §6.3 filters, metrics, and flags; short-call risk rules (02 §6.3) |
 | Review | The Desk AI daily verdict ([02f](02f-desk-indicators-and-ai-daily-design.md) §5): four votes and one structured verdict per stock each trading day, checked in code. It replaces the weekly `persona_review`. Spend is logged, with no cap (owner, 2026-10-10). |
 | Actions | `alert` (channels, severity); `paperOrder` (side, sizing by risk $, shares, % of book, or contracts; stop; target by R or level; bracket); `paperCoveredCall` (sell by delta/DTE, close at % decay, roll rules) |
-| Limits | max trades per day, max open positions, max position $, flat-by time, pause after daily loss, cooldown minutes |
+| Limits | max trades per day, max open positions, max position $, flat-by time, flatten before the weekend (02g), pause after daily loss, cooldown minutes |
 
 Family-wide limits: at most 12 paper orders per day, plus a global off switch.
 
@@ -157,12 +158,14 @@ Family-wide limits: at most 12 paper orders per day, plus a global off switch.
   - N-day breakout on volume
   - pullback to the 20/50-day average in an uptrend
   - RSI extreme reversal
+  - technical bias change (02f §6)
+  - futures position risk: roll due, Friday before the close, margin use (02g §5)
 - **Long-term:**
   - quality dip (drawdown plus valuation)
   - trim/rebalance (position weight, stretched valuation)
   - covered-call income (02 §6.3; runs at 15:30)
   - short-call risk (02 §6.3)
-  - weekly persona review
+  - AI daily view (02f §6; replaces the weekly persona review)
 
 ### 4.6 Editing
 
@@ -420,4 +423,10 @@ All mockups are in the file "TobyTest", page "Family Desk · R2 mockups". Dark i
 | D12 · AI daily brief (desktop) | Every analyzed stock after the close, with the alerts feed |
 | M7 · Watchlist flip (mobile) | A flipped card on a phone |
 | M8 · Stock long-term (mobile) | The verdict, consensus EPS, and alerts on a phone |
+| D13 · Covered calls (desktop) | Coverage for each holding with its reasons, AVGO's candidates with the opportunity banner, a payoff sketch, Desk AI context ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §2) |
+| D14 · Short calls & income (desktop) | Open short calls and risks, the KO roll panel, the assignment note, premium by month, the Monday digest |
+| D15 · Futures swing (desktop) | Pair chips (mini/micro, broker availability), weekly levels, bias gauges, the micro-first sizer, positions with roll warnings, the weekend card |
+| D16 · Futures specs & roll calendar (desktop) | The 12 contracts' specs and approximate margins, mini/micro equivalence, the roll timeline, session hours |
+| M9 · Short-call risk alert (mobile) | The KO alert with roll candidates |
+| M10 · Futures swing position (mobile) | MNQ ×3 with P/L, R multiple, a price ladder, the weekend choice, the roll countdown |
 | M6 · More (mobile) | The off switch first, then Watchlists, Holdings, and Settings; the next IBKR phone approval |
