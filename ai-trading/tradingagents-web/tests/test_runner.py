@@ -532,7 +532,8 @@ class RunnerTestCase(unittest.TestCase):
 
         popen_entered = threading.Event()
         let_popen_return = threading.Event()
-        close_attempting_acquire = threading.Event()
+        outcome_known = threading.Event()
+        contention_outcome = []  # the one real, recorded fact: did close()'s attempt actually contend?
         spawned_procs = []  # any real child Popen actually created, for cleanup
 
         import subprocess as subprocess_module
@@ -550,20 +551,34 @@ class RunnerTestCase(unittest.TestCase):
         start_thread = threading.Thread(target=runner.start, args=(run["id"],))
 
         class _HandshakeLock:
-            """Wraps the real lock to signal the exact moment a thread other
-            than start_thread (i.e. close_thread) reaches its own lock
-            statement — proving close() got there, as opposed to merely "the
-            test slept a while and close_thread's state object still looked
-            alive". Delegates the actual acquire/release to the real lock, so
-            whether that attempt then blocks (fixed code, contended) or
-            succeeds immediately (pre-fix code, uncontended because start()
-            isn't holding the lock during Popen) is still decided for real."""
+            """Wraps the real lock so close_thread's attempt records the
+            actual outcome of a real, non-blocking acquire — not a signal
+            sent merely for reaching this code path, which (per re-review 2)
+            left a window where the test could resume between "signaled" and
+            "actually tried the lock" while the pre-fix lock was still free.
+
+            close_thread (any thread other than start_thread): tries
+            ``real_lock.acquire(blocking=False)`` first. Only *after* that
+            call returns do we know anything, and only then do we record it:
+            True (contended) if it failed — meaning something else, i.e.
+            start_thread, held the lock at that exact instant — else False
+            (no contention), in which case this call already holds the lock
+            and must not acquire it again. On contention, it then blocks for
+            real to actually acquire before proceeding, same as always.
+
+            start_thread: ordinary blocking acquire, unchanged.
+            """
 
             def __enter__(self):
-                if threading.current_thread() is not start_thread:
-                    close_attempting_acquire.set()
-                real_lock.acquire()
-                return self
+                if threading.current_thread() is start_thread:
+                    real_lock.acquire()
+                    return self
+                acquired_immediately = real_lock.acquire(blocking=False)
+                contention_outcome.append(not acquired_immediately)
+                outcome_known.set()
+                if not acquired_immediately:
+                    real_lock.acquire()  # genuinely contended; wait for it for real
+                return self  # either way, this thread now holds real_lock
 
             def __exit__(self, *exc_info):
                 real_lock.release()
@@ -581,19 +596,17 @@ class RunnerTestCase(unittest.TestCase):
 
             close_thread.start()
             close_thread_started = True
-            self.assertTrue(
-                close_attempting_acquire.wait(timeout=5),
-                "close() never reached its own lock acquisition",
-            )
-            # Popen is still held open by let_popen_return, and close() has
-            # just attempted the very lock start() took before calling Popen.
-            # If the fix's lock genuinely spans that call, close() must still
-            # be blocked here — a direct consequence of real lock contention,
-            # not a scheduler-timing guess (the handshake above is what makes
-            # this check meaningful: it proves close() already tried).
-            self.assertTrue(
-                close_thread.is_alive(),
-                "close() returned before start() could register its child (the orphan race)",
+            self.assertTrue(outcome_known.wait(timeout=5), "close()'s lock attempt never completed")
+            # The one thing that actually proves serialization: close()'s own
+            # real, non-blocking acquire attempt genuinely failed because
+            # start_thread held the lock at that instant — not "the thread
+            # object still looks alive", which can be true for unrelated
+            # scheduling reasons even with no contention at all.
+            self.assertEqual(
+                contention_outcome,
+                [True],
+                "close()'s lock attempt was not contended — start() is not holding the "
+                "lock across Popen (the orphan race)",
             )
         finally:
             let_popen_return.set()  # always release the gate so nothing can hang
