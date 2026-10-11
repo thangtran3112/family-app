@@ -1,8 +1,8 @@
 # Release 2 Addendum B: Family Desk Market Data Options
 
-Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day. Prices come from vendor and broker pages read on 2026-10-10 and change often. The verification spike in [02a](02a-desk-v1-strategies-design.md) section 12 re-checks the IBKR items before anyone subscribes.
+Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day. Prices come from vendor and broker pages read on 2026-10-10 and change often. The owner subscribed the IBKR data user on 2026-10-10 ([02e](02e-ibkr-data-user-setup.md)); [02d](02d-desk-spike-results.md) records what the spike confirms.
 
-Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (the Desk v1 design that uses this data), [02-release-2-desk-design.md](02-release-2-desk-design.md) section 5 (superseded where it conflicts), [STATUS.md](../STATUS.md).
+Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (the Desk v1 design that uses this data), [02-release-2-desk-design.md](02-release-2-desk-design.md) (the kept base sections), [STATUS.md](../STATUS.md).
 
 ## 1. Needs
 
@@ -38,7 +38,7 @@ Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (t
 
 | Option | Per month | Real-time coverage | Notes |
 |---|---|---|---|
-| **A. IBKR data login (chosen)** | $4.50–$14.50 | Stocks (all exchanges, extended hours), futures, option greeks; 250 ms | Uses existing accounts, and quotes match the IBKR order ticket. Billed per username; one session per username; $500 minimum equity for subscriptions. Live logins need a weekly 2FA re-login. |
+| **A. IBKR data login (chosen)** | $14.50–$16 | Stocks (all exchanges, extended hours), futures, option greeks; 250 ms | Uses existing accounts, and quotes match the IBKR order ticket. Billed per username; one session per username; $500 minimum equity for subscriptions. Live logins need a weekly 2FA re-login. |
 | B. tastytrade free feed | $0 | Stocks, futures, greeks; streamed in batches of about 100 ms (adjustable) | Needs a new funded account per person, possibly with futures approval. Minute history about 43 days. Its tokens refresh without a person. No upstream app supports it. |
 | C. Data vendors only | $29 | Stocks IEX-only; futures *or* options 15 minutes delayed | Fails real-time futures |
 
@@ -62,7 +62,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
   - Both users share this one subscription.
   - Exchange data is licensed per person, so sharing one non-professional subscription inside the household's own apps is a known gray area. The owner accepted it.
 - **History and reference data:** free sources (section 5).
-- **Expected paid cost:** $4.50–$14.50 per month, at most half of the cap.
+- **Paid cost:** $14.50 a month as subscribed (the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle), or $16 if the probe shows option greeks need OPRA Top of Book. The first bill confirms it.
 
 ## 5. Hybrid Store: What We Keep and What We Fetch
 

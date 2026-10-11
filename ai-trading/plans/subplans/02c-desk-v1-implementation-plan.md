@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> This file is the master plan. Each phase has its own task file under [02c-desk-v1-tasks/](02c-desk-v1-tasks/), written with the writing-plans skill and reviewed by the owner before that phase starts. This keeps every task file small enough to carry complete code. Phase 0 is written in full now.
+> This file is the master plan. Each phase has its own task file under [02c-desk-v1-tasks/](02c-desk-v1-tasks/), written with the writing-plans skill and reviewed by the owner before that phase starts. This keeps every task file small enough to carry complete code. Phases 0, 1, and 1b have task files; each later phase gets its own before it starts.
 
 **Goal:** Ship Family Desk v1 at `trading.tobytran.dev`. User-owned, versioned strategies alert automatically and paper-trade on IBKR paper. They run on one shared IBKR live feed plus a free history store. Delivery is in phases, and each phase ships working, tested software.
 
@@ -10,7 +10,8 @@
 - One Python 3.12 backend image runs two services:
   - `api` (FastAPI): REST, SSE, AG-UI chat, the live stream, and `bar_close_1m` strategy evaluation.
   - `scheduler`: backfills, daily and weekly strategies, imports, and watchdog checks.
-- Strategy specs are JSON, validated by Zod v4 schemas in `ai-trading/contracts`. Those schemas generate JSON Schema, which generates the backend's Pydantic models.
+- The Desk is the package `ai-trading/packages/family-desk/` (`contracts/`, `backend/`, `frontend/`). Provider clients that other ai-trading apps also use live in `ai-trading/common/`.
+- Strategy specs are JSON, validated by Zod v4 schemas in `packages/family-desk/contracts`. Those schemas generate JSON Schema, which generates the backend's Pydantic models.
 - Pure functions in `ai_trading.core` evaluate specs on closed bars stored in PostgreSQL 17.
 - One IB Gateway (IBC) serves live data and paper orders, unless the Phase 0 spike forces the two-gateway fallback.
 - The static Next.js Desk is served from GCS through the existing Worker pattern. `/api/*` reaches `api` through the tunnel and the Clerk/Caddy gate.
@@ -53,7 +54,8 @@
   - No `.env` files inside `ai-trading/`.
   - Never print values.
 - **Public repository (02a §10):** no balances, positions, account numbers, emails, or VPS addresses in commits. Mockups and fixtures use made-up numbers.
-- **Upstream code:** never edit `ai-trading/packages/*` (upstream submodules).
+- **Layout (owner, 2026-10-10):** the Desk lives in `ai-trading/packages/family-desk/` (`contracts/`, `backend/`, and `frontend/` from Phase 4). It never imports another package. Code shared by two or more ai-trading packages (provider clients such as Alpaca and IBKR, a shared database schema, shared types) lives in `ai-trading/common/`. Code adapted from an upstream app is copied in with attribution.
+- **Upstream code:** never edit the upstream submodules under `ai-trading/packages/` (`vibe-trading` only through its fork rules in AGENTS.md).
 - **Git (AGENTS.md):**
   - The main session works in the main checkout on `feature/toby`, merged up to `origin/dev` before new work. A worktree for the main session is opt-in: only with the owner's explicit instruction or approval.
   - Subagents work in `.worktrees/` worktrees, and the main session merges their branches into `feature/toby`.
@@ -91,11 +93,12 @@
 
 | Phase | Ships | Depends on | Task file | Status |
 |---|---|---|---|---|
-| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress |
+| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress: waiting for IBKR to approve the data user |
 | 1. Strategy core | Contracts package, backend scaffold, session calendar, indicators, levels, evaluator, intraday and swing templates (no I/O) | none; can run beside Phase 0 | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done |
-| 2. Data foundation | Postgres schema, bar store and backfills, IBKR live adapter, futures roll, streaming slots, calendar/news/fundamentals adapters | 0, 1 | `phase-2-data.md` | Planned |
+| 1b. Ported quant core | Option math, covered-call math, support/resistance level, order sizing (no I/O) | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done |
+| 2. Data foundation | Provider clients in `ai-trading/common/` (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, then IBKR), Postgres schema, bar store and backfills, futures roll, streaming slots | 1; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, alert outbox, Telegram/Slack, watchdog checks, compose services, Firestore profile, backups (deployed) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | Desk static app (Today, Strategies, Watchlists, Settings); `trading.tobytran.dev` points at the Desk after the open-source lane moves the hub to `trading-hub` | 3, plus the hub move (open-source lane) | `phase-4-web.md` | Planned |
+| 4. Desk web and hostnames | Desk static app (the shell from the mockups; Today, Strategies, Watchlists, and Settings live); `trading.tobytran.dev` points at the Desk (the hub already moved to `trading-hub`) | 3; the shell can start earlier, on fixtures | `phase-4-web.md` | Planned |
 | 5. Long-term | Fundamentals and persona-review blocks, covered-call and short-call templates, Flex and CSV import, Holdings page | 3 (UI after 4) | `phase-5-long-term.md` | Planned |
 | 6. Paper trading | Paper broker with guard, bracket orders, reconciliation, flat-by, limits, off switch, stats, Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
 | 7. Ask | PydanticAI agent over AG-UI with market, strategy, and drafting tools; budgets | 5, 6 | `phase-7-ask.md` | Planned |
@@ -106,15 +109,15 @@
 3. release the phase's ai-trading paths to `main`;
 4. deploy and verify the live result.
 
-Phases 0–2 change nothing that is deployed. Phases 3–7 deploy.
+Phases 0–2 change nothing that is deployed, so they stop at `dev` (as Phases 1 and 1b did); Desk code first goes to `main` with Phase 3. Phases 3–7 deploy.
 
 ## Execution Map
 
 | Wave | Who | What |
 |---|---|---|
-| A | Main session + owner | Phase 0. The owner sets up IBKR (Task 0.4); the main session runs the probes and records results. |
-| B | One subagent in a worktree, after the owner reviews `phase-1-strategy-core.md` | Phase 1. It needs no IBKR access, so it runs while Wave A waits on the owner. |
-| C | Main session with subagents per task file | Phases 2 → 3 → 4, then 5 and 6 (UI tasks after 4), then 7 |
+| A | Main session + owner | Phase 0: waiting for IBKR to approve the data user; then the probes (Task 0.5) and the gateway layout (Task 0.6). |
+| B | Subagents in worktrees | Phases 1 and 1b: no IBKR needed; done or finishing. |
+| C | Main session with subagents per task file | Phase 2 without IBKR first (the IBKR client follows Phase 0), then 3 → 4 (the frontend shell can start early on fixture data), 5 and 6 (UI tasks after 4), then 7. |
 
 ## Shared Interfaces
 
@@ -122,10 +125,14 @@ These names are fixed for every phase. A task file may add names but must not re
 
 | Thing | Name |
 |---|---|
-| Contracts package | `ai-trading/contracts`, pnpm name `@ai-trading/contracts`, schema export `StrategySpecV1Schema` |
-| Generated JSON Schema | `ai-trading/contracts/generated/strategy-spec-v1.schema.json` |
-| Shared spec fixtures | `ai-trading/contracts/fixtures/strategy-spec-v1/{valid,invalid}/*.json` (both test suites read them) |
-| Backend project | `ai-trading/backend`, uv project `ai-trading-desk`, import package `ai_trading` under `src/` |
+| Contracts package | `ai-trading/packages/family-desk/contracts`, pnpm name `@ai-trading/contracts`, schema export `StrategySpecV1Schema` |
+| Generated JSON Schema | `ai-trading/packages/family-desk/contracts/generated/strategy-spec-v1.schema.json` |
+| Shared spec fixtures | `ai-trading/packages/family-desk/contracts/fixtures/strategy-spec-v1/{valid,invalid}/*.json` (both test suites read them) |
+| Strategy templates | `ai-trading/packages/family-desk/contracts/templates/*.json` |
+| Backend project | `ai-trading/packages/family-desk/backend`, uv project `ai-trading-desk`, import package `ai_trading` under `src/` |
+| Desk frontend | `ai-trading/packages/family-desk/frontend` (Phase 4) |
+| Shared ai-trading code | `ai-trading/common/` (created by Phase 2): provider clients (Alpaca, IBKR, SEC EDGAR, FRED, Finnhub, Stooq) with typed errors and as-of guards, a shared schema if two apps share the database, and cross-package types |
+| Attribution | each package's own `THIRD_PARTY_NOTICES.md` |
 | Generated Pydantic models | `ai_trading.contracts.strategy_spec_v1` (generated; never hand-edited) |
 | Backend modules | `ai_trading.core` (pure), `ai_trading.data`, `ai_trading.db`, `ai_trading.engine`, `ai_trading.notify`, `ai_trading.broker`, `ai_trading.agent`, `ai_trading.api`, `ai_trading.jobs` |
 | Services | `api` (port 8000), `scheduler`, `ib-gateway` (paper API 4004 via the image's socat), `desk-postgres` (5432); all internal, no host ports |
@@ -150,36 +157,25 @@ Firestore keys in `ai-trading/desk` (names only; values only through `family_con
 
 Each phase's task file turns its outline into complete, test-first tasks.
 
-### Phase 1: Strategy core (no I/O)
+### Phase 1: Strategy core (no I/O) — done
 
-- **`ai-trading/contracts`:**
-  - `src/strategy-spec-v1.ts`: the Zod v4 schema for 02a §4.3–4.4. Covers watch, when (`all`/`any`/`not` and the operators), then (alert, paperOrder), limits, and `schemaVersion: 1`.
-  - `scripts/generate-json-schema.ts` and `scripts/check-generated.mjs`, mirroring `expense-tax-management/packages/contracts`.
-  - vitest over the shared fixtures.
-- **`ai-trading/backend`:**
-  - uv project with ruff and pytest.
-  - `scripts/generate-contracts.sh` runs `datamodel-code-generator` from the JSON Schema.
-  - A pytest suite checks that the Pydantic models accept and reject exactly the same fixtures as Zod.
-- **`ai_trading.core`:**
-  - `calendar.py`: XNYS and CME sessions via `exchange_calendars`, including half days and DST.
-  - `indicators.py`: SMA, EMA, RSI, ATR, session VWAP, relative volume.
-  - `levels.py`: prior-day high/low/close, pre-market high/low, overnight high/low, opening range, N-day high/low.
-  - `evaluate.py`: closed-bar evaluation of a spec into signal candidates with evidence.
-  - `templates/`: the intraday and swing templates from 02a §4.5.
-- **Acceptance:** golden tests for every template (fires, does not fire, repaint-safe); calendar tests for DST, a half day, and a holiday; a CI job for contracts and backend; `uv run pytest` and `pnpm test` pass.
+Shipped in PR #95; task file [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md). The contracts package, the backend scaffold, the session calendar, indicators, levels, the closed-bar evaluator, and ten intraday and swing templates, now in `packages/family-desk/`.
+
+### Phase 1b: Ported quant core (no I/O)
+
+Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md): option math (from Vibe-Trading), covered-call math (02 §6.3), the support/resistance level (from Vibe-Trading), and paper-order sizing.
 
 ### Phase 2: Data foundation
 
-- **`ai_trading.db`:** SQLAlchemy models and Alembic migrations for the Shared Interfaces tables, plus `deploy/postgres/` role and schema init.
-- **`ai_trading.data`:**
-  - Interfaces: `MarketData`, `Calendar`, `News`, `Fundamentals`.
-  - Adapters: Alpaca history, Stooq daily fallback, IBKR, Finnhub, FRED, SEC EDGAR, Yahoo fallback. The IBKR adapter covers the live 1-minute bar builder, futures history, daily IV, and option snapshots.
-  - The bar store with backfill on watchlist add.
-  - The futures roll map.
-  - The streaming slot manager (priority order from 02a §7).
-  - Internal `/api/data` read models.
+- **`ai-trading/common/`** (new, shared): one client interface per data kind, with explicit fallback chains, typed "no data" versus "provider unavailable" errors, and as-of guards against look-ahead (adapted from TradingAgents' dataflows router; 02a §11):
+  - Alpaca history (move or adapt the open-source lane's `ai-trading/market-data/alpaca.py`), with Stooq as the daily fallback;
+  - SEC EDGAR fundamentals (adapt TradingAgents' `sec_edgar.py`; compare with `market-data/sec.py` and keep one);
+  - FRED observations (vintage pinned to the as-of date) and release dates; Finnhub earnings, dividends, and news (publication-window filtering);
+  - IBKR through `ib_async` (the live 1-minute bar builder, futures history, daily IV, option snapshots), after Phase 0 settles the gateway layout.
+- **Desk `ai_trading.db`:** SQLAlchemy models and Alembic migrations for the Shared Interfaces tables, plus `deploy/postgres/` role and schema init.
+- **Desk `ai_trading.data`:** the bar store with backfill on watchlist add, the futures roll map, the streaming slot manager (priority order from 02a §7), and the internal `/api/data` read models.
 - **Acceptance:**
-  - adapter contract tests on recorded responses, with no network in CI;
+  - client contract tests on recorded responses, with no network in CI;
   - store tests against a real Postgres container;
   - the roll test (no cross-contract gap) and the slot-priority test.
 
@@ -202,30 +198,26 @@ Each phase's task file turns its outline into complete, test-first tasks.
 
 ### Phase 4: Desk web and hostnames
 
-- **Desk static app:**
-  - Today, Strategies (list, builder, versions, JSON view), Watchlists, and Settings (channels, quiet hours, off switch).
-  - The PAPER badge and data-quality labels on every number.
-  - Charts with lightweight-charts.
-  - Built from the Paper mockups.
-- **Infrastructure:**
-  - The open-source lane moves the hub to `trading-hub` (AGENTS.md "Hostnames"). Phase 4 waits for that move and its staging checks; it does not redo them.
-  - Phase 4 then adds a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`) and points `trading.tobytran.dev` at the Desk.
+- **Desk static app** (`packages/family-desk/frontend`, Next.js 16 static export):
+  - a shell with every tab from the Paper mockups (D1–D8, M2–M6; 02a §16), with the PAPER badge and data-quality labels on every number and charts from lightweight-charts; it can start before Phase 3, on fixture data;
+  - Today, Strategies (list, builder, versions, JSON view, new from a template), Watchlists, and Settings (channels, quiet hours, off switch) wired to the API; Holdings, Paper, and Ask stay on fixtures until Phases 5–7.
+- **Infrastructure:** the hub already moved to `trading-hub` (01l). Phase 4 adds a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`), points it at the Desk, updates the hub registry's Desk card, and checks the Clerk origins and `ALLOWED_ORIGINS` (02a §8).
 - **Acceptance:**
-  - a Playwright smoke test: Today → Strategies → create from template → save a version → its alert appears;
-  - the 01h Task 10 staging checks repeated on `trading-hub`.
+  - a Playwright smoke test: Today → Strategies → new from a template → save a version → its alert appears;
+  - `trading.tobytran.dev` serves the Desk behind the Clerk gate (401 without a session, forged identity headers stripped).
 
 ### Phase 5: Long-term
 
-- **Blocks:** fundamentals (SEC EDGAR) and `persona_review` (structured `{signal, confidence, reasoning}` output, within the LLM budget).
-- **Templates:** covered-call and short-call, using 02 §6.3 math adapted from Vibe-Trading `quantlib/options.py` with attribution.
-- **Imports and UI:** IBKR Flex import (Open Positions plus Open Lots), CSV import, and the Holdings page.
+- **Blocks:** fundamentals (SEC EDGAR, through `ai-trading/common`) and `persona_review` (structured `{signal, confidence, reasoning}` output, within the LLM budget; prompts adapted from ai-hedge-fund's personas and TradingAgents' evidence-first analyst and debate prompts, 02a §11).
+- **Templates and jobs:** the covered-call income and short-call risk templates and the 15:30 scan job, on Phase 1b's `covered_calls` math.
+- **Imports and UI:** IBKR Flex import (Open Positions plus Open Lots), CSV import, and the Holdings page (mockup D5).
 - **Acceptance:** golden tests on fixture option chains; Flex import from a fixture statement; budget refusal.
 
 ### Phase 6: Paper trading
 
 - **`ai_trading.broker`:**
   - the paper guard;
-  - limit, stop, and bracket orders through `ib_async`;
+  - limit, stop, and bracket orders through `ib_async`, sized by Phase 1b's `core/sizing.py`;
   - the order-intent outbox, with `orderRef` set to the order intent ID;
   - fills;
   - reconciliation on reconnect and every 15 minutes;
@@ -239,7 +231,7 @@ Each phase's task file turns its outline into complete, test-first tasks.
 ### Phase 7: Ask
 
 - **Agent:** PydanticAI over AG-UI at `/api/agent`.
-- **Tools:** 02 §6.4's tools plus `draft_strategy`, `explain_signal`, `strategy_performance`, `fundamentals`, `futures_info`, `swing_setups`.
+- **Tools:** 02 §6.4's tools plus `draft_strategy`, `explain_signal`, `strategy_performance`, `fundamentals`, `futures_info`, `swing_setups`. Tool descriptions follow TradingAgents' indicator catalog (pattern); `collar_quote` adapts Vibe-Trading's options payoff (02a §11).
 - **Budgets and UI:** usage limits and budgets; the assistant-ui page.
 - **Acceptance:**
   - test-model tool wiring;

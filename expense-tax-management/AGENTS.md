@@ -40,6 +40,7 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
   - the owner's Gmail is connected (Personal), with a daily 02:00 scan schedule;
   - Gmail's per-user quota is 6,000 units per rolling minute (a full message fetch costs ~30-60), and it answers an exhausted quota with 403 `rateLimitExceeded`; the broker retries it with a 1 s doubling backoff (63 s in total);
   - one discovery page can take minutes, so the worker's `/discover` timeout is 240 s, the activity's `startToCloseTimeout` 5 min, and the broker's socket timeout 300 s;
+  - a document whose OCR total is 0.00 is skipped automatically (candidate `skipped`, no OpenAI retries); the first real Gmail receipt became an expense on 2026-10-10;
   - re-run a scan on the VPS: `docker exec family-temporal temporal schedule trigger --address temporal:7233 --namespace expense-tax --schedule-id mailbox-schedule-<connectionId>`.
 - Receipt OCR (Capture/Office uploads and Gmail attachments) uses OpenAI through Foundry route versions: `ocr_mode_fast` and `ocr_mode_balanced` use `gpt-5.4-mini`, `ocr_mode_accurate` uses `gpt-5.4`.
   - The worker rotates `OPENAI_API_KEY`, `OPENAI_API_KEY_1`, `OPENAI_API_KEY_2` (Firestore `shared/llm`, linked into the expense profiles) with failover; only `workflow-worker` receives them.
@@ -71,18 +72,18 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 
 - Default working branch is `feature/toby`; work directly on it permanently, across sessions.
 - Use a separate git worktree with its own throwaway `feature/*` branch only when a worktree is explicitly requested for that session.
-- Before starting new work on `feature/toby`: `git fetch origin`, then fast-forward `feature/toby` onto `origin/dev` (it carries no unmerged unique history once its prior PR is merged).
+- Before starting new work on `feature/toby`: `git fetch origin`, then fast-forward `feature/toby` onto `origin/dev`, or merge `origin/dev` into it when a fast-forward is not possible (other sessions' unmerged commits may be on it).
 - Never commit directly on `dev` or `main`.
 - Push `feature/toby` (or the explicitly requested worktree's branch), then open a pull request to `dev`.
 - Unit/quality check must succeed before merge.
 - Integration result is advisory and must be reported when red.
 - GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge.
-- After a squash merge, `feature/toby` diverges from its now-merged commits; fast-forward it onto the new `origin/dev` tip (or reset+force-push `feature/toby` specifically if fast-forward is not possible) before the next round of work. Never force-push `dev` or `main`.
+- After a squash merge, `feature/toby` diverges from its now-merged commits; merge the new `origin/dev` tip into it (a fast-forward when possible) before the next round of work. Never reset or force-push `feature/toby`: other sessions share it, and a reset drops their unmerged commits. Never force-push `dev` or `main`.
 - Never bypass branch protection.
 - `main` remains outside the development flow until a later release phase.
 - Personal repository standing approval: agents may push `feature/*` branches, open pull requests to `dev`, and squash-merge them into `origin/dev` without execution-time confirmation once the merge conditions above hold.
 - Conserve GitHub Actions minutes: stack commits locally, push only after local verification, and open exactly one pull request per phase; avoid extra pushes to an open pull request unless CI fails.
-- Every other remote write still needs explicit execution-time confirmation immediately before the command: anything targeting `main`, workflow dispatch, ruleset or default-branch changes, and force-pushes other than `feature/toby` resets.
+- Every other remote write still needs explicit execution-time confirmation immediately before the command: anything targeting `main`, workflow dispatch, ruleset or default-branch changes, and any force-push.
 - Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
 - Never inspect, print, commit, or expose secrets.
 - Inspect status and diff before editing; never revert unrelated changes.

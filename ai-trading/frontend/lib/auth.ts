@@ -217,18 +217,12 @@ export function createSessionGatedTask(
 }
 
 const HUB_FALLBACK = "/";
-// B8's staging Worker (infrastructure/cloudflare/ai-trading/workers/
-// mirofish-static.js) passes `mirofish-static.tobytran.dev` as returnTo
-// before the public `mirofish.tobytran.dev` hostname is cut over
-// (01i-mirofish-upstream-implementation progress.md ruling: "Allow EXACT
-// public and staging MiroFish hostnames over HTTPS with no port/userinfo").
-// Both are exact, family-owned hostnames; nothing else matches, including
-// a hostname that merely starts with or contains one of these as a
-// substring. The two terminal hostnames (01l) join them: their Caddy gate
-// sends a signed-out navigation to /login with returnTo set to the terminal root.
+// Exact, family-owned hostnames whose gates send a signed-out visitor to
+// /login with returnTo: MiroFish (its Worker) and the two terminal hostnames
+// (their Caddy blocks, 01l). Nothing else matches, including a hostname that
+// merely starts with or contains one of these.
 const ALLOWED_RETURN_TO_HOSTS: ReadonlySet<string> = new Set([
   "mirofish.tobytran.dev",
-  "mirofish-static.tobytran.dev",
   "tradingagents.tobytran.dev",
   "ai-hedge-fund.tobytran.dev",
 ]);

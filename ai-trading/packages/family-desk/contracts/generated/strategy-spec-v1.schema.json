@@ -150,6 +150,28 @@
             "days"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "days": {
+              "maximum": 260,
+              "minimum": 20,
+              "type": "integer"
+            },
+            "level": {
+              "enum": [
+                "support",
+                "resistance"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "level",
+            "days"
+          ],
+          "type": "object"
         }
       ]
     },

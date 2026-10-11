@@ -107,6 +107,8 @@ def _compute(operand: dict[str, Any], frame: _Frame) -> pd.Series:
         if name.startswith("n_day_"):
             column = name.removeprefix("n_day_")
             return frame.per_day(levels.n_day(frame.daily, unique_days, operand["days"], column))
+        if name in ("support", "resistance"):
+            return frame.per_day(levels.support_resistance(frame.daily, unique_days, operand["days"], name))
         if name in _SESSION_LEVELS:
             return levels.pre_phase(bars, name.rsplit("_", 1)[1])
         return levels.opening_range(bars, frame.asset, operand["minutes"], name.rsplit("_", 1)[1])

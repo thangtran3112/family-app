@@ -80,6 +80,7 @@ smoke_web() {
   expect_status 404 http://127.0.0.1:13000/apps/unknown
   expect_body "/u/tradingagents/" http://127.0.0.1:13000/apps/tradingagents
   expect_body "/u/ai-hedge-fund/" http://127.0.0.1:13000/apps/ai-hedge-fund
+  expect_body "https://mirofish.tobytran.dev" http://127.0.0.1:13000/apps/mirofish
   local headers
   headers="$(curl -fsSI http://127.0.0.1:13000/)"
   grep -qi '^cache-control: no-store' <<<"$headers" || fail "expected no-store Cache-Control on /"

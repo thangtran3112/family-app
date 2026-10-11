@@ -62,3 +62,30 @@ def test_opening_range_longer_than_a_half_day_never_forms():
     day = date(2026, 11, 27)
     out = levels.opening_range(annotate(minute_bars("stock", day), "stock"), "stock", 220, "high")
     assert out.isna().all()
+
+
+def _wave_days() -> tuple[list[date], list[float]]:
+    days = trading_days("stock", date(2026, 10, 6), 61)
+    wave = [100.0, 102.0, 104.0, 106.0, 108.0, 110.0, 108.0, 106.0, 104.0, 102.0] * 6  # lows 100, highs 110
+    return days, wave
+
+
+def test_support_and_resistance_come_from_pivots_around_the_previous_close():
+    days, wave = _wave_days()
+    daily = daily_bars(days[:-1], wave)
+    today = pd.Index([days[-1]])
+    assert levels.support_resistance(daily, today, 60, "support").iloc[0] == 100.0
+    assert levels.support_resistance(daily, today, 60, "resistance").iloc[0] == 110.0
+
+
+def test_an_unconfirmed_pivot_is_not_a_level():
+    days, wave = _wave_days()
+    daily = daily_bars(days[:-1], wave[:-2] + [95.0, 96.0])  # a new low two bars ago, not yet confirmed
+    out = levels.support_resistance(daily, pd.Index([days[-1]]), 60, "support")
+    assert np.isnan(out.iloc[0])  # 100 is above the previous close and 95 needs 5 more bars
+
+
+def test_support_needs_enough_history():
+    days, wave = _wave_days()
+    daily = daily_bars(days[:10], wave[:10])
+    assert np.isnan(levels.support_resistance(daily, pd.Index([days[10]]), 60, "support").iloc[0])

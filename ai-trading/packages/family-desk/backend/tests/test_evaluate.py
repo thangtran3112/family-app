@@ -179,3 +179,15 @@ def test_premarket_scan_reads_the_bars_closed_by_0830():
     late = minute_bars("stock", DAY)
     set_bar(late, DAY, "08:30", close=104.0)  # closes at 08:31, after the scan
     assert run(spec, late, daily) == []
+
+
+def test_a_close_below_support_fires_with_the_level_as_evidence():
+    days = trading_days("stock", DAY, 62)
+    wave = [100.0, 102.0, 104.0, 106.0, 108.0, 110.0, 108.0, 106.0, 104.0, 102.0] * 6
+    daily = daily_bars(days, wave + [101.0, 97.0])
+    spec = make_spec(
+        {"op": "crosses_below", "left": CLOSE, "right": {"level": "support", "days": 60}}, run_on="daily_close"
+    )
+    found = evaluate(spec, "TEST", "stock", bars_1m=None, bars_1d=daily, as_of=et(DAY, "20:00"))
+    assert times(found) == ["10-06 16:00"]
+    assert found[0].evidence == {"close": 97.0, "support(60)": 100.0}
