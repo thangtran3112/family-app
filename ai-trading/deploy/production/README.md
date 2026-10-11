@@ -7,6 +7,7 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | hub (Worker + GCS) | `https://trading-hub.tobytran.dev/` | Static hub from GCS; `/u/*` and `/__auth/*` through `trading-origin` to Caddy (01l) |
 | `web` | `https://trading.tobytran.dev/` | The same hub, interim host until Desk Phase 4 takes it |
 | `ta-terminal` | `https://tradingagents.tobytran.dev/` | TradingAgents in ttyd + tmux; also `/u/tradingagents/` on the hub |
+| `ta-research` | internal only (own `research` network, port 8182) | Private, owner-scoped TradingAgents research API + static shell (06); `/research`, `/research/*`, `/api/research`, `/api/research/*` at the dedicated host, `/u/tradingagents/research...` on the hub. Own `ta-research-data` volume, never shares `ta-terminal`'s `ta-data`. Never on `ta` with `ta-terminal` -- see "Research (06)" below |
 | `ahf-terminal` | `https://ai-hedge-fund.tobytran.dev/` | ai-hedge-fund in ttyd + tmux; also `/u/ai-hedge-fund/` on the hub |
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
@@ -56,6 +57,31 @@ This is browser-cookie cleanup, not server-side revocation: copied stateless coo
 ## Terminal analyses
 
 TradingAgents is a one-analysis CLI, not a chat loop. The shared captive launcher keeps the tmux pane and output after normal completion, an app error, or Ctrl+C cancellation, then offers **Press Enter to start another analysis**. It never automatically retries a run or opens a shell. Reconnecting attaches to that same pane without launching another analysis; EOF closes it. The image smoke tests exercise this lifecycle for both terminal apps using dummy commands, without provider calls. Deploying new terminal images still interrupts existing panes, so wait for active analyses to finish before rollout.
+
+## Research (06)
+
+`ta-research` serves a private, owner-scoped TradingAgents research history
+(list/detail/share/download) at `/research`/`/api/research` on this
+dedicated host and `/u/tradingagents/research...` on the hub — reachable
+from the hub's TradingAgents terminal page via its "Research dashboard"
+button (`frontend/components/terminal-frame.tsx`), which opens that
+`/u/tradingagents/research` URL in a new tab; see
+`ai-trading/tradingagents-web/DIVERGENCE.md` for the verified integration
+evidence (every case in `ta_web`'s four `tests/test_*.py` files running
+inside the built image — see `ai-trading/deploy/ci/test-tradingagents-research.sh`
+for the current count rather than trusting a number here — plus the full
+real-Caddy `smoke-test.sh all` suite, and the private/share/revoke/download
+contract against the real service). It shares `ta-terminal`'s `tradingagents.env` and
+appuser UID but never its data volume: `ta-research-data` is private to this
+service, and the legacy `ta-data` volume stays terminal-only (no read mount
+by default; see the research plan for the explicit operator import path).
+`ta-research` trusts the identity/prefix headers the gateway sets, so it is
+never on `ta` with `ta-terminal`: it has its own `research` network, joined
+only by `gateway` (same shape as `vibe`), with `FORWARDED_ALLOW_IPS` scoped
+to that network's own fixed subnet, not `"*"` (see `DIVERGENCE.md` "Network
+isolation"). Rollback behaves like every other service in `SERVICES` (`health-check.sh`):
+an unhealthy `ta-research` after a deploy triggers the same automatic
+previous-tag rollback as any other service, not a special case.
 
 ## Deploy
 
