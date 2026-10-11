@@ -20,14 +20,15 @@
 | MiroFish | Deploys keep it in its current state (`MIROFISH_ACTIVATE=keep`); `activate_mirofish` / `stop_mirofish` dispatch inputs turn it on or off. No more manual re-dispatch or `[skip ci]` dance. |
 | Gateway | `deploy.sh` labels the gateway with the Caddyfile's sha256, so a changed Caddyfile recreates it. Before this, Caddyfile changes never reached the running gateway (single-file bind mount keeps the old inode). |
 | Market data (01m, done) | Internal `market-data` service (ahf network, port 8000): Alpaca free daily bars + SEC EDGAR point-in-time TTM metrics in the Financial Datasets API shape; ai-hedge-fund's FDClient is repointed by `deploy/upstream/ai-hedge-fund/sitecustomize.py`. Earnings, news, insider trades, and non-ttm periods return 501; provider faults 502. Verified live, including a persona backtest. |
-| PRs this session | #83 root AGENTS.md; #84/#86 MiroFish keep; #90/#91 hub move; #93/#94 gateway recreate; #99/#100 market-data adapter. All merged to `dev` and released. |
+| MiroFish + Vibe (done) | MiroFish is public on `mirofish.tobytran.dev` (UI and its `/api` verified signed in; `mirofish-static` retired). Vibe-Trading fork synced with upstream `8e43007` (`family-app` = `d402c2d`). Production tag `df5aed5`. **Disk: 28 GB free, under the 30 GB guard;** the next deploy prunes the previous tag first and should pass, but the expense stack's growth is eating the margin (owner's call on tidying expense images/logs). |
+| PRs this session | #83 root AGENTS.md; #84/#86 MiroFish keep; #90/#91 hub move; #93/#94 gateway recreate; #99/#100 market-data adapter; #101/#102 MiroFish public + Vibe sync. All merged to `dev` and released. |
 
 ## 3. Next work, in order
 
 1. **Interactive Brokers prices for market-data:** once the IBKR data user is approved and Desk Phase 3 runs the IB Gateway, add an `IbkrPriceProvider` and set `PRICE_PROVIDER=ibkr` (01m §5.6); coordinate with the Desk lane. Deferred minors from the 01m review: the SEC lock is held across the network fetch, `limit <= 0` returns all rows, no response-size cap, the SEC cache never evicts.
 2. **Owner Safari check** on `trading-hub` (sign-in, reload, quit/reopen), the last open 01h Task 10 item for the new hostname.
 3. **After Desk Phase 4 takes `trading.tobytran.dev`:** remove the `web` service and the four `hub_hostname` tunnel entries if Phase 4 did not.
-4. Weekly Dependabot upstream bumps (sync skills under `.opencode/skills/`); MiroFish public hostname still open (staging `mirofish-static`).
+4. Upstream bumps: TradingAgents, ai-hedge-fund, and MiroFish were current on 2026-10-10; Vibe-Trading's fork reconciliation needs the owner's approval each time (sync skill).
 
 ## 4. Recipes
 
