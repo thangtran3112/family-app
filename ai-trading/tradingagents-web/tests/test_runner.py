@@ -228,6 +228,50 @@ class WorkerTestCase(unittest.TestCase):
         exports_dir = run_directory(self.store, run["owner_id"], run["id"]) / "exports"
         self.assertIn("market info", (exports_dir / "complete_report.md").read_text())
 
+    def test_worker_never_raises_on_unexpected_partial_publish_error(self):
+        """Regression for the lint follow-up's "narrow ReportError catch lets
+        unexpected failures escape" finding: an OSError from a part of the
+        real ``reports.publish`` that is *not* inside its own wrapped
+        write/fsync/rename step (its ``mkdir``, or its final
+        ``artifacts_ready`` metadata update) must still be swallowed here,
+        preserving run_research()'s documented "never raises" contract and
+        the already-correct RESEARCH_FAILED terminal record -- not propagate
+        out of run_research. Induced via a targeted fault on the real
+        ``Store.update`` call reports.publish's own last line makes, not a
+        fake ``ta_web.reports``/``ta_web.store`` module."""
+        run = self.store.create(self.owner, _inputs())
+
+        def factory(*args, **kwargs):
+            return FakeGraph(
+                *args,
+                **kwargs,
+                stream=[([], {"market_report": "market info"})],  # real, exportable content
+                on_record_decision=lambda state: (_ for _ in ()).throw(RuntimeError(_SECRET)),
+            )
+
+        real_update = Store.update
+
+        def faulty_update(self, id, **kwargs):
+            # Only reports.publish's own final `artifacts_ready=True` call
+            # fails; every other store.update in this run (status/state
+            # writes) behaves normally.
+            if kwargs.get("artifacts_ready") is True:
+                raise OSError(f"simulated disk failure: {_SECRET}")
+            return real_update(self, id, **kwargs)
+
+        Store.update = faulty_update
+        try:
+            run_research(self.root, run["id"], graph_factory=factory)  # must not raise
+        finally:
+            Store.update = real_update
+
+        saved = self.store.worker_run(run["id"])
+        self.assertEqual(saved["status"], "failed")
+        self.assertEqual(saved["error_code"], RESEARCH_FAILED)
+        self.assertTrue(saved["partial"])
+        self.assertFalse(saved["artifacts_ready"])  # the faulty metadata flip never committed
+        self.assertNotIn(_SECRET, json.dumps(saved))
+
     # --- Failure handling: fixed codes, no leaked secrets ---------------------
 
     def test_worker_records_research_failed_on_constructor_error(self):

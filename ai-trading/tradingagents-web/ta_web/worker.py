@@ -107,19 +107,37 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
             graph.clear_checkpoint_on_success(ticker, trade_date, asset_type)
         finally:
             graph.end_checkpoint()
-    except Exception:
+    except Exception:  # noqa: BLE001 -- upstream graph/provider SDK call: any
+        # exception type must become the fixed RESEARCH_FAILED code instead of
+        # letting a raw provider/secret-bearing exception propagate, or
+        # leaving the record stuck "running" (protocol.md: never exception
+        # text; "never leaves Busy permanently occupied").
         cleaned = clean_state(state)
         store.update(id, status="failed", state=cleaned, partial=bool(cleaned), error_code=RESEARCH_FAILED)
         if cleaned:
             try:
                 publish(store, id)
-            except Exception:
-                pass  # no report text worth exporting, or export itself failed; leave artifacts_ready False
+            except Exception:  # noqa: BLE001 -- best-effort bonus export only: the
+                # failed/RESEARCH_FAILED record right above already stands as
+                # the correct terminal result no matter why this failed --
+                # the expected ReportError refusal/wrapped write failure, or
+                # an unexpected error outside reports.publish's own wrapped
+                # step (its mkdir, its final metadata update). Preserves the
+                # "every partial-publish outcome is swallowed, run_research
+                # never raises" contract; an explicit return here (not a bare
+                # pass) is what actually does that, rather than letting an
+                # unanticipated exception escape past an already-correct
+                # terminal record.
+                return
         return
 
     try:
         publish(store, id)
-    except Exception:
+    except Exception:  # noqa: BLE001 -- publish() is not exclusively ReportError
+        # (e.g. a filesystem/store failure outside its own wrapped
+        # write/fsync/rename step); the record is still "running" at this
+        # point, so any failure here must still become the fixed
+        # EXPORT_FAILED code rather than leave it stuck running.
         store.update(id, status="failed", partial=True, error_code=EXPORT_FAILED)
         return
 
