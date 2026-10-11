@@ -239,8 +239,23 @@ if (typeof document !== 'undefined') {
         ...options,
         signal: controller.signal,
       });
+      if ([401, 403, 404].includes(response.status)) {
+        // Access is already denied by the headers. Do not retain private
+        // content while waiting for an optional (possibly stalled) error body.
+        const error = new Error(fallbackMessage(response, null));
+        error.status = response.status;
+        controller.abort();
+        throw error;
+      }
       let payload = null;
-      try { payload = await response.json(); } catch { /* use static fallback below */ }
+      try {
+        payload = await response.json();
+      } catch (error) {
+        // A body-read timeout is not navigation cancellation. Let the outer
+        // handler turn its abort into a retryable read error instead of silently
+        // returning null and leaving status polling stopped.
+        if (controller.signal.aborted) throw error;
+      }
       if (!response.ok) {
         const error = new Error(fallbackMessage(response, payload));
         error.status = response.status;

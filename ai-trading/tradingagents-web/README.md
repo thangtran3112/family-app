@@ -143,6 +143,9 @@ PLAYWRIGHT_CHROME_EXECUTABLE=/path/to/test-browser \
 - Read requests time out after **10 seconds**. Transient network/service or
   malformed-response failures retain the last authorized snapshot, warn,
   and retry reads. Authorization loss/revocation clears private content.
+  Authorization-denial headers clear it before any response-body parsing;
+  stalled bodies also trigger the read deadline and retry rather than silently
+  stopping status updates.
   Mutations are never automatically retried; a timed-out submission warns
   the user to check history before repeating an action.
 - Failures/interruption show fixed, helpful explanations and preserve any

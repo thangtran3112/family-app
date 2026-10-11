@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { createServer } from 'node:http';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_CORE_PATH
   ? pathToFileURL(process.env.PLAYWRIGHT_CORE_PATH).href : 'playwright-core');
@@ -20,6 +21,7 @@ const started = Date.now() - 300_000;
 let mode = 'running';
 let reads = 0;
 let writes = 0;
+let streamServer = null;
 const iso = value => new Date(value).toISOString();
 const record = () => ({
   id, origin: 'web', status: mode === 'completed' ? 'completed' : mode === 'failed' ? 'failed' : 'running',
@@ -147,13 +149,54 @@ try {
   assert.match(await page.locator('.research-card .task-activity').innerText(), /elapsed/i);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   if (process.env.UI_SCREENSHOT_PATH) await page.screenshot({ path: process.env.UI_SCREENSHOT_PATH, fullPage: true });
+
+  // Actual HTTP headers/body streaming, not a fulfilled whole-response mock:
+  // a timeout after headers must warn/retry, and a 401 must clear the snapshot
+  // without waiting for a stalled error body.
+  streamServer = createServer((request, response) => {
+    const path = new URL(request.url, 'http://localhost').pathname;
+    const name = path.split('/').at(-1);
+    if (name === 'app.mjs' || name === 'app.css') {
+      response.writeHead(200, { 'content-type': name === 'app.mjs' ? 'text/javascript' : 'text/css' });
+      response.end(staticFiles[name]);
+    } else if (path.startsWith('/api/research/')) {
+      if (mode === 'body-hang' || mode === 'auth-body-hang') {
+        response.writeHead(mode === 'body-hang' ? 200 : 401, { 'content-type': 'application/json' });
+        response.write('{"unfinished":');
+      } else {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(record()));
+      }
+    } else {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(staticFiles['index.html'].replaceAll('__APP_PREFIX__', ''));
+    }
+  });
+  await new Promise(resolve => streamServer.listen(0, '127.0.0.1', resolve));
+  const streamPage = await browser.newPage();
+  mode = 'running';
+  await streamPage.goto(`http://127.0.0.1:${streamServer.address().port}/research/${id}`);
+  await streamPage.locator('.progress-metrics').waitFor();
+  mode = 'body-hang';
+  await streamPage.locator('.connection-warning').waitFor({ timeout: 17000 });
+  assert.equal(await streamPage.locator('.report-text').innerText(), 'saved-analysis-fixture');
+  mode = 'running';
+  await streamPage.locator('.connection-warning').waitFor({ state: 'detached', timeout: 7000 });
+  mode = 'auth-body-hang';
+  await streamPage.locator('.error-state').waitFor({ timeout: 6000 });
+  assert.equal(await streamPage.locator('.report-text').count(), 0, '401 headers failed to clear private content while body stalled');
   console.log(JSON.stringify({
     result: 'PASS', heartbeatFocus: true, noProgressWarning: true, connectionRecovery: true,
     authLossClearsPrivateState: true, failurePreservesAnalysis: true, reducedMotion: true,
     prefixCompletion: true, mobileHistory: true, automaticMutations: writes,
     malformedResponseRetainsSnapshot: true,
     partialDownloadsAfterError: true,
+    stalledResponseBodyRecovers: true, authHeadersClearBeforeBody: true,
   }));
 } finally {
   await browser.close();
+  if (streamServer) {
+    streamServer.closeAllConnections();
+    await new Promise(resolve => streamServer.close(resolve));
+  }
 }
