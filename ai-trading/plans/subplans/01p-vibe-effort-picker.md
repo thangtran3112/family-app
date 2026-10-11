@@ -1,6 +1,6 @@
 # Vibe Per-Chat Reasoning Effort: Design
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** draft for owner review
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** approved by the owner; implementation plan written ([01p-vibe-effort-picker-plan.md](01p-vibe-effort-picker-plan.md)), awaiting plan review. Planning added a test-only fix for an existing IBKR xdist order dependency required by the combined SP1+SP2 full-suite gate.
 
 Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-integrity.md) (ships in the same batch), `packages/vibe-trading/DIVERGENCE.md`. Code paths are under `packages/vibe-trading/` at fork commit `d402c2df`.
 
@@ -9,7 +9,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 - The reasoning effort is changeable from the chat bar. The choice applies from the next message: no Settings round trip, no restart.
 - Success:
   - Selecting a level sends `reasoning_effort` with the next message, and that run's message metadata reports it.
-  - A level the model rejects is refused with the accepted list before anything is stored.
+  - A level the model **definitively** rejects is refused with the accepted list before anything is stored. When OpenAI supplies only a generic, inconclusive list, the picker offers the conservative `low, medium, high` fallback; a manually crafted allowed-level request may still fail at runtime (section 10).
   - A committee run (`run_swarm`) uses the chat's level for every agent and records it in its `run.json`.
   - Two concurrent chats with different levels do not affect each other or the server default.
   - The picker lists only levels the model accepts (for `o3`, not `xhigh`).
@@ -79,7 +79,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 - **Frontend (vitest):** options come from the API; selecting sends `reasoning_effort` in the POST body and Default sends none; the initial value comes from the last assistant metadata; disabled while streaming; a probe failure keeps the badge; locale parity.
 - **Live, sponsored key:** real chats at `low` and `xhigh` on `gpt-6.1-sol` and at `none` on `gpt-5.5` report the level in their message metadata and complete; a refused level returns 400 with the list; a committee run's `run.json` shows the chosen level. A probe matrix over the twelve models already probed (01n section 3.2) compares the picker's list with real acceptance on the Responses route, including `o3`, whose offered `xhigh` fails today.
 - **Real browser:** the picker follows the model, a change applies to the next message, a reload restores the last level, Chinese and Arabic render, no console errors or failed requests.
-- Existing suites unchanged, then `ai-trading/deploy/ci/smoke-test.sh vibe-trading`.
+- Existing product suites pass, then `ai-trading/deploy/ci/smoke-test.sh vibe-trading`. The combined `-n 8` run exposed a pre-existing order-dependent `threading.local` test in `test_ibkr_local.py`; Task 4 initializes its fake test state with `monkeypatch.setattr(..., raising=False)` (test-only, no IBKR product change) before the full-suite gate.
 
 ## 8. DIVERGENCE.md Entries
 
@@ -91,6 +91,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 | `agent/src/providers/chat.py`, `agent/src/providers/llm.py` | `ChatLLM` and `build_llm` take an optional `reasoning_effort` that wins over the environment value in the three provider branches; the runtime snapshot reports the effective level. | Same. |
 | `agent/src/tools/__init__.py`, `tools/swarm_tool.py`, `swarm/runtime.py`, `swarm/worker.py` | The level reaches every committee worker and `run.json`. | The committee must use the chat's level. |
 | `agent/tests/test_settings_api.py`, `test_chat_llm_lifecycle.py`, `test_session_service_lifecycle.py`, `test_swarm_tool_variables.py`; new `test_reasoning_effort_override.py` | Extended and new tests for sections 5.1 to 5.3. | |
+| `agent/tests/test_ibkr_local.py` | Test-only: fake-broker thread-local state initializes even when the test runs first in an xdist worker (`raising=False` at three setup sites). | The combined SP1+SP2 `-n 8` suite failed twice on the untouched test's missing `refcount`; the same isolated test also fails on the original pinned fork. |
 | `frontend/src/components/chat/ModelRuntimeBar.tsx`, new `ReasoningEffortSelect.tsx` | The selector replaces the read-only badge. | |
 | `frontend/src/pages/Agent.tsx`, `frontend/src/lib/api.ts` | Per-chat choice; `sendMessage` options. | |
 | `frontend/src/i18n/locales/*.json` (9 files) | `agent.reasoningEffortDefault`, `agent.reasoningEffortHint`. | The locale parity test. |
@@ -110,6 +111,7 @@ Ships in Batch 1 with 01o: one fork commit set, one pull request, one deploy. No
 ## 10. Risks
 
 - **Probe versus the Responses route.** The picker stays conservative because the Responses route accepts a superset (it accepts `max` for Sol). The live probe matrix in section 7 confirms it for the twelve models before the pull request.
+- **Inconclusive model support.** A generic OpenAI error causes a conservative picker list, but the API validation follows Settings' existing rule: only a definite model-specific rejection yields HTTP 400. A manually crafted request with an allowed effort the generic-list model rejects can still fail after an attempt starts; do not claim otherwise in the UI or verification report.
 - **Frontend churn.** `Agent.tsx` is large and upstream edits it often (the last sync did). The change is limited to prop wiring and three call sites; conflicts are expected and listed in the ledger.
 
 ## 11. Out of Scope
