@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Header } from "@/components/header";
+import { WorkspaceSidebar } from "@/components/workspace-sidebar";
 
 export function PageShell({
   breadcrumb,
@@ -18,10 +19,15 @@ export function PageShell({
       >
         Skip to content
       </a>
-      <Header breadcrumb={breadcrumb} />
-      <main id="main-content" className={`flex min-h-0 flex-1 flex-col${scroll ? " overflow-y-auto" : ""}`}>
-        {children}
-      </main>
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceSidebar breadcrumb={breadcrumb} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header breadcrumb={breadcrumb} />
+          <main id="main-content" tabIndex={-1} className={`flex min-h-0 flex-1 flex-col${scroll ? " overflow-y-auto" : ""}`}>
+            {children}
+          </main>
+        </div>
+      </div>
     </>
   );
 }

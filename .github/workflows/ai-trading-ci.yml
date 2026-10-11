@@ -57,6 +57,8 @@ jobs:
         run: pnpm build
       - name: Check static export
         run: ../deploy/ci/check-static-export.sh out
+      - name: Check exported workspace routes and layout
+        run: pnpm test:export
       - name: Upload-hub-static mock-gcloud test
         run: ../deploy/ci/upload-hub-static.test.sh
 

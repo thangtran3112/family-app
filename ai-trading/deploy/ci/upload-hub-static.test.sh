@@ -20,6 +20,11 @@ fixture() {
   done
   printf 'console.log(%q)\n' "$marker" >"$dir/_next/static/chunks/app-abc123.js"
   printf 'icon-%s\n' "$marker" >"$dir/favicon.ico"
+  # Next 16 exports an RSC segment index for each known route.
+  for route in '' login _not-found apps/tradingagents apps/ai-hedge-fund apps/vibe-trading apps/mirofish; do
+    mkdir -p "$dir/${route}"
+    printf 'Flight segment index %s\n' "$marker" >"$dir/${route:+$route/}__next._index.txt"
+  done
 }
 
 MOCK_BIN="$WORKDIR/bin"; mkdir -p "$MOCK_BIN"
@@ -117,6 +122,10 @@ REAL_OUT="$SCRIPT_DIR/../../frontend/out"
 "$TARGET" "$REAL_OUT" real-next-out >/dev/null || fail "real Next static export was rejected"
 [[ -s "$CALL_LOG" ]] || fail "real Next static export made no fake-GCS calls"
 pass "real Next static export uploads through the fake GCS transaction"
+flight_gen="$(live_gen real-next-out __next._index.txt)"
+[[ "$(sed -n '1p' "$FAKE_GCS_ROOT/real-next-out/__next._index.txt/$flight_gen.meta")" == text/x-component ]] || fail "Flight index MIME is wrong"
+[[ "$(sed -n '2p' "$FAKE_GCS_ROOT/real-next-out/__next._index.txt/$flight_gen.meta")" == no-store ]] || fail "Flight index cache-control is wrong"
+pass "Flight segment index has component MIME and no-store"
 
 : >"$CALL_LOG"; OUTSIDE="$WORKDIR/outside-secret.txt"; echo 'sk-proj-THISISAFAKETAINTEDTOKEN1234567890' >"$OUTSIDE"
 SYMLINK="$WORKDIR/symlink"; fixture "$SYMLINK" symlink; ln -s "$OUTSIDE" "$SYMLINK/evil"
@@ -132,6 +141,14 @@ out="$("$TARGET" "$BAD" "$BUCKET" 2>&1)" && fail "unknown file passed"
 grep -q 'unexpected path' <<<"$out" || fail "wrong unknown-file error: $out"
 [[ ! -s "$CALL_LOG" ]] || fail "unknown file made cloud call"
 pass "unknown private file rejected before cloud calls"
+
+: >"$CALL_LOG"; UNKNOWN_ROUTE="$WORKDIR/unknown-route"; fixture "$UNKNOWN_ROUTE" unknown
+mkdir -p "$UNKNOWN_ROUTE/apps/unlisted"
+printf 'unlisted Flight index\n' >"$UNKNOWN_ROUTE/apps/unlisted/__next._index.txt"
+out="$("$TARGET" "$UNKNOWN_ROUTE" "$BUCKET" 2>&1)" && fail "unlisted route Flight index passed"
+grep -q 'unexpected path' <<<"$out" || fail "wrong unlisted-route error: $out"
+[[ ! -s "$CALL_LOG" ]] || fail "unlisted route made cloud call"
+pass "Flight index for an unknown route is rejected before cloud calls"
 
 : >"$CALL_LOG"; SECRET="$WORKDIR/secret"; fixture "$SECRET" secret; echo 'sk-proj-THISISAFAKETAINTEDTOKEN1234567890' >>"$SECRET/index.html"
 "$TARGET" "$SECRET" "$BUCKET" >/dev/null 2>&1 && fail "secret passed"
