@@ -1,5 +1,7 @@
 """Indicators over bar series. Every value uses only its own and earlier bars."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 
@@ -37,18 +39,174 @@ def rsi(close: pd.Series, length: int) -> pd.Series:
     return out.where(~((gain == 0) & (loss == 0)), 50.0)
 
 
+def _true_range(bars: pd.DataFrame) -> pd.Series:
+    """max(high, prior close) - min(low, prior close): equal to the usual max(H-L, |H-PC|, |L-PC|),
+    without a prior close (the first bar) this is just H-L."""
+    prev_close = bars["close"].shift(1)
+    upper = pd.concat([bars["high"], prev_close], axis=1).max(axis=1)
+    lower = pd.concat([bars["low"], prev_close], axis=1).min(axis=1)
+    return upper - lower
+
+
 def atr(bars: pd.DataFrame, length: int) -> pd.Series:
     """Wilder's average true range."""
+    return _wilder(_true_range(bars), length)
+
+
+@dataclass(frozen=True)
+class Macd:
+    line: pd.Series
+    signal: pd.Series
+    histogram: pd.Series
+
+
+def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Macd:
+    """MACD line (EMA(fast) - EMA(slow)), its signal line (EMA(signal) of the MACD line), and
+    their difference. NaN until `slow` bars for the line, `slow + signal - 1` for the signal and
+    histogram (34 for the default 12,26,9)."""
+    line = ema(close, fast) - ema(close, slow)
+    sig = ema(line, signal)
+    return Macd(line, sig, line - sig)
+
+
+@dataclass(frozen=True)
+class Stochastic:
+    k: pd.Series  # slow %K
+    d: pd.Series
+
+
+def stochastic(bars: pd.DataFrame, length: int = 14, smooth_k: int = 3, smooth_d: int = 3) -> Stochastic:
+    """Slow %K (an SMA(smooth_k) of the raw %K) and %D (an SMA(smooth_d) of slow %K). Raw %K is
+    100 x (close - lowestLow(length)) / (highestHigh(length) - lowestLow(length)), 50 when that
+    range is zero. NaN until `length + smooth_k + smooth_d - 2` bars (18 for the default 14,3,3)."""
+    lowest = bars["low"].rolling(length, min_periods=length).min()
+    highest = bars["high"].rolling(length, min_periods=length).max()
+    span = highest - lowest
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raw_k = 100 * (bars["close"] - lowest) / span
+    raw_k = raw_k.where(span != 0, 50.0)
+    k = sma(raw_k, smooth_k)
+    return Stochastic(k, sma(k, smooth_d))
+
+
+@dataclass(frozen=True)
+class StochRsi:
+    k: pd.Series
+    d: pd.Series
+
+
+def stoch_rsi(
+    close: pd.Series, smooth_k: int = 3, smooth_d: int = 3, rsi_length: int = 14, stoch_length: int = 14
+) -> StochRsi:
+    """A stochastic of Wilder's RSI(rsi_length) over its own `stoch_length`-bar range, scaled
+    0-100 and smoothed into %K (SMA(smooth_k)) and %D (SMA(smooth_d) of %K). 50 when the RSI range
+    is zero. NaN until `rsi_length + stoch_length + smooth_k + smooth_d - 2` bars (32 for the
+    default 3,3,14,14)."""
+    rsi_values = rsi(close, rsi_length)
+    lowest = rsi_values.rolling(stoch_length, min_periods=stoch_length).min()
+    highest = rsi_values.rolling(stoch_length, min_periods=stoch_length).max()
+    span = highest - lowest
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raw = 100 * (rsi_values - lowest) / span
+    raw = raw.where(span != 0, 50.0)
+    k = sma(raw, smooth_k)
+    return StochRsi(k, sma(k, smooth_d))
+
+
+def cci(bars: pd.DataFrame, length: int = 20) -> pd.Series:
+    """(typical price - its SMA(length)) / (0.015 x the mean absolute deviation of the typical
+    price from that SMA, over the same window). 0 when every bar in the window has the same
+    typical price. NaN until `length` bars."""
+    typical = (bars["high"] + bars["low"] + bars["close"]) / 3
+    mean = sma(typical, length)
+    mad = typical.rolling(length, min_periods=length).apply(lambda w: np.abs(w - w.mean()).mean(), raw=True)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = (typical - mean) / (0.015 * mad)
+    return out.where(mad != 0, 0.0)
+
+
+@dataclass(frozen=True)
+class Adx:
+    adx: pd.Series
+    plus_di: pd.Series
+    minus_di: pd.Series
+
+
+def adx(bars: pd.DataFrame, length: int = 14) -> Adx:
+    """Wilder's ADX and +DI/-DI. NaN for +DI/-DI until `length` bars, and for ADX until
+    `2 * length - 1` bars (27 for the default 14): +DI/-DI need `length` bars of Wilder-smoothed
+    true range and directional movement, then ADX needs another `length` bars of DX to smooth.
+
+    Adapted from Vibe-Trading `agent/src/skills/technical-basic/example_signal_engine.py`
+    (`compute_adx`, commit d402c2d; MIT License, see THIRD_PARTY_NOTICES.md). Changes: this
+    module's Wilder seeding rule (the mean of the first `length` valid values, via `_wilder`)
+    instead of an EWM-only smoothing with no explicit seed.
+    """
+    high, low = bars["high"], bars["low"]
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=bars.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=bars.index)
+    smoothed_tr = _wilder(_true_range(bars), length)
+    smoothed_plus_dm = _wilder(plus_dm, length)
+    smoothed_minus_dm = _wilder(minus_dm, length)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        plus_di = 100 * smoothed_plus_dm / smoothed_tr
+        minus_di = 100 * smoothed_minus_dm / smoothed_tr
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    return Adx(_wilder(dx, length), plus_di, minus_di)
+
+
+def awesome_oscillator(bars: pd.DataFrame, fast: int = 5, slow: int = 34) -> pd.Series:
+    """SMA(fast) minus SMA(slow) of the median price (high + low) / 2. NaN until `slow` bars."""
+    median_price = (bars["high"] + bars["low"]) / 2
+    return sma(median_price, fast) - sma(median_price, slow)
+
+
+def momentum(close: pd.Series, length: int = 10) -> pd.Series:
+    """Close minus the close `length` bars ago. NaN until `length + 1` bars."""
+    return close.diff(length)
+
+
+def williams_r(bars: pd.DataFrame, length: int = 14) -> pd.Series:
+    """-100 x (highestHigh(length) - close) / (highestHigh(length) - lowestLow(length)). -50 when
+    that range is zero. NaN until `length` bars."""
+    highest = bars["high"].rolling(length, min_periods=length).max()
+    lowest = bars["low"].rolling(length, min_periods=length).min()
+    span = highest - lowest
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = -100 * (highest - bars["close"]) / span
+    return out.where(span != 0, -50.0)
+
+
+@dataclass(frozen=True)
+class BullBearPower:
+    bull: pd.Series  # high - EMA(length)
+    bear: pd.Series  # low - EMA(length)
+
+
+def bull_bear_power(bars: pd.DataFrame, length: int = 13) -> BullBearPower:
+    """High minus EMA(length) of the close (bull power), and low minus that same EMA (bear
+    power). NaN until `length` bars."""
+    baseline = ema(bars["close"], length)
+    return BullBearPower(bars["high"] - baseline, bars["low"] - baseline)
+
+
+def ultimate_oscillator(bars: pd.DataFrame, fast: int = 7, mid: int = 14, slow: int = 28) -> pd.Series:
+    """Larry Williams' Ultimate Oscillator: a 4:2:1-weighted blend of buying pressure over true
+    range (see `_true_range`) at three lookbacks, where buying pressure is the close minus the
+    lesser of the low and the prior close. NaN until `slow` bars (28 for the default 7,14,28)."""
     prev_close = bars["close"].shift(1)
-    true_range = pd.concat(
-        [
-            bars["high"] - bars["low"],
-            (bars["high"] - prev_close).abs(),
-            (bars["low"] - prev_close).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-    return _wilder(true_range, length)
+    lower = pd.concat([bars["low"], prev_close], axis=1).min(axis=1)
+    buying_pressure = bars["close"] - lower
+    true_range = _true_range(bars)
+
+    def average(length: int) -> pd.Series:
+        bp_sum = buying_pressure.rolling(length, min_periods=length).sum()
+        tr_sum = true_range.rolling(length, min_periods=length).sum()
+        return bp_sum / tr_sum.replace(0, np.nan)
+
+    return 100 * (4 * average(fast) + 2 * average(mid) + average(slow)) / 7
 
 
 def session_vwap(ann: pd.DataFrame) -> pd.Series:
