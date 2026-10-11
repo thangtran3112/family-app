@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Technical bias change",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": {
+    "any": [
+      { "op": "crosses_above", "left": { "series": "bias", "part": "summary" }, "right": { "value": 0.1 } },
+      { "op": "crosses_below", "left": { "series": "bias", "part": "summary" }, "right": { "value": -0.1 } }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox", "telegram"], "severity": "info" } }
+}

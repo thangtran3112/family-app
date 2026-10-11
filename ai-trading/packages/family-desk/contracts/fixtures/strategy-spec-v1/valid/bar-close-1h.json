@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_1h" },
+  "when": {
+    "op": "gt",
+    "left": { "level": "pivot", "method": "fibonacci", "period": "week", "point": "S1" },
+    "right": { "value": 0 }
+  },
+  "then": { "alert": { "channels": ["inbox"] } }
+}

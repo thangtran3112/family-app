@@ -172,6 +172,50 @@
             "days"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "level": {
+              "const": "pivot",
+              "type": "string"
+            },
+            "method": {
+              "enum": [
+                "classic",
+                "fibonacci",
+                "camarilla"
+              ],
+              "type": "string"
+            },
+            "period": {
+              "enum": [
+                "session",
+                "week",
+                "month"
+              ],
+              "type": "string"
+            },
+            "point": {
+              "enum": [
+                "P",
+                "R1",
+                "R2",
+                "R3",
+                "S1",
+                "S2",
+                "S3"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "level",
+            "method",
+            "period",
+            "point"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -392,7 +436,12 @@
                 "sma",
                 "ema",
                 "rsi",
-                "atr"
+                "atr",
+                "cci",
+                "momentum",
+                "williams_r",
+                "vwma",
+                "hull_ma"
               ],
               "type": "string"
             }
@@ -419,6 +468,329 @@
           "required": [
             "series",
             "lookbackDays"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fast": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "line": {
+              "enum": [
+                "line",
+                "signal",
+                "histogram"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "macd",
+              "type": "string"
+            },
+            "signal": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "slow": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "fast",
+            "slow",
+            "signal"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "line": {
+              "enum": [
+                "k",
+                "d"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "stochastic",
+              "type": "string"
+            },
+            "smoothD": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "smoothK": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "length",
+            "smoothK",
+            "smoothD"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "line": {
+              "enum": [
+                "k",
+                "d"
+              ],
+              "type": "string"
+            },
+            "rsiLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "series": {
+              "const": "stoch_rsi",
+              "type": "string"
+            },
+            "smoothD": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "smoothK": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "stochLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "smoothK",
+            "smoothD",
+            "rsiLength",
+            "stochLength"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "line": {
+              "enum": [
+                "adx",
+                "plus_di",
+                "minus_di"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "adx",
+              "type": "string"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "length"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fast": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "series": {
+              "const": "awesome_oscillator",
+              "type": "string"
+            },
+            "slow": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "fast",
+            "slow"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "line": {
+              "enum": [
+                "bull",
+                "bear"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "bull_bear_power",
+              "type": "string"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "length"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fast": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "mid": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "series": {
+              "const": "ultimate_oscillator",
+              "type": "string"
+            },
+            "slow": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "fast",
+            "mid",
+            "slow"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "baseLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "conversionLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "line": {
+              "enum": [
+                "conversion",
+                "base",
+                "span_a",
+                "span_b"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "ichimoku",
+              "type": "string"
+            },
+            "spanBLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "series",
+            "line",
+            "conversionLength",
+            "baseLength",
+            "spanBLength"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "medianLength": {
+              "maximum": 500,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "series": {
+              "const": "atr_pct",
+              "type": "string"
+            }
+          },
+          "required": [
+            "series",
+            "length",
+            "medianLength"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "enum": [
+                "oscillators",
+                "moving_averages",
+                "summary"
+              ],
+              "type": "string"
+            },
+            "series": {
+              "const": "bias",
+              "type": "string"
+            }
+          },
+          "required": [
+            "series",
+            "part"
           ],
           "type": "object"
         }
@@ -550,6 +922,9 @@
         "runOn": {
           "enum": [
             "bar_close_1m",
+            "bar_close_5m",
+            "bar_close_15m",
+            "bar_close_1h",
             "premarket_0830",
             "daily_close",
             "weekly"

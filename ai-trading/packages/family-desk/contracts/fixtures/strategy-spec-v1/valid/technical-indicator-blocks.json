@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": {
+    "all": [
+      { "op": "gt", "left": { "series": "cci", "length": 20 }, "right": { "value": -100 } },
+      { "op": "gt", "left": { "series": "momentum", "length": 10 }, "right": { "value": 0 } },
+      { "op": "gt", "left": { "series": "williams_r", "length": 14 }, "right": { "value": -80 } },
+      { "op": "gt", "left": { "series": "vwma", "length": 20 }, "right": { "value": 0 } },
+      { "op": "gt", "left": { "series": "hull_ma", "length": 9 }, "right": { "value": 0 } },
+      {
+        "op": "crosses_above",
+        "left": { "series": "macd", "line": "line", "fast": 12, "slow": 26, "signal": 9 },
+        "right": { "series": "macd", "line": "signal", "fast": 12, "slow": 26, "signal": 9 }
+      },
+      {
+        "op": "lt",
+        "left": { "series": "stochastic", "line": "k", "length": 14, "smoothK": 3, "smoothD": 3 },
+        "right": { "value": 20 }
+      },
+      {
+        "op": "lt",
+        "left": { "series": "stoch_rsi", "line": "k", "smoothK": 3, "smoothD": 3, "rsiLength": 14, "stochLength": 14 },
+        "right": { "value": 20 }
+      },
+      { "op": "gt", "left": { "series": "adx", "line": "adx", "length": 14 }, "right": { "value": 20 } },
+      { "op": "gt", "left": { "series": "awesome_oscillator", "fast": 5, "slow": 34 }, "right": { "value": 0 } },
+      { "op": "lt", "left": { "series": "bull_bear_power", "line": "bear", "length": 13 }, "right": { "value": 0 } },
+      {
+        "op": "gt",
+        "left": { "series": "ultimate_oscillator", "fast": 7, "mid": 14, "slow": 28 },
+        "right": { "value": 70 }
+      },
+      {
+        "op": "gt",
+        "left": { "series": "ichimoku", "line": "conversion", "conversionLength": 9, "baseLength": 26, "spanBLength": 52 },
+        "right": { "series": "ichimoku", "line": "base", "conversionLength": 9, "baseLength": 26, "spanBLength": 52 }
+      },
+      { "op": "lt", "left": { "series": "atr_pct", "length": 14, "medianLength": 100 }, "right": { "value": 3 } },
+      {
+        "op": "crosses_above",
+        "left": { "series": "bias", "part": "summary" },
+        "right": { "value": 0.1 }
+      },
+      {
+        "op": "gt",
+        "left": { "level": "pivot", "method": "classic", "period": "session", "point": "R1" },
+        "right": { "value": 0 }
+      }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox"], "severity": "opportunity" } }
+}
