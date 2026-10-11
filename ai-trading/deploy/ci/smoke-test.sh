@@ -18,6 +18,7 @@ cleanup() {
     docker rm -fv "${containers[@]}" >/dev/null 2>&1 || true
   fi
   docker network rm smoke-gateway-net smoke-research-net >/dev/null 2>&1 || true
+  docker volume rm smoke-control-sock >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -350,11 +351,58 @@ except (urllib.error.URLError, OSError, socket.timeout):
     || fail "a legacy-network peer (same network as ta-terminal) must not be able to reach ta-research at all by IP -- got: $bypass_result"
   echo "ok   a legacy ta-network peer (same network as ta-terminal) cannot reach ta-research's IP at all -- real network isolation, not just a missing DNS alias"
 
+  # Task 4 (01g): every app route now runs an availability check against the
+  # control helper's private Unix socket after existing app auth. This smoke
+  # fixture is not the control-boundary test (that is
+  # deploy/ci/test-app-controls-gateway.sh) -- it is a dummy stand-in, always
+  # answering 204 (app available), so none of this script's own pre-existing
+  # assertions regress now that the gate sits in front of them.
+  docker volume rm smoke-control-sock >/dev/null 2>&1 || true
+  docker volume create smoke-control-sock >/dev/null
+  docker run -d --name smoke-control-helper -v smoke-control-sock:/run/family-app/ai-trading-control \
+    python:3.12-alpine python3 -c '
+import http.server
+import os
+import socket
+import socketserver
+
+sock_dir = "/run/family-app/ai-trading-control"
+os.makedirs(sock_dir, exist_ok=True)
+sock_path = os.path.join(sock_dir, "control.sock")
+if os.path.exists(sock_path):
+    os.unlink(sock_path)
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+    def log_message(self, *a):
+        pass
+
+class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    address_family = socket.AF_UNIX
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "local", 0
+
+srv = UnixServer(sock_path, Handler)
+os.chmod(sock_path, 0o666)
+srv.serve_forever()
+' >/dev/null
+  containers+=(smoke-control-helper)
+  local control_deadline=$((SECONDS + 15))
+  until docker exec smoke-control-helper test -S /run/family-app/ai-trading-control/control.sock 2>/dev/null; do
+    ((SECONDS < control_deadline)) || fail "smoke-control-helper did not create its socket in time"
+    sleep 0.3
+  done
+
   # smoke-caddy is the one real peer that bridges both networks, same as the
   # production gateway service (docker-compose.yml networks: [..., research]).
   docker run -d --name smoke-caddy --network "$net" -p 127.0.0.1:18080:8080 \
     -e VIBE_API_AUTH_KEY=smoke-key \
     -v "$PWD/ai-trading/deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v smoke-control-sock:/run/family-app/ai-trading-control:ro \
     caddy:2-alpine >/dev/null
   containers+=(smoke-caddy)
   docker network connect "$net_research" smoke-caddy
