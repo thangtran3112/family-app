@@ -37,6 +37,17 @@ def test_futures_week_opens_sunday_1800_et():
     assert monday.extended_close == et(date(2026, 3, 9), "17:00")
 
 
+def test_calendar_horizon_reaches_2028():
+    # The underlying exchange_calendars instances are built over a fixed, explicit range
+    # (2015-01-01 to 2030-12-31), not exchange_calendars' own today-relative default, so a date
+    # years out stays available and stays the same no matter what day this test runs. If the
+    # range ever quietly shrinks back to a today-relative default, this pin catches it immediately
+    # rather than letting a far-future lookup (e.g. a futures contract month) start failing later.
+    found = session("stock", date(2028, 6, 15))
+    assert found.regular_open == utc("2028-06-15 13:30")
+    assert session("future", date(2028, 6, 15)) is not None
+
+
 def test_previous_session_skips_weekends_and_holidays():
     assert previous_session("stock", date(2026, 3, 9)) == date(2026, 3, 6)
     assert previous_session("stock", date(2026, 11, 27)) == date(2026, 11, 25)

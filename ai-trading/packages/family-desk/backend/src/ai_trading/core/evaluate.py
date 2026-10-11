@@ -4,6 +4,9 @@ Rules see closed bars only: a 1-minute bar counts once its minute has ended, a d
 its regular session has closed. A strategy fires when its rule turns true at an evaluation point
 (a rising edge), so a rule that stays true does not fire again:
 - bar_close_1m: every closed 1-minute bar in the watched session; the edge resets each day.
+- bar_close_5m, bar_close_15m, bar_close_1h: the same, over bars built by aggregating 1-minute
+  bars from the start of each session phase, so a bar never spans a pre/regular/post boundary
+  (02c Shared Interfaces).
 - premarket_0830: once per trading day at 08:30 ET, from the bars closed by then; no edge.
 - daily_close: every closed daily bar. weekly: the last trading day of each finished week.
 """
@@ -17,13 +20,22 @@ import numpy as np
 import pandas as pd
 
 from ai_trading.contracts.strategy_spec_v1 import StrategySpecV1
-from ai_trading.core import indicators, levels
+from ai_trading.core import bias, indicators, levels, pivots
 from ai_trading.core.calendar import ET, Asset, annotate, et, session
 
-INTRADAY_CADENCES = {"bar_close_1m", "premarket_0830"}
+CADENCE_MINUTES = {"bar_close_1m": 1, "bar_close_5m": 5, "bar_close_15m": 15, "bar_close_1h": 60}
+INTRADAY_CADENCES = set(CADENCE_MINUTES) | {"premarket_0830"}
 _SESSION_LEVELS = {"premarket_high", "premarket_low", "overnight_high", "overnight_low"}
 _OPENING_LEVELS = {"opening_range_high", "opening_range_low"}
 _COMPARE = {"gt": np.greater, "gte": np.greater_equal, "lt": np.less, "lte": np.less_equal}
+_PIVOT_METHODS = {
+    "classic": pivots.classic_pivots,
+    "fibonacci": pivots.fibonacci_pivots,
+    "camarilla": pivots.camarilla_pivots,
+}
+_BIAS_FIELD = {"oscillators": "oscillator_score", "moving_averages": "ma_score", "summary": "summary_score"}
+_PHASE_START = {"pre": "extended_open", "regular": "regular_open", "post": "regular_close"}
+_PHASE_END = {"pre": "regular_open", "regular": "regular_close", "post": "extended_close"}
 
 
 @dataclass(frozen=True)
@@ -51,10 +63,16 @@ def _operands(condition: dict[str, Any]):
 
 
 def label(operand: dict[str, Any]) -> str:
-    """Evidence key, e.g. "close", "sma(20)", "opening_range_high(15)"."""
+    """Evidence key, e.g. "close", "sma(20)", "opening_range_high(15)", "macd(12, line, 9, 26)".
+    Every parameter besides the block's own kind (`series`/`level`), in whatever field order the
+    generated Pydantic model's `model_dump()` produces for that operand -- stable within a process
+    and across identical inputs, since it comes from the dumped model rather than JSON source
+    text, but not a property this function sorts or guarantees itself. Today that order happens to
+    be alphabetical by key name (an artifact of the datamodel-code-generator toolchain); see
+    `test_label_evidence_key_pins_the_schema_order` for the pinned example."""
     name = operand.get("series") or operand["level"]
-    arg = next((operand[key] for key in ("length", "lookbackDays", "minutes", "days") if key in operand), None)
-    return f"{name}({arg})" if arg is not None else name
+    args = [str(value) for key, value in operand.items() if key not in ("series", "level")]
+    return f"{name}({', '.join(args)})" if args else name
 
 
 def check(spec: StrategySpecV1) -> list[str]:
@@ -101,6 +119,10 @@ def _compute(operand: dict[str, Any], frame: _Frame) -> pd.Series:
     unique_days = pd.Index(frame.days.unique())
     if "level" in operand:
         name = operand["level"]
+        if name == "pivot":
+            high, low, close = pivots.prior_period_hlc(frame.daily, unique_days, frame.asset, operand["period"])
+            points = _PIVOT_METHODS[operand["method"]](high, low, close)
+            return frame.per_day(points[operand["point"]])
         if name.startswith("prior_day_"):
             column = name.removeprefix("prior_day_")
             return frame.per_day(levels.prior_day(frame.daily, unique_days, frame.asset, column))
@@ -117,10 +139,36 @@ def _compute(operand: dict[str, Any], frame: _Frame) -> pd.Series:
         return bars[name].astype(float)
     if name == "vwap":
         return indicators.session_vwap(bars)
-    if name in ("sma", "ema", "rsi"):
+    if name in ("sma", "ema", "rsi", "momentum", "hull_ma"):
         return getattr(indicators, name)(bars["close"], operand["length"])
-    if name == "atr":
-        return indicators.atr(bars, operand["length"])
+    if name in ("atr", "cci", "williams_r", "vwma"):
+        return getattr(indicators, name)(bars, operand["length"])
+    if name == "macd":
+        m = indicators.macd(bars["close"], operand["fast"], operand["slow"], operand["signal"])
+        return getattr(m, operand["line"])
+    if name == "stochastic":
+        st = indicators.stochastic(bars, operand["length"], operand["smoothK"], operand["smoothD"])
+        return getattr(st, operand["line"])
+    if name == "stoch_rsi":
+        sr = indicators.stoch_rsi(
+            bars["close"], operand["smoothK"], operand["smoothD"], operand["rsiLength"], operand["stochLength"]
+        )
+        return getattr(sr, operand["line"])
+    if name == "adx":
+        return getattr(indicators.adx(bars, operand["length"]), operand["line"])
+    if name == "awesome_oscillator":
+        return indicators.awesome_oscillator(bars, operand["fast"], operand["slow"])
+    if name == "bull_bear_power":
+        return getattr(indicators.bull_bear_power(bars, operand["length"]), operand["line"])
+    if name == "ultimate_oscillator":
+        return indicators.ultimate_oscillator(bars, operand["fast"], operand["mid"], operand["slow"])
+    if name == "ichimoku":
+        ic = indicators.ichimoku(bars, operand["conversionLength"], operand["baseLength"], operand["spanBLength"])
+        return getattr(ic, operand["line"])
+    if name == "atr_pct":
+        return indicators.atr_percent(bars, operand["length"], operand["medianLength"]).pct
+    if name == "bias":
+        return _bias_series(bars, operand["part"])
     if name == "rvol":
         if frame.intraday:
             return indicators.rvol_intraday(bars, operand["lookbackDays"])
@@ -131,6 +179,20 @@ def _compute(operand: dict[str, Any], frame: _Frame) -> pd.Series:
         return (bars["close"] - prior) / prior * 100
     prior = bars["close"].shift(1)
     return (bars["open"] - prior) / prior * 100
+
+
+def level_series(bars: pd.DataFrame, daily: pd.DataFrame, asset: Asset, operand: dict[str, Any]) -> pd.Series:
+    """Public: `operand`'s level value (e.g. `{"level": "pivot", "method": ..., "period": ...,
+    "point": ...}`) at every row of `bars`, through the same dispatch `_compute` uses for a
+    `when` operand's level. `bars` is annotated intraday bars with a `day` column (`annotate()`'s
+    output) or daily bars indexed by trading day; `daily` is always regular-session daily bars.
+
+    `backtest.py`'s `paperOrder.stop`/`target` level resolves through this one dispatch, so the
+    two can never drift (the Phase 1c pivot addition included)."""
+    intraday = "day" in bars.columns
+    days = pd.Index(bars["day"]) if intraday else bars.index
+    frame = _Frame(bars, days, daily, asset, intraday=intraday)
+    return _compute(operand, frame)
 
 
 def _truth(values: np.ndarray, known: pd.Series) -> pd.Series:
@@ -178,10 +240,70 @@ def _before_cross(value: pd.Series, operand: dict[str, Any]) -> pd.Series:
     return shifted if "series" in operand else shifted.fillna(value)
 
 
+def _resample(ann: pd.DataFrame, asset: Asset, minutes: int, as_of: pd.Timestamp) -> pd.DataFrame:
+    """Aggregates closed, annotated 1-minute bars (`day`/`phase` columns from `annotate()`) into
+    `minutes`-minute OHLCV bars, binned by phase-aligned timestamp (not row position) so a bar
+    never spans a pre/regular/post boundary, and a missing 1-minute bar inside a bin never shifts
+    later bars into it: a bin's identity and end time come from the calendar, not from how many
+    rows happen to exist.
+
+    A bin's window is `[bin_start, bin_end)`, capped at the phase's own end. It is exposed once
+    that whole window has elapsed as of `as_of` (`bin_end <= as_of`) -- equivalently, once a bar
+    at or after `bin_end` has itself closed, or the bin's own phase has ended. A missing minute
+    *inside* an otherwise-closed bin is fine -- the bin aggregates whatever bars actually exist in
+    its window. A bin with no bars at all is never emitted (pandas' `groupby` only visits bin ids
+    that have at least one row, so this falls out for free). A still-forming bin is never exposed.
+    """
+    if minutes == 1:
+        return ann
+    columns = ["open", "high", "low", "close", "volume", "day", "phase"]
+    rows: dict[str, list] = {column: [] for column in columns}
+    index: list[pd.Timestamp] = []
+    bin_width = pd.Timedelta(minutes=minutes)
+    for (day, phase), group in ann.groupby(["day", "phase"], sort=False):
+        day_session = session(asset, day)
+        phase_start = getattr(day_session, _PHASE_START[phase])
+        phase_end = getattr(day_session, _PHASE_END[phase])
+        bin_id = (group.index - phase_start) // bin_width
+        for b, chunk in group.groupby(bin_id):
+            bin_start = phase_start + b * bin_width
+            bin_end = min(bin_start + bin_width, phase_end)
+            if as_of < bin_end:
+                continue  # still forming: a bar inside this bin's window could still arrive
+            index.append(bin_start)
+            rows["open"].append(chunk["open"].iloc[0])
+            rows["high"].append(chunk["high"].max())
+            rows["low"].append(chunk["low"].min())
+            rows["close"].append(chunk["close"].iloc[-1])
+            rows["volume"].append(chunk["volume"].sum())
+            rows["day"].append(day)
+            rows["phase"].append(phase)
+    out = pd.DataFrame(rows, index=pd.DatetimeIndex(index, name=ann.index.name))
+    return out.astype({"open": float, "high": float, "low": float, "close": float, "volume": float}).sort_index()
+
+
+def _bias_series(bars: pd.DataFrame, part: str) -> pd.Series:
+    """The Desk Technical Bias score (02f §3) as of each bar: NaN while warming up (fewer than
+    `bias.MIN_BARS` closed bars).
+
+    ponytail: `bias.bias()` only reports a point-in-time snapshot (Phase 1c REPORT-C decision 5),
+    so getting a series means recomputing every vote from its own full history at each bar --
+    O(n^2) over `bars`. Fine at today's bar counts; replace with an incremental bias if a cadence's
+    history grows large enough to make this a hot path.
+    """
+    field_name = _BIAS_FIELD[part]
+    out = np.full(len(bars), np.nan)
+    for i in range(bias.MIN_BARS - 1, len(bars)):
+        result = bias.bias(bars.iloc[: i + 1])
+        if result != "warming up":
+            out[i] = getattr(result, field_name)
+    return pd.Series(out, index=bars.index)
+
+
 def _points(run_on: str, frame: _Frame, session_name: str, as_of: pd.Timestamp) -> pd.Series:
     """Maps each evaluation point's time (index) to the frame row it reads (values)."""
     bars = frame.bars
-    if run_on == "bar_close_1m":
+    if run_on in CADENCE_MINUTES:
         rows = bars.index if session_name == "extended" else bars.index[bars["phase"] == "regular"]
         return pd.Series(rows, index=rows)
     if run_on == "premarket_0830":
@@ -233,6 +355,8 @@ def evaluate(
             raise ValueError(f"{run_on} needs 1-minute bars")
         closed = bars_1m[bars_1m.index + pd.Timedelta(minutes=1) <= as_of].sort_index()
         bars = annotate(closed, asset)
+        if run_on in CADENCE_MINUTES:
+            bars = _resample(bars, asset, CADENCE_MINUTES[run_on], as_of)
         frame = _Frame(bars, pd.Index(bars["day"]), daily, asset, intraday=True)
     else:
         frame = _Frame(daily, daily.index, daily, asset, intraday=False)
@@ -249,9 +373,9 @@ def evaluate(
         fired = now.fillna(False).astype(bool)
     else:
         # An unknown point neither fires nor resets the edge: compare with the last KNOWN state
-        # before it (per day for bar_close_1m, the whole series for daily_close/weekly).
+        # before it (per day for the bar-close cadences, the whole series for daily_close/weekly).
         groups = frame.days.to_series(index=frame.bars.index).reindex(rows).to_numpy()
-        keys = groups if run_on == "bar_close_1m" else np.zeros(len(now))
+        keys = groups if run_on in CADENCE_MINUTES else np.zeros(len(now))
         last_known = now.groupby(keys).transform(lambda s: s.ffill().shift(1))
         fired = now.fillna(False).astype(bool) & ~last_known.fillna(False).astype(bool)
 

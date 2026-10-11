@@ -11,7 +11,7 @@ from bars import daily_bars, minute_bars, set_bar, trading_days
 
 from ai_trading.contracts.strategy_spec_v1 import StrategySpecV1
 from ai_trading.core.calendar import Asset, et, session
-from ai_trading.core.evaluate import SignalCandidate, evaluate
+from ai_trading.core.evaluate import CADENCE_MINUTES, SignalCandidate, evaluate
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "contracts" / "templates"
 DAY = date(2026, 10, 6)  # a Tuesday
@@ -114,6 +114,26 @@ def rsi_reversal(fire: bool) -> Scenario:
     return Scenario("stock", None, daily_bars(trading_days("stock", DAY, len(closing)), closing))
 
 
+def _regular_session_bars(day: date) -> pd.DataFrame:
+    """Regular-session-only 1-minute bars: a bias fixture only needs these, and skipping the
+    pre/post phases keeps `bias()`'s per-bar recomputation (see REPORT-C/evaluate.py's
+    `_bias_series`) fast across the ~10 trading days its 250-bar warm-up needs."""
+    bounds = session("stock", day)
+    return minute_bars("stock", day).loc[bounds.regular_open : bounds.regular_close - pd.Timedelta(minutes=1)]
+
+
+def technical_bias_change(fire: bool) -> Scenario:
+    # 10 flat days (26 regular-session 15m bars each = 260) warm the bias past its 250-bar
+    # minimum before today's 15m bars arrive.
+    days = trading_days("stock", DAY, 11)
+    bars = pd.concat([_regular_session_bars(day) for day in [*days[:-1], DAY]])
+    if fire:
+        closes(bars, "10:00", "10:15", 103.0)  # the whole 15-minute bar rallies and holds
+    else:
+        closes(bars, "10:00", "10:10", 103.0)  # reverts before the bar closes: no net change
+    return Scenario("stock", bars, daily_bars([], []))
+
+
 CASES: dict[str, tuple[Callable[[bool], Scenario], str, dict[str, float]]] = {
     "orb-breakout": (
         orb_breakout,
@@ -145,6 +165,7 @@ CASES: dict[str, tuple[Callable[[bool], Scenario], str, dict[str, float]]] = {
         {"sma(20)": 149.05, "sma(50)": 134.32, "close": 150.0},
     ),
     "rsi-reversal": (rsi_reversal, "16:00", {"rsi(14)": 30.963847}),
+    "technical-bias-change": (technical_bias_change, "10:00", {"bias(summary)": 0.666667}),
 }
 
 
@@ -183,7 +204,8 @@ def test_never_repaints(name: str):
     scenario = build(True)
     spec = load(name)
     final = run(name, scenario, end_of(scenario))
-    lag = pd.Timedelta(minutes=1) if spec.watch.runOn == "bar_close_1m" else pd.Timedelta(0)
+    # bar_time is a bar-close cadence's bar START; it actually closes `lag` later (0 elsewhere).
+    lag = pd.Timedelta(minutes=CADENCE_MINUTES.get(spec.watch.runOn, 0))
     fired = et(DAY, clock)
     moments = [fired - pd.Timedelta(seconds=1), fired + lag - pd.Timedelta(seconds=1), fired + lag]
     if scenario.bars_1m is not None:
