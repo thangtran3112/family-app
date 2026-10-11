@@ -119,6 +119,9 @@ class Run(TypedDict):
     stage: str | None
     created_at: str
     updated_at: str
+    heartbeat_at: str | None
+    last_progress_at: str | None
+    ended_at: str | None
     shared: bool
     state: dict
     settings: dict
@@ -156,6 +159,9 @@ _PUBLIC_FIELDS = (
     "stage",
     "created_at",
     "updated_at",
+    "heartbeat_at",
+    "last_progress_at",
+    "ended_at",
     "shared",
     "artifacts_ready",
     "partial",

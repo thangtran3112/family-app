@@ -67,6 +67,58 @@ export function apiPath(prefix, suffix) {
   return `${prefix}/api${suffix}`;
 }
 
+const STAGE_LABELS = {
+  starting: 'Preparing researchers', analyst: 'Analyst research', research: 'Research debate',
+  trading: 'Trading plan', risk: 'Risk review', exporting: 'Preparing downloads', finished: 'Finished',
+};
+
+function secondsSince(value, now) {
+  const time = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? Math.max(0, Math.floor((now - time) / 1000)) : null;
+}
+
+export function researchProgress(record, now = Date.now()) {
+  const running = record.status === 'running';
+  const end = running ? now : Date.parse(record.ended_at);
+  const elapsedSeconds = Number.isFinite(end) ? secondsSince(record.created_at, end) : null;
+  const progressAgeSeconds = secondsSince(record.last_progress_at || record.created_at, now);
+  const heartbeatAgeSeconds = secondsSince(record.heartbeat_at, now);
+  let warning = '';
+  if (running && (heartbeatAgeSeconds == null ? elapsedSeconds >= 20 : heartbeatAgeSeconds >= 20)) {
+    warning = 'Worker heartbeat is delayed. Research status is unconfirmed; the worker may have stalled.';
+  } else if (running && progressAgeSeconds >= 180) {
+    warning = 'No new research activity for 3 minutes or more. A model or data request may be slow; this is not a confirmed failure.';
+  }
+  if (running && record.error_code) {
+    warning = `${warning ? `${warning} ` : ''}Research encountered an error; preparing saved reports. No research will be rerun.`;
+  }
+  return {
+    elapsedSeconds, progressAgeSeconds, heartbeatAgeSeconds, warning,
+    tone: warning ? 'warning' : running ? 'running' : record.status,
+    label: STAGE_LABELS[record.stage] || (running ? 'Starting research' : statusText(record.status)),
+  };
+}
+
+export function retryableReadError(error) {
+  const status = error.status || 0;
+  return status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+export function runFailureMessage(record) {
+  if (record.status === 'interrupted') return 'Research was interrupted before completion. Saved analysis is preserved; Run again starts a new research.';
+  return ({
+    LAUNCH_FAILED: 'The research worker could not start. Please try a new run.',
+    RESEARCH_FAILED: 'Research could not complete. Any saved analysis is shown below; you can start a new run.',
+    EXPORT_FAILED: 'Research ended, but downloadable reports could not be prepared. Saved analysis is shown below.',
+  })[record.error_code] || 'Research could not complete. Any saved analysis is preserved; please try a new run.';
+}
+
+function duration(seconds) {
+  if (seconds == null) return 'Unavailable';
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`;
+}
+
 function text(tag, value, className) {
   const element = document.createElement(tag);
   if (className) element.className = className;
@@ -145,6 +197,7 @@ if (typeof document !== 'undefined') {
   let listControls = null;
   let lastListStatus = '';
   let lastDetailSignature = '';
+  let serverClockOffset = 0;
 
   function announce(message) {
     if (appStatus) appStatus.textContent = message;
@@ -175,22 +228,55 @@ if (typeof document !== 'undefined') {
   async function request(path, options = {}, token = generation) {
     const controller = new AbortController();
     activeController = controller;
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 10000);
     try {
       const response = await fetch(apiPath(prefix, path), {
         credentials: 'same-origin',
         ...options,
         signal: controller.signal,
       });
+      if ([401, 403, 404].includes(response.status)) {
+        // Access is already denied by the headers. Do not retain private
+        // content while waiting for an optional (possibly stalled) error body.
+        const error = new Error(fallbackMessage(response, null));
+        error.status = response.status;
+        controller.abort();
+        throw error;
+      }
       let payload = null;
-      try { payload = await response.json(); } catch { /* use static fallback below */ }
+      try {
+        payload = await response.json();
+      } catch (error) {
+        // A body-read timeout is not navigation cancellation. Let the outer
+        // handler turn its abort into a retryable read error instead of silently
+        // returning null and leaving status polling stopped.
+        if (controller.signal.aborted) throw error;
+      }
       if (!response.ok) {
         const error = new Error(fallbackMessage(response, payload));
         error.status = response.status;
         throw error;
       }
       if (controller.signal.aborted || token !== generation) return null;
+      if (!payload || typeof payload !== 'object') {
+        const error = new Error('The research service returned an unreadable response.');
+        error.status = 502;
+        throw error;
+      }
+      const serverTime = Date.parse(response.headers.get('date'));
+      if (Number.isFinite(serverTime)) serverClockOffset = serverTime - Date.now();
       return payload;
+    } catch (error) {
+      if (timedOut) throw new Error(options.method
+        ? 'Connection timed out. Check research history before repeating this action.'
+        : 'Connection timed out. Retrying the research status.');
+      throw error;
     } finally {
+      window.clearTimeout(deadline);
       if (activeController === controller) activeController = null;
     }
   }
@@ -200,6 +286,35 @@ if (typeof document !== 'undefined') {
     pollTimer = null;
     if (!shouldPoll || document.hidden || token !== generation) return;
     pollTimer = window.setTimeout(() => refresh(token), 3000);
+  }
+
+  function clearConnectionWarning() {
+    app.querySelector('.connection-warning')?.remove();
+  }
+
+  function handleReadError(error, token) {
+    if (error.name === 'AbortError' || token !== generation) return;
+    if (!retryableReadError(error)) {
+      // Authorization loss or revocation must clear the last private snapshot,
+      // not be mistaken for a temporary network interruption.
+      showError(error.message, error.status);
+      return;
+    }
+    let warning = app.querySelector('.connection-warning');
+    if (!warning) {
+      warning = element('section', 'connection-warning', { role: 'status', 'aria-live': 'polite' });
+      warning.append(text('strong', 'Connection lost · retrying'));
+      warning.append(text('p', 'Showing the last known state. Current server status is unavailable; this does not mean research failed. No new research will be submitted.'));
+      app.prepend(warning);
+      announce('Connection lost. Retrying status; last known research is retained.');
+    }
+    app.querySelectorAll('.is-running').forEach(node => node.classList.remove('is-running'));
+    const progress = app.querySelector('.progress-panel');
+    if (progress) {
+      progress.dataset.tone = 'disconnected';
+      progress.querySelector('progress').hidden = true;
+    }
+    schedulePoll(true, token);
   }
 
   function navigate(path, replace = false) {
@@ -557,6 +672,7 @@ if (typeof document !== 'undefined') {
       const body = element('tbody', '');
       const cards = element('ul', 'research-cards');
       for (const record of items) {
+        const activity = researchProgress(record, Date.now() + serverClockOffset);
         const detailPath = `${base}/${encodeURIComponent(record.id)}`;
         const tickerLink = link(detailPath, recordLabel(record), true);
         const row = element('tr', '');
@@ -566,17 +682,23 @@ if (typeof document !== 'undefined') {
         row.append(text('td', readableDate(record.inputs?.analysis_date)));
         const stateCell = element('td', '');
         stateCell.append(statusBadge(record.status));
+        if (record.status === 'running') {
+          stateCell.querySelector('.badge-running').classList.toggle('is-running', activity.tone === 'running');
+          stateCell.append(text('small', activity.warning || `Elapsed ${duration(activity.elapsedSeconds)} · heartbeat ${activity.heartbeatAgeSeconds == null ? 'pending' : `${activity.heartbeatAgeSeconds}s ago`}`, 'task-activity'));
+        }
         if (record.shared) stateCell.append(text('span', 'Shared with family', 'badge badge-shared'));
         if (record.partial) stateCell.append(text('span', 'Partial', 'badge badge-partial'));
         row.append(stateCell, text('td', display(record.stage)), text('td', record.origin === 'web' ? 'Web' : record.origin === 'import' ? 'Imported' : 'Unknown'), text('td', readableDate(record.updated_at)));
         body.append(row);
 
         const card = element('li', 'research-card');
+        if (record.status === 'running') card.classList.toggle('is-running', activity.tone === 'running');
         const cardHeading = element('div', 'card-heading');
         cardHeading.append(tickerLink.cloneNode(true), statusBadge(record.status));
         card.append(cardHeading);
         card.append(text('p', `Analysis date: ${readableDate(record.inputs?.analysis_date)}`));
         card.append(text('p', `Stage: ${display(record.stage)}`));
+        if (record.status === 'running') card.append(text('p', activity.warning || `Elapsed ${duration(activity.elapsedSeconds)} · heartbeat ${activity.heartbeatAgeSeconds == null ? 'pending' : `${activity.heartbeatAgeSeconds}s ago`}`, 'task-activity'));
         const badges = element('div', 'badge-row');
         badges.append(text('span', record.origin === 'web' ? 'Web run' : record.origin === 'import' ? 'Imported' : 'Origin unknown', 'badge badge-neutral'));
         if (record.shared) badges.append(text('span', 'Shared with family', 'badge badge-shared'));
@@ -675,6 +797,28 @@ if (typeof document !== 'undefined') {
     return section;
   }
 
+  function updateProgressPanel(panel, record) {
+    const activity = researchProgress(record, Date.now() + serverClockOffset);
+    panel.dataset.tone = activity.tone;
+    panel.classList.toggle('is-running', activity.tone === 'running');
+    const label = `${record.status === 'running' && record.error_code ? 'Finalizing after error' : statusText(record.status)} · ${activity.label}`;
+    const labelNode = panel.querySelector('.progress-label');
+    if (labelNode.textContent !== label) labelNode.textContent = label;
+    const metrics = panel.querySelector('.progress-metrics');
+    metrics.replaceChildren(
+      text('span', `Elapsed: ${duration(activity.elapsedSeconds)}`),
+      text('span', `Last research activity: ${record.last_progress_at ? `${duration(activity.progressAgeSeconds)} ago` : 'not recorded'}`),
+      text('span', `Worker heartbeat: ${activity.heartbeatAgeSeconds == null ? 'not recorded yet' : `${activity.heartbeatAgeSeconds}s ago`}`),
+    );
+    const message = record.status === 'failed' || record.status === 'interrupted'
+      ? runFailureMessage(record) : activity.warning || (record.status === 'running'
+        ? 'Live status refreshes every 3 seconds. A heartbeat confirms the worker is alive, not that research is advancing.'
+        : 'Research is complete. Saved analysis is available below.');
+    const messageNode = panel.querySelector('.progress-message');
+    if (messageNode.textContent !== message) messageNode.textContent = message;
+    panel.querySelector('progress').hidden = activity.tone !== 'running';
+  }
+
   function renderDetail(record, token) {
     if (token !== generation || !record) return;
     const signature = JSON.stringify([
@@ -682,7 +826,13 @@ if (typeof document !== 'undefined') {
       record.artifacts_ready ? record.updated_at : '', record.error_code, record.state,
       record.inputs, record.rating, record.can_share, record.can_rerun,
     ]);
-    if (signature === lastDetailSignature) return;
+    if (signature === lastDetailSignature) {
+      // Heartbeat/clock changes update only the progress region. Rebuilding
+      // the entire page every three seconds destroys focus and restarts motion.
+      const panel = app.querySelector('.progress-panel');
+      if (panel) updateProgressPanel(panel, record);
+      return;
+    }
     lastDetailSignature = signature;
     announce(`${recordLabel(record)}: ${statusText(record.status)}. Stage: ${display(record.stage)}.`);
     app.replaceChildren();
@@ -725,16 +875,14 @@ if (typeof document !== 'undefined') {
     if (!record.can_share) badges.append(text('span', 'Read only', 'badge badge-neutral'));
     app.append(badges);
 
-    const progress = element('section', 'progress-panel', { 'aria-label': 'Research progress', 'aria-live': 'polite', 'aria-atomic': 'true' });
-    progress.append(text('div', `Stage: ${display(record.stage)}`, 'progress-label'));
-    if (record.status === 'running') {
-      const bar = element('progress', 'progress-bar', { max: 1 });
-      bar.removeAttribute('value');
-      bar.setAttribute('aria-label', 'Research is running');
-      progress.append(bar);
-    } else if (record.status === 'failed' || record.status === 'interrupted') {
-      progress.append(text('p', record.error_code ? `Run ended: ${record.error_code}` : 'Run ended before completion.', 'muted'));
-    }
+    const progress = element('section', 'progress-panel', { 'aria-label': 'Research progress' });
+    progress.append(element('div', 'progress-label', { 'aria-live': 'polite' }));
+    progress.append(element('div', 'progress-metrics'));
+    progress.append(element('p', 'progress-message', { role: 'status', 'aria-live': 'polite' }));
+    const bar = element('progress', 'progress-bar', { max: 1, 'aria-label': 'Research is running' });
+    bar.removeAttribute('value');
+    progress.append(bar);
+    updateProgressPanel(progress, record);
     app.append(progress);
 
     const grid = element('div', 'detail-grid');
@@ -827,9 +975,17 @@ if (typeof document !== 'undefined') {
     if (filterDate) query.set('analysis_date', filterDate);
     try {
       const data = await request(`/research?${query}`, {}, token);
-      if (data) renderListRecords(data, token);
+      if (data) {
+        if (!Array.isArray(data.items) || !/^[0-9a-f]{64}$/.test(data.owner_id || '')) {
+          const error = new Error('The research service returned an incomplete history response.');
+          error.status = 502;
+          throw error;
+        }
+        clearConnectionWarning();
+        renderListRecords(data, token);
+      }
     } catch (error) {
-      if (error.name !== 'AbortError' && token === generation) showError(error.message, error.status);
+      handleReadError(error, token);
     }
   }
 
@@ -837,10 +993,16 @@ if (typeof document !== 'undefined') {
     try {
       const record = await request(`/research/${encodeURIComponent(id)}`, {}, token);
       if (!record || token !== generation) return;
+      if (record.id !== id || !['running', 'completed', 'failed', 'interrupted'].includes(record.status)) {
+        const error = new Error('The research service returned an incomplete status response.');
+        error.status = 502;
+        throw error;
+      }
+      clearConnectionWarning();
       renderDetail(record, token);
       schedulePoll(record.status === 'running', token);
     } catch (error) {
-      if (error.name !== 'AbortError' && token === generation) showError(error.message, error.status);
+      handleReadError(error, token);
     }
   }
 
@@ -869,6 +1031,7 @@ if (typeof document !== 'undefined') {
 
   function handleLocation() {
     const token = stopWork();
+    clearConnectionWarning();
     const previousRoute = route;
     route = routeFor(window.location.pathname, prefix);
     const params = new URLSearchParams(window.location.search);
