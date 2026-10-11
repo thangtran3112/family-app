@@ -27,6 +27,14 @@ from tradingagents.dataflows.symbols import normalize_symbol, safe_ticker_compon
 # "sentiment" is the user-facing label; the wire/analyst key is "social".
 _ANALYST_ALIASES = {"sentiment": "social"}
 _MIN_DEPTH, _MAX_DEPTH = 1, 5
+# Spec's request-boundary limit (01n-tradingagents-research-design.md §5):
+# "Accept ticker strings of at most 64 characters at the request boundary."
+# Distinct from and checked before upstream's own 32-char canonical limit
+# (enforced separately below by safe_ticker_component) -- this one applies
+# to the raw field exactly as submitted, before any trim/normalize, so a
+# value padded past 64 characters with whitespace can never reach
+# normalization just because trimming would shrink it back under 32.
+_MAX_REQUEST_TICKER_LEN = 64
 
 
 class Inputs(BaseModel):
@@ -56,6 +64,8 @@ class Inputs(BaseModel):
     @field_validator("ticker")
     @classmethod
     def _check_ticker(cls, value: str) -> str:
+        if len(value) > _MAX_REQUEST_TICKER_LEN:
+            raise ValueError(f"ticker exceeds {_MAX_REQUEST_TICKER_LEN} characters at the request boundary")
         canonical = normalize_symbol(value.strip())
         try:
             return safe_ticker_component(canonical)

@@ -46,6 +46,21 @@ wrapper-only — nothing in `packages/trading-agents` is ever modified.
 
   Prints only the new/existing run id and its status/partial flag — never
   identity, report text, or provider configuration.
+- `ta_web/worker.py` — `run_research(root, id, graph_factory=None)`: the
+  isolated research subprocess entry point. Builds a per-run, per-owner
+  config (isolated `results_dir`/`data_cache_dir`/`memory_log_path`) around
+  upstream's unmodified `TradingAgentsGraph`, persists only `clean_state`/
+  `safe_settings` as it streams, and never raises on a publish failure.
+- `ta_web/runner.py` — `Runner(root)`: launches `worker.py` as a real
+  subprocess (`[sys.executable, '-m', 'ta_web.worker', ...]`, never a
+  shell), one at a time, with a race-proof start/close handshake.
+- `ta_web/app.py` — `create_app(root, start=None)` / `application`: the
+  guarded Starlette HTTP API (identity/Origin/prefix enforcement, the
+  `/api/research*` routes, and the `/research`/`/research/{id}` shell routes
+  that serve `ta_web/static/`).
+- `ta_web/static/index.html`, `ta_web/static/app.mjs`, `ta_web/static/app.css`
+  — the framework-free UI: dashboard (pagination plus ticker/analysis-date/
+  status history filters), new-research form, and detail/share/download view.
 - `requirements.lock` — hash-pinned, `--no-deps` additions this wrapper needs
   on top of the upstream `trading-agents` environment (`starlette`,
   `uvicorn`, `click`).
@@ -54,12 +69,36 @@ wrapper-only — nothing in `packages/trading-agents` is ever modified.
 - `tests/test_reports.py` — real (non-mocked) exporter/export tests: hostile
   report text, readiness/visibility, traversal/symlink/oversized-file guards,
   publish atomicity/failure handling, and legacy import dedupe/safety.
+- `tests/test_runner.py` — `Runner`'s real-subprocess start/close lifecycle,
+  including the start-vs-close race proof.
+- `tests/test_api.py` — `IsolatedAsyncioTestCase` + HTTPX ASGI transport,
+  real `create_app`; guard/body-validation/sharing/download/list-filter
+  contract, and the production lifespan (service lock, restart recovery,
+  real child subprocess).
+- `tests/test_ui.mjs` — Node `node:test`; `app.mjs`'s prefix-safe
+  `routeFor`/`apiPath` helpers (no DOM, no mocked backend).
+
+## Running the service
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tradingagents-web \
+  python -m uvicorn ta_web.app:application --host 0.0.0.0 --port 8182
+```
+
+`application` builds its `Store`/service lock/`Runner` lazily inside the
+ASGI lifespan — importing `ta_web.app` alone never touches the filesystem or
+a database. The production image runs the same command (no `--reload`); see
+`ai-trading/deploy/production/README.md`'s "Research (06)" section and
+`ai-trading/deploy/local/README.md` for the actual deployed/local routes
+(behind the gateway's identity/prefix headers — this module trusts, never
+re-derives, caller identity).
 
 ## Running the tests
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tradingagents-web \
   python -m unittest discover -s tradingagents-web/tests -p 'test_*.py' -v
+node --test tradingagents-web/tests/test_ui.mjs
 ```
 
 ## Data model notes

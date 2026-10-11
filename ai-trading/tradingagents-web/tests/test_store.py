@@ -143,6 +143,18 @@ class StoreTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _inputs(ticker="A" * 33)
 
+    def test_overlong_raw_ticker_with_whitespace_rejected_before_trim(self):
+        # Final-fix wave: the request-boundary check happens BEFORE
+        # value.strip(), so a raw value this api accepted would otherwise
+        # trim down to a trivially-short, easily-valid canonical ticker and
+        # silently bypass the spec's 64-char request boundary.
+        with self.assertRaises(ValidationError):
+            _inputs(ticker="SPY" + " " * 62)  # 65 raw chars, 3 after trim
+
+    def test_raw_ticker_at_64_char_boundary_accepted(self):
+        inputs = _inputs(ticker="SPY" + " " * 61)  # exactly 64 raw chars
+        self.assertEqual(inputs.ticker, "SPY")
+
     def test_dot_only_or_path_ticker_rejected(self):
         for bad in (".", "..", "../etc", "a/b"):
             with self.assertRaises(ValidationError):

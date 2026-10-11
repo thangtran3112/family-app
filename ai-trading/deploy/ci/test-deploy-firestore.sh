@@ -515,6 +515,11 @@ status9=0
       echo "fake docker $*" >>"$APP_DIR/docker.log"
       return 0
     fi
+    # mirofish_container_ids' real-evidence query: no owned container in
+    # this scenario (MIROFISH_ACTIVATE is unset).
+    if [[ "${1:-}" == ps ]]; then
+      return 0
+    fi
     # prune_old_images must never reach a real daemon (or its images).
     if [[ "${1:-}" == images || "${1:-}" == rmi ]]; then
       return 0
@@ -919,35 +924,109 @@ for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.en
 done
 echo "    exit=$status"
 
-echo "=== Case 25 (GREEN x2, review P2 round 3): stop_remove_mirofish_container() -- best-effort 'compose rm -s -f mirofish', both outcomes checked and reported, never raises ==="
+echo "=== Case 25 (GREEN x3, review P2 round 3 + whole-branch review reopen round 2): stop_remove_mirofish_container() -- no owned container is a silent no-op with compose() never even called; an owned container with an active config delegates to best-effort 'compose rm -s -f mirofish', both outcomes checked and reported, never raises ==="
 CASE_COUNT=$((CASE_COUNT + 1))
+
+# 25a: real Docker evidence (faked here) says nothing is owned -- success,
+# and compose() (which would need a $APP_DIR/docker-compose.yml this case
+# never creates) must never even be called.
 err25a="$TEST_ROOT/case25a.err"
+compose_called25a="$TEST_ROOT/case25a.compose-called"
 result25a="$(
   IMAGE_TAG=0000000000000000000000000000000000000000
-  export IMAGE_TAG
+  APP_DIR="$TEST_ROOT/case25a-app"
+  export IMAGE_TAG APP_DIR
   # shellcheck source=/dev/null
   source "$LIB_FILE"
   # shellcheck disable=SC2329
-  compose() { return 0; }
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) return 0 ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { touch "$compose_called25a"; return 0; }
   (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25a"
 )"
-[[ "$result25a" == OK ]] || fail "case25a: expected OK when compose succeeds, got $result25a"
-[[ -s "$err25a" ]] && fail "case25a: no error should be logged when compose succeeds: $(cat "$err25a")"
+[[ "$result25a" == OK ]] || fail "case25a: expected OK when no owned container exists, got $result25a"
+[[ -s "$err25a" ]] && fail "case25a: no error should be logged when nothing is owned: $(cat "$err25a")"
+[[ -f "$compose_called25a" ]] && fail "case25a: compose() must never be called when no owned container exists"
 echo "    result=$result25a"
 
+# 25b/25c: an owned container exists AND the active config is present --
+# delegates to compose, both outcomes.
+mkdir -p "$TEST_ROOT/case25bc-app"
+printf 'name: fixture\nservices: {}\n' >"$TEST_ROOT/case25bc-app/docker-compose.yml"
 err25b="$TEST_ROOT/case25b.err"
 result25b="$(
   IMAGE_TAG=0000000000000000000000000000000000000000
-  export IMAGE_TAG
+  APP_DIR="$TEST_ROOT/case25bc-app"
+  export IMAGE_TAG APP_DIR
   # shellcheck source=/dev/null
   source "$LIB_FILE"
   # shellcheck disable=SC2329
-  compose() { return 1; }
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { return 0; }
   (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25b"
 )"
-[[ "$result25b" == FAILED ]] || fail "case25b: expected FAILED when compose fails, got $result25b"
-grep -q 'best-effort stop/remove' "$err25b" 2>/dev/null || fail "case25b: expected a best-effort stop/remove failure message: $(cat "$err25b" 2>/dev/null)"
+[[ "$result25b" == OK ]] || fail "case25b: expected OK when compose succeeds, got $result25b"
+[[ -s "$err25b" ]] && fail "case25b: no error should be logged when compose succeeds: $(cat "$err25b")"
 echo "    result=$result25b"
+
+err25c="$TEST_ROOT/case25c.err"
+result25c="$(
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  APP_DIR="$TEST_ROOT/case25bc-app"
+  export IMAGE_TAG APP_DIR
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  # shellcheck disable=SC2329
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { return 1; }
+  (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25c"
+)"
+[[ "$result25c" == FAILED ]] || fail "case25c: expected FAILED when compose fails, got $result25c"
+grep -q 'best-effort stop/remove' "$err25c" 2>/dev/null || fail "case25c: expected a best-effort stop/remove failure message: $(cat "$err25c" 2>/dev/null)"
+echo "    result=$result25c"
+
+echo "=== Case 25d (RED, whole-branch review reopen round 2): an owned container exists but the active \$APP_DIR/docker-compose.yml is missing -- refuses to guess, fails with a clear diagnosis instead of a generic Compose error ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+err25d="$TEST_ROOT/case25d.err"
+compose_called25d="$TEST_ROOT/case25d.compose-called"
+result25d="$(
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  APP_DIR="$TEST_ROOT/case25d-app"
+  export IMAGE_TAG APP_DIR
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  # shellcheck disable=SC2329
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { touch "$compose_called25d"; return 1; }
+  (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25d"
+)"
+[[ "$result25d" == FAILED ]] || fail "case25d: expected FAILED when an owned container exists but the active config is missing, got $result25d"
+grep -q 'no active .*docker-compose.yml to manage it with' "$err25d" 2>/dev/null || fail "case25d: expected the owned-missing-config diagnosis: $(cat "$err25d" 2>/dev/null)"
+[[ -f "$compose_called25d" ]] && fail "case25d: must not fall through to calling compose() when the active config is missing"
+echo "    result=$result25d"
 
 echo "=== Case 26 (GREEN overall, review P2 round 3): a genuine post-install scratch-cleanup failure escalates into a full activation failure and self-heals -- never exports COMPOSE_PROFILES over a leftover secret-bearing scratch copy ==="
 CASE_COUNT=$((CASE_COUNT + 1))
@@ -1013,20 +1092,27 @@ status27=0
   export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG MIROFISH_ACTIVATE
 
   # Fake docker: deploy.sh/health-check.sh only ever shell out to `docker
-  # compose ...`; no real Docker daemon is contacted anywhere in this case.
-  # Logs every compose subcommand (pull/up/rm) so this case can assert the
-  # best-effort stop_remove_mirofish_container call actually ran.
+  # compose ...` plus mirofish_container_ids' real-evidence `docker ps
+  # -aq --filter`; no real Docker daemon is contacted anywhere in this
+  # case. Logs every compose subcommand (pull/up/rm) so this case can
+  # assert the best-effort stop_remove_mirofish_container call actually
+  # ran; the ps query always reports an owned container so that call
+  # actually reaches 'compose rm -s -f mirofish' (the active
+  # docker-compose.yml this scratch run installs via stage_configs()
+  # before the health-check failure is what makes that the right branch).
   # shellcheck disable=SC2329
   docker() {
-    if [[ "${1:-}" == compose ]]; then
-      echo "fake docker $*" >>"$APP_DIR/docker.log"
-      return 0
-    fi
-    # prune_old_images must never reach a real daemon (or its images).
-    if [[ "${1:-}" == images || "${1:-}" == rmi ]]; then
-      return 0
-    fi
-    command docker "$@"
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose) return 0 ;;
+      ps)
+        echo fake-mirofish-container-id
+        return 0
+        ;;
+      # prune_old_images must never reach a real daemon (or its images).
+      images | rmi) return 0 ;;
+      *) command docker "$@" ;;
+    esac
   }
   export -f docker
 
@@ -1061,6 +1147,10 @@ echo "    exit=$status27"
 echo "=== Case 28 (GREEN, whole-branch review reopen): ensure_mirofish_stopped() -- a normal disabled redeploy after an earlier activation explicitly stops the stale container, not just unsets the profile ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s28="$(new_scratch case28)"
+# This case simulates STEADY STATE (an earlier deploy already installed the
+# active config); the genuine-first-bootstrap case (no active config at
+# all) is Case 52 below.
+printf 'name: fixture\nservices: {}\n' >"$s28/app/docker-compose.yml"
 marker28="$TEST_ROOT/case28-container-marker"
 touch "$marker28"
 err28="$TEST_ROOT/case28.err"
@@ -1071,20 +1161,28 @@ result28="$(
     export IMAGE_TAG APP_DIR
     # shellcheck source=/dev/null
     source "$LIB_FILE"
-    # Fake compose(): simulates a real Docker Compose project where the
-    # mirofish service's container still exists (marker file present)
-    # until explicitly stopped/removed. shellcheck only analyzes this
-    # file, not the sourced lib that calls it, so it looks unused here.
+    # Fake docker(): mirofish_container_ids' real-evidence `ps -aq --filter`
+    # query reports the marker's presence; fake compose(): simulates a real
+    # Docker Compose project where the mirofish service's container still
+    # exists until explicitly stopped/removed. shellcheck only analyzes
+    # this file, not the sourced lib that calls them, so they look unused
+    # here.
+    # shellcheck disable=SC2329
+    docker() {
+      case "$*" in
+        "ps -aq --filter"*)
+          [[ -f "$marker28" ]] && echo fake-mirofish-container-id
+          return 0
+          ;;
+        *) command docker "$@" ;;
+      esac
+    }
     # shellcheck disable=SC2329
     compose() {
       case "$*" in
         *"rm -s -f mirofish"*)
           echo "fake compose $*" >>"$APP_DIR/docker.log"
           rm -f "$marker28"
-          return 0
-          ;;
-        *"ps -q mirofish"*)
-          [[ -f "$marker28" ]] && echo fake-mirofish-container-id
           return 0
           ;;
         *) return 0 ;;
@@ -1105,6 +1203,7 @@ echo "    exit=$status28"
 echo "=== Case 29 (GREEN, whole-branch review reopen): ensure_mirofish_stopped() -- a FAILED new activation (missing Firestore profile) still explicitly stops a stale container left by an earlier successful activation ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s29="$(new_scratch case29)"
+printf 'name: fixture\nservices: {}\n' >"$s29/app/docker-compose.yml"
 marker29="$TEST_ROOT/case29-container-marker"
 touch "$marker29"
 err29="$TEST_ROOT/case29.err"
@@ -1120,15 +1219,21 @@ result29="$(
     # shellcheck source=/dev/null
     source "$LIB_FILE"
     # shellcheck disable=SC2329
+    docker() {
+      case "$*" in
+        "ps -aq --filter"*)
+          [[ -f "$marker29" ]] && echo fake-mirofish-container-id
+          return 0
+          ;;
+        *) command docker "$@" ;;
+      esac
+    }
+    # shellcheck disable=SC2329
     compose() {
       case "$*" in
         *"rm -s -f mirofish"*)
           echo "fake compose $*" >>"$APP_DIR/docker.log"
           rm -f "$marker29"
-          return 0
-          ;;
-        *"ps -q mirofish"*)
-          [[ -f "$marker29" ]] && echo fake-mirofish-container-id
           return 0
           ;;
         *) return 0 ;;
@@ -1155,6 +1260,11 @@ for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.en
   printf 'OLD_VALUE=old-%s\n' "$name" >"$s30/secrets/$name"
   chmod 0600 "$s30/secrets/$name"
 done
+# This case simulates STEADY STATE (an earlier deploy's active config is
+# already installed, and an earlier activation left a container running);
+# the genuine-first-bootstrap/owned-missing-config cases are Cases 52/53
+# below.
+printf 'name: fixture\nservices: {}\n' >"$s30/app/docker-compose.yml"
 status30=0
 (
   APP_DIR="$s30/app"
@@ -1167,30 +1277,33 @@ status30=0
   IMAGE_TAG=4444444444444444444444444444444444444444
   export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
-  # Fake docker: every compose subcommand is logged; 'rm -s -f mirofish'
-  # (the stop/remove call ensure_mirofish_stopped makes) always fails here,
-  # simulating a genuine Docker/daemon problem. MIROFISH_ACTIVATE stays
-  # unset (the normal disabled path) -- this case's own controlled
-  # precondition stands in for "an earlier activation left a container
-  # running that this stop attempt cannot clear."
+  # Fake docker: every call is logged; mirofish_container_ids' real-evidence
+  # `ps -aq --filter` query always reports an owned container, and
+  # 'rm -s -f mirofish' (the stop/remove call ensure_mirofish_stopped makes
+  # through compose(), since this scratch app dir has an active
+  # docker-compose.yml) always fails, simulating a genuine Docker/daemon
+  # problem. MIROFISH_ACTIVATE stays unset (the normal disabled path) --
+  # this case's own controlled precondition stands in for "an earlier
+  # activation left a container running that this stop attempt cannot
+  # clear."
   # shellcheck disable=SC2329
   docker() {
-    if [[ "${1:-}" == compose ]]; then
-      echo "fake docker $*" >>"$APP_DIR/docker.log"
-      case "$*" in
-        *"rm -s -f mirofish"*) return 1 ;;
-        *"ps -q mirofish"*)
-          echo fake-mirofish-container-id
-          return 0
-          ;;
-        *) return 0 ;;
-      esac
-    fi
-    # prune_old_images must never reach a real daemon (or its images).
-    if [[ "${1:-}" == images || "${1:-}" == rmi ]]; then
-      return 0
-    fi
-    command docker "$@"
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *"rm -s -f mirofish"*) return 1 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      ps)
+        echo fake-mirofish-container-id
+        return 0
+        ;;
+      # prune_old_images must never reach a real daemon (or its images).
+      images | rmi) return 0 ;;
+      *) command docker "$@" ;;
+    esac
   }
   export -f docker
 
@@ -1357,6 +1470,9 @@ status33=0
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
       compose) return 0 ;;
+      # mirofish_container_ids' real-evidence query: no owned container in
+      # this pruning-focused scenario (MIROFISH_ACTIVATE is unset).
+      ps) return 0 ;;
       images)
         cat "$APP_DIR/fake-images.txt"
         return 0
@@ -1977,6 +2093,110 @@ leftover_secrets51=("$s51/secrets"/*.env)
 shopt -u nullglob
 [[ ${#leftover_secrets51[@]} -eq 0 ]] || fail "case51: secrets staged earlier in this same run must roll back too: ${leftover_secrets51[*]}"
 echo "    exit=$status"
+
+# Cases 52-53 (final fix wave, whole-branch review reopen round 2): the
+# first-bootstrap Important defect final-review.md found, reproduced and
+# fixed against REAL Docker Compose -- no faked `docker`/`compose` anywhere
+# below, matching Case 31's own real-fixture technique, but this time with
+# genuinely NO docker-compose.yml ever written into $APP_DIR (Case 31 was
+# the one case final-review.md flagged as pre-seeding it, masking the exact
+# failure mode).
+
+echo "=== Case 52 (GREEN, REAL docker, whole-branch review reopen round 2): genuine first bootstrap -- \$APP_DIR has no docker-compose.yml at all and no real container exists for this disposable project -- real ensure_mirofish_stopped() succeeds without ever needing Compose's -f, fixing the real empty-\$APP_DIR bootstrap failure final-review.md found ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s52="$TEST_ROOT/case52"
+  mkdir -p "$s52/app"
+  proj52="mirofish-bootstrap-fixture-$$"
+  # Deliberately no docker-compose.yml/docker-compose.mirofish.yml anywhere
+  # under $s52/app, and no container for this unique disposable project
+  # name exists either -- the exact genuine-first-bootstrap condition
+  # final-review.md's Important finding describes (stage_configs() has not
+  # installed anything yet).
+  result52="$(
+    (
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      APP_DIR="$s52/app"
+      DEPLOY_SH_COMPOSE_PROJECT="$proj52"
+      export IMAGE_TAG APP_DIR DEPLOY_SH_COMPOSE_PROJECT
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      # Deliberately no fake docker/compose here -- the real binaries are
+      # exactly what used to fail on this path.
+      ensure_mirofish_stopped
+      echo DEPLOY_PROCEEDED
+    ) 2>"$s52/stderr.log"
+  )"
+  status52=$?
+  if [[ "$status52" != 0 ]]; then
+    fail "case52: expected exit 0 on a genuine first bootstrap with no active config and no owned container, got $status52: $(cat "$s52/stderr.log" 2>/dev/null)"
+  fi
+  echo "$result52" | grep -q DEPLOY_PROCEEDED || fail "case52: expected ensure_mirofish_stopped to succeed and let the deploy proceed"
+  grep -qi 'no such file' "$s52/stderr.log" 2>/dev/null && fail "case52: must never surface a generic Compose 'no such file' error on a genuine first bootstrap: $(cat "$s52/stderr.log")"
+  echo "    exit=$status52"
+fi
+
+echo "=== Case 53 (RED, REAL docker, whole-branch review reopen round 2): a real mirofish container exists for this project but \$APP_DIR/docker-compose.yml is genuinely missing -- real ensure_mirofish_stopped() refuses to guess and fails the deploy with a clear diagnosis instead of a generic Compose error (owned-missing-config denial) ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s53="$TEST_ROOT/case53"
+  mkdir -p "$s53/bringup" "$s53/app"
+  proj53="mirofish-denial-fixture-$$"
+  cat >"$s53/bringup/docker-compose.mirofish.yml" <<EOF
+name: $proj53
+services:
+  mirofish:
+    image: busybox:1
+    command: ["sleep", "infinity"]
+    profiles: ["mirofish"]
+EOF
+  ok53=1
+  # Bring up a real, owned mirofish container under its own bring-up
+  # directory -- $s53/app (the directory ensure_mirofish_stopped will be
+  # pointed at below) never gets a docker-compose.yml at all, so the
+  # container is genuinely "owned" (real compose project/service labels)
+  # while its active base config is genuinely missing.
+  if ! COMPOSE_PROFILES=mirofish docker compose --project-name "$proj53" -f "$s53/bringup/docker-compose.mirofish.yml" up -d --wait --wait-timeout 30 >"$s53/up.log" 2>&1; then
+    fail "case53: real 'docker compose up' failed: $(cat "$s53/up.log" 2>/dev/null)"
+    ok53=0
+  fi
+  if [[ "$ok53" == 1 ]]; then
+    # Bare subshell + `|| status=$?` (not a `result="$(...)"` assignment --
+    # under this script's own top-level `set -e`, a *failing* command
+    # substitution inside a plain assignment aborts the whole test script,
+    # same bash quirk Case 8/9/27/30 already route around this same way;
+    # this case, unlike Case 52, expects a genuine non-zero exit).
+    status53=0
+    (
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      APP_DIR="$s53/app"
+      DEPLOY_SH_COMPOSE_PROJECT="$proj53"
+      export IMAGE_TAG APP_DIR DEPLOY_SH_COMPOSE_PROJECT
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      ensure_mirofish_stopped
+      echo DEPLOY_PROCEEDED
+    ) >"$s53/stdout.log" 2>"$s53/stderr.log" || status53=$?
+    [[ "$status53" != 0 ]] || fail "case53: expected non-zero exit when an owned container exists but the active config is missing, got 0: $(cat "$s53/stdout.log" 2>/dev/null)"
+    grep -q DEPLOY_PROCEEDED "$s53/stdout.log" 2>/dev/null && fail "case53: deploy must not proceed when an owned container exists with no active config to manage it"
+    grep -q 'no active .*docker-compose.yml to manage it with' "$s53/stderr.log" 2>/dev/null || fail "case53: expected the owned-missing-config diagnosis: $(cat "$s53/stderr.log" 2>/dev/null)"
+    if ! docker ps -a --filter "label=com.docker.compose.project=$proj53" --format '{{.Names}}' | grep -q mirofish; then
+      fail "case53: the real mirofish container must still exist -- this function must refuse to guess, not silently remove it via an unverified path"
+    fi
+    echo "    exit=$status53"
+  fi
+  # Teardown: always attempt, regardless of pass/fail above, so no real
+  # Docker resource from this test ever lingers (same belt-and-suspenders
+  # as Case 31's own teardown -- `down` alone occasionally leaves the
+  # auto-created network behind).
+  docker compose --project-name "$proj53" -f "$s53/bringup/docker-compose.mirofish.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+  docker rm -f "${proj53}-mirofish-1" >/dev/null 2>&1 || true
+  docker network rm "${proj53}_default" >/dev/null 2>&1 || true
+fi
 
 echo
 cleanup

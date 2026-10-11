@@ -116,6 +116,13 @@ if (typeof document !== 'undefined') {
   let items = [];
   let pageLimit = PAGE_SIZE;
   let pageOffset = 0;
+  // History filters (final-fix wave, spec §5): applied server-side via
+  // Store.list_owned across the caller's whole history, not just the
+  // current page -- mirrored into the URL the same way pageOffset already
+  // is, so reload/Back/Forward restore them.
+  let filterTicker = '';
+  let filterStatus = '';
+  let filterDate = '';
   let listToday = '';
   let ownerId = '';
   let listControls = null;
@@ -203,6 +210,19 @@ if (typeof document !== 'undefined') {
     navigate(`${url.pathname}${url.search}`);
   }
 
+  // Applying/changing any history filter resets to page one: the previous
+  // offset belongs to a different (unfiltered or differently-filtered)
+  // result set and otherwise could silently point past the end of this one.
+  function scheduleListFilters({ ticker, status, analysisDate }) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('offset');
+    for (const [param, value] of [['ticker', ticker], ['status', status], ['analysis_date', analysisDate]]) {
+      if (value) url.searchParams.set(param, value);
+      else url.searchParams.delete(param);
+    }
+    navigate(`${url.pathname}${url.search}`);
+  }
+
   function createInput(labelText, name, type, value, attrs = {}) {
     const wrapper = element('label', 'field');
     wrapper.append(text('span', labelText));
@@ -225,7 +245,7 @@ if (typeof document !== 'undefined') {
 
     const ticker = createInput('Ticker', 'ticker', 'text', typeof initial.ticker === 'string' ? initial.ticker : '', {
       required: true, maxlength: 32, autocomplete: 'off', autocapitalize: 'characters', spellcheck: false,
-      'aria-describedby': 'ticker-help',
+      'aria-describedby': `ticker-help-${generation}`,
     });
     ticker.input.id = `ticker-${generation}`;
     ticker.wrapper.append(text('small', 'Up to 32 characters.', 'field-help'));
@@ -234,9 +254,13 @@ if (typeof document !== 'undefined') {
     tickerError.hidden = true;
     ticker.wrapper.append(tickerError);
     form.append(ticker.wrapper);
+    // Minor (final review): generation-scoped like every other id in this
+    // form -- no collision today (only one makeResearchForm renders at a
+    // time), but this is the one id here that wasn't, and the fix is
+    // mechanical, not a new abstraction.
     const tickerHelp = form.querySelector('.field-help');
-    tickerHelp.id = 'ticker-help';
-    ticker.input.setAttribute('aria-describedby', `ticker-help ${tickerError.id}`);
+    tickerHelp.id = `ticker-help-${generation}`;
+    ticker.input.setAttribute('aria-describedby', `ticker-help-${generation} ${tickerError.id}`);
 
     const date = createInput('Analysis date', 'analysis_date', 'date',
       typeof initial.analysis_date === 'string' ? initial.analysis_date : today);
@@ -443,16 +467,21 @@ if (typeof document !== 'undefined') {
     });
 
     const controls = element('section', 'list-controls', { 'aria-label': 'Research filters' });
-    const search = createInput('Filter this page by ticker', 'search', 'search', '', { autocomplete: 'off' });
-    search.input.setAttribute('aria-label', 'Filter this page by ticker');
+    const ticker = createInput('Ticker', 'ticker_filter', 'text', filterTicker, { autocomplete: 'off', maxlength: 32 });
+    ticker.input.setAttribute('aria-label', 'Filter history by exact ticker');
+    ticker.wrapper.append(text('small', 'Matches the exact ticker across your whole history.', 'field-help'));
+    const analysisDate = createInput('Analysis date', 'analysis_date_filter', 'date', filterDate);
+    analysisDate.input.setAttribute('aria-label', 'Filter history by analysis date');
     const statusLabel = element('label', 'field');
     statusLabel.append(text('span', 'Status'));
     const status = element('select', '', { 'aria-label': 'Filter by status' });
     for (const [value, labelText] of [['', 'All statuses'], ['running', 'Running'], ['completed', 'Completed'], ['failed', 'Failed'], ['interrupted', 'Interrupted']]) {
-      status.append(element('option', '', { value, text: labelText }));
+      const option = element('option', '', { value, text: labelText });
+      option.selected = filterStatus === value;
+      status.append(option);
     }
     statusLabel.append(status);
-    controls.append(search.wrapper, statusLabel);
+    controls.append(ticker.wrapper, analysisDate.wrapper, statusLabel);
     app.append(controls);
     const results = element('section', 'results', { 'aria-label': 'Research runs' });
     results.id = 'research-results';
@@ -465,8 +494,15 @@ if (typeof document !== 'undefined') {
     app.append(pager);
     previous.addEventListener('click', () => scheduleListOffset(Math.max(0, pageOffset - pageLimit)));
     next.addEventListener('click', () => scheduleListOffset(pageOffset + pageLimit));
-    search.input.addEventListener('input', () => drawList(results, search.input.value, status.value, previous, next, pageLabel));
-    status.addEventListener('change', () => drawList(results, search.input.value, status.value, previous, next, pageLabel));
+    // Filters apply across the caller's whole history via the API (spec
+    // §5), not just this page -- `change` (blur/Enter/select), not `input`,
+    // so a server round trip doesn't fire on every keystroke.
+    const applyFilters = () => scheduleListFilters({
+      ticker: ticker.input.value.trim(), status: status.value, analysisDate: analysisDate.input.value,
+    });
+    ticker.input.addEventListener('change', applyFilters);
+    analysisDate.input.addEventListener('change', applyFilters);
+    status.addEventListener('change', applyFilters);
 
     if (ownerId) {
       const importDetails = element('details', 'owner-key');
@@ -475,23 +511,23 @@ if (typeof document !== 'undefined') {
       importDetails.append(text('code', ownerId));
       app.append(importDetails);
     }
-    return { results, previous, next, pageLabel, search, status };
+    return { results, previous, next, pageLabel };
   }
 
   function recordLabel(record) {
     return display(record?.inputs?.ticker);
   }
 
-  function drawList(results, searchTerm = '', statusFilter = '', previous, next, pageLabel) {
+  function drawList(results, previous, next, pageLabel) {
     results.replaceChildren();
-    const filtered = items.filter((item) => {
-      const tickerMatches = recordLabel(item).toLocaleLowerCase().includes(searchTerm.trim().toLocaleLowerCase());
-      return tickerMatches && (!statusFilter || item.status === statusFilter);
-    });
-    if (!filtered.length) {
+    // Filters are applied server-side, across the caller's whole history
+    // (spec §5) -- `items` is already exactly this page's filtered result,
+    // never re-filtered here.
+    const filtersActive = Boolean(filterTicker || filterStatus || filterDate);
+    if (!items.length) {
       const empty = element('div', 'empty-state');
-      empty.append(text('h2', items.length ? 'No matching research' : 'No research yet'));
-      empty.append(text('p', items.length ? 'Adjust filters to see other runs on this page.' : 'Start a run when you are ready. Each request creates a separate private record.'));
+      empty.append(text('h2', filtersActive ? 'No matching research' : 'No research yet'));
+      empty.append(text('p', filtersActive ? 'Adjust filters to see other runs in your history.' : 'Start a run when you are ready. Each request creates a separate private record.'));
       results.append(empty);
     } else {
       const tableWrap = element('div', 'table-wrap');
@@ -503,7 +539,7 @@ if (typeof document !== 'undefined') {
       table.append(head);
       const body = element('tbody', '');
       const cards = element('ul', 'research-cards');
-      for (const record of filtered) {
+      for (const record of items) {
         const detailPath = `${base}/${encodeURIComponent(record.id)}`;
         const tickerLink = link(detailPath, recordLabel(record), true);
         const row = element('tr', '');
@@ -757,8 +793,7 @@ if (typeof document !== 'undefined') {
     listToday = typeof data.today === 'string' ? data.today : '';
     ownerId = typeof data.owner_id === 'string' ? data.owner_id : '';
     if (!listControls) listControls = makeListPage();
-    drawList(listControls.results, listControls.search.input.value, listControls.status.value,
-      listControls.previous, listControls.next, listControls.pageLabel);
+    drawList(listControls.results, listControls.previous, listControls.next, listControls.pageLabel);
     const statusSignature = items.map((item) => `${item.id}:${item.status}:${item.stage}`).join('|');
     if (statusSignature !== lastListStatus) {
       announce(`Research history updated. ${items.length} run${items.length === 1 ? '' : 's'} on this page.`);
@@ -770,6 +805,9 @@ if (typeof document !== 'undefined') {
 
   async function loadList(token) {
     const query = new URLSearchParams({ limit: String(pageLimit), offset: String(pageOffset) });
+    if (filterTicker) query.set('ticker', filterTicker);
+    if (filterStatus) query.set('status', filterStatus);
+    if (filterDate) query.set('analysis_date', filterDate);
     try {
       const data = await request(`/research?${query}`, {}, token);
       if (data) renderListRecords(data, token);
@@ -801,6 +839,9 @@ if (typeof document !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
     const offset = Number(params.get('offset'));
     pageOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    filterTicker = params.get('ticker') || '';
+    filterStatus = params.get('status') || '';
+    filterDate = params.get('analysis_date') || '';
     listControls = null;
     lastDetailSignature = '';
     lastListStatus = '';

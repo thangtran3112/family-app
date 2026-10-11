@@ -56,7 +56,10 @@
 #                             `--project-name ai-trading`, so a test can point the real
 #                             compose()/ensure_mirofish_stopped() code at a disposable,
 #                             uniquely-named scratch Compose project instead of the real
-#                             one. Never set this in production.
+#                             one. mirofish_container_ids()'s own real-Docker evidence
+#                             query (its `docker ps --filter label=com.docker.compose.
+#                             project=...`) uses this same name, so the override scopes
+#                             both. Never set this in production.
 #   AI_TRADING_MIN_FREE_GB    free GiB required (after old images are pruned) before this
 #                             release is pulled; a whole number 0-999999, default 30. One
 #                             release unpacks to ~17 GB and needs ~5 GB more of compressed
@@ -284,20 +287,58 @@ cleanup_mirofish_scratch() {
   fi
 }
 
-# stop_remove_mirofish_container: best-effort stop+remove of a running
-# mirofish container (review P2, round 3). A container a *successful*
-# `compose up` already started earlier in this same deploy attempt does not
-# stop itself just because this process later decides, during rollback,
-# that mirofish.env can't be restored or deleted -- COMPOSE_PROFILES and
-# mirofish.env are this script's own bookkeeping, not a live signal the
-# container reacts to, so "MiroFish left disabled" in the log would
-# otherwise be false: the container could still be running, unmonitored,
-# with no corresponding env file on disk. `compose rm -s -f` stops it first
-# (if still running) then force-removes it, no confirmation prompt. Always
-# best-effort: never lets a failure here change the caller's own outcome,
-# only logs that manual intervention may be needed (service name only,
-# nothing else to log).
+# mirofish_container_ids: real Docker evidence of every container this
+# run's compose project owns as its "mirofish" service -- found directly
+# via `docker ps`'s own compose labels, so this never depends on
+# $APP_DIR/docker-compose.yml existing at all (whole-branch review reopen,
+# round 2: that file is not installed yet on a genuine first bootstrap,
+# before stage_configs() has ever run) and never lets Compose fall back to
+# discovering an unrelated project from $PWD -- there is no `-f` here to
+# omit. `-a` includes a stopped/exited container, not just a running one,
+# so a left-behind exited container still counts as "owned." A real
+# `docker ps` failure (e.g. the daemon is unreachable) is never swallowed
+# as "no containers": its non-zero exit status is passed straight through
+# to the caller instead of being read as proof nothing is running.
+mirofish_container_ids() {
+  docker ps -aq \
+    --filter "label=com.docker.compose.project=${DEPLOY_SH_COMPOSE_PROJECT:-ai-trading}" \
+    --filter "label=com.docker.compose.service=mirofish"
+}
+
+# stop_remove_mirofish_container: best-effort stop+remove of any mirofish
+# container this project owns (review P2, round 3; whole-branch review
+# reopen round 2 added the real-evidence check above). Three outcomes:
+#   - no owned container exists (per mirofish_container_ids' real evidence,
+#     not a guess from file existence): nothing to do, success -- this is
+#     the genuine first-bootstrap case, with or without an active
+#     $APP_DIR/docker-compose.yml.
+#   - an owned container exists AND $APP_DIR/docker-compose.yml is active:
+#     delegate to `compose rm -s -f mirofish` exactly as before -- it stops
+#     the container first (if still running) then force-removes it, no
+#     confirmation prompt.
+#   - an owned container exists but $APP_DIR/docker-compose.yml is
+#     missing: an inconsistent state this script cannot safely resolve
+#     through Compose (it has nothing to pass as `-f`) -- fail loudly with
+#     a clear diagnosis instead of a generic Compose "no such file" error,
+#     and never silently assume there is nothing to stop.
+# A failed mirofish_container_ids query itself (e.g. daemon unreachable) is
+# reported and fails this function too, same "never swallow a real Docker
+# error as success" discipline. The config-present branch stays best-effort
+# from the caller's point of view: never lets a `compose rm` failure change
+# this function's own reported outcome beyond returning 1, only logs that
+# manual intervention may be needed (service name only, nothing else to
+# log).
 stop_remove_mirofish_container() {
+  local ids
+  if ! ids="$(mirofish_container_ids)"; then
+    echo "deploy: mirofish: failed to query Docker for an existing mirofish container; it may still be running -- check manually" >&2
+    return 1
+  fi
+  [[ -n "$ids" ]] || return 0
+  if [[ ! -f "$APP_DIR/docker-compose.yml" ]]; then
+    echo "deploy: mirofish: found an existing mirofish container for this project but no active $APP_DIR/docker-compose.yml to manage it with -- refusing to guess; check manually" >&2
+    return 1
+  fi
   if ! compose rm -s -f mirofish >/dev/null 2>&1; then
     echo "deploy: mirofish: best-effort stop/remove of the mirofish container failed; it may still be running -- check manually" >&2
     return 1
@@ -507,19 +548,43 @@ activate_mirofish() {
 #
 # This explicitly stops+removes any such container (reusing
 # stop_remove_mirofish_container, the same best-effort primitive rollback
-# already uses) and then independently VERIFIES its absence via `compose ps
-# -q mirofish` -- never trusting a zero exit status alone. Either check
-# failing is NOT best-effort here: it FAILS THIS DEPLOY outright (die(),
-# before stage_secrets or deploy_tag ever runs), so the previously-deployed
-# tag -- the other three apps, gateway, auth, cloudflared -- is left
-# completely untouched rather than risk a newly-deployed "disabled" stack
-# silently running next to an unverified, un-monitored MiroFish instance.
-# A no-op when this run's own activation succeeded (COMPOSE_PROFILES is
-# already "mirofish" -- deploy_tag's own `compose up` manages it normally).
+# already uses) and then independently VERIFIES its absence via
+# mirofish_container_ids' real Docker evidence -- never trusting a zero
+# exit status alone, and never via `compose ps -q mirofish`, which (like
+# every other compose() call) requires `-f $APP_DIR/docker-compose.yml` to
+# resolve a project at all.
+#
+# Round 2 (whole-branch review reopen): that unconditional `-f` was itself
+# the bug -- `compose()`'s base file is installed by stage_configs(), which
+# this function runs strictly *before*, on every deploy. On a genuinely
+# empty $APP_DIR (a fresh VPS, or any host rebuild) real `docker compose`
+# failed on the missing `-f` file before stop_remove_mirofish_container
+# could even try, aborting the whole deploy with a generic "no such file"
+# error instead of the clear diagnosis below. Both
+# stop_remove_mirofish_container and this function's own verification now
+# go through mirofish_container_ids() instead -- real `docker ps` evidence,
+# scoped by compose project/service label, which needs no `-f` and so works
+# identically whether or not $APP_DIR/docker-compose.yml currently exists.
+# Either check failing is NOT best-effort here: it FAILS THIS DEPLOY
+# outright (die(), before stage_secrets or deploy_tag ever runs), so the
+# previously-deployed tag -- the other three apps, gateway, auth,
+# cloudflared -- is left completely untouched rather than risk a
+# newly-deployed "disabled" stack silently running next to an unverified,
+# un-monitored MiroFish instance. A no-op when this run's own activation
+# succeeded (COMPOSE_PROFILES is already "mirofish" -- deploy_tag's own
+# `compose up` manages it normally).
 ensure_mirofish_stopped() {
   [[ "${COMPOSE_PROFILES:-}" == mirofish ]] && return 0
   stop_remove_mirofish_container || die "mirofish: failed to stop/remove an existing mirofish container; aborting this deploy -- the previously-deployed tag stays running"
-  [[ -z "$(compose ps -q mirofish 2>/dev/null)" ]] || die "mirofish: a mirofish container is still present after stop/remove; aborting this deploy -- the previously-deployed tag stays running"
+  # whole-branch review reopen, round 2: verify via mirofish_container_ids'
+  # real Docker evidence, not `compose ps -q mirofish` -- that call requires
+  # `-f $APP_DIR/docker-compose.yml` to resolve a project at all, a file
+  # that does not exist yet on a genuine first bootstrap (this verification
+  # must hold on that path too, where stop_remove_mirofish_container above
+  # already found nothing to stop and never called compose() at all).
+  local remaining
+  remaining="$(mirofish_container_ids)" || die "mirofish: failed to verify no mirofish container remains; aborting this deploy -- the previously-deployed tag stays running"
+  [[ -z "$remaining" ]] || die "mirofish: a mirofish container is still present after stop/remove; aborting this deploy -- the previously-deployed tag stays running"
 }
 
 # prune_old_images: image retention. Every release unpacks to ~17 GB (MiroFish's
@@ -673,8 +738,17 @@ rollback() {
   if [[ -n "$ENV_STAGING_DIR" ]]; then
     restore_or_remove_secrets
   fi
-  restore_or_remove_configs || echo "deploy: config: rollback error above; one or more of docker-compose.yml/docker-compose.mirofish.yml/Caddyfile/health-check.sh may be left in an inconsistent state, the rest of rollback continues" >&2
+  # whole-branch review reopen, round 2: MiroFish rollback runs BEFORE
+  # config rollback, not after. stop_remove_mirofish_container() needs
+  # $APP_DIR/docker-compose.yml to still be the one this same run's
+  # deploy_tag/compose up just used, to correctly `compose rm -s -f
+  # mirofish` any container that file started -- restore_or_remove_configs
+  # below may delete that exact file an instant later (a genuine first
+  # deploy has no prior version to restore), which would otherwise leave
+  # stop_remove_mirofish_container looking at a config that already
+  # vanished, through no fault of an external actor, and refusing to guess.
   restore_or_remove_mirofish || echo "deploy: mirofish: rollback error above; MiroFish left disabled, the rest of rollback continues" >&2
+  restore_or_remove_configs || echo "deploy: config: rollback error above; one or more of docker-compose.yml/docker-compose.mirofish.yml/Caddyfile/health-check.sh may be left in an inconsistent state, the rest of rollback continues" >&2
   if [[ -f "$STATE_FILE" ]]; then
     previous="$(cat "$STATE_FILE")"
   fi
