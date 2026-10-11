@@ -42,6 +42,6 @@ This stack's own `deploy/local/Caddyfile` (loaded by the `router` service in ste
      -f ai-trading/deploy/local/docker-compose.override.yml up -d --wait
    ```
 
-4. Open http://localhost:8080 for the hub. Vibe-Trading is at http://localhost:8899; on first visit open Settings > Local API access, paste `local-dev-key` into Server API key, and save.
+4. Open http://localhost:8080 for the hub. Vibe-Trading is at http://localhost:8899; on first visit open Settings > Local API access, paste `local-dev-key` into Server API key, and save. TradingAgents research (06) is at http://localhost:8080/u/tradingagents/research, with the same mock identity header the local Caddyfile injects for the terminal routes — not a production auth test, same caveat as above (the real auth/Origin/sharing contract is covered by `ai-trading/deploy/ci/smoke-test.sh gateway`, see `ai-trading/tradingagents-web/DIVERGENCE.md`).
 
 5. Stop the stack: run the same compose command with `down` instead of `up -d --wait`.

@@ -5,6 +5,17 @@
 
 # Hub and terminals, like trading-hub.tobytran.dev's dynamic paths behind the tunnel.
 :8080 {
+	# Research (06) is matched before the broader /u/tradingagents* terminal
+	# route below, same reasoning as the production Caddyfile: a prefix
+	# wildcard there would otherwise swallow these paths first.
+	@ta_research path /u/tradingagents/research /u/tradingagents/research/* /u/tradingagents/api/research /u/tradingagents/api/research/*
+	handle @ta_research {
+		uri strip_prefix /u/tradingagents
+		reverse_proxy ta-research:8182 {
+			header_up Cf-Access-Authenticated-User-Email local-dev@example.test
+			header_up X-Family-App-Prefix /u/tradingagents
+		}
+	}
 	handle /u/tradingagents* {
 		reverse_proxy ta-terminal:7681 {
 			header_up Cf-Access-Authenticated-User-Email local-dev@example.test
