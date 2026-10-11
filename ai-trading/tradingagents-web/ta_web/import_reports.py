@@ -78,6 +78,26 @@ def _regular_file(path: Path) -> bool:
     return path.is_file() and not path.is_symlink()
 
 
+def _accepted_file(source_real: Path, absolute: Path) -> bool:
+    """Regular, non-symlink leaf *and* fully resolved beneath ``source_real``.
+
+    ``O_NOFOLLOW`` on the open in ``_bounded_read`` only refuses a symlinked
+    leaf; a symlinked ancestor directory (``source/reports -> /elsewhere``,
+    followed by a perfectly ordinary ``market_report.md`` inside it) would
+    still resolve and read outside the assigned source otherwise. Resolving
+    once per candidate against the one already-resolved ``source_real`` makes
+    this exact for the actual target regardless of harmless path aliasing
+    above ``source`` itself (e.g. macOS's ``/var`` -> ``/private/var``).
+    """
+    if not _regular_file(absolute):
+        return False
+    try:
+        real_absolute = Path(os.path.realpath(absolute))
+    except OSError:
+        return False
+    return real_absolute.is_relative_to(source_real)
+
+
 def _bounded_read(path: Path, remaining_budget: int) -> bytes:
     """No-follow, regular-file-only read, rejected *before* allocation if it
     would exceed the remaining budget."""
@@ -99,13 +119,15 @@ def _bounded_read(path: Path, remaining_budget: int) -> bytes:
             os.close(fd)
 
 
-def _collect(source: Path, names: list[tuple[Path, Path]]) -> list[tuple[Path, bytes]]:
+def _collect(source_real: Path, names: list[tuple[Path, Path]]) -> list[tuple[Path, bytes]]:
     """``[(relative_path, bytes), ...]`` for the present, recognized files in
-    ``names`` (``(relative_path, absolute_path)`` pairs), bounded in total."""
+    ``names`` (``(relative_path, absolute_path)`` pairs), bounded in total.
+    A file behind a symlinked ancestor directory is treated as absent, same
+    as a missing file — never read, never counted."""
     collected: list[tuple[Path, bytes]] = []
     remaining = _MAX_BYTES
     for relative, absolute in names:
-        if not _regular_file(absolute):
+        if not _accepted_file(source_real, absolute):
             continue
         data = _bounded_read(absolute, remaining)
         remaining -= len(data)
@@ -118,9 +140,12 @@ def _collect(source: Path, names: list[tuple[Path, Path]]) -> list[tuple[Path, b
 def _find_content(source: Path) -> tuple[str, bool, list[tuple[Path, bytes]]]:
     """``(markdown_text, consolidated, files)``: ``files`` is exactly the
     recognized, bounded-read files that contributed — the one set the
-    fingerprint hashes. Never infers content from name/mtime or globs."""
+    fingerprint hashes. Never infers content from name/mtime or globs; every
+    candidate must resolve beneath ``source`` itself (no symlinked ancestor,
+    e.g. ``source/reports -> elsewhere``)."""
+    source_real = Path(os.path.realpath(source))
     consolidated_path = source / "complete_report.md"
-    if _regular_file(consolidated_path):
+    if _accepted_file(source_real, consolidated_path):
         data = _bounded_read(consolidated_path, _MAX_BYTES)
         rel = Path("complete_report.md")
         return data.decode("utf-8", errors="replace"), True, [(rel, data)]
@@ -130,10 +155,10 @@ def _find_content(source: Path) -> tuple[str, bool, list[tuple[Path, bytes]]]:
         for folder in _SECTION_FOLDERS
         for name in _SECTION_FILES[folder]
     ]
-    files = _collect(source, nested)
+    files = _collect(source_real, nested)
     if not files:
         flat = [(Path("reports") / f"{name}.md", source / "reports" / f"{name}.md") for name in _FLAT_SECTION_NAMES]
-        files = _collect(source, flat)
+        files = _collect(source_real, flat)
     if not files:
         raise ReportError("REPORT_INVALID_FORMAT")
     text = "\n\n".join(data.decode("utf-8", errors="replace") for _rel, data in files)

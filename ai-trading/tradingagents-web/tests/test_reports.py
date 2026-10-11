@@ -353,6 +353,40 @@ class LegacyImportTestCase(unittest.TestCase):
         with self.assertRaises(ReportError):
             import_folder(self.store, source, self.owner)
 
+    def test_import_nested_ancestor_symlink_not_followed(self):
+        """A symlinked `1_analysts/` directory must not let an ordinary-named
+        file outside `source` resolve as accepted content (O_NOFOLLOW on the
+        leaf alone misses a symlinked ancestor)."""
+        outside = self.root / "outside-analysts"
+        outside.mkdir()
+        (outside / "market.md").write_text("secret outside content", encoding="utf-8")
+        source = self.root / "legacy-symlinked-ancestor"
+        source.mkdir()
+        os.symlink(outside, source / "1_analysts")
+
+        before = self.store.list_owned(self.owner)
+        with self.assertRaises(ReportError) as ctx:
+            import_folder(self.store, source, self.owner)
+        self.assertEqual(ctx.exception.code, "REPORT_INVALID_FORMAT")
+        self.assertEqual(self.store.list_owned(self.owner), before)
+
+    def test_import_flat_ancestor_symlink_not_followed(self):
+        """Same escape via the flat CLI layout: `source/reports -> elsewhere`
+        must not admit an ordinary-named `market_report.md` living outside
+        `source`."""
+        outside = self.root / "outside-reports"
+        outside.mkdir()
+        (outside / "market_report.md").write_text("secret outside content", encoding="utf-8")
+        source = self.root / "legacy-flat-symlinked-ancestor"
+        source.mkdir()
+        os.symlink(outside, source / "reports")
+
+        before = self.store.list_owned(self.owner)
+        with self.assertRaises(ReportError) as ctx:
+            import_folder(self.store, source, self.owner)
+        self.assertEqual(ctx.exception.code, "REPORT_INVALID_FORMAT")
+        self.assertEqual(self.store.list_owned(self.owner), before)
+
     def test_import_write_failure_cleans_stage_and_rolls_back(self):
         source = self.root / "legacy-replace-fail"
         source.mkdir()
