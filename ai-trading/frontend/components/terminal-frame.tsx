@@ -1,62 +1,66 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, RotateCw } from "lucide-react";
+import { ArrowUpRight, Info, RotateCw, Terminal } from "lucide-react";
 import { appIcons, type TerminalApp } from "@/lib/apps";
-import { StatusBadge } from "@/components/status-badge";
 
 export function TerminalFrame({ app }: { app: TerminalApp }) {
   const [connection, setConnection] = useState(0);
   const Icon = appIcons[app.icon];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-11 flex-wrap items-center gap-3 border-b border-border px-4 py-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-          <Icon aria-hidden size={16} />
+    <div className="mx-auto w-full max-w-[1440px] px-6 pt-7 pb-8 md:p-8 xl:px-10 xl:pt-9 xl:pb-7">
+      <div className="flex flex-wrap items-center justify-between gap-6">
+        <div className="max-w-[590px]">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-muted text-accent"><Icon aria-hidden size={24} strokeWidth={1.5} /></div>
+            <h1 className="text-[28px] leading-9 font-semibold tracking-[-0.04em] md:text-4xl md:leading-[44px]">{app.name}</h1>
+          </div>
+          <p className="mt-3 text-[15px] leading-6 text-muted-foreground">{app.summary} Run the original app here.</p>
         </div>
-        <h1 className="text-sm font-semibold text-foreground">{app.name}</h1>
-        <StatusBadge app={app} />
-        <button
-          type="button"
-          onClick={() => setConnection((n) => n + 1)}
-          className="flex h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          <RotateCw aria-hidden size={16} />
-          Reconnect
-        </button>
-        <a
-          href={app.hostUrl}
-          target="_blank"
-          rel="noopener"
-          className="flex h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          <ExternalLink aria-hidden size={16} />
-          Open in new tab
+        <a href={app.hostUrl} target="_blank" rel="noopener" aria-label={`Open ${app.name} full-screen (opens in a new tab)`} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-accent px-[18px] text-[13px] leading-5 font-semibold text-on-accent transition-colors duration-150 hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none">
+          Open full-screen<ArrowUpRight aria-hidden size={16} strokeWidth={1.6} />
         </a>
         {app.slug === "tradingagents" && (
           <a
             href={new URL("research", app.hostUrl).toString()}
             target="_blank"
             rel="noopener"
-            className="flex h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            aria-label="Open TradingAgents research dashboard (opens in a new tab)"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] border border-border px-[18px] text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
           >
-            <ExternalLink aria-hidden size={16} />
-            Research dashboard
+            Research dashboard<ArrowUpRight aria-hidden size={16} strokeWidth={1.6} />
           </a>
         )}
-        <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
-          Closing this page keeps your session running.
-        </span>
       </div>
-      <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Good for:</span> {app.goodFor}
-        <span aria-hidden className="mx-2">
-          ·
-        </span>
-        <span className="font-medium text-foreground">Cost:</span> {app.costNote}
+
+      <div className="mt-7 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_276px]">
+        <section aria-label={`${app.name} terminal`} className="min-w-0 overflow-hidden rounded-xl border border-border">
+          <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-card px-5">
+            <div className="flex items-center gap-2.5 text-[13px] font-medium"><Terminal aria-hidden size={17} strokeWidth={1.6} className="text-muted-foreground" />Terminal</div>
+            <button type="button" onClick={() => setConnection((n) => n + 1)} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-xs text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"><RotateCw aria-hidden size={14} />Reconnect</button>
+          </div>
+          <iframe key={connection} src={app.terminalPath} title={`${app.name} terminal`} className="block h-[378px] w-full border-0 bg-black xl:h-[max(378px,calc(100dvh-522px))]" />
+          <div className="flex items-center gap-2.5 border-t border-border bg-card px-5 py-3.5 text-xs leading-[18px] text-muted-foreground"><Info aria-hidden size={15} className="shrink-0" /><p>Closing this page keeps your terminal session running.</p></div>
+        </section>
+
+        <aside aria-label="App guidance" className="space-y-7">
+          <section>
+            <h2 className="text-[11px] leading-4 tracking-[0.08em] text-muted-foreground">GOOD FOR</h2>
+            <p className="mt-3 text-xl leading-7 font-medium tracking-[-0.025em]">{app.goodFor}</p>
+            <p className="mt-3 text-sm leading-[22px] text-muted-foreground">Compare the results with your own research before forming a judgment.</p>
+          </section>
+          <section className="border-t border-border pt-6">
+            <h2 className="text-[13px] leading-5 font-semibold">Before you start</h2>
+            <p className="mt-3 text-sm leading-[22px] text-muted-foreground">Use a keyboard for the terminal.</p>
+            <p className="mt-3 text-sm leading-[22px] text-muted-foreground">{app.costNote}</p>
+          </section>
+          <section className="rounded-[10px] border border-border p-[18px]">
+            <h2 className="text-[13px] leading-5 font-medium">Research, not execution.</h2>
+            <p className="mt-2.5 text-[13px] leading-5 text-muted-foreground">These reports are not trade instructions. Review sources and make your own decisions.</p>
+          </section>
+        </aside>
       </div>
-      <iframe key={connection} src={app.terminalPath} title={`${app.name} terminal`} className="min-h-0 w-full flex-1 border-0 bg-black" />
     </div>
   );
 }

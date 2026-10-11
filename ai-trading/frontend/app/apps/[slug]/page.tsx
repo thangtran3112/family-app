@@ -26,7 +26,7 @@ export default async function AppPage({ params }: Props) {
 
   if (app.kind === "terminal") {
     return (
-      <PageShell breadcrumb={app.name} scroll={false}>
+      <PageShell breadcrumb={app.name}>
         <TerminalFrame app={app} />
       </PageShell>
     );
@@ -36,7 +36,7 @@ export default async function AppPage({ params }: Props) {
     const Icon = appIcons[app.icon];
     return (
       <PageShell breadcrumb={app.name}>
-        <div className="mx-auto w-full max-w-[720px] px-4 py-12 md:px-6">
+        <div className="mx-auto w-full max-w-[800px] px-6 py-9 md:px-8">
           <div className="rounded-xl border border-border bg-card p-6 text-center sm:p-8">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-muted">
               <Icon aria-hidden size={20} />
@@ -81,16 +81,17 @@ export default async function AppPage({ params }: Props) {
   const Icon = appIcons[app.icon];
   return (
     <PageShell breadcrumb={app.name}>
-      <div className="mx-auto w-full max-w-[720px] px-4 py-12 md:px-6">
-        <div className="rounded-xl border border-border bg-card p-6 text-center sm:p-8">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-muted">
-            <Icon aria-hidden size={20} />
+      <div className="mx-auto w-full max-w-[800px] px-6 py-9 md:px-8">
+        <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-muted text-accent">
+            <Icon aria-hidden size={24} strokeWidth={1.5} />
           </div>
-          <h1 className="mt-4 text-2xl font-semibold text-foreground">{app.name}</h1>
-          <div className="mt-2 flex justify-center">
+          <h1 className="mt-4 text-[32px] leading-10 font-semibold tracking-[-0.04em] text-foreground">{app.name}</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground">{app.subtitle}</p>
+          <div className="mt-2 flex">
             <StatusBadge app={app} />
           </div>
-          <p className="mt-4 text-muted-foreground">{app.summary}</p>
+          <p className="mt-4 text-[15px] leading-6 text-muted-foreground">{app.summary}</p>
           <dl className="mt-4 space-y-1 text-left text-sm text-muted-foreground">
             <div>
               <dt className="inline font-medium text-foreground">Good for: </dt>
@@ -113,7 +114,7 @@ export default async function AppPage({ params }: Props) {
             href={app.url}
             target="_blank"
             rel="noopener"
-            className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-md bg-accent px-4 py-3 font-medium text-on-accent transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="mt-6 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] bg-accent px-4 py-3 text-[13px] font-semibold text-on-accent transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
           >
             Open {app.name}
             <ExternalLink aria-hidden size={16} />
