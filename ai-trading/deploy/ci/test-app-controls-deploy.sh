@@ -606,6 +606,68 @@ else
 fi
 echo "    exit=$status7"
 
+echo "=== Case 8 (GREEN, task-7 brief item 3): a REAL child 'state.py' CLI process, invoked exactly as deploy.sh invokes it (--lock-fd 9, FD 9 inherited, never opened itself), cannot accidentally release deploy.sh's own held lifecycle lock -- the lock survives the child's exit ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s8="$(new_scratch case8)"
+seed_control_state "$s8/control-state"
+lock_path8="$s8/control-state/.control.lock"
+: >"$lock_path8"
+chmod 0600 "$lock_path8"
+status8=0
+(
+  # Mirrors deploy.sh's own acquire_lifecycle_lock: opens the lock at FD 9
+  # in THIS process and holds a non-blocking exclusive flock on it, before
+  # ever invoking the real state.py CLI as a child.
+  exec 9>"$lock_path8"
+  python3 -c '
+import fcntl
+fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+' 9<&9 9>&9 || { echo "case8: could not acquire the parent lock" >&2; exit 1; }
+
+  # Real child process (not an in-process call), inheriting FD 9 exactly
+  # as deploy.sh's own `python3 ... --lock-fd 9 ...` invocations do.
+  python3 "$CONTROL_DIR_REAL/state.py" snapshot \
+    --state "$s8/control-state/control.json" --lock "$lock_path8" \
+    --owner-uid "$(id -u)" --lock-fd 9 --output "$s8/control-state/snapshot.json" \
+    || { echo "case8: child state.py CLI call failed" >&2; exit 1; }
+
+  # The child process has already exited (implicitly closing ITS copy of
+  # FD 9); this process's own FD 9 -- the one deploy.sh's shell would still
+  # hold across the rest of the transaction -- must still be exclusively
+  # locked. A second, independent fd on the same path must see BUSY.
+  second_result="$(
+    exec 8>"$lock_path8"
+    python3 -c '
+import fcntl
+try:
+    fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print("ACQUIRED")
+except BlockingIOError:
+    print("BUSY")
+' 8<&8 8>&8
+  )"
+  [[ "$second_result" == BUSY ]] || { echo "case8: expected the lock to still be held after the child CLI exited, got $second_result" >&2; exit 1; }
+
+  # Only now release it (closing FD 9, as deploy.sh's own EXIT trap does
+  # last) and confirm a fresh attempt can finally acquire it.
+  exec 9>&-
+  after_result="$(
+    exec 8>"$lock_path8"
+    python3 -c '
+import fcntl
+try:
+    fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print("ACQUIRED")
+except BlockingIOError:
+    print("BUSY")
+' 8<&8 8>&8
+  )"
+  [[ "$after_result" == ACQUIRED ]] || { echo "case8: expected ACQUIRED once this process actually released FD 9, got $after_result" >&2; exit 1; }
+  echo "    second=$second_result after=$after_result"
+) || status8=$?
+[[ "$status8" == 0 ]] || fail "case8: $(cat <<<"child CLI/inherited-lock scenario failed, see stderr above")"
+echo "    exit=$status8"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then

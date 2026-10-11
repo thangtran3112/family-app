@@ -34,7 +34,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=mirofish-runtime.sh
+# shellcheck source=SCRIPTDIR/mirofish-runtime.sh
 source "$SCRIPT_DIR/mirofish-runtime.sh"
 
 #   PREPARE_MIROFISH_LOCK_PATH test-only: overrides the fixed lifecycle lock

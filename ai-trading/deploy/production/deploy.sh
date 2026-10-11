@@ -119,7 +119,7 @@ UNIT_BACKUP_PATH=""
 # MiroFish activation (control/runtime.py's Runtime.prepare_mirofish(), used
 # when an operator turns MiroFish on without a full redeploy) shares this
 # exact checked contract instead of a second copy.
-# shellcheck source=mirofish-runtime.sh
+# shellcheck source=SCRIPTDIR/mirofish-runtime.sh
 source "$SCRIPT_DIR/mirofish-runtime.sh"
 MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"

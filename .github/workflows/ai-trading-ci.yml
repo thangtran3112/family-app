@@ -136,6 +136,10 @@ jobs:
         run: |
           npm ci
           npm test
+      - name: app-controls real-Caddy/auth/helper gateway test (Task 4/7)
+        # Needs ai-trading/auth/node_modules (real @clerk/backend), so it
+        # runs after "Auth service tests" installs them, never before.
+        run: ai-trading/deploy/ci/test-app-controls-gateway.sh
       - name: Market data tests
         working-directory: ai-trading/market-data
         run: python3 -m unittest discover -v
