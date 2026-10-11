@@ -47,26 +47,27 @@ source "$SCRIPT_DIR/mirofish-runtime.sh"
 #                              test can exercise a real busy-lock timeout in
 #                              well under a second. Never set this in
 #                              production.
-#   PREPARE_MIROFISH_DOCKER_PATH test-only: overrides the fixed, minimal PATH
-#                              every sanitized Docker/Compose invocation below
-#                              uses, so an offline test's fake `docker` (never
-#                              a real Docker socket) can be found without
-#                              installing it into a real system directory.
-#                              Production default is the standard Debian/
-#                              Ubuntu package locations this rootful-Linux-
-#                              only target installs into. Never set this in
-#                              production.
 LOCK_PATH="${PREPARE_MIROFISH_LOCK_PATH:-/var/lib/family-app/ai-trading/.control.lock}"
 LOCK_WAIT_SECONDS="${PREPARE_MIROFISH_LOCK_WAIT_SECONDS:-30}"
-DOCKER_PATH="${PREPARE_MIROFISH_DOCKER_PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
 # Fixed, local-rootful Docker target -- the design's own "Rootful Docker/
-# Linux/systemd only" contract. Explicit DOCKER_HOST/DOCKER_CONTEXT so a
+# Linux/systemd only" contract. Every value below is a fixed constant, never
+# reachable through an environment-variable override: an earlier round of
+# this script accepted PREPARE_MIROFISH_DOCKER_PATH, letting a caller point
+# the PATH `env -i` uses at an attacker-controlled directory and make
+# `docker compose` execute an attacker-controlled `docker` -- removed
+# entirely, no replacement knob. Explicit DOCKER_HOST/DOCKER_CONTEXT so a
 # root operator's own ambient environment, or a persisted `docker context
 # use` pointing elsewhere, can never silently redirect this script at a
-# remote daemon; never overridable (unlike the three knobs above, this is
-# not a path that needs to move for a test fixture -- every test here uses a
-# fake `docker` shim and never opens a real socket at all).
+# remote daemon.
+DOCKER_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 DOCKER_SOCK="unix:///var/run/docker.sock"
+# The external command boundary: the one place this script names the Docker
+# CLI it executes, a fixed constant -- never an argument, environment
+# variable, or any other caller-reachable input. A test instruments this
+# exact line (and only this line) in a staged COPY of this file to run the
+# real script body against a fake Docker shim; production always runs this
+# file unmodified, with this constant exactly as committed.
+DOCKER_BIN="docker"
 
 die() {
   echo "prepare-mirofish: $*" >&2
@@ -147,7 +148,7 @@ compose() {
     AI_TRADING_IMAGE_TAG="$AI_TRADING_IMAGE_TAG" \
     AI_TRADING_SECRETS_DIR="$SECRETS_DIR" \
     AI_TRADING_RUNTIME_ENV_DIR="$RUNTIME_ENV_DIR" \
-    docker compose --project-name "$PROJECT" --env-file "$IMAGES_ENV" \
+    "$DOCKER_BIN" compose --project-name "$PROJECT" --env-file "$IMAGES_ENV" \
       -f "$APP_DIR/docker-compose.yml" -f "$APP_DIR/docker-compose.mirofish.yml" "$@"
 }
 

@@ -513,6 +513,8 @@ class PrepareMirofishScriptTest(unittest.TestCase):
     """
 
     SCRIPT = REPO_ROOT / "deploy" / "production" / "prepare-mirofish.sh"
+    MIROFISH_LIB = REPO_ROOT / "deploy" / "production" / "mirofish-runtime.sh"
+    CONTROL_SRC_DIR = REPO_ROOT / "control"
     # Resolved once from the TEST process's own full PATH, not the
     # restricted one `run_script()` gives the script itself: macOS ships a
     # bash 3.2 at /bin/bash (no `exec {fd}>file` auto-allocation support,
@@ -544,6 +546,47 @@ class PrepareMirofishScriptTest(unittest.TestCase):
             'name: fixture\nservices:\n  mirofish:\n    image: busybox\n    profiles: ["mirofish"]\n'
         )
         self.write_fake_docker()
+        self.staged_script = self._stage_real_script_with_fake_docker()
+
+    def _stage_real_script_with_fake_docker(self):
+        """Copies the REAL prepare-mirofish.sh into this test's own writable
+        tempdir (the prescribed Linux suite mounts the actual ai-trading
+        tree read-only, so nothing can be staged in place), replacing ONLY
+        the one external command-boundary constant (`DOCKER_BIN="docker"`)
+        with an absolute path to this test's fake docker shim -- never a
+        production env-var override (PREPARE_MIROFISH_DOCKER_PATH was
+        removed entirely after the prior review round; see
+        test_hostile_docker_path_env_var_has_no_effect_on_command_selection
+        below). Asserts the replacement is unique, so a future change to
+        this constant's spelling fails this staging helper loudly instead of
+        silently leaving a new/renamed Docker invocation unfaked. Mirrors
+        the real deploy/production/control relative layout with symlinks to
+        the REAL, unmodified mirofish-runtime.sh and control/state.py, so
+        every other code path -- lease validation, metadata checks, render,
+        recovery -- still runs exactly the real, reviewed source; only the
+        external Docker command selection is substituted.
+        """
+        original = self.SCRIPT.read_text()
+        target = 'DOCKER_BIN="docker"'
+        occurrences = original.count(target)
+        if occurrences != 1:
+            raise AssertionError(
+                f"expected exactly one {target!r} constant to replace in "
+                f"{self.SCRIPT}, found {occurrences} -- update this staging "
+                "helper to match the current script"
+            )
+        fake_docker = self.bin_dir / "docker"
+        patched = original.replace(target, f"DOCKER_BIN={shlex.quote(str(fake_docker))}")
+
+        stage_root = Path(self._tmp.name) / "stage"
+        staged_production_dir = stage_root / "deploy" / "production"
+        staged_production_dir.mkdir(parents=True)
+        (staged_production_dir / "mirofish-runtime.sh").symlink_to(self.MIROFISH_LIB)
+        (stage_root / "control").symlink_to(self.CONTROL_SRC_DIR)
+        staged_script = staged_production_dir / "prepare-mirofish.sh"
+        staged_script.write_text(patched)
+        staged_script.chmod(0o755)
+        return staged_script
 
     def write_image_metadata(self, tag=VALID_TAG):
         path = self.app_dir / "images.env"
@@ -595,30 +638,29 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         )
         path.chmod(0o755)
 
-    def run_script(self, extra_args=(), env_overrides=None, pass_fds=()):
+    def run_script(self, extra_args=(), env_overrides=None, pass_fds=(), script=None):
         # The script's own internal validate_inherited_lock_fd shells out to
         # `python3` (never duplicating state.py's lock logic) -- include
         # wherever *this* interpreter actually lives (python:3.12-slim's
-        # python3 is under /usr/local/bin, not /usr/bin) alongside the fake
-        # docker shim and the usual system directories.
+        # python3 is under /usr/local/bin, not /usr/bin). self.bin_dir holds
+        # this test's own PATH-resolved shims (e.g. a forced-failure `rm`),
+        # resolved the ordinary way since those calls happen outside
+        # compose()'s sandbox. This PATH is irrelevant to Docker command
+        # selection either way: compose()'s own `env -i PATH="$DOCKER_PATH"`
+        # replaces PATH entirely for that one child process with a fixed
+        # production constant the script never reads from the environment,
+        # regardless of what's on PATH out here or sitting in self.bin_dir.
         python_dir = str(Path(sys.executable).parent)
         env = {
             "PATH": f"{self.bin_dir}:{python_dir}:/usr/bin:/bin",
             "FAMILY_CONFIG_CREDENTIALS": str(Path(self._tmp.name) / "fake-reader-key.json"),
             "DEPLOY_SH_SKIP_CHOWN": "1",
             "PREPARE_MIROFISH_LOCK_PATH": str(self.lock_path),
-            # compose()'s own sanitized `env -i PATH=...` must still be able
-            # to find this test's fake `docker` shim (never a real system
-            # directory) AND let that shim's own `#!/usr/bin/env bash`
-            # shebang resolve `bash` -- `env -i` replaces PATH for the whole
-            # subtree, including the fake docker script's own shebang
-            # lookup, not just the initial `docker` lookup.
-            "PREPARE_MIROFISH_DOCKER_PATH": f"{self.bin_dir}:/usr/local/bin:/usr/bin:/bin",
         }
         if env_overrides:
             env.update(env_overrides)
         argv = [
-            self.BASH, str(self.SCRIPT),
+            self.BASH, str(script or self.SCRIPT),
             "--app-dir", str(self.app_dir),
             "--secrets-dir", str(self.secrets_dir),
             "--runtime-dir", str(self.runtime_dir),
@@ -635,6 +677,25 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self.addCleanup(os.close, fd)
         return fd
+
+    def write_failing_rm(self):
+        # Forces activate_mirofish's post-install scratch cleanup to fail
+        # for real by shadowing `rm` on PATH for exactly the render-scratch
+        # directory pattern -- works identically at any privilege level,
+        # unlike a chmod-based injection (root bypasses DAC permission
+        # checks entirely, so this suite running as root -- the prescribed
+        # Linux container -- would otherwise never see the failure).
+        failing_rm = self.bin_dir / "rm"
+        failing_rm.write_text(
+            "#!/usr/bin/env bash\n"
+            'for arg in "$@"; do\n'
+            '  case "$arg" in\n'
+            "    *.mirofish-render-*) echo \"rm: $arg: Permission denied (simulated)\" >&2; exit 1 ;;\n"
+            "  esac\n"
+            "done\n"
+            'exec /bin/rm "$@"\n'
+        )
+        failing_rm.chmod(0o755)
 
     # -- happy path / inherited lease -----------------------------------------
 
@@ -698,29 +759,18 @@ class PrepareMirofishScriptTest(unittest.TestCase):
     def test_cleanup_failure_self_heals_via_stop_only_recovery_never_rm(self):
         # Forces activate_mirofish's post-install scratch cleanup to fail
         # for real, exercising this script's OWN stop_remove_mirofish_container
-        # override: a bounded `compose stop`, never `rm`/`down`. A chmod-based
-        # injection (mirofish-runtime.sh's own DEPLOY_SH_MIROFISH_CHMOD_SCRATCH_AFTER_INSTALL
-        # knob, used by deploy/ci/test-deploy-firestore.sh) does not work
-        # when this suite runs as root (the prescribed Linux container):
-        # root bypasses DAC permission checks entirely, so a chmod 0500
-        # directory is still removable by root. Shadowing `rm` on PATH
-        # instead works identically at any privilege level. Uses the
-        # inherited-lock path (not self-acquire) so this test never depends
-        # on `flock(1)` being installed -- that binary is exercised
-        # separately by test_standalone_busy_lock_times_out_without_writing_anything.
-        failing_rm = self.bin_dir / "rm"
-        failing_rm.write_text(
-            "#!/usr/bin/env bash\n"
-            'for arg in "$@"; do\n'
-            '  case "$arg" in\n'
-            "    *.mirofish-render-*) echo \"rm: $arg: Permission denied (simulated)\" >&2; exit 1 ;;\n"
-            "  esac\n"
-            "done\n"
-            'exec /bin/rm "$@"\n'
-        )
-        failing_rm.chmod(0o755)
+        # override: a bounded `compose stop`, never `rm`/`down`. Runs the
+        # STAGED copy (real script body, only the external docker command
+        # substituted -- see _stage_real_script_with_fake_docker) because
+        # this path reaches compose(). Uses the inherited-lock path (not
+        # self-acquire) so this test never depends on `flock(1)` being
+        # installed -- that binary is exercised separately by
+        # test_standalone_busy_lock_times_out_without_writing_anything.
+        self.write_failing_rm()
         fd = self.acquire_real_lock()
-        result = self.run_script(extra_args=["--lock-fd", str(fd)], pass_fds=(fd,))
+        result = self.run_script(
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,), script=self.staged_script,
+        )
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.mirofish_env.exists())
         self.assertIn("post-install cleanup failed", result.stderr)
@@ -768,21 +818,13 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         # own process environment (as if set in a root operator's shell),
         # and must never reach the fake `docker` compose() actually invokes
         # -- verified by the fake docker's own env-log, not by this test's
-        # assumptions about what `env -i` does.
-        failing_rm = self.bin_dir / "rm"
-        failing_rm.write_text(
-            "#!/usr/bin/env bash\n"
-            'for arg in "$@"; do\n'
-            '  case "$arg" in\n'
-            "    *.mirofish-render-*) echo \"rm: $arg: Permission denied (simulated)\" >&2; exit 1 ;;\n"
-            "  esac\n"
-            "done\n"
-            'exec /bin/rm "$@"\n'
-        )
-        failing_rm.chmod(0o755)
+        # assumptions about what `env -i` does. Runs the STAGED copy (real
+        # script body, only the external docker command substituted) since
+        # this path reaches compose().
+        self.write_failing_rm()
         fd = self.acquire_real_lock()
         result = self.run_script(
-            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,),
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,), script=self.staged_script,
             env_overrides={
                 "DOCKER_HOST": "ssh://attacker@remote-host",
                 "COMPOSE_PROFILES": "every-profile",
@@ -800,6 +842,42 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         self.assertIn("COMPOSE_FILE=<unset>", snapshot)
         self.assertIn("HTTP_PROXY=<unset>", snapshot)
         self.assertNotIn("attacker", snapshot)
+
+    def test_hostile_docker_path_env_var_has_no_effect_on_command_selection(self):
+        # Re-review round 1: PREPARE_MIROFISH_DOCKER_PATH was removed from
+        # production entirely (it let a caller point the PATH `env -i` uses
+        # at an attacker-controlled directory). Proves it is now fully
+        # inert: even if a caller still sets it to a directory holding a
+        # malicious `docker` that would prove it ran by touching a marker
+        # file, the REAL, UNSTAGED script (no fake docker substituted at
+        # all -- this is the actual production file) never selects it,
+        # because DOCKER_PATH/DOCKER_BIN are fixed constants the script no
+        # longer reads from the environment.
+        marker = Path(self._tmp.name) / "attacker-ran"
+        malicious_dir = Path(self._tmp.name) / "attacker-bin"
+        malicious_dir.mkdir()
+        malicious_docker = malicious_dir / "docker"
+        # `#!/bin/sh` (absolute, never PATH-resolved) and the `:` builtin
+        # with a bare redirect (never an external `touch`) so this exploit
+        # attempt is fully self-contained and cannot itself fail to run
+        # merely because a narrow hostile PATH lacks `env`/`bash`/`touch` --
+        # confirmed against the pre-fix script (this exact payload reliably
+        # created the marker there; see this round's report for the RED
+        # capture) before being used as this test's own assertion.
+        malicious_docker.write_text(f"#!/bin/sh\n: > {shlex.quote(str(marker))}\nexit 0\n")
+        malicious_docker.chmod(0o755)
+        self.write_failing_rm()
+        fd = self.acquire_real_lock()
+        result = self.run_script(
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,),
+            env_overrides={"PREPARE_MIROFISH_DOCKER_PATH": str(malicious_dir)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("post-install cleanup failed", result.stderr)
+        self.assertFalse(
+            marker.exists(),
+            "a hostile PREPARE_MIROFISH_DOCKER_PATH must never select the Docker command",
+        )
 
     # -- standalone busy lock --------------------------------------------------
 
