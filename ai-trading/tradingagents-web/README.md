@@ -146,7 +146,10 @@ PLAYWRIGHT_CHROME_EXECUTABLE=/path/to/test-browser \
   Mutations are never automatically retried; a timed-out submission warns
   the user to check history before repeating an action.
 - Failures/interruption show fixed, helpful explanations and preserve any
-  saved analysis. No provider exception, raw tool log, or credential is
+  saved analysis. A research error is shown immediately while partial reports
+  are prepared; the task remains processing until publication finishes, so
+  polling cannot stop just before its downloads become ready. The border is
+  static warning-colored during this error-finalization stage. No provider exception, raw tool log, or credential is
   streamed to the browser. Old records migrate additively and keep unknown
   monitoring timestamps as null rather than inventing historical activity.
 

@@ -23,11 +23,11 @@ let writes = 0;
 const iso = value => new Date(value).toISOString();
 const record = () => ({
   id, origin: 'web', status: mode === 'completed' ? 'completed' : mode === 'failed' ? 'failed' : 'running',
-  stage: 'risk', created_at: iso(started), updated_at: iso(started + 20_000),
+  stage: mode === 'failed-publishing' ? 'exporting' : 'risk', created_at: iso(started), updated_at: iso(started + 20_000),
   heartbeat_at: iso(Date.now() - 1000), last_progress_at: iso(mode === 'stalled' ? Date.now() - 181_000 : started + 285_000),
   ended_at: mode === 'completed' || mode === 'failed' ? iso(started + 290_000) : null,
-  shared: false, partial: mode === 'failed', artifacts_ready: false,
-  error_code: mode === 'failed' ? 'RESEARCH_FAILED' : null,
+  shared: false, partial: mode === 'failed' || mode === 'failed-publishing', artifacts_ready: mode === 'failed',
+  error_code: mode === 'failed' || mode === 'failed-publishing' ? 'RESEARCH_FAILED' : null,
   inputs: { ticker: 'SPY', analysis_date: '2026-10-09', asset_type: 'stock', analysts: ['market'], research_depth: 1 },
   state: { market_report: 'saved-analysis-fixture' }, settings: {}, can_share: true, can_rerun: true,
 });
@@ -49,6 +49,7 @@ try {
     const headers = { date: new Date().toUTCString() };
     if (path.startsWith('/api/research')) {
       reads += 1;
+      if (path.includes('/report')) return route.fulfill({ body: '<p>saved-analysis-fixture</p>', contentType: 'text/html', headers });
       if (mode === 'offline') return route.abort('internetdisconnected');
       if (mode === 'unauthorized') return route.fulfill({ status: 401, json: { error: 'UNAUTHENTICATED' }, headers });
       if (mode === 'malformed') return route.fulfill({ json: {}, headers });
@@ -120,12 +121,17 @@ try {
   assert.equal(await page.locator('.report-text').count(), 0, 'authorization loss retained private report text');
   assert.equal(await page.getByRole('button', { name: 'Run again', exact: true }).count(), 0);
 
-  mode = 'failed';
+  mode = 'failed-publishing';
   await page.goto(`http://research.test/research/${id}`);
   await page.locator('.progress-message').waitFor();
+  assert.match(await page.locator('.progress-message').innerText(), /error.*preparing/is);
+  assert.equal(await page.locator('.progress-panel.is-running').count(), 0);
+  mode = 'failed';
+  await page.waitForFunction(() => document.querySelector('.badge-failed'));
   assert.match(await page.locator('.progress-message').innerText(), /saved analysis/i);
   assert.equal(await page.locator('.badge-failed').count(), 1);
   assert.equal(await page.locator('.report-text').innerText(), 'saved-analysis-fixture');
+  assert.equal(await page.locator('.download-links a').count(), 3, 'error finalization stopped before downloads became available');
 
   mode = 'completed';
   await page.goto(`http://research.test/u/tradingagents/research/${id}`);
@@ -146,6 +152,7 @@ try {
     authLossClearsPrivateState: true, failurePreservesAnalysis: true, reducedMotion: true,
     prefixCompletion: true, mobileHistory: true, automaticMutations: writes,
     malformedResponseRetainsSnapshot: true,
+    partialDownloadsAfterError: true,
   }));
 } finally {
   await browser.close();

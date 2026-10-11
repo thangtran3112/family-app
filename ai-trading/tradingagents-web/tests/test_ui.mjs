@@ -112,3 +112,9 @@ test('failure explanations are helpful without exposing arbitrary backend errors
   assert.match(runFailureMessage({ status: 'interrupted' }), /interrupted/i);
   assert.doesNotMatch(runFailureMessage({ status: 'failed', error_code: 'secret-sentinel' }), /secret-sentinel/);
 });
+
+test('an error while preparing partial downloads is visible, not falsely healthy', () => {
+  const progress = researchProgress({ ...running, stage: 'exporting', error_code: 'RESEARCH_FAILED' }, now);
+  assert.equal(progress.tone, 'warning');
+  assert.match(progress.warning, /error.*preparing/is);
+});

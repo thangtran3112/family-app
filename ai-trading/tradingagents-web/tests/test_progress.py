@@ -11,7 +11,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from ta_web.domain import Inputs, owner_key, public_view
+from ta_web import worker as worker_module
+from ta_web.domain import BusyError, Inputs, owner_key, public_view
 from ta_web.store import Store
 from ta_web.worker import run_research
 from test_runner import FakeGraph
@@ -251,3 +252,41 @@ class ProgressTestCase(unittest.TestCase):
         with patch("ta_web.store._utc_now_iso", return_value="2026-10-11T10:06:00.000000Z"):
             self.store.mark_interrupted()
         self.assertEqual(self.store.worker_run(active["id"]).get("ended_at"), "2026-10-11T10:06:00.000000Z")
+
+    def test_failed_research_stays_processing_until_partial_reports_finish(self):
+        run = self.store.create(self.owner, self.inputs)
+        publishing, release = threading.Event(), threading.Event()
+        real_publish = worker_module.publish
+
+        class FailingGraph(FakeGraph):
+            def stream_run(self, *args, **kwargs):
+                yield [], {"market_report": "saved analysis"}
+                raise RuntimeError("synthetic research failure")
+
+        def paused_publish(store, run_id):
+            publishing.set()
+            if not release.wait(timeout=5):
+                raise RuntimeError("test publisher was not released")
+            return real_publish(store, run_id)
+
+        with patch("ta_web.worker.publish", paused_publish):
+            thread = threading.Thread(target=run_research, args=(self.root, run["id"], FailingGraph))
+            thread.start()
+            try:
+                self.assertTrue(publishing.wait(timeout=2))
+                pending = self.store.worker_run(run["id"])
+                self.assertEqual(pending["status"], "running", "UI would stop polling before exports finish")
+                self.assertEqual(pending["stage"], "exporting")
+                self.assertEqual(pending["error_code"], "RESEARCH_FAILED")
+                self.assertTrue(pending["partial"])
+                self.assertFalse(pending["artifacts_ready"])
+                with self.assertRaises(BusyError):
+                    self.store.create(self.owner, self.inputs)
+            finally:
+                release.set()
+                thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+        saved = self.store.worker_run(run["id"])
+        self.assertEqual(saved["status"], "failed")
+        self.assertTrue(saved["artifacts_ready"])
+        self.assertIsNotNone(saved["ended_at"])

@@ -149,22 +149,20 @@ def _run_research(store: Store, id: str, graph_factory: Callable[..., Any] | Non
         # leaving the record stuck "running" (protocol.md: never exception
         # text; "never leaves Busy permanently occupied").
         cleaned = clean_state(state)
-        store.update(id, status="failed", state=cleaned, partial=bool(cleaned), error_code=RESEARCH_FAILED)
         if cleaned:
+            # The task is still processing partial exports. Publish before its
+            # terminal transition, as on success, so a poll cannot freeze just
+            # before downloads become ready. Expose the error immediately;
+            # liveness/activity warnings remain active during slow publishing.
+            store.update(id, state=cleaned, partial=True, stage="exporting", error_code=RESEARCH_FAILED, progress=True)
             try:
                 publish(store, id)
-            except Exception:  # noqa: BLE001 -- best-effort bonus export only: the
-                # failed/RESEARCH_FAILED record right above already stands as
-                # the correct terminal result no matter why this failed --
-                # the expected ReportError refusal/wrapped write failure, or
-                # an unexpected error outside reports.publish's own wrapped
-                # step (its mkdir, its final metadata update). Preserves the
-                # "every partial-publish outcome is swallowed, run_research
-                # never raises" contract; an explicit return here (not a bare
-                # pass) is what actually does that, rather than letting an
-                # unanticipated exception escape past an already-correct
-                # terminal record.
+            except Exception:  # noqa: BLE001 - best-effort export; finally records safe failure for every outcome
                 return
+            finally:
+                store.update(id, status="failed", stage=research_stage(state))
+            return
+        store.update(id, status="failed", state=cleaned, partial=False, error_code=RESEARCH_FAILED)
         return
 
     try:

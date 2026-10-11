@@ -89,6 +89,9 @@ export function researchProgress(record, now = Date.now()) {
   } else if (running && progressAgeSeconds >= 180) {
     warning = 'No new research activity for 3 minutes or more. A model or data request may be slow; this is not a confirmed failure.';
   }
+  if (running && record.error_code) {
+    warning = `${warning ? `${warning} ` : ''}Research encountered an error; preparing saved reports. No research will be rerun.`;
+  }
   return {
     elapsedSeconds, progressAgeSeconds, heartbeatAgeSeconds, warning,
     tone: warning ? 'warning' : running ? 'running' : record.status,
@@ -211,7 +214,6 @@ if (typeof document !== 'undefined') {
 
   function showError(message, status = 0) {
     listControls = null;
-    app.classList.remove('connection-lost');
     app.replaceChildren();
     const section = element('section', 'empty-state error-state');
     section.append(text('h1', status === 404 ? 'Research not found' : status === 401 ? 'Sign in to continue' : 'Research unavailable'));
@@ -272,7 +274,6 @@ if (typeof document !== 'undefined') {
   }
 
   function clearConnectionWarning() {
-    app.classList.remove('connection-lost');
     app.querySelector('.connection-warning')?.remove();
   }
 
@@ -292,7 +293,6 @@ if (typeof document !== 'undefined') {
       app.prepend(warning);
       announce('Connection lost. Retrying status; last known research is retained.');
     }
-    app.classList.add('connection-lost');
     app.querySelectorAll('.is-running').forEach(node => node.classList.remove('is-running'));
     const progress = app.querySelector('.progress-panel');
     if (progress) {
@@ -786,7 +786,7 @@ if (typeof document !== 'undefined') {
     const activity = researchProgress(record, Date.now() + serverClockOffset);
     panel.dataset.tone = activity.tone;
     panel.classList.toggle('is-running', activity.tone === 'running');
-    const label = `${statusText(record.status)} · ${activity.label}`;
+    const label = `${record.status === 'running' && record.error_code ? 'Finalizing after error' : statusText(record.status)} · ${activity.label}`;
     const labelNode = panel.querySelector('.progress-label');
     if (labelNode.textContent !== label) labelNode.textContent = label;
     const metrics = panel.querySelector('.progress-metrics');
