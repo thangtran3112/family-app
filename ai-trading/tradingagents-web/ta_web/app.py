@@ -19,7 +19,7 @@ import json
 import logging
 import os
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import date
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError
@@ -320,7 +320,7 @@ async def research_list(request: Request) -> JSONResponse:
             "items": [public_view(run, owner) for run in items],
             "limit": limit,
             "offset": offset,
-            "today": datetime.now(UTC).date().isoformat(),
+            "today": date.today().isoformat(),
             "defaults": _DEFAULTS,
         }
     )
