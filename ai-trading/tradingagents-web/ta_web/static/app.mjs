@@ -38,6 +38,23 @@ export function routeFor(pathname, prefix) {
   return UUID.test(id) ? { kind: 'detail', id: id.toLowerCase() } : { kind: 'list' };
 }
 
+// Loading-UI fix: a list-to-list navigation (filter/page change) should keep
+// the ticker/date/status controls and pager mounted and only clear/reload the
+// results region -- a route change into or out of the detail view still gets
+// the full-page loading state, same as before.
+export function isListRefresh(previousRoute, nextRoute) {
+  return previousRoute?.kind === 'list' && nextRoute?.kind === 'list';
+}
+
+// Loading-UI fix (owner-switch correction, review finding): the cached list
+// shell bakes a owner-specific operator-import-key panel in at build time.
+// It must never survive an identity change -- a refresh response naming a
+// different (or newly missing/invalid) owner always rebuilds the shell
+// instead of reusing one still showing a previous owner's opaque key.
+export function shouldRebuildListShell(existingOwnerId, nextOwnerId) {
+  return existingOwnerId !== nextOwnerId;
+}
+
 export function apiPath(prefix, suffix) {
   assertPrefix(prefix);
   if (typeof suffix !== 'string' || !suffix.startsWith('/') || suffix.startsWith('//')) {
@@ -511,7 +528,7 @@ if (typeof document !== 'undefined') {
       importDetails.append(text('code', ownerId));
       app.append(importDetails);
     }
-    return { results, previous, next, pageLabel };
+    return { results, previous, next, pageLabel, tickerInput: ticker.input, dateInput: analysisDate.input, statusSelect: status, ownerId };
   }
 
   function recordLabel(record) {
@@ -792,7 +809,7 @@ if (typeof document !== 'undefined') {
     pageOffset = Number.isInteger(data.offset) && data.offset >= 0 ? data.offset : pageOffset;
     listToday = typeof data.today === 'string' ? data.today : '';
     ownerId = typeof data.owner_id === 'string' ? data.owner_id : '';
-    if (!listControls) listControls = makeListPage();
+    if (shouldRebuildListShell(listControls?.ownerId, ownerId)) listControls = makeListPage();
     drawList(listControls.results, listControls.previous, listControls.next, listControls.pageLabel);
     const statusSignature = items.map((item) => `${item.id}:${item.status}:${item.stage}`).join('|');
     if (statusSignature !== lastListStatus) {
@@ -833,8 +850,26 @@ if (typeof document !== 'undefined') {
     return loadList(token);
   }
 
+  // Clears only the results region (not the controls/pager) so a list-to-list
+  // reload never shows stale rows under the new filters while keeping the
+  // controls visible and usable.
+  function showListLoading(results) {
+    results.replaceChildren(text('p', 'Loading research history…', 'loading-state'));
+  }
+
+  // Keeps the mounted ticker/date/status inputs in sync with the URL (e.g.
+  // Back/Forward), without touching values that already match -- so a
+  // control the user just changed (and that drove this navigation) keeps
+  // focus and cursor position.
+  function syncListFilterInputs(controls) {
+    if (controls.tickerInput.value !== filterTicker) controls.tickerInput.value = filterTicker;
+    if (controls.dateInput.value !== filterDate) controls.dateInput.value = filterDate;
+    if (controls.statusSelect.value !== filterStatus) controls.statusSelect.value = filterStatus;
+  }
+
   function handleLocation() {
     const token = stopWork();
+    const previousRoute = route;
     route = routeFor(window.location.pathname, prefix);
     const params = new URLSearchParams(window.location.search);
     const offset = Number(params.get('offset'));
@@ -842,13 +877,19 @@ if (typeof document !== 'undefined') {
     filterTicker = params.get('ticker') || '';
     filterStatus = params.get('status') || '';
     filterDate = params.get('analysis_date') || '';
-    listControls = null;
     lastDetailSignature = '';
-    lastListStatus = '';
     if (route.kind === 'detail') {
+      listControls = null;
+      lastListStatus = '';
       app.replaceChildren(text('p', 'Loading research…', 'loading-state'));
       loadDetail(route.id, token);
+    } else if (listControls && isListRefresh(previousRoute, route)) {
+      syncListFilterInputs(listControls);
+      showListLoading(listControls.results);
+      loadList(token);
     } else {
+      listControls = null;
+      lastListStatus = '';
       app.replaceChildren(text('p', 'Loading research history…', 'loading-state'));
       loadList(token);
     }
