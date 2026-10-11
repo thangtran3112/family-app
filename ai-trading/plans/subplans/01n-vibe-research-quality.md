@@ -1,8 +1,8 @@
 # Vibe-Trading Research Quality for US Stocks: Overview and Decomposition
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** decomposition approved by the owner in conversation; specs for sub-projects 1 and 2 written, awaiting owner review
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** decomposition and the specs for sub-projects 1 and 2 approved by the owner; implementation plans written, awaiting owner review and the choice of execution method
 
-Related: [01o](01o-vibe-answer-integrity.md) (sub-project 1), [01p](01p-vibe-effort-picker.md) (sub-project 2), `packages/vibe-trading/DIVERGENCE.md` (the fork ledger every sub-project updates).
+Related: [01o](01o-vibe-answer-integrity.md) and its [plan](01o-vibe-answer-integrity-plan.md) (sub-project 1), [01p](01p-vibe-effort-picker.md) and its [plan](01p-vibe-effort-picker-plan.md) (sub-project 2), [results of sub-project 1](01o-vibe-answer-integrity-results.md), `packages/vibe-trading/DIVERGENCE.md` (the fork ledger every sub-project updates).
 
 ## 1. Goal
 
