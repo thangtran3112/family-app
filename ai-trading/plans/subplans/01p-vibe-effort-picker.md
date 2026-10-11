@@ -1,6 +1,6 @@
 # Vibe Per-Chat Reasoning Effort: Design
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** approved by the owner; native implementation approved 2026-10-11. A test-only IBKR xdist order fix was committed first as execution preflight because the SP1 baseline was red.
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** implemented and locally verified in the fork; ships with 01o in Batch 1 after image smoke, PR, scoped release and live deploy verification. A test-only IBKR xdist order fix was committed first as execution preflight because the SP1 baseline was red.
 
 Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-integrity.md) (ships in the same batch), `packages/vibe-trading/DIVERGENCE.md`. Code paths are under `packages/vibe-trading/` at fork commit `d402c2df`.
 
@@ -80,6 +80,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 - **Live, sponsored key:** real chats at `low` and `xhigh` on `gpt-6.1-sol` and at `none` on `gpt-5.5` report the level in their message metadata and complete; a refused level returns 400 with the list; a committee run's `run.json` shows the chosen level. A probe matrix over the twelve models already probed (01n section 3.2) compares the picker's list with real acceptance on the Responses route, including `o3`, whose offered `xhigh` fails today.
 - **Real browser:** the picker follows the model, a change applies to the next message, a reload restores the last level, Chinese and Arabic render, no console errors or failed requests.
 - Existing product suites pass, then `ai-trading/deploy/ci/smoke-test.sh vibe-trading`. The required `-n 8` baseline exposed a pre-existing order-dependent `threading.local` test in `test_ibkr_local.py`; execution preflight commit `f9b8c2e` initializes its fake state with `monkeypatch.setattr(..., raising=False)` (test-only, no IBKR product change), so Task 4 does not repeat it.
+- Owner-approved browser-gate repair (2026-10-11): an existing chat with no active research goal returns `200` JSON `null` from `GET /sessions/{id}/goal` instead of an expected `404`, which Chromium logs as a resource error. Unknown sessions still return `404`; `api.getGoal` and Agent treat nullable absence explicitly. This is a bounded contract change discovered during the real browser walkthrough, with backend and frontend tests and a browser rerun before ship.
 
 ## 8. DIVERGENCE.md Entries
 

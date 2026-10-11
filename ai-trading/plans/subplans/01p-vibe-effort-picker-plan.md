@@ -57,6 +57,7 @@ All paths below are relative to `ai-trading/packages/vibe-trading/` unless they 
 | `agent/src/swarm/worker.py` | `run_worker(..., reasoning_effort=None)` → `ChatLLM(model_name=..., reasoning_effort=...)` | 4 |
 | `agent/tests/test_swarm_status_hydration.py`, `test_swarm_m4_e2e.py`, `test_swarm_m5_trust_model.py` | Pre-existing `FakeRuntime.start_run` / `_stub_llm_factory` test doubles accept the new keyword | 4 |
 | `agent/tests/test_ibkr_local.py` | Test-only preflight commit `f9b8c2e`: initialize fake broker `threading.local` attributes even when xdist runs the test first; already done before SP1 because its baseline was red | before SP1 Task 1 |
+| `agent/src/api/sessions_routes.py`, `agent/tests/test_goal_api.py` | Owner-approved Task 7 browser-gate repair: existing session without active goal returns 200 JSON null; unknown session still 404 | 7 |
 | `frontend/src/lib/api.ts` | `sendMessage(sid, content, opts?: { reasoningEffort?: string })` | 5 |
 | `frontend/src/lib/__tests__/api.test.ts` | New: body omits/includes `reasoning_effort` | 5 |
 | `frontend/src/components/chat/ReasoningEffortSelect.tsx` | New: the `<select>`, badge fallback, re-probe-and-reset logic | 5 |
@@ -65,6 +66,7 @@ All paths below are relative to `ai-trading/packages/vibe-trading/` unless they 
 | `frontend/src/components/chat/__tests__/ModelRuntimeBar.test.tsx` | Extended: selector rendering, disabled-while-streaming | 5 |
 | `frontend/src/i18n/locales/*.json` (9 files) | `agent.reasoningEffortDefault`, `agent.reasoningEffortHint` | 5 |
 | `frontend/src/pages/Agent.tsx` | Per-chat `reasoningEffortChoices` map keyed by session id; an unsent choice survives switching away and back; three `api.sendMessage` call sites pass it; `ModelRuntimeBar` wired to it | 6 |
+| `frontend/src/lib/api.ts`, `frontend/src/pages/Agent.tsx` | `getGoal` nullable; JSON null means no goal, a real 404 surfaces as an error | 7 |
 | `frontend/src/pages/__tests__/AgentGroundingStatus.test.tsx`, `AgentBackgroundStreamCompletion.test.tsx` | Add `listReasoningEfforts` to their `apiMock` (ModelRuntimeBar now calls it) | 6 |
 | `frontend/src/pages/__tests__/AgentReasoningEffortChoice.test.tsx` | New | 6 |
 | `packages/vibe-trading/DIVERGENCE.md` | New rows, "Behaviours to preserve" items 6–7, expected-conflict additions, Verification section | 1–6, 8 |

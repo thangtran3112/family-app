@@ -208,11 +208,11 @@ for i in $(seq 1 720); do
   sleep 5
 done
 [ "$STATE" = completed ] || { echo "committee did not complete within 60 minutes" >&2; exit 1; }
-curl -s "$BASE/swarm/runs/$RUN_ID" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reasoning_effort"))'
+curl -sf "$BASE/swarm/runs/$RUN_ID" | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"]=="completed"; print("API run completed")'
 python3 -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1])/"vibe-home-01p/.vibe-trading/swarm/runs"/sys.argv[2]/"run.json"; r=json.loads(p.read_text()); assert r["reasoning_effort"]=="xhigh"; print("persisted effort:",r["reasoning_effort"])' "$T" "$RUN_ID"
 ```
 
-Expected: `xhigh`. Open `$T/vibe-home-01p/.vibe-trading/swarm/runs/$RUN_ID/run.json` (the actual path from `src/config/paths.py::get_swarm_runs_dir()`) and confirm `"reasoning_effort": "xhigh"` is persisted, not just in the API response. If the model did not call `run_swarm`, this check is inconclusive; retry with an explicit preset rather than claiming success.
+Expected: API run status `completed`; `run.json` contains `"reasoning_effort": "xhigh"`. The `/swarm/runs/{id}` API serializes status/tasks but does **not** expose reasoning_effort, so do not claim it does. If the model did not call `run_swarm`, this check is inconclusive; retry with an explicit preset rather than claiming success.
 
 - [ ] **Step 10: Real-browser walkthrough.**
 
@@ -223,7 +223,7 @@ Read the global OpenCode `AGENTS.md` browser rule (`~/.config/opencode/AGENTS.md
 3. Send a message; while streaming, the picker is disabled and shows the run's actual level.
 4. After it completes, reload the page; the picker shows "Low" again (restored from the last assistant message's metadata).
 5. Switch the page language to Chinese (`zh-CN`) and Arabic (`ar`); the picker's labels and the "Default (…)" text render correctly, including RTL layout in Arabic.
-6. Open the browser devtools console and network tab for the whole walkthrough; confirm no console errors and no failed (4xx/5xx other than the deliberate Step 8 case) requests.
+6. Open the browser devtools console and network tab for the whole walkthrough; confirm no console errors and no failed (4xx/5xx other than the deliberate Step 8 case) requests. **Owner-approved repair during Task 7:** ordinary chats previously emitted an expected `GET /sessions/{id}/goal` 404. The optional-goal API now returns 200 JSON null for an existing chat with no active goal; unknown sessions still return 404. Re-run the browser flow against the new server, not the earlier process that loaded the old route.
 
 Record what you observed for each of the six checks.
 
@@ -257,7 +257,7 @@ The file already has "Verification of the first fork commit". Add a second secti
 | `o3` Responses-route check | Step 3's low and xhigh statuses |
 | Real chats | Steps 5–7: model, level, completed status and stored `metadata.reasoning_effort` |
 | Rejected send | Step 8's HTTP 400 detail and zero stored messages |
-| Committee | Step 9's successful `run_swarm` trail, API level and persisted `run.json` level |
+| Committee | Step 9's successful `run_swarm` trail, API completed status and persisted `run.json` effort |
 | Browser | All six Step 10 observations, including Chinese/Arabic and console/network |
 
 Do not copy scratch validation counts (those covered *code*, not live models or a browser), and do not claim a live check passed unless its evidence exists. If one is inconclusive, record it as unverified and **stop before Task 8**.
