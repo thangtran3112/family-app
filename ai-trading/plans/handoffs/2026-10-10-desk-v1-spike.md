@@ -1,4 +1,4 @@
-# Handoff: Family Desk v1 (Phase 1b Done; Comprehensive Plan Written; Phase 1c Next)
+# Handoff: Family Desk v1 (Phases 1c and 1d Done; Phase 2a Next)
 
 **Date:** 2026-10-10
 **From:** the ai-trading main session that designed Desk v1 and ran Phases 1 and 1b
@@ -26,6 +26,7 @@ Paths below are relative to `ai-trading/` unless they start with `../`.
 | Phase 0 spike | Tasks 0.1–0.4 done. The owner set up the IBKR data user (guide `plans/subplans/02e-ibkr-data-user-setup.md`, $14.50 a month) and is waiting for IBKR's approval. Tasks 0.5–0.6 wait on that. |
 | Phase 1 strategy core | Done (PR #95). |
 | Phase 1b ported quant core | Done ([phase-1b-ported-quant-core.md](../subplans/02c-desk-v1-tasks/phase-1b-ported-quant-core.md)): option math, covered-call math, the support/resistance level, and paper-order sizing. On `dev` (PR #104). Contracts 40 tests, backend 169. |
+| Phases 1c and 1d | Done, on `dev` (PR #110, 2026-10-11): technicals, pivots, the Desk Technical Bias, futures specs, dates, and sizer; as-of helpers, valuation, earnings reaction, the backtest engine, AI call settlement. Backend 525 tests, contracts 47, none skipped. Built in parallel worktree lanes from tested prototypes. **Known open item:** a `bar_close_1h` signal in a session's truncated final bin fills at 16:30, not 16:00; Phase 6b fixes it first (02c). |
 | Reuse | `02a` §11 maps what to copy from Vibe-Trading, ai-hedge-fund, and TradingAgents. TradingAgents was surveyed on 2026-10-10: its vendor router and typed errors, SEC EDGAR and FRED clients, and analyst and debate prompts are worth adapting; its LangGraph and LangChain code is not. |
 | Indicators and AI daily | `02f`, approved with mocks D9–D12, M7, and M8 (2026-10-10). Flip-card indicators and the Desk Technical Bias (TradingView's published rules); consensus EPS from Eulerpool's free tier after a pilot; one Desk AI verdict per stock each trading day, with no budget cap. |
 | Covered calls and futures swing | `02g`, approved with mocks D13–D16, M9, and M10 (2026-10-10). Covered-call coverage, rolls, and income; mini/micro futures swings for both users, with roll dates from CME's rules and a micro-first sizer. |
@@ -35,10 +36,8 @@ Paths below are relative to `ai-trading/` unless they start with `../`.
 
 Each phase gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill, written from a tested prototype in `temp/`), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`, and one pull request to `dev`.
 
-1. **Phase 1c task file** (`phase-1c-technicals-and-futures.md`): pure code, written from a tested prototype. It covers the 02f §3 indicators, pivots, and bias with their blocks and cadences, and the 02g §4 futures specs, roll dates, and micro-first sizer. Reuse Vibe-Trading's futures tables and its ADX and Ichimoku (02a §11).
-2. **Phase 1d task file** (`phase-1d-research-math.md`): the as-of helpers, valuation (copied from ai-hedge-fund v1), earnings reaction, the backtest engine core, and AI call settlement (02h).
-3. **Phase 2a plan, data without IBKR**, then 3 → 4 → 5, 6, 6b → 7 (02c Execution Map). The open-source lane owns `ai-trading/market-data/`; move it into `common/` together with that lane, never alone.
-4. **When IBKR approves the data user:** Task 0.5 with the owner (weekday market hours; also confirm that greeks arrive through the $4.50 add-on), Task 0.6, then Phase 2b (the IBKR client).
+1. **Phase 2a plan, data without IBKR** (02c Phase 2): write the task file from a tested prototype, get the owner's review, then run it in parallel worktree lanes as for 1c and 1d. Then 3 → 4 → 5, 6, 6b → 7 (02c Execution Map). The open-source lane owns `ai-trading/market-data/`; move it into `common/` together with that lane, never alone.
+2. **When IBKR approves the data user:** Task 0.5 with the owner (weekday market hours; also confirm that greeks arrive through the $4.50 add-on), Task 0.6, then Phase 2b (the IBKR client).
 
 Done on 2026-10-10:
 - PR #81 is closed.
