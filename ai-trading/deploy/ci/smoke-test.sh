@@ -589,6 +589,17 @@ with zipfile.ZipFile('$zip_path') as z:
   expect_status 401 http://127.0.0.1:18080/u/tradingagents/api/research -H 'Sec-Fetch-Mode: navigate'
   echo "ok   an unauthenticated research API request stays a plain 401 even with a navigate header"
 
+  # re-review 1 (Important): the redirect must accept ONLY a canonical
+  # lowercase UUID4 descendant, matching ta_web/store.py's own
+  # _validate_run_id contract exactly -- not any hex/hyphen string. A
+  # malformed, non-v4, or uppercase-spelled id must stay a plain 401.
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/---- -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/0b32e9ee-6e57-1b1b-9f0a-6c2a8c8d9b11 -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/0B32E9EE-6E57-4B1B-9F0A-6C2A8C8D9B11 -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   hub: a malformed, non-v4, or uppercase-spelled research id never triggers the redirect (stays 401)"
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/assets/app.mjs -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   hub: a research asset path is never redirected, even with a navigate header (stays 401)"
+
   # Review round 1 (Important): the dedicated host needs the identical
   # root/UUID-only redirect, not a plain 401 -- it previously had no
   # handle_response branch on this route at all.
@@ -603,6 +614,16 @@ with zipfile.ZipFile('$zip_path') as z:
   echo "ok   dedicated host: signed-out navigation to a research detail path preserves only the validated UUID path and discards the query"
   expect_status 401 http://127.0.0.1:18080/api/research "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
   echo "ok   dedicated host: an unauthenticated research API request stays a plain 401 even with a navigate header"
+
+  # re-review 1 (Important): same canonical-UUID4-only restriction and
+  # asset-401 coverage as the hub, at the dedicated host (its matcher was
+  # fixed together with the hub's, for one consistent redirect contract).
+  expect_status 401 http://127.0.0.1:18080/research/---- "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/research/0b32e9ee-6e57-1b1b-9f0a-6c2a8c8d9b11 "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/research/0B32E9EE-6E57-4B1B-9F0A-6C2A8C8D9B11 "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: a malformed, non-v4, or uppercase-spelled research id never triggers the redirect (stays 401)"
+  expect_status 401 http://127.0.0.1:18080/research/assets/app.mjs "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: a research asset path is never redirected, even with a navigate header (stays 401 -- required dedicated APIs/assets coverage)"
 
   # Swap the header-echo stand-in for a real ttyd to prove the WebSocket
   # handshake actually reaches a real upstream through forward_auth + reverse_proxy.

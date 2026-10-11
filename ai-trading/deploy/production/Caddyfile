@@ -56,7 +56,12 @@ http://tradingagents.tobytran.dev:8080 {
 				handle_response @denied {
 					@research_return {
 						header Sec-Fetch-Mode navigate
-						path_regexp research_return ^/research(/[0-9a-f-]+)?$
+						# re-review 1 (Important): canonical UUID4 only -- the
+						# prior [0-9a-f-]+ class accepted malformed values like
+						# "----" or a partial/non-v4 id, broader than the
+						# backend's own canonical-UUID4-only contract
+						# (ta_web/store.py's _validate_run_id).
+						path_regexp research_return ^/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
 					}
 					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch{re.research_return.1} 302
 					respond 401
@@ -143,17 +148,23 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 				@denied status 401
 				handle_response @denied {
 					# Only a top-level navigation to the research root or a
-					# canonical-shaped UUID descendant is redirected -- never
-					# an API/asset fetch under the same matcher (those stay a
-					# plain 401, same as every other unauthenticated
-					# request). The captured group is restricted to
-					# lowercase hex and hyphen characters only, so no query
-					# or path-injection value can ever reach the redirect
-					# target; any query string on the original request is
-					# never referenced here at all, so it is always discarded.
+					# canonical lowercase UUID4 descendant is redirected --
+					# never an API/asset fetch under the same matcher (those
+					# stay a plain 401, same as every other unauthenticated
+					# request). The captured group matches exactly the
+					# backend's own canonical-UUID4-only shape (no other hex/
+					# hyphen string), so no query or path-injection value can
+					# ever reach the redirect target; any query string on the
+					# original request is never referenced here at all, so it
+					# is always discarded.
 					@research_return {
 						header Sec-Fetch-Mode navigate
-						path_regexp research_return ^/u/tradingagents/research(/[0-9a-f-]+)?$
+						# re-review 1 (Important): canonical UUID4 only, same
+						# fix and reasoning as the dedicated host's matcher
+						# above -- updated together for one consistent
+						# binding/redirect contract rather than leaving this
+						# copy on the old, broader class.
+						path_regexp research_return ^/u/tradingagents/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
 					}
 					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftrading-hub.tobytran.dev%2Fu%2Ftradingagents%2Fresearch{re.research_return.1} 302
 					respond 401
