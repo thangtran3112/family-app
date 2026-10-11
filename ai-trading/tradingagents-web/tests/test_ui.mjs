@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apiPath, routeFor, isListRefresh } from '../ta_web/static/app.mjs';
+import { apiPath, routeFor, isListRefresh, shouldRebuildListShell } from '../ta_web/static/app.mjs';
 
 test('research routes retain trusted deployment prefix', () => {
   const id = 'b3f34c8d-5cbd-49cf-a7b5-d7a2d65b1d39';
@@ -27,4 +27,12 @@ test('isListRefresh only keeps the list shell mounted for a list-to-list navigat
   assert.equal(isListRefresh({ kind: 'detail', id: 'x' }, { kind: 'list' }), false);
   assert.equal(isListRefresh({ kind: 'list' }, { kind: 'detail', id: 'x' }), false);
   assert.equal(isListRefresh(undefined, { kind: 'list' }), false);
+});
+
+test('shouldRebuildListShell rebuilds the owner-specific shell whenever the response owner differs', () => {
+  assert.equal(shouldRebuildListShell(undefined, 'owner-a'), true);
+  assert.equal(shouldRebuildListShell('owner-a', 'owner-a'), false);
+  assert.equal(shouldRebuildListShell('owner-a', 'owner-b'), true);
+  assert.equal(shouldRebuildListShell('owner-a', ''), true);
+  assert.equal(shouldRebuildListShell('', 'owner-a'), true);
 });

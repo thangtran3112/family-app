@@ -46,6 +46,15 @@ export function isListRefresh(previousRoute, nextRoute) {
   return previousRoute?.kind === 'list' && nextRoute?.kind === 'list';
 }
 
+// Loading-UI fix (owner-switch correction, review finding): the cached list
+// shell bakes a owner-specific operator-import-key panel in at build time.
+// It must never survive an identity change -- a refresh response naming a
+// different (or newly missing/invalid) owner always rebuilds the shell
+// instead of reusing one still showing a previous owner's opaque key.
+export function shouldRebuildListShell(existingOwnerId, nextOwnerId) {
+  return existingOwnerId !== nextOwnerId;
+}
+
 export function apiPath(prefix, suffix) {
   assertPrefix(prefix);
   if (typeof suffix !== 'string' || !suffix.startsWith('/') || suffix.startsWith('//')) {
@@ -519,7 +528,7 @@ if (typeof document !== 'undefined') {
       importDetails.append(text('code', ownerId));
       app.append(importDetails);
     }
-    return { results, previous, next, pageLabel, tickerInput: ticker.input, dateInput: analysisDate.input, statusSelect: status };
+    return { results, previous, next, pageLabel, tickerInput: ticker.input, dateInput: analysisDate.input, statusSelect: status, ownerId };
   }
 
   function recordLabel(record) {
@@ -800,7 +809,7 @@ if (typeof document !== 'undefined') {
     pageOffset = Number.isInteger(data.offset) && data.offset >= 0 ? data.offset : pageOffset;
     listToday = typeof data.today === 'string' ? data.today : '';
     ownerId = typeof data.owner_id === 'string' ? data.owner_id : '';
-    if (!listControls) listControls = makeListPage();
+    if (shouldRebuildListShell(listControls?.ownerId, ownerId)) listControls = makeListPage();
     drawList(listControls.results, listControls.previous, listControls.next, listControls.pageLabel);
     const statusSignature = items.map((item) => `${item.id}:${item.status}:${item.stage}`).join('|');
     if (statusSignature !== lastListStatus) {
