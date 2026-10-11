@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .domain import clean_state, safe_settings
+from .domain import NotFoundError, clean_state, safe_settings
 from .reports import publish, run_directory
 from .store import Store
 
@@ -22,6 +24,7 @@ from .store import Store
 # strings in a persisted record).
 RESEARCH_FAILED = "RESEARCH_FAILED"
 EXPORT_FAILED = "EXPORT_FAILED"
+_HEARTBEAT_INTERVAL_SECONDS = 5
 
 
 def research_stage(state: dict) -> str:
@@ -72,6 +75,36 @@ def _run_config(store: Store, owner: str, run_id: str, research_depth: int | Non
 
 
 def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None = None) -> None:
+    """Keep a real worker heartbeat active even while a provider/tool call waits."""
+    store = Store(root)
+    stop = threading.Event()
+
+    def heartbeat():
+        while not stop.is_set():
+            try:
+                if not store.heartbeat(id):
+                    return
+            except sqlite3.Error:
+                # Monitoring failure must not log database paths or manufacture
+                # progress. Retry transient contention at the normal interval.
+                if stop.wait(_HEARTBEAT_INTERVAL_SECONDS):
+                    return
+                continue
+            except NotFoundError:
+                return
+            if stop.wait(_HEARTBEAT_INTERVAL_SECONDS):
+                return
+
+    thread = threading.Thread(target=heartbeat, name="research-heartbeat", daemon=True)
+    thread.start()
+    try:
+        _run_research(store, id, graph_factory)
+    finally:
+        stop.set()
+        thread.join()
+
+
+def _run_research(store: Store, id: str, graph_factory: Callable[..., Any] | None) -> None:
     """Run one record's research to completion. Never raises.
 
     Every failure is recorded on the run as a fixed error code and whatever
@@ -80,7 +113,6 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
     partial export is still published so a partial download is possible;
     :func:`ta_web.reports.publish` itself refuses a header-only non-export.
     """
-    store = Store(root)
     run = store.worker_run(id)
     inputs = run["inputs"]
     owner = run["owner_id"]
@@ -91,7 +123,7 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
     state: dict = {}
     try:
         graph = factory(selected_analysts=inputs["analysts"], config=config)
-        store.update(id, settings=safe_settings(graph.run_settings()))
+        store.update(id, settings=safe_settings(graph.run_settings()), stage="starting", progress=True)
         initial = graph.create_run_state(ticker, trade_date, asset_type)
         thread_id = graph.begin_checkpoint(ticker, trade_date, asset_type)
         args = graph.propagator.get_graph_args()
@@ -102,7 +134,11 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
             for _messages, chunk in graph.stream_run(graph.checkpoint_input(initial), **args):
                 if chunk:
                     state.update(chunk)
-                    store.update(id, state=clean_state(state), stage=research_stage(state))
+                    store.update(id, state=clean_state(state), stage=research_stage(state), progress=True)
+                elif _messages:
+                    # Upstream emits message-only completed tool/agent steps as
+                    # well as reports. Count activity, never persist the messages.
+                    store.update(id, progress=True)
             graph.record_decision(ticker, trade_date, state)
             graph.clear_checkpoint_on_success(ticker, trade_date, asset_type)
         finally:
@@ -132,6 +168,7 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
         return
 
     try:
+        store.update(id, stage="exporting", progress=True)
         publish(store, id)
     except Exception:  # noqa: BLE001 -- publish() is not exclusively ReportError
         # (e.g. a filesystem/store failure outside its own wrapped
@@ -141,7 +178,7 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
         store.update(id, status="failed", partial=True, error_code=EXPORT_FAILED)
         return
 
-    store.update(id, status="completed")
+    store.update(id, status="completed", stage="finished", progress=True)
 
 
 def _main() -> None:
