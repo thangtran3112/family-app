@@ -29,6 +29,7 @@
  *   as its child with the resulting opaque `scanRunId`.
  */
 import {
+  ActivityFailure,
   ApplicationFailure,
   CancellationScope,
   executeChild,
@@ -41,6 +42,7 @@ import {
   AI_WORKER_TASK_QUEUE,
   MAILBOX_MATERIALIZE_WORKFLOW_TYPE,
   MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE,
+  MAILBOX_OCR_ZERO_AMOUNT_MESSAGE,
   MAILBOX_SCAN_WORKFLOW_TYPE,
   type DiscoveryPageV1,
   type JobReferenceV1,
@@ -199,11 +201,15 @@ export async function MailboxOcrReceiptWorkflow(jobReference: JobReferenceV1): P
     await mailboxOcr.mailbox_ocr_receipt({ jobReference: ref, expectedJobVersion: version });
   } catch (error) {
     if (isCancellation(error)) throw error;
+    const zeroAmount =
+      error instanceof ActivityFailure &&
+      error.cause instanceof ApplicationFailure &&
+      error.cause.type === "OcrZeroAmount";
     try {
       await mailboxOcr.ocr_mark_failed({
         jobReference: ref,
         expectedJobVersion: version,
-        message: "MAILBOX_OCR_FAILED: extraction or submission error",
+        message: zeroAmount ? MAILBOX_OCR_ZERO_AMOUNT_MESSAGE : "MAILBOX_OCR_FAILED: extraction or submission error",
       });
     } catch (failError) {
       if (isCancellation(failError)) throw failError;
