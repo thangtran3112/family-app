@@ -41,6 +41,7 @@ class FakeRuntime:
         self.prepare_mirofish_result = True
         self.prepare_mirofish_lock_fds = []
         self.converged_override = {}
+        self.converged_exception = None
 
     @property
     def start_blocked(self):
@@ -88,6 +89,8 @@ class FakeRuntime:
 
     def converged(self, app_id, enabled):
         self.calls.append(("converged", app_id, enabled))
+        if self.converged_exception is not None:
+            raise self.converged_exception
         if app_id in self.converged_override:
             return self.converged_override[app_id]
         return self.group_status(app_id, enabled) == ("Running" if enabled else "Stopped")
@@ -170,6 +173,7 @@ class ServerTest(unittest.TestCase):
         if body is not None:
             payload = json.dumps(body).encode("utf-8")
             headers["Content-Length"] = str(len(payload))
+            headers.setdefault("Content-Type", "application/json")
         try:
             conn.connect()
             conn.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
@@ -437,6 +441,23 @@ class ServerTest(unittest.TestCase):
             os.close(external_fd)
         self.assertEqual(self.runtime.calls, [])
 
+    def test_unexpected_converged_exception_releases_the_lease_not_just_a_listed_one(self):
+        """`runtime.converged()` raising anything -- not only the
+        anticipated ValueError/StateFailure/RuntimeFailure -- must still
+        release the just-acquired lease; otherwise every later
+        operation/reconcile reads as deployment-busy until a restart.
+        """
+        self.start_server()
+        self.runtime.converged_exception = KeyError("unexpected")
+        code, _body = self.put("/apps/mirofish", {"enabled": True, "expectedRevision": 0}, "user_fixture")
+        self.assertEqual(code, 503)
+        self.runtime.converged_exception = None
+        # The lease must be free again: a normal operation at the SAME
+        # revision (nothing committed by the failed attempt) now succeeds.
+        code, _body = self.put("/apps/mirofish", {"enabled": True, "expectedRevision": 0}, "user_fixture")
+        self.assertEqual(code, 202)
+        self.wait_for_operation_to_clear()
+
     # -- converged no-op -------------------------------------------------
 
     def test_converged_choice_is_a_no_op(self):
@@ -623,6 +644,7 @@ class ServerTest(unittest.TestCase):
         def build(conn):
             conn.putrequest("PUT", "/apps/mirofish", skip_host=True, skip_accept_encoding=True)
             conn.putheader(ACTOR_HEADER, "user_fixture")
+            conn.putheader("Content-Type", "application/json")
             conn.putheader("Content-Length", "2")
             conn.putheader("Content-Length", "2")
             conn.endheaders(b"{}")
@@ -636,6 +658,7 @@ class ServerTest(unittest.TestCase):
         def build(conn):
             conn.putrequest("PUT", "/apps/mirofish", skip_host=True, skip_accept_encoding=True)
             conn.putheader(ACTOR_HEADER, "user_fixture")
+            conn.putheader("Content-Type", "application/json")
             conn.putheader("Transfer-Encoding", "chunked")
             conn.putheader("Content-Length", "2")
             conn.endheaders(b"{}")
@@ -651,6 +674,7 @@ class ServerTest(unittest.TestCase):
             conn.connect()
             conn.putrequest("PUT", "/apps/mirofish", skip_host=True, skip_accept_encoding=True)
             conn.putheader(ACTOR_HEADER, "user_fixture")
+            conn.putheader("Content-Type", "application/json")
             conn.putheader("Content-Length", str(len(raw_body)))
             conn.endheaders(raw_body)
             resp = conn.getresponse()
@@ -658,6 +682,66 @@ class ServerTest(unittest.TestCase):
             resp.read()
         finally:
             conn.close()
+        self.assertEqual(self.runtime.calls, [])
+
+    # -- Content-Type enforcement -------------------------------------------------
+
+    def test_put_requires_application_json_content_type(self):
+        self.start_server()
+        body = {"enabled": True, "expectedRevision": 0}
+
+        # Missing Content-Type entirely.
+        conn = UnixHTTPConnection(self.socket_path)
+        try:
+            payload = json.dumps(body).encode("utf-8")
+            conn.connect()
+            conn.putrequest("PUT", "/apps/mirofish", skip_host=True, skip_accept_encoding=True)
+            conn.putheader(ACTOR_HEADER, "user_fixture")
+            conn.putheader("Content-Length", str(len(payload)))
+            conn.endheaders(payload)
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 400)
+            resp.read()
+        finally:
+            conn.close()
+
+        for bad_content_type in ("text/plain", "application/xml", "application/json-ish", ""):
+            with self.subTest(content_type=bad_content_type):
+                code, _body = self.put(
+                    "/apps/mirofish", body, "user_fixture",
+                    extra_headers={"Content-Type": bad_content_type} if bad_content_type else {"Content-Type": ""},
+                )
+                self.assertEqual(code, 400)
+
+        # A normal charset parameter is accepted and reaches real dispatch.
+        code, _body = self.put(
+            "/apps/mirofish", body, "user_fixture",
+            extra_headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+        self.assertEqual(code, 202)
+        self.assertIn(("converged", "mirofish", True), self.runtime.calls)
+        self.wait_for_operation_to_clear()
+
+    # -- exhaustive bounded method handling (never stdlib's 501/HTML) ------------------
+
+    def test_every_unimplemented_verb_gets_bounded_json_405_never_html_501(self):
+        self.start_server()
+        for verb in ("OPTIONS", "TRACE", "CONNECT", "FOOBAR", "options"):
+            with self.subTest(verb=verb):
+                conn = UnixHTTPConnection(self.socket_path)
+                try:
+                    conn.connect()
+                    conn.putrequest(verb, "/apps", skip_host=True, skip_accept_encoding=True)
+                    conn.putheader(ACTOR_HEADER, "user_fixture")
+                    conn.endheaders()
+                    resp = conn.getresponse()
+                    self.assertEqual(resp.status, 405)
+                    self.assertEqual(resp.getheader("Content-Type"), "application/json")
+                    raw = resp.read()
+                    body = json.loads(raw)
+                    self.assertEqual(set(body), {"error", "message"})
+                finally:
+                    conn.close()
         self.assertEqual(self.runtime.calls, [])
 
     # -- internal /gate/{id} -------------------------------------------------
@@ -692,20 +776,34 @@ class ServerTest(unittest.TestCase):
 
     def test_gate_unavailable_body_is_fixed_actionable_and_bounded_no_identity_leak(self):
         """Task 4 reads this exact, generic body -- never which app,
-        container, environment, or identity detail caused the 503, and
-        regardless of the underlying reason (degraded, corrupt state,
-        active operation, desired off, or a non-converged group).
+        container, environment, or identity detail caused the 503 --
+        regardless of the underlying reason. MiroFish must actually be
+        desired-on here so `process_gate` genuinely reaches and exercises
+        `runtime.converged()` (a "not converged" result, and separately a
+        raised `RuntimeFailure`) rather than short-circuiting at the
+        desired-off check before the configured failure is ever relevant.
         """
         self.start_server()
-        self.runtime.apply_failures["mirofish"] = RuntimeFailure("runtime_unavailable")
-        self.runtime.unhealthy.add("mirofish")
-        code, body = self.get("/gate/mirofish")
-        self.assertEqual(code, 503)
-        self.assertEqual(body, {
-            "error": "app_unavailable",
-            "message": "Open Trading Hub Settings to start the app or check its status.",
-        })
-        self.assertEqual(set(body), {"error", "message"})
+        current = read_state(self.state_path)
+        current["desired"]["mirofish"] = True
+        atomic_write(self.state_path, current)
+        for configure, cause in [
+            (lambda: self.runtime.converged_override.update({"mirofish": False}), "not converged"),
+            (lambda: setattr(self.runtime, "converged_exception", RuntimeFailure("runtime_unavailable")), "runtime query failure"),
+        ]:
+            with self.subTest(cause=cause):
+                self.runtime.converged_override.clear()
+                self.runtime.converged_exception = None
+                configure()
+                code, body = self.get("/gate/mirofish")
+                self.assertEqual(code, 503)
+                self.assertEqual(body, {
+                    "error": "app_unavailable",
+                    "message": "Open Trading Hub Settings to start the app or check its status.",
+                })
+                self.assertEqual(set(body), {"error", "message"})
+        # Proves the configured failure was actually exercised, not skipped.
+        self.assertIn(("converged", "mirofish", True), self.runtime.calls)
 
     def test_gate_response_is_no_store(self):
         self.start_server()
@@ -736,6 +834,111 @@ class ServerTest(unittest.TestCase):
         self.assertNotIn("Traceback", content)
         # Root-only rotating log: owner-writable only.
         self.assertEqual(self.audit_log_path.stat().st_mode & 0o077, 0)
+
+    # -- audit log path safety (state-style lstat/owner/mode/no-follow) ----------------
+
+    def test_audit_log_directory_symlink_is_refused(self):
+        root = self.state_path.parent
+        elsewhere = root / "elsewhere"
+        elsewhere.mkdir(mode=0o700)
+        audit_dir = root / "audit-symlink-dir"
+        os.symlink(elsewhere, audit_dir)
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=audit_dir / "audit.log",
+            )
+        self.assertTrue(audit_dir.is_symlink())  # never replaced/followed
+
+    def test_audit_log_directory_owned_by_someone_else_is_refused(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-foreign-dir"
+        audit_dir.mkdir(mode=0o700)
+        os.chown(audit_dir, 65534, 65534)
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=audit_dir / "audit.log",
+            )
+
+    def test_audit_log_directory_world_writable_is_refused(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-writable-dir"
+        audit_dir.mkdir(mode=0o700)
+        os.chmod(audit_dir, 0o777)  # mkdir's own mode is masked by umask; force it explicitly
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=audit_dir / "audit.log",
+            )
+
+    def test_audit_log_file_symlink_is_never_followed(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-dir"
+        audit_dir.mkdir(mode=0o700)
+        secret = root / "attacker-controlled-target"
+        secret.write_text("pre-existing unrelated content")
+        link_path = audit_dir / "audit.log"
+        os.symlink(secret, link_path)
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=link_path,
+            )
+        self.assertTrue(link_path.is_symlink())  # never replaced
+        self.assertEqual(secret.read_text(), "pre-existing unrelated content")  # never opened/written
+
+    def test_audit_log_file_owned_by_someone_else_is_refused(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-dir2"
+        audit_dir.mkdir(mode=0o700)
+        path = audit_dir / "audit.log"
+        path.write_text("")
+        os.chown(path, 65534, 65534)
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=path,
+            )
+
+    def test_audit_log_file_group_or_other_writable_is_refused(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-dir3"
+        audit_dir.mkdir(mode=0o700)
+        path = audit_dir / "audit.log"
+        path.write_text("")
+        os.chmod(path, 0o666)
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=path,
+            )
+
+    def test_audit_log_file_not_a_regular_file_is_refused(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-dir4"
+        audit_dir.mkdir(mode=0o700)
+        path = audit_dir / "audit.log"
+        path.mkdir(mode=0o700)  # a directory, not a regular file
+        with self.assertRaises(Exception):
+            create_server(
+                self.socket_path, self.state_path, self.lock_path, self.runtime,
+                gateway_uid=os.getuid(), audit_log_path=path,
+            )
+
+    def test_audit_log_permissive_existing_file_mode_is_repaired_to_0600(self):
+        root = self.state_path.parent
+        audit_dir = root / "audit-dir5"
+        audit_dir.mkdir(mode=0o700)
+        path = audit_dir / "audit.log"
+        path.write_text("")
+        os.chmod(path, 0o644)  # world-readable: safe-but-permissive, no write bits
+        server = create_server(
+            self.socket_path, self.state_path, self.lock_path, self.runtime,
+            gateway_uid=os.getuid(), audit_log_path=path,
+        )
+        self.addCleanup(server.server_close)  # never serve_forever()'d here: shutdown() would hang
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
     # -- needs_setup worker path -------------------------------------------------
 

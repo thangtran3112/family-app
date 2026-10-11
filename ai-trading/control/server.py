@@ -57,6 +57,7 @@ from state import (
     begin_change,
     finish_change,
     read_state,
+    refuse_unsafe_existing_path,
     restore_preferences,
     validate_inherited_lock,
 )
@@ -88,16 +89,54 @@ class ServerFailure(RuntimeError):
     """The helper's own socket/process state is unsafe or unavailable."""
 
 
+def _prepare_audit_directory(directory):
+    """Validate (via `lstat`, never following a symlink) that an existing
+    directory is root-owned with no group/other write bit, or create one
+    fresh at a safe mode if nothing exists yet -- the same no-follow/
+    owner/mode safety `state.py` applies to its own paths. Raises
+    `ServerFailure` for a symlink, a non-directory, a wrong owner, or a
+    group/other-writable directory; never mutates an existing one.
+    """
+    try:
+        info = directory.lstat()
+    except FileNotFoundError:
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        info = directory.lstat()
+    except OSError as exc:
+        raise ServerFailure(f"audit log directory {directory} is unavailable") from exc
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or stat.S_ISLNK(info.st_mode)
+        or info.st_uid != 0
+        or info.st_mode & 0o022
+    ):
+        raise ServerFailure(f"audit log directory {directory} is unsafe")
+
+
 def _build_audit_logger(path):
     """Root-only rotating audit log (1 MiB, three retained files). Each
     entry logs only fixed app/actor/time/result/exit-code fields -- never
     raw exception text, subprocess output, tokens or environment values.
+
+    A pre-existing symlink, unsafe directory, or permissive/foreign
+    existing log file is rejected (`refuse_unsafe_existing_path`, reused
+    from `state.py`) and never opened/followed; `O_NOFOLLOW` closes the
+    TOCTOU window between that check and the open itself, and the mode is
+    always repaired to 0600 after opening -- even for a pre-existing file
+    `refuse_unsafe_existing_path` accepted (e.g. a world-readable 0644).
     """
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
-    fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o600)
-    os.close(fd)
+    _prepare_audit_directory(path.parent)
+    refuse_unsafe_existing_path(path, owner_uid=0)
+    flags = os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise ServerFailure(f"audit log {path} could not be opened safely") from exc
+    try:
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
     logger = logging.getLogger(f"ai-trading-control-audit.{uuid.uuid4()}")
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -177,17 +216,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_PUT(self):
         self._dispatch("PUT")
 
-    def do_POST(self):
-        self._dispatch("POST")
-
-    def do_DELETE(self):
-        self._dispatch("DELETE")
-
-    def do_PATCH(self):
-        self._dispatch("PATCH")
-
-    def do_HEAD(self):
-        self._dispatch("HEAD")
+    def __getattr__(self, name):
+        """BaseHTTPRequestHandler dispatches `do_<COMMAND>` by `hasattr`
+        and falls back to its own default 501/HTML page for any verb that
+        has no such method -- OPTIONS, TRACE, CONNECT, or any other/
+        extension token a client sends. Catch every one of those here and
+        route it through the same bounded JSON dispatch as GET/PUT, so no
+        verb can ever reach stdlib's default error page or logging.
+        """
+        if name.startswith("do_"):
+            verb = name[len("do_"):]
+            return lambda: self._dispatch(verb)
+        raise AttributeError(name)
 
     def _verified_actor(self):
         values = self.headers.get_all(ACTOR_HEADER)
@@ -197,6 +237,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not ACTOR_ID.fullmatch(value):
             return None
         return value
+
+    def _has_json_content_type(self):
+        values = self.headers.get_all("Content-Type")
+        if not values or len(values) != 1:
+            return False
+        # A normal charset parameter is fine ("application/json;
+        # charset=utf-8"); anything else before the first ";" is not.
+        media_type = values[0].split(";", 1)[0].strip().lower()
+        return media_type == "application/json"
 
     def _validated_content_length(self):
         if self.headers.get_all("Transfer-Encoding"):
@@ -215,6 +264,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._respond_json(status, payload)
 
     def _handle_put_app(self, app_id, actor):
+        if not self._has_json_content_type():
+            return self._error(400, "bad_request", "Content-Type must be application/json")
         length = self._validated_content_length()
         if length is None:
             return self._error(400, "bad_request", "invalid request framing")
@@ -524,7 +575,12 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         except Conflict:
             self._release_lease(lock_fd)
             return 409, {"error": "conflict", "message": "revision conflict"}
-        except (ValueError, StateFailure, RuntimeFailure):
+        except Exception:
+            # Any failure here -- anticipated (ValueError/StateFailure/
+            # RuntimeFailure) or not -- must still release the lease:
+            # ownership only transfers to the worker thread past this
+            # point. A leaked lease would read as deployment-busy for
+            # every future operation/reconcile until process restart.
             self._release_lease(lock_fd)
             return 503, {"error": "unavailable", "message": "service unavailable"}
 
