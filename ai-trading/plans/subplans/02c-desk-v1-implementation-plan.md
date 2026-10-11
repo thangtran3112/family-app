@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> This file is the master plan for the whole Desk. Each phase has its own task file under [02c-desk-v1-tasks/](02c-desk-v1-tasks/). A task file is written with the writing-plans skill, from a tested prototype, and the owner reviews it before that phase starts. That keeps every task file small enough to carry complete code. Phases 0, 1, and 1b have task files. Each later phase gets its own before it starts.
+> This file is the master plan for the whole Desk. Each phase has its own task file under [02c-desk-v1-tasks/](02c-desk-v1-tasks/). A task file is written with the writing-plans skill, from a tested prototype, and the owner reviews it before that phase starts. That keeps every task file small enough to carry complete code. Phases 0, 1, 1b, 1c, and 1d have task files. Each later phase gets its own before it starts.
 
 **Goal:** ship Family Desk v1 at `trading.tobytran.dev`, in phases that each deliver working, tested software:
 - the two users' strategies alert automatically and paper-trade on IBKR paper;
@@ -107,8 +107,8 @@
 | 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Waiting for IBKR to approve the data user |
 | 1. Strategy core | Contracts, backend scaffold, session calendar, first indicators, levels, evaluator, ten templates | none | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done (PR #95) |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance, order sizing | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done (PR #104) |
-| 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | `phase-1c-technicals-and-futures.md` | **Next** |
-| 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | `phase-1d-research-math.md` | Planned |
+| 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | [phase-1c-technicals-and-futures.md](02c-desk-v1-tasks/phase-1c-technicals-and-futures.md) | Done |
+| 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | [phase-1d-research-math.md](02c-desk-v1-tasks/phase-1d-research-math.md) | Done |
 | 2. Data foundation | `ai-trading/common` providers (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | `phase-3-runtime.md` | Planned |
 | 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | `phase-4-web.md` | Planned |
@@ -329,7 +329,7 @@ Chart overlays come from Vibe-Trading's `indicators.ts` (copy).
 
 **Scope:**
 - **Imports:** IBKR Flex (Open Positions plus Open Lots), CSV, and the Holdings page.
-- **Fundamentals:** fundamentals and valuation from SEC data and Phase 1d; the consensus EPS and earnings-reaction cards (D11, D19).
+- **Fundamentals:** fundamentals and valuation from SEC data and Phase 1d; the consensus EPS and earnings-reaction cards (D11, D19). The valuation card states when a number rests on one of `core/valuation.py`'s documented fallbacks: WACC with missing debt or cash treated as no debt, a default credit spread for a missing interest coverage, the default volatility discount, or a 5% revenue growth when growth is missing (Phase 1d review).
 - **Covered calls:** the 15:30 covered-call scan, the income and short-call risk templates, and the coverage, roll, income, and assignment views (D13, D14, M9; 02g §3).
 - **Desk AI verdict** at 17:05 (02f §5):
   - four votes and a structured verdict, checked in code;
@@ -389,6 +389,7 @@ Chart overlays come from Vibe-Trading's `indicators.ts` (copy).
 ### Phase 6b: Backtests
 
 **Scope:**
+- **first, a known fix from the Phase 1c/1d final review:** `backtest._signal_positions` maps a resampled signal to its bin's real end (the truncated final `bar_close_1h` bin of a session closes at 16:00, not 16:30), derived the way `evaluate._resample` derives it, with a regression test;
 - backtest jobs over stored bars using the Phase 1d engine, with a concurrency limit;
 - `backtest_runs` and `backtest_trades`;
 - the results page (D17);

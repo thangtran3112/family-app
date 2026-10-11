@@ -29,9 +29,19 @@ class Session:
     extended_close: pd.Timestamp
 
 
+#: A fixed, explicit range (not `exchange_calendars`' default, which is relative to today and
+#: drifts as the wall clock advances) so every result -- including a futures contract month years
+#: out -- stays the same no matter when this runs. 2015-01-01 covers everything this project
+#: looks up historically; 2030-12-31 leaves more than four years of futures contract months ahead
+#: of the Phase 1c cutoff date (2026-10-10).
+_CALENDAR_START = "2015-01-01"
+_CALENDAR_END = "2030-12-31"
+
+
 @cache
 def _calendar(asset: Asset) -> xcals.ExchangeCalendar:
-    return xcals.get_calendar("XNYS" if asset == "stock" else "CMES")
+    name = "XNYS" if asset == "stock" else "CMES"
+    return xcals.get_calendar(name, start=_CALENDAR_START, end=_CALENDAR_END)
 
 
 def et(day: date, hhmm: str) -> pd.Timestamp:
