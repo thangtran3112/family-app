@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +31,9 @@ CREATE TABLE IF NOT EXISTS runs (
     stage TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    heartbeat_at TEXT,
+    last_progress_at TEXT,
+    ended_at TEXT,
     shared INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL,
     settings TEXT NOT NULL,
@@ -82,6 +86,9 @@ def _row_to_run(row: sqlite3.Row) -> Run:
         stage=row["stage"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        heartbeat_at=row["heartbeat_at"],
+        last_progress_at=row["last_progress_at"],
+        ended_at=row["ended_at"],
         shared=bool(row["shared"]),
         state=json.loads(row["state"]),
         settings=json.loads(row["settings"]),
@@ -100,6 +107,15 @@ class Store:
         conn = self._connect()
         try:
             conn.executescript(_SCHEMA)
+            # Serialize additive upgrades: API and child processes can open the
+            # same pre-heartbeat database together. Historical activity stays
+            # unknown rather than being inferred from sharing/update times.
+            conn.execute("BEGIN IMMEDIATE")
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
+            for name in ("heartbeat_at", "last_progress_at", "ended_at"):
+                if name not in columns:
+                    conn.execute(f"ALTER TABLE runs ADD COLUMN {name} TEXT")
+            conn.execute("COMMIT")
         finally:
             conn.close()
 
@@ -110,10 +126,25 @@ class Store:
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path, timeout=5, isolation_level=None)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=5000")
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    return conn
+                except sqlite3.OperationalError as error:
+                    # WAL activation can fail immediately during concurrent
+                    # first opens despite busy_timeout. Retry only contention,
+                    # within the same bound; never replay a data transaction.
+                    code = getattr(error, "sqlite_errorcode", 0) & 0xff
+                    if code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED) or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.01)
+        except BaseException:  # release partially initialized resource, then propagate unchanged
+            conn.close()
+            raise
 
     # --- admission / lifecycle ----------------------------------------------
 
@@ -128,10 +159,10 @@ class Store:
             try:
                 conn.execute(
                     """INSERT INTO runs
-                       (id, owner_id, inputs, origin, status, stage, created_at, updated_at,
+                       (id, owner_id, inputs, origin, status, stage, created_at, updated_at, last_progress_at,
                         shared, state, settings, artifacts_ready, partial, fingerprint, error_code)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (run_id, owner, payload, "web", "running", None, now, now,
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (run_id, owner, payload, "web", "running", None, now, now, now,
                      0, empty, empty, 0, 0, None, None),
                 )
             except sqlite3.IntegrityError as exc:
@@ -153,6 +184,7 @@ class Store:
         artifacts_ready: bool | None = None,
         partial: bool | None = None,
         error_code: str | None = None,
+        progress: bool = False,
     ) -> None:
         run_id = _validate_run_id(id)
         sets: list[str] = []
@@ -180,10 +212,17 @@ class Store:
         if error_code is not None:
             sets.append("error_code = ?")
             params.append(error_code)
-        if not sets:
+        if not sets and not progress:
             return
+        now = _utc_now_iso()
+        if status in ("completed", "failed", "interrupted"):
+            sets.append("ended_at = COALESCE(ended_at, ?)")
+            params.append(now)
+        if progress:
+            sets.append("last_progress_at = ?")
+            params.append(now)
         sets.append("updated_at = ?")
-        params.append(_utc_now_iso())
+        params.append(now)
         params.append(run_id)
 
         conn = self._connect()
@@ -197,6 +236,18 @@ class Store:
         finally:
             conn.close()
 
+    def heartbeat(self, id: str) -> bool:
+        """Touch only worker liveness; never progress, sharing, or terminal state."""
+        run_id = _validate_run_id(id)
+        conn = self._connect()
+        try:
+            return conn.execute(
+                "UPDATE runs SET heartbeat_at=? WHERE id=? AND status='running'",
+                (_utc_now_iso(), run_id),
+            ).rowcount > 0
+        finally:
+            conn.close()
+
     def mark_interrupted(self) -> list[str]:
         now = _utc_now_iso()
         conn = self._connect()
@@ -206,8 +257,8 @@ class Store:
             ids = [row["id"] for row in rows]
             if ids:
                 conn.execute(
-                    "UPDATE runs SET status='interrupted', updated_at=? WHERE status='running'",
-                    (now,),
+                    "UPDATE runs SET status='interrupted', updated_at=?, ended_at=COALESCE(ended_at, ?) WHERE status='running'",
+                    (now, now),
                 )
             conn.execute("COMMIT")
         finally:

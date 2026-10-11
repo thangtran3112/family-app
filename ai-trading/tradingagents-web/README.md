@@ -76,7 +76,16 @@ wrapper-only — nothing in `packages/trading-agents` is ever modified.
   contract, and the production lifespan (service lock, restart recovery,
   real child subprocess).
 - `tests/test_ui.mjs` — Node `node:test`; `app.mjs`'s prefix-safe
-  `routeFor`/`apiPath` helpers (no DOM, no mocked backend).
+  route helpers, progress freshness, safe failure messages, and read-retry
+  classification (no DOM, no mocked backend).
+- `tests/test_progress.py` — real SQLite heartbeat/progress separation,
+  additive/concurrent database upgrades, and a worker heartbeat while the
+  graph waits, including heartbeat-thread cleanup.
+- `tests/check_progress_browser.mjs` — opt-in offline browser regression:
+  actual UI assets with synthetic HTTP fixtures, connection recovery,
+  malformed-response handling, authorization-loss clearing, focus,
+  reduced motion, and mobile/prefix behavior. Reuses an installed
+  `playwright-core`; it adds no application dependency or live provider call.
 
 ## Running the service
 
@@ -100,6 +109,52 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tradingagents-web \
   python -m unittest discover -s tradingagents-web/tests -p 'test_*.py' -v
 node --test tradingagents-web/tests/test_ui.mjs
 ```
+
+For the optional DOM check, point to an existing Playwright installation and
+an isolated test browser (never the owner's personal Chrome profile):
+
+```sh
+PLAYWRIGHT_CORE_PATH=/path/to/playwright-core/index.mjs \
+PLAYWRIGHT_CHROME_EXECUTABLE=/path/to/test-browser \
+  node tradingagents-web/tests/check_progress_browser.mjs
+```
+
+## Live progress and connection handling
+
+- The isolated worker records `heartbeat_at` every **5 seconds**, including
+  while a model or tool request waits. This confirms worker liveness, not
+  forward progress. The heartbeat stops when the worker finishes.
+- `last_progress_at` changes only for completed research/tool steps, stage/output activity,
+  and completion. Message-only steps update the timestamp, never store their
+  raw messages. Heartbeats and sharing changes do not advance it.
+- `ended_at` records completion/failure/interruption once, so elapsed research
+  time stops even if sharing changes later. Historical end times stay unknown
+  rather than being guessed from a later metadata update.
+- The authenticated UI keeps its existing **3-second status polling** and
+  shows stage, elapsed time, last research activity, and heartbeat age. It
+  uses the response's HTTP Date to avoid misleading laptop-clock skew.
+- A heartbeat delayed by **20 seconds** produces an unconfirmed-liveness
+  warning. **3 minutes without new research activity** produces a slow/stall
+  warning even if the heartbeat remains fresh. Neither warning changes the
+  saved run status, terminates the worker, or automatically reruns research.
+- Active, healthy work has a Hermes-inspired moving rainbow border. Slow,
+  disconnected, or terminal states stop the animation. Reduced-motion users
+  get a static border and no animated native progress bar.
+- Read requests time out after **10 seconds**. Transient network/service or
+  malformed-response failures retain the last authorized snapshot, warn,
+  and retry reads. Authorization loss/revocation clears private content.
+  Authorization-denial headers clear it before any response-body parsing;
+  stalled bodies also trigger the read deadline and retry rather than silently
+  stopping status updates.
+  Mutations are never automatically retried; a timed-out submission warns
+  the user to check history before repeating an action.
+- Failures/interruption show fixed, helpful explanations and preserve any
+  saved analysis. A research error is shown immediately while partial reports
+  are prepared; the task remains processing until publication finishes, so
+  polling cannot stop just before its downloads become ready. The border is
+  static warning-colored during this error-finalization stage. No provider exception, raw tool log, or credential is
+  streamed to the browser. Old records migrate additively and keep unknown
+  monitoring timestamps as null rather than inventing historical activity.
 
 ## Data model notes
 
