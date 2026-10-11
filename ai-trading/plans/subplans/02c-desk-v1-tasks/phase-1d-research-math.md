@@ -25,6 +25,17 @@ Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.
 - [02a §11](../02a-desk-v1-strategies-design.md): the reuse map's Phase 1d rows
 - [02c](../02c-desk-v1-implementation-plan.md) Global Constraints, Review Focus, and Shared Interfaces; "Phase 1d: Research math" in its Phase Outlines; `ai-trading/AGENTS.md` "Our Code"
 
+## Global Constraints
+
+- Everything in 02c's Global Constraints and in Phase 1's and Phase 1b's Global Constraints applies.
+- Code lives in `ai-trading/packages/family-desk/`. It never imports another package. Code adapted from an upstream app carries an attribution header and a row in `packages/family-desk/THIRD_PARTY_NOTICES.md`; Apache-2.0 files (TradingAgents) are also marked as modified. Nothing is copied from MiroFish.
+- **No new runtime dependency.** No new dependencies in `pyproject.toml`; every calculation uses pandas, numpy, `exchange_calendars`, and the standard library already there.
+- `ai_trading.core` does no I/O and reads no clock.
+- **No look-ahead (02h).** Backtests and settlements see only data that existed at their decision time: a signal on a closed bar fills at the next bar's open, and a call made after a close is judged only on later sessions.
+- **Unknown data never votes, fires, or guesses.** A missing input gives `None`, `Pending`, or an unknown target with a reason, never a fabricated number.
+- No contract changes: Phase 1d adds no Zod or Pydantic shapes, and never edits the generated files.
+- Commits are one line, with no trailer. Do not push.
+
 ## Decisions for Owner Review
 
 Consolidated from the three prototype reports (`REPORT-E.md`: as-of helpers, valuation, earnings reaction, unchanged since the last revision; `REPORT-F.md`: backtest engine, settlement, now in its revision-3 "scoped re-review" fixes).
