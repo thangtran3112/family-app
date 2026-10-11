@@ -135,7 +135,7 @@ class StateTest(unittest.TestCase):
         changed, _ = begin_change(state, "vibe-trading", False, state["revision"], False)
         self.assertEqual(changed["results"]["mirofish"]["errorCode"], "operation_timeout")
 
-    def test_validation_rejects_unknown_keys_bad_revision_and_bad_operation(self):
+    def test_validation_rejects_unknown_keys_and_bad_revision(self):
         valid = initial_state(None)
         for mutation in (
             lambda value: value.update(extra=True),
@@ -146,12 +146,59 @@ class StateTest(unittest.TestCase):
             lambda value: value["desired"].pop("mirofish"),
             lambda value: value["desired"].update(mirofish=1),
             lambda value: value["results"].update(extra=None),
-            lambda value: value.update(operation={"id": "bad", "status": "unknown"}),
         ):
             bad = json.loads(json.dumps(valid))
             mutation(bad)
             with self.subTest(bad=bad), self.assertRaises(StateFailure):
                 validate_state(bad)
+
+    def test_validation_accepts_complete_operation_baseline(self):
+        validate_state(self._complete_operation_state())
+
+    def test_validation_rejects_invalid_operation_id(self):
+        state = self._complete_operation_state()
+        state["operation"]["id"] = "not-a-uuid"
+        with self.assertRaises(StateFailure):
+            validate_state(state)
+
+    def test_validation_rejects_invalid_operation_status(self):
+        state = self._complete_operation_state()
+        state["operation"]["status"] = "unknown"
+        with self.assertRaises(StateFailure):
+            validate_state(state)
+
+    @staticmethod
+    def _complete_operation_state():
+        return {
+            "schemaVersion": 1,
+            "revision": 1,
+            "desired": {
+                "tradingagents": True,
+                "ai-hedge-fund": True,
+                "vibe-trading": True,
+                "mirofish": True,
+            },
+            "results": {
+                "tradingagents": None,
+                "ai-hedge-fund": None,
+                "vibe-trading": None,
+                "mirofish": {
+                    "changedAt": "2026-10-11T12:00:00Z",
+                    "errorCode": None,
+                },
+            },
+            "lastChange": "2026-10-11T12:00:00Z",
+            "operation": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "appId": "mirofish",
+                "actorId": "operator",
+                "enabled": True,
+                "status": "complete",
+                "startedAt": "2026-10-11T12:00:00Z",
+                "finishedAt": "2026-10-11T12:01:00Z",
+                "errorCode": None,
+            },
+        }
 
     def test_atomic_file_and_corrupt_or_unsafe_paths(self):
         with tempfile.TemporaryDirectory() as directory:
