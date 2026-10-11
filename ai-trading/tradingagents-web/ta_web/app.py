@@ -313,7 +313,22 @@ async def research_list(request: Request) -> JSONResponse:
     store: Store = request.app.state.store
     owner = request.state.owner
     limit, offset = _clamped_pagination(request)
-    items = store.list_owned(owner, limit=limit, offset=offset)
+    # Spec §5: ticker/analysis-date/status filters apply across the caller's
+    # whole history, not just the returned page -- Store.list_owned already
+    # does the filtering and owner-scoping; this only forwards the validated
+    # query params to it. Absent/empty means "no filter" (list_owned's own
+    # default). An invalid value (bad date shape, unknown status, or a
+    # ticker list_owned's own safe_ticker_component rejects) is the caller's
+    # fault, not a storage failure -- surfaced as 422, not 500.
+    ticker = request.query_params.get("ticker") or None
+    analysis_date = request.query_params.get("analysis_date") or None
+    status = request.query_params.get("status") or None
+    try:
+        items = store.list_owned(
+            owner, limit=limit, offset=offset, ticker=ticker, analysis_date=analysis_date, status=status
+        )
+    except ValueError:
+        raise ApiError("INVALID_INPUT", 422) from None
     return JSONResponse(
         {
             "owner_id": owner,

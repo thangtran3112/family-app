@@ -62,11 +62,16 @@ TradingAgents is a one-analysis CLI, not a chat loop. The shared captive launche
 
 `ta-research` serves a private, owner-scoped TradingAgents research history
 (list/detail/share/download) at `/research`/`/api/research` on this
-dedicated host and `/u/tradingagents/research...` on the hub — see
+dedicated host and `/u/tradingagents/research...` on the hub — reachable
+from the hub's TradingAgents terminal page via its "Research dashboard"
+button (`frontend/components/terminal-frame.tsx`), which opens that
+`/u/tradingagents/research` URL in a new tab; see
 `ai-trading/tradingagents-web/DIVERGENCE.md` for the verified integration
-evidence (107 unittest cases inside the built image, the full real-Caddy
-`smoke-test.sh all` suite, and the private/share/revoke/download contract
-against the real service). It shares `ta-terminal`'s `tradingagents.env` and
+evidence (every case in `ta_web`'s four `tests/test_*.py` files running
+inside the built image — see `ai-trading/deploy/ci/test-tradingagents-research.sh`
+for the current count rather than trusting a number here — plus the full
+real-Caddy `smoke-test.sh all` suite, and the private/share/revoke/download
+contract against the real service). It shares `ta-terminal`'s `tradingagents.env` and
 appuser UID but never its data volume: `ta-research-data` is private to this
 service, and the legacy `ta-data` volume stays terminal-only (no read mount
 by default; see the research plan for the explicit operator import path).

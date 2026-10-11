@@ -13,8 +13,10 @@ next to upstream's own files.
 ## Upstream source pin
 
 Tracks the same pinned commit as `ai-trading/packages/trading-agents`
-(`.gitmodules`; see that submodule's checked-out commit for the exact SHA).
-No source file in that submodule is ever edited.
+(`.gitmodules`): `1394a3f72aa4393e1a98f51b382434c4b4c2d972`. Re-check this
+value against `.gitmodules`/the submodule's checked-out commit after a sync;
+do not let it go stale the way the "Verified integration" count below once
+did. No source file in that submodule is ever edited.
 
 ## Hash-pinned additions (`requirements.lock`)
 
@@ -30,6 +32,18 @@ upstream dependency bump that conflicts with one of these three, regenerate
 Not re-implemented; imported directly so an upstream rename/removal fails
 loudly (ImportError) rather than silently diverging:
 
+- `tradingagents.graph.trading_graph.TradingAgentsGraph` — the real research
+  engine (`ta_web/worker.py`'s `_build_graph`); constructed with the
+  isolated-per-run config below and run unmodified, never forked.
+- `tradingagents.default_config.DEFAULT_CONFIG` — the server-controlled
+  provider/model/round defaults; `ta_web/worker.py` deep-copies it per run
+  (isolated `results_dir`/`data_cache_dir`/`memory_log_path`), and
+  `ta_web/app.py` reuses the same object (through `safe_settings`) as the
+  list endpoint's `defaults` field.
+- `TradingAgentsGraph.run_settings()` — the safe, server-controlled
+  provider/model/round values a completed run's *own* settings are recorded
+  with (`ta_web/worker.py`, re-exported through `ta_web/domain.py`'s
+  `safe_settings`).
 - `tradingagents.dataflows.symbols.normalize_symbol`,
   `tradingagents.dataflows.symbols.safe_ticker_component` — canonical,
   path-safe ticker normalization (`ta_web/domain.py`, `ta_web/store.py`).
@@ -43,8 +57,6 @@ loudly (ImportError) rather than silently diverging:
   import ...`) depend on that top-level package staying importable at that
   path; an upstream restructure that moves or nests `cli/` would need these
   import paths updated here, not a wrapper abstraction layer.
-- `run_settings()` — the safe, server-controlled provider/model/round
-  defaults a run is created with (`ta_web/domain.py`'s `safe_settings`).
 - `write_report_tree(state, ticker, stage, settings=safe_settings, html=True)`
   and `render_report(ticker, state, settings, _report_parts(state))` — used
   by `ta_web/reports.py`'s export/preview pipeline. `_report_parts` is
@@ -58,8 +70,20 @@ loudly (ImportError) rather than silently diverging:
 - `tests/test_store.py` — unittest, real SQLite via `TemporaryDirectory`, no
   mocks; ownership/persistence/race/input-validation coverage for
   `ta_web/domain.py` and `ta_web/store.py`.
+- `tests/test_reports.py` — unittest; `ta_web/reports.py`'s publish/preview/
+  download pipeline, hostile-HTML stripping, ZIP allowlist, path/symlink
+  ancestry, and legacy import dedupe (`ta_web/import_reports.py`).
+- `tests/test_runner.py` — unittest; `ta_web/runner.py`'s real-subprocess
+  start/close lifecycle, including the start-vs-close race proof.
+- `tests/test_api.py` — `IsolatedAsyncioTestCase` + HTTPX ASGI transport,
+  real `create_app`; identity/Origin/prefix guard, body validation, sharing,
+  downloads, and the history list endpoint's pagination/filter contract.
 - `tests/test_ui.mjs` — Node `node:test`; prefix-safe route/API-path helpers
   in `ta_web/static/app.mjs` (no DOM, no mocked backend).
+- Intentionally not listed as a count here (see "Verified integration"
+  below): the exact number of cases drifts every time a test is added, and a
+  stale number was already found and corrected once — run the suites
+  themselves rather than trust a figure in this file.
 - `ai-trading/deploy/ci/test-tradingagents-research.sh` — runs the above
   Python suite *inside the built `ta-research` image* (not just a host dev
   venv), proving the hash-pinned additions and upstream base actually
@@ -120,17 +144,21 @@ prove isolation) with a forged identity header fails to connect at all.
 ## Verified integration (as of this change)
 
 `ta_web.app:application`, `ta_web/reports.py`, and the background research
-worker landed in this branch (controller-reviewed, commit `73c00ca`). One
-real bug was found and fixed while wiring this up, in this task's own
-`web.Dockerfile` (not the reviewed app code): the base image's
-`ENTRYPOINT ["tradingagents"]` was not cleared, so `CMD`'s Uvicorn argv was
-passed as arguments *to* that CLI instead of replacing it
-(`No such command 'uvicorn'`). Fixed with `ENTRYPOINT []` before `CMD`.
-With that fix: the built image's `/__healthz` serves 200, all 107
-`tradingagents-web` unittest cases pass running inside the built image (not
-just a host dev venv), and the full `deploy/ci/smoke-test.sh all` real-Caddy
-suite passes end-to-end alongside the existing terminal/Vibe/market-data/
-MiroFish flows, unmodified.
+worker landed in this phase (whole-branch reviewed through `5b35469`, final
+fix wave applied on top). One real bug was found and fixed while originally
+wiring this up, in this task's own `web.Dockerfile` (not the reviewed app
+code): the base image's `ENTRYPOINT ["tradingagents"]` was not cleared, so
+`CMD`'s Uvicorn argv was passed as arguments *to* that CLI instead of
+replacing it (`No such command 'uvicorn'`). Fixed with `ENTRYPOINT []`
+before `CMD`.
+
+With that fix: the built image's `/__healthz` serves 200, every case in all
+four `tests/test_*.py` files plus `tests/test_ui.mjs` passes running inside
+the built image (not just a host dev venv), and the full
+`deploy/ci/smoke-test.sh all` real-Caddy suite passes end-to-end alongside
+the existing terminal/Vibe/market-data/MiroFish flows, unmodified. Run
+`deploy/ci/test-tradingagents-research.sh` for the current in-image count
+rather than trusting a number here.
 
 ## Upstream sync procedure
 

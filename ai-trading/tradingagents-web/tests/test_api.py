@@ -18,7 +18,7 @@ import sys
 import time
 import unittest
 import zipfile
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -350,6 +350,159 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(listing["defaults"], dict)
             self.assertNotIn("backend_url", listing["defaults"])
 
+    # --- history filters (final-fix wave: spec §5 ticker/date/status apply
+    # across the caller's whole history, forwarded to Store.list_owned, not
+    # just the one page already returned) --------------------------------
+
+    async def test_list_ticker_filter_matches_across_full_history_not_just_current_page(self):
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            owner = owner_key("owner-one")
+            target_id = None
+            # 30 rows (> the default 25-row page) so a filter that only
+            # looked at the already-returned page could never find the match.
+            for i in range(30):
+                ticker = "ZZZZ" if i == 0 else f"T{i:03d}"
+                run = store.create(owner, Inputs(**_inputs(ticker=ticker)))
+                if i == 0:
+                    target_id = run["id"]
+                store.update(run["id"], status="completed")
+
+            response = await client.get("/api/research?ticker=ZZZZ", headers=self.owner_headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([item["id"] for item in response.json()["items"]], [target_id])
+
+    async def test_list_status_filter_matches_across_full_history(self):
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            owner = owner_key("owner-one")
+            interrupted_id = None
+            for i in range(27):
+                run = store.create(owner, Inputs(**_inputs(ticker=f"S{i:03d}")))
+                if i == 5:
+                    interrupted_id = run["id"]
+                    store.update(run["id"], status="interrupted")
+                else:
+                    store.update(run["id"], status="completed")
+
+            response = await client.get("/api/research?status=interrupted", headers=self.owner_headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([item["id"] for item in response.json()["items"]], [interrupted_id])
+
+    async def test_list_analysis_date_filter_matches_exact_date(self):
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            owner = owner_key("owner-one")
+            match_id = None
+            for i in range(5):
+                analysis_date = "2026-01-01" if i != 2 else date.today().isoformat()
+                run = store.create(owner, Inputs(**_inputs(ticker=f"D{i:03d}", analysis_date=analysis_date)))
+                if i == 2:
+                    match_id = run["id"]
+                store.update(run["id"], status="completed")
+
+            response = await client.get(
+                f"/api/research?analysis_date={date.today().isoformat()}", headers=self.owner_headers
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([item["id"] for item in response.json()["items"]], [match_id])
+
+    async def test_list_invalid_filter_value_returns_422_not_500(self):
+        app = self._app()
+        async with self._running(app) as client:
+            bad_status = await client.get("/api/research?status=not-a-status", headers=self.owner_headers)
+            self.assertEqual(bad_status.status_code, 422)
+            self.assertEqual(bad_status.json(), {"error": "INVALID_INPUT"})
+
+            bad_date = await client.get("/api/research?analysis_date=not-a-date", headers=self.owner_headers)
+            self.assertEqual(bad_date.status_code, 422)
+            self.assertEqual(bad_date.json(), {"error": "INVALID_INPUT"})
+
+    async def test_list_filters_never_leak_another_owners_matching_record(self):
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            other_owner = owner_key("owner-two")
+            store.create(other_owner, Inputs(**_inputs(ticker="SHARED9")))
+
+            response = await client.get("/api/research?ticker=SHARED9", headers=self.owner_headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["items"], [])
+
+    # --- coverage debt extensions (coverage-audit.md gaps 1/2/3; cheap,
+    # existing fixtures only, no new seams) -----------------------------
+
+    async def test_list_pagination_query_params_clamp_over_real_http(self):
+        """Gap 1: ``Store.list_owned``'s clamp is proven at the Python-call
+        level already (test_store.py); this drives it over real HTTP query
+        params (malformed/over-cap/negative), the path an actual client uses."""
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            owner = owner_key("owner-one")
+            for i in range(5):
+                run = store.create(owner, Inputs(**_inputs(ticker=f"P{i:03d}")))
+                store.update(run["id"], status="completed")
+
+            malformed = await client.get("/api/research?limit=abc&offset=xyz", headers=self.owner_headers)
+            self.assertEqual(malformed.status_code, 200)
+            payload = malformed.json()
+            self.assertEqual(payload["limit"], 25)
+            self.assertEqual(payload["offset"], 0)
+            self.assertEqual(len(payload["items"]), 5)
+
+            over_cap = await client.get("/api/research?limit=9999", headers=self.owner_headers)
+            self.assertEqual(over_cap.json()["limit"], 100)
+
+            negative_offset = await client.get("/api/research?offset=-5", headers=self.owner_headers)
+            self.assertEqual(negative_offset.json()["offset"], 0)
+
+    async def test_asset_route_serves_known_names_and_404s_unknown(self):
+        """Gap 2: ``/research/assets/{name}`` -- no test in this file ever
+        requested it before."""
+        app = self._app()
+        async with self._running(app) as client:
+            headers = self.owner_headers
+            app_mjs = await client.get("/research/assets/app.mjs", headers=headers)
+            self.assertEqual(app_mjs.status_code, 200)
+            self.assertEqual(app_mjs.headers["content-type"], "text/javascript; charset=utf-8")
+
+            app_css = await client.get("/research/assets/app.css", headers=headers)
+            self.assertEqual(app_css.status_code, 200)
+            self.assertEqual(app_css.headers["content-type"], "text/css; charset=utf-8")
+
+            unknown = await client.get("/research/assets/does-not-exist.js", headers=headers)
+            self.assertEqual(unknown.status_code, 404)
+
+            traversal = await client.get("/research/assets/..%2Fapp.py", headers=headers)
+            self.assertEqual(traversal.status_code, 404)
+
+    async def test_owner_can_rerun_false_for_own_unrunnable_legacy_inputs(self):
+        """Gap 3: existing tests vary the *viewer* (owner vs. reader); none
+        gives the owner their own record with invalid/legacy inputs (e.g. a
+        legacy import's null analysis_date) that can never round-trip
+        through Inputs(**...)."""
+        app = self._app()
+        async with self._running(app) as client:
+            store = app.state.store
+            owner = owner_key("owner-one")
+            run, _created = store.add_import(
+                owner,
+                fingerprint="legacy-fp-1",
+                inputs={"ticker": "LEGACY", "analysis_date": None, "asset_type": "stock", "analysts": ["market"]},
+                state={},
+                settings={},
+                partial=False,
+            )
+            detail = await client.get(f"/api/research/{run['id']}", headers=self.owner_headers)
+            self.assertEqual(detail.status_code, 200)
+            payload = detail.json()
+            self.assertTrue(payload["can_share"])  # confirms this is the owner's own view
+            self.assertFalse(payload["can_rerun"])
+
     async def test_list_today_matches_local_validator_across_utc_local_boundary(self):
         """UI-001: ``research_list``'s ``today`` must be the same server-local
         date ``Inputs._check_analysis_date`` validates against, even in the
@@ -364,14 +517,29 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             def today(cls):
                 return local_today
 
+        # Final-fix wave (browser-date-fix-review.md, LOW test-determinism
+        # note): the pre-fix code path computed "today" from
+        # ``datetime.now(UTC).date()``, not ``date.today()`` — pin that clock
+        # too (one day ahead of the local date, the exact boundary browser QA
+        # observed) so a reintroduced bug fails deterministically on that
+        # boundary, not merely whenever the real wall-clock UTC happens to
+        # differ from ``local_today``. Inert against the current, correct
+        # code: ``ta_web.app`` no longer imports ``datetime`` at all.
+        class _FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(local_tomorrow.year, local_tomorrow.month, local_tomorrow.day, tzinfo=tz)
+
         calls = []
         app = self._app(start=lambda run_id: calls.append(run_id))
         with (
-            # create=True: pre-fix ``ta_web.app`` has no ``date`` name at all
-            # (it computes "today" from ``datetime.now(UTC)``), so this must
-            # tolerate the attribute's absence rather than erroring on it —
-            # the real bug is the mismatch below, not a missing patch target.
+            # create=True: pre-fix ``ta_web.app`` has no ``date``/``datetime``
+            # name at all (it computes "today" from ``datetime.now(UTC)``),
+            # so this must tolerate the attribute's absence rather than
+            # erroring on it — the real bug is the mismatch below, not a
+            # missing patch target.
             mock.patch("ta_web.app.date", _FixedDate, create=True),
+            mock.patch("ta_web.app.datetime", _FixedDatetime, create=True),
             mock.patch("ta_web.domain.date", _FixedDate),
         ):
             async with self._running(app) as client:
