@@ -196,6 +196,10 @@ def _enhanced_dcf_value(
     `None` when `fcf_history` is empty or its most recent entry is not positive, or when `wacc` is
     at or below zero or at or below the terminal growth rate derived from `revenue_growth` (the
     Gordon terminal value is invalid there; no silent rate substitution).
+
+    `revenue_growth` is used as given — a real `0.0` or a negative growth is respected, capped at
+    25% where the cap applies — and only a missing (`None`) `revenue_growth` takes the 5% default;
+    only `None` counts as missing, not a falsy `0.0`.
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -203,7 +207,7 @@ def _enhanced_dcf_value(
     fcf_avg_3yr = sum(fcf_history[:3]) / min(3, len(fcf_history))
     volatility = _fcf_volatility(fcf_history)
 
-    high_growth = min(revenue_growth or 0.05, 0.25) if revenue_growth else 0.05
+    high_growth = min(revenue_growth, 0.25) if revenue_growth is not None else 0.05
     if market_cap > 50_000_000_000:
         high_growth = min(high_growth, 0.10)
     transition_growth = (high_growth + 0.03) / 2
@@ -238,6 +242,10 @@ def calculate_dcf_scenarios(
     "downside"}`. `None` when `fcf_history` is empty or its most recent entry is not positive, or
     when any scenario's own-scaled `wacc` (bear 1.2x, base 1x, bull 0.9x the given `wacc`) ends up
     at or below its terminal growth rate — one unusable scenario makes the whole set unavailable.
+
+    `revenue_growth` is used as given — a real `0.0` or a negative growth is respected, then scaled
+    per scenario — and only a missing (`None`) `revenue_growth` takes the 5% default; only `None`
+    counts as missing, not a falsy `0.0`.
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -246,7 +254,7 @@ def calculate_dcf_scenarios(
         "base": (1.0, 1.0),
         "bull": (1.5, 0.9),
     }
-    base_revenue_growth = revenue_growth or 0.05
+    base_revenue_growth = revenue_growth if revenue_growth is not None else 0.05
     scenarios = {
         name: _enhanced_dcf_value(fcf_history, wacc * wacc_adj, market_cap, base_revenue_growth * growth_adj)
         for name, (growth_adj, wacc_adj) in adjustments.items()

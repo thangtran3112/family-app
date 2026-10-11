@@ -155,6 +155,24 @@ def test_blended_value_is_unavailable_without_dcf():
     assert valuation.blended_value(None, 800.0, 900.0, 1300.0) is None
 
 
+def test_dcf_scenarios_uses_a_true_zero_revenue_growth_instead_of_the_5pct_default():
+    # revenue_growth=0.0 is a real "no growth" assumption, not "missing"; it must not silently
+    # become the 5% default (the bug: `revenue_growth or 0.05` treated a falsy 0.0 as missing).
+    fcf_history = [100.0] * 8
+    zero_growth = valuation.calculate_dcf_scenarios(fcf_history, wacc=0.10, market_cap=1.0, revenue_growth=0.0)
+    default_growth = valuation.calculate_dcf_scenarios(fcf_history, wacc=0.10, market_cap=1.0, revenue_growth=None)
+    assert zero_growth["scenarios"]["base"] < default_growth["scenarios"]["base"]
+
+
+def test_dcf_scenarios_respects_a_negative_revenue_growth():
+    # A negative growth assumption must shrink projected cash flows below even the zero-growth
+    # case, not get floored or defaulted away.
+    fcf_history = [100.0] * 8
+    negative_growth = valuation.calculate_dcf_scenarios(fcf_history, wacc=0.10, market_cap=1.0, revenue_growth=-0.05)
+    zero_growth = valuation.calculate_dcf_scenarios(fcf_history, wacc=0.10, market_cap=1.0, revenue_growth=0.0)
+    assert negative_growth["scenarios"]["base"] < zero_growth["scenarios"]["base"]
+
+
 def test_fcf_volatility_defaults_are_internal_but_feed_the_dcf_quality_factor():
     # A single flat-FCF history (no volatility) should value higher than an identical-average but
     # erratic one, because the quality factor only ever discounts, never boosts (max(0.7, ...)).
