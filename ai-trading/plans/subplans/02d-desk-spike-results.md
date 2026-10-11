@@ -36,7 +36,7 @@ Related:
 - The waiver counts real commissions, so a username that only paper-trades will likely never earn it.
 
 **Decision:**
-- Subscribed: the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle (not waivable, and required to stream stocks over the API), **$14.50/month**. OPRA Top of Book ($1.50) is added only if Task 0.5 shows option greeks need it.
+- Subscribed: the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle (not waivable, and required to stream stocks over the API), **$14.50/month**. IBKR's documentation says the add-on already includes OPRA L1 ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §3), so OPRA Top of Book ($1.50) should not be needed; Task 0.5 confirms that greeks arrive.
 - That is under the $30 cap.
 - Confirm 02b's cost line on the first bill.
 

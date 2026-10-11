@@ -173,34 +173,77 @@ FAKE_EOF
   chmod 0700 "$dest"
 }
 
-# new_scratch NAME: a fresh, isolated APP_DIR/SECRETS_DIR/ENV_STAGING_DIR
-# triple under $TEST_ROOT for one scenario, with a fake family_config.py
-# already installed alongside deploy.sh's expected path ($APP_DIR/family_config.py).
+# stage_default_configs DIR [HEALTH_BODY]: writes minimal, inert fixtures for
+# the four files stage_configs() now owns (A10a), so every scenario has a
+# working APP_CONFIG_STAGING_DIR by default without needing the real
+# production Compose/Caddy content -- Task 6a owns only the rollback
+# controller, never those files' real content (Task 6's job). HEALTH_BODY
+# overrides health-check.sh's content only, preserving each case's own
+# injected health logic (same technique Case 9 already used directly on
+# $APP_DIR/health-check.sh before health-check.sh became a rollback-managed
+# config file); the default is a plain `exit 0`.
+stage_default_configs() {
+  local dir="$1"
+  printf 'name: ai-trading-fixture\nservices:\n  web:\n    image: busybox:1\n' >"$dir/docker-compose.yml"
+  printf 'name: ai-trading-fixture\nservices:\n  mirofish:\n    image: busybox:1\n    profiles: ["mirofish"]\n' >"$dir/docker-compose.mirofish.yml"
+  printf '# fixture Caddyfile, not the real production content\n' >"$dir/Caddyfile"
+  if [[ $# -ge 2 ]]; then
+    printf '%s\n' "$2" >"$dir/health-check.sh"
+  else
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$dir/health-check.sh"
+  fi
+  chmod 0755 "$dir/health-check.sh"
+}
+
+# new_scratch NAME: a fresh, isolated APP_DIR/SECRETS_DIR/ENV_STAGING_DIR/
+# APP_CONFIG_STAGING_DIR quadruple under $TEST_ROOT for one scenario, with a
+# fake family_config.py already installed alongside deploy.sh's expected
+# path ($APP_DIR/family_config.py) and a default-valid config staging dir.
 new_scratch() {
   local name="$1" base="$TEST_ROOT/$1"
-  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging"
+  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging" "$base/config-staging"
   fake_family_config "$base/app/family_config.py"
+  stage_default_configs "$base/config-staging"
   printf '%s\n' "$base"
 }
 
-# run_scenario NAME: sources the lib (re-validating IMAGE_TAG) and calls
-# render_profiles + stage_secrets in one subshell, isolated per scenario so
-# each gets its own EXIT trap / RENDER_SRC_DIR / PRIOR_EXISTED state. Prints
-# the resolved exit status on stdout as the final line.
+# run_scenario NAME [IMAGE_TAG]: sources the lib (re-validating IMAGE_TAG)
+# and calls render_profiles + stage_secrets + stage_configs (A10a) in one
+# subshell, isolated per scenario so each gets its own EXIT trap /
+# RENDER_SRC_DIR / PRIOR_EXISTED / CONFIG_PRIOR_EXISTED state. IMAGE_TAG
+# defaults to the all-zero fixture tag every existing case already expects;
+# a case probing rollback's own image-tag precedence passes a distinct one.
+# Prints the resolved exit status on stdout as the final line.
 run_scenario() {
-  local base="$1"
+  local base="$1" tag="${2:-0000000000000000000000000000000000000000}"
   (
     APP_DIR="$base/app"
     AI_TRADING_SECRETS_DIR="$base/secrets"
     ENV_STAGING_DIR="$base/ci-staging"
+    APP_CONFIG_STAGING_DIR="$base/config-staging"
     FAMILY_CONFIG_CREDENTIALS="$base/fake-reader-key.json"
     DEPLOY_SH_SKIP_CHOWN=1
-    IMAGE_TAG=0000000000000000000000000000000000000000
-    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+    IMAGE_TAG="$tag"
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
     # shellcheck source=/dev/null
     source "$LIB_FILE"
+    # Fix round 1: stage_configs() now runs `docker compose ... config
+    # --quiet` against the staged Compose files (review's required Compose
+    # preflight). Most scenarios here are not testing Compose *parsing*
+    # itself (a dedicated real-docker case below is), so default to a no-op
+    # "compose always succeeds" fake -- never require live Docker for every
+    # scenario. Only define it if the caller hasn't already provided its own
+    # `docker` (e.g. Case 48's tag-logging fake, wrapped around this call).
+    if ! declare -f docker >/dev/null 2>&1; then
+      # shellcheck disable=SC2329
+      docker() {
+        [[ "${1:-}" == compose ]] && return 0
+        command docker "$@"
+      }
+    fi
     render_profiles
     stage_secrets
+    stage_configs
   )
   echo "$?"
 }
@@ -236,19 +279,32 @@ run_scenario_mirofish() {
     APP_DIR="$base/app"
     AI_TRADING_SECRETS_DIR="$base/secrets"
     ENV_STAGING_DIR="$base/ci-staging"
+    APP_CONFIG_STAGING_DIR="$base/config-staging"
     AI_TRADING_RUNTIME_ENV_DIR="$base/runtime"
     FAMILY_CONFIG_CREDENTIALS="$base/fake-reader-key.json"
     DEPLOY_SH_SKIP_CHOWN=1
     IMAGE_TAG=0000000000000000000000000000000000000000
-    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
     # shellcheck source=/dev/null
     source "$LIB_FILE"
+    # Same reasoning and guard as run_scenario's own default fake above --
+    # only define it if the caller hasn't already (e.g. run_keep_scenario's
+    # own `docker` fake for MIROFISH_ACTIVATE=keep's `compose ps` check,
+    # which this must never clobber).
+    if ! declare -f docker >/dev/null 2>&1; then
+      # shellcheck disable=SC2329
+      docker() {
+        [[ "${1:-}" == compose ]] && return 0
+        command docker "$@"
+      }
+    fi
     render_profiles
     activate_mirofish || true
     if [[ -n "${TEST_CHMOD_RUNTIME_DIR_AFTER_ACTIVATE:-}" ]]; then
       chmod "$TEST_CHMOD_RUNTIME_DIR_AFTER_ACTIVATE" "$AI_TRADING_RUNTIME_ENV_DIR"
     fi
     stage_secrets
+    stage_configs
     printf '%s\n' "${COMPOSE_PROFILES:-unset}" >"$base/compose-profiles.out"
   )
   echo "$?"
@@ -428,20 +484,24 @@ echo "=== Case 9 (GREEN, process-level): the real deploy.sh, unsourced, runs end
 CASE_COUNT=$((CASE_COUNT + 1))
 s9="$(new_scratch case9)"
 printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s9/ci-staging/cloudflared.env"
-cat >"$s9/app/health-check.sh" <<'HEALTH_EOF'
+# Health-check.sh is now one of the four CONFIG_FILES stage_configs()
+# installs from APP_CONFIG_STAGING_DIR (A10a) -- stage it there, not
+# directly into $APP_DIR, so this case's injected health logic survives.
+cat >"$s9/config-staging/health-check.sh" <<'HEALTH_EOF'
 #!/usr/bin/env bash
 exit 0
 HEALTH_EOF
-chmod +x "$s9/app/health-check.sh"
+chmod +x "$s9/config-staging/health-check.sh"
 status9=0
 (
   APP_DIR="$s9/app"
   AI_TRADING_SECRETS_DIR="$s9/secrets"
   ENV_STAGING_DIR="$s9/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s9/config-staging"
   FAMILY_CONFIG_CREDENTIALS="$s9/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=1111111111111111111111111111111111111111
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
   # Fake docker: deploy.sh only ever shells out to `docker compose ...`; no
   # real Docker daemon is contacted anywhere in this case. An exported bash
@@ -453,6 +513,11 @@ status9=0
   docker() {
     if [[ "${1:-}" == compose ]]; then
       echo "fake docker $*" >>"$APP_DIR/docker.log"
+      return 0
+    fi
+    # mirofish_container_ids' real-evidence query: no owned container in
+    # this scenario (MIROFISH_ACTIVATE is unset).
+    if [[ "${1:-}" == ps ]]; then
       return 0
     fi
     # prune_old_images must never reach a real daemon (or its images).
@@ -859,35 +924,109 @@ for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.en
 done
 echo "    exit=$status"
 
-echo "=== Case 25 (GREEN x2, review P2 round 3): stop_remove_mirofish_container() -- best-effort 'compose rm -s -f mirofish', both outcomes checked and reported, never raises ==="
+echo "=== Case 25 (GREEN x3, review P2 round 3 + whole-branch review reopen round 2): stop_remove_mirofish_container() -- no owned container is a silent no-op with compose() never even called; an owned container with an active config delegates to best-effort 'compose rm -s -f mirofish', both outcomes checked and reported, never raises ==="
 CASE_COUNT=$((CASE_COUNT + 1))
+
+# 25a: real Docker evidence (faked here) says nothing is owned -- success,
+# and compose() (which would need a $APP_DIR/docker-compose.yml this case
+# never creates) must never even be called.
 err25a="$TEST_ROOT/case25a.err"
+compose_called25a="$TEST_ROOT/case25a.compose-called"
 result25a="$(
   IMAGE_TAG=0000000000000000000000000000000000000000
-  export IMAGE_TAG
+  APP_DIR="$TEST_ROOT/case25a-app"
+  export IMAGE_TAG APP_DIR
   # shellcheck source=/dev/null
   source "$LIB_FILE"
   # shellcheck disable=SC2329
-  compose() { return 0; }
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) return 0 ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { touch "$compose_called25a"; return 0; }
   (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25a"
 )"
-[[ "$result25a" == OK ]] || fail "case25a: expected OK when compose succeeds, got $result25a"
-[[ -s "$err25a" ]] && fail "case25a: no error should be logged when compose succeeds: $(cat "$err25a")"
+[[ "$result25a" == OK ]] || fail "case25a: expected OK when no owned container exists, got $result25a"
+[[ -s "$err25a" ]] && fail "case25a: no error should be logged when nothing is owned: $(cat "$err25a")"
+[[ -f "$compose_called25a" ]] && fail "case25a: compose() must never be called when no owned container exists"
 echo "    result=$result25a"
 
+# 25b/25c: an owned container exists AND the active config is present --
+# delegates to compose, both outcomes.
+mkdir -p "$TEST_ROOT/case25bc-app"
+printf 'name: fixture\nservices: {}\n' >"$TEST_ROOT/case25bc-app/docker-compose.yml"
 err25b="$TEST_ROOT/case25b.err"
 result25b="$(
   IMAGE_TAG=0000000000000000000000000000000000000000
-  export IMAGE_TAG
+  APP_DIR="$TEST_ROOT/case25bc-app"
+  export IMAGE_TAG APP_DIR
   # shellcheck source=/dev/null
   source "$LIB_FILE"
   # shellcheck disable=SC2329
-  compose() { return 1; }
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { return 0; }
   (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25b"
 )"
-[[ "$result25b" == FAILED ]] || fail "case25b: expected FAILED when compose fails, got $result25b"
-grep -q 'best-effort stop/remove' "$err25b" 2>/dev/null || fail "case25b: expected a best-effort stop/remove failure message: $(cat "$err25b" 2>/dev/null)"
+[[ "$result25b" == OK ]] || fail "case25b: expected OK when compose succeeds, got $result25b"
+[[ -s "$err25b" ]] && fail "case25b: no error should be logged when compose succeeds: $(cat "$err25b")"
 echo "    result=$result25b"
+
+err25c="$TEST_ROOT/case25c.err"
+result25c="$(
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  APP_DIR="$TEST_ROOT/case25bc-app"
+  export IMAGE_TAG APP_DIR
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  # shellcheck disable=SC2329
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { return 1; }
+  (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25c"
+)"
+[[ "$result25c" == FAILED ]] || fail "case25c: expected FAILED when compose fails, got $result25c"
+grep -q 'best-effort stop/remove' "$err25c" 2>/dev/null || fail "case25c: expected a best-effort stop/remove failure message: $(cat "$err25c" 2>/dev/null)"
+echo "    result=$result25c"
+
+echo "=== Case 25d (RED, whole-branch review reopen round 2): an owned container exists but the active \$APP_DIR/docker-compose.yml is missing -- refuses to guess, fails with a clear diagnosis instead of a generic Compose error ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+err25d="$TEST_ROOT/case25d.err"
+compose_called25d="$TEST_ROOT/case25d.compose-called"
+result25d="$(
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  APP_DIR="$TEST_ROOT/case25d-app"
+  export IMAGE_TAG APP_DIR
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  # shellcheck disable=SC2329
+  docker() {
+    case "$*" in
+      "ps -aq --filter"*) echo fake-mirofish-container-id ;;
+      *) command docker "$@" ;;
+    esac
+  }
+  # shellcheck disable=SC2329
+  compose() { touch "$compose_called25d"; return 1; }
+  (stop_remove_mirofish_container && echo OK || echo FAILED) 2>"$err25d"
+)"
+[[ "$result25d" == FAILED ]] || fail "case25d: expected FAILED when an owned container exists but the active config is missing, got $result25d"
+grep -q 'no active .*docker-compose.yml to manage it with' "$err25d" 2>/dev/null || fail "case25d: expected the owned-missing-config diagnosis: $(cat "$err25d" 2>/dev/null)"
+[[ -f "$compose_called25d" ]] && fail "case25d: must not fall through to calling compose() when the active config is missing"
+echo "    result=$result25d"
 
 echo "=== Case 26 (GREEN overall, review P2 round 3): a genuine post-install scratch-cleanup failure escalates into a full activation failure and self-heals -- never exports COMPOSE_PROFILES over a leftover secret-bearing scratch copy ==="
 CASE_COUNT=$((CASE_COUNT + 1))
@@ -927,44 +1066,53 @@ for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.en
   chmod 0600 "$s27/secrets/$name"
 done
 # A fake health-check.sh standing in for the real one (same technique Case 9
-# already uses): simulates a post-Compose health failure, and -- as this
-# case's own controlled precondition -- makes the runtime dir read-only so
-# the rollback that follows hits a REAL (not faked) mirofish.env removal
-# failure, exercising "rollback cannot restore/delete mirofish.env after a
-# post-Compose/health failure" end to end.
-cat >"$s27/app/health-check.sh" <<'HEALTH_EOF'
+# already uses, now staged into config-staging per A10a): simulates a
+# post-Compose health failure, and -- as this case's own controlled
+# precondition -- makes the runtime dir read-only so the rollback that
+# follows hits a REAL (not faked) mirofish.env removal failure, exercising
+# "rollback cannot restore/delete mirofish.env after a post-Compose/health
+# failure" end to end.
+cat >"$s27/config-staging/health-check.sh" <<'HEALTH_EOF'
 #!/usr/bin/env bash
 chmod 0500 "${AI_TRADING_RUNTIME_ENV_DIR:-/run/family-app/ai-trading}"
 exit 1
 HEALTH_EOF
-chmod +x "$s27/app/health-check.sh"
+chmod +x "$s27/config-staging/health-check.sh"
 status27=0
 (
   APP_DIR="$s27/app"
   AI_TRADING_SECRETS_DIR="$s27/secrets"
   ENV_STAGING_DIR="$s27/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s27/config-staging"
   AI_TRADING_RUNTIME_ENV_DIR="$s27/runtime"
   FAMILY_CONFIG_CREDENTIALS="$s27/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=3333333333333333333333333333333333333333
   MIROFISH_ACTIVATE=1
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG MIROFISH_ACTIVATE
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG MIROFISH_ACTIVATE
 
   # Fake docker: deploy.sh/health-check.sh only ever shell out to `docker
-  # compose ...`; no real Docker daemon is contacted anywhere in this case.
-  # Logs every compose subcommand (pull/up/rm) so this case can assert the
-  # best-effort stop_remove_mirofish_container call actually ran.
+  # compose ...` plus mirofish_container_ids' real-evidence `docker ps
+  # -aq --filter`; no real Docker daemon is contacted anywhere in this
+  # case. Logs every compose subcommand (pull/up/rm) so this case can
+  # assert the best-effort stop_remove_mirofish_container call actually
+  # ran; the ps query always reports an owned container so that call
+  # actually reaches 'compose rm -s -f mirofish' (the active
+  # docker-compose.yml this scratch run installs via stage_configs()
+  # before the health-check failure is what makes that the right branch).
   # shellcheck disable=SC2329
   docker() {
-    if [[ "${1:-}" == compose ]]; then
-      echo "fake docker $*" >>"$APP_DIR/docker.log"
-      return 0
-    fi
-    # prune_old_images must never reach a real daemon (or its images).
-    if [[ "${1:-}" == images || "${1:-}" == rmi ]]; then
-      return 0
-    fi
-    command docker "$@"
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose) return 0 ;;
+      ps)
+        echo fake-mirofish-container-id
+        return 0
+        ;;
+      # prune_old_images must never reach a real daemon (or its images).
+      images | rmi) return 0 ;;
+      *) command docker "$@" ;;
+    esac
   }
   export -f docker
 
@@ -999,6 +1147,10 @@ echo "    exit=$status27"
 echo "=== Case 28 (GREEN, whole-branch review reopen): ensure_mirofish_stopped() -- a normal disabled redeploy after an earlier activation explicitly stops the stale container, not just unsets the profile ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s28="$(new_scratch case28)"
+# This case simulates STEADY STATE (an earlier deploy already installed the
+# active config); the genuine-first-bootstrap case (no active config at
+# all) is Case 52 below.
+printf 'name: fixture\nservices: {}\n' >"$s28/app/docker-compose.yml"
 marker28="$TEST_ROOT/case28-container-marker"
 touch "$marker28"
 err28="$TEST_ROOT/case28.err"
@@ -1009,20 +1161,28 @@ result28="$(
     export IMAGE_TAG APP_DIR
     # shellcheck source=/dev/null
     source "$LIB_FILE"
-    # Fake compose(): simulates a real Docker Compose project where the
-    # mirofish service's container still exists (marker file present)
-    # until explicitly stopped/removed. shellcheck only analyzes this
-    # file, not the sourced lib that calls it, so it looks unused here.
+    # Fake docker(): mirofish_container_ids' real-evidence `ps -aq --filter`
+    # query reports the marker's presence; fake compose(): simulates a real
+    # Docker Compose project where the mirofish service's container still
+    # exists until explicitly stopped/removed. shellcheck only analyzes
+    # this file, not the sourced lib that calls them, so they look unused
+    # here.
+    # shellcheck disable=SC2329
+    docker() {
+      case "$*" in
+        "ps -aq --filter"*)
+          [[ -f "$marker28" ]] && echo fake-mirofish-container-id
+          return 0
+          ;;
+        *) command docker "$@" ;;
+      esac
+    }
     # shellcheck disable=SC2329
     compose() {
       case "$*" in
         *"rm -s -f mirofish"*)
           echo "fake compose $*" >>"$APP_DIR/docker.log"
           rm -f "$marker28"
-          return 0
-          ;;
-        *"ps -q mirofish"*)
-          [[ -f "$marker28" ]] && echo fake-mirofish-container-id
           return 0
           ;;
         *) return 0 ;;
@@ -1043,6 +1203,7 @@ echo "    exit=$status28"
 echo "=== Case 29 (GREEN, whole-branch review reopen): ensure_mirofish_stopped() -- a FAILED new activation (missing Firestore profile) still explicitly stops a stale container left by an earlier successful activation ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s29="$(new_scratch case29)"
+printf 'name: fixture\nservices: {}\n' >"$s29/app/docker-compose.yml"
 marker29="$TEST_ROOT/case29-container-marker"
 touch "$marker29"
 err29="$TEST_ROOT/case29.err"
@@ -1058,15 +1219,21 @@ result29="$(
     # shellcheck source=/dev/null
     source "$LIB_FILE"
     # shellcheck disable=SC2329
+    docker() {
+      case "$*" in
+        "ps -aq --filter"*)
+          [[ -f "$marker29" ]] && echo fake-mirofish-container-id
+          return 0
+          ;;
+        *) command docker "$@" ;;
+      esac
+    }
+    # shellcheck disable=SC2329
     compose() {
       case "$*" in
         *"rm -s -f mirofish"*)
           echo "fake compose $*" >>"$APP_DIR/docker.log"
           rm -f "$marker29"
-          return 0
-          ;;
-        *"ps -q mirofish"*)
-          [[ -f "$marker29" ]] && echo fake-mirofish-container-id
           return 0
           ;;
         *) return 0 ;;
@@ -1093,41 +1260,50 @@ for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.en
   printf 'OLD_VALUE=old-%s\n' "$name" >"$s30/secrets/$name"
   chmod 0600 "$s30/secrets/$name"
 done
+# This case simulates STEADY STATE (an earlier deploy's active config is
+# already installed, and an earlier activation left a container running);
+# the genuine-first-bootstrap/owned-missing-config cases are Cases 52/53
+# below.
+printf 'name: fixture\nservices: {}\n' >"$s30/app/docker-compose.yml"
 status30=0
 (
   APP_DIR="$s30/app"
   AI_TRADING_SECRETS_DIR="$s30/secrets"
   ENV_STAGING_DIR="$s30/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s30/config-staging"
   AI_TRADING_RUNTIME_ENV_DIR="$s30/runtime"
   FAMILY_CONFIG_CREDENTIALS="$s30/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=4444444444444444444444444444444444444444
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
-  # Fake docker: every compose subcommand is logged; 'rm -s -f mirofish'
-  # (the stop/remove call ensure_mirofish_stopped makes) always fails here,
-  # simulating a genuine Docker/daemon problem. MIROFISH_ACTIVATE stays
-  # unset (the normal disabled path) -- this case's own controlled
-  # precondition stands in for "an earlier activation left a container
-  # running that this stop attempt cannot clear."
+  # Fake docker: every call is logged; mirofish_container_ids' real-evidence
+  # `ps -aq --filter` query always reports an owned container, and
+  # 'rm -s -f mirofish' (the stop/remove call ensure_mirofish_stopped makes
+  # through compose(), since this scratch app dir has an active
+  # docker-compose.yml) always fails, simulating a genuine Docker/daemon
+  # problem. MIROFISH_ACTIVATE stays unset (the normal disabled path) --
+  # this case's own controlled precondition stands in for "an earlier
+  # activation left a container running that this stop attempt cannot
+  # clear."
   # shellcheck disable=SC2329
   docker() {
-    if [[ "${1:-}" == compose ]]; then
-      echo "fake docker $*" >>"$APP_DIR/docker.log"
-      case "$*" in
-        *"rm -s -f mirofish"*) return 1 ;;
-        *"ps -q mirofish"*)
-          echo fake-mirofish-container-id
-          return 0
-          ;;
-        *) return 0 ;;
-      esac
-    fi
-    # prune_old_images must never reach a real daemon (or its images).
-    if [[ "${1:-}" == images || "${1:-}" == rmi ]]; then
-      return 0
-    fi
-    command docker "$@"
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *"rm -s -f mirofish"*) return 1 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      ps)
+        echo fake-mirofish-container-id
+        return 0
+        ;;
+      # prune_old_images must never reach a real daemon (or its images).
+      images | rmi) return 0 ;;
+      *) command docker "$@" ;;
+    esac
   }
   export -f docker
 
@@ -1281,18 +1457,22 @@ status33=0
   APP_DIR="$s33/app"
   AI_TRADING_SECRETS_DIR="$s33/secrets"
   ENV_STAGING_DIR="$s33/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s33/config-staging"
   FAMILY_CONFIG_CREDENTIALS="$s33/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=$new33
   AI_TRADING_REGISTRY=$reg33
   FAKE_RMI_FAIL_TAG=$busy33
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_REGISTRY FAKE_RMI_FAIL_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_REGISTRY FAKE_RMI_FAIL_TAG
 
   # shellcheck disable=SC2329
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
       compose) return 0 ;;
+      # mirofish_container_ids' real-evidence query: no owned container in
+      # this pruning-focused scenario (MIROFISH_ACTIVATE is unset).
+      ps) return 0 ;;
       images)
         cat "$APP_DIR/fake-images.txt"
         return 0
@@ -1341,12 +1521,13 @@ status34=0
   APP_DIR="$s34/app"
   AI_TRADING_SECRETS_DIR="$s34/secrets"
   ENV_STAGING_DIR="$s34/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s34/config-staging"
   FAMILY_CONFIG_CREDENTIALS="$s34/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=9999999999999999999999999999999999999999
   AI_TRADING_MIN_FREE_GB=999999
   AI_TRADING_DOCKER_DATA_DIR="$s34/app"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
 
   # shellcheck disable=SC2329
   docker() {
@@ -1385,11 +1566,12 @@ status35=0
   APP_DIR="$s35/app"
   AI_TRADING_SECRETS_DIR="$s35/secrets"
   ENV_STAGING_DIR="$s35/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s35/config-staging"
   FAMILY_CONFIG_CREDENTIALS="$s35/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=9999999999999999999999999999999999999999
   AI_TRADING_DOCKER_DATA_DIR="$s35/does-not-exist"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_DOCKER_DATA_DIR
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_DOCKER_DATA_DIR
 
   # shellcheck disable=SC2329
   docker() {
@@ -1577,6 +1759,444 @@ want42="${want42%% *}"
 grep -q 'caddyfile-sha256: \${AI_TRADING_CADDYFILE_SHA256' "$(dirname "$DEPLOY_SH")/docker-compose.yml" \
   || fail "case42: the gateway service must carry the Caddyfile sha256 as a label"
 echo "    got=$got42"
+
+# Cases 43-48 (A10a): transactional config-file rollback. The four
+# declarative config files (docker-compose.yml, docker-compose.mirofish.yml,
+# Caddyfile, health-check.sh) are now staged by the workflow into
+# APP_CONFIG_STAGING_DIR and owned end-to-end by stage_configs()/
+# restore_or_remove_configs() -- the same validate-first, back-up-before-any-
+# mutation, atomic-install, roll-back-on-any-later-failure discipline the
+# five SECRET_FILES already have. Case 48 additionally regresses a real bug
+# this task fixed: compose()'s inline AI_TRADING_IMAGE_TAG env var overrides
+# images.env, so a rollback's own `deploy_tag "$previous"` must reassign the
+# global IMAGE_TAG or it silently redeploys the just-failed NEW tag instead.
+
+echo "=== Case 43 (RED->rollback): first-time config install + a forced mid-install failure REMOVES every just-installed config file, leaves nothing partial, and the same-run secrets rollback still happens too ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s43="$(new_scratch case43)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s43/ci-staging/cloudflared.env"
+export DEPLOY_SH_CONFIG_FAIL_AFTER="Caddyfile"
+status="$(run_scenario "$s43")"
+unset DEPLOY_SH_CONFIG_FAIL_AFTER
+if [[ "$status" == 0 ]]; then
+  fail "case43: expected non-zero exit for a forced mid-install config failure, got 0"
+fi
+for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+  [[ -e "$s43/app/$name" ]] && fail "case43: $name had no prior version -- rollback should have removed it, not left it behind"
+done
+shopt -s nullglob
+leftover43=("$s43/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover43[@]} -eq 0 ]] || fail "case43: run-owned config backup scratch not cleaned: ${leftover43[*]}"
+shopt -s nullglob
+leftover_secrets43=("$s43/secrets"/*.env)
+shopt -u nullglob
+[[ ${#leftover_secrets43[@]} -eq 0 ]] || fail "case43: first-time secret files left behind after a later config-stage failure: ${leftover_secrets43[*]}"
+echo "    exit=$status"
+
+echo "=== Case 44 (RED->rollback): a staged release adding a new service (synthetic 'ta-research' marker standing in for Task 6's real research service) over an OLD release that lacks it -- a mid-install failure restores all four active files byte-for-byte, so a previous-tag redeploy would never see the new/nonexistent service ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s44="$(new_scratch case44)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s44/ci-staging/cloudflared.env"
+# OLD active release: no research service at all.
+printf 'name: ai-trading\nservices:\n  web:\n    image: busybox:1\n' >"$s44/app/docker-compose.yml"
+printf 'name: ai-trading\nservices:\n  mirofish:\n    image: busybox:1\n    profiles: ["mirofish"]\n' >"$s44/app/docker-compose.mirofish.yml"
+printf '# OLD Caddyfile, no research route\n' >"$s44/app/Caddyfile"
+printf '#!/usr/bin/env bash\nSERVICES=(web)\nexit 0\n' >"$s44/app/health-check.sh"
+chmod 0755 "$s44/app/health-check.sh"
+# NEW staged release: adds a synthetic ta-research marker (Task 6a owns only
+# the rollback mechanics, never the real Compose/Caddy content Task 6 adds).
+printf 'name: ai-trading\nservices:\n  web:\n    image: busybox:1\n  ta-research:\n    image: ghcr.io/example/ai-trading-ta-research:new\n' >"$s44/config-staging/docker-compose.yml"
+printf '# NEW Caddyfile with a ta-research route\n' >"$s44/config-staging/Caddyfile"
+printf '#!/usr/bin/env bash\nSERVICES=(web ta-research)\nexit 0\n' >"$s44/config-staging/health-check.sh"
+chmod 0755 "$s44/config-staging/health-check.sh"
+# Fail after the 3rd of 4 files (Caddyfile) so health-check.sh's own install
+# never even starts -- a genuine partial install, not merely a post-install
+# abort after all four already landed.
+export DEPLOY_SH_CONFIG_FAIL_AFTER="Caddyfile"
+status="$(run_scenario "$s44")"
+unset DEPLOY_SH_CONFIG_FAIL_AFTER
+if [[ "$status" == 0 ]]; then
+  fail "case44: expected non-zero exit for a forced mid-install config failure, got 0"
+fi
+grep -q 'ta-research' "$s44/app/docker-compose.yml" 2>/dev/null && fail "case44: the restored docker-compose.yml must never mention the new service -- restore did not fully undo the partial install"
+grep -q 'ta-research' "$s44/app/Caddyfile" 2>/dev/null && fail "case44: the restored Caddyfile must never mention the new service"
+grep -q 'ta-research' "$s44/app/health-check.sh" 2>/dev/null && fail "case44: the restored health-check.sh must never mention the new service"
+grep -q 'no research route' "$s44/app/Caddyfile" 2>/dev/null || fail "case44: Caddyfile not restored to its exact OLD content"
+grep -q 'SERVICES=(web)' "$s44/app/health-check.sh" 2>/dev/null || fail "case44: health-check.sh not restored to its exact OLD content"
+shopt -s nullglob
+leftover44=("$s44/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover44[@]} -eq 0 ]] || fail "case44: run-owned config backup scratch not cleaned: ${leftover44[*]}"
+echo "    exit=$status"
+
+echo "=== Case 45 (unit-level, injected real failures): restore_or_remove_configs's RESTORE and REMOVE paths both fail for real (APP_DIR made read-only) -- each is reported, never silently claimed as a successful recovery ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s45="$(new_scratch case45)"
+# docker-compose.yml and Caddyfile pre-exist (exercises the RESTORE path);
+# docker-compose.mirofish.yml and health-check.sh do not (exercises REMOVE).
+printf 'OLD_VALUE=old-docker-compose.yml\n' >"$s45/app/docker-compose.yml"
+printf 'OLD_VALUE=old-Caddyfile\n' >"$s45/app/Caddyfile"
+err45="$s45/stderr.log"
+result45="$(
+  (
+    APP_DIR="$s45/app"
+    APP_CONFIG_STAGING_DIR="$s45/config-staging"
+    IMAGE_TAG=0000000000000000000000000000000000000000
+    export APP_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+    # shellcheck source=/dev/null
+    source "$LIB_FILE"
+    # stage_configs()'s new Compose-parse validation doesn't need real
+    # Docker for this case (it's testing restore/remove failure, not
+    # Compose parsing -- Case 49 below is the dedicated real-docker probe).
+    # shellcheck disable=SC2329
+    docker() {
+      [[ "${1:-}" == compose ]] && return 0
+      command docker "$@"
+    }
+    stage_configs
+    chmod 0500 "$APP_DIR"
+    restore_or_remove_configs && echo OK || echo FAILED
+  ) 2>"$err45"
+)"
+chmod 0700 "$s45/app" 2>/dev/null || true
+[[ "$result45" == FAILED ]] || fail "case45: expected FAILED when APP_DIR is read-only during restore/remove, got $result45"
+grep -q 'failed to restore' "$err45" 2>/dev/null || fail "case45: expected the restore failure to be reported: $(cat "$err45" 2>/dev/null)"
+grep -q 'failed to remove' "$err45" 2>/dev/null || fail "case45: expected the remove failure to be reported: $(cat "$err45" 2>/dev/null)"
+# A genuinely failed restore's own atomic install never reached its final
+# `mv -f`, so the file must still hold whatever stage_configs installed
+# moments earlier (the staged/new fixture content) -- never vanish, never a
+# half-written file, and never silently reappear as the old content either.
+grep -q 'ai-trading-fixture' "$s45/app/docker-compose.yml" 2>/dev/null || fail "case45: a genuinely failed restore must leave the file exactly as stage_configs last installed it, not vanish or revert"
+echo "    result=$result45"
+
+echo "=== Case 46 (RED, process-level): a missing or incomplete APP_CONFIG_STAGING_DIR fails before touching ANY active config, secret, or tag file ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+for variant46 in unset incomplete; do
+  s46="$(new_scratch "case46-$variant46")"
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s46/ci-staging/cloudflared.env"
+  if [[ "$variant46" == incomplete ]]; then
+    rm -f "$s46/config-staging/Caddyfile"
+  fi
+  status46=0
+  (
+    APP_DIR="$s46/app"
+    AI_TRADING_SECRETS_DIR="$s46/secrets"
+    ENV_STAGING_DIR="$s46/ci-staging"
+    FAMILY_CONFIG_CREDENTIALS="$s46/fake-reader-key.json"
+    DEPLOY_SH_SKIP_CHOWN=1
+    IMAGE_TAG=0000000000000000000000000000000000000000
+    if [[ "$variant46" == unset ]]; then
+      unset APP_CONFIG_STAGING_DIR
+    else
+      APP_CONFIG_STAGING_DIR="$s46/config-staging"
+      export APP_CONFIG_STAGING_DIR
+    fi
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+    bash "$DEPLOY_SH" >"$s46/stdout.log" 2>"$s46/stderr.log"
+  ) || status46=$?
+  if [[ "$status46" == 0 ]]; then
+    fail "case46 ($variant46): expected non-zero exit, got 0"
+  fi
+  grep -qE 'APP_CONFIG_STAGING_DIR|missing .*Caddyfile' "$s46/stderr.log" 2>/dev/null || fail "case46 ($variant46): expected a config-staging error message: $(cat "$s46/stderr.log" 2>/dev/null)"
+  shopt -s nullglob
+  leftover_secrets46=("$s46/secrets"/*)
+  shopt -u nullglob
+  [[ ${#leftover_secrets46[@]} -eq 0 ]] || fail "case46 ($variant46): a secret file was created despite failing closed before secrets/configs: ${leftover_secrets46[*]}"
+  [[ -f "$s46/app/docker-compose.yml" ]] && fail "case46 ($variant46): a config file was installed despite failing closed"
+  [[ -f "$s46/app/last-good-tag" ]] && fail "case46 ($variant46): last-good-tag written despite failing closed"
+  echo "    exit=$status46 ($variant46)"
+done
+
+echo "=== Case 47 (RED, process-level): a preflight (free-disk) failure leaves ALL FOUR active config files completely untouched -- stage_configs must never have run ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s47="$(new_scratch case47)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s47/ci-staging/cloudflared.env"
+printf '%s\n' 6666666666666666666666666666666666666666 >"$s47/app/last-good-tag"
+for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+  printf 'OLD_ACTIVE_CONFIG=%s\n' "$name" >"$s47/app/$name"
+done
+chmod 0755 "$s47/app/health-check.sh"
+status47=0
+(
+  APP_DIR="$s47/app"
+  AI_TRADING_SECRETS_DIR="$s47/secrets"
+  ENV_STAGING_DIR="$s47/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s47/config-staging"
+  FAMILY_CONFIG_CREDENTIALS="$s47/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=9999999999999999999999999999999999999999
+  AI_TRADING_MIN_FREE_GB=999999
+  AI_TRADING_DOCKER_DATA_DIR="$s47/app"
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  bash "$DEPLOY_SH" >"$s47/stdout.log" 2>"$s47/stderr.log"
+) || status47=$?
+if [[ "$status47" == 0 ]]; then
+  fail "case47: expected non-zero exit when the disk is too small, got 0"
+fi
+for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+  grep -q "OLD_ACTIVE_CONFIG=$name" "$s47/app/$name" 2>/dev/null || fail "case47: $name must stay completely untouched -- stage_configs must never have run"
+done
+shopt -s nullglob
+leftover47=("$s47/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover47[@]} -eq 0 ]] || fail "case47: no config backup scratch should have been created before the preflight check: ${leftover47[*]}"
+echo "    exit=$status47"
+
+echo "=== Case 48 (regression): rollback's previous-tag redeploy must use the PREVIOUS tag's image, never the stale new tag -- compose()'s inline AI_TRADING_IMAGE_TAG env var takes precedence over images.env, so deploy_tag() must reassign the global IMAGE_TAG before calling compose() or a rollback silently redeploys the just-failed NEW tag's images ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s48="$(new_scratch case48)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s48/ci-staging/cloudflared.env"
+good48=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+new48=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+printf '%s\n' "$good48" >"$s48/app/last-good-tag"
+# An established release (the realistic case a rollback actually redeploys):
+# active config already exists for all four files, so restore -- not
+# first-time removal -- is what rollback does here, leaving a working
+# health-check.sh in place for the previous-tag redeploy below to call.
+for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s48/app/$name"
+done
+printf '#!/usr/bin/env bash\nexit 0\n' >"$s48/app/health-check.sh"
+chmod 0755 "$s48/app/health-check.sh"
+export DEPLOY_SH_CONFIG_FAIL_AFTER="Caddyfile"
+status="$(
+  (
+    # shellcheck disable=SC2329
+    docker() {
+      if [[ "${1:-}" == compose ]]; then
+        echo "fake docker tag=${AI_TRADING_IMAGE_TAG:-unset} $*" >>"$s48/app/docker.log"
+        return 0
+      fi
+      command docker "$@"
+    }
+    run_scenario "$s48" "$new48"
+  )
+)"
+unset DEPLOY_SH_CONFIG_FAIL_AFTER
+if [[ "$status" == 0 ]]; then
+  fail "case48: expected non-zero exit for a forced config-stage failure, got 0"
+fi
+last_tag48="$(grep '^fake docker tag=' "$s48/app/docker.log" 2>/dev/null | tail -1)"
+echo "$last_tag48" | grep -q "tag=$good48 " || fail "case48: rollback's previous-tag redeploy must use AI_TRADING_IMAGE_TAG=$good48 (effective Compose precedence), got: $last_tag48"
+echo "$last_tag48" | grep -q "tag=$new48" && fail "case48: rollback must never carry the stale new tag ($new48) into compose, got: $last_tag48"
+echo "    exit=$status last=$last_tag48"
+
+# Cases 49-51 (A10a fix round 1, review): the required staged-Compose
+# preflight, and the active-config symlink/non-regular-path rejection both
+# findings called for. All three also double as the "failures must safely
+# roll back any already-staged secrets, never bypass the trap via an
+# unchecked exit" regression: each seeds real secrets content via the
+# existing render/stage path, then asserts those secrets actually roll back
+# when the NEW validation fails -- which only holds if validate_staged_
+# config_file/validate_active_config_path/validate_staged_compose report
+# via `return 1`, never `die()`'s raw `exit 1` (empirically confirmed to
+# bypass an already-armed ERR trap entirely).
+
+echo "=== Case 49 (RED, REAL docker compose, A10a fix round 1): a genuinely malformed staged Compose file is rejected by the real 'docker compose config' parser BEFORE any active-config mutation -- the one real-Docker probe proving stage_configs() actually parses, not a fake 'always succeeds' stand-in -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s49="$(new_scratch case49)"
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s49/ci-staging/cloudflared.env"
+  for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+    printf 'OLD_ACTIVE_CONFIG=%s\n' "$name" >"$s49/app/$name"
+  done
+  chmod 0755 "$s49/app/health-check.sh"
+  # Deliberately invalid YAML (not merely semantically wrong) so the real
+  # parser, not a schema-aware linter, is what rejects it.
+  printf 'name: ai-trading-fixture\nservices:\n  web:\n  : not valid yaml :::\n' >"$s49/config-staging/docker-compose.yml"
+  status="$(
+    (
+      APP_DIR="$s49/app"
+      AI_TRADING_SECRETS_DIR="$s49/secrets"
+      ENV_STAGING_DIR="$s49/ci-staging"
+      APP_CONFIG_STAGING_DIR="$s49/config-staging"
+      FAMILY_CONFIG_CREDENTIALS="$s49/fake-reader-key.json"
+      DEPLOY_SH_SKIP_CHOWN=1
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      # Deliberately NO fake `docker` here -- this is the one case that must
+      # exercise the real parser.
+      render_profiles
+      stage_secrets
+      stage_configs
+    )
+    echo "$?"
+  )"
+  if [[ "$status" == 0 ]]; then
+    fail "case49: expected non-zero exit for a malformed staged Compose file, got 0"
+  fi
+  for name in docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh; do
+    grep -q "OLD_ACTIVE_CONFIG=$name" "$s49/app/$name" 2>/dev/null || fail "case49: $name must stay completely untouched -- Compose validation must reject before any backup/install"
+  done
+  shopt -s nullglob
+  leftover49=("$s49/app"/.config-backup-*)
+  shopt -u nullglob
+  [[ ${#leftover49[@]} -eq 0 ]] || fail "case49: no config backup scratch should exist -- validation runs before CONFIG_STAGED/backups: ${leftover49[*]}"
+  shopt -s nullglob
+  leftover_secrets49=("$s49/secrets"/*.env)
+  shopt -u nullglob
+  [[ ${#leftover_secrets49[@]} -eq 0 ]] || fail "case49: secrets staged earlier in this same run must roll back too (a validation failure must not bypass the already-armed rollback trap via an unchecked exit): ${leftover_secrets49[*]}"
+  echo "    exit=$status"
+fi
+
+echo "=== Case 50 (RED, A10a fix round 1): an existing ACTIVE config path that is a symlink is rejected before any backup/CONFIG_STAGED -- genuine absence is the only CONFIG_PRIOR_EXISTED=0 case, a symlink is never silently treated as absent or backed up -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s50="$(new_scratch case50)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s50/ci-staging/cloudflared.env"
+printf 'REAL_OLD_TARGET=1\n' >"$s50/real-old-caddyfile-target"
+ln -s "$s50/real-old-caddyfile-target" "$s50/app/Caddyfile"
+status="$(run_scenario "$s50")"
+if [[ "$status" == 0 ]]; then
+  fail "case50: expected non-zero exit when an active config path is a symlink, got 0"
+fi
+[[ -L "$s50/app/Caddyfile" ]] || fail "case50: the active Caddyfile symlink must be left exactly as it was -- rejection happens before any mutation"
+shopt -s nullglob
+leftover50=("$s50/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover50[@]} -eq 0 ]] || fail "case50: no config backup scratch should exist -- the symlink check runs before CONFIG_STAGED/backups: ${leftover50[*]}"
+shopt -s nullglob
+leftover_secrets50=("$s50/secrets"/*.env)
+shopt -u nullglob
+[[ ${#leftover_secrets50[@]} -eq 0 ]] || fail "case50: secrets staged earlier in this same run must roll back too: ${leftover_secrets50[*]}"
+echo "    exit=$status"
+
+echo "=== Case 51 (RED, A10a fix round 1): an existing ACTIVE config path that is a directory (not a regular file) is rejected before any backup/CONFIG_STAGED -- and secrets staged earlier in this same run still roll back ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s51="$(new_scratch case51)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s51/ci-staging/cloudflared.env"
+mkdir -p "$s51/app/health-check.sh"
+status="$(run_scenario "$s51")"
+if [[ "$status" == 0 ]]; then
+  fail "case51: expected non-zero exit when an active config path is a directory, got 0"
+fi
+[[ -d "$s51/app/health-check.sh" ]] || fail "case51: the active directory must be left exactly as it was -- rejection happens before any mutation"
+shopt -s nullglob
+leftover51=("$s51/app"/.config-backup-*)
+shopt -u nullglob
+[[ ${#leftover51[@]} -eq 0 ]] || fail "case51: no config backup scratch should exist: ${leftover51[*]}"
+shopt -s nullglob
+leftover_secrets51=("$s51/secrets"/*.env)
+shopt -u nullglob
+[[ ${#leftover_secrets51[@]} -eq 0 ]] || fail "case51: secrets staged earlier in this same run must roll back too: ${leftover_secrets51[*]}"
+echo "    exit=$status"
+
+# Cases 52-53 (final fix wave, whole-branch review reopen round 2): the
+# first-bootstrap Important defect final-review.md found, reproduced and
+# fixed against REAL Docker Compose -- no faked `docker`/`compose` anywhere
+# below, matching Case 31's own real-fixture technique, but this time with
+# genuinely NO docker-compose.yml ever written into $APP_DIR (Case 31 was
+# the one case final-review.md flagged as pre-seeding it, masking the exact
+# failure mode).
+
+echo "=== Case 52 (GREEN, REAL docker, whole-branch review reopen round 2): genuine first bootstrap -- \$APP_DIR has no docker-compose.yml at all and no real container exists for this disposable project -- real ensure_mirofish_stopped() succeeds without ever needing Compose's -f, fixing the real empty-\$APP_DIR bootstrap failure final-review.md found ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s52="$TEST_ROOT/case52"
+  mkdir -p "$s52/app"
+  proj52="mirofish-bootstrap-fixture-$$"
+  # Deliberately no docker-compose.yml/docker-compose.mirofish.yml anywhere
+  # under $s52/app, and no container for this unique disposable project
+  # name exists either -- the exact genuine-first-bootstrap condition
+  # final-review.md's Important finding describes (stage_configs() has not
+  # installed anything yet).
+  result52="$(
+    (
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      APP_DIR="$s52/app"
+      DEPLOY_SH_COMPOSE_PROJECT="$proj52"
+      export IMAGE_TAG APP_DIR DEPLOY_SH_COMPOSE_PROJECT
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      # Deliberately no fake docker/compose here -- the real binaries are
+      # exactly what used to fail on this path.
+      ensure_mirofish_stopped
+      echo DEPLOY_PROCEEDED
+    ) 2>"$s52/stderr.log"
+  )"
+  status52=$?
+  if [[ "$status52" != 0 ]]; then
+    fail "case52: expected exit 0 on a genuine first bootstrap with no active config and no owned container, got $status52: $(cat "$s52/stderr.log" 2>/dev/null)"
+  fi
+  echo "$result52" | grep -q DEPLOY_PROCEEDED || fail "case52: expected ensure_mirofish_stopped to succeed and let the deploy proceed"
+  grep -qi 'no such file' "$s52/stderr.log" 2>/dev/null && fail "case52: must never surface a generic Compose 'no such file' error on a genuine first bootstrap: $(cat "$s52/stderr.log")"
+  echo "    exit=$status52"
+fi
+
+echo "=== Case 53 (RED, REAL docker, whole-branch review reopen round 2): a real mirofish container exists for this project but \$APP_DIR/docker-compose.yml is genuinely missing -- real ensure_mirofish_stopped() refuses to guess and fails the deploy with a clear diagnosis instead of a generic Compose error (owned-missing-config denial) ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+if ! docker compose version >/dev/null 2>&1; then
+  echo "    SKIP: docker compose not available in this environment"
+else
+  s53="$TEST_ROOT/case53"
+  mkdir -p "$s53/bringup" "$s53/app"
+  proj53="mirofish-denial-fixture-$$"
+  cat >"$s53/bringup/docker-compose.mirofish.yml" <<EOF
+name: $proj53
+services:
+  mirofish:
+    image: busybox:1
+    command: ["sleep", "infinity"]
+    profiles: ["mirofish"]
+EOF
+  ok53=1
+  # Bring up a real, owned mirofish container under its own bring-up
+  # directory -- $s53/app (the directory ensure_mirofish_stopped will be
+  # pointed at below) never gets a docker-compose.yml at all, so the
+  # container is genuinely "owned" (real compose project/service labels)
+  # while its active base config is genuinely missing.
+  if ! COMPOSE_PROFILES=mirofish docker compose --project-name "$proj53" -f "$s53/bringup/docker-compose.mirofish.yml" up -d --wait --wait-timeout 30 >"$s53/up.log" 2>&1; then
+    fail "case53: real 'docker compose up' failed: $(cat "$s53/up.log" 2>/dev/null)"
+    ok53=0
+  fi
+  if [[ "$ok53" == 1 ]]; then
+    # Bare subshell + `|| status=$?` (not a `result="$(...)"` assignment --
+    # under this script's own top-level `set -e`, a *failing* command
+    # substitution inside a plain assignment aborts the whole test script,
+    # same bash quirk Case 8/9/27/30 already route around this same way;
+    # this case, unlike Case 52, expects a genuine non-zero exit).
+    status53=0
+    (
+      IMAGE_TAG=0000000000000000000000000000000000000000
+      APP_DIR="$s53/app"
+      DEPLOY_SH_COMPOSE_PROJECT="$proj53"
+      export IMAGE_TAG APP_DIR DEPLOY_SH_COMPOSE_PROJECT
+      # shellcheck source=/dev/null
+      source "$LIB_FILE"
+      ensure_mirofish_stopped
+      echo DEPLOY_PROCEEDED
+    ) >"$s53/stdout.log" 2>"$s53/stderr.log" || status53=$?
+    [[ "$status53" != 0 ]] || fail "case53: expected non-zero exit when an owned container exists but the active config is missing, got 0: $(cat "$s53/stdout.log" 2>/dev/null)"
+    grep -q DEPLOY_PROCEEDED "$s53/stdout.log" 2>/dev/null && fail "case53: deploy must not proceed when an owned container exists with no active config to manage it"
+    grep -q 'no active .*docker-compose.yml to manage it with' "$s53/stderr.log" 2>/dev/null || fail "case53: expected the owned-missing-config diagnosis: $(cat "$s53/stderr.log" 2>/dev/null)"
+    if ! docker ps -a --filter "label=com.docker.compose.project=$proj53" --format '{{.Names}}' | grep -q mirofish; then
+      fail "case53: the real mirofish container must still exist -- this function must refuse to guess, not silently remove it via an unverified path"
+    fi
+    echo "    exit=$status53"
+  fi
+  # Teardown: always attempt, regardless of pass/fail above, so no real
+  # Docker resource from this test ever lingers (same belt-and-suspenders
+  # as Case 31's own teardown -- `down` alone occasionally leaves the
+  # auto-created network behind).
+  docker compose --project-name "$proj53" -f "$s53/bringup/docker-compose.mirofish.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+  docker rm -f "${proj53}-mirofish-1" >/dev/null 2>&1 || true
+  docker network rm "${proj53}_default" >/dev/null 2>&1 || true
+fi
 
 echo
 cleanup

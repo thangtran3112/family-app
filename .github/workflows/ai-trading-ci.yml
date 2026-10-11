@@ -133,6 +133,8 @@ jobs:
         run: |
           node --test infrastructure/cloudflare/ai-trading/worker/*.test.js
           node --test infrastructure/cloudflare/ai-trading/workers/*.test.js
+      - name: TradingAgents research UI tests
+        run: node --test ai-trading/tradingagents-web/tests/test_ui.mjs
       - name: Validate compose files
         run: |
           set -euo pipefail
@@ -189,3 +191,7 @@ jobs:
         env:
           TAG: ci
         run: ai-trading/deploy/ci/smoke-test.sh all
+      - name: TradingAgents research image tests
+        env:
+          TAG: ci
+        run: ai-trading/deploy/ci/test-tradingagents-research.sh

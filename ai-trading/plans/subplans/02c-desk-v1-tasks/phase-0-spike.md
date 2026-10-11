@@ -101,7 +101,7 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
 - [x] **Step 1: Create the data username** (02e Step 1).
 - [x] **Step 2: Subscribe the data username** (02e Step 2): the USD 10 bundle and the USD 4.50 streaming add-on; OPRA only if Task 0.5 shows it is needed.
 - [x] **Step 3: Paper account and data sharing** (02e Step 3). If there is no paper account, Task 0.5 probes the two-gateway fallback.
-- [x] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). One account for the spike; Phase 5 adds the other with per-account key names.
+- [ ] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). Reopened 2026-10-10: the profile had no Flex keys. The IBKR data user and Alpaca keys moved there from `temp/.env` as links to `shared/ibkr` and `shared/alpaca`. One account for the spike; Phase 5 adds the other with per-account key names.
 - [x] **Step 5: Install IB Gateway on the Mac** (02e Step 5).
 
 ### Task 0.5: Run the probes and record the results (main session with the owner)
@@ -144,7 +144,7 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
 
 - [ ] **Step 1: Apply the decisions.**
   - Write the chosen gateway layout into 02d.
-  - Confirm 02b's cost line on the first bill ($14.50, or $16 with OPRA).
+  - Confirm 02b's cost line on the first bill ($14.50; the add-on includes OPRA L1, 02g §3).
 - [ ] **Step 2: Mark Phase 0 done** in 02c and STATUS.md.
 - [ ] **Step 3: Ship.**
   - Commit (one line, no trailer).

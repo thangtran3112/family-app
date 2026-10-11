@@ -4,6 +4,9 @@ Status: approved in conversation on 2026-10-10, section by section. The phased p
 
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision
+- [02f-desk-indicators-and-ai-daily-design.md](02f-desk-indicators-and-ai-daily-design.md): technical indicators and the bias (spouse), consensus EPS and the Desk AI daily verdict (owner)
+- [02g-desk-covered-calls-and-futures-swing-design.md](02g-desk-covered-calls-and-futures-swing-design.md): covered calls (owner) and mini/micro futures swing trading (both users)
+- [02h-desk-research-tools-design.md](02h-desk-research-tools-design.md): backtests, the Desk AI track record, valuation and earnings reaction, the holding timeline
 - [02-release-2-desk-design.md](02-release-2-desk-design.md): the kept base sections (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12)
 - [STATUS.md](../STATUS.md): decisions log
 - Mockups: Paper file "TobyTest", page "Family Desk · R2 mockups" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG)
@@ -37,7 +40,7 @@ Still valid from 02:
 | User | Style | v1 value |
 |---|---|---|
 | Spouse | Day and one-week trades: US stocks/ETFs, ES/NQ/MES/MNQ, CL/GC. She executes in IBKR or Robinhood. | Live charts with key levels; intraday strategies that alert automatically; paper-testing her setups |
-| Owner | Long-term, swing, tactical; covered calls | Long-term and options strategies that alert automatically; paper-testing covered-call and swing rules |
+| Owner | Long-term, swing, tactical; covered calls; mini and micro futures swings ([02g](02g-desk-covered-calls-and-futures-swing-design.md)) | Long-term and options strategies that alert automatically; paper-testing covered-call and swing rules |
 
 The two main jobs are answering investment questions (stocks, futures, options, mostly covered calls) and watching each user's own lists through their own strategies.
 
@@ -132,14 +135,14 @@ Blocks are code. Adding a block type takes a pull request that changes the Zod s
 
 | Kind | Blocks |
 |---|---|
-| Series | close/open/high/low/volume, VWAP, EMA(n), SMA(n), RSI(n, timeframe), ATR(n), relative volume (lookback), gap %, % from 52-week high, IV30, IV rank |
-| Levels | prior-day high/low/close, pre-market high/low, overnight high/low (futures), opening-range high/low (minutes), N-day high/low, support/resistance, cost basis, short-call strike |
+| Series | close/open/high/low/volume, VWAP, EMA(n), SMA(n), RSI(n, timeframe), ATR(n), relative volume (lookback), gap %, % from 52-week high, IV30, IV rank; the [02f](02f-desk-indicators-and-ai-daily-design.md) §3 indicators (MACD, Stochastic, Stoch RSI, CCI, ADX/DMI, Awesome Oscillator, Momentum, Williams %R, Bull/Bear Power, Ultimate Oscillator, VWMA, Hull MA, Ichimoku) and the Desk Technical Bias |
+| Levels | prior-day high/low/close, pre-market high/low, overnight high/low (futures), opening-range high/low (minutes), N-day high/low, support/resistance, cost basis, short-call strike, pivots (Classic, Fibonacci, Camarilla; 02f §3) |
 | Conditions | `gt`, `gte`, `lt`, `lte`, `crosses_above`, `crosses_below`, `within_pct`, `all`, `any`, `not`, time window, earnings within N days, ex-dividend within N days |
-| Fundamentals | forward P/E, P/E versus its 5-year median, FCF yield, revenue growth (YoY), debt/equity, position weight %, gain versus cost % |
+| Fundamentals | forward P/E, P/E versus its 5-year median, FCF yield, revenue growth (YoY), debt/equity, position weight %, gain versus cost %, consensus EPS and its 7/30/90-day revision (02f §4), the Desk AI rating, target, and confidence (02f §5) |
 | Options | covered-call candidates with 02 §6.3 filters, metrics, and flags; short-call risk rules (02 §6.3) |
-| Review | `persona_review` (Buffett, Graham, Lynch, Munger, Druckenmiller). Weekly LLM review with output `{signal, confidence, reasoning}` and a deterministic gate on score. Counts against the LLM budget. |
+| Review | The Desk AI daily verdict ([02f](02f-desk-indicators-and-ai-daily-design.md) §5): four votes and one structured verdict per stock each trading day, checked in code. It replaces the weekly `persona_review`. Spend is logged, with no cap (owner, 2026-10-10). |
 | Actions | `alert` (channels, severity); `paperOrder` (side, sizing by risk $, shares, % of book, or contracts; stop; target by R or level; bracket); `paperCoveredCall` (sell by delta/DTE, close at % decay, roll rules) |
-| Limits | max trades per day, max open positions, max position $, flat-by time, pause after daily loss, cooldown minutes |
+| Limits | max trades per day, max open positions, max position $, flat-by time, flatten before the weekend (02g), pause after daily loss, cooldown minutes |
 
 Family-wide limits: at most 12 paper orders per day, plus a global off switch.
 
@@ -156,12 +159,14 @@ Family-wide limits: at most 12 paper orders per day, plus a global off switch.
   - N-day breakout on volume
   - pullback to the 20/50-day average in an uptrend
   - RSI extreme reversal
+  - technical bias change (02f §6)
+  - futures position risk: roll due, Friday before the close, margin use (02g §5)
 - **Long-term:**
   - quality dip (drawdown plus valuation)
   - trim/rebalance (position weight, stretched valuation)
   - covered-call income (02 §6.3; runs at 15:30)
   - short-call risk (02 §6.3)
-  - weekly persona review
+  - AI daily view (02f §6; replaces the weekly persona review)
 
 ### 4.6 Editing
 
@@ -317,34 +322,83 @@ These add to 02 §7. The 02 `users.role` column is dropped.
 
 ## 11. Reuse Map
 
-Code from the upstream apps is copied into the Desk (or into `ai-trading/common/` when two packages need it), never imported (`AGENTS.md` "Our Code"). Adapted files carry an attribution header and a row in the receiving package's `THIRD_PARTY_NOTICES.md` with the upstream license text; Apache-2.0 files (TradingAgents) are also marked as modified.
+Code from the upstream apps is copied into the Desk (or into `ai-trading/common/` when two packages need it), never imported (`AGENTS.md` "Our Code"). Each adapted file carries an attribution header and a row in the receiving package's `THIRD_PARTY_NOTICES.md` with the upstream license text. Apache-2.0 files (TradingAgents) are also marked as modified. MiroFish is AGPL-3.0: ideas only, never code.
 
-| Source | Item | Use | Phase |
-|---|---|---|---|
-| Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes price, greeks, IV solver | `core/options_math.py`, ported to the standard library | 1b |
-| Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Peak/valley clustering | `levels.support_resistance` with confirmed pivots, and the `support`/`resistance` level | 1b |
-| ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Clamps with an audit trail | Pattern for `core/sizing.py` | 1b |
-| TradingAgents `tradingagents/dataflows/router.py`, `errors.py`, `date_window.py` (Apache-2.0) | Explicit vendor fallback chains; typed "no data" versus "provider unavailable" errors; as-of date guards against look-ahead | Adapt for the shared provider layer in `ai-trading/common/` | 2 |
-| TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py` (Apache-2.0) | SEC company facts with a compliant User-Agent, a daily cache, filing-period selection, and point-in-time filtering | Adapt for the fundamentals client in `ai-trading/common/`; compare with `ai-trading/market-data/sec.py` and keep one | 2 (the fundamentals block in 5) |
-| TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache-2.0) | FRED series with the realtime vintage pinned to the as-of date | Adapt for macro observations in `ai-trading/common/`; release dates come from FRED's release-dates endpoint | 2 |
-| TradingAgents news and social fetchers (Apache-2.0) | Publication-window filtering; "unavailable" kept apart from "no news" | Pattern for the Finnhub news client | 2 |
-| `ai-trading/market-data/` (ours, open-source lane) | Alpaca daily bars, SEC metrics | Move into `ai-trading/common/` when Phase 2 needs them, with the open-source lane | 2 |
-| Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | IBKR connection profiles | Reference for the IBKR client in `ai-trading/common/` | 2 |
-| Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery | 3 |
-| Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences | 3 |
-| deer-flow notification delivery (MIT) | Secret redaction | Adapt for the notifier | 3 |
-| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | `persona_review` | 5 |
-| TradingAgents `agents/analysts/*`, `researchers/*`, `risk_mgmt/*`, `agents/schemas.py` (Apache-2.0) | Evidence-first analyst prompts, bull/bear and risk debate, explicit missing-data language, Pydantic output schemas | Adapt for `persona_review` and Ask prompts, with the `{signal, confidence, reasoning}` output | 5, 7 |
-| ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills | 6 |
-| Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | The `collar_quote` tool | 7 |
-| TradingAgents `dataflows/vendors/yahoo/market.py` indicator catalog (Apache-2.0) | Plain descriptions of SMA, EMA, MACD, RSI, Bollinger Bands, ATR | Pattern for the `indicators` tool's descriptions | 7 |
-| TradingAgents `memory/log.py`, `settlement.py`, `reflection.py` (Apache-2.0) | Idempotent decision log, single settlement, outcome dates, bounded reflection | Pattern for a trade journal | Later |
-| Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies | — |
+The recon of 2026-10-10 checked all four apps against the Desk goals: TradingAgents `1394a3f` (v0.6.0), ai-hedge-fund `78b779c` (v2.5.0), Vibe-Trading fork `d402c2d`, MiroFish `7657031`. Each pin equals its upstream tip or is synced to it. The local notes are `ai-trading/temp/desk-research/recon-*.md`. Verdicts:
+- **copy:** lift with attribution;
+- **adapt:** rework the code into our shapes;
+- **pattern:** reimplement the idea, no code.
+
+| Phase | Source (license) | Item | Use | Verdict |
+|---|---|---|---|---|
+| 1b ✓ | Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes, greeks, IV solver | `core/options_math.py` (standard library) | done |
+| 1b ✓ | Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Peak/valley clustering | `levels.support_resistance` | done |
+| 1b ✓ | ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Clamps with an audit trail | `core/sizing.py` | done (pattern) |
+| 1c | Vibe-Trading `agent/backtest/engines/global_futures.py` `_MULTIPLIER`, `_extract_product` (MIT) | Futures specs per product (minis and micros) and product-code parsing, with tests | `core/futures.py` | copy (not its margins or engine) |
+| 1c | Vibe-Trading `agent/src/skills/technical-basic/example_signal_engine.py` `compute_adx`; `skills/ichimoku/example_signal_engine.py` (MIT) | The ADX/DMI chain with Wilder smoothing; the Ichimoku lines | `core/indicators.py` | adapt (formulas; our tests) |
+| 1c | TradingView technical-ratings documentation | Published vote rules and thresholds | `core/bias.py` (02f §3) | rules only |
+| 1d | TradingAgents `tradingagents/dataflows/date_window.py` (Apache-2.0) | One as-of boundary; half-open windows; withholding undated data | `core/asof.py` | adapt (pure helpers and tests) |
+| 1d | ai-hedge-fund `6c41ae8:src/agents/valuation.py` (MIT, v1 history) | Owner earnings, DCF and scenarios, EV/EBITDA, residual income, WACC | `core/valuation.py` (02h §4) | copy |
+| 1d | ai-hedge-fund `hedge_fund/event_study/engine.py`, `stats.py` (MIT) | Market-model abnormal returns around events | `core/earnings_reaction.py` (single stock, no bootstrap) | adapt |
+| 1d | ai-hedge-fund `hedge_fund/backtesting/fund.py`, `pipeline/stages.py` (MIT) | Performance metrics; decide at the close, execute at the next bar | `core/backtest.py` over the Phase 1 evaluator (02h §2) | pattern |
+| 1d | TradingAgents `tradingagents/memory/log.py`, `settlement.py` (Apache-2.0) | Idempotent settlement after a horizon; known-at-time filtering | `core/settlement.py` (02h §3) | pattern |
+| 2 | Vibe-Trading `agent/backtest/loaders/_http.py` `HostThrottle`, `throttled_get_json` (MIT) | Per-host rate limiter with jitter and session reuse | `ai-trading/common/http.py` | copy |
+| 2 | Vibe-Trading `agent/backtest/loaders/stooq_loader.py` (MIT) | Detect an anti-bot page and latch the source off | Provider fallback policy | pattern |
+| 2 | TradingAgents `dataflows/router.py`, `errors.py`, `config.py` (Apache-2.0) | Fallback chains; "no data" versus "unavailable" | `ai-trading/common` provider errors | pattern |
+| 2 | TradingAgents `dataflows/vendors/yahoo/ohlcv.py`, `market.py` (Apache-2.0) | Bar hygiene: inclusive ends, stale-frame rejection, partial-bar refresh | Bar-store guards (rules and tests, not the Yahoo client) | adapt |
+| 2 | TradingAgents `dataflows/vendors/sec_edgar.py` (Apache-2.0) | SEC CompanyFacts by filing date, correct quarter and year spans, daily cache | The fundamentals client in `ai-trading/common/`; compare with `ai-trading/market-data/sec.py` and keep one | adapt |
+| 2 | TradingAgents `dataflows/vendors/fred.py` (Apache-2.0) | FRED with the vintage pinned to the as-of date | Macro client in `ai-trading/common/` | adapt |
+| 2 | TradingAgents news and social fetchers (Apache-2.0) | Publication-window filtering; "unavailable" kept apart from "no news" | The Finnhub news client | pattern |
+| 2 | ai-hedge-fund `hedge_fund/data/cached.py` (MIT) | Never cache a trading day that has not closed | Bar and quote caches | pattern |
+| 2 | ai-hedge-fund `hedge_fund/signals/pead.py` (MIT) | The 8-K (Item 2.02) is the announcement date, not the 10-Q | `earnings_results` | pattern |
+| 2 | `ai-trading/market-data/` (ours, open-source lane) | Alpaca daily bars, SEC metrics | Move into `ai-trading/common/` with the open-source lane | move |
+| 2 | Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | Paper and live-read-only profiles with their ports; the market-data type (delayed type 3 when no subscription) | The IBKR client in `ai-trading/common/`; read side only (the file places no orders) | adapt |
+| 3 | ai-hedge-fund `hedge_fund/paper/tick.py` (MIT) | Idempotent, catch-up-safe ticks that halt on failure | Scheduler jobs | pattern |
+| 3 | Vibe-Trading `agent/src/channels/manager.py`, `channels/bus/queue.py` (MIT) | Retry with backoff, fingerprint dedupe, URL-credential redaction | `ai_trading.notify` | adapt |
+| 3 | Vibe-Trading `agent/src/live/runtime/triggers.py` (MIT) | Wall-clock-free "due now" checks | Scheduler tests (the calendar itself stays `exchange_calendars`) | pattern |
+| 3 | deer-flow notification delivery (MIT) | Secret redaction | `ai_trading.notify` | adapt |
+| 4 | Vibe-Trading `frontend/src/lib/indicators.ts` (MIT) | MA, EMA, Bollinger, MACD, RSI, stochastic for chart overlays | Desk frontend chart overlays | copy |
+| 4 | TradingAgents `tradingagents/agents/rating.py`, `reporting.py` (Apache-2.0) | Own rating kept apart from quoted ratings; provenance fields | The AI verdict card | adapt (tests and fields) |
+| 5 | ai-hedge-fund `hedge_fund/signals/llm_agent.py`, `buffett.py` and the other maintained personas (MIT) | Fail loud on data errors, abstain on model failure, a prompt cache keyed by content hash, a JSON-only contract | The Desk AI votes (02f §5) | pattern; persona prompts adapted |
+| 5 | ai-hedge-fund `hedge_fund/features/snapshot.py` (MIT) | Point-in-time snapshot with a content hash | Verdict inputs and cache keys | pattern |
+| 5 | ai-hedge-fund `hedge_fund/llm/client.py` `extract_json` (MIT) | Fenced, bare, or embedded JSON extraction | Fallback parsing behind PydanticAI | adapt |
+| 5 | TradingAgents `agents/schemas.py`, `structured.py`, analyst and debate prompts (Apache-2.0) | Typed recommendation with a structured-output fallback; evidence-first prompts | The verdict schema and prompts | adapt |
+| 5 | TradingAgents `agents/context.py` (Apache-2.0) | A run signature: never resume a run under changed inputs | The AI job | pattern |
+| 5 | Vibe-Trading `agent/src/scheduled_research/verdict.py` (MIT) | An explicit "contract violation" state instead of guessing | Verdict validation (02f §5 checks) | pattern |
+| 6 | ai-hedge-fund `hedge_fund/paper/ledger.py` (MIT) | Append-only, hash-chained records; a kill switch; corrections kept, not erased | The fills journal | pattern |
+| 6 | ai-hedge-fund `hedge_fund/pipeline/stages.py` (MIT) | Reject a decision made under a stale strategy version | The order gate | pattern |
+| 6 | Vibe-Trading `agent/src/live/order_guard.py` (MIT) | Enforce the larger of notional or quantity × price; fail closed on a bad quote; a locked daily counter | The order gate | pattern |
+| 6 | ai-hedge-fund `hedge_fund/fund/spec.py` (MIT) | Validated spec with an off switch | Paper settings | pattern |
+| 7 | TradingAgents `dataflows/vendors/yahoo/snapshot.py` (Apache-2.0) | A typed, as-of evidence snapshot | Every Ask tool result carries provider, as-of time, and values | adapt (the contract, not the Yahoo text) |
+| 7 | Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | `collar_quote` | adapt |
+| Later | Vibe-Trading `agent/backtest/engines/options_portfolio.py` `iv_smile_adjustment` (MIT) | Skew and curvature against moneyness | Option backtests and marks | adapt later |
+| Later | Vibe-Trading `agent/src/tools/options_chain_tool.py` (MIT) | Free options chain from Yahoo's unofficial API | A fallback chain source, only if the owner accepts Yahoo's terms | owner decision |
+| Later | MiroFish (AGPL-3.0) | A catalyst-to-position brief; a "what-if" delta | Ask features | idea only |
+| — | Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies | — |
+
+Corrections from the recon:
+- TradingAgents' indicator catalog covers only SMA, EMA, MACD, RSI, Bollinger, ATR, and VWMA (descriptions over `stockstats`). It is not a source for the 02f indicators.
+- Vibe-Trading's `ibkr/local.py` only reads; its order path is elsewhere and gated.
+- ai-hedge-fund v2.5.0 has no web app and no numeric valuation. The maintained personas are in `hedge_fund/signals/`, while the v1 personas exist only in history.
 
 Skipped:
-- Vibe-Trading's LLM-written strategy code and its sandbox (documented escape gaps; unacceptable once strategies place orders);
-- TradingAgents' LangGraph orchestration and LangChain tools (`graph/*`, `agents/state.py`, `agents/tools.py`), its CLI, its Yahoo, Alpha Vantage, and Polymarket clients, and its LLM-sampled backtest: the Desk takes no LangChain or LangGraph dependency;
-- anything from MiroFish (AGPL-3.0).
+- Vibe-Trading:
+  - its LLM-written strategy code and sandbox;
+  - the factor zoo;
+  - China- and Hong Kong-specific tools and channels;
+  - harmonic, Elliott-wave, and chanlun skills;
+  - the shadow-account subsystem;
+  - crypto connectors.
+- TradingAgents:
+  - its LangGraph orchestration and LangChain tools;
+  - the CLI;
+  - its Yahoo, Alpha Vantage, Polymarket, Reddit, and StockTwits feeds;
+  - its LLM-rating backtest.
+- ai-hedge-fund:
+  - the Textual TUI;
+  - the `JevLLM` adapter;
+  - the v1 graph agents.
+- MiroFish code, and its synthetic personas and simulated forecasts.
 
 ## 12. Verification Spike (First Implementation Task)
 
@@ -412,4 +466,20 @@ All mockups are in the file "TobyTest", page "Family Desk · R2 mockups". Dark i
 | D6 · Ask (desktop) | Threads; a covered-call candidate table rendered from a tool result with its data label; a `draft_strategy` diff (v5 → draft v6) that saves only on "Save as v6"; the monthly budget |
 | D7 · Settings (desktop) | Telegram/Slack channels and quiet hours; the family-wide off switch, daily cap, and paper guard checks; Ask budget; gateway re-login, data sources, reconciliation, and backups status |
 | D8 · New strategy from a template (desktop) | The ten intraday and swing templates (`packages/family-desk/contracts/templates`), alert-only versus alert + paper, a plain-English preview, the list picker, and "Use this template" creating draft v1 |
+| D9 · Watchlist flip cards (desktop) | A card grid with NVDA and ES flipped to their technical backs ([02f](02f-desk-indicators-and-ai-daily-design.md) §2) |
+| D10 · Technicals (desktop) | Gauges; a chart with RSI and MACD; the oscillator, moving-average, and pivot tables |
+| D11 · Stock long-term (desktop) | The Desk AI verdict with its panel, consensus EPS, analyst context, "Alert me" |
+| D12 · AI daily brief (desktop) | Every analyzed stock after the close, with the alerts feed |
+| M7 · Watchlist flip (mobile) | A flipped card on a phone |
+| M8 · Stock long-term (mobile) | The verdict, consensus EPS, and alerts on a phone |
+| D13 · Covered calls (desktop) | Coverage for each holding with its reasons, AVGO's candidates with the opportunity banner, a payoff sketch, Desk AI context ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §2) |
+| D14 · Short calls & income (desktop) | Open short calls and risks, the KO roll panel, the assignment note, premium by month, the Monday digest |
+| D15 · Futures swing (desktop) | Pair chips (mini/micro, broker availability), weekly levels, bias gauges, the micro-first sizer, positions with roll warnings, the weekend card |
+| D16 · Futures specs & roll calendar (desktop) | The 12 contracts' specs and approximate margins, mini/micro equivalence, the roll timeline, session hours |
+| M9 · Short-call risk alert (mobile) | The KO alert with roll candidates |
+| M10 · Futures swing position (mobile) | MNQ ×3 with P/L, R multiple, a price ladder, the weekend choice, the roll countdown |
+| D17 · Backtest (desktop) | A strategy version over 2018–2026 daily bars: next-open fills, stats in R, equity against buy-and-hold, per-year returns, honest-results box, "Promote to Paper" ([02h](02h-desk-research-tools-design.md) §2) |
+| D18 · Desk AI track record (desktop) | Settled AI calls against SPY: results by rating, calibration, the target hit rate, recent calls with lessons |
+| D19 · Valuation & earnings reaction (desktop) | AAPL: four intrinsic-value methods and the blend, the earnings-reaction stats and chart, "Feeds the Desk AI" |
+| M11 · Holding timeline (mobile) | AAPL's dated events: earnings, macro, Desk AI, consensus, news, strategy, filings |
 | M6 · More (mobile) | The off switch first, then Watchlists, Holdings, and Settings; the next IBKR phone approval |
