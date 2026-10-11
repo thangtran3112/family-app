@@ -1,7 +1,7 @@
 # Trading Hub App Start/Stop Controls
 
-**Updated:** 2026-10-11. **Status:** feature scope approved by the owner; revised
-written design awaiting review before an implementation plan is written.
+**Updated:** 2026-10-11. **Status:** revised written design approved by the owner;
+implementation plan accepted for subagent-driven execution. Implementation starting.
 
 This replaces the earlier three-app-era proposal. The owner wants browser-based
 switches after disk housekeeping, plans to retire this VPS in a few months, and
