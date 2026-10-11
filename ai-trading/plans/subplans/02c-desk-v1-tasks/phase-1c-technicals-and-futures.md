@@ -3621,3 +3621,9 @@ git commit -m "feat(ai-trading): wire the 02f indicator, pivot, and bias blocks 
 
 1. Merge the subagent's branch into `feature/toby`, then remove its worktree and delete the branch.
 2. Phase 1c ships in the same pull request as Phase 1d, or on its own if 1d is not ready soon (one pull request per finished phase or meaningful batch).
+
+## Post-merge fixes (final review, 2026-10-11)
+
+The final whole-branch review of Phases 1c and 1d found that `backend/src/ai_trading/core/backtest.py` (Phase 1d, written in parallel before this phase's evaluator wiring landed) duplicated `evaluate.py`'s level dispatch from before this phase added the `"pivot"` level kind, so a `paperOrder.stop`/`target` of `{"level": "pivot", ...}` crashed with `KeyError: 'minutes'`.
+
+Fixed at the root by adding one small, additive public helper to this file: `level_series(bars, daily, asset, operand) -> pd.Series`, built from `_compute`'s existing level branch (unchanged). `backtest.py` now resolves every `paperOrder` stop/target level through this one helper instead of its own duplicated dispatch table, so the two can no longer drift. `evaluate.py`'s existing public API and behavior are unchanged; every existing `test_evaluate*.py` and `test_templates.py` test still passes untouched. New coverage (`test_paper_order_pivot_stop_and_target_resolve_through_the_evaluator`, plus three resampled-cadence tests for a related `backtest.py` bug) lives in `backend/tests/test_backtest.py`; see `phase-1d-research-math.md`'s matching section for the full report. Backend suite: 525 passed (519 + 6 new), 0 skipped. The `evaluate.py` code block shown earlier in this task file is the pre-fix code; this commit supersedes it.

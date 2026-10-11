@@ -10,6 +10,7 @@ from bars import daily_bars, minute_bars, set_bar, trading_days
 from ai_trading.contracts.strategy_spec_v1 import StrategySpecV1
 from ai_trading.core.backtest import InstrumentSpec, SymbolBars, Trade, backtest, stats
 from ai_trading.core.calendar import et, previous_session
+from ai_trading.core.evaluate import level_series
 
 LAST_DAY = date(2026, 11, 10)
 DAY = date(2026, 10, 6)  # a plain trading day, for the intraday fixtures
@@ -561,6 +562,134 @@ def test_flat_by_does_not_apply_to_daily_bars():
     result = backtest(spec, "stock", {"TEST": SymbolBars(bars_1d=frame)}, benchmark=flat_benchmark(frame))
     [trade] = result.trades
     assert trade.exit_reason == "stop"
+
+
+# --- resampled-cadence fills: a signal maps to the bin's close, not its first minute ------------
+
+
+def _cadence_spec(run_on: str) -> StrategySpecV1:
+    return StrategySpecV1.model_validate(
+        {
+            "schemaVersion": 1,
+            "name": "Cadence fill test",
+            "watch": {"universe": {"symbols": ["TEST"]}, "session": "regular", "runOn": run_on},
+            "when": {"op": "gt", "left": {"series": "close"}, "right": {"value": 100}},
+            "then": {
+                "alert": {"channels": ["inbox"]},
+                "paperOrder": {
+                    "side": "buy",
+                    "size": {"riskUsd": 50},
+                    "stop": {"level": "prior_day_low"},
+                    "target": {"r": 2},
+                },
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize("run_on,minutes", [("bar_close_5m", 5), ("bar_close_15m", 15), ("bar_close_1h", 60)])
+def test_resampled_cadence_signal_fills_after_its_bin_closes_not_before(run_on: str, minutes: int):
+    # The condition only turns true on the LAST minute of the 09:30 bin; the bin itself is only
+    # known once it closes `minutes` later. Filling at the bin's own first minute's open (the bug)
+    # would be a look-ahead fill, before the bar that produced the signal has even closed.
+    bars = minute_bars("stock", DAY)
+    bin_start = et(DAY, "09:30")
+    last_minute = bin_start + pd.Timedelta(minutes=minutes - 1)
+    bin_close = bin_start + pd.Timedelta(minutes=minutes)
+    set_bar(bars, DAY, last_minute.tz_convert("America/New_York").strftime("%H:%M"), open=101.0, close=101.0)
+    set_bar(
+        bars,
+        DAY,
+        bin_close.tz_convert("America/New_York").strftime("%H:%M"),
+        open=102.0,
+        high=103.0,
+        low=101.0,
+        close=102.0,
+    )
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    result = backtest(
+        _cadence_spec(run_on),
+        "stock",
+        {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)},
+        benchmark=pd.Series(100.0, index=bars.index),
+    )
+    [trade] = result.trades
+    assert trade.entry_time == bin_close
+    assert trade.entry_price == pytest.approx(102.01)
+
+
+def test_resampled_cadence_signal_fills_after_its_bin_closes_with_a_missing_minute_inside_it():
+    # 09:32 is missing entirely from the 09:30-09:34 bin; the bin still closes at 09:35 and the
+    # fill is still the first row after that, not shifted by the missing minute.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "09:30", close=100.0)
+    set_bar(bars, DAY, "09:34", open=101.0, close=101.0)
+    bars = bars.drop(index=et(DAY, "09:32"))
+    set_bar(bars, DAY, "09:35", open=102.0, high=103.0, low=101.0, close=102.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    result = backtest(
+        _cadence_spec("bar_close_5m"),
+        "stock",
+        {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)},
+        benchmark=pd.Series(100.0, index=bars.index),
+    )
+    [trade] = result.trades
+    assert trade.entry_time == et(DAY, "09:35")
+    assert trade.entry_price == pytest.approx(102.01)
+
+
+def test_bar_close_1m_signal_still_fills_at_the_next_minutes_open():
+    # bar_close_1m's bin length is already 1 minute, so this path must not change.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "10:00", close=101.0)
+    set_bar(bars, DAY, "10:01", open=103.0, high=105.0, low=101.0, close=104.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    result = backtest(
+        _cadence_spec("bar_close_1m"),
+        "stock",
+        {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)},
+        benchmark=pd.Series(100.0, index=bars.index),
+    )
+    [trade] = result.trades
+    assert trade.entry_time == et(DAY, "10:01")
+    assert trade.entry_price == pytest.approx(103.01)
+
+
+# --- a paperOrder stop/target that is a pivot level resolves through the evaluator --------------
+
+
+def make_pivot_spec() -> StrategySpecV1:
+    body = make_spec().model_dump(by_alias=True, exclude_none=True)
+    body["then"]["paperOrder"]["stop"] = {"level": "pivot", "method": "classic", "period": "session", "point": "S1"}
+    body["then"]["paperOrder"]["target"] = {"level": "pivot", "method": "classic", "period": "session", "point": "R1"}
+    return StrategySpecV1.model_validate(body)
+
+
+def test_paper_order_pivot_stop_and_target_resolve_through_the_evaluator():
+    frame = _custom_bars(
+        23,
+        {
+            19: (100.0, 110.0, 90.0, 100.0),  # prior day: feeds day 20's classic session pivot
+            20: (90.0, 103.0, 88.0, 101.0),  # signal: close breaks above 100
+            21: (95.0, 96.0, 94.0, 95.0),  # entry fill, inside the pivot band
+            22: (95.0, 111.0, 95.0, 100.0),  # touches the R1 target intrabar; close stays <= 100
+        },
+    )
+    s1_operand = {"level": "pivot", "method": "classic", "period": "session", "point": "S1"}
+    r1_operand = {"level": "pivot", "method": "classic", "period": "session", "point": "R1"}
+    expected_stop = float(level_series(frame, frame, "stock", s1_operand).loc[frame.index[20]])
+    expected_target = float(level_series(frame, frame, "stock", r1_operand).loc[frame.index[20]])
+
+    result = backtest(make_pivot_spec(), "stock", {"TEST": SymbolBars(bars_1d=frame)}, benchmark=flat_benchmark(frame))
+
+    [trade] = result.trades  # sizes and runs without raising
+    assert trade.entry_time == frame.index[21]
+    assert trade.quantity == math.floor(300 / (95.0 - expected_stop))  # riskUsd 300 / (entry - pivot S1)
+    assert trade.exit_reason == "target"
+    assert trade.exit_price == pytest.approx(expected_target - 0.01)  # pivot R1 minus 1-cent slippage
 
 
 EQUITY_DATES = [date(2025, 12, 30), date(2025, 12, 31), date(2026, 1, 2), date(2026, 1, 3)]

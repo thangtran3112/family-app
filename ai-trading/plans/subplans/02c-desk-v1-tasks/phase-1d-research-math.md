@@ -3168,3 +3168,14 @@ git commit -m "feat(ai-trading): Desk AI call settlement against SPY on the XNYS
 
 1. Merge the subagent's branch into `feature/toby`, then remove its worktree and delete the branch.
 2. Phase 1d ships in the same pull request as the next phase, or on its own if nothing follows soon (one pull request per finished phase or meaningful batch). Phases 1c and 1d both change nothing that is deployed (02c), so they may land together.
+
+## Post-merge fixes (final review, 2026-10-11)
+
+The final whole-branch review of Phases 1c and 1d found two Critical cross-lane bugs in `backend/src/ai_trading/core/backtest.py`: it was written in parallel before Phase 1c's evaluator wiring landed and was never re-synced.
+
+- **Look-ahead for resampled cadences.** `_signal_positions` mapped a resampled-cadence (`bar_close_5m`/`15m`/`1h`) signal's `bar_time` (the bin's *start*, per `evaluate._resample`) straight onto the matching 1-minute execution row, so stage 3 queued the fill for the next minute after the bin's first minute — before the bin that produced the signal had even closed. Fixed: a resampled signal now maps to the last 1-minute execution row inside its bin (the last row with a start time before the bin's nominal close, which also tolerates a missing minute inside the bin), so the fill queues for the first minute after the bin actually closes. `bar_close_1m` and `daily_close`/`weekly` are unchanged; the fix generalizes to all three without a code branch.
+- **Crash on a pivot stop or target.** `_level_series`/`_level_cache` duplicated `evaluate.py`'s level dispatch from before Phase 1c added the `"pivot"` level kind, so a `paperOrder.stop`/`target` of `{"level": "pivot", ...}` raised `KeyError: 'minutes'`. Fixed at the root: `backtest.py` now resolves every stop/target level through a new additive public helper, `evaluate.level_series(bars, daily, asset, operand)`, built from `_compute`'s existing level branch, instead of its own duplicated dispatch table (now deleted). The two can no longer drift.
+
+New tests in `backend/tests/test_backtest.py`: `test_resampled_cadence_signal_fills_after_its_bin_closes_not_before` (parametrized over `bar_close_5m`/`15m`/`1h`), `test_resampled_cadence_signal_fills_after_its_bin_closes_with_a_missing_minute_inside_it`, `test_bar_close_1m_signal_still_fills_at_the_next_minutes_open`, `test_paper_order_pivot_stop_and_target_resolve_through_the_evaluator`. Confirmed RED against the pre-fix code (the early fill at the bin's first minute; the pivot `KeyError`) before applying the fix.
+
+Backend suite: 525 passed (519 + 6 new), 0 skipped. Contracts suite: 47 passed, unchanged. The `backtest.py`/`evaluate.py` code blocks shown earlier in this task file are the pre-fix code; this commit supersedes them.

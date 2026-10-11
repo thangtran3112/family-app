@@ -22,14 +22,13 @@ from typing import Any, Literal
 import pandas as pd
 
 from ai_trading.contracts.strategy_spec_v1 import Limits, StrategySpecV1
-from ai_trading.core import indicators, levels
+from ai_trading.core import indicators
 from ai_trading.core.calendar import ET, Asset, annotate, session
-from ai_trading.core.evaluate import INTRADAY_CADENCES, SignalCandidate, evaluate
+from ai_trading.core.evaluate import CADENCE_MINUTES, INTRADAY_CADENCES, SignalCandidate, evaluate, level_series
 from ai_trading.core.sizing import Bracket, Side, plan_order
 
 ExitReason = Literal["stop", "target", "time", "end_of_data"]
 ATR_LENGTH = 14  # paperOrder.stop.atrMultiple has no length field; 14 is the common swing default.
-_SESSION_LEVELS = {"premarket_high", "premarket_low", "overnight_high", "overnight_low"}
 _ANNUALIZATION = {"daily": 252.0, "weekly": 52.0}
 _BAR_LENGTH = pd.Timedelta(minutes=1)  # bars_1m is always 1-minute, the same assumption evaluate.py makes
 
@@ -117,34 +116,20 @@ class _Position:
 def _signal_positions(
     signals: list[SignalCandidate], execution_bars: pd.DataFrame, asset: Asset, run_on: str
 ) -> set[int]:
-    """The execution-bar row position of every fired signal."""
+    """The execution-bar row position of every fired signal. For a resampled intraday cadence
+    (`bar_close_5m`/`15m`/`1h`), `sig.bar_time` is the bin's *start* (`evaluate._resample` labels
+    a bin by its start), but `execution_bars` is always raw 1-minute bars, so the signal maps to
+    the last 1-minute row inside that bin -- the last row with a start before the bin closes --
+    not the bin's own first minute. That also handles a missing minute inside the bin: whichever
+    1-minute rows exist, the last one before the bin's close is still found. `bar_close_1m` (bin
+    length 1 minute) and `premarket_0830` (not in `CADENCE_MINUTES`, so bin length 1) fall out of
+    the same formula unchanged."""
     if run_on in INTRADAY_CADENCES:
-        return {execution_bars.index.get_loc(sig.bar_time) for sig in signals}
+        bin_length = pd.Timedelta(minutes=CADENCE_MINUTES.get(run_on, 1))
+        index = execution_bars.index
+        return {int(index.searchsorted(sig.bar_time + bin_length, side="left")) - 1 for sig in signals}
     close_to_day = {session(asset, day).regular_close: day for day in execution_bars.index}
     return {execution_bars.index.get_loc(close_to_day[sig.bar_time]) for sig in signals}
-
-
-def _level_series(
-    level_operand: dict[str, Any], *, daily: pd.DataFrame, bars: pd.DataFrame, days: pd.Index, asset: Asset
-) -> pd.Series:
-    """`level_operand`'s value at every row of `bars`, through the same `core/levels.py`
-    functions `evaluate()`'s own level dispatch uses, so a `paperOrder` stop or target level
-    resolves whether or not that level also appears in `when`."""
-    name = level_operand["level"]
-    unique_days = pd.Index(days.unique())
-
-    def per_day(values: pd.Series) -> pd.Series:
-        return pd.Series(values.reindex(days).to_numpy(), index=bars.index)
-
-    if name.startswith("prior_day_"):
-        return per_day(levels.prior_day(daily, unique_days, asset, name.removeprefix("prior_day_")))
-    if name.startswith("n_day_"):
-        return per_day(levels.n_day(daily, unique_days, level_operand["days"], name.removeprefix("n_day_")))
-    if name in ("support", "resistance"):
-        return per_day(levels.support_resistance(daily, unique_days, level_operand["days"], name))
-    if name in _SESSION_LEVELS:
-        return levels.pre_phase(bars, name.rsplit("_", 1)[1])
-    return levels.opening_range(bars, asset, level_operand["minutes"], name.rsplit("_", 1)[1])
 
 
 def _level_cache(
@@ -161,22 +146,14 @@ def _level_cache(
     out: dict[str, tuple[pd.Series | None, pd.Series | None]] = {}
     for s in symbols:
         sb = bars[s]
-        if intraday:
-            ann = annotate(sb.bars_1m, asset)
-            level_bars, level_days = ann, pd.Index(ann["day"])
-        else:
-            level_bars, level_days = sb.bars_1d, sb.bars_1d.index
+        level_bars = annotate(sb.bars_1m, asset) if intraday else sb.bars_1d
         stop_series = (
-            _level_series(stop_spec, daily=sb.bars_1d, bars=level_bars, days=level_days, asset=asset).reindex(
-                execution_bars[s].index
-            )
+            level_series(level_bars, sb.bars_1d, asset, stop_spec).reindex(execution_bars[s].index)
             if "level" in stop_spec
             else None
         )
         target_series = (
-            _level_series(target_spec, daily=sb.bars_1d, bars=level_bars, days=level_days, asset=asset).reindex(
-                execution_bars[s].index
-            )
+            level_series(level_bars, sb.bars_1d, asset, target_spec).reindex(execution_bars[s].index)
             if "level" in target_spec
             else None
         )

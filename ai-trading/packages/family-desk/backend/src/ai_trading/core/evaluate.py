@@ -181,6 +181,20 @@ def _compute(operand: dict[str, Any], frame: _Frame) -> pd.Series:
     return (bars["open"] - prior) / prior * 100
 
 
+def level_series(bars: pd.DataFrame, daily: pd.DataFrame, asset: Asset, operand: dict[str, Any]) -> pd.Series:
+    """Public: `operand`'s level value (e.g. `{"level": "pivot", "method": ..., "period": ...,
+    "point": ...}`) at every row of `bars`, through the same dispatch `_compute` uses for a
+    `when` operand's level. `bars` is annotated intraday bars with a `day` column (`annotate()`'s
+    output) or daily bars indexed by trading day; `daily` is always regular-session daily bars.
+
+    `backtest.py`'s `paperOrder.stop`/`target` level resolves through this one dispatch, so the
+    two can never drift (the Phase 1c pivot addition included)."""
+    intraday = "day" in bars.columns
+    days = pd.Index(bars["day"]) if intraday else bars.index
+    frame = _Frame(bars, days, daily, asset, intraday=intraday)
+    return _compute(operand, frame)
+
+
 def _truth(values: np.ndarray, known: pd.Series) -> pd.Series:
     return pd.Series(values, index=known.index, dtype="boolean").mask(~known)
 
