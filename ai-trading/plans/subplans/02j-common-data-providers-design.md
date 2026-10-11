@@ -130,10 +130,12 @@ To make X the default for every app instead, change `DEFAULT_CHAINS` in the same
 
 ## 11. Effect on the Phase 2a plan
 
-The prototype in `temp/p2a-proto/final/` is restructured to this layout, then the plan is re-rendered from it, self-checked byte for byte, and reviewed again.
-- **2a.1** adds `types.py`, `sources.py`, and `registry.py` (an empty registry, with the chain and config logic and their tests).
-- **2a.2–2a.5:** each vendor task moves its module under `providers/`, adds its adapter and `PROVIDER`, and adds its registry line through an anchored insertion, so the parallel lanes union cleanly.
-- **2a.6** becomes "chains and the swap test": the consensus types land in `types.py` from 2a.1, and the Eulerpool join moves into the Eulerpool adapter.
-- **2a.8's** backfill takes a `BarsSource` and adds the import-boundary test.
+The prototype in `temp/p2a-proto/final/` is restructured to this layout (common: 177 tests; Desk backend: 557 with Postgres), then the plan is re-rendered from it, self-checked byte for byte, and reviewed again. Task split:
+- **2a.1:** the core plus `types.py`, `sources.py`, and `registry.py`, with an empty `REGISTRY` and `DEFAULT_CHAINS`. The chains, the config validation, and the swap tests all run on fake providers. `Provider` itself is defined in the leaf module `_provider.py` and re-exported as `registry.Provider`, so the provider modules never import `registry.py` (no import cycle).
+- **2a.2:** Alpaca.
+- **2a.3:** SEC EDGAR and FRED.
+- **2a.4:** Finnhub and Alpha Vantage.
+- **2a.5:** Eulerpool, including the calendar/surprise join.
+- **2a.6:** the conformance test over the real registry, the real-adapter fallback test, `ai-trading/common/README.md`, and the pilot write-up.
 
-The fixtures (`ae6ec0f`, `c602b52`) are unchanged.
+Each provider task adds its own lines to `REGISTRY` and `DEFAULT_CHAINS`. Both are sorted one entry per line, so parallel lanes union cleanly. 2a.7 (the Desk database) is unchanged. In 2a.8, backfill takes a `BarsSource`, and the import-boundary test is added. The fixtures (`ae6ec0f`, `c602b52`) are unchanged.
