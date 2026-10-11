@@ -91,6 +91,25 @@ LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
 CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
 CONTROL_SCRATCH_DIR=""
 CONTROL_SNAPSHOT_PATH=""
+# Task 5 (app-controls, fix round 1): the control helper's own systemd
+# unit. deploy.sh -- never install.sh, which only bootstraps the host
+# identity/directories/state before deploy.sh ever runs -- owns this
+# file's install/backup/restore/activation, under the SAME lifecycle lock
+# and the SAME rollback transaction as the six CONFIG_FILES control/*
+# entries, so "old deploy rollback must restore the matching helper/
+# runtime version ... roll back its activation" (task-5-brief) actually
+# holds: stage_unit()'s backup always runs before this run's own
+# install.sh bootstrap (which never touches this path) has had any chance
+# to overwrite it.
+UNIT_NAME=ai-trading-control.service
+UNIT_DIR="${AI_TRADING_UNIT_DIR:-/etc/systemd/system}"
+UNIT_INSTALLED_PATH="$UNIT_DIR/$UNIT_NAME"
+UNIT_STAGED_NAME="ai-trading-control.service"
+UNIT_PRIOR_EXISTED=0
+UNIT_WAS_ACTIVE=0
+UNIT_WAS_ENABLED=0
+UNIT_STAGED=0
+UNIT_BACKUP_PATH=""
 # Shared MiroFish render/validate/install library (Task 2, app-controls):
 # defines install_secret_file, mirofish_env_valid, file_mode_octal,
 # cleanup_mirofish_scratch, restore_or_remove_mirofish, activate_mirofish
@@ -213,6 +232,11 @@ cleanup_scratch_dirs() {
   # copy (see acquire_lifecycle_lock/prepare_control_scratch below) --
   # removed on every exit, same as the other two scratch directories above.
   [[ -n "$CONTROL_SCRATCH_DIR" ]] && rm -rf "$CONTROL_SCRATCH_DIR"
+  # This run's own backup of the prior systemd unit content (stage_unit
+  # below), a single file under $STATE_DIR rather than a whole scratch
+  # directory -- removed on every exit, once restore_or_remove_unit (if it
+  # ran at all) no longer needs it.
+  [[ -n "$UNIT_BACKUP_PATH" ]] && rm -f "$UNIT_BACKUP_PATH"
   # Release the lifecycle lock (FD 9) LAST, after every other scratch
   # cleanup above -- held from before any preference/config mutation
   # (acquire_lifecycle_lock) through commit or rollback, on every exit path.
@@ -668,7 +692,18 @@ deploy_tag() {
   # pre-controls version that assumes every standard service is on. This
   # call (including a rollback's own `deploy_tag "$previous"`) always
   # verifies the SAME effective selection this run just applied.
-  "$CONTROL_SCRATCH_DIR/health-check.sh"
+  #
+  # task-5-review fix round 1, Important #2: the scratch health-check.sh
+  # must also be told to READ from this run's own scratch control/ module
+  # and the real persisted state path -- without these two explicit
+  # overrides it silently falls back to its own defaults
+  # ($APP_DIR/control, the hardcoded production state path), which is not
+  # necessarily this run's scratch copy or $CONTROL_STATE_PATH (e.g. when
+  # $STATE_DIR is ever customized, or during a same-run rollback where
+  # $APP_DIR/control may already be reverted/removed).
+  AI_TRADING_CONTROL_DIR="$CONTROL_SCRATCH_DIR/control" \
+  AI_TRADING_STATE_PATH="$CONTROL_STATE_PATH" \
+    "$CONTROL_SCRATCH_DIR/health-check.sh"
 }
 
 # restore_or_remove_secrets: used by rollback to undo a partially- or fully-
@@ -767,6 +802,120 @@ restore_or_remove_configs() {
   return "$ok"
 }
 
+# validate_staged_unit: existence/symlink/regular-file checks, same
+# discipline as validate_staged_config_file, plus a real `systemd-analyze
+# verify` against the STAGED file when the binary is available (never
+# faked out in production; an offline test without systemd on PATH simply
+# skips this one check, same as every other optional-tool guard in this
+# file). Never installs/activates anything.
+validate_staged_unit() {
+  local file="$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME"
+  if [[ ! -e "$file" ]]; then
+    echo "deploy: missing staged $file" >&2
+    return 1
+  fi
+  if [[ -L "$file" || ! -f "$file" ]]; then
+    echo "deploy: staged $file must be a regular file, not a symlink or other path" >&2
+    return 1
+  fi
+  if command -v systemd-analyze >/dev/null 2>&1; then
+    systemd-analyze verify "$file" || {
+      echo "deploy: staged $UNIT_STAGED_NAME failed systemd-analyze verify" >&2
+      return 1
+    }
+  fi
+}
+
+# stage_unit: the systemd-unit analogue of stage_configs above, for the ONE
+# file deploy.sh manages outside $APP_DIR ($UNIT_INSTALLED_PATH, normally
+# /etc/systemd/system/ai-trading-control.service). Captures whether a prior
+# unit existed, and -- only when it did -- its own prior content plus
+# whether the service was active/enabled, BEFORE installing this run's
+# staged unit and (re)starting it. Called from main flow right after
+# stage_configs() has already installed this run's control/* code, so the
+# unit that starts always matches the code already on disk; undone by
+# restore_or_remove_unit on any later failure (task-5-review fix round 1,
+# Critical #1).
+stage_unit() {
+  validate_staged_unit
+  UNIT_WAS_ACTIVE=0
+  UNIT_WAS_ENABLED=0
+  if [[ -f "$UNIT_INSTALLED_PATH" && ! -L "$UNIT_INSTALLED_PATH" ]]; then
+    UNIT_PRIOR_EXISTED=1
+    UNIT_BACKUP_PATH="$(mktemp "$STATE_DIR/.unit-backup-XXXXXX")" || return 1
+    cp -p "$UNIT_INSTALLED_PATH" "$UNIT_BACKUP_PATH" || return 1
+    systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null && UNIT_WAS_ACTIVE=1
+    systemctl is-enabled --quiet "$UNIT_NAME" 2>/dev/null && UNIT_WAS_ENABLED=1
+  else
+    UNIT_PRIOR_EXISTED=0
+  fi
+  UNIT_STAGED=1
+  local tmp
+  tmp="$(mktemp "$UNIT_DIR/.$UNIT_NAME.XXXXXX")" || return 1
+  install -m 0644 "$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME" "$tmp" || return 1
+  mv -f "$tmp" "$UNIT_INSTALLED_PATH" || return 1
+  systemctl daemon-reload || return 1
+  systemctl enable "$UNIT_NAME" || return 1
+  # Reconciliation (control/server.py's reconcile(), run on the helper's own
+  # thread on every start) shares the SAME lifecycle lock this script
+  # already holds (FD 9) -- it blocks behind this deploy's own lock until
+  # commit-or-rollback releases it, so restarting here, mid-transaction,
+  # never lets an unverified reconcile touch Docker before this deploy
+  # finishes (task-5-review fix round 1: "No unverified boot reconcile
+  # outside transaction changing choices").
+  systemctl restart "$UNIT_NAME" || return 1
+}
+
+# restore_or_remove_unit: used by rollback to undo a partially- or
+# fully-applied stage_unit, the same prior/new-state discipline
+# restore_or_remove_configs already applies to the six control/*
+# CONFIG_FILES entries. A no-op unless this run actually got far enough to
+# arm UNIT_STAGED. A prior unit is restored byte-for-byte and left active
+# only if it was active before (task-5-brief: "old deploy rollback must
+# restore the matching helper/runtime version"); a genuinely first
+# activation (no prior unit at all) is stopped, disabled, and its just-
+# installed file removed -- never left running on a rolled-back deploy
+# (task-5-review fix round 1, Critical #1: "roll back its activation").
+restore_or_remove_unit() {
+  [[ "$UNIT_STAGED" == 1 ]] || return 0
+  UNIT_STAGED=0
+  if [[ "$UNIT_PRIOR_EXISTED" == 1 ]]; then
+    if [[ ! -f "$UNIT_BACKUP_PATH" ]]; then
+      echo "deploy: unit: rollback: missing backup for $UNIT_INSTALLED_PATH; cannot restore" >&2
+      return 1
+    fi
+    local tmp
+    tmp="$(mktemp "$UNIT_DIR/.$UNIT_NAME.XXXXXX")" 2>/dev/null || {
+      echo "deploy: unit: rollback: failed to restore $UNIT_INSTALLED_PATH from backup" >&2
+      return 1
+    }
+    if ! install -m 0644 "$UNIT_BACKUP_PATH" "$tmp" || ! mv -f "$tmp" "$UNIT_INSTALLED_PATH"; then
+      echo "deploy: unit: rollback: failed to restore $UNIT_INSTALLED_PATH from backup" >&2
+      return 1
+    fi
+    systemctl daemon-reload 2>/dev/null
+    if [[ "$UNIT_WAS_ACTIVE" == 1 ]]; then
+      systemctl restart "$UNIT_NAME" || {
+        echo "deploy: unit: rollback: restored $UNIT_INSTALLED_PATH but failed to restart it" >&2
+        return 1
+      }
+    else
+      systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    fi
+    if [[ "$UNIT_WAS_ENABLED" != 1 ]]; then
+      systemctl disable "$UNIT_NAME" 2>/dev/null || true
+    fi
+  else
+    systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    systemctl disable "$UNIT_NAME" 2>/dev/null || true
+    if ! rm -f "$UNIT_INSTALLED_PATH"; then
+      echo "deploy: unit: rollback: failed to remove $UNIT_INSTALLED_PATH" >&2
+      return 1
+    fi
+    systemctl daemon-reload 2>/dev/null || true
+  fi
+}
+
 rollback() {
   local status="$1" previous=""
   trap - ERR
@@ -784,6 +933,11 @@ rollback() {
   # vanished, through no fault of an external actor, and refusing to guess.
   restore_or_remove_mirofish || echo "deploy: mirofish: rollback error above; MiroFish left disabled, the rest of rollback continues" >&2
   restore_or_remove_configs || echo "deploy: config: rollback error above; one or more of docker-compose.yml/docker-compose.mirofish.yml/Caddyfile/health-check.sh may be left in an inconsistent state, the rest of rollback continues" >&2
+  # Unit restore runs AFTER config restore, same ordering reasoning as
+  # mirofish-before-config above: the service should only (re)start once
+  # the control/* code underneath it has already been returned to its own
+  # matching prior version, never the other way around.
+  restore_or_remove_unit || echo "deploy: unit: rollback error above; the control helper's unit/activation state may not match the rolled-back release, the rest of rollback continues" >&2
   # Restore the pre-mutation persisted app-control preferences (Task 5) --
   # a NEW, strictly greater revision, never a lowered one -- alongside the
   # tag/secrets/config restore above, using this run's own scratch
@@ -1033,6 +1187,7 @@ stage_configs() {
 for name in "${CONFIG_FILES[@]}"; do
   [[ -f "$APP_CONFIG_STAGING_DIR/$name" ]] || die "missing $APP_CONFIG_STAGING_DIR/$name; the workflow must stage it first"
 done
+[[ -f "$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME" ]] || die "missing $APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME; the workflow must stage it first"
 # Task 5 (app-controls): acquire the shared lifecycle lock (FD 9) before any
 # preference/config mutation -- held through health-check and commit-or-
 # rollback, released only on exit (cleanup_scratch_dirs' EXIT trap). This
@@ -1072,6 +1227,10 @@ fi
 ensure_mirofish_stopped
 stage_secrets
 stage_configs
+# Only after stage_configs() has installed this run's control/* code --
+# the unit that (re)starts here always matches the code already on disk.
+# Covered by the same rollback trap stage_secrets already armed above.
+stage_unit
 
 for name in "${SECRET_FILES[@]}"; do
   file="$SECRETS_DIR/$name"

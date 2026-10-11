@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# Focused offline tests for Task 5 (app-controls): the Linux installer
+# Focused offline tests for Task 5 (app-controls): the Linux bootstrap
 # (infrastructure/vps/app-controls/install.sh) and the deploy.sh/
 # health-check.sh behaviors test-deploy-firestore.sh's own existing suite
 # does not already cover -- explicit selected-service Compose calls, the
-# lifecycle lock's contention/inherited-FD behavior, and preference
-# snapshot/restore. No real Firestore, VPS, host user/group, systemd unit,
-# or Docker socket is used anywhere in this file; every fixture lives under
-# a unique mktemp root removed on exit.
+# lifecycle lock's contention/inherited-FD behavior, preference
+# snapshot/restore, and (fix round 1) the control helper's own
+# code/catalog/unit transaction: a genuinely prior version must be
+# captured and restored on failure, a genuine first activation must be
+# rolled back (stopped/disabled), and the real health-check.sh must be
+# proven to run through deploy.sh's actual call path, not just its
+# functions in isolation. No real Firestore, VPS, host user/group, systemd
+# unit, or Docker socket is used anywhere in this file; every fixture
+# lives under a unique mktemp root removed on exit.
 #
 # install.sh's own Linux/systemd/Docker/user preconditions need a real
-# Linux userland (id/getent/useradd/groupadd/systemctl/systemd-analyze) --
-# run inside a disposable, network-isolated python:3.12-slim container with
-# every one of those commands faked via a PATH-prepended fixture bin
-# directory (common-context's own "Run Linux-only control tests ... not
-# macOS Python" guidance, applied here to the installer rather than the
+# Linux userland (id/getent/useradd/groupadd/systemctl) -- run inside a
+# disposable, network-isolated python:3.12-slim container with every one
+# of those commands faked via a PATH-prepended fixture bin directory
+# (common-context's own "Run Linux-only control tests ... not macOS
+# Python" guidance, applied here to the installer rather than the
 # control/*.py suite). SKIPPED entirely when Docker is unavailable.
 #
 # Usage: ai-trading/deploy/ci/test-app-controls-deploy.sh
@@ -22,6 +27,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AI_TRADING_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEPLOY_SH="$SCRIPT_DIR/../production/deploy.sh"
+HEALTH_SH="$SCRIPT_DIR/../production/health-check.sh"
 INSTALL_SH="$AI_TRADING_DIR/../infrastructure/vps/app-controls/install.sh"
 UNIT_FILE="$AI_TRADING_DIR/../infrastructure/vps/app-controls/ai-trading-control.service"
 CONTROL_DIR_REAL="$AI_TRADING_DIR/control"
@@ -56,6 +62,15 @@ export AI_TRADING_DOCKER_DATA_DIR="$TEST_ROOT"
 # Shared deploy.sh fixtures (same shapes test-deploy-firestore.sh uses).
 # ---------------------------------------------------------------------
 
+FIXTURE_UNIT_CONTENT='[Unit]
+Description=fixture unit, not real production content
+[Service]
+Type=simple
+ExecStart=/bin/true
+[Install]
+WantedBy=multi-user.target
+'
+
 fake_family_config() {
   local dest="$1"
   cat >"$dest" <<'FAKE_EOF'
@@ -88,21 +103,31 @@ FAKE_EOF
   chmod 0700 "$dest"
 }
 
+# stage_default_configs DIR [HEALTH_CONTENT_FILE]: writes minimal, inert
+# fixtures for everything stage_configs()/stage_unit() now own. Passing a
+# second argument stages that file's content as health-check.sh instead of
+# the trivial `exit 0` stub -- used by the cases below that must exercise
+# the REAL health-check.sh through deploy.sh's actual call path.
 stage_default_configs() {
   local dir="$1"
   printf 'name: ai-trading-fixture\nservices:\n  web:\n    image: busybox:1\n' >"$dir/docker-compose.yml"
   printf 'name: ai-trading-fixture\nservices:\n  mirofish:\n    image: busybox:1\n    profiles: ["mirofish"]\n' >"$dir/docker-compose.mirofish.yml"
   printf '# fixture Caddyfile\n' >"$dir/Caddyfile"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$dir/health-check.sh"
+  if [[ $# -ge 2 ]]; then
+    cp "$2" "$dir/health-check.sh"
+  else
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$dir/health-check.sh"
+  fi
   chmod 0755 "$dir/health-check.sh"
   mkdir -p "$dir/control" "$dir/deploy/production"
   cp "$CONTROL_DIR_REAL/catalog.json" "$dir/control/catalog.json"
   cp "$CONTROL_DIR_REAL/state.py" "$dir/control/state.py"
-  printf '"""fixture stand-in."""\n' >"$dir/control/runtime.py"
-  printf '"""fixture stand-in."""\n' >"$dir/control/server.py"
-  printf '#!/usr/bin/env bash\n# fixture stand-in.\n' >"$dir/deploy/production/mirofish-runtime.sh"
-  printf '#!/usr/bin/env bash\n# fixture stand-in.\nexit 0\n' >"$dir/deploy/production/prepare-mirofish.sh"
+  printf '"""fixture stand-in, new version."""\n' >"$dir/control/runtime.py"
+  printf '"""fixture stand-in, new version."""\n' >"$dir/control/server.py"
+  printf '#!/usr/bin/env bash\n# fixture stand-in, new version.\n' >"$dir/deploy/production/mirofish-runtime.sh"
+  printf '#!/usr/bin/env bash\n# fixture stand-in, new version.\nexit 0\n' >"$dir/deploy/production/prepare-mirofish.sh"
   chmod 0755 "$dir/deploy/production/prepare-mirofish.sh"
+  printf '%s' "$FIXTURE_UNIT_CONTENT" >"$dir/ai-trading-control.service"
 }
 
 seed_control_state() {
@@ -120,11 +145,33 @@ EOF
 
 new_scratch() {
   local name="$1" base="$TEST_ROOT/$1"
-  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging" "$base/config-staging"
+  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging" "$base/config-staging" "$base/unit-dir"
   fake_family_config "$base/app/family_config.py"
   stage_default_configs "$base/config-staging"
   printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$base/ci-staging/cloudflared.env"
   printf '%s\n' "$base"
+}
+
+# seed_prior_artifacts BASE MARKER: writes a genuinely-prior,
+# distinguishable (never byte-identical to the staged "new" fixtures
+# above) version of every control/* CONFIG_FILES entry and the systemd
+# unit directly into $BASE/app and $BASE/unit-dir -- simulating exactly
+# what a PREVIOUS successful deploy would have already left on disk before
+# this run's own install.sh bootstrap (which never touches these paths)
+# and deploy.sh both run (task-5-review fix round 1, Critical #1: "seed
+# genuinely differing prior artifacts/unit").
+seed_prior_artifacts() {
+  local base="$1" marker="$2"
+  mkdir -p "$base/app/control" "$base/app/deploy/production"
+  printf '"""OLD control/catalog.json stand-in, marker=%s."""\n' "$marker" >"$base/app/control/catalog-marker.txt"
+  printf '{"schemaVersion":1,"apps":{"tradingagents":["ta-terminal","ta-research"],"ai-hedge-fund":["ahf-terminal"],"vibe-trading":["vibe-trading"],"mirofish":["mirofish"]},"protected":["web","gateway","auth","cloudflared","market-data"],"comment":"OLD-%s"}\n' "$marker" >"$base/app/control/catalog.json"
+  printf '"""OLD state.py stand-in, marker=%s. Never executed by this run (CONTROL_SCRATCH_DIR holds the real one); only its BYTES matter here."""\n' "$marker" >"$base/app/control/state.py"
+  printf '"""OLD runtime.py stand-in, marker=%s."""\n' "$marker" >"$base/app/control/runtime.py"
+  printf '"""OLD server.py stand-in, marker=%s."""\n' "$marker" >"$base/app/control/server.py"
+  printf '#!/usr/bin/env bash\n# OLD mirofish-runtime.sh stand-in, marker=%s.\n' "$marker" >"$base/app/deploy/production/mirofish-runtime.sh"
+  printf '#!/usr/bin/env bash\n# OLD prepare-mirofish.sh stand-in, marker=%s.\nexit 0\n' "$marker" >"$base/app/deploy/production/prepare-mirofish.sh"
+  chmod 0755 "$base/app/deploy/production/prepare-mirofish.sh"
+  printf '[Unit]\nDescription=OLD unit stand-in, marker=%s\n[Service]\nType=simple\nExecStart=/bin/true\n[Install]\nWantedBy=multi-user.target\n' "$marker" >"$base/unit-dir/ai-trading-control.service"
 }
 
 # fake_docker_log BASE: a fake docker() shim that always succeeds on
@@ -146,6 +193,29 @@ install_fake_docker() {
   export FAKE_DOCKER_LOG_BASE
 }
 
+# install_fake_systemctl BASE [is-active-exit] [is-enabled-exit]: a
+# systemctl() shim logging every call to $BASE/systemctl.log. Real
+# systemctl is NEVER invoked by these tests (root/systemd changes stay
+# offline-fake only).
+# shellcheck disable=SC2329
+install_fake_systemctl() {
+  local base="$1" active_exit="${2:-1}" enabled_exit="${3:-1}"
+  FAKE_SYSTEMCTL_LOG_BASE="$base"
+  FAKE_SYSTEMCTL_ACTIVE_EXIT="$active_exit"
+  FAKE_SYSTEMCTL_ENABLED_EXIT="$enabled_exit"
+  export FAKE_SYSTEMCTL_LOG_BASE FAKE_SYSTEMCTL_ACTIVE_EXIT FAKE_SYSTEMCTL_ENABLED_EXIT
+  # shellcheck disable=SC2317
+  systemctl() {
+    echo "fake systemctl $*" >>"$FAKE_SYSTEMCTL_LOG_BASE/systemctl.log"
+    case "${1:-}" in
+      is-active) return "$FAKE_SYSTEMCTL_ACTIVE_EXIT" ;;
+      is-enabled) return "$FAKE_SYSTEMCTL_ENABLED_EXIT" ;;
+      *) return 0 ;;
+    esac
+  }
+  export -f systemctl
+}
+
 echo "=== Case 1 (GREEN): explicit selected-service Compose up excludes a disabled group, stop targets exactly that group's services ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s1="$(new_scratch case1)"
@@ -157,11 +227,13 @@ status1=0
   ENV_STAGING_DIR="$s1/ci-staging"
   APP_CONFIG_STAGING_DIR="$s1/config-staging"
   AI_TRADING_STATE_DIR="$s1/control-state"
+  AI_TRADING_UNIT_DIR="$s1/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s1/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=1111111111111111111111111111111111111111
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
   install_fake_docker "$s1"
+  install_fake_systemctl "$s1"
   # shellcheck disable=SC2329
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
@@ -195,13 +267,16 @@ else
   echo "$stop_services" | grep -qw ahf-terminal && fail "case1: enabled ahf-terminal must never appear in the 'stop' call: $stop_line"
   echo "$up_line" | grep -qw -- '--no-deps' || fail "case1: expected --no-deps on the 'up' call (never a blanket up)"
   echo "$up_line" | grep -q -- '--remove-orphans' && fail "case1: must never use --remove-orphans"
+  grep -q 'systemctl enable ai-trading-control.service' "$s1/systemctl.log" 2>/dev/null || fail "case1: expected the unit to be enabled"
+  grep -q 'systemctl restart ai-trading-control.service' "$s1/systemctl.log" 2>/dev/null || fail "case1: expected the unit to be (re)started"
 fi
 echo "    exit=$status1"
 
-echo "=== Case 2 (RED->rollback): a staging failure restores the saved app-control preferences with a NEW, strictly greater revision -- never a lowered or unchanged one ==="
+echo "=== Case 2 (RED->rollback, task-5-review fix round 1 Critical #1): a GENUINELY DIFFERING prior control/*/unit, the unit ACTIVE, and a later deploy_tag failure restores the OLD code/unit byte-for-byte and RESTARTS (never stops/disables) the matching prior version ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s2="$(new_scratch case2)"
 seed_control_state "$s2/control-state" '{"schemaVersion":1,"revision":5,"desired":{"tradingagents":false,"ai-hedge-fund":true,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+seed_prior_artifacts "$s2" "case2-prior"
 for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
   printf 'OLD_VALUE=old-%s\n' "$name" >"$s2/secrets/$name"
   chmod 0600 "$s2/secrets/$name"
@@ -213,16 +288,46 @@ status2=0
   ENV_STAGING_DIR="$s2/ci-staging"
   APP_CONFIG_STAGING_DIR="$s2/config-staging"
   AI_TRADING_STATE_DIR="$s2/control-state"
+  AI_TRADING_UNIT_DIR="$s2/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s2/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=2222222222222222222222222222222222222222
-  DEPLOY_SH_FAIL_AFTER="vibe-trading.env"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG DEPLOY_SH_FAIL_AFTER
-  install_fake_docker "$s2"
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  # The prior unit is reported ACTIVE and ENABLED -- stage_unit() must
+  # capture that, and restore_or_remove_unit() must therefore RESTART
+  # (never stop/disable) the restored prior unit on rollback.
+  install_fake_systemctl "$s2" 0 0
+  # The failure happens AFTER stage_configs()/stage_unit() have already
+  # installed this run's NEW content (forcing a real "mid/late-transaction
+  # failure", not merely a staging-phase one) -- `compose up` itself fails.
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" up -d --no-deps"*) return 1 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
   bash "$DEPLOY_SH" >"$s2/stdout.log" 2>"$s2/stderr.log"
 ) || status2=$?
 if [[ "$status2" == 0 ]]; then
-  fail "case2: expected non-zero exit for a forced mid-stage failure, got 0"
+  fail "case2: expected non-zero exit for a forced deploy_tag failure, got 0: $(cat "$s2/stdout.log" 2>/dev/null)"
 fi
 restored="$(cat "$s2/control-state/control.json" 2>/dev/null || true)"
 echo "$restored" | python3 -c '
@@ -231,11 +336,20 @@ data = json.load(sys.stdin)
 assert data["desired"] == {"tradingagents": False, "ai-hedge-fund": True, "vibe-trading": True, "mirofish": False}, data["desired"]
 assert data["revision"] > 5, data["revision"]
 ' || fail "case2: restored control.json does not match the saved preferences with an increased revision: $restored"
+grep -q 'OLD-case2-prior' "$s2/app/control/catalog.json" 2>/dev/null || fail "case2: control/catalog.json must be restored to its GENUINELY PRIOR content, not left as this run's new content"
+grep -q 'OLD state.py stand-in, marker=case2-prior' "$s2/app/control/state.py" 2>/dev/null || fail "case2: control/state.py must be restored to its GENUINELY PRIOR content"
+grep -q 'OLD runtime.py stand-in, marker=case2-prior' "$s2/app/control/runtime.py" 2>/dev/null || fail "case2: control/runtime.py must be restored to its GENUINELY PRIOR content"
+grep -q 'OLD server.py stand-in, marker=case2-prior' "$s2/app/control/server.py" 2>/dev/null || fail "case2: control/server.py must be restored to its GENUINELY PRIOR content"
+grep -q 'OLD unit stand-in, marker=case2-prior' "$s2/unit-dir/ai-trading-control.service" 2>/dev/null || fail "case2: the installed unit must be restored to its GENUINELY PRIOR content"
+grep -qx 'fake systemctl restart ai-trading-control.service' "$s2/systemctl.log" 2>/dev/null || fail "case2: an active prior unit must be RESTARTED on rollback, not left stopped: $(cat "$s2/systemctl.log" 2>/dev/null)"
+grep -q 'fake systemctl stop ai-trading-control.service' "$s2/systemctl.log" 2>/dev/null && fail "case2: an active prior unit must never be stopped on rollback"
+grep -q 'fake systemctl disable ai-trading-control.service' "$s2/systemctl.log" 2>/dev/null && fail "case2: an already-enabled prior unit must never be disabled on rollback"
 echo "    exit=$status2 revision=$(echo "$restored" | python3 -c 'import json,sys; print(json.load(sys.stdin)["revision"])' 2>/dev/null)"
 
-echo "=== Case 3 (RED, process-level): a missing control-state directory (install.sh never ran) aborts before any secret/config mutation ==="
+echo "=== Case 3 (RED->rollback, task-5-review fix round 1 Critical #1): a GENUINE FIRST ACTIVATION (no prior control/* or unit) rolls back by REMOVING the just-installed code and STOPPING+DISABLING the just-activated unit -- never leaving it running ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s3="$(new_scratch case3)"
+seed_control_state "$s3/control-state"
 for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
   printf 'OLD_VALUE=old-%s\n' "$name" >"$s3/secrets/$name"
   chmod 0600 "$s3/secrets/$name"
@@ -246,31 +360,101 @@ status3=0
   AI_TRADING_SECRETS_DIR="$s3/secrets"
   ENV_STAGING_DIR="$s3/ci-staging"
   APP_CONFIG_STAGING_DIR="$s3/config-staging"
-  AI_TRADING_STATE_DIR="$s3/control-state-never-seeded"
+  AI_TRADING_STATE_DIR="$s3/control-state"
+  AI_TRADING_UNIT_DIR="$s3/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s3/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=3333333333333333333333333333333333333333
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
-  install_fake_docker "$s3"
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  # No prior unit exists in $AI_TRADING_UNIT_DIR, so stage_unit() sees
+  # UNIT_PRIOR_EXISTED=0 regardless of what is-active/is-enabled report --
+  # the defaults (not active/not enabled) are what a fresh unit would be.
+  install_fake_systemctl "$s3"
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" up -d --no-deps"*) return 1 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
   bash "$DEPLOY_SH" >"$s3/stdout.log" 2>"$s3/stderr.log"
 ) || status3=$?
 if [[ "$status3" == 0 ]]; then
-  fail "case3: expected non-zero exit when control-state was never initialized, got 0"
+  fail "case3: expected non-zero exit for a forced deploy_tag failure, got 0: $(cat "$s3/stdout.log" 2>/dev/null)"
 fi
-grep -q 'failed to snapshot the current app-control preferences' "$s3/stderr.log" 2>/dev/null \
-  || fail "case3: expected the snapshot failure to be reported: $(cat "$s3/stderr.log" 2>/dev/null)"
-for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
-  grep -q "old-$name" "$s3/secrets/$name" 2>/dev/null || fail "case3: $name must stay completely untouched -- stage_secrets must never have run"
-done
-[[ -d "$s3/secrets/.previous" ]] && fail "case3: stage_secrets must never have run (.previous backup directory exists)"
+[[ -e "$s3/app/control/catalog.json" ]] && fail "case3: control/catalog.json had no prior version -- rollback should have removed it, not left this run's new content behind"
+[[ -e "$s3/app/control/state.py" ]] && fail "case3: control/state.py had no prior version -- rollback should have removed it"
+[[ -e "$s3/unit-dir/ai-trading-control.service" ]] && fail "case3: the unit had no prior version -- rollback should have removed the just-installed file, never leave it behind"
+grep -qx 'fake systemctl stop ai-trading-control.service' "$s3/systemctl.log" 2>/dev/null || fail "case3: a genuine first activation must be STOPPED on rollback: $(cat "$s3/systemctl.log" 2>/dev/null)"
+grep -qx 'fake systemctl disable ai-trading-control.service' "$s3/systemctl.log" 2>/dev/null || fail "case3: a genuine first activation must be DISABLED on rollback"
+# The forward path's own stage_unit() legitimately restarts it once as
+# part of this run's (later rolled-back) first activation -- the property
+# that matters is the FINAL state: stop (rollback) must be the LAST
+# lifecycle action logged, strictly after that one forward-path restart.
+last_restart_line="$(grep -n 'fake systemctl restart ai-trading-control.service' "$s3/systemctl.log" 2>/dev/null | tail -1 | cut -d: -f1)"
+last_stop_line="$(grep -n 'fake systemctl stop ai-trading-control.service' "$s3/systemctl.log" 2>/dev/null | tail -1 | cut -d: -f1)"
+[[ -n "$last_stop_line" && ( -z "$last_restart_line" || "$last_stop_line" -gt "$last_restart_line" ) ]] \
+  || fail "case3: the final systemctl action must be 'stop', after any forward-path restart, never the other way around: $(cat "$s3/systemctl.log" 2>/dev/null)"
 echo "    exit=$status3"
 
-echo "=== Case 4 (GREEN): the lifecycle lock is actually held for the duration of a deploy -- a second process attempting it (via state.py's own inherited-lock CLI) is BUSY until the first releases it ==="
+echo "=== Case 4 (RED, process-level): a missing control-state directory (install.sh's own bootstrap never ran) aborts before any secret/config/unit mutation ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s4="$(new_scratch case4)"
-seed_control_state "$s4/control-state"
-lock_path="$s4/control-state/.control.lock"
-install -d -m 0700 "$s4/control-state"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s4/secrets/$name"
+  chmod 0600 "$s4/secrets/$name"
+done
+status4=0
+(
+  APP_DIR="$s4/app"
+  AI_TRADING_SECRETS_DIR="$s4/secrets"
+  ENV_STAGING_DIR="$s4/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s4/config-staging"
+  AI_TRADING_STATE_DIR="$s4/control-state-never-seeded"
+  AI_TRADING_UNIT_DIR="$s4/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s4/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=4444444444444444444444444444444444444444
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_docker "$s4"
+  install_fake_systemctl "$s4"
+  bash "$DEPLOY_SH" >"$s4/stdout.log" 2>"$s4/stderr.log"
+) || status4=$?
+if [[ "$status4" == 0 ]]; then
+  fail "case4: expected non-zero exit when control-state was never initialized, got 0"
+fi
+grep -q 'failed to snapshot the current app-control preferences' "$s4/stderr.log" 2>/dev/null \
+  || fail "case4: expected the snapshot failure to be reported: $(cat "$s4/stderr.log" 2>/dev/null)"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  grep -q "old-$name" "$s4/secrets/$name" 2>/dev/null || fail "case4: $name must stay completely untouched -- stage_secrets must never have run"
+done
+[[ -d "$s4/secrets/.previous" ]] && fail "case4: stage_secrets must never have run (.previous backup directory exists)"
+[[ -s "$s4/systemctl.log" ]] && fail "case4: systemctl must never have been called -- stage_unit must never have run: $(cat "$s4/systemctl.log" 2>/dev/null)"
+echo "    exit=$status4"
+
+echo "=== Case 5 (GREEN): the lifecycle lock is actually held for the duration of a deploy -- a second process attempting it (via state.py's own inherited-lock CLI) is BUSY until the first releases it ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s5="$(new_scratch case5)"
+seed_control_state "$s5/control-state"
+lock_path="$s5/control-state/.control.lock"
+install -d -m 0700 "$s5/control-state"
 : >"$lock_path"
 chmod 0600 "$lock_path"
 # Hold the lock from a long-lived background subshell (fd 9), exactly how
@@ -299,7 +483,7 @@ except BlockingIOError:
     print("BUSY")
 ' 8<&8 8>&8
 )"
-[[ "$busy_result" == BUSY ]] || fail "case4: expected BUSY while the lock is held, got $busy_result"
+[[ "$busy_result" == BUSY ]] || fail "case5: expected BUSY while the lock is held, got $busy_result"
 wait "$holder_pid"
 after_result="$(
   exec 8>"$lock_path"
@@ -312,30 +496,115 @@ except BlockingIOError:
     print("BUSY")
 ' 8<&8 8>&8
 )"
-[[ "$after_result" == ACQUIRED ]] || fail "case4: expected ACQUIRED once the holder released the lock, got $after_result"
+[[ "$after_result" == ACQUIRED ]] || fail "case5: expected ACQUIRED once the holder released the lock, got $after_result"
 echo "    busy=$busy_result after=$after_result"
 
-echo "=== Case 5 (GREEN): health-check.sh computes the same selected-service list as deploy.sh for an identical control.json -- never a second, independently maintained hardcoded list ==="
+echo "=== Case 6 (GREEN): health-check.sh computes the same selected-service list as deploy.sh for an identical control.json -- never a second, independently maintained hardcoded list (isolated function check) ==="
 CASE_COUNT=$((CASE_COUNT + 1))
-s5="$(new_scratch case5)"
-seed_control_state "$s5/control-state" '{"schemaVersion":1,"revision":0,"desired":{"tradingagents":true,"ai-hedge-fund":false,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
-health_lib5="$TEST_ROOT/health-lib5.sh"
-awk '/^# --- main flow below this line;/{exit} {print}' "$SCRIPT_DIR/../production/health-check.sh" >"$health_lib5"
-got5="$(
+s6="$(new_scratch case6)"
+seed_control_state "$s6/control-state" '{"schemaVersion":1,"revision":0,"desired":{"tradingagents":true,"ai-hedge-fund":false,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+health_lib6="$TEST_ROOT/health-lib6.sh"
+awk '/^# --- main flow below this line;/{exit} {print}' "$HEALTH_SH" >"$health_lib6"
+got6="$(
   AI_TRADING_CONTROL_DIR="$CONTROL_DIR_REAL" \
-  AI_TRADING_STATE_PATH="$s5/control-state/control.json" \
+  AI_TRADING_STATE_PATH="$s6/control-state/control.json" \
   AI_TRADING_CONTROL_OWNER_UID="$(id -u)" \
   HEALTH_CHECK_SKIP_CONTROL=1 \
   bash -c '
     APP_DIR=/nonexistent
-    source "'"$health_lib5"'"
+    source "'"$health_lib6"'"
     selected_services_text
   '
 )"
-want5="$(python3 "$CONTROL_DIR_REAL/state.py" services --mirofish-ready false --state "$s5/control-state/control.json" --owner-uid "$(id -u)")"
-[[ "$got5" == "$want5" ]] || fail "case5: health-check.sh's selected list ($got5) does not match control/state.py's own ($want5)"
-echo "$got5" | grep -qw ahf-terminal && fail "case5: ai-hedge-fund is off and must not be selected"
-echo "    got=$(echo "$got5" | tr '\n' ' ')"
+want6="$(python3 "$CONTROL_DIR_REAL/state.py" services --mirofish-ready false --state "$s6/control-state/control.json" --owner-uid "$(id -u)")"
+[[ "$got6" == "$want6" ]] || fail "case6: health-check.sh's selected list ($got6) does not match control/state.py's own ($want6)"
+echo "$got6" | grep -qw ahf-terminal && fail "case6: ai-hedge-fund is off and must not be selected"
+echo "    got=$(echo "$got6" | tr '\n' ' ')"
+
+echo "=== Case 7 (GREEN, task-5-review fix round 1 Important #2): the REAL health-check.sh, staged like any other CONFIG_FILES entry, is actually invoked through deploy.sh's real deploy_tag() call path (fake Docker/systemctl/runuser/curl) -- never the exit0 stand-in -- and correctly queries ONLY the selected (On) services, respecting a saved Off choice ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s7="$(new_scratch case7)"
+cp "$HEALTH_SH" "$s7/config-staging/health-check.sh"
+chmod 0755 "$s7/config-staging/health-check.sh"
+seed_control_state "$s7/control-state" '{"schemaVersion":1,"revision":0,"desired":{"tradingagents":false,"ai-hedge-fund":true,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+status7=0
+(
+  APP_DIR="$s7/app"
+  AI_TRADING_SECRETS_DIR="$s7/secrets"
+  ENV_STAGING_DIR="$s7/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s7/config-staging"
+  AI_TRADING_STATE_DIR="$s7/control-state"
+  AI_TRADING_UNIT_DIR="$s7/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s7/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=7777777777777777777777777777777777777777
+  HEALTH_CHECK_ATTEMPTS=1
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG HEALTH_CHECK_ATTEMPTS
+  install_fake_systemctl "$s7" 0 0
+  # shellcheck disable=SC2329
+  runuser() {
+    echo "fake runuser $*" >>"$APP_DIR/runuser.log"
+    # Drop "-u <user> --" and run the rest (curl) for real, against the
+    # fake below -- never a real socket/identity.
+    shift 3
+    "$@"
+  }
+  export -f runuser
+  # shellcheck disable=SC2329
+  curl() {
+    echo "fake curl $*" >>"$APP_DIR/curl.log"
+    return 0
+  }
+  export -f curl
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" ps -q "*)
+            echo fakecontainerid
+            return 0
+            ;;
+          *" exec -T web "*) return 0 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      inspect)
+        case "$3" in
+          *State.Status*) echo running ;;
+          *) echo healthy ;;
+        esac
+        return 0
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$DEPLOY_SH" >"$s7/stdout.log" 2>"$s7/stderr.log"
+) || status7=$?
+if [[ "$status7" != 0 ]]; then
+  fail "case7: expected exit 0 (real health-check.sh should pass via fakes), got $status7: $(cat "$s7/stdout.log" "$s7/stderr.log" 2>/dev/null)"
+else
+  ps_calls="$(grep -o ' ps -q [a-z-]*' "$s7/app/docker.log" 2>/dev/null || true)"
+  echo "$ps_calls" | grep -qw ta-terminal && fail "case7: health-check.sh queried disabled ta-terminal -- it must only check the selected (On) services: $ps_calls"
+  echo "$ps_calls" | grep -qw ta-research && fail "case7: health-check.sh queried disabled ta-research: $ps_calls"
+  echo "$ps_calls" | grep -qw ahf-terminal || fail "case7: health-check.sh never queried enabled ahf-terminal: $ps_calls"
+  grep -q 'fake systemctl is-active.*ai-trading-control.service' "$s7/systemctl.log" 2>/dev/null || fail "case7: expected control_helper_ready() to check systemctl is-active: $(cat "$s7/systemctl.log" 2>/dev/null)"
+  grep -q 'fake runuser' "$s7/app/runuser.log" 2>/dev/null || fail "case7: expected control_helper_ready() to drop privileges via runuser"
+  grep -q 'fake curl' "$s7/app/curl.log" 2>/dev/null || fail "case7: expected control_helper_ready() to curl the control socket"
+fi
+echo "    exit=$status7"
 
 echo
 cleanup
@@ -347,10 +616,10 @@ fi
 SHELL_FAILURES="$FAIL_COUNT"
 
 # =======================================================================
-# Linux installer suite: real Linux userland inside a disposable container,
-# every Linux-specific external command (id/getent/useradd/groupadd/
-# systemctl/systemd-analyze/docker) faked via a PATH-prepended fixture bin
-# directory. Skipped (not failed) when Docker is unavailable.
+# Linux installer (bootstrap) suite: real Linux userland inside a
+# disposable container, every Linux-specific external command
+# (id/getent/useradd/groupadd/systemctl/docker) faked via a PATH-prepended
+# fixture bin directory. Skipped (not failed) when Docker is unavailable.
 # =======================================================================
 INSTALL_FAIL_COUNT=0
 INSTALL_CASE_COUNT=0
@@ -412,11 +681,6 @@ EOF
 #!/bin/bash
 echo "systemctl $*" >> /fake-state/calls.log
 EOF
-  cat >"$IROOT/bin/systemd-analyze" <<'EOF'
-#!/bin/bash
-echo "systemd-analyze $*" >> /fake-state/calls.log
-exit 0
-EOF
   cat >"$IROOT/bin/docker" <<'EOF'
 #!/bin/bash
 [[ "$1" == info ]] && { echo '[{"Name":"seccomp"}]'; exit 0; }
@@ -435,25 +699,46 @@ EOF
       bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app
   }
 
-  echo "=== Install Case 1 (GREEN): fresh install on a genuinely empty host -- group/user created, no Docker group membership, unit installed and started ==="
+  echo "=== Install Case 1 (GREEN, task-5-review fix round 1 Critical #1): fresh bootstrap on a genuinely empty host -- group/user created, no Docker group membership -- and it NEVER installs/activates the control code or systemd unit (that is deploy.sh's own job now, so install.sh's backup-free run can never race deploy.sh's backup) ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   rm -f "$IROOT/fake-state/calls.log" "$IROOT/fake-state/user-exists" "$IROOT/fake-state/group-exists"
   out1="$(run_install 2>&1)" && rc1=0 || rc1=$?
   if [[ "$rc1" != 0 ]]; then
     install_fail "install1: expected exit 0: $out1"
   else
-    echo "$out1" | grep -q 'installed and active' || install_fail "install1: missing success message: $out1"
+    echo "$out1" | grep -q 'bootstrap complete' || install_fail "install1: missing success message: $out1"
     grep -q '^groupadd --gid 22001 ai-trading-gateway$' "$IROOT/fake-state/calls.log" || install_fail "install1: expected groupadd call"
     grep -q 'useradd --uid 22001 --gid 22001 --no-create-home --shell /usr/sbin/nologin --system ai-trading-gateway' "$IROOT/fake-state/calls.log" || install_fail "install1: expected useradd call without any -G docker"
     grep -q -- '-G docker' "$IROOT/fake-state/calls.log" && install_fail "install1: must never add the gateway user to the docker group"
-    grep -q 'systemctl enable ai-trading-control.service' "$IROOT/fake-state/calls.log" || install_fail "install1: expected systemctl enable"
-    grep -q 'systemctl restart ai-trading-control.service' "$IROOT/fake-state/calls.log" || install_fail "install1: expected systemctl restart"
+    grep -q 'systemctl' "$IROOT/fake-state/calls.log" && install_fail "install1: install.sh must never call systemctl at all -- that is deploy.sh's own job (task-5-review fix round 1, Critical #1)"
   fi
   echo "    exit=$rc1"
 
-  echo "=== Install Case 2 (GREEN): idempotent re-run never resets an existing, valid preference file ==="
+  echo "=== Install Case 2 (GREEN, task-5-review fix round 1 Critical #1): install.sh NEVER touches \$APP_DIR/control or any unit path -- a pre-existing, genuinely-prior version of both is left byte-for-byte untouched ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   out2="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    python:3.12-slim bash -c '
+set -e
+mkdir -p /opt/family-app/ai-trading/control /etc/systemd/system
+echo "OLD-PRIOR-CONTROL-CODE-MARKER" > /opt/family-app/ai-trading/control/state.py
+echo "OLD-PRIOR-UNIT-MARKER" > /etc/systemd/system/ai-trading-control.service
+bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app
+cat /opt/family-app/ai-trading/control/state.py
+cat /etc/systemd/system/ai-trading-control.service
+' 2>&1)" && rc2=0 || rc2=$?
+  if [[ "$rc2" != 0 ]]; then
+    install_fail "install2: expected exit 0: $out2"
+  else
+    echo "$out2" | grep -q 'OLD-PRIOR-CONTROL-CODE-MARKER' || install_fail "install2: install.sh must never overwrite the genuinely prior \$APP_DIR/control/state.py: $out2"
+    echo "$out2" | grep -q 'OLD-PRIOR-UNIT-MARKER' || install_fail "install2: install.sh must never overwrite the genuinely prior unit file: $out2"
+  fi
+  echo "    exit=$rc2"
+
+  echo "=== Install Case 3 (GREEN): idempotent re-run never resets an existing, valid preference file ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  out3="$(docker run --rm \
     -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
     -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     python:3.12-slim bash -c '
@@ -466,59 +751,38 @@ EOF2
 chmod 600 /var/lib/family-app/ai-trading/control.json
 bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app
 cat /var/lib/family-app/ai-trading/control.json
-' 2>&1)" && rc2=0 || rc2=$?
-  if [[ "$rc2" != 0 ]]; then
-    install_fail "install2: expected exit 0: $out2"
+' 2>&1)" && rc3=0 || rc3=$?
+  if [[ "$rc3" != 0 ]]; then
+    install_fail "install3: expected exit 0: $out3"
   else
-    echo "$out2" | grep -q '"revision":7' || install_fail "install2: pre-existing preferences were not preserved: $out2"
-    echo "$out2" | grep -q '"mirofish":true' || install_fail "install2: pre-existing MiroFish preference was not preserved: $out2"
+    echo "$out3" | grep -q '"revision":7' || install_fail "install3: pre-existing preferences were not preserved: $out3"
+    echo "$out3" | grep -q '"mirofish":true' || install_fail "install3: pre-existing MiroFish preference was not preserved: $out3"
   fi
-  echo "    exit=$rc2"
+  echo "    exit=$rc3"
 
-  echo "=== Install Case 3 (RED): occupied UID 22001 under a different name is rejected before any install/restart ==="
+  echo "=== Install Case 4 (RED): occupied UID 22001 under a different name is rejected before any mutation ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
-  mkdir -p "$IROOT/override3"
-  cat >"$IROOT/override3/getent" <<'EOF'
+  mkdir -p "$IROOT/override4"
+  cat >"$IROOT/override4/getent" <<'EOF'
 #!/bin/bash
 [[ "$1" == passwd && "$2" == 22001 ]] && { echo "someoneelse:x:22001:22001::/x:/bin/sh"; exit 0; }
 exit 2
 EOF
-  chmod +x "$IROOT/override3/getent"
-  out3="$(run_install "$IROOT/src" "/override3-placeholder" 2>&1)" && rc3=0 || rc3=$?
-  # Re-run with the override actually first on PATH (docker run's -e PATH
-  # above needs the override baked in, not a placeholder) -- simplest is a
-  # dedicated container invocation mirroring run_install with one more -v.
-  out3="$(docker run --rm \
-    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override3:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
-    -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    python:3.12-slim bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app 2>&1)" && rc3=0 || rc3=$?
-  [[ "$rc3" != 0 ]] || install_fail "install3: expected non-zero exit for an occupied UID, got 0"
-  echo "$out3" | grep -q "already in use by 'someoneelse'" || install_fail "install3: expected the occupied-UID message: $out3"
-  echo "    exit=$rc3"
-
-  echo "=== Install Case 4 (RED): rootless Docker is rejected ==="
-  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
-  mkdir -p "$IROOT/override4"
-  cat >"$IROOT/override4/docker" <<'EOF'
-#!/bin/bash
-[[ "$1" == info ]] && { echo '[{"Name":"name=rootless"}]'; exit 0; }
-exit 0
-EOF
-  chmod +x "$IROOT/override4/docker"
+  chmod +x "$IROOT/override4/getent"
   out4="$(docker run --rm \
     -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override4:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
     -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     python:3.12-slim bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app 2>&1)" && rc4=0 || rc4=$?
-  [[ "$rc4" != 0 ]] || install_fail "install4: expected non-zero exit for rootless Docker, got 0"
-  echo "$out4" | grep -q 'rootless Docker is not supported' || install_fail "install4: expected the rootless-Docker message: $out4"
+  [[ "$rc4" != 0 ]] || install_fail "install4: expected non-zero exit for an occupied UID, got 0"
+  echo "$out4" | grep -q "already in use by 'someoneelse'" || install_fail "install4: expected the occupied-UID message: $out4"
   echo "    exit=$rc4"
 
-  echo "=== Install Case 5 (RED): Docker userns-remap is rejected ==="
+  echo "=== Install Case 5 (RED): rootless Docker is rejected ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   mkdir -p "$IROOT/override5"
   cat >"$IROOT/override5/docker" <<'EOF'
 #!/bin/bash
-[[ "$1" == info ]] && { echo '[{"Name":"name=userns"}]'; exit 0; }
+[[ "$1" == info ]] && { echo '[{"Name":"name=rootless"}]'; exit 0; }
 exit 0
 EOF
   chmod +x "$IROOT/override5/docker"
@@ -526,81 +790,126 @@ EOF
     -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override5:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
     -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     python:3.12-slim bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app 2>&1)" && rc5=0 || rc5=$?
-  [[ "$rc5" != 0 ]] || install_fail "install5: expected non-zero exit for Docker userns-remap, got 0"
-  echo "$out5" | grep -q 'userns-remap is not supported' || install_fail "install5: expected the userns-remap message: $out5"
+  [[ "$rc5" != 0 ]] || install_fail "install5: expected non-zero exit for rootless Docker, got 0"
+  echo "$out5" | grep -q 'rootless Docker is not supported' || install_fail "install5: expected the rootless-Docker message: $out5"
   echo "    exit=$rc5"
 
-  echo "=== Install Case 6 (RED): a symlinked state directory is refused ==="
+  echo "=== Install Case 6 (RED): Docker userns-remap is rejected ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  mkdir -p "$IROOT/override6"
+  cat >"$IROOT/override6/docker" <<'EOF'
+#!/bin/bash
+[[ "$1" == info ]] && { echo '[{"Name":"name=userns"}]'; exit 0; }
+exit 0
+EOF
+  chmod +x "$IROOT/override6/docker"
   out6="$(docker run --rm \
-    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
-    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    python:3.12-slim bash -c 'mkdir -p /var/lib/family-app && ln -s /tmp /var/lib/family-app/ai-trading && bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app' 2>&1)" && rc6=0 || rc6=$?
-  [[ "$rc6" != 0 ]] || install_fail "install6: expected non-zero exit for a symlinked state directory, got 0"
-  echo "$out6" | grep -q 'must not be a symlink' || install_fail "install6: expected the symlink-rejection message: $out6"
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override6:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    python:3.12-slim bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app 2>&1)" && rc6=0 || rc6=$?
+  [[ "$rc6" != 0 ]] || install_fail "install6: expected non-zero exit for Docker userns-remap, got 0"
+  echo "$out6" | grep -q 'userns-remap is not supported' || install_fail "install6: expected the userns-remap message: $out6"
   echo "    exit=$rc6"
 
-  echo "=== Install Case 7 (RED): a symlinked socket directory is refused ==="
+  echo "=== Install Case 7 (RED): a symlinked state directory is refused ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   out7="$(docker run --rm \
     -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
     -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    python:3.12-slim bash -c 'mkdir -p /run/family-app && ln -s /tmp /run/family-app/ai-trading-control && bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app' 2>&1)" && rc7=0 || rc7=$?
-  [[ "$rc7" != 0 ]] || install_fail "install7: expected non-zero exit for a symlinked socket directory, got 0"
+    python:3.12-slim bash -c 'mkdir -p /var/lib/family-app && ln -s /tmp /var/lib/family-app/ai-trading && bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app' 2>&1)" && rc7=0 || rc7=$?
+  [[ "$rc7" != 0 ]] || install_fail "install7: expected non-zero exit for a symlinked state directory, got 0"
   echo "$out7" | grep -q 'must not be a symlink' || install_fail "install7: expected the symlink-rejection message: $out7"
   echo "    exit=$rc7"
 
-  echo "=== Install Case 8 (RED): incomplete staged artifacts are rejected before any install/restart ==="
+  echo "=== Install Case 8 (RED): a symlinked socket directory is refused ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  out8="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    python:3.12-slim bash -c 'mkdir -p /run/family-app && ln -s /tmp /run/family-app/ai-trading-control && bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app' 2>&1)" && rc8=0 || rc8=$?
+  [[ "$rc8" != 0 ]] || install_fail "install8: expected non-zero exit for a symlinked socket directory, got 0"
+  echo "$out8" | grep -q 'must not be a symlink' || install_fail "install8: expected the symlink-rejection message: $out8"
+  echo "    exit=$rc8"
+
+  echo "=== Install Case 9 (RED): incomplete staged source (missing catalog.json/state.py) is rejected before any mutation ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   mkdir -p "$IROOT/incomplete-src/ai-trading/control"
   cp "$INSTALL_SH" "$IROOT/incomplete-src/install.sh"
-  out8="$(run_install "$IROOT/incomplete-src" 2>&1)" && rc8=0 || rc8=$?
-  [[ "$rc8" != 0 ]] || install_fail "install8: expected non-zero exit for incomplete artifacts, got 0"
-  echo "$out8" | grep -q 'missing or non-regular required source file' || install_fail "install8: expected the incomplete-artifacts message: $out8"
-  echo "    exit=$rc8"
-
-  echo "=== Install Case 9 (GREEN): a genuinely fresh host (no docker-compose.yml) adopts the fresh-host defaults -- three standard apps on, MiroFish off ==="
-  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
-  rm -f "$IROOT/fake-state/calls.log" "$IROOT/fake-state/user-exists" "$IROOT/fake-state/group-exists"
-  out9="$(docker run --rm \
-    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
-    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    python:3.12-slim bash -c 'bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app && cat /var/lib/family-app/ai-trading/control.json' 2>&1)" && rc9=0 || rc9=$?
-  if [[ "$rc9" != 0 ]]; then
-    install_fail "install9: expected exit 0: $out9"
-  else
-    echo "$out9" | grep -q '"tradingagents":true' || install_fail "install9: expected tradingagents on by default: $out9"
-    echo "$out9" | grep -q '"mirofish":false' || install_fail "install9: expected mirofish off by default: $out9"
-  fi
+  out9="$(run_install "$IROOT/incomplete-src" 2>&1)" && rc9=0 || rc9=$?
+  [[ "$rc9" != 0 ]] || install_fail "install9: expected non-zero exit for incomplete artifacts, got 0"
+  echo "$out9" | grep -q 'missing or non-regular required source file' || install_fail "install9: expected the incomplete-artifacts message: $out9"
   echo "    exit=$rc9"
 
-  echo "=== Install Case 10 (GREEN): an existing stack adopts ANY actually running app, including MiroFish, instead of the fresh-host defaults ==="
+  echo "=== Install Case 10 (GREEN): a genuinely fresh host (no docker-compose.yml) adopts the fresh-host defaults -- three standard apps on, MiroFish off ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
-  mkdir -p "$IROOT/override10"
-  cat >"$IROOT/override10/docker" <<'EOF'
+  rm -f "$IROOT/fake-state/calls.log" "$IROOT/fake-state/user-exists" "$IROOT/fake-state/group-exists"
+  out10="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    python:3.12-slim bash -c 'bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app && cat /var/lib/family-app/ai-trading/control.json' 2>&1)" && rc10=0 || rc10=$?
+  if [[ "$rc10" != 0 ]]; then
+    install_fail "install10: expected exit 0: $out10"
+  else
+    echo "$out10" | grep -q '"tradingagents":true' || install_fail "install10: expected tradingagents on by default: $out10"
+    echo "$out10" | grep -q '"mirofish":false' || install_fail "install10: expected mirofish off by default: $out10"
+  fi
+  echo "    exit=$rc10"
+
+  echo "=== Install Case 11 (GREEN): an existing stack adopts ANY actually running app, including MiroFish, instead of the fresh-host defaults ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  mkdir -p "$IROOT/override11"
+  cat >"$IROOT/override11/docker" <<'EOF'
 #!/bin/bash
 if [[ "$1" == info ]]; then echo '[{"Name":"seccomp"}]'; exit 0; fi
 if [[ "$1" == ps ]]; then printf 'mirofish\nvibe-trading\n'; exit 0; fi
 exit 0
 EOF
-  chmod +x "$IROOT/override10/docker"
-  out10="$(docker run --rm \
-    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override10:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+  chmod +x "$IROOT/override11/docker"
+  out11="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override11:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
     -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     python:3.12-slim bash -c '
 install -d /opt/family-app/ai-trading
 touch /opt/family-app/ai-trading/docker-compose.yml
 bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app
 cat /var/lib/family-app/ai-trading/control.json
-' 2>&1)" && rc10=0 || rc10=$?
-  if [[ "$rc10" != 0 ]]; then
-    install_fail "install10: expected exit 0: $out10"
+' 2>&1)" && rc11=0 || rc11=$?
+  if [[ "$rc11" != 0 ]]; then
+    install_fail "install11: expected exit 0: $out11"
   else
-    echo "$out10" | grep -q '"mirofish":true' || install_fail "install10: expected MiroFish adopted as on (actually running): $out10"
-    echo "$out10" | grep -q '"vibe-trading":true' || install_fail "install10: expected vibe-trading adopted as on: $out10"
-    echo "$out10" | grep -q '"tradingagents":false' || install_fail "install10: expected tradingagents adopted as off (not running): $out10"
+    echo "$out11" | grep -q '"mirofish":true' || install_fail "install11: expected MiroFish adopted as on (actually running): $out11"
+    echo "$out11" | grep -q '"vibe-trading":true' || install_fail "install11: expected vibe-trading adopted as on: $out11"
+    echo "$out11" | grep -q '"tradingagents":false' || install_fail "install11: expected tradingagents adopted as off (not running): $out11"
   fi
-  echo "    exit=$rc10"
+  echo "    exit=$rc11"
+
+  echo "=== Install Case 12 (GREEN, real systemd-analyze, task-5-review minor ledger): a genuinely valid unit file passes the REAL systemd-analyze verify binary (no PID 1 needed -- static analysis only), run against deploy.sh's own stage_unit() validation path ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  if docker run --rm debian:12-slim bash -c 'command -v apt-get' >/dev/null 2>&1; then
+    out12="$(docker run --rm -v "$UNIT_FILE:/unit/ai-trading-control.service:ro" debian:12-slim bash -c '
+set -e
+apt-get update -qq >/dev/null 2>&1
+apt-get install -y -qq systemd python3 >/dev/null 2>&1
+mkdir -p /opt/family-app/ai-trading/control
+touch /opt/family-app/ai-trading/control/server.py
+cat >/etc/systemd/system/docker.service <<EOF2
+[Unit]
+Description=dummy docker for verify
+[Service]
+ExecStart=/usr/bin/true
+EOF2
+systemd-analyze verify /unit/ai-trading-control.service
+echo VERIFY_OK
+' 2>&1)" && rc12=0 || rc12=$?
+    if [[ "$rc12" != 0 ]]; then
+      install_fail "install12: real systemd-analyze verify failed against the actual production unit: $out12"
+    else
+      echo "$out12" | grep -q VERIFY_OK || install_fail "install12: expected VERIFY_OK: $out12"
+    fi
+    echo "    exit=$rc12"
+  else
+    echo "    SKIP: debian:12-slim/apt-get unavailable -- real systemd-analyze probe not run"
+  fi
 
   echo
   if [[ "$INSTALL_FAIL_COUNT" -eq 0 ]]; then

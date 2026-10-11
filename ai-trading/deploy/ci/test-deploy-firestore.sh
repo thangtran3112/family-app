@@ -232,6 +232,41 @@ stage_default_configs() {
   printf '#!/usr/bin/env bash\n# fixture stand-in, never executed by this transaction-level test.\n' >"$dir/deploy/production/mirofish-runtime.sh"
   printf '#!/usr/bin/env bash\n# fixture stand-in, never executed by this transaction-level test.\nexit 0\n' >"$dir/deploy/production/prepare-mirofish.sh"
   chmod 0755 "$dir/deploy/production/prepare-mirofish.sh"
+  # Task 5 (app-controls, fix round 1): deploy.sh's own stage_unit() now
+  # owns this file -- minimal but genuinely valid (passes a REAL
+  # `systemd-analyze verify` where available, e.g. GitHub's ubuntu-latest
+  # runner; no Requires=/ExecStart path this fixture doesn't also satisfy).
+  cat >"$dir/ai-trading-control.service" <<'EOF'
+[Unit]
+Description=fixture unit, not real production content
+[Service]
+Type=simple
+ExecStart=/bin/true
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+# install_fake_systemctl BASE: a systemctl() shim logging every call to
+# $BASE/systemctl.log, reporting "not active"/"not enabled" (so
+# stage_unit's own prior-state capture always sees a genuinely first
+# activation by default) and success otherwise -- exported so a child
+# `bash "$DEPLOY_SH"` process inherits it. Real systemctl is NEVER invoked
+# by these tests (root/systemd changes stay offline-fake only).
+# shellcheck disable=SC2329
+install_fake_systemctl() {
+  local base="$1"
+  # shellcheck disable=SC2317
+  systemctl() {
+    echo "fake systemctl $*" >>"$FAKE_SYSTEMCTL_LOG_BASE/systemctl.log"
+    case "${1:-}" in
+      is-active | is-enabled) return 1 ;;
+      *) return 0 ;;
+    esac
+  }
+  export -f systemctl
+  FAKE_SYSTEMCTL_LOG_BASE="$base"
+  export FAKE_SYSTEMCTL_LOG_BASE
 }
 
 # seed_control_state DIR: a valid, already-"adopted" control.json + lock
@@ -258,7 +293,7 @@ EOF
 # AI_TRADING_STATE_DIR at it -- harmless for every other scenario).
 new_scratch() {
   local name="$1" base="$TEST_ROOT/$1"
-  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging" "$base/config-staging"
+  mkdir -p "$base/app" "$base/secrets" "$base/ci-staging" "$base/config-staging" "$base/unit-dir"
   fake_family_config "$base/app/family_config.py"
   stage_default_configs "$base/config-staging"
   seed_control_state "$base/control-state"
@@ -557,10 +592,11 @@ status9=0
   ENV_STAGING_DIR="$s9/ci-staging"
   APP_CONFIG_STAGING_DIR="$s9/config-staging"
   AI_TRADING_STATE_DIR="$s9/control-state"
+  AI_TRADING_UNIT_DIR="$s9/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s9/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=1111111111111111111111111111111111111111
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
   # Fake docker: deploy.sh only ever shells out to `docker compose ...`; no
   # real Docker daemon is contacted anywhere in this case. An exported bash
@@ -586,6 +622,7 @@ status9=0
     command docker "$@"
   }
   export -f docker
+  install_fake_systemctl "$s9"
 
   # Fake stat: deploy.sh's post-stage check asks for owner:mode as a GNU
   # `stat -c '%u:%a'` string, which does not exist on this BSD/macOS test
@@ -1145,11 +1182,12 @@ status27=0
   APP_CONFIG_STAGING_DIR="$s27/config-staging"
   AI_TRADING_RUNTIME_ENV_DIR="$s27/runtime"
   AI_TRADING_STATE_DIR="$s27/control-state"
+  AI_TRADING_UNIT_DIR="$s27/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s27/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=3333333333333333333333333333333333333333
   MIROFISH_ACTIVATE=1
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG MIROFISH_ACTIVATE
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG MIROFISH_ACTIVATE
 
   # Fake docker: deploy.sh/health-check.sh only ever shell out to `docker
   # compose ...` plus mirofish_container_ids' real-evidence `docker ps
@@ -1175,6 +1213,7 @@ status27=0
     esac
   }
   export -f docker
+  install_fake_systemctl "$s27"
 
   # Fake stat: same BSD/macOS-vs-GNU shim Case 9 already documents and uses.
   # shellcheck disable=SC2329
@@ -1333,10 +1372,11 @@ status30=0
   APP_CONFIG_STAGING_DIR="$s30/config-staging"
   AI_TRADING_RUNTIME_ENV_DIR="$s30/runtime"
   AI_TRADING_STATE_DIR="$s30/control-state"
+  AI_TRADING_UNIT_DIR="$s30/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s30/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=4444444444444444444444444444444444444444
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
   # Fake docker: every call is logged; mirofish_container_ids' real-evidence
   # `ps -aq --filter` query always reports an owned container, and
@@ -1367,6 +1407,7 @@ status30=0
     esac
   }
   export -f docker
+  install_fake_systemctl "$s30"
 
   bash "$DEPLOY_SH" >"$s30/stdout.log" 2>"$s30/stderr.log"
 ) || status30=$?
@@ -1520,12 +1561,13 @@ status33=0
   ENV_STAGING_DIR="$s33/ci-staging"
   APP_CONFIG_STAGING_DIR="$s33/config-staging"
   AI_TRADING_STATE_DIR="$s33/control-state"
+  AI_TRADING_UNIT_DIR="$s33/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s33/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=$new33
   AI_TRADING_REGISTRY=$reg33
   FAKE_RMI_FAIL_TAG=$busy33
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_REGISTRY FAKE_RMI_FAIL_TAG
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_REGISTRY FAKE_RMI_FAIL_TAG
 
   # shellcheck disable=SC2329
   docker() {
@@ -1551,6 +1593,7 @@ status33=0
   # shellcheck disable=SC2329
   stat() { fake_stat "$@"; }
   export -f stat
+  install_fake_systemctl "$s33"
 
   bash "$DEPLOY_SH" >"$s33/stdout.log" 2>"$s33/stderr.log"
 ) || status33=$?
@@ -1585,12 +1628,13 @@ status34=0
   ENV_STAGING_DIR="$s34/ci-staging"
   APP_CONFIG_STAGING_DIR="$s34/config-staging"
   AI_TRADING_STATE_DIR="$s34/control-state"
+  AI_TRADING_UNIT_DIR="$s34/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s34/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=9999999999999999999999999999999999999999
   AI_TRADING_MIN_FREE_GB=999999
   AI_TRADING_DOCKER_DATA_DIR="$s34/app"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
 
   # shellcheck disable=SC2329
   docker() {
@@ -1601,6 +1645,7 @@ status34=0
     command docker "$@"
   }
   export -f docker
+  install_fake_systemctl "$s34"
 
   bash "$DEPLOY_SH" >"$s34/stdout.log" 2>"$s34/stderr.log"
 ) || status34=$?
@@ -1631,11 +1676,12 @@ status35=0
   ENV_STAGING_DIR="$s35/ci-staging"
   APP_CONFIG_STAGING_DIR="$s35/config-staging"
   AI_TRADING_STATE_DIR="$s35/control-state"
+  AI_TRADING_UNIT_DIR="$s35/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s35/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=9999999999999999999999999999999999999999
   AI_TRADING_DOCKER_DATA_DIR="$s35/does-not-exist"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_DOCKER_DATA_DIR
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_DOCKER_DATA_DIR
 
   # shellcheck disable=SC2329
   docker() {
@@ -1646,6 +1692,7 @@ status35=0
     command docker "$@"
   }
   export -f docker
+  install_fake_systemctl "$s35"
 
   bash "$DEPLOY_SH" >"$s35/stdout.log" 2>"$s35/stderr.log"
 ) || status35=$?
@@ -1988,12 +2035,13 @@ status47=0
   ENV_STAGING_DIR="$s47/ci-staging"
   APP_CONFIG_STAGING_DIR="$s47/config-staging"
   AI_TRADING_STATE_DIR="$s47/control-state"
+  AI_TRADING_UNIT_DIR="$s47/unit-dir"
   FAMILY_CONFIG_CREDENTIALS="$s47/fake-reader-key.json"
   DEPLOY_SH_SKIP_CHOWN=1
   IMAGE_TAG=9999999999999999999999999999999999999999
   AI_TRADING_MIN_FREE_GB=999999
   AI_TRADING_DOCKER_DATA_DIR="$s47/app"
-  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG AI_TRADING_MIN_FREE_GB AI_TRADING_DOCKER_DATA_DIR
   # shellcheck disable=SC2329
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
@@ -2003,6 +2051,7 @@ status47=0
     command docker "$@"
   }
   export -f docker
+  install_fake_systemctl "$s47"
   bash "$DEPLOY_SH" >"$s47/stdout.log" 2>"$s47/stderr.log"
 ) || status47=$?
 if [[ "$status47" == 0 ]]; then
