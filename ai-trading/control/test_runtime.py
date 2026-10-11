@@ -1,5 +1,6 @@
 import fcntl
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -534,6 +535,7 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         ):
             directory.mkdir(parents=True)
         self.docker_log = root / "docker.log"
+        self.docker_env_log = root / "docker-env.log"
         self.mirofish_env = self.runtime_dir / "mirofish.env"
         self.write_image_metadata()
         self.write_fake_family_config(succeed=True)
@@ -568,12 +570,26 @@ class PrepareMirofishScriptTest(unittest.TestCase):
 
     def write_fake_docker(self):
         # Never the real Docker socket: a plain PATH shim, logging every
-        # call to $DOCKER_LOG so a test can assert exactly which compose
-        # subcommands ran (and which never did).
+        # call to the (literal, baked-in -- compose()'s own sanitized
+        # `env -i` never passes a test's private $DOCKER_LOG/$DOCKER_ENV_LOG
+        # through, by design) log paths so a test can assert exactly which
+        # compose subcommands ran (and which never did). Also snapshots the
+        # handful of environment variables concern (2) requires stay fixed
+        # (DOCKER_HOST/DOCKER_CONTEXT) or absent (COMPOSE_PROFILES/
+        # COMPOSE_FILE/HTTP_PROXY) regardless of whatever this PROCESS's own
+        # ambient environment held when the script was invoked -- that
+        # snapshot is `compose()`'s actual `env -i ...` argument, not this
+        # test's own environment.
         path = self.bin_dir / "docker"
+        docker_log = str(self.docker_log)
+        docker_env_log = str(self.docker_env_log)
         path.write_text(
             "#!/usr/bin/env bash\n"
-            'echo "fake docker $*" >> "$DOCKER_LOG"\n'
+            f'echo "fake docker $*" >> {shlex.quote(docker_log)}\n'
+            "printf 'DOCKER_HOST=%s\\nDOCKER_CONTEXT=%s\\nCOMPOSE_PROFILES=%s\\n"
+            "COMPOSE_FILE=%s\\nHTTP_PROXY=%s\\n' "
+            '"${DOCKER_HOST-<unset>}" "${DOCKER_CONTEXT-<unset>}" "${COMPOSE_PROFILES-<unset>}" '
+            f'"${{COMPOSE_FILE-<unset>}}" "${{HTTP_PROXY-<unset>}}" >> {shlex.quote(docker_env_log)}\n'
             'case "${1:-}" in compose) exit 0;; esac\n'
             "exit 0\n"
         )
@@ -588,10 +604,16 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         python_dir = str(Path(sys.executable).parent)
         env = {
             "PATH": f"{self.bin_dir}:{python_dir}:/usr/bin:/bin",
-            "DOCKER_LOG": str(self.docker_log),
             "FAMILY_CONFIG_CREDENTIALS": str(Path(self._tmp.name) / "fake-reader-key.json"),
             "DEPLOY_SH_SKIP_CHOWN": "1",
             "PREPARE_MIROFISH_LOCK_PATH": str(self.lock_path),
+            # compose()'s own sanitized `env -i PATH=...` must still be able
+            # to find this test's fake `docker` shim (never a real system
+            # directory) AND let that shim's own `#!/usr/bin/env bash`
+            # shebang resolve `bash` -- `env -i` replaces PATH for the whole
+            # subtree, including the fake docker script's own shebang
+            # lookup, not just the initial `docker` lookup.
+            "PREPARE_MIROFISH_DOCKER_PATH": f"{self.bin_dir}:/usr/local/bin:/usr/bin:/bin",
         }
         if env_overrides:
             env.update(env_overrides)
@@ -634,6 +656,21 @@ class PrepareMirofishScriptTest(unittest.TestCase):
 
     def test_bad_image_metadata_fails_before_touching_lock_or_files(self):
         self.write_image_metadata(tag="not-a-sha")
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("images.env", result.stderr)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertFalse(self.lock_path.exists())
+
+    def test_rejects_64_character_hex_tag_not_a_valid_40_char_sha(self):
+        # Review round 1, issue 1: the old SHA_RE made an extra 24 hex
+        # characters optional (`^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$`), so a
+        # 64-character value -- never a valid full commit SHA, and never
+        # what control/runtime.py's Runtime._deployed_env() (exactly
+        # `^[0-9a-fA-F]{40}$`) would accept -- slipped through here. A
+        # direct standalone invocation must reject anything that validator
+        # would reject, never accept a longer value it never would.
+        self.write_image_metadata(tag="a" * 64)
         result = self.run_script()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("images.env", result.stderr)
@@ -694,6 +731,75 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         self.assertNotIn("down", log)
         self.assertNotIn("fake-zep", result.stderr)
         self.assertNotIn("fake-llm", result.stderr)
+
+    # -- lock directory creation fails closed ----------------------------------
+
+    def test_lock_parent_directory_failure_fails_closed_before_any_action(self):
+        # Review round 1, issue 3: a failure to create/validate the lock
+        # directory used to be swallowed with `|| true`, letting the script
+        # fall through to `exec {fd}>"$LOCK_PATH"` and fail there instead
+        # with a confusing redirect error -- or, worse, succeed against some
+        # other pre-existing directory. Block the lock path's own parent
+        # with a plain FILE (not a directory) so `install -d` must fail for
+        # real, and assert this happens BEFORE any lock is opened/acquired
+        # and before any activation is even attempted.
+        blocker = Path(self._tmp.name) / "blocker-not-a-directory"
+        blocker.write_text("not a directory\n")
+        hostile_lock_path = blocker / "sub" / ".control.lock"
+        result = self.run_script(env_overrides={"PREPARE_MIROFISH_LOCK_PATH": str(hostile_lock_path)})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot create or validate the lifecycle lock directory", result.stderr)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertFalse(hostile_lock_path.exists())
+        # The blocker file itself must be left exactly as it was -- this is
+        # a fail-closed rejection, never an attempt to "fix" the obstruction.
+        self.assertEqual(blocker.read_text(), "not a directory\n")
+
+    # -- sanitized Docker environment ------------------------------------------
+
+    def test_compose_invocation_sanitizes_hostile_ambient_docker_environment(self):
+        # Review round 1, issue 2: compose() used to only ever PREPEND its
+        # own variables onto whatever environment this process inherited --
+        # a direct root-operator invocation could silently honor a hostile
+        # or merely stale DOCKER_HOST (pointed at a remote daemon/context),
+        # COMPOSE_PROFILES/COMPOSE_FILE (overriding which services/files
+        # Compose resolves), or a proxy affecting registry/image resolution.
+        # Simulates exactly that: these hostile values sit in the SCRIPT's
+        # own process environment (as if set in a root operator's shell),
+        # and must never reach the fake `docker` compose() actually invokes
+        # -- verified by the fake docker's own env-log, not by this test's
+        # assumptions about what `env -i` does.
+        failing_rm = self.bin_dir / "rm"
+        failing_rm.write_text(
+            "#!/usr/bin/env bash\n"
+            'for arg in "$@"; do\n'
+            '  case "$arg" in\n'
+            "    *.mirofish-render-*) echo \"rm: $arg: Permission denied (simulated)\" >&2; exit 1 ;;\n"
+            "  esac\n"
+            "done\n"
+            'exec /bin/rm "$@"\n'
+        )
+        failing_rm.chmod(0o755)
+        fd = self.acquire_real_lock()
+        result = self.run_script(
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,),
+            env_overrides={
+                "DOCKER_HOST": "ssh://attacker@remote-host",
+                "COMPOSE_PROFILES": "every-profile",
+                "COMPOSE_FILE": "/tmp/hostile-compose.yml",
+                "HTTP_PROXY": "http://attacker.invalid:8080",
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("post-install cleanup failed", result.stderr)
+        self.assertTrue(self.docker_env_log.exists(), "compose() must have actually been invoked")
+        snapshot = self.docker_env_log.read_text()
+        self.assertIn("DOCKER_HOST=unix:///var/run/docker.sock", snapshot)
+        self.assertIn("DOCKER_CONTEXT=default", snapshot)
+        self.assertIn("COMPOSE_PROFILES=<unset>", snapshot)
+        self.assertIn("COMPOSE_FILE=<unset>", snapshot)
+        self.assertIn("HTTP_PROXY=<unset>", snapshot)
+        self.assertNotIn("attacker", snapshot)
 
     # -- standalone busy lock --------------------------------------------------
 

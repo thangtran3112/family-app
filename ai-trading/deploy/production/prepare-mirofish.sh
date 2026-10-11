@@ -47,8 +47,26 @@ source "$SCRIPT_DIR/mirofish-runtime.sh"
 #                              test can exercise a real busy-lock timeout in
 #                              well under a second. Never set this in
 #                              production.
+#   PREPARE_MIROFISH_DOCKER_PATH test-only: overrides the fixed, minimal PATH
+#                              every sanitized Docker/Compose invocation below
+#                              uses, so an offline test's fake `docker` (never
+#                              a real Docker socket) can be found without
+#                              installing it into a real system directory.
+#                              Production default is the standard Debian/
+#                              Ubuntu package locations this rootful-Linux-
+#                              only target installs into. Never set this in
+#                              production.
 LOCK_PATH="${PREPARE_MIROFISH_LOCK_PATH:-/var/lib/family-app/ai-trading/.control.lock}"
 LOCK_WAIT_SECONDS="${PREPARE_MIROFISH_LOCK_WAIT_SECONDS:-30}"
+DOCKER_PATH="${PREPARE_MIROFISH_DOCKER_PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+# Fixed, local-rootful Docker target -- the design's own "Rootful Docker/
+# Linux/systemd only" contract. Explicit DOCKER_HOST/DOCKER_CONTEXT so a
+# root operator's own ambient environment, or a persisted `docker context
+# use` pointing elsewhere, can never silently redirect this script at a
+# remote daemon; never overridable (unlike the three knobs above, this is
+# not a path that needs to move for a test fixture -- every test here uses a
+# fake `docker` shim and never opens a real socket at all).
+DOCKER_SOCK="unix:///var/run/docker.sock"
 
 die() {
   echo "prepare-mirofish: $*" >&2
@@ -73,7 +91,12 @@ done
 [[ -z "$LOCK_FD" || "$LOCK_FD" =~ ^[0-9]+$ ]] || die "--lock-fd must be a nonnegative integer"
 
 IMAGES_ENV="$APP_DIR/images.env"
-SHA_RE='^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$'
+# Exactly 40 hex characters -- a full commit SHA, never deploy.sh's own more
+# tolerant SHA_RE (which also accepts a 64-char digest for its own,
+# unrelated purposes). control/runtime.py's Runtime._deployed_env() already
+# requires exactly 40; this standalone script must reject anything that
+# validator would, not accept a longer value it never would.
+SHA_RE='^[0-9a-fA-F]{40}$'
 
 # validate_deployed_image_metadata: the same fixed-format, root-owned,
 # plain-file checks control/runtime.py's own Runtime._deployed_env()
@@ -100,14 +123,30 @@ validate_deployed_image_metadata
 
 # compose(): fixed project/images-env/compose-file wrapper, scoped to this
 # invocation's own validated app_dir/secrets_dir/registry/tag -- never a
-# caller-supplied project, path, or image override.
+# caller-supplied project, path, or image override. Unlike deploy.sh's own
+# compose() (which only ever runs inside a controlled CI/VPS pipeline), this
+# script is explicitly documented as directly invocable by a root operator,
+# so it never merely prepends its own variables onto the inherited
+# environment -- a direct invocation could otherwise honor a hostile or
+# merely stale ambient DOCKER_HOST (or COMPOSE_PROFILES/COMPOSE_FILE
+# overriding which services/files Compose resolves, a proxy affecting
+# registry/image resolution, etc.). `env -i` clears ALL of that first; only
+# the fixed PATH/Docker target and this invocation's own validated
+# registry/tag/secrets-dir/runtime-dir/Caddyfile-hash are passed through --
+# never the caller's ambient environment, never a credential the separate
+# render path (activate_mirofish/family_config.py) already owns.
 compose() {
   local caddyfile_sha=unset
   [[ -f "$APP_DIR/Caddyfile" ]] && caddyfile_sha="$(sha256sum "$APP_DIR/Caddyfile")" && caddyfile_sha="${caddyfile_sha%% *}"
-  AI_TRADING_CADDYFILE_SHA256="$caddyfile_sha" \
-  AI_TRADING_REGISTRY="$AI_TRADING_REGISTRY" \
-  AI_TRADING_IMAGE_TAG="$AI_TRADING_IMAGE_TAG" \
-  AI_TRADING_SECRETS_DIR="$SECRETS_DIR" \
+  env -i \
+    PATH="$DOCKER_PATH" \
+    DOCKER_CONTEXT=default \
+    DOCKER_HOST="$DOCKER_SOCK" \
+    AI_TRADING_CADDYFILE_SHA256="$caddyfile_sha" \
+    AI_TRADING_REGISTRY="$AI_TRADING_REGISTRY" \
+    AI_TRADING_IMAGE_TAG="$AI_TRADING_IMAGE_TAG" \
+    AI_TRADING_SECRETS_DIR="$SECRETS_DIR" \
+    AI_TRADING_RUNTIME_ENV_DIR="$RUNTIME_ENV_DIR" \
     docker compose --project-name "$PROJECT" --env-file "$IMAGES_ENV" \
       -f "$APP_DIR/docker-compose.yml" -f "$APP_DIR/docker-compose.mirofish.yml" "$@"
 }
@@ -160,7 +199,10 @@ if [[ -n "$LOCK_FD" ]]; then
 else
   # Direct root-operator invocation: acquire the fixed lifecycle lock
   # ourselves, with a bounded wait -- never block the helper indefinitely.
-  install -d -m 0700 "$(dirname "$LOCK_PATH")" 2>/dev/null || true
+  # A failure to create/validate the lock directory must fail closed here,
+  # before any attempt to open or acquire the lock -- never swallowed with
+  # `|| true` into a later, harder-to-diagnose redirect error.
+  install -d -m 0700 "$(dirname "$LOCK_PATH")" || die "cannot create or validate the lifecycle lock directory $(dirname "$LOCK_PATH")"
   exec {ACQUIRED_LOCK_FD}>"$LOCK_PATH" || die "cannot open lifecycle lock $LOCK_PATH"
   flock -w "$LOCK_WAIT_SECONDS" "$ACQUIRED_LOCK_FD" || die "could not acquire the lifecycle lock within ${LOCK_WAIT_SECONDS}s; another operation is in progress"
   run_activation
