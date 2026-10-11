@@ -2,13 +2,15 @@
 
 HTTPX 0.28.1 ASGITransport + stdlib IsolatedAsyncioTestCase; the transport
 never triggers ASGI lifespan, so every test manually enters
-``app.router.lifespan_context(app)``. ``raise_app_exceptions=False`` lets the
-unexpected-storage-error test inspect the response Starlette's default error
-machinery sends before it re-raises (its own documented behavior), instead of
-the exception propagating out of the test client.
+``app.router.lifespan_context(app)``. Every client here uses the ASGITransport
+*default* (``raise_app_exceptions=True``): an unexpected exception must never
+propagate out of the app at all (``ta_web.app``'s outer guard sits outside
+Starlette's ``ServerErrorMiddleware`` and never re-raises), so disabling that
+default to hide the bug is never needed.
 """
 
 import contextlib
+import json
 import unittest
 import zipfile
 from datetime import UTC, date, datetime
@@ -49,7 +51,9 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
     @contextlib.asynccontextmanager
     async def _running(self, app):
         async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+            # Default raise_app_exceptions=True: proves the app itself never
+            # lets an exception escape, rather than hiding one via the transport.
+            transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
                 yield client
 
@@ -146,6 +150,51 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 422)
             self.assertEqual(response.json()["error"], "INVALID_JSON")
 
+    async def test_valid_json_wrong_media_type_rejected_before_admission(self):
+        app = self._app()
+        async with self._running(app) as client:
+            response = await client.post(
+                "/api/research",
+                headers={**self.owner_headers, "content-type": "text/plain"},
+                content=json.dumps(self.body).encode(),
+            )
+            self.assertEqual(response.status_code, 415)
+            self.assertEqual(response.json()["error"], "UNSUPPORTED_MEDIA_TYPE")
+            listing = await client.get("/api/research", headers=self.owner_headers)
+            self.assertEqual(listing.json()["items"], [])  # no run was admitted
+
+    async def test_missing_media_type_rejected(self):
+        app = self._app()
+        async with self._running(app) as client:
+            response = await client.post(
+                "/api/research", headers=self.owner_headers, content=json.dumps(self.body).encode()
+            )
+            self.assertEqual(response.status_code, 415)
+
+    async def test_valid_json_with_charset_media_type_succeeds(self):
+        app = self._app()
+        async with self._running(app) as client:
+            response = await client.post(
+                "/api/research",
+                headers={**self.owner_headers, "content-type": "application/json; charset=utf-8"},
+                content=json.dumps(self.body).encode(),
+            )
+            self.assertEqual(response.status_code, 202)
+
+    async def test_sharing_wrong_media_type_rejected_without_mutation(self):
+        app = self._app()
+        async with self._running(app) as client:
+            made = await client.post("/api/research", headers=self.owner_headers, json=self.body)
+            run_id = made.json()["id"]
+            response = await client.post(
+                f"/api/research/{run_id}/sharing",
+                headers={**self.owner_headers, "content-type": "text/plain"},
+                content=json.dumps({"enabled": True}).encode(),
+            )
+            self.assertEqual(response.status_code, 415)
+            detail = await client.get(f"/api/research/{run_id}", headers=self.owner_headers)
+            self.assertFalse(detail.json()["shared"])
+
     async def test_oversized_streamed_body_rejected_without_content_length(self):
         app = self._app()
 
@@ -153,7 +202,11 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             yield b'{"ticker": "' + b"A" * (17 * 1024) + b'"}'
 
         async with self._running(app) as client:
-            response = await client.post("/api/research", headers=self.owner_headers, content=oversized())
+            response = await client.post(
+                "/api/research",
+                headers={**self.owner_headers, "content-type": "application/json"},
+                content=oversized(),
+            )
             self.assertEqual(response.status_code, 413)
             self.assertEqual(response.json()["error"], "BODY_TOO_LARGE")
 
@@ -304,22 +357,36 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(denied.headers["cache-control"], "no-store")
             self.assertEqual(denied.headers["referrer-policy"], "no-referrer")
 
-    # --- unexpected storage error --------------------------------------------
+    # --- unexpected storage error never escapes the app -----------------------
 
-    async def test_unexpected_storage_error_sanitized(self):
+    async def test_unexpected_storage_error_never_escapes_or_leaks(self):
         app = self._app()
         async with self._running(app) as client:
             secret = "provider-secret-sentinel"
+            leak_path = "/home/appuser/.tradingagents"
 
             def boom(*args, **kwargs):
-                raise OSError(f"disk failure near /home/appuser/.tradingagents: {secret}")
+                raise OSError(f"disk failure near {leak_path}: {secret}")
 
             app.state.store.list_owned = boom
-            response = await client.get("/api/research", headers=self.owner_headers)
+
+            # Default ASGITransport (raise_app_exceptions=True): if the app let
+            # Starlette's documented re-raise through, this await would itself
+            # raise OSError here instead of returning a response.
+            with self.assertLogs("ta_web.app", level="ERROR") as captured:
+                response = await client.get("/api/research", headers=self.owner_headers)
+
             self.assertEqual(response.status_code, 500)
-            self.assertNotIn(secret, response.text)
-            self.assertNotIn("/home/appuser", response.text)
             self.assertEqual(response.json(), {"error": "INTERNAL_ERROR"})
+            self.assertNotIn(secret, response.text)
+            self.assertNotIn(leak_path, response.text)
+            # Something was logged (not silently swallowed), but never the
+            # original exception text/traceback.
+            for record in captured.records:
+                message = record.getMessage()
+                self.assertNotIn(secret, message)
+                self.assertNotIn(leak_path, message)
+                self.assertIsNone(record.exc_info)
 
     # --- lifespan: service lock / restart recovery --------------------------
 

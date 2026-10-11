@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import json
+import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -63,6 +64,8 @@ _SECURITY_HEADERS = {
     "content-security-policy": "frame-ancestors 'none'",
 }
 _SECURITY_HEADERS_RAW = [(k.encode("latin-1"), v.encode("latin-1")) for k, v in _SECURITY_HEADERS.items()]
+
+_logger = logging.getLogger("ta_web.app")
 
 
 class ApiError(Exception):
@@ -151,6 +154,54 @@ class Guard:
         await self.app(scope, receive, send_harden)
 
 
+class _OuterSanitizer:
+    """The true last line of defense, outside Starlette's ``ServerErrorMiddleware``.
+
+    ``ServerErrorMiddleware`` always re-raises the original exception after
+    sending its (already-sanitized) response — documented Starlette behavior,
+    meant so a real ASGI server can log it. That re-raise is exactly what
+    would otherwise put a raw, possibly secret-bearing exception into the
+    server's logs. This wraps the *entire* built middleware stack (including
+    ``ServerErrorMiddleware``) so nothing above this point ever sees the
+    original exception: it logs one fixed, sanitized line and stops the
+    propagation here, never via ``logger.exception``/``raise ... from exc``
+    (both would carry the original text/traceback into the log record).
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def _send(message):
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception:  # noqa: BLE001 - deliberate final backstop; never re-raised
+            if not response_started:
+                # Nothing below produced a response at all (should not happen,
+                # since the inner Exception handler already does) — still
+                # never let the original exception escape unanswered.
+                await _deny(send, 500, "INTERNAL_ERROR")
+            _logger.error(
+                "unhandled exception reached the outer guard for %s %s",
+                scope.get("method"),
+                scope.get("path"),
+            )
+            # Deliberately not re-raised and not passed to logger.exception:
+            # the original exception stops here, never reaching the ASGI
+            # server's own (unsanitized) exception logging.
+
+
 def _error(status: int, code: str, message: str | None = None) -> JSONResponse:
     payload: dict = {"error": code}
     if message:
@@ -194,8 +245,17 @@ _EXCEPTION_HANDLERS = {
 }
 
 
+def _check_json_media_type(request: Request) -> None:
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/json":
+        raise ApiError("UNSUPPORTED_MEDIA_TYPE", 415)
+
+
 async def _read_bounded_json(request: Request) -> dict:
-    """Stream-bound the body to 16 KiB before decoding; require a JSON object."""
+    """Require application/json (optional charset tolerated) before anything
+    else, then stream-bound the body to 16 KiB before decoding; require a
+    JSON object."""
+    _check_json_media_type(request)
     total = 0
     chunks: list[bytes] = []
     async for chunk in request.stream():
@@ -372,12 +432,19 @@ def create_app(root: Path, start: Callable[[str], None] | None = None) -> Starle
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
             os.close(lock_fd)
 
-    return Starlette(
+    app = Starlette(
         routes=routes,
         middleware=[Middleware(Guard)],
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    # Starlette always puts ServerErrorMiddleware outermost, and it always
+    # re-raises after sending its response (see _OuterSanitizer's docstring).
+    # Pre-build the normal stack and wrap *that* so the sanitizer sits truly
+    # outside it, while `app` itself stays the real Starlette instance (its
+    # `.router`/`.state`/lifespan access are unchanged for callers/tests).
+    app.middleware_stack = _OuterSanitizer(app.build_middleware_stack())
+    return app
 
 
 def _production_root() -> Path:
