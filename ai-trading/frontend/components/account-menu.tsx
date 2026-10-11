@@ -5,7 +5,7 @@ import { useUser } from "@clerk/react";
 import { ChevronDown, LogOut } from "lucide-react";
 import { useTradingSignOut } from "@/components/auth-gate";
 
-export function AccountMenu() {
+export function AccountMenu({ sidebar = false }: { sidebar?: boolean }) {
   const { user } = useUser();
   const signOut = useTradingSignOut();
   const [open, setOpen] = useState(false);
@@ -49,18 +49,18 @@ export function AccountMenu() {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
-        className="flex h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-md px-2 text-sm font-medium transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+        className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-sm font-medium transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none ${sidebar ? "w-full py-2 text-left" : "justify-center"}`}
       >
-        <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold">{initials}</span>
-        <span className="hidden md:inline">Account</span>
-        <ChevronDown aria-hidden size={14} className="hidden md:block" />
+        <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-accent">{initials}</span>
+        {sidebar && <span className="min-w-0 flex-1"><span className="block truncate text-[13px] leading-[18px]">{name}</span><span className="block text-xs leading-4 font-normal text-muted-foreground">View account</span></span>}
+        {sidebar && <ChevronDown aria-hidden size={14} className="shrink-0 text-muted-foreground" />}
       </button>
       {open && (
         <section
           id={panelId}
           ref={panelRef}
           aria-label="Signed-in account"
-          className="absolute right-0 top-full z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-4 shadow-lg"
+          className={`absolute z-20 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-4 shadow-lg ${sidebar ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}
         >
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Your profile</h2>
