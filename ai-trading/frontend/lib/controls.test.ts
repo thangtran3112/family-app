@@ -633,3 +633,140 @@ test("controller: real cycle-to-cycle polling slows from 2s back to 30s once a s
   await waitUntil(() => states.length === 2);
   assert.equal(clock.pendingDelay(), IDLE_POLL_MS, "once settled idle, cadence must return to 30s");
 });
+
+// Re-review 3, Important #1: `stop()` only promised that a stopped
+// controller's *scheduler* release stays local -- it did not guard the
+// mutation finally's `deps.onMutating(false)` call itself. A Clerk-session
+// switch/unmount calls `oldController.stop()` while that session's own PUT
+// is still in flight (app-controls-provider.tsx's effect cleanup); the old
+// PUT's `finally` must not later write into the shared React setter once a
+// successor controller (the new session, same setState identity across
+// controller instances in one provider) is already mid-mutation.
+test("controller: a stopped controller's late-settling PUT never writes shared callback state for a successor session", async () => {
+  const oldClock = createFakeClock();
+  const oldStates: ControlsState[] = [];
+  const oldPutDeferred = deferred<Response>();
+  let mutatingValue: boolean | null = null;
+  const sharedOnMutating = (value: boolean) => {
+    mutatingValue = value;
+  };
+
+  const oldController = createControlsController({
+    getToken: async () => "old-session-tok",
+    onState: (s) => oldStates.push(s),
+    onLoading: () => {},
+    onError: () => {},
+    onMutating: sharedOnMutating,
+    fetchImpl: (async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return oldPutDeferred.promise;
+      return jsonResponse(controlsFixture(0));
+    }) as typeof fetch,
+    setTimeoutImpl: oldClock.setTimeoutImpl,
+    clearTimeoutImpl: oldClock.clearTimeoutImpl,
+  });
+
+  oldController.start();
+  await waitUntil(() => oldStates.length === 1);
+
+  const oldChangePromise = oldController.change("mirofish", true); // old session's PUT begins
+  await Promise.resolve();
+
+  oldController.stop(); // Clerk session switch/unmount while the PUT is still pending
+  assert.equal(oldClock.pendingCount(), 0, "stop() clears the old controller's own armed timer");
+
+  // The successor controller for the new session -- in production this
+  // shares the exact same React setMutating identity as the old one
+  // (app-controls-provider.tsx constructs one controller per sessionId but
+  // wires both to the same component's state setters).
+  const successorClock = createFakeClock();
+  const successorStates: ControlsState[] = [];
+  const successorPutDeferred = deferred<Response>();
+  const successorController = createControlsController({
+    getToken: async () => "new-session-tok",
+    onState: (s) => successorStates.push(s),
+    onLoading: () => {},
+    onError: () => {},
+    onMutating: sharedOnMutating,
+    fetchImpl: (async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return successorPutDeferred.promise;
+      return jsonResponse(controlsFixture(0));
+    }) as typeof fetch,
+    setTimeoutImpl: successorClock.setTimeoutImpl,
+    clearTimeoutImpl: successorClock.clearTimeoutImpl,
+  });
+
+  successorController.start();
+  await waitUntil(() => successorStates.length === 1);
+  const successorChangePromise = successorController.change("tradingagents", false); // the new session's own real mutation
+  await Promise.resolve();
+  assert.equal(mutatingValue, true, "the successor's own pending mutation marks the shared state busy");
+
+  // The old, stopped controller's PUT settles *after* the successor began
+  // its own mutation. It must never clear the shared busy flag out from
+  // under the successor's real pending PUT, and must never arm its own
+  // timer either.
+  oldPutDeferred.resolve(jsonResponse(controlsFixture(1), 202));
+  await oldChangePromise;
+  assert.equal(mutatingValue, true, "a stopped controller's late PUT settlement must never overwrite a successor's busy state");
+  assert.equal(oldClock.pendingCount(), 0, "a stopped controller must never arm its own timer after settling");
+  assert.equal(successorStates.length, 1, "the old controller's settlement must not apply its snapshot into the successor's state");
+
+  successorPutDeferred.resolve(jsonResponse(controlsFixture(2), 202));
+  await successorChangePromise;
+  assert.equal(mutatingValue, false, "the successor's own mutation finishing still clears the shared busy state normally");
+});
+
+// Re-review 3, Important #2: prior coverage only drove the blocked-read
+// path through `handleFocus()` (which explicitly clears the timer before
+// calling `cycle()` directly); an *armed timer actually firing* while a PUT
+// is pending is a distinct code path (the timer's own callback invokes
+// `cycle()` without going through `handleFocus()`'s early timer-clear) and
+// had no dedicated test.
+test("controller: an armed timer firing while a mutation is pending never issues a GET, and the mutation's transition snapshot plus 2s timer survive", async () => {
+  const clock = createFakeClock();
+  const states: ControlsState[] = [];
+  let getCalls = 0;
+  let putCalls = 0;
+  const putDeferred = deferred<Response>();
+
+  const controller = createControlsController({
+    getToken: async () => "tok",
+    onState: (s) => states.push(s),
+    onLoading: () => {},
+    onError: () => {},
+    onMutating: () => {},
+    fetchImpl: (async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        putCalls += 1;
+        return putDeferred.promise;
+      }
+      getCalls += 1;
+      return jsonResponse(controlsFixture(0));
+    }) as typeof fetch,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+  });
+
+  controller.start();
+  await waitUntil(() => states.length === 1);
+  assert.equal(clock.pendingDelay(), IDLE_POLL_MS, "the initial settled read arms the pre-PUT idle timer");
+
+  const changePromise = controller.change("mirofish", true); // PUT begins; the pre-existing idle timer is untouched
+  await Promise.resolve();
+  assert.equal(clock.pendingCount(), 1, "change() does not itself touch the already-armed timer");
+
+  clock.fire(); // the armed timer's own callback invokes cycle() directly -- not via handleFocus()
+  await Promise.resolve();
+  assert.equal(getCalls, 1, "a timer firing while a mutation is pending must never issue a GET");
+  assert.equal(clock.pendingCount(), 0, "the blocked cycle this timer triggered must not arm a stray timer of its own");
+
+  const starting = controlsFixture(1);
+  starting.apps[3] = { ...starting.apps[3], status: "Starting" };
+  putDeferred.resolve(jsonResponse(starting, 202));
+  await changePromise;
+
+  assert.equal(putCalls, 1);
+  assert.equal(states.at(-1)!.revision, 1, "the mutation's own transition snapshot is what applied");
+  assert.equal(states.at(-1)!.apps[3].status, "Starting");
+  assert.equal(clock.pendingDelay(), ACTIVE_POLL_MS, "the mutation's transition reschedule must survive the blocked timer firing");
+});

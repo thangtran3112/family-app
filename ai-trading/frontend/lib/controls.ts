@@ -497,14 +497,27 @@ export function createControlsController(deps: ControlsControllerDeps): Controls
       deps.onError(null);
       applied = next;
     } finally {
+      // Local lease release always runs, stopped or not -- it only affects
+      // this controller instance's own (otherwise-dead) scheduler, never a
+      // successor's.
       scheduler.endMutation();
-      deps.onMutating(false);
-      // Reschedule from this mutation's own outcome (the fresh snapshot on
-      // success, or the pre-mutation state as the best-known fallback on
-      // failure) so background polling always has an active timer once this
-      // mutation stops blocking new reads -- whether or not a focus/timer
-      // attempt was refused while it was pending.
-      if (!stopped && scheduler.isCurrent(ticket)) scheduleFrom(applied ?? current);
+      // Re-review-3 Important #1: a stopped controller's late-settling PUT
+      // must never write into a *callback* -- `onMutating`, like `onState`/
+      // `onError`/`onLoading` elsewhere in this module, is wired to the same
+      // React setter across controller instances in app-controls-provider.tsx
+      // (one instance per Clerk session, same component). An unconditional
+      // `deps.onMutating(false)` here could fire after a session switch,
+      // clearing a successor controller's own real in-flight mutation's busy
+      // flag.
+      if (!stopped) {
+        deps.onMutating(false);
+        // Reschedule from this mutation's own outcome (the fresh snapshot on
+        // success, or the pre-mutation state as the best-known fallback on
+        // failure) so background polling always has an active timer once
+        // this mutation stops blocking new reads -- whether or not a
+        // focus/timer attempt was refused while it was pending.
+        if (scheduler.isCurrent(ticket)) scheduleFrom(applied ?? current);
+      }
     }
   }
 
