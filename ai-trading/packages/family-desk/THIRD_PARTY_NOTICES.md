@@ -250,3 +250,36 @@ The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LIC
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## ai-hedge-fund
+
+Source: https://github.com/virattt/ai-hedge-fund (v1 history; pinned tip as `ai-trading/packages/ai-hedge-fund`)
+
+| Desk file | Adapted from | Changes |
+|---|---|---|
+| `backend/src/ai_trading/core/valuation.py` | `src/agents/valuation.py` at commit `6c41ae8` | No framework ties (plain numbers in, a number or `None` out); a non-positive cash flow, a missing input, or a rate that does not clear its matching growth rate gives `None` instead of `0`; dropped two parameters unused by the original function bodies (`calculate_wacc`'s `debt_to_equity`, `calculate_dcf_scenarios`'s `growth_metrics`); added `blended_value` (02h section 4) |
+
+```text
+MIT License
+
+Copyright (c) 2024 Virat Singh
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
