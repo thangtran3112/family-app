@@ -389,6 +389,7 @@ Chart overlays come from Vibe-Trading's `indicators.ts` (copy).
 ### Phase 6b: Backtests
 
 **Scope:**
+- **first, a known fix from the Phase 1c/1d final review:** `backtest._signal_positions` maps a resampled signal to its bin's real end (the truncated final `bar_close_1h` bin of a session closes at 16:00, not 16:30), derived the way `evaluate._resample` derives it, with a regression test;
 - backtest jobs over stored bars using the Phase 1d engine, with a concurrency limit;
 - `backtest_runs` and `backtest_trades`;
 - the results page (D17);

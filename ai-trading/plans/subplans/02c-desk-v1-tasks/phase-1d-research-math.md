@@ -3179,3 +3179,5 @@ The final whole-branch review of Phases 1c and 1d found two Critical cross-lane 
 New tests in `backend/tests/test_backtest.py`: `test_resampled_cadence_signal_fills_after_its_bin_closes_not_before` (parametrized over `bar_close_5m`/`15m`/`1h`), `test_resampled_cadence_signal_fills_after_its_bin_closes_with_a_missing_minute_inside_it`, `test_bar_close_1m_signal_still_fills_at_the_next_minutes_open`, `test_paper_order_pivot_stop_and_target_resolve_through_the_evaluator`. Confirmed RED against the pre-fix code (the early fill at the bin's first minute; the pivot `KeyError`) before applying the fix.
 
 Backend suite: 525 passed (519 + 6 new), 0 skipped. Contracts suite: 47 passed, unchanged. The `backtest.py`/`evaluate.py` code blocks shown earlier in this task file are the pre-fix code; this commit supersedes them.
+
+**Known open item** (the final review's re-check): a `bar_close_1h` signal in a session's truncated final bin (15:30–15:59) fills at 16:30 instead of 16:00, because `_signal_positions` assumes a full 60-minute bin. This is a late fill, not look-ahead; 5m and 15m bins divide the sessions evenly. Phase 6b fixes it first (02c Phase 6b outline).
