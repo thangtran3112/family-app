@@ -515,6 +515,12 @@ class PrepareMirofishScriptTest(unittest.TestCase):
     SCRIPT = REPO_ROOT / "deploy" / "production" / "prepare-mirofish.sh"
     MIROFISH_LIB = REPO_ROOT / "deploy" / "production" / "mirofish-runtime.sh"
     CONTROL_SRC_DIR = REPO_ROOT / "control"
+    # The two fixed-constant lines a staged copy may substitute -- always
+    # matched verbatim and asserted unique, so a future reformat/rename of
+    # either fails the relevant staging helper loudly instead of silently
+    # leaving a Docker invocation unfaked or un-probed.
+    DOCKER_BIN_TARGET = 'DOCKER_BIN="docker"'
+    DOCKER_PATH_TARGET = 'DOCKER_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"'
     # Resolved once from the TEST process's own full PATH, not the
     # restricted one `run_script()` gives the script itself: macOS ships a
     # bash 3.2 at /bin/bash (no `exec {fd}>file` auto-allocation support,
@@ -548,26 +554,21 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         self.write_fake_docker()
         self.staged_script = self._stage_real_script_with_fake_docker()
 
-    def _stage_real_script_with_fake_docker(self):
+    def _stage_real_script(self, target, replacement, name):
         """Copies the REAL prepare-mirofish.sh into this test's own writable
         tempdir (the prescribed Linux suite mounts the actual ai-trading
-        tree read-only, so nothing can be staged in place), replacing ONLY
-        the one external command-boundary constant (`DOCKER_BIN="docker"`)
-        with an absolute path to this test's fake docker shim -- never a
-        production env-var override (PREPARE_MIROFISH_DOCKER_PATH was
-        removed entirely after the prior review round; see
-        test_hostile_docker_path_env_var_has_no_effect_on_command_selection
-        below). Asserts the replacement is unique, so a future change to
-        this constant's spelling fails this staging helper loudly instead of
-        silently leaving a new/renamed Docker invocation unfaked. Mirrors
-        the real deploy/production/control relative layout with symlinks to
-        the REAL, unmodified mirofish-runtime.sh and control/state.py, so
-        every other code path -- lease validation, metadata checks, render,
+        tree read-only, so nothing can be staged in place), replacing
+        exactly one occurrence of `target` with `replacement` -- asserted
+        unique first, so a future reformat/rename of that constant fails
+        this staging helper loudly instead of silently leaving a Docker
+        invocation unfaked or un-probed. Mirrors the real
+        deploy/production/control relative layout with symlinks to the
+        REAL, unmodified mirofish-runtime.sh and control/state.py, so every
+        other code path -- lease validation, metadata checks, render,
         recovery -- still runs exactly the real, reviewed source; only the
-        external Docker command selection is substituted.
+        one targeted line is substituted.
         """
         original = self.SCRIPT.read_text()
-        target = 'DOCKER_BIN="docker"'
         occurrences = original.count(target)
         if occurrences != 1:
             raise AssertionError(
@@ -575,10 +576,9 @@ class PrepareMirofishScriptTest(unittest.TestCase):
                 f"{self.SCRIPT}, found {occurrences} -- update this staging "
                 "helper to match the current script"
             )
-        fake_docker = self.bin_dir / "docker"
-        patched = original.replace(target, f"DOCKER_BIN={shlex.quote(str(fake_docker))}")
+        patched = original.replace(target, replacement)
 
-        stage_root = Path(self._tmp.name) / "stage"
+        stage_root = Path(self._tmp.name) / f"stage-{name}"
         staged_production_dir = stage_root / "deploy" / "production"
         staged_production_dir.mkdir(parents=True)
         (staged_production_dir / "mirofish-runtime.sh").symlink_to(self.MIROFISH_LIB)
@@ -587,6 +587,47 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         staged_script.write_text(patched)
         staged_script.chmod(0o755)
         return staged_script
+
+    def _stage_real_script_with_fake_docker(self):
+        """Substitutes ONLY the external command-boundary constant
+        (`DOCKER_BIN="docker"`) with an absolute path to this test's fake
+        docker shim -- never a production env-var override (removed
+        entirely after a prior review round). Used by the tests that need
+        compose() to run against a fake docker while otherwise exercising
+        the real script body.
+        """
+        fake_docker = self.bin_dir / "docker"
+        return self._stage_real_script(
+            self.DOCKER_BIN_TARGET,
+            f"DOCKER_BIN={shlex.quote(str(fake_docker))}",
+            "fake-docker-bin",
+        )
+
+    def _stage_real_script_with_docker_path_literal(self, path_expr, name):
+        """Substitutes ONLY the fixed `DOCKER_PATH` default literal with
+        `path_expr` (a raw bash assignment right-hand side) -- `DOCKER_BIN`
+        stays exactly `"docker"`, untouched, so bash's own ordinary PATH
+        search still runs, just scoped to whatever directory `path_expr`
+        names instead of real system directories. Used by the Docker-path
+        regression below: `path_expr` must always be a fixture directory
+        this test itself creates, never a real system directory, so this
+        never reaches a real Docker socket no matter what happens to be
+        installed on the machine running the suite.
+        """
+        return self._stage_real_script(
+            self.DOCKER_PATH_TARGET, f"DOCKER_PATH={path_expr}", name,
+        )
+
+    def _write_signal_docker(self, directory, signal_path):
+        # A minimal docker stand-in that only ever proves it ran, by
+        # creating `signal_path` -- `#!/bin/sh` (an absolute, kernel-resolved
+        # shebang) and the `:` builtin with a bare redirect (no external
+        # `touch`), so this is fully self-contained and cannot itself fail
+        # to run merely because the PATH scoping it onto is narrow.
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "docker"
+        path.write_text(f"#!/bin/sh\n: > {shlex.quote(str(signal_path))}\nexit 0\n")
+        path.chmod(0o755)
 
     def write_image_metadata(self, tag=VALID_TAG):
         path = self.app_dir / "images.env"
@@ -843,40 +884,87 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         self.assertIn("HTTP_PROXY=<unset>", snapshot)
         self.assertNotIn("attacker", snapshot)
 
-    def test_hostile_docker_path_env_var_has_no_effect_on_command_selection(self):
-        # Re-review round 1: PREPARE_MIROFISH_DOCKER_PATH was removed from
-        # production entirely (it let a caller point the PATH `env -i` uses
-        # at an attacker-controlled directory). Proves it is now fully
-        # inert: even if a caller still sets it to a directory holding a
-        # malicious `docker` that would prove it ran by touching a marker
-        # file, the REAL, UNSTAGED script (no fake docker substituted at
-        # all -- this is the actual production file) never selects it,
-        # because DOCKER_PATH/DOCKER_BIN are fixed constants the script no
-        # longer reads from the environment.
-        marker = Path(self._tmp.name) / "attacker-ran"
-        malicious_dir = Path(self._tmp.name) / "attacker-bin"
-        malicious_dir.mkdir()
-        malicious_docker = malicious_dir / "docker"
-        # `#!/bin/sh` (absolute, never PATH-resolved) and the `:` builtin
-        # with a bare redirect (never an external `touch`) so this exploit
-        # attempt is fully self-contained and cannot itself fail to run
-        # merely because a narrow hostile PATH lacks `env`/`bash`/`touch` --
-        # confirmed against the pre-fix script (this exact payload reliably
-        # created the marker there; see this round's report for the RED
-        # capture) before being used as this test's own assertion.
-        malicious_docker.write_text(f"#!/bin/sh\n: > {shlex.quote(str(marker))}\nexit 0\n")
-        malicious_docker.chmod(0o755)
+    def test_compose_docker_path_resolution_is_fixed_never_env_overridable(self):
+        # Re-review round 2: the prior version of this regression ran the
+        # REAL, UNSTAGED script -- whose compose() reaches the real local
+        # Docker socket once DOCKER_PATH/DOCKER_BIN resolve normally -- and
+        # forced recovery through write_failing_rm(), so on a developer host
+        # with Docker and a real `ai-trading` MiroFish container, this test
+        # could have issued a REAL `docker compose stop` against it. Never
+        # acceptable, regardless of how unlikely in practice.
+        #
+        # This version instead stages a copy of the real script with ONLY
+        # its fixed DOCKER_PATH *default* literal substituted for a SAFE
+        # fixture directory -- DOCKER_BIN stays exactly "docker", untouched,
+        # so bash's own ordinary PATH search still runs, just scoped to this
+        # fixture. Setting the (removed) PREPARE_MIROFISH_DOCKER_PATH env var
+        # to a SEPARATE, genuinely malicious shim must have zero effect: the
+        # staged copy's DOCKER_PATH is a fixed string literal, never an
+        # environment read, exactly matching the real production file's own
+        # pattern. Neither directory here is ever a real system directory,
+        # so no step in this test can reach a real Docker socket, regardless
+        # of whether Docker happens to be installed on the host running it.
+        safe_dir = Path(self._tmp.name) / "safe-docker-bin"
+        safe_signal = Path(self._tmp.name) / "safe-docker-ran"
+        self._write_signal_docker(safe_dir, safe_signal)
+        malicious_dir = Path(self._tmp.name) / "malicious-docker-bin"
+        malicious_signal = Path(self._tmp.name) / "malicious-docker-ran"
+        self._write_signal_docker(malicious_dir, malicious_signal)
+
+        staged = self._stage_real_script_with_docker_path_literal(
+            shlex.quote(str(safe_dir)), "safe-fixed-path",
+        )
         self.write_failing_rm()
         fd = self.acquire_real_lock()
         result = self.run_script(
-            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,),
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,), script=staged,
             env_overrides={"PREPARE_MIROFISH_DOCKER_PATH": str(malicious_dir)},
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("post-install cleanup failed", result.stderr)
+        self.assertTrue(
+            safe_signal.exists(),
+            "compose() should have run against the fixed/safe fixture PATH",
+        )
         self.assertFalse(
-            marker.exists(),
+            malicious_signal.exists(),
             "a hostile PREPARE_MIROFISH_DOCKER_PATH must never select the Docker command",
+        )
+        self.assertNotIn("fake-zep", result.stderr)
+        self.assertNotIn("fake-llm", result.stderr)
+
+    def test_regression_would_catch_a_reintroduced_docker_path_override(self):
+        # Sensitivity probe, entirely offline: if the historical vulnerable
+        # `DOCKER_PATH="${PREPARE_MIROFISH_DOCKER_PATH:-...}"` pattern were
+        # ever reintroduced, prove the SAME staged-copy technique above would
+        # catch it -- a synthetic mutation of the staged copy used only for
+        # this probe, never the committed production file (which has no such
+        # pattern; see test_compose_docker_path_resolution_is_fixed_never_env_overridable
+        # above for the real file's own behavior). Still never touches a
+        # real system directory or Docker socket: both the trusted default
+        # and the hostile override here are fixture directories this test
+        # creates.
+        safe_dir = Path(self._tmp.name) / "safe-docker-bin-2"
+        safe_signal = Path(self._tmp.name) / "safe-docker-ran-2"
+        self._write_signal_docker(safe_dir, safe_signal)
+        malicious_dir = Path(self._tmp.name) / "malicious-docker-bin-2"
+        malicious_signal = Path(self._tmp.name) / "malicious-docker-ran-2"
+        self._write_signal_docker(malicious_dir, malicious_signal)
+
+        vulnerable_path_expr = f'"${{PREPARE_MIROFISH_DOCKER_PATH:-{safe_dir}}}"'
+        staged = self._stage_real_script_with_docker_path_literal(
+            vulnerable_path_expr, "vulnerable-reintroduced-path",
+        )
+        self.write_failing_rm()
+        fd = self.acquire_real_lock()
+        result = self.run_script(
+            extra_args=["--lock-fd", str(fd)], pass_fds=(fd,), script=staged,
+            env_overrides={"PREPARE_MIROFISH_DOCKER_PATH": str(malicious_dir)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(
+            malicious_signal.exists(),
+            "this synthetic reintroduction of the historical bug should have been caught",
         )
 
     # -- standalone busy lock --------------------------------------------------
