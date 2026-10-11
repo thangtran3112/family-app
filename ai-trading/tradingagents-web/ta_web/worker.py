@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .domain import clean_state, safe_settings
-from .reports import ReportError, publish, run_directory
+from .reports import publish, run_directory
 from .store import Store
 
 # Fixed, exception-text-free codes (protocol.md: never raw exception/provider
@@ -117,14 +117,18 @@ def run_research(root: Path, id: str, graph_factory: Callable[..., Any] | None =
         if cleaned:
             try:
                 publish(store, id)
-            except ReportError:
-                # Expected: reports.publish refuses a header-only non-export,
-                # or reports its own wrapped write/fsync/rename failure, as
-                # ReportError. The failed/RESEARCH_FAILED record above already
-                # stands either way -- this is only a best-effort bonus export
-                # of whatever partial text survived, so there is nothing left
-                # to protect by catching more broadly here.
-                pass
+            except Exception:  # noqa: BLE001 -- best-effort bonus export only: the
+                # failed/RESEARCH_FAILED record right above already stands as
+                # the correct terminal result no matter why this failed --
+                # the expected ReportError refusal/wrapped write failure, or
+                # an unexpected error outside reports.publish's own wrapped
+                # step (its mkdir, its final metadata update). Preserves the
+                # "every partial-publish outcome is swallowed, run_research
+                # never raises" contract; an explicit return here (not a bare
+                # pass) is what actually does that, rather than letting an
+                # unanticipated exception escape past an already-correct
+                # terminal record.
+                return
         return
 
     try:
