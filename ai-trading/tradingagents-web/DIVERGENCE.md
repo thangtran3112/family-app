@@ -33,7 +33,7 @@ Not re-implemented; imported directly so an upstream rename/removal fails
 loudly (ImportError) rather than silently diverging:
 
 - `tradingagents.graph.trading_graph.TradingAgentsGraph` — the real research
-  engine (`ta_web/worker.py`'s `_build_graph`); constructed with the
+  engine (`ta_web/worker.py`'s `_default_graph_factory`); constructed with the
   isolated-per-run config below and run unmodified, never forked.
 - `tradingagents.default_config.DEFAULT_CONFIG` — the server-controlled
   provider/model/round defaults; `ta_web/worker.py` deep-copies it per run
@@ -79,7 +79,14 @@ loudly (ImportError) rather than silently diverging:
   real `create_app`; identity/Origin/prefix guard, body validation, sharing,
   downloads, and the history list endpoint's pagination/filter contract.
 - `tests/test_ui.mjs` — Node `node:test`; prefix-safe route/API-path helpers
-  in `ta_web/static/app.mjs` (no DOM, no mocked backend).
+  plus heartbeat/progress freshness, fixed safe error explanations, and
+  read-retry classification in `ta_web/static/app.mjs`.
+- `tests/test_progress.py` — independent worker heartbeat, honest progress
+  timestamps, migration compatibility/concurrency, and thread cleanup.
+- `tests/check_progress_browser.mjs` — optional offline DOM regression with
+  an already-installed Playwright runtime; proves focus, retry/snapshot
+  retention, authorization-loss clearing, reduced motion, and prefix/mobile
+  behavior without any live model or private family data.
 - Intentionally not listed as a count here (see "Verified integration"
   below): the exact number of cases drifts every time a test is added, and a
   stale number was already found and corrected once — run the suites
@@ -152,13 +159,26 @@ code): the base image's `ENTRYPOINT ["tradingagents"]` was not cleared, so
 replacing it (`No such command 'uvicorn'`). Fixed with `ENTRYPOINT []`
 before `CMD`.
 
-With that fix: the built image's `/__healthz` serves 200, every case in all
-four `tests/test_*.py` files plus `tests/test_ui.mjs` passes running inside
+With that fix: the built image's `/__healthz` serves 200, every case in
+`tests/test_*.py` plus `tests/test_ui.mjs` passes running inside
 the built image (not just a host dev venv), and the full
 `deploy/ci/smoke-test.sh all` real-Caddy suite passes end-to-end alongside
 the existing terminal/Vibe/market-data/MiroFish flows, unmodified. Run
 `deploy/ci/test-tradingagents-research.sh` for the current in-image count
 rather than trusting a number here.
+
+### Progress feedback extension
+
+Heartbeats and the moving running-task border are wrapper-owned; upstream
+is still imported unmodified. `stream_run()` chunks remain the source of
+research activity, including message-only finished tool/agent steps whose
+messages are never persisted. A separate worker thread updates only `heartbeat_at`,
+not report snapshots or `last_progress_at`, while synchronous upstream
+model/tool calls wait. Liveness does not prove those calls are advancing.
+The SQLite upgrade adds nullable monitoring columns without rewriting old
+reports, and old wrapper versions can ignore those extra columns on rollback.
+Existing authenticated polling is retained; no token stream, raw tool log,
+provider error text, task queue, or automatic model rerun was added.
 
 ## Upstream sync procedure
 

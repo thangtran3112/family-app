@@ -10,6 +10,7 @@
   --down: #b4372f;
   --level: #5d6670;
   --edge: #d3d8dc;
+  --warning: #8a5600;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
 }
@@ -26,6 +27,7 @@
     --down: #ef6f63;
     --level: #aab5bd;
     --edge: #3d4c55;
+    --warning: #eab665;
   }
 }
 
@@ -162,7 +164,26 @@ h3 { margin-bottom: .55rem; font-size: 1rem; }
 .progress-panel { margin-bottom: 1rem; padding: .9rem 1rem; }
 .progress-label { font-weight: 600; }
 .progress-bar { display: block; width: 100%; height: .35rem; margin-top: .7rem; accent-color: var(--accent); }
+.progress-bar[hidden] { display: none; }
 .progress-panel p { margin: .5rem 0 0; }
+.progress-metrics { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin-top: .55rem; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.progress-message { font-size: .9rem; }
+.progress-panel[data-tone="warning"], .progress-panel[data-tone="disconnected"], .connection-warning { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 6%, var(--paper)); }
+.progress-panel[data-tone="warning"] .progress-message, .connection-warning strong { color: var(--warning); }
+.progress-panel[data-tone="failed"] .progress-message, .progress-panel[data-tone="interrupted"] .progress-message { color: var(--down); }
+.connection-warning { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--warning); border-radius: .65rem; }
+.connection-warning p { margin: .35rem 0 0; color: var(--muted); font-size: .9rem; }
+.task-activity { display: block; max-width: 24rem; margin-top: .45rem; color: var(--muted); font-size: .8rem; }
+@property --research-rainbow-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.is-running {
+  border: 2px solid transparent;
+  border-radius: .65rem;
+  background: linear-gradient(var(--paper), var(--paper)) padding-box,
+    conic-gradient(from var(--research-rainbow-angle), #ef6b68, #e8b956, #53c9a4, #69a8f2, #b28ae8, #ef6b68) border-box;
+  animation: research-rainbow 8s linear infinite;
+}
+.badge.is-running { border-radius: 99px; }
+@keyframes research-rainbow { to { --research-rainbow-angle: 360deg; } }
 .detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem); align-items: start; gap: 1rem; }
 .detail-main, .detail-aside { display: grid; gap: 1rem; min-width: 0; }
 .settings-panel, .report-panel, .share-panel { padding: 1.15rem; }
@@ -214,5 +235,7 @@ h3 { margin-bottom: .55rem; font-size: 1rem; }
   .report-preview { min-height: 24rem; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .is-running { animation: none; }
+  .progress-bar { display: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
