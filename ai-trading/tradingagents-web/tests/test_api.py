@@ -18,7 +18,7 @@ import sys
 import time
 import unittest
 import zipfile
-from datetime import UTC, date, datetime
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -346,9 +346,54 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             listing = (await client.get("/api/research", headers=self.owner_headers)).json()
             for key in ("owner_id", "items", "limit", "offset", "today", "defaults"):
                 self.assertIn(key, listing)
-            self.assertEqual(listing["today"], datetime.now(UTC).date().isoformat())
+            self.assertEqual(listing["today"], date.today().isoformat())
             self.assertIsInstance(listing["defaults"], dict)
             self.assertNotIn("backend_url", listing["defaults"])
+
+    async def test_list_today_matches_local_validator_across_utc_local_boundary(self):
+        """UI-001: ``research_list``'s ``today`` must be the same server-local
+        date ``Inputs._check_analysis_date`` validates against, even in the
+        hour where UTC has already rolled to the next calendar day but local
+        (server) time has not. Pin a fixed local "today" so the boundary is
+        exercised deterministically regardless of when this test runs."""
+        local_today = date(2026, 1, 1)
+        local_tomorrow = date(2026, 1, 2)
+
+        class _FixedDate(date):
+            @classmethod
+            def today(cls):
+                return local_today
+
+        calls = []
+        app = self._app(start=lambda run_id: calls.append(run_id))
+        with (
+            # create=True: pre-fix ``ta_web.app`` has no ``date`` name at all
+            # (it computes "today" from ``datetime.now(UTC)``), so this must
+            # tolerate the attribute's absence rather than erroring on it —
+            # the real bug is the mismatch below, not a missing patch target.
+            mock.patch("ta_web.app.date", _FixedDate, create=True),
+            mock.patch("ta_web.domain.date", _FixedDate),
+        ):
+            async with self._running(app) as client:
+                listing = await client.get("/api/research", headers=self.owner_headers)
+                self.assertEqual(listing.json()["today"], local_today.isoformat())
+
+                unchanged_default = await client.post(
+                    "/api/research",
+                    headers=self.owner_headers,
+                    json=_inputs(analysis_date=listing.json()["today"]),
+                )
+                self.assertEqual(unchanged_default.status_code, 202)
+                self.assertEqual(len(calls), 1)
+
+                future = await client.post(
+                    "/api/research",
+                    headers=self.owner_headers,
+                    json=_inputs(analysis_date=local_tomorrow.isoformat()),
+                )
+                self.assertEqual(future.status_code, 422)
+                self.assertEqual(future.json(), {"error": "INVALID_INPUT"})
+                self.assertEqual(len(calls), 1)  # no extra admission from the rejected POST
 
     # --- security headers --------------------------------------------------
 
