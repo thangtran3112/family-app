@@ -156,13 +156,13 @@ These names are fixed for every phase. A task file may add names but must not re
 | Tables | 02 §7, 02a §9, 02b §5, plus `consensus_snapshots`, `earnings_results`, `analyst_targets` (02f); `ai_verdicts`, `ai_calls`, `ai_call_outcomes` (02f, 02h); `backtest_runs`, `backtest_trades` (02h) |
 | Probe tools | `ai-trading/tools/ibkr-probe/` (Phase 0), kept as the manual gateway smoke test |
 
-Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`):
+Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`, and the Desk links to them. A dashboard login stored in a shared group is never linked into an app profile.
 
 | Group | Keys |
 |---|---|
-| IBKR | `IBKR_PAPER_USERNAME`, `IBKR_PAPER_PASSWORD`; with the two-gateway fallback, also `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD` |
-| Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes) |
-| Data sources | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `FINNHUB_API_KEY`, `FRED_API_KEY`, `EULERPOOL_API_KEY`, `ALPHA_VANTAGE_API_KEY` |
+| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, linked to `shared/ibkr` (set); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
+| Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes); **not in Firestore yet** (Task 0.4 Step 4) |
+| Data sources | `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`, linked to `shared/alpaca` (set); `FINNHUB_API_KEY`, `FRED_API_KEY`, `EULERPOOL_API_KEY`, `ALPHA_VANTAGE_API_KEY` (Phase 2) |
 | Alert channels | `TELEGRAM_BOT_TOKEN`, `SLACK_WEBHOOK_URL_OWNER`, `SLACK_WEBHOOK_URL_SPOUSE` |
 | Database | `DESK_DB_PASSWORD` |
 | LLM keys | linked from `shared/llm` |

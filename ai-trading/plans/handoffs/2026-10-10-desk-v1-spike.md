@@ -40,7 +40,11 @@ Each phase gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-p
 3. **Phase 2a plan, data without IBKR**, then 3 → 4 → 5, 6, 6b → 7 (02c Execution Map). The open-source lane owns `ai-trading/market-data/`; move it into `common/` together with that lane, never alone.
 4. **When IBKR approves the data user:** Task 0.5 with the owner (weekday market hours; also confirm that greeks arrive through the $4.50 add-on), Task 0.6, then Phase 2b (the IBKR client).
 
-Open question for the owner: remove `temp/.env` once its values are in Firestore (`AGENTS.md` forbids `.env` files inside `ai-trading/`)? PR #81 was closed on 2026-10-10.
+Done on 2026-10-10:
+- PR #81 is closed.
+- `temp/.env` moved to Firestore (`shared/ibkr` and `shared/alpaca`, linked from the new `ai-trading/desk`) and was deleted.
+
+Still open: the Flex token and query ID are not in Firestore (Task 0.4 Step 4).
 
 ## Decisions Already Made (do not reopen without the owner)
 
