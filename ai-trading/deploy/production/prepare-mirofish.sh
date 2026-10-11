@@ -42,8 +42,13 @@ source "$SCRIPT_DIR/mirofish-runtime.sh"
 #                              real flock/validate_inherited_lock semantics
 #                              without writing into /var/lib/family-app.
 #                              Never set this in production.
+#   PREPARE_MIROFISH_LOCK_WAIT_SECONDS test-only: overrides the bounded wait
+#                              below (production default 30s), so an offline
+#                              test can exercise a real busy-lock timeout in
+#                              well under a second. Never set this in
+#                              production.
 LOCK_PATH="${PREPARE_MIROFISH_LOCK_PATH:-/var/lib/family-app/ai-trading/.control.lock}"
-LOCK_WAIT_SECONDS=30
+LOCK_WAIT_SECONDS="${PREPARE_MIROFISH_LOCK_WAIT_SECONDS:-30}"
 
 die() {
   echo "prepare-mirofish: $*" >&2

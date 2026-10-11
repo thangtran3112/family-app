@@ -10,11 +10,11 @@ one fixed Compose project.
 """
 
 import hashlib
-import json
 import os
 import re
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 from state import APP_SERVICES
@@ -33,6 +33,19 @@ _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _HEALTHY_STATES = frozenset({"healthy", "none"})
 _STOPPED_STATUSES = frozenset({"exited", "absent", "created", "dead"})
 _MIROFISH_REQUIRED_KEYS = ("ZEP_API_KEY", "LLM_API_KEY")
+
+# Narrow `docker inspect` field list: container id (to map a response line
+# back to the id that was asked for), the compose-service label (`index`
+# looks a map key up by exact string, so the dotted label name is never
+# misparsed as a nested field path), state status, and health status only.
+# Deliberately never `{{json .}}` (or any other whole-object format), which
+# would also return `Config.Env` -- every secret the container was started
+# with -- plus mounts, networks and other metadata this module never needs
+# and must never read, log, or return.
+_INSPECT_FORMAT = (
+    '{{.Id}}\t{{index .Config.Labels "com.docker.compose.service"}}'
+    "\t{{.State.Status}}\t{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}"
+)
 
 PREPARE_MIROFISH_SCRIPT = (
     Path(__file__).resolve().parent.parent / "deploy" / "production" / "prepare-mirofish.sh"
@@ -152,42 +165,63 @@ class Runtime:
         except OSError as exc:
             raise RuntimeFailure("runtime_unavailable") from exc
 
+    def _run_within_budget(self, argv, deadline, env):
+        """Runs one subprocess call sized to whatever remains of a shared
+        monotonic deadline -- never a fresh, independent QUERY_TIMEOUT per
+        call. Raises RuntimeFailure("runtime_unavailable") immediately,
+        without even attempting the call, once the budget is already spent;
+        the same code covers an actual subprocess timeout or any other
+        failure to run the command -- an observation query never surfaces
+        `operation_timeout` (that code is reserved for an apply() start/stop
+        actually timing out).
+        """
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeFailure("runtime_unavailable")
+        try:
+            return self.command(
+                argv, capture_output=True, timeout=remaining, env=env, shell=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise RuntimeFailure("runtime_unavailable") from exc
+
     def service_states(self, services):
-        """Batch status+health for every service in one bounded query."""
+        """Batch status+health for every service under one aggregate,
+        monotonic QUERY_TIMEOUT (5s) budget -- not QUERY_TIMEOUT per
+        subprocess call. Returns `{service: {"status": <docker status
+        string, or "absent" with no container>, "health": "healthy" |
+        "unhealthy" | "starting" | "none" | None}}`; this exact shape is
+        also the `observations` argument `group_status()` accepts below, so
+        a caller (the server GET handler) can collect every mapped service
+        once and classify every app's group from the same dict.
+        """
         services = tuple(services)
         states = {service: {"status": "absent", "health": None} for service in services}
         if not services:
             return states
         env = self._deployed_env()
-        listed = self._run(self._compose_base() + ["ps", "-q", *services], QUERY_TIMEOUT, env)
+        deadline = time.monotonic() + QUERY_TIMEOUT
+        listed = self._run_within_budget(self._compose_base() + ["ps", "-q", *services], deadline, env)
         if listed.returncode != 0:
             raise RuntimeFailure("runtime_unavailable")
         ids = [line for line in _decode(listed.stdout).split() if line]
         if not ids:
             return states
-        inspected = self._run(
-            ["docker", "inspect", "--format", "{{json .}}", *ids], QUERY_TIMEOUT, env,
+        inspected = self._run_within_budget(
+            ["docker", "inspect", "--format", _INSPECT_FORMAT, *ids], deadline, env,
         )
         if inspected.returncode != 0:
             raise RuntimeFailure("runtime_unavailable")
         for line in _decode(inspected.stdout).splitlines():
             if not line.strip():
                 continue
-            try:
-                info = json.loads(line)
-            except ValueError as exc:
-                raise RuntimeFailure("runtime_unavailable") from exc
-            service = (info.get("Config") or {}).get("Labels", {}).get(
-                "com.docker.compose.service"
-            )
+            parts = line.split("\t")
+            if len(parts) != 4:
+                raise RuntimeFailure("runtime_unavailable")
+            _container_id, service, status, health = parts
             if service not in states:
                 continue
-            service_state = info.get("State") or {}
-            health_info = service_state.get("Health")
-            states[service] = {
-                "status": service_state.get("Status", "unknown"),
-                "health": health_info.get("Status") if health_info else "none",
-            }
+            states[service] = {"status": status, "health": health}
         return states
 
     def _mirofish_env_path(self):
@@ -207,14 +241,33 @@ class Runtime:
             return False
         return all(key in values for key in _MIROFISH_REQUIRED_KEYS)
 
-    def group_status(self, app_id, enabled):
+    def group_status(self, app_id, enabled, observations=None):
+        """`observations`, when given, must be a dict in the exact shape
+        `service_states()` returns (`{service: {"status": ..., "health":
+        ...}}`); a mapped service absent from it is treated as absent, the
+        same default `service_states()` itself uses. This lets a caller
+        collect one batch of observations (e.g. `service_states(ALL_SERVICES)`)
+        and classify every app's group from it, without this method
+        re-querying Docker or this class keeping any mutable cache.
+        Omitting it (or passing None) re-queries Docker directly, exactly as
+        before -- existing two-argument calls are unaffected.
+        """
         if app_id not in APP_SERVICES:
             raise ValueError("unknown app ID")
         if type(enabled) is not bool:
             raise ValueError("enabled must be a boolean")
+        if observations is not None and type(observations) is not dict:
+            raise ValueError("observations must be a dict or None")
         if app_id == "mirofish" and enabled and not self._mirofish_ready():
             return "Needs setup"
-        states = self.service_states(APP_SERVICES[app_id])
+        mapped_services = APP_SERVICES[app_id]
+        if observations is None:
+            states = self.service_states(mapped_services)
+        else:
+            states = {
+                service: observations.get(service, {"status": "absent", "health": None})
+                for service in mapped_services
+            }
         if enabled:
             running_healthy = all(
                 state["status"] == "running" and state["health"] in _HEALTHY_STATES

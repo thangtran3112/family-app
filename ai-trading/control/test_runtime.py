@@ -1,25 +1,33 @@
-import json
+import fcntl
 import os
+import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import runtime
 from runtime import Runtime, RuntimeFailure
 
 VALID_TAG = "a" * 40
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class FakeDocker:
     """Stands in for the real `docker`/`docker compose` CLI, understanding
     only the exact argv shapes Runtime emits: `compose ps -q SERVICE...`,
-    `docker inspect --format {{json .}} ID...`, `compose up ...`,
-    `compose stop ...`, `compose config --images SERVICE...`,
-    `docker image inspect REF...`, and the preparer script path. Mirrors the
-    real CLI's own contracts (an absent service means empty `ps -q` output;
-    `docker inspect` emits one JSON line per container) without a daemon.
+    `docker inspect --format <narrow id/service/status/health template>
+    ID...`, `compose up ...`, `compose stop ...`, `compose config --images
+    SERVICE...`, `docker image inspect REF...`, and the preparer script
+    path. Mirrors the real CLI's own contracts (an absent service means
+    empty `ps -q` output; `docker inspect` emits one line per container, in
+    whatever format string was actually requested) without a daemon. Emits
+    the SAME tab-joined id/service/status/health shape
+    `runtime._INSPECT_FORMAT` requests -- never the full `{{json .}}` object
+    (no Config.Env, no mounts, no raw container metadata).
     """
 
     def __init__(self):
@@ -49,18 +57,14 @@ class FakeDocker:
             stdout = ("\n".join(ids) + "\n").encode() if ids else b""
             return subprocess.CompletedProcess(argv, self.ps_returncode, stdout=stdout)
         if argv[:2] == ["docker", "inspect"]:
+            self.assert_narrow_inspect_format(argv)
             wanted = set(argv[argv.index("--format") + 2 :])
             lines = []
             for service, info in self.containers.items():
                 if info["id"] not in wanted:
                     continue
-                state = {"Status": info["status"]}
-                if info.get("health") not in (None, "none"):
-                    state["Health"] = {"Status": info["health"]}
-                lines.append(json.dumps({
-                    "State": state,
-                    "Config": {"Labels": {"com.docker.compose.service": service}},
-                }))
+                health = info.get("health") or "none"
+                lines.append("\t".join([info["id"], service, info["status"], health]))
             stdout = ("\n".join(lines) + "\n").encode() if lines else b""
             return subprocess.CompletedProcess(argv, self.inspect_returncode, stdout=stdout)
         if "up" in argv:
@@ -79,6 +83,23 @@ class FakeDocker:
         if argv[:3] == ["docker", "image", "inspect"]:
             return subprocess.CompletedProcess(argv, 0 if self.images_present else 1)
         return subprocess.CompletedProcess(argv, 0)
+
+    @staticmethod
+    def assert_narrow_inspect_format(argv):
+        """The boundary assertion for concern (1): `docker inspect` must
+        never ask for the whole container object (which includes
+        `Config.Env` -- every secret the container was started with -- and
+        other raw metadata). It may only request the four fixed fields
+        Runtime actually needs: container id, compose-service label, state
+        status, health status.
+        """
+        fmt = argv[argv.index("--format") + 1]
+        assert "json" not in fmt.lower(), f"inspect format must not request the full object: {fmt!r}"
+        assert "Env" not in fmt, f"inspect format must never read Config.Env: {fmt!r}"
+        assert ".Id" in fmt
+        assert "com.docker.compose.service" in fmt
+        assert ".State.Status" in fmt
+        assert ".State.Health" in fmt
 
 
 class RuntimeTest(unittest.TestCase):
@@ -159,12 +180,18 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "runtime_unavailable")
 
     def test_wrong_owner_images_env_is_rejected_even_with_valid_content(self):
-        # Production default owner_uid=0: a file this (non-root) test process
-        # owns is never root, so the default must reject it rather than trust
-        # metadata from an unexpected owner.
-        runtime_obj = self.runtime(command=lambda argv, **kw: self.ok(), owner_uid=0)
+        # Production default owner_uid=0: a file not owned by root must be
+        # rejected regardless of otherwise-valid content. Non-root: this
+        # process's own uid is already never 0, so the default already
+        # mismatches. Root (the prescribed Linux container runs as root):
+        # chown the ephemeral fixture to a different numeric uid first, the
+        # same technique test_state.py's own
+        # test_unsafe_owner_permissions_and_parent_are_rejected uses, so the
+        # rejection is exercised for real instead of being skipped.
+        images_env = self.app_dir / "images.env"
         if os.getuid() == 0:
-            self.skipTest("cannot exercise a non-root-owned rejection while running as root")
+            os.chown(images_env, 65534, 65534)
+        runtime_obj = self.runtime(command=lambda argv, **kw: self.ok(), owner_uid=0)
         with self.assertRaises(RuntimeFailure) as ctx:
             runtime_obj.apply("vibe-trading", True)
         self.assertEqual(ctx.exception.code, "runtime_unavailable")
@@ -208,6 +235,74 @@ class RuntimeTest(unittest.TestCase):
         with self.assertRaises(RuntimeFailure) as ctx:
             runtime_obj.apply("vibe-trading", True)
         self.assertEqual(ctx.exception.code, "image_missing")
+
+    # -- concern (1): docker inspect must use a narrow field list ------------
+
+    def test_service_states_inspect_uses_narrow_format_not_full_object(self):
+        self.docker.containers = {
+            "vibe-trading": {"id": "c1", "status": "running", "health": "healthy"},
+        }
+        runtime_obj = self.runtime()
+        runtime_obj.service_states(("vibe-trading",))
+        inspect_call = next(c for c in self.docker.calls if c[:2] == ["docker", "inspect"])
+        # FakeDocker.assert_narrow_inspect_format (called from __call__ while
+        # producing the response) already enforces this on every call; this
+        # assertion is the test's own independent, explicit check of the
+        # exact production argv, not a check on the test double.
+        fmt = inspect_call[inspect_call.index("--format") + 1]
+        self.assertNotIn("json", fmt.lower())
+        self.assertNotIn("Env", fmt)
+        self.assertIn(".State.Status", fmt)
+        self.assertIn(".State.Health", fmt)
+
+    # -- concern (2): one aggregate 5s observation budget, not 5s+5s ---------
+
+    def test_service_states_shrinks_second_call_timeout_by_elapsed_time(self):
+        timeouts = []
+
+        def recording(argv, **kw):
+            timeouts.append(kw.get("timeout"))
+            if argv[:2] == ["docker", "inspect"]:
+                return self.ok(stdout=b"c1\tvibe-trading\trunning\thealthy\n")
+            return self.ok(stdout=b"c1\n")
+
+        runtime_obj = self.runtime(command=recording)
+        # time.monotonic() is read once for the deadline, once to size the
+        # "ps" call (no elapsed time yet: full 5s budget), and once more to
+        # size the "inspect" call -- this third read simulates 4.5s of real
+        # elapsed time having passed during/after the "ps" call, so the
+        # second subprocess call must be sized to the remaining 0.5s, never
+        # a second independent 5s.
+        with mock.patch("runtime.time.monotonic", side_effect=[100.0, 100.0, 104.5]):
+            runtime_obj.service_states(("vibe-trading",))
+        self.assertEqual(len(timeouts), 2)
+        self.assertAlmostEqual(timeouts[0], 5.0)
+        self.assertAlmostEqual(timeouts[1], 0.5)
+
+    def test_service_states_raises_before_a_second_call_once_budget_is_spent(self):
+        calls = []
+
+        def recording(argv, **kw):
+            calls.append((list(argv), kw.get("timeout")))
+            if argv[:2] == ["docker", "inspect"]:
+                raise AssertionError("inspect must never be attempted once the budget is spent")
+            return self.ok(stdout=b"c1\n")
+
+        runtime_obj = self.runtime(command=recording)
+        with mock.patch("runtime.time.monotonic", side_effect=[100.0, 100.0, 105.1]):
+            with self.assertRaises(RuntimeFailure) as ctx:
+                runtime_obj.service_states(("vibe-trading",))
+        self.assertEqual(ctx.exception.code, "runtime_unavailable")
+        self.assertEqual(len(calls), 1)
+
+    def test_service_states_query_timeout_is_runtime_unavailable_not_operation_timeout(self):
+        def timing_out(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+
+        runtime_obj = self.runtime(command=timing_out)
+        with self.assertRaises(RuntimeFailure) as ctx:
+            runtime_obj.service_states(("vibe-trading",))
+        self.assertEqual(ctx.exception.code, "runtime_unavailable")
 
     # -- group_status / converged --------------------------------------------
 
@@ -285,6 +380,70 @@ class RuntimeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             runtime_obj.group_status("vibe-trading", "on")
 
+    # -- controller ruling: group_status(..., observations=...) reuse --------
+    # observations shape, documented for the server consumer: the exact dict
+    # service_states() returns -- {service_name: {"status": <docker status
+    # string, "absent" if no container>, "health": "healthy"|"unhealthy"|
+    # "starting"|"none"|None}}. A service_id missing from the map (a caller
+    # that only collected a subset) is treated as absent, same as
+    # service_states()'s own default.
+
+    def test_group_status_with_observations_never_touches_docker(self):
+        observations = {
+            "ta-terminal": {"status": "running", "health": "healthy"},
+            "ta-research": {"status": "running", "health": "healthy"},
+        }
+        runtime_obj = self.runtime()
+        self.assertEqual(
+            runtime_obj.group_status("tradingagents", True, observations=observations),
+            "Running",
+        )
+        self.assertEqual(self.docker.calls, [])
+
+    def test_group_status_reuses_one_observations_map_across_two_apps(self):
+        # The exact "one batch classifies every group" reuse Task 3 needs:
+        # the same dict, collected once, correctly classifies two different
+        # apps without mutation or cross-talk.
+        observations = {
+            "ta-terminal": {"status": "running", "health": "healthy"},
+            "ta-research": {"status": "running", "health": "healthy"},
+            "vibe-trading": {"status": "exited", "health": None},
+        }
+        before = dict(observations)
+        runtime_obj = self.runtime()
+        self.assertEqual(
+            runtime_obj.group_status("tradingagents", True, observations=observations), "Running",
+        )
+        self.assertEqual(
+            runtime_obj.group_status("vibe-trading", False, observations=observations), "Stopped",
+        )
+        self.assertEqual(observations, before)
+        self.assertEqual(self.docker.calls, [])
+
+    def test_group_status_observations_missing_a_mapped_service_is_absent(self):
+        runtime_obj = self.runtime()
+        self.assertEqual(
+            runtime_obj.group_status("vibe-trading", False, observations={}), "Stopped",
+        )
+        self.assertEqual(
+            runtime_obj.group_status("vibe-trading", True, observations={}), "Unhealthy",
+        )
+        self.assertEqual(self.docker.calls, [])
+
+    def test_group_status_without_observations_still_queries_docker(self):
+        # Old two-argument calls keep working exactly as before.
+        self.docker.containers = {
+            "vibe-trading": {"id": "c1", "status": "running", "health": "healthy"},
+        }
+        runtime_obj = self.runtime()
+        self.assertEqual(runtime_obj.group_status("vibe-trading", True), "Running")
+        self.assertTrue(len(self.docker.calls) > 0)
+
+    def test_group_status_rejects_non_dict_observations(self):
+        runtime_obj = self.runtime()
+        with self.assertRaises(ValueError):
+            runtime_obj.group_status("vibe-trading", True, observations=["not", "a", "dict"])
+
     # -- prepare_mirofish() ---------------------------------------------------
 
     def test_missing_run_credentials_uses_shared_preparer(self):
@@ -340,6 +499,229 @@ class RuntimeTest(unittest.TestCase):
         runtime_obj.apply("mirofish", True)
         self.assertEqual(self.docker.calls[-1][-1], "mirofish")
         self.assertIn("up", self.docker.calls[-1])
+
+
+class PrepareMirofishScriptTest(unittest.TestCase):
+    """Concern (4): durable automated regression coverage for the REAL
+    `production/prepare-mirofish.sh` entrypoint -- not `FakeDocker`, not a
+    manual-only claim. Runs the actual script as a subprocess against a fake
+    `docker` on PATH and a fake `family_config.py`, entirely under one
+    `tempfile.TemporaryDirectory()` outside the repository. No real Docker
+    socket (a plain shell-script shim on PATH, never `/var/run/docker.sock`),
+    no real Firestore/provider call, no `.env`/key file inside `ai-trading/`.
+    """
+
+    SCRIPT = REPO_ROOT / "deploy" / "production" / "prepare-mirofish.sh"
+    # Resolved once from the TEST process's own full PATH, not the
+    # restricted one `run_script()` gives the script itself: macOS ships a
+    # bash 3.2 at /bin/bash (no `exec {fd}>file` auto-allocation support,
+    # required by this script's self-acquire branch) -- production and the
+    # prescribed Linux CI container both have a modern bash as `/bin/bash`.
+    BASH = shutil.which("bash") or "/bin/bash"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.app_dir = root / "app"
+        self.secrets_dir = root / "secrets"
+        self.runtime_dir = root / "runtime"
+        self.bin_dir = root / "bin"
+        self.lock_path = root / "varlib" / ".control.lock"
+        for directory in (
+            self.app_dir, self.secrets_dir, self.runtime_dir,
+            self.bin_dir, self.lock_path.parent,
+        ):
+            directory.mkdir(parents=True)
+        self.docker_log = root / "docker.log"
+        self.mirofish_env = self.runtime_dir / "mirofish.env"
+        self.write_image_metadata()
+        self.write_fake_family_config(succeed=True)
+        (self.app_dir / "docker-compose.yml").write_text("name: fixture\nservices: {}\n")
+        (self.app_dir / "docker-compose.mirofish.yml").write_text(
+            'name: fixture\nservices:\n  mirofish:\n    image: busybox\n    profiles: ["mirofish"]\n'
+        )
+        self.write_fake_docker()
+
+    def write_image_metadata(self, tag=VALID_TAG):
+        path = self.app_dir / "images.env"
+        path.write_text(f"AI_TRADING_REGISTRY=fake-registry\nAI_TRADING_IMAGE_TAG={tag}\n")
+        os.chmod(path, 0o644)
+
+    def write_fake_family_config(self, succeed):
+        path = self.app_dir / "family_config.py"
+        if succeed:
+            body = (
+                "#!/usr/bin/env bash\nset -e\nshift\nout=\"\"\n"
+                "while [ \"$#\" -gt 0 ]; do case \"$1\" in "
+                "--out-dir) out=\"$2\"; shift 2;; *) shift;; esac; done\n"
+                "printf 'ZEP_API_KEY=fake-zep\\nLLM_API_KEY=fake-llm\\n' > \"$out/mirofish.env\"\n"
+            )
+        else:
+            body = (
+                "#!/usr/bin/env bash\n"
+                "echo 'family-config: profile not found: ai-trading/mirofish' >&2\n"
+                "exit 1\n"
+            )
+        path.write_text(body)
+        path.chmod(0o755)
+
+    def write_fake_docker(self):
+        # Never the real Docker socket: a plain PATH shim, logging every
+        # call to $DOCKER_LOG so a test can assert exactly which compose
+        # subcommands ran (and which never did).
+        path = self.bin_dir / "docker"
+        path.write_text(
+            "#!/usr/bin/env bash\n"
+            'echo "fake docker $*" >> "$DOCKER_LOG"\n'
+            'case "${1:-}" in compose) exit 0;; esac\n'
+            "exit 0\n"
+        )
+        path.chmod(0o755)
+
+    def run_script(self, extra_args=(), env_overrides=None, pass_fds=()):
+        # The script's own internal validate_inherited_lock_fd shells out to
+        # `python3` (never duplicating state.py's lock logic) -- include
+        # wherever *this* interpreter actually lives (python:3.12-slim's
+        # python3 is under /usr/local/bin, not /usr/bin) alongside the fake
+        # docker shim and the usual system directories.
+        python_dir = str(Path(sys.executable).parent)
+        env = {
+            "PATH": f"{self.bin_dir}:{python_dir}:/usr/bin:/bin",
+            "DOCKER_LOG": str(self.docker_log),
+            "FAMILY_CONFIG_CREDENTIALS": str(Path(self._tmp.name) / "fake-reader-key.json"),
+            "DEPLOY_SH_SKIP_CHOWN": "1",
+            "PREPARE_MIROFISH_LOCK_PATH": str(self.lock_path),
+        }
+        if env_overrides:
+            env.update(env_overrides)
+        argv = [
+            self.BASH, str(self.SCRIPT),
+            "--app-dir", str(self.app_dir),
+            "--secrets-dir", str(self.secrets_dir),
+            "--runtime-dir", str(self.runtime_dir),
+            "--owner-uid", str(os.getuid()),
+            *extra_args,
+        ]
+        return subprocess.run(
+            argv, env=env, capture_output=True, text=True, timeout=20, pass_fds=pass_fds,
+        )
+
+    def acquire_real_lock(self):
+        self.lock_path.touch(mode=0o600)
+        fd = os.open(self.lock_path, os.O_RDWR)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.addCleanup(os.close, fd)
+        return fd
+
+    # -- happy path / inherited lease -----------------------------------------
+
+    def test_happy_path_with_inherited_lock_validates_and_installs(self):
+        fd = self.acquire_real_lock()
+        result = self.run_script(extra_args=["--lock-fd", str(fd)], pass_fds=(fd,))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.mirofish_env.exists())
+        self.assertEqual(stat.S_IMODE(self.mirofish_env.stat().st_mode), 0o600)
+        content = self.mirofish_env.read_text()
+        self.assertIn("ZEP_API_KEY=fake-zep", content)
+        self.assertIn("LLM_API_KEY=fake-llm", content)
+        # The happy path only renders/installs a file -- it never needs to
+        # call compose/docker at all (starting the container is apply()'s
+        # separate job).
+        self.assertFalse(self.docker_log.exists())
+
+    # -- bad metadata / bad fd -------------------------------------------------
+
+    def test_bad_image_metadata_fails_before_touching_lock_or_files(self):
+        self.write_image_metadata(tag="not-a-sha")
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("images.env", result.stderr)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertFalse(self.lock_path.exists())
+
+    def test_bogus_lock_fd_is_rejected_without_leaking_secrets(self):
+        result = self.run_script(extra_args=["--lock-fd", "123"])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inherited lifecycle lock is invalid", result.stderr)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertNotIn("fake-zep", result.stderr)
+        self.assertNotIn("fake-llm", result.stderr)
+
+    # -- missing profile / cleanup failure uses stop-only recovery -----------
+
+    def test_missing_profile_fails_cleanly_writing_nothing(self):
+        self.write_fake_family_config(succeed=False)
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertNotIn("fake-zep", result.stderr)
+        self.assertNotIn("fake-llm", result.stderr)
+
+    def test_cleanup_failure_self_heals_via_stop_only_recovery_never_rm(self):
+        # Forces activate_mirofish's post-install scratch cleanup to fail
+        # for real, exercising this script's OWN stop_remove_mirofish_container
+        # override: a bounded `compose stop`, never `rm`/`down`. A chmod-based
+        # injection (mirofish-runtime.sh's own DEPLOY_SH_MIROFISH_CHMOD_SCRATCH_AFTER_INSTALL
+        # knob, used by deploy/ci/test-deploy-firestore.sh) does not work
+        # when this suite runs as root (the prescribed Linux container):
+        # root bypasses DAC permission checks entirely, so a chmod 0500
+        # directory is still removable by root. Shadowing `rm` on PATH
+        # instead works identically at any privilege level. Uses the
+        # inherited-lock path (not self-acquire) so this test never depends
+        # on `flock(1)` being installed -- that binary is exercised
+        # separately by test_standalone_busy_lock_times_out_without_writing_anything.
+        failing_rm = self.bin_dir / "rm"
+        failing_rm.write_text(
+            "#!/usr/bin/env bash\n"
+            'for arg in "$@"; do\n'
+            '  case "$arg" in\n'
+            "    *.mirofish-render-*) echo \"rm: $arg: Permission denied (simulated)\" >&2; exit 1 ;;\n"
+            "  esac\n"
+            "done\n"
+            'exec /bin/rm "$@"\n'
+        )
+        failing_rm.chmod(0o755)
+        fd = self.acquire_real_lock()
+        result = self.run_script(extra_args=["--lock-fd", str(fd)], pass_fds=(fd,))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.mirofish_env.exists())
+        self.assertIn("post-install cleanup failed", result.stderr)
+        self.assertTrue(self.docker_log.exists())
+        log = self.docker_log.read_text()
+        self.assertIn("stop --timeout 60 mirofish", log)
+        self.assertNotIn("rm -s -f mirofish", log)
+        self.assertNotIn("down", log)
+        self.assertNotIn("fake-zep", result.stderr)
+        self.assertNotIn("fake-llm", result.stderr)
+
+    # -- standalone busy lock --------------------------------------------------
+
+    def test_standalone_busy_lock_times_out_without_writing_anything(self):
+        if not shutil.which("flock"):
+            self.skipTest("flock(1) is not installed in this environment")
+        self.lock_path.touch(mode=0o600)
+        holder = subprocess.Popen(
+            [
+                sys.executable, "-c",
+                "import fcntl,sys,time\n"
+                "fd = open(sys.argv[1], 'r+')\n"
+                "fcntl.flock(fd.fileno(), fcntl.LOCK_EX)\n"
+                "print('locked', flush=True)\n"
+                "time.sleep(float(sys.argv[2]))\n",
+                str(self.lock_path), "3",
+            ],
+            stdout=subprocess.PIPE, text=True,
+        )
+        try:
+            self.assertEqual(holder.stdout.readline().strip(), "locked")
+            result = self.run_script(env_overrides={"PREPARE_MIROFISH_LOCK_WAIT_SECONDS": "1"})
+        finally:
+            holder.wait(timeout=10)
+            holder.stdout.close()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not acquire the lifecycle lock", result.stderr)
+        self.assertFalse(self.mirofish_env.exists())
 
 
 if __name__ == "__main__":
