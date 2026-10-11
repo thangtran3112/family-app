@@ -8,6 +8,7 @@ import json
 import stat
 import sys
 import textwrap
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -505,6 +506,98 @@ class RunnerTestCase(unittest.TestCase):
     def test_close_is_a_noop_with_no_children(self):
         runner = Runner(self.root)
         runner.close()  # must not raise
+
+    # --- start()/close() admission race (task-3-review.md) -------------------
+    #
+    # Exact interleaving reported: start() spawned a child before acquiring
+    # the lock, while close() set `_closing` and snapshotted `_children`
+    # under that lock; if close()'s snapshot ran in the gap before start()
+    # registered its child, close() saw an empty dict and returned having
+    # terminated nothing, orphaning the just-registered child outside any
+    # tracking — permanently "running". Both tests below force the exact
+    # ordering with events/lock ownership, not sleep-based guessing.
+
+    def test_start_racing_close_never_orphans_a_running_record(self):
+        run = self._running_record()
+        runner = Runner(self.root)
+        script = Path(self.tmp.name) / "race_sleep.py"
+        _write_script(
+            script,
+            """
+            import time
+            time.sleep(30)
+        """,
+        )
+        runner._argv = lambda id: [sys.executable, str(script)]
+
+        popen_entered = threading.Event()
+        let_popen_return = threading.Event()
+        import subprocess as subprocess_module
+
+        real_popen = subprocess_module.Popen
+
+        def fake_popen(argv, **kwargs):
+            popen_entered.set()
+            let_popen_return.wait(timeout=5)
+            return real_popen(argv, **kwargs)
+
+        subprocess_module.Popen = fake_popen
+        try:
+            start_thread = threading.Thread(target=runner.start, args=(run["id"],))
+            start_thread.start()
+            self.assertTrue(popen_entered.wait(timeout=5), "start() never reached Popen")
+
+            close_thread = threading.Thread(target=runner.close)
+            close_thread.start()
+            time.sleep(0.1)  # scheduling nudge only; the assertion below is the real check
+            # The fix holds one lock across start()'s whole closing-check +
+            # Popen + register, shared with close()'s closing-flag + snapshot.
+            # Popen is still blocked (held open by let_popen_return), so if
+            # close() has already finished here, it did so WITHOUT that lock
+            # ever serializing against start() — exactly the reported bug.
+            self.assertTrue(
+                close_thread.is_alive(),
+                "close() returned before start() could register its child (the orphan race)",
+            )
+
+            let_popen_return.set()
+            start_thread.join(timeout=10)
+            close_thread.join(timeout=10)
+        finally:
+            subprocess_module.Popen = real_popen
+
+        self.assertFalse(start_thread.is_alive())
+        self.assertFalse(close_thread.is_alive())
+        saved = self.store.worker_run(run["id"])
+        self.assertEqual(saved["status"], "interrupted")
+        self.assertNotEqual(saved["status"], "running")
+        self.assertEqual(runner._children, {})
+
+    def test_start_after_close_is_rejected_without_orphaning(self):
+        runner = Runner(self.root)
+        runner.close()  # no children yet; sets _closing and returns immediately
+        run = self._running_record()
+
+        import subprocess as subprocess_module
+
+        real_popen = subprocess_module.Popen
+        spawned = []
+
+        def spying_popen(*args, **kwargs):
+            spawned.append(args)
+            return real_popen(*args, **kwargs)
+
+        subprocess_module.Popen = spying_popen
+        try:
+            runner.start(run["id"])
+        finally:
+            subprocess_module.Popen = real_popen
+
+        self.assertEqual(spawned, [])  # never spawned once closing
+        saved = self.store.worker_run(run["id"])
+        self.assertEqual(saved["status"], "failed")
+        self.assertEqual(saved["error_code"], "LAUNCH_FAILED")
+        self.assertEqual(runner._children, {})
 
 
 if __name__ == "__main__":

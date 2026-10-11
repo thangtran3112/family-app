@@ -44,18 +44,34 @@ class Runner:
 
     def start(self, id: str) -> None:
         """Launch the worker subprocess for ``id``. Never raises: a launch
-        failure is recorded on the run instead of propagating."""
-        try:
-            proc = subprocess.Popen(
-                self._argv(id),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except OSError:
-            self._mark_failed_if_running(id, "LAUNCH_FAILED")
-            return
+        failure — including one that raced an in-progress ``close()`` — is
+        recorded on the run instead of propagating or leaving it stuck
+        running.
+
+        Checking ``_closing``, spawning, and registering the child all
+        happen under one lock acquisition (shared with ``close()``'s own
+        closing-flag-plus-snapshot) so the two can never interleave: either
+        this call finishes registering the child before ``close()`` can
+        take its snapshot — in which case ``close()`` is guaranteed to see
+        and terminate it — or ``close()`` has already flipped ``_closing``
+        before this call gets the lock, in which case the child is never
+        spawned at all. There is no window where a child exists but is
+        untracked by both.
+        """
         with self._lock:
+            if self._closing:
+                self._mark_failed_if_running(id, "LAUNCH_FAILED")
+                return
+            try:
+                proc = subprocess.Popen(
+                    self._argv(id),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except OSError:
+                self._mark_failed_if_running(id, "LAUNCH_FAILED")
+                return
             self._children[id] = proc
         threading.Thread(target=self._reap, args=(id, proc), daemon=True).start()
 
@@ -63,9 +79,14 @@ class Runner:
         """Shut down every tracked child: terminate its process group, wait
         up to the grace period, kill if still alive, then record each as
         Interrupted — never Failed, which would misclassify an intentional
-        shutdown."""
-        self._closing = True
+        shutdown.
+
+        Setting ``_closing`` and snapshotting ``_children`` happen under the
+        same lock ``start()`` uses for its own closing-check-and-register,
+        so no child started concurrently can be missed (see ``start()``).
+        """
         with self._lock:
+            self._closing = True
             children = list(self._children.items())
 
         for _id, proc in children:
