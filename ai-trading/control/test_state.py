@@ -85,6 +85,28 @@ class StateTest(unittest.TestCase):
         self.assertNotIn("mirofish", selected_services(state, False))
         self.assertIn("mirofish", selected_services(state, True))
 
+    def test_service_selection_omits_both_ta_members_when_off(self):
+        # task-5-brief's own fixture: deploy.sh's explicit selected-service
+        # Compose call must never include a disabled app's mapped services,
+        # and must always still include every protected (always-on) one.
+        s = initial_state(None)
+        s["desired"]["tradingagents"] = False
+        selected = selected_services(s, mirofish_ready=False)
+        self.assertNotIn("ta-terminal", selected)
+        self.assertNotIn("ta-research", selected)
+        self.assertTrue(set(PROTECTED_SERVICES).issubset(selected))
+
+    def test_rollback_restores_preferences_without_lowering_revision(self):
+        # task-5-brief's own fixture: a deploy-time rollback's preference
+        # restore must land at a strictly GREATER revision than whatever
+        # this run mutated it to, never equal to or lower than the saved
+        # snapshot's own revision.
+        saved = initial_state(None)
+        current, _ = begin_change(saved, "mirofish", True, 0, False)
+        restored = restore_preferences(current, saved)
+        self.assertEqual(restored["desired"], saved["desired"])
+        self.assertGreater(restored["revision"], current["revision"])
+
     def test_stale_and_invalid_mutations_do_not_change_state(self):
         state = initial_state(None)
         before = json.loads(json.dumps(state))

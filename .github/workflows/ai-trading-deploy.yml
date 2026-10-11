@@ -10,6 +10,9 @@ on:
       - ".gitmodules"
       - ".github/workflows/ai-trading-deploy.yml"
       - "common/config/**"
+      # Task 5 (app-controls): the Linux installer lives outside ai-trading/
+      # entirely -- without this, an installer-only fix would never deploy.
+      - "infrastructure/vps/app-controls/**"
   workflow_dispatch:
     inputs:
       deploy_app:
@@ -25,13 +28,19 @@ on:
           Turn MiroFish on for this deploy (MIROFISH_ACTIVATE=1 to deploy.sh's
           fail-safe opt-in). Only takes effect when deploy_app is also true.
           Without it (and on every push to main) deploy.sh gets
-          MIROFISH_ACTIVATE=keep: MiroFish stays on only if it is running now.
+          MIROFISH_ACTIVATE=keep: the persisted app-control preference
+          (Task 5, app-controls) is left exactly as it is -- on a first
+          activation this adopts whichever app was actually running at
+          install time, never re-derived from "is a container running
+          right now" on every later deploy.
         type: boolean
         default: false
       stop_mirofish:
         description: >-
           Turn MiroFish off for this deploy (MIROFISH_ACTIVATE=0). Wins over
           activate_mirofish. Only takes effect when deploy_app is also true.
+          Updates the same persisted app-control preference (Task 5) a
+          Settings switch would.
         type: boolean
         default: false
       upload_hub_static:
@@ -175,6 +184,8 @@ jobs:
           sparse-checkout: |
             ai-trading/deploy/production
             ai-trading/deploy/ci
+            ai-trading/control
+            infrastructure/vps/app-controls
             common/config
           persist-credentials: false
 
@@ -227,7 +238,8 @@ jobs:
           umask 077
           ssh_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
           scp_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT")
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "install -d -m 0700 /tmp/ai-trading-deploy /tmp/ai-trading-deploy/env /tmp/ai-trading-deploy/config"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "install -d -m 0700 /tmp/ai-trading-deploy /tmp/ai-trading-deploy/env /tmp/ai-trading-deploy/config /tmp/ai-trading-deploy/config/control /tmp/ai-trading-deploy/config/deploy/production /tmp/ai-trading-deploy/installer/ai-trading/control /tmp/ai-trading-deploy/installer/ai-trading/deploy/production /tmp/ai-trading-deploy/installer/infrastructure/vps/app-controls"
           # Only the controller (deploy.sh) and its config CLI (family_config.py)
           # are installed directly below; the four declarative config files are
           # staged, never pre-installed as active config -- deploy.sh itself now
@@ -242,10 +254,45 @@ jobs:
             ai-trading/deploy/production/Caddyfile \
             ai-trading/deploy/production/health-check.sh \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/"
+          # Task 5 (app-controls): the control helper's own code/catalog and
+          # the standalone MiroFish preparer it depends on at its deployed
+          # location -- staged alongside the four files above, in the SAME
+          # nested layout deploy.sh's own APP_CONFIG_STAGING_DIR expects
+          # (control/runtime.py's PREPARE_MIROFISH_SCRIPT resolves relative
+          # to its own installed path; see that module's docstring).
+          scp "${scp_opts[@]}" \
+            ai-trading/control/catalog.json \
+            ai-trading/control/state.py \
+            ai-trading/control/runtime.py \
+            ai-trading/control/server.py \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/control/"
+          scp "${scp_opts[@]}" \
+            ai-trading/deploy/production/mirofish-runtime.sh \
+            ai-trading/deploy/production/prepare-mirofish.sh \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/deploy/production/"
+          # The Linux installer (infrastructure/vps/app-controls/install.sh)
+          # and its own staged source tree -- no provider keys, pure code,
+          # same relative repo layout its own --src-dir expects.
+          scp "${scp_opts[@]}" \
+            infrastructure/vps/app-controls/install.sh \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/installer/"
+          scp "${scp_opts[@]}" \
+            ai-trading/control/catalog.json \
+            ai-trading/control/state.py \
+            ai-trading/control/runtime.py \
+            ai-trading/control/server.py \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/installer/ai-trading/control/"
+          scp "${scp_opts[@]}" \
+            ai-trading/deploy/production/mirofish-runtime.sh \
+            ai-trading/deploy/production/prepare-mirofish.sh \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/installer/ai-trading/deploy/production/"
+          scp "${scp_opts[@]}" \
+            infrastructure/vps/app-controls/ai-trading-control.service \
+            "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/installer/infrastructure/vps/app-controls/"
           scp "${scp_opts[@]}" "$ENV_DIR"/*.env "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/env/"
           # shellcheck disable=SC2029 # GHCR_USER and IMAGE_TAG expand on the runner on purpose
           printf '%s\n' "$GITHUB_TOKEN" | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh"
+            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo bash /tmp/ai-trading-deploy/installer/install.sh --src-dir /tmp/ai-trading-deploy/installer; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh"
           SCRIPT_EOF
           common/config/family_config.py run ai-trading/deploy -- bash "$DEPLOY_SCRIPT"
 

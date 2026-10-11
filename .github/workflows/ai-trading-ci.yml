@@ -9,6 +9,10 @@ on:
       - "!ai-trading/**/*.md"
       - ".gitmodules"
       - ".github/workflows/ai-trading-ci.yml"
+      # Task 5 (app-controls): the Linux installer lives outside ai-trading/
+      # entirely -- without this, an installer-only change would never
+      # trigger this workflow's own scripts/shellcheck job at all.
+      - "infrastructure/vps/app-controls/**"
   workflow_dispatch:
 
 concurrency:
@@ -111,7 +115,8 @@ jobs:
         run: |
           shopt -s nullglob
           files=(ai-trading/deploy/upstream/terminal/*.sh ai-trading/deploy/ci/*.sh
-            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh)
+            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh
+            infrastructure/vps/app-controls/*.sh)
           shellcheck "${files[@]}"
       - name: Upload-mirofish-static mock-gcloud test
         run: ai-trading/deploy/ci/upload-mirofish-static.test.sh
@@ -119,6 +124,11 @@ jobs:
         run: ai-trading/deploy/ci/check-clerk-publishable-key.test.sh
       - name: deploy.sh Firestore-render test (A9a1)
         run: ai-trading/deploy/ci/test-deploy-firestore.sh
+      - name: app-controls deploy/installer test (Task 5)
+        run: ai-trading/deploy/ci/test-app-controls-deploy.sh
+      - name: Control helper tests (Task 5)
+        working-directory: ai-trading/control
+        run: python3 -m unittest discover -s . -v
       - name: render-env.sh test (A9a2)
         run: ai-trading/deploy/ci/test-render-env.sh
       - name: Auth service tests
