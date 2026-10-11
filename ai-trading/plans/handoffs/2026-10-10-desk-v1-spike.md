@@ -1,4 +1,4 @@
-# Handoff: Family Desk v1 (Phase 1b Done; 02f and 02g Approved; Phase 1c Next)
+# Handoff: Family Desk v1 (Phase 1b Done; Comprehensive Plan Written; Phase 1c Next)
 
 **Date:** 2026-10-10
 **From:** the ai-trading main session that designed Desk v1 and ran Phases 1 and 1b
@@ -12,6 +12,7 @@
 - `plans/subplans/02d-desk-spike-results.md`
 - `plans/subplans/02f-desk-indicators-and-ai-daily-design.md`
 - `plans/subplans/02g-desk-covered-calls-and-futures-swing-design.md`
+- `plans/subplans/02h-desk-research-tools-design.md`
 
 Paths below are relative to `ai-trading/` unless they start with `../`.
 
@@ -21,27 +22,25 @@ Paths below are relative to `ai-trading/` unless they start with `../`.
 |---|---|
 | Design | Approved: `02a` (Desk v1) and `02b` (market data). `02` keeps only the base sections they still cite (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12). Decisions are in `STATUS.md` (2026-10-10 rows). |
 | Layout | `packages/family-desk/` (`contracts/`, `backend/`, and `frontend/` from Phase 4). Packages never import each other; code that two or more ai-trading packages share (provider clients, a shared schema, shared types) goes in `ai-trading/common/` (`AGENTS.md` "Our Code"). |
-| Mockups | Paper file "TobyTest", page "Family Desk · R2 mockups": desktop D1–D16, mobile M2, M3, M5–M10. Indexed in `02a` §16. |
+| Mockups | Paper file "TobyTest", page "Family Desk · R2 mockups": desktop D1–D19, mobile M2, M3, M5–M11. Indexed in `02a` §16. |
 | Phase 0 spike | Tasks 0.1–0.4 done. The owner set up the IBKR data user (guide `plans/subplans/02e-ibkr-data-user-setup.md`, $14.50 a month) and is waiting for IBKR's approval. Tasks 0.5–0.6 wait on that. |
 | Phase 1 strategy core | Done (PR #95). |
 | Phase 1b ported quant core | Done ([phase-1b-ported-quant-core.md](../subplans/02c-desk-v1-tasks/phase-1b-ported-quant-core.md)): option math, covered-call math, the support/resistance level, and paper-order sizing. On `dev` (PR #104). Contracts 40 tests, backend 169. |
 | Reuse | `02a` §11 maps what to copy from Vibe-Trading, ai-hedge-fund, and TradingAgents. TradingAgents was surveyed on 2026-10-10: its vendor router and typed errors, SEC EDGAR and FRED clients, and analyst and debate prompts are worth adapting; its LangGraph and LangChain code is not. |
 | Indicators and AI daily | `02f`, approved with mocks D9–D12, M7, and M8 (2026-10-10). Flip-card indicators and the Desk Technical Bias (TradingView's published rules); consensus EPS from Eulerpool's free tier after a pilot; one Desk AI verdict per stock each trading day, with no budget cap. |
 | Covered calls and futures swing | `02g`, approved with mocks D13–D16, M9, and M10 (2026-10-10). Covered-call coverage, rolls, and income; mini/micro futures swings for both users, with roll dates from CME's rules and a micro-first sizer. |
+| Recon and plan | The recon of all four upstream apps rewrote the reuse map (02a §11, by phase). `02h` adds backtests, the AI track record, valuation and earnings reaction, and the holding timeline (mocks D17–D19, M11). `02c` is the comprehensive master plan (new pure Phases 1c and 1d, and Phase 6b). All three await the owner's review. |
 
 ## Next Steps, in Order
 
 Each phase gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill, written from a tested prototype in `temp/`), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`, and one pull request to `dev`.
 
-1. **Phase 1c plan** (pure, no data): the `02f` §3 indicators, pivots, and Desk Technical Bias, plus the `02g` §4 futures math (roll and expiry dates from the exchange rules, weekly pivots, the micro/mini sizer), with their spec blocks.
-2. **Phase 2 plan, without IBKR** (02c "Phase 2: Data foundation"):
-   - the provider layer in `ai-trading/common/`: Alpaca with a Stooq fallback, SEC EDGAR, FRED, Finnhub, and the consensus-EPS client (the Eulerpool pilot, then the fallback);
-   - the open-source lane's `ai-trading/market-data/` (on `dev` since #99) has Alpaca and SEC clients: copy from it, or move it into `common/` together with that lane, never alone;
-   - the Desk's Postgres schema, bar store, futures roll map, and streaming slots.
-3. **Desk frontend shell plan** (02c Phase 4): `packages/family-desk/frontend` from the mockups (now D1–D16 and M2–M10), on fixture data.
-4. **When IBKR approves the data user:** run Task 0.5 with the owner on a weekday, 09:30–16:00 ET, with IB Gateway logged in. Also confirm that option greeks arrive through the $4.50 add-on. Then Task 0.6 and the IBKR client.
+1. **Phase 1c task file** (`phase-1c-technicals-and-futures.md`): pure code, written from a tested prototype. It covers the 02f §3 indicators, pivots, and bias with their blocks and cadences, and the 02g §4 futures specs, roll dates, and micro-first sizer. Reuse Vibe-Trading's futures tables and its ADX and Ichimoku (02a §11).
+2. **Phase 1d task file** (`phase-1d-research-math.md`): the as-of helpers, valuation (copied from ai-hedge-fund v1), earnings reaction, the backtest engine core, and AI call settlement (02h).
+3. **Phase 2a plan, data without IBKR**, then 3 → 4 → 5, 6, 6b → 7 (02c Execution Map). The open-source lane owns `ai-trading/market-data/`; move it into `common/` together with that lane, never alone.
+4. **When IBKR approves the data user:** Task 0.5 with the owner (weekday market hours; also confirm that greeks arrive through the $4.50 add-on), Task 0.6, then Phase 2b (the IBKR client).
 
-Open questions for the owner: close the superseded docs PR #81? Remove `temp/.env` once its values are in Firestore (`AGENTS.md` forbids `.env` files inside `ai-trading/`)?
+Open question for the owner: remove `temp/.env` once its values are in Firestore (`AGENTS.md` forbids `.env` files inside `ai-trading/`)? PR #81 was closed on 2026-10-10.
 
 ## Decisions Already Made (do not reopen without the owner)
 
