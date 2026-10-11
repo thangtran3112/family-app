@@ -9,19 +9,26 @@ Starlette's ``ServerErrorMiddleware`` and never re-raises), so disabling that
 default to hide the bug is never needed.
 """
 
+import asyncio
 import contextlib
 import json
+import os
+import subprocess
+import sys
+import time
 import unittest
 import zipfile
 from datetime import UTC, date, datetime
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 import httpx
 from ta_web import reports
 from ta_web.app import create_app
 from ta_web.domain import Inputs, owner_key
+from ta_web.runner import Runner
 from ta_web.store import Store
 
 _ORIGIN = "https://research.test"
@@ -444,6 +451,123 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             recovered = app.state.store.worker_run(run["id"])
             self.assertEqual(recovered["status"], "interrupted")
             self.assertEqual(calls, [])  # recovery never launches research
+
+
+class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
+    """create_app(root, start=None): the real production path, now that
+    Task 3's Runner/worker are merged. No test here invokes real research
+    (no POST that reaches the real ``ta_web.worker`` module/LLM); the one
+    test that does exercise ``Runner.start`` patches ``Runner._argv`` to a
+    tiny real child script (the existing test_runner.py seam), never the
+    real worker module, so no provider/network/keys are touched.
+    """
+
+    async def asyncSetUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.owner_headers = {"Cf-Access-Authenticated-User-Email": "owner-one", "Origin": _ORIGIN}
+
+    async def test_production_lifespan_real_runner_lock_health_read_close(self):
+        # A running record left behind by a simulated crashed prior process,
+        # seeded before the production app ever starts.
+        pre_store = Store(self.root)
+        owner = owner_key("owner-one")
+        stuck = pre_store.create(owner, Inputs(**_inputs()))
+        self.assertEqual(stuck["status"], "running")
+
+        app = create_app(self.root)  # start=None: production path, real Runner
+
+        real_popen = subprocess.Popen
+
+        def guard_popen(*args, **kwargs):
+            raise AssertionError("recovery must never spawn a worker subprocess")
+
+        subprocess.Popen = guard_popen
+        try:
+            async with app.router.lifespan_context(app):
+                # Recovery ran using only Store/reports (store.mark_interrupted +
+                # best-effort reports.publish) — never Runner.start/subprocess.Popen,
+                # which would have raised via guard_popen above.
+                recovered = app.state.store.worker_run(stuck["id"])
+                self.assertEqual(recovered["status"], "interrupted")
+
+                # A real Runner was constructed (not a stub/fake): app.state.start
+                # is its real bound .start method.
+                runner = app.state.start.__self__
+                self.assertIsInstance(runner, Runner)
+                self.assertFalse(runner._closing)
+
+                # The service lock is held for this whole lifespan: a second
+                # process sharing the root cannot start concurrently.
+                second = create_app(self.root)
+                with self.assertRaises(RuntimeError):
+                    async with second.router.lifespan_context(second):
+                        pass  # pragma: no cover - must not be reached
+
+                # Health and an authenticated read both work against the real,
+                # fully production-constructed app.
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
+                    health_response = await client.get("/__healthz")
+                    self.assertEqual(health_response.status_code, 200)
+                    self.assertEqual(health_response.json(), {"ok": True})
+
+                    listing = await client.get("/api/research", headers=self.owner_headers)
+                    self.assertEqual(listing.status_code, 200)
+                    ids = [item["id"] for item in listing.json()["items"]]
+                    self.assertIn(stuck["id"], ids)
+        finally:
+            subprocess.Popen = real_popen
+
+        # close(): the real Runner.close() body actually ran (it is the only
+        # code that sets `_closing`), and the service lock was released — a
+        # fresh lifespan on the same root succeeds immediately afterward.
+        self.assertTrue(runner._closing)
+        third = create_app(self.root)
+        async with third.router.lifespan_context(third):
+            pass
+
+    async def test_production_lifespan_start_launches_real_child_without_llm(self):
+        # The existing Runner._argv test seam (test_runner.py): a tiny real
+        # child script, never the real ta_web.worker module, so Runner.start's
+        # actual subprocess plumbing is exercised without any provider/network/
+        # key dependency.
+        script = Path(self.tmp.name) / "noop_worker.py"
+        script.write_text("import sys\nsys.exit(0)\n")
+
+        app = create_app(self.root)
+        with mock.patch.object(Runner, "_argv", lambda self, id: [sys.executable, str(script)]):
+            async with app.router.lifespan_context(app):
+                runner = app.state.start.__self__
+                self.assertIsInstance(runner, Runner)
+
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
+                    made = await client.post("/api/research", headers=self.owner_headers, json=_inputs())
+                    self.assertEqual(made.status_code, 202)
+                    run_id = made.json()["id"]
+
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and run_id in runner._children:
+                    await asyncio.sleep(0.02)
+                self.assertNotIn(run_id, runner._children)
+
+    def test_module_import_has_no_filesystem_or_db_side_effect(self):
+        with TemporaryDirectory() as fake_home:
+            env = dict(os.environ)
+            env["HOME"] = fake_home
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            result = subprocess.run(
+                [sys.executable, "-c", "import ta_web.app as m\nassert m.application is not None\n"],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((Path(fake_home) / ".tradingagents").exists())
 
 
 if __name__ == "__main__":
