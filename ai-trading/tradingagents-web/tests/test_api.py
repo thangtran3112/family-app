@@ -388,6 +388,40 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(leak_path, message)
                 self.assertIsNone(record.exc_info)
 
+    async def test_unexpected_handler_error_logs_no_path_or_exception_sentinel(self):
+        """Rereview round 1: the outer guard's own log line must carry zero
+        request-derived data — a request *path* can itself be a secret-bearing
+        identifier, distinct from whatever the exception text contains."""
+        app = self._app()
+        async with self._running(app) as client:
+            path_sentinel = "path-secret-ABCDEF123456"
+            exc_sentinel = "exception-secret-ZYXWVU987654"
+
+            def boom(*args, **kwargs):
+                raise RuntimeError(f"boom near {exc_sentinel}")
+
+            app.state.store.get_visible = boom
+
+            with self.assertLogs("ta_web.app", level="ERROR") as captured:
+                response = await client.get(f"/api/research/{path_sentinel}", headers=self.owner_headers)
+
+            self.assertEqual(response.status_code, 500)
+            self.assertEqual(response.json(), {"error": "INTERNAL_ERROR"})
+            self.assertNotIn(exc_sentinel, response.text)
+            self.assertNotIn(path_sentinel, response.text)
+            # Media/security headers still present on this sanitized path.
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+            self.assertEqual(response.headers["content-type"], "application/json")
+
+            for record in captured.records:
+                message = record.getMessage()
+                self.assertNotIn(exc_sentinel, message)
+                self.assertNotIn(path_sentinel, message)
+                self.assertNotIn(exc_sentinel, repr(record.args))
+                self.assertNotIn(path_sentinel, repr(record.args))
+                self.assertIsNone(record.exc_info)
+
     # --- lifespan: service lock / restart recovery --------------------------
 
     async def test_lifespan_service_lock_prevents_second_process(self):

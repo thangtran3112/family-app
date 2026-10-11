@@ -192,11 +192,11 @@ class _OuterSanitizer:
                 # since the inner Exception handler already does) — still
                 # never let the original exception escape unanswered.
                 await _deny(send, 500, "INTERNAL_ERROR")
-            _logger.error(
-                "unhandled exception reached the outer guard for %s %s",
-                scope.get("method"),
-                scope.get("path"),
-            )
+            # Fixed message only: scope["method"]/["path"] are untrusted
+            # caller-supplied ASGI data (a path segment can itself be a
+            # secret-bearing identifier) and must never reach the log, same
+            # as the original exception text/traceback.
+            _logger.error("INTERNAL_REQUEST_ERROR")
             # Deliberately not re-raised and not passed to logger.exception:
             # the original exception stops here, never reaching the ASGI
             # server's own (unsanitized) exception logging.
