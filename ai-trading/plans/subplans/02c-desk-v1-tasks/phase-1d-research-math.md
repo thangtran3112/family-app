@@ -104,7 +104,7 @@ This round's fixes first (the scoped re-review's own "critical" and "important" 
 39. **`avg_hold_bars` counts the entry and exit bar inclusively.** Unaffected by any revision.
 40. **`exposure_pct` is account-level.** Unaffected by any revision.
 
-41. **`flatBy` fires on the first bar whose *end* (not its start) is at or after the limit, and the exit is recorded at that bar's own end, not its start.** Bars are labeled by their start, so "flat by 11:00" fires on the bar that *ends* at or after 11:00 (the 10:59 bar, which ends at 11:00, not the 11:00 bar, which only ends at 11:01); a bar missing from the data is handled for free, since whatever bar actually ends at or after the limit fires, with its own real end — no special-casing needed. This refines the previous round's "flatBy fires at the close, not the open" fix with the exact bar it fires on and the exact time it records. New this round. `test_flat_by_forces_an_intraday_exit_at_the_close_of_the_bar_ending_at_it` and `test_flat_by_uses_the_first_later_bar_when_its_own_bar_is_missing` are the regressions; `test_flat_by_does_not_apply_to_daily_bars` confirms the cadence restriction still holds.
+41. **`flatBy` fires on the first bar whose *end* (not its start) is at or after the limit, and the exit is recorded at that bar's own end, not its start.** Bars are labeled by their start, so "flat by 11:00" fires on the bar that *ends* at or after 11:00 (the 10:59 bar, which ends at 11:00, not the 11:00 bar, which only ends at 11:01); a bar missing from the data is handled for free, since whatever bar actually ends at or after the limit fires, with its own real end — no special-casing needed. This refines the previous round's "flatBy fires at the close, not the open" fix with the exact bar it fires on and the exact time it records. New this round. `test_flat_by_forces_an_intraday_exit_at_the_close_of_the_bar_ending_at_it` and `test_flat_by_uses_the_first_later_bar_when_its_own_bar_is_missing` are the regressions; `test_flat_by_does_not_apply_to_daily_bars` confirms the cadence restriction still holds. The hold duration (`avg_hold_bars`) counts the exit bar by its own row position — never by looking the recorded `exit_time` up in the bar-start index, which for a `flatBy` exit is that bar's end and either lands one bar later or, on the series' final bar, is absent entirely (`Trade.exit_bar_time`; `test_flat_by_hold_duration_counts_the_exit_bar_not_one_bar_later`, `test_flat_by_exit_on_the_final_bar_does_not_raise_and_counts_correctly`).
 
 ### settlement.py
 
@@ -143,7 +143,7 @@ These modules are pure; the phases that actually run them in the Desk still have
 - Supplies per-symbol `InstrumentSpec` values, **including `commission_per_unit`** (decision 23, Most-consequential #6): futures from Phase 1c's `core/futures.py` contract specs (multiplier, tick size, and the contract's own per-contract commission), stocks by the default (`InstrumentSpec()`, multiplier 1, tick $0.01, $0.005/share) when a symbol is omitted from the map.
 - Presents results with 02h §2's honest-results labels ("Survivorship: this list was chosen today"; "Past results do not predict paper or live results") next to every backtest's statistics, including the required benchmark comparison.
 
-All paths below are relative to `ai-trading/packages/family-desk/` unless they start with `ai-trading/`. Commands run in the directory a step names. Every GREEN step's full-suite count is a **delta**, not an absolute total: the absolute total is Phase 1c's final count (whatever `phase-1c-technicals-and-futures.md` lands at) **plus** this phase's delta. This plan was written against the Phase-1b-only baseline (169 passed, no Phase 1c); verified fresh, this phase's five tasks grow that baseline by 94 (5 + 18 + 8 + 26 + 37 — see each task's own Step for its GREEN count), for 263 passed if Phase 1c has not yet merged when Phase 1d starts.
+All paths below are relative to `ai-trading/packages/family-desk/` unless they start with `ai-trading/`. Commands run in the directory a step names. Every GREEN step's full-suite count is a **delta**, not an absolute total: the absolute total is Phase 1c's final count (whatever `phase-1c-technicals-and-futures.md` lands at) **plus** this phase's delta. This plan was written against the Phase-1b-only baseline (169 passed, no Phase 1c); verified fresh, this phase's five tasks grow that baseline by 96 (5 + 18 + 8 + 28 + 37 — see each task's own Step for its GREEN count), for 265 passed if Phase 1c has not yet merged when Phase 1d starts.
 
 ### Task 1d.1: As-of helpers
 
@@ -1864,6 +1864,50 @@ def test_flat_by_uses_the_first_later_bar_when_its_own_bar_is_missing():
     assert trade.exit_price == pytest.approx(107.99)  # the 11:00 bar's close (minus slippage)
 
 
+def test_flat_by_hold_duration_counts_the_exit_bar_not_one_bar_later():
+    # Same fixture as the exit-timing test above, but checking the *hold* statistic: the exit bar
+    # is 10:59 (its end, 11:00, is only when the exit is recorded); a bar exists after it (11:00),
+    # so a bug that looks `exit_time` (11:00) up in the bar-start index overcounts the hold by one.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "10:00", close=101.0)
+    set_bar(bars, DAY, "10:01", open=103.0, high=105.0, low=101.0, close=104.0)
+    _hold(bars, DAY, "10:02", "10:59", 104.0)
+    set_bar(bars, DAY, "10:59", open=104.0, high=106.0, low=103.0, close=107.0)
+    set_bar(bars, DAY, "11:00", open=107.0, high=109.0, low=105.0, close=108.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    spec = _intraday_spec({"flatBy": "11:00"}, target_r=5.0)
+    result = backtest(
+        spec, "stock", {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)}, benchmark=pd.Series(100.0, index=bars.index)
+    )
+    [trade] = result.trades
+    assert trade.exit_reason == "time"
+    expected_hold = bars.index.get_loc(et(DAY, "10:59")) - bars.index.get_loc(et(DAY, "10:01")) + 1
+    assert result.stats.avg_hold_bars == pytest.approx(expected_hold)
+
+
+def test_flat_by_exit_on_the_final_bar_does_not_raise_and_counts_correctly():
+    # The exit bar (19:59, extended-session close minus one minute) is the series' very last row:
+    # its end (20:00) has no row at all, so a bug that looks `exit_time` up in the bar-start index
+    # raises KeyError instead of computing the hold.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "10:00", close=101.0)
+    set_bar(bars, DAY, "10:01", open=103.0, high=105.0, low=101.0, close=104.0)
+    _hold(bars, DAY, "10:02", "19:59", 104.0)
+    set_bar(bars, DAY, "19:59", open=104.0, high=106.0, low=103.0, close=107.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    spec = _intraday_spec({"flatBy": "20:00"}, target_r=5.0)
+    result = backtest(
+        spec, "stock", {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)}, benchmark=pd.Series(100.0, index=bars.index)
+    )
+    [trade] = result.trades
+    assert trade.exit_reason == "time"
+    assert trade.exit_time == et(DAY, "20:00")
+    expected_hold = bars.index.get_loc(et(DAY, "19:59")) - bars.index.get_loc(et(DAY, "10:01")) + 1
+    assert result.stats.avg_hold_bars == pytest.approx(expected_hold)
+
+
 def test_flat_by_does_not_apply_to_daily_bars():
     frame = make_bars(23)  # the day-21 entry still exits via the day-22 gap-stop, not a time exit
     spec = make_spec(limits={"flatBy": "12:00"})
@@ -2011,6 +2055,8 @@ class Trade:
     r: float
     exit_reason: ExitReason
     pnl: float  # realized, after commission and slippage
+    exit_bar_time: Any = None  # the exit bar's own start; differs from exit_time only for a
+    # flat-by exit, which records exit_time as that bar's end. None for a hand-built Trade.
 
 
 @dataclass(frozen=True)
@@ -2188,10 +2234,19 @@ def _open(bracket: Bracket, entry_time: Any, costs: Costs, instrument: Instrumen
 
 
 def _close(
-    position: _Position, raw_price: float, reason: ExitReason, exit_time: Any, costs: Costs, instrument: InstrumentSpec
+    position: _Position,
+    raw_price: float,
+    reason: ExitReason,
+    exit_time: Any,
+    exit_bar_time: Any,
+    costs: Costs,
+    instrument: InstrumentSpec,
 ) -> tuple[Trade, float]:
     """The closed `Trade` (whose `pnl` is the full round trip, both commissions) and the cash this
-    close adds (the entry commission was already taken out of cash when the position opened)."""
+    close adds (the entry commission was already taken out of cash when the position opened).
+    `exit_bar_time` is the exit bar's own start (its row in `reference_index`), used for the hold
+    duration; `exit_time` is the recorded, user-facing moment the exit happens, which for a
+    flat-by exit is that bar's *end*, not its start."""
     sign = 1.0 if position.side == "buy" else -1.0
     exit_price = raw_price - sign * costs.slippage_ticks * instrument.tick_size
     gross = (exit_price - position.entry_price) * sign * position.quantity * instrument.multiplier
@@ -2214,6 +2269,7 @@ def _close(
         r=round(r, 6),
         exit_reason=reason,
         pnl=round(pnl, 6),
+        exit_bar_time=exit_bar_time,
     )
     return trade, cash_delta
 
@@ -2350,7 +2406,9 @@ def backtest(
             if position is not None:
                 exit_ = _gap_exit(position, execution_bars[s].iloc[i])
                 if exit_ is not None:
-                    trade, cash_delta = _close(position, exit_[0], exit_[1], reference_index[i], costs, specs[s])
+                    trade, cash_delta = _close(
+                        position, exit_[0], exit_[1], reference_index[i], reference_index[i], costs, specs[s]
+                    )
                     trades.append(trade)
                     cash += cash_delta
                     daily_pnl += trade.pnl
@@ -2404,9 +2462,13 @@ def backtest(
                 exit_ = _touch_exit(position, execution_bars[s].iloc[i], is_last=is_last, flat=flat_time)
                 if exit_ is not None:
                     # A time exit is recorded at the bar's end (when it actually happens), not the
-                    # bar's start; every other exit already happens within the bar it is on.
+                    # bar's start; every other exit already happens within the bar it is on. The
+                    # hold duration always uses this row's own start (`exit_bar_time`), never the
+                    # bar's end, so a flat-by exit's hold is not overcounted by one bar.
                     exit_time = bar_end if exit_[1] == "time" else reference_index[i]
-                    trade, cash_delta = _close(position, exit_[0], exit_[1], exit_time, costs, specs[s])
+                    trade, cash_delta = _close(
+                        position, exit_[0], exit_[1], exit_time, reference_index[i], costs, specs[s]
+                    )
                     trades.append(trade)
                     cash += cash_delta
                     daily_pnl += trade.pnl
@@ -2564,13 +2626,17 @@ def stats(
 
 
 def _hold_bars(trade: Trade, index: pd.Index) -> int:
-    return int(index.get_loc(trade.exit_time) - index.get_loc(trade.entry_time) + 1)
+    """Entry bar to exit bar, inclusive, by their row position — never `exit_time` itself, which
+    for a flat-by exit is that bar's *end*, one bar length past its own row (and absent from
+    `index` entirely when that bar is the series' last)."""
+    exit_time = trade.exit_bar_time if trade.exit_bar_time is not None else trade.exit_time
+    return int(index.get_loc(exit_time) - index.get_loc(trade.entry_time) + 1)
 ```
 
 - [ ] **Step 4: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_backtest.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `26 passed`, ruff clean, then the full suite grows by 26 over Task 1d.3's count (57 total growth over the pre-1d baseline).
+Expected: `28 passed`, ruff clean, then the full suite grows by 28 over Task 1d.3's count (59 total growth over the pre-1d baseline).
 
 - [ ] **Step 5: Commit.**
 
@@ -3017,7 +3083,7 @@ def settle_all(calls: list[AiCall], prices: dict[str, pd.DataFrame], spy: pd.Ser
 - [ ] **Step 5: Run every suite.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_settlement.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `37 passed`, ruff clean, then the full suite grows by 37 over Task 1d.4's count (94 total growth over the pre-1d baseline — 263 passed if Phase 1c has not yet merged when Phase 1d starts).
+Expected: `37 passed`, ruff clean, then the full suite grows by 37 over Task 1d.4's count (96 total growth over the pre-1d baseline — 265 passed if Phase 1c has not yet merged when Phase 1d starts).
 
 - [ ] **Step 6: Commit.**
 

@@ -71,6 +71,8 @@ class Trade:
     r: float
     exit_reason: ExitReason
     pnl: float  # realized, after commission and slippage
+    exit_bar_time: Any = None  # the exit bar's own start; differs from exit_time only for a
+    # flat-by exit, which records exit_time as that bar's end. None for a hand-built Trade.
 
 
 @dataclass(frozen=True)
@@ -248,10 +250,19 @@ def _open(bracket: Bracket, entry_time: Any, costs: Costs, instrument: Instrumen
 
 
 def _close(
-    position: _Position, raw_price: float, reason: ExitReason, exit_time: Any, costs: Costs, instrument: InstrumentSpec
+    position: _Position,
+    raw_price: float,
+    reason: ExitReason,
+    exit_time: Any,
+    exit_bar_time: Any,
+    costs: Costs,
+    instrument: InstrumentSpec,
 ) -> tuple[Trade, float]:
     """The closed `Trade` (whose `pnl` is the full round trip, both commissions) and the cash this
-    close adds (the entry commission was already taken out of cash when the position opened)."""
+    close adds (the entry commission was already taken out of cash when the position opened).
+    `exit_bar_time` is the exit bar's own start (its row in `reference_index`), used for the hold
+    duration; `exit_time` is the recorded, user-facing moment the exit happens, which for a
+    flat-by exit is that bar's *end*, not its start."""
     sign = 1.0 if position.side == "buy" else -1.0
     exit_price = raw_price - sign * costs.slippage_ticks * instrument.tick_size
     gross = (exit_price - position.entry_price) * sign * position.quantity * instrument.multiplier
@@ -274,6 +285,7 @@ def _close(
         r=round(r, 6),
         exit_reason=reason,
         pnl=round(pnl, 6),
+        exit_bar_time=exit_bar_time,
     )
     return trade, cash_delta
 
@@ -410,7 +422,9 @@ def backtest(
             if position is not None:
                 exit_ = _gap_exit(position, execution_bars[s].iloc[i])
                 if exit_ is not None:
-                    trade, cash_delta = _close(position, exit_[0], exit_[1], reference_index[i], costs, specs[s])
+                    trade, cash_delta = _close(
+                        position, exit_[0], exit_[1], reference_index[i], reference_index[i], costs, specs[s]
+                    )
                     trades.append(trade)
                     cash += cash_delta
                     daily_pnl += trade.pnl
@@ -464,9 +478,13 @@ def backtest(
                 exit_ = _touch_exit(position, execution_bars[s].iloc[i], is_last=is_last, flat=flat_time)
                 if exit_ is not None:
                     # A time exit is recorded at the bar's end (when it actually happens), not the
-                    # bar's start; every other exit already happens within the bar it is on.
+                    # bar's start; every other exit already happens within the bar it is on. The
+                    # hold duration always uses this row's own start (`exit_bar_time`), never the
+                    # bar's end, so a flat-by exit's hold is not overcounted by one bar.
                     exit_time = bar_end if exit_[1] == "time" else reference_index[i]
-                    trade, cash_delta = _close(position, exit_[0], exit_[1], exit_time, costs, specs[s])
+                    trade, cash_delta = _close(
+                        position, exit_[0], exit_[1], exit_time, reference_index[i], costs, specs[s]
+                    )
                     trades.append(trade)
                     cash += cash_delta
                     daily_pnl += trade.pnl
@@ -624,4 +642,8 @@ def stats(
 
 
 def _hold_bars(trade: Trade, index: pd.Index) -> int:
-    return int(index.get_loc(trade.exit_time) - index.get_loc(trade.entry_time) + 1)
+    """Entry bar to exit bar, inclusive, by their row position — never `exit_time` itself, which
+    for a flat-by exit is that bar's *end*, one bar length past its own row (and absent from
+    `index` entirely when that bar is the series' last)."""
+    exit_time = trade.exit_bar_time if trade.exit_bar_time is not None else trade.exit_time
+    return int(index.get_loc(exit_time) - index.get_loc(trade.entry_time) + 1)

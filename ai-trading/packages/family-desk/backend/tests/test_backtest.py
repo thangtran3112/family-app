@@ -511,6 +511,50 @@ def test_flat_by_uses_the_first_later_bar_when_its_own_bar_is_missing():
     assert trade.exit_price == pytest.approx(107.99)  # the 11:00 bar's close (minus slippage)
 
 
+def test_flat_by_hold_duration_counts_the_exit_bar_not_one_bar_later():
+    # Same fixture as the exit-timing test above, but checking the *hold* statistic: the exit bar
+    # is 10:59 (its end, 11:00, is only when the exit is recorded); a bar exists after it (11:00),
+    # so a bug that looks `exit_time` (11:00) up in the bar-start index overcounts the hold by one.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "10:00", close=101.0)
+    set_bar(bars, DAY, "10:01", open=103.0, high=105.0, low=101.0, close=104.0)
+    _hold(bars, DAY, "10:02", "10:59", 104.0)
+    set_bar(bars, DAY, "10:59", open=104.0, high=106.0, low=103.0, close=107.0)
+    set_bar(bars, DAY, "11:00", open=107.0, high=109.0, low=105.0, close=108.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    spec = _intraday_spec({"flatBy": "11:00"}, target_r=5.0)
+    result = backtest(
+        spec, "stock", {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)}, benchmark=pd.Series(100.0, index=bars.index)
+    )
+    [trade] = result.trades
+    assert trade.exit_reason == "time"
+    expected_hold = bars.index.get_loc(et(DAY, "10:59")) - bars.index.get_loc(et(DAY, "10:01")) + 1
+    assert result.stats.avg_hold_bars == pytest.approx(expected_hold)
+
+
+def test_flat_by_exit_on_the_final_bar_does_not_raise_and_counts_correctly():
+    # The exit bar (19:59, extended-session close minus one minute) is the series' very last row:
+    # its end (20:00) has no row at all, so a bug that looks `exit_time` up in the bar-start index
+    # raises KeyError instead of computing the hold.
+    bars = minute_bars("stock", DAY)
+    set_bar(bars, DAY, "10:00", close=101.0)
+    set_bar(bars, DAY, "10:01", open=103.0, high=105.0, low=101.0, close=104.0)
+    _hold(bars, DAY, "10:02", "19:59", 104.0)
+    set_bar(bars, DAY, "19:59", open=104.0, high=106.0, low=103.0, close=107.0)
+
+    daily = daily_bars([previous_session("stock", DAY)], [90.0])
+    spec = _intraday_spec({"flatBy": "20:00"}, target_r=5.0)
+    result = backtest(
+        spec, "stock", {"TEST": SymbolBars(bars_1d=daily, bars_1m=bars)}, benchmark=pd.Series(100.0, index=bars.index)
+    )
+    [trade] = result.trades
+    assert trade.exit_reason == "time"
+    assert trade.exit_time == et(DAY, "20:00")
+    expected_hold = bars.index.get_loc(et(DAY, "19:59")) - bars.index.get_loc(et(DAY, "10:01")) + 1
+    assert result.stats.avg_hold_bars == pytest.approx(expected_hold)
+
+
 def test_flat_by_does_not_apply_to_daily_bars():
     frame = make_bars(23)  # the day-21 entry still exits via the day-22 gap-stop, not a time exit
     spec = make_spec(limits={"flatBy": "12:00"})
