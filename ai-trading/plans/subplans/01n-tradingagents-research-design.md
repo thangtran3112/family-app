@@ -70,7 +70,10 @@ arbitrary save paths and runs as the same OS user, so sharing its writable data
 volume would allow terminal users to overwrite private/read-only report files.
 Leave existing `ta-data` unchanged. Explicit legacy imports use a read-only
 operator mount, not a permanent mount in the research service. Do not publish its
-port to the host. Keep the existing terminal available and give the app's launch surface
+port to the host. Give the service a separate Docker research network, with only
+the gateway as its production peer. The retained terminal must not reach this
+header-trusting backend directly; an internal port on their shared network would
+allow forged identities to bypass the gate. Keep the existing terminal available and give the app's launch surface
 a discoverable research link. Deploy routing changes through tracked application
 configuration, with no console infrastructure changes.
 
