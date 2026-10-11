@@ -350,6 +350,6 @@ None of the ten finished clean. Both covered-call runs were replaced by a canned
 - [ ] **Step 9: Commit (superproject).**
 
 ```bash
-git add ai-trading/tools/vibe-eval ai-trading/plans/subplans/01o-vibe-answer-integrity-results.md
+git add ai-trading/tools/vibe-eval/run_scenarios.py ai-trading/tools/vibe-eval/grounding_report.py ai-trading/tools/vibe-eval/test_grounding_report.py ai-trading/tools/vibe-eval/serve_local.sh ai-trading/tools/vibe-eval/README.md ai-trading/plans/subplans/01o-vibe-answer-integrity-results.md
 git commit -m "feat(ai-trading): scenario runner and grounding report for the Vibe research-quality checks"
 ```

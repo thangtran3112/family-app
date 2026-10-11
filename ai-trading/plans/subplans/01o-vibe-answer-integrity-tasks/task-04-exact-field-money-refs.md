@@ -538,6 +538,6 @@ Insert the rows below into the **Backend** table of `ai-trading/packages/vibe-tr
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/agent/grounding/evidence.py agent/src/agent/grounding/policies.py agent/tests/test_grounding_exact_field_refs.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "fix(family-app): let an exact field ref ground a money-valued leaf such as an analyst target"
 ```

@@ -177,6 +177,6 @@ Insert the row below into the **Backend** table of `ai-trading/packages/vibe-tra
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/agent/grounding/policies.py agent/tests/test_grounding_percent_notes.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "fix(family-app): compare a percent whose note already multiplies by 100 in points"
 ```

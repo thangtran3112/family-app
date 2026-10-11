@@ -237,6 +237,6 @@ Insert the row below into the **Backend** table of `ai-trading/packages/vibe-tra
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/tools/stock_profile_tool.py agent/tests/test_stock_profile_tool.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "feat(family-app): get_stock_profile keeps the revenue range and adds EPS surprise history"
 ```

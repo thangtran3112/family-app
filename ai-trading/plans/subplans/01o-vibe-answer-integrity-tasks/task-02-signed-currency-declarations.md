@@ -125,6 +125,6 @@ Insert the row below into the **Backend** table of `ai-trading/packages/vibe-tra
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/agent/grounding/figures.py agent/tests/test_grounding_figures_contract.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "fix(family-app): read a sign before the currency mark in a figures declaration"
 ```

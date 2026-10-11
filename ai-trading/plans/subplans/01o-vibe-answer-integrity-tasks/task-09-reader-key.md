@@ -249,6 +249,6 @@ Insert the row below into the **Backend** table of `ai-trading/packages/vibe-tra
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/tools/web_reader_tool.py agent/tests/test_web_reader_security.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "feat(family-app): read_url sends an optional JINA_API_KEY and stops retries on a refusal"
 ```

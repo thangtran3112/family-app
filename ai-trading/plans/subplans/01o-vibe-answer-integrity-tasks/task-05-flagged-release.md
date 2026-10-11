@@ -759,6 +759,6 @@ Insert the rows below into the **Backend** table of `ai-trading/packages/vibe-tr
 - [ ] **Step 6: Commit.**
 
 ```bash
-git -C ai-trading/packages/vibe-trading add -A agent DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/agent/grounding/release.py agent/src/agent/grounding/ledger.py agent/tests/test_grounding_flagged_release.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "feat(family-app): flagged_release keeps and marks figures the gate could not verify"
 ```
