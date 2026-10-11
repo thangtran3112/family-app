@@ -1,6 +1,6 @@
 # ai-trading Common: Data Providers Design
 
-Status: design approved by the owner (2026-10-11); this spec awaits review. It changes the Phase 2a plan ([phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md)) before that plan runs.
+Status: approved by the owner (2026-10-11), design and written spec. It changes the Phase 2a plan ([phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md)) before that plan runs.
 
 ## 1. Goal
 
