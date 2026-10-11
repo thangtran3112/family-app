@@ -51,3 +51,57 @@ def opening_range(ann: pd.DataFrame, asset: Asset, minutes: int, side: str) -> p
         value = window["high"].max() if side == "high" else window["low"].min()
         out.loc[day_bars.index[day_bars.index >= end]] = value
     return out
+
+
+def _clusters(prices: list[float], count: int) -> list[float]:
+    """Centers of the `count` most-touched price clusters (prices within 5% of the range)."""
+    if len(prices) <= count:
+        return sorted(prices)
+    ordered = sorted(prices)
+    spread = ordered[-1] - ordered[0]
+    threshold = spread * 0.05 if spread > 0 else 1.0
+    groups: list[list[float]] = [[ordered[0]]]
+    for price in ordered[1:]:
+        if abs(price - float(np.mean(groups[-1]))) <= threshold:
+            groups[-1].append(price)
+        else:
+            groups.append([price])
+    ranked = sorted(((len(group), float(np.mean(group))) for group in groups), reverse=True)
+    return [center for _, center in ranked[:count]]
+
+
+def support_resistance(
+    daily: pd.DataFrame, days: pd.Index, lookback: int, side: str, window: int = 5, count: int = 3
+) -> pd.Series:
+    """Nearest support at or below ("support"), or resistance at or above ("resistance"), the
+    previous close. Levels are cluster centers of the closing-price pivots in the `lookback`
+    daily bars before each day; a pivot counts only once `window` bars after it have closed, so a
+    level never moves on bars that are already known.
+
+    Adapted from Vibe-Trading `agent/src/tools/pattern_tool.py` (`find_peaks_valleys`,
+    `support_resistance`; MIT License, see THIRD_PARTY_NOTICES.md). Changes: confirmed pivots only,
+    and the nearest level to the previous close instead of the whole list.
+    """
+    closes = daily["close"].to_numpy(dtype=float)
+    out = []
+    for day in days:
+        end = int(daily.index.searchsorted(day, side="left"))
+        history = closes[max(0, end - lookback) : end]
+        level = float("nan")
+        if len(history) > 2 * window:
+            pivots = []
+            for i in range(window, len(history) - window):
+                segment = history[i - window : i + window + 1]
+                is_pivot = history[i] == segment.min() if side == "support" else history[i] == segment.max()
+                if is_pivot and not np.isnan(history[i]):
+                    pivots.append(float(history[i]))
+            reference = history[-1]
+            centers = _clusters(pivots, count)
+            if side == "support":
+                below = [c for c in centers if c <= reference]
+                level = max(below) if below else level
+            else:
+                above = [c for c in centers if c >= reference]
+                level = min(above) if above else level
+        out.append(level)
+    return pd.Series(out, index=days, dtype=float)

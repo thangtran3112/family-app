@@ -2,7 +2,7 @@
 
 Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints and Shared Interfaces first. Results go in [02d-desk-spike-results.md](../02d-desk-spike-results.md).
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Tasks 0.1–0.3 are done (checked). Task 0.4 is the owner's. The main session runs Tasks 0.5 and 0.6 after Task 0.4.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Tasks 0.1–0.4 are done (checked); the owner is waiting for IBKR to approve the data user. The main session runs Tasks 0.5 and 0.6 after that.
 
 **Goal:** Answer every 02a §12 check with evidence, and apply each check's decided fallback where it fails, before Phases 2, 3, and 6 commit to a gateway layout.
 
@@ -87,7 +87,7 @@ Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.
   - The token is masked in any printed error.
 - [x] **Step 3: Run the tests and lint** (the Task 0.2 Step 4 command). Expected: pass.
 
-### Task 0.4: Owner IBKR setup (owner)
+### Task 0.4: Owner IBKR setup (owner) — done
 
 **Files:**
 - Modify: Firestore profile `ai-trading/desk` (through `family_config.py` only)
@@ -98,11 +98,11 @@ Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.
 
 The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ibkr-data-user-setup.md), which also explains why the Desk needs its own username.
 
-- [ ] **Step 1: Create the data username** (02e Step 1).
-- [ ] **Step 2: Subscribe the data username** (02e Step 2): the USD 10 bundle and the USD 4.50 streaming add-on; OPRA only if Task 0.5 shows it is needed.
-- [ ] **Step 3: Paper account and data sharing** (02e Step 3). If there is no paper account, Task 0.5 probes the two-gateway fallback.
-- [ ] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). One account for the spike; Phase 5 adds the other with per-account key names.
-- [ ] **Step 5: Install IB Gateway on the Mac** (02e Step 5).
+- [x] **Step 1: Create the data username** (02e Step 1).
+- [x] **Step 2: Subscribe the data username** (02e Step 2): the USD 10 bundle and the USD 4.50 streaming add-on; OPRA only if Task 0.5 shows it is needed.
+- [x] **Step 3: Paper account and data sharing** (02e Step 3). If there is no paper account, Task 0.5 probes the two-gateway fallback.
+- [x] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). One account for the spike; Phase 5 adds the other with per-account key names.
+- [x] **Step 5: Install IB Gateway on the Mac** (02e Step 5).
 
 ### Task 0.5: Run the probes and record the results (main session with the owner)
 
@@ -144,9 +144,9 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
 
 - [ ] **Step 1: Apply the decisions.**
   - Write the chosen gateway layout into 02d.
-  - Correct 02b's cost line to the billed amount (expected about $16 per month).
+  - Confirm 02b's cost line on the first bill ($14.50, or $16 with OPRA).
 - [ ] **Step 2: Mark Phase 0 done** in 02c and STATUS.md.
 - [ ] **Step 3: Ship.**
   - Commit (one line, no trailer).
   - Push, open a pull request to `dev`, wait for checks, and squash-merge.
-- [ ] **Step 4: Plan Phase 1.** Write `phase-1-strategy-core.md` with the writing-plans skill for owner review (if it was not already written while waiting on Task 0.4).
+- [x] **Step 4: Plan Phase 1.** Done while waiting on IBKR; Phase 1 shipped (PR #95).

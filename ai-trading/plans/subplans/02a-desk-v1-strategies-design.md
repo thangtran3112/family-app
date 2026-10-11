@@ -1,10 +1,10 @@
 # Release 2 Addendum A: Family Desk v1 (Strategies, Alerts, Paper Trading)
 
-Status: Designed and approved in conversation on 2026-10-10, section by section (scope, data architecture, hostnames and layout, mockups, reuse, spike, testing). The implementation plan is the next step. Where this addendum conflicts with [02](02-release-2-desk-design.md), this addendum wins.
+Status: approved in conversation on 2026-10-10, section by section. The phased plan is [02c](02c-desk-v1-implementation-plan.md). [02](02-release-2-desk-design.md) keeps only the base sections this design still cites.
 
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision
-- [02-release-2-desk-design.md](02-release-2-desk-design.md): base design; still valid where unchanged
+- [02-release-2-desk-design.md](02-release-2-desk-design.md): the kept base sections (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12)
 - [STATUS.md](../STATUS.md): decisions log
 - Mockups: Paper file "TobyTest", page "Family Desk · R2 mockups" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG)
 
@@ -21,7 +21,7 @@ Related:
 | Holdings | Form and CSV | IBKR Flex read-only import, plus form and CSV (Robinhood) |
 | Roles | `investor` / `trader` | Gone. Each watchlist has a horizon and each strategy has an owner. |
 | Auth | Cloudflare Access JWT | The Clerk/Caddy gate from Release 1 (STATUS, 2026-10-07) |
-| Address | `trading.tobytran.dev/desk` | `trading.tobytran.dev` is the Desk; the hub moves to `trading-hub.tobytran.dev` |
+| Address | `trading.tobytran.dev/desk` | `trading.tobytran.dev` is the Desk; the hub moved to `trading-hub.tobytran.dev` (01l, live 2026-10-10) |
 | Push channel | Telegram | Telegram or Slack, chosen per user |
 
 Still valid from 02:
@@ -264,23 +264,16 @@ Data sources, cost, and the store layout are in [02b](02b-desk-market-data-optio
 
 ## 8. Hostnames and App Layout
 
-| Host | After the change |
+| Host | Role |
 |---|---|
-| `trading.tobytran.dev` | **Family Desk**: static Next.js export from GCS through the existing Worker pattern; `/api/*` goes through the tunnel to the Desk `api` |
-| `trading-hub.tobytran.dev` | **Hub**, replacing `trading-static`. The production hub moves off `trading.tobytran.dev`. Terminal pages (`/apps/*`, `/u/*`) move with it. |
-| `vibe-trading.`, `mirofish.` | Unchanged |
+| `trading.tobytran.dev` | **Family Desk** from Phase 4: static Next.js export from GCS through the existing Worker pattern; `/api/*` goes through the tunnel to the Desk `api`. Until then it still serves the hub from `web:3000`. |
+| `trading-hub.tobytran.dev` | **Hub** (moved 2026-10-10, 01l): the registry (`/apps/*`) and the terminals (`/u/*`) |
+| `tradingagents.`, `ai-hedge-fund.`, `vibe-trading.`, `mirofish.` | The upstream apps (open-source lane) |
 
-What changes:
-- Cloudflare Terraform (DNS records, Worker routes)
-- Clerk allowed origins and the session cookie domain
-- the `ai-trading/gateway` profile's `ALLOWED_ORIGINS`
-- ttyd origin checks
-- the hub registry's Desk card, which links to `trading.tobytran.dev`
-
-Cutover order:
-1. Bring up `trading-hub`.
-2. Pass the existing staging checks on it.
-3. Switch `trading.tobytran.dev` to the Desk.
+The hub move (cutover steps 1 and 2: bring up `trading-hub`, pass its staging checks) is done. Phase 4 does step 3, switching `trading.tobytran.dev` to the Desk:
+- a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`) in `infrastructure/cloudflare/ai-trading/`;
+- the hub registry's Desk card, which links to `trading.tobytran.dev`;
+- a check that the Clerk origins and the `ai-trading/gateway` profile's `ALLOWED_ORIGINS` (set by the hub move) still admit `trading.tobytran.dev`.
 
 Tabs:
 - Desktop: **Today · Strategies · Paper · Ask · Watchlists · Holdings**
@@ -324,30 +317,38 @@ These add to 02 §7. The 02 `users.role` column is dropped.
 
 ## 11. Reuse Map
 
-| Source | Item | Use |
-|---|---|---|
-| Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes price, greeks, IV solver | Adapt into `core/options_math.py` with attribution |
-| Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | Adapt for covered-call metrics |
-| Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Support/resistance clustering | Adapt for the levels block |
-| ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Position clamps | Adapt for strategy limits |
-| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | Adapt for `persona_review` |
-| ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills |
-| Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery |
-| Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences |
-| Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | IBKR connection profiles | Reference for the IBKR adapter |
-| TradingAgents `dataflows/router.py` (Apache-2.0) | Typed vendor-fallback errors | Pattern for `data/` interfaces |
-| deer-flow notification delivery (MIT) | Secret redaction patterns | Adapt for the notifier |
-| Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies |
+Code from the upstream apps is copied into the Desk (or into `ai-trading/common/` when two packages need it), never imported (`AGENTS.md` "Our Code"). Adapted files carry an attribution header and a row in the receiving package's `THIRD_PARTY_NOTICES.md` with the upstream license text; Apache-2.0 files (TradingAgents) are also marked as modified.
+
+| Source | Item | Use | Phase |
+|---|---|---|---|
+| Vibe-Trading `agent/src/quantlib/options.py` (MIT) | Black-Scholes price, greeks, IV solver | `core/options_math.py`, ported to the standard library | 1b |
+| Vibe-Trading `agent/src/tools/pattern_tool.py` (MIT) | Peak/valley clustering | `levels.support_resistance` with confirmed pivots, and the `support`/`resistance` level | 1b |
+| ai-hedge-fund `hedge_fund/risk/limits.py` (MIT) | Clamps with an audit trail | Pattern for `core/sizing.py` | 1b |
+| TradingAgents `tradingagents/dataflows/router.py`, `errors.py`, `date_window.py` (Apache-2.0) | Explicit vendor fallback chains; typed "no data" versus "provider unavailable" errors; as-of date guards against look-ahead | Adapt for the shared provider layer in `ai-trading/common/` | 2 |
+| TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py` (Apache-2.0) | SEC company facts with a compliant User-Agent, a daily cache, filing-period selection, and point-in-time filtering | Adapt for the fundamentals client in `ai-trading/common/`; compare with `ai-trading/market-data/sec.py` and keep one | 2 (the fundamentals block in 5) |
+| TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache-2.0) | FRED series with the realtime vintage pinned to the as-of date | Adapt for macro observations in `ai-trading/common/`; release dates come from FRED's release-dates endpoint | 2 |
+| TradingAgents news and social fetchers (Apache-2.0) | Publication-window filtering; "unavailable" kept apart from "no news" | Pattern for the Finnhub news client | 2 |
+| `ai-trading/market-data/` (ours, open-source lane) | Alpaca daily bars, SEC metrics | Move into `ai-trading/common/` when Phase 2 needs them, with the open-source lane | 2 |
+| Vibe-Trading `agent/src/trading/connectors/ibkr/local.py` (MIT) | IBKR connection profiles | Reference for the IBKR client in `ai-trading/common/` | 2 |
+| Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery | 3 |
+| Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences | 3 |
+| deer-flow notification delivery (MIT) | Secret redaction | Adapt for the notifier | 3 |
+| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | `persona_review` | 5 |
+| TradingAgents `agents/analysts/*`, `researchers/*`, `risk_mgmt/*`, `agents/schemas.py` (Apache-2.0) | Evidence-first analyst prompts, bull/bear and risk debate, explicit missing-data language, Pydantic output schemas | Adapt for `persona_review` and Ask prompts, with the `{signal, confidence, reasoning}` output | 5, 7 |
+| ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills | 6 |
+| Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | The `collar_quote` tool | 7 |
+| TradingAgents `dataflows/vendors/yahoo/market.py` indicator catalog (Apache-2.0) | Plain descriptions of SMA, EMA, MACD, RSI, Bollinger Bands, ATR | Pattern for the `indicators` tool's descriptions | 7 |
+| TradingAgents `memory/log.py`, `settlement.py`, `reflection.py` (Apache-2.0) | Idempotent decision log, single settlement, outcome dates, bounded reflection | Pattern for a trade journal | Later |
+| Packages | `ib_async`, `alpaca-py`, `pydantic-ai-slim[ag-ui]`, `ag-ui-protocol`, assistant-ui, lightweight-charts (Apache-2.0; keep its notice), Zod v4, datamodel-code-generator | Dependencies | — |
 
 Skipped:
-- Vibe-Trading's LLM-written strategy code and its sandbox (documented escape gaps; unacceptable once strategies place orders)
-- anything from MiroFish (AGPL-3.0)
-
-All adapted code carries attribution headers and is listed in `ai-trading/THIRD_PARTY_NOTICES.md`.
+- Vibe-Trading's LLM-written strategy code and its sandbox (documented escape gaps; unacceptable once strategies place orders);
+- TradingAgents' LangGraph orchestration and LangChain tools (`graph/*`, `agents/state.py`, `agents/tools.py`), its CLI, its Yahoo, Alpha Vantage, and Polymarket clients, and its LLM-sampled backtest: the Desk takes no LangChain or LangGraph dependency;
+- anything from MiroFish (AGPL-3.0).
 
 ## 12. Verification Spike (First Implementation Task)
 
-These replace 02 §13 where they overlap. Each item has a decided fallback, so the design does not change if a check fails.
+Each item has a decided fallback, so the design does not change if a check fails. Results: [02d](02d-desk-spike-results.md).
 
 | Check | Fallback |
 |---|---|
@@ -358,7 +359,7 @@ These replace 02 §13 where they overlap. Each item has a decided fallback, so t
 | The Vibe-Trading IBKR connector's host and port can be configured | Vibe-Trading keeps its own data |
 | Host headroom for IB Gateway, Postgres, `api`, and `scheduler` on the VPS | Move the ai-trading stack to the home Ubuntu server |
 | An IBKR Flex Web Service token pulls positions and open options read-only | CSV upload |
-| The `trading-hub` hostname move (Clerk origins, cookies, ttyd origin) | Stay on `trading-static` until it passes on staging |
+| The `trading-hub` hostname move (Clerk origins, cookies, ttyd origin) | Done by the open-source lane (01l, live 2026-10-10) |
 | Paper account ID prefix | Record the observed prefix as the guard value |
 
 ## 13. Testing
@@ -385,7 +386,7 @@ Each slice ships on its own:
 3. IBKR paper trading, the guard, reconciliation, and performance tracking (Paper tab).
 4. Ask (chat) with `draft_strategy`, `explain_signal`, and `strategy_performance`.
 
-The hostname move to `trading-hub` happens before slice 1 goes live on `trading.tobytran.dev`.
+The hub already moved to `trading-hub` (01l), so `trading.tobytran.dev` is free for the Desk once Phase 4 ships.
 
 ## 15. What v1 Must Not Block (for v2 and v3)
 
@@ -406,3 +407,9 @@ All mockups are in the file "TobyTest", page "Family Desk · R2 mockups". Dark i
 | M3 · Today (mobile) | Signal feed: paper fill, VWAP alert, short-call risk with a roll idea, persona review |
 | M2 · ES chart (mobile) | Futures strategy armed at the overnight high |
 | M5 · Watchlist (mobile) | Lists as strategy inputs, rows tagged with signals |
+| D4 · Watchlists (desktop) | Lists with horizon tags; symbols with live/delayed labels and today's signals; a new symbol backfilling (`/ES` style for futures); strategies using the list; streaming slots 41 of 70; where each number comes from |
+| D5 · Holdings (desktop) | Accounts from IBKR Flex and Robinhood CSV; positions with covered-call coverage under each symbol's cap; tax lots with the short-term flag; open short calls; the strategy watching the position |
+| D6 · Ask (desktop) | Threads; a covered-call candidate table rendered from a tool result with its data label; a `draft_strategy` diff (v5 → draft v6) that saves only on "Save as v6"; the monthly budget |
+| D7 · Settings (desktop) | Telegram/Slack channels and quiet hours; the family-wide off switch, daily cap, and paper guard checks; Ask budget; gateway re-login, data sources, reconciliation, and backups status |
+| D8 · New strategy from a template (desktop) | The ten intraday and swing templates (`packages/family-desk/contracts/templates`), alert-only versus alert + paper, a plain-English preview, the list picker, and "Use this template" creating draft v1 |
+| M6 · More (mobile) | The off switch first, then Watchlists, Holdings, and Settings; the next IBKR phone approval |

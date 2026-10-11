@@ -2,7 +2,7 @@
 
 Status: In progress, started 2026-10-10.
 - The desk-side checks and the documentation research are done.
-- The IBKR checks wait on the owner's account setup ([phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4).
+- The owner set up the data user ([phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4, guide [02e](02e-ibkr-data-user-setup.md)). The IBKR checks wait for IBKR to approve it, then Task 0.5.
 
 Related:
 - [02a §12](02a-desk-v1-strategies-design.md): the checks and their decided fallbacks
@@ -36,9 +36,9 @@ Related:
 - The waiver counts real commissions, so a username that only paper-trades will likely never earn it.
 
 **Decision:**
-- Budget about **$16/month**: $10 Snapshot and Futures Value Bundle, $4.50 Equity and Options Add-On Streaming Bundle (not waivable, and required to stream stocks over the API), and $1.50 OPRA Top of Book.
+- Subscribed: the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle (not waivable, and required to stream stocks over the API), **$14.50/month**. OPRA Top of Book ($1.50) is added only if Task 0.5 shows option greeks need it.
 - That is under the $30 cap.
-- Correct 02b's "$4.50–$14.50" after the first bill.
+- Confirm 02b's cost line on the first bill.
 
 ### 3. Option-chain speed under the 100-line cap
 
@@ -108,11 +108,10 @@ Related:
 
 ### 8. `trading-hub` hostname move
 
-**Status:** desk-side PASS.
+**Status: done** by the open-source lane (01l, live 2026-10-10).
 - The session cookie is set with `Domain=tobytran.dev` (`ai-trading/auth/src/server.js`), so `trading-hub` and `trading` share sessions.
-- `ALLOWED_ORIGINS` (a comma-separated list in `ai-trading/gateway`) must add `https://trading-hub.tobytran.dev` and keep `https://trading.tobytran.dev`.
 
-**Decision:** Clerk and ttyd origin checks are verified on staging in Phase 4, before the cutover.
+**Decision:** Phase 4 checks that the Clerk origins and `ALLOWED_ORIGINS` still admit `trading.tobytran.dev` when it switches to the Desk.
 
 ### 9. Paper account ID prefix
 
