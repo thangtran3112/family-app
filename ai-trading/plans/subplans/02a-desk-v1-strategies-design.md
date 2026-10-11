@@ -4,6 +4,7 @@ Status: approved in conversation on 2026-10-10, section by section. The phased p
 
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision
+- [02f-desk-indicators-and-ai-daily-design.md](02f-desk-indicators-and-ai-daily-design.md): technical indicators and the bias (spouse), consensus EPS and the Desk AI daily verdict (owner)
 - [02-release-2-desk-design.md](02-release-2-desk-design.md): the kept base sections (§4.3, §6.3, §6.4, §6.6, §7, §8, §11, §12)
 - [STATUS.md](../STATUS.md): decisions log
 - Mockups: Paper file "TobyTest", page "Family Desk · R2 mockups" (https://app.paper.design/file/01M4K3AXAKQC8Z6JTW03YR5HEG)
@@ -132,12 +133,12 @@ Blocks are code. Adding a block type takes a pull request that changes the Zod s
 
 | Kind | Blocks |
 |---|---|
-| Series | close/open/high/low/volume, VWAP, EMA(n), SMA(n), RSI(n, timeframe), ATR(n), relative volume (lookback), gap %, % from 52-week high, IV30, IV rank |
-| Levels | prior-day high/low/close, pre-market high/low, overnight high/low (futures), opening-range high/low (minutes), N-day high/low, support/resistance, cost basis, short-call strike |
+| Series | close/open/high/low/volume, VWAP, EMA(n), SMA(n), RSI(n, timeframe), ATR(n), relative volume (lookback), gap %, % from 52-week high, IV30, IV rank; the [02f](02f-desk-indicators-and-ai-daily-design.md) §3 indicators (MACD, Stochastic, Stoch RSI, CCI, ADX/DMI, Awesome Oscillator, Momentum, Williams %R, Bull/Bear Power, Ultimate Oscillator, VWMA, Hull MA, Ichimoku) and the Desk Technical Bias |
+| Levels | prior-day high/low/close, pre-market high/low, overnight high/low (futures), opening-range high/low (minutes), N-day high/low, support/resistance, cost basis, short-call strike, pivots (Classic, Fibonacci, Camarilla; 02f §3) |
 | Conditions | `gt`, `gte`, `lt`, `lte`, `crosses_above`, `crosses_below`, `within_pct`, `all`, `any`, `not`, time window, earnings within N days, ex-dividend within N days |
-| Fundamentals | forward P/E, P/E versus its 5-year median, FCF yield, revenue growth (YoY), debt/equity, position weight %, gain versus cost % |
+| Fundamentals | forward P/E, P/E versus its 5-year median, FCF yield, revenue growth (YoY), debt/equity, position weight %, gain versus cost %, consensus EPS and its 7/30/90-day revision (02f §4), the Desk AI rating, target, and confidence (02f §5) |
 | Options | covered-call candidates with 02 §6.3 filters, metrics, and flags; short-call risk rules (02 §6.3) |
-| Review | `persona_review` (Buffett, Graham, Lynch, Munger, Druckenmiller). Weekly LLM review with output `{signal, confidence, reasoning}` and a deterministic gate on score. Counts against the LLM budget. |
+| Review | The Desk AI daily verdict ([02f](02f-desk-indicators-and-ai-daily-design.md) §5): four votes and one structured verdict per stock each trading day, checked in code. It replaces the weekly `persona_review`. Spend is logged, with no cap (owner, 2026-10-10). |
 | Actions | `alert` (channels, severity); `paperOrder` (side, sizing by risk $, shares, % of book, or contracts; stop; target by R or level; bracket); `paperCoveredCall` (sell by delta/DTE, close at % decay, roll rules) |
 | Limits | max trades per day, max open positions, max position $, flat-by time, pause after daily loss, cooldown minutes |
 
@@ -333,9 +334,10 @@ Code from the upstream apps is copied into the Desk (or into `ai-trading/common/
 | Vibe-Trading `scheduled_research/executor.py`, `channels/manager.py` (MIT) | Delivery queue and channels with retry | Pattern for alert delivery | 3 |
 | Vibe-Trading `live/runtime/scheduler.py`, `triggers.py` (MIT) | Session-aware triggers | Pattern for cadences | 3 |
 | deer-flow notification delivery (MIT) | Secret redaction | Adapt for the notifier | 3 |
-| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | `persona_review` | 5 |
-| TradingAgents `agents/analysts/*`, `researchers/*`, `risk_mgmt/*`, `agents/schemas.py` (Apache-2.0) | Evidence-first analyst prompts, bull/bear and risk debate, explicit missing-data language, Pydantic output schemas | Adapt for `persona_review` and Ask prompts, with the `{signal, confidence, reasoning}` output | 5, 7 |
+| ai-hedge-fund `hedge_fund/signals/` and `6c41ae8:src/agents/` (MIT) | Persona prompts and scoring | The Desk AI valuation and fundamentals votes (02f §5) | 5 |
+| TradingAgents `agents/analysts/*`, `researchers/*`, `risk_mgmt/*`, `agents/schemas.py` (Apache-2.0) | Evidence-first analyst prompts, bull/bear and risk debate, explicit missing-data language, Pydantic output schemas | Adapt for the Desk AI votes and verdict (02f §5) and Ask prompts | 5, 7 |
 | ai-hedge-fund `hedge_fund/fund/spec.py`, `hedge_fund/paper/ledger.py` (MIT) | Validated spec; tamper-evident ledger with an off switch | Patterns for the spec and fills | 6 |
+| TradingView technical-ratings documentation | Published vote rules and thresholds (rules only, no code) | The Desk Technical Bias (02f §3) | 1c |
 | Vibe-Trading `agent/backtest/options_payoff.py` (MIT) | Option legs and payoff | The `collar_quote` tool | 7 |
 | TradingAgents `dataflows/vendors/yahoo/market.py` indicator catalog (Apache-2.0) | Plain descriptions of SMA, EMA, MACD, RSI, Bollinger Bands, ATR | Pattern for the `indicators` tool's descriptions | 7 |
 | TradingAgents `memory/log.py`, `settlement.py`, `reflection.py` (Apache-2.0) | Idempotent decision log, single settlement, outcome dates, bounded reflection | Pattern for a trade journal | Later |
@@ -412,4 +414,10 @@ All mockups are in the file "TobyTest", page "Family Desk · R2 mockups". Dark i
 | D6 · Ask (desktop) | Threads; a covered-call candidate table rendered from a tool result with its data label; a `draft_strategy` diff (v5 → draft v6) that saves only on "Save as v6"; the monthly budget |
 | D7 · Settings (desktop) | Telegram/Slack channels and quiet hours; the family-wide off switch, daily cap, and paper guard checks; Ask budget; gateway re-login, data sources, reconciliation, and backups status |
 | D8 · New strategy from a template (desktop) | The ten intraday and swing templates (`packages/family-desk/contracts/templates`), alert-only versus alert + paper, a plain-English preview, the list picker, and "Use this template" creating draft v1 |
+| D9 · Watchlist flip cards (desktop) | A card grid with NVDA and ES flipped to their technical backs ([02f](02f-desk-indicators-and-ai-daily-design.md) §2) |
+| D10 · Technicals (desktop) | Gauges; a chart with RSI and MACD; the oscillator, moving-average, and pivot tables |
+| D11 · Stock long-term (desktop) | The Desk AI verdict with its panel, consensus EPS, analyst context, "Alert me" |
+| D12 · AI daily brief (desktop) | Every analyzed stock after the close, with the alerts feed |
+| M7 · Watchlist flip (mobile) | A flipped card on a phone |
+| M8 · Stock long-term (mobile) | The verdict, consensus EPS, and alerts on a phone |
 | M6 · More (mobile) | The off switch first, then Watchlists, Holdings, and Settings; the next IBKR phone approval |

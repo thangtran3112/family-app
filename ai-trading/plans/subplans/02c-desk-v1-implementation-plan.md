@@ -96,10 +96,11 @@
 | 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | In progress: waiting for IBKR to approve the data user |
 | 1. Strategy core | Contracts package, backend scaffold, session calendar, indicators, levels, evaluator, intraday and swing templates (no I/O) | none; can run beside Phase 0 | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance level, order sizing (no I/O) | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done |
-| 2. Data foundation | Provider clients in `ai-trading/common/` (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, then IBKR), Postgres schema, bar store and backfills, futures roll, streaming slots | 1; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
+| 1c. Technical indicators | Indicators, pivots, and the Desk Technical Bias as pure code, with their spec blocks ([02f](02f-desk-indicators-and-ai-daily-design.md) §3) | 1 | `phase-1c-technical-indicators.md` | Planned |
+| 2. Data foundation | Provider clients in `ai-trading/common/` (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, then IBKR), Postgres schema, bar store and backfills, futures roll, streaming slots, consensus EPS (02f §4) | 1; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, alert outbox, Telegram/Slack, watchdog checks, compose services, Firestore profile, backups (deployed) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | Desk static app (the shell from the mockups; Today, Strategies, Watchlists, and Settings live); `trading.tobytran.dev` points at the Desk (the hub already moved to `trading-hub`) | 3; the shell can start earlier, on fixtures | `phase-4-web.md` | Planned |
-| 5. Long-term | Fundamentals and persona-review blocks, covered-call and short-call templates, Flex and CSV import, Holdings page | 3 (UI after 4) | `phase-5-long-term.md` | Planned |
+| 4. Desk web and hostnames | Desk static app (the shell from the mockups; Today, Strategies, Watchlists with flip cards and Technicals, and Settings live); `trading.tobytran.dev` points at the Desk (the hub already moved to `trading-hub`) | 3; the shell can start earlier, on fixtures | `phase-4-web.md` | Planned |
+| 5. Long-term | The fundamentals block and the Desk AI daily verdict (02f §5); covered-call, short-call, and "AI daily view" templates; Flex and CSV import; Holdings, the long-term stock page, and the AI brief | 3 (UI after 4) | `phase-5-long-term.md` | Planned |
 | 6. Paper trading | Paper broker with guard, bracket orders, reconciliation, flat-by, limits, off switch, stats, Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
 | 7. Ask | PydanticAI agent over AG-UI with market, strategy, and drafting tools; budgets | 5, 6 | `phase-7-ask.md` | Planned |
 
@@ -116,7 +117,7 @@ Phases 0–2 change nothing that is deployed, so they stop at `dev` (as Phases 1
 | Wave | Who | What |
 |---|---|---|
 | A | Main session + owner | Phase 0: waiting for IBKR to approve the data user; then the probes (Task 0.5) and the gateway layout (Task 0.6). |
-| B | Subagents in worktrees | Phases 1 and 1b: no IBKR needed; done or finishing. |
+| B | Subagents in worktrees | Phases 1, 1b, and 1c: no data needed. 1 and 1b are done. |
 | C | Main session with subagents per task file | Phase 2 without IBKR first (the IBKR client follows Phase 0), then 3 → 4 (the frontend shell can start early on fixture data), 5 and 6 (UI tasks after 4), then 7. |
 
 ## Shared Interfaces
@@ -161,9 +162,13 @@ Each phase's task file turns its outline into complete, test-first tasks.
 
 Shipped in PR #95; task file [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md). The contracts package, the backend scaffold, the session calendar, indicators, levels, the closed-bar evaluator, and ten intraday and swing templates, now in `packages/family-desk/`.
 
-### Phase 1b: Ported quant core (no I/O)
+### Phase 1b: Ported quant core (no I/O) — done
 
 Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md): option math (from Vibe-Trading), covered-call math (02 §6.3), the support/resistance level (from Vibe-Trading), and paper-order sizing.
+
+### Phase 1c: Technical indicators and the bias (no I/O)
+
+The [02f](02f-desk-indicators-and-ai-daily-design.md) §3 indicators, pivots, and Desk Technical Bias as pure functions in `ai_trading.core`, with golden tests and the new series and level blocks in the strategy-spec contract. No data is needed, so it can run now, like Phase 1b.
 
 ### Phase 2: Data foundation
 
@@ -171,6 +176,7 @@ Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quan
   - Alpaca history (move or adapt the open-source lane's `ai-trading/market-data/alpaca.py`), with Stooq as the daily fallback;
   - SEC EDGAR fundamentals (adapt TradingAgents' `sec_edgar.py`; compare with `market-data/sec.py` and keep one);
   - FRED observations (vintage pinned to the as-of date) and release dates; Finnhub earnings, dividends, and news (publication-window filtering);
+  - consensus EPS: Eulerpool's free tier after a 10-symbol pilot, Finnhub free plus Alpha Vantage free as the fallback, and one snapshot per symbol per trading day for the revisions (02f §4);
   - IBKR through `ib_async` (the live 1-minute bar builder, futures history, daily IV, option snapshots), after Phase 0 settles the gateway layout.
 - **Desk `ai_trading.db`:** SQLAlchemy models and Alembic migrations for the Shared Interfaces tables, plus `deploy/postgres/` role and schema init.
 - **Desk `ai_trading.data`:** the bar store with backfill on watchlist add, the futures roll map, the streaming slot manager (priority order from 02a §7), and the internal `/api/data` read models.
@@ -200,7 +206,8 @@ Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quan
 
 - **Desk static app** (`packages/family-desk/frontend`, Next.js 16 static export):
   - a shell with every tab from the Paper mockups (D1–D8, M2–M6; 02a §16), with the PAPER badge and data-quality labels on every number and charts from lightweight-charts; it can start before Phase 3, on fixture data;
-  - Today, Strategies (list, builder, versions, JSON view, new from a template), Watchlists, and Settings (channels, quiet hours, off switch) wired to the API; Holdings, Paper, and Ask stay on fixtures until Phases 5–7.
+  - Today, Strategies (list, builder, versions, JSON view, new from a template), Watchlists, and Settings (channels, quiet hours, off switch) wired to the API; Holdings, Paper, and Ask stay on fixtures until Phases 5–7;
+  - the flip cards and the Technicals page (D9, D10, M7; 02f §2) wired to Phase 3's card backs; the long-term stock page and the AI brief (D11, D12, M8) on fixtures until Phase 5.
 - **Infrastructure:** the hub already moved to `trading-hub` (01l). Phase 4 adds a GCS bucket and Worker routes for `trading.tobytran.dev` (static plus `/api/*`), points it at the Desk, updates the hub registry's Desk card, and checks the Clerk origins and `ALLOWED_ORIGINS` (02a §8).
 - **Acceptance:**
   - a Playwright smoke test: Today → Strategies → new from a template → save a version → its alert appears;
@@ -208,9 +215,9 @@ Task file [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quan
 
 ### Phase 5: Long-term
 
-- **Blocks:** fundamentals (SEC EDGAR, through `ai-trading/common`) and `persona_review` (structured `{signal, confidence, reasoning}` output, within the LLM budget; prompts adapted from ai-hedge-fund's personas and TradingAgents' evidence-first analyst and debate prompts, 02a §11).
-- **Templates and jobs:** the covered-call income and short-call risk templates and the 15:30 scan job, on Phase 1b's `covered_calls` math.
-- **Imports and UI:** IBKR Flex import (Open Positions plus Open Lots), CSV import, and the Holdings page (mockup D5).
+- **Blocks:** fundamentals (SEC EDGAR, through `ai-trading/common`) and the Desk AI daily verdict (02f §5), which replaces the weekly `persona_review`: four votes and one structured verdict per stock, checked in code. Prompts are adapted from ai-hedge-fund's personas and TradingAgents' evidence-first analyst and debate prompts (02a §11). No budget cap; spend is logged.
+- **Templates and jobs:** the covered-call income and short-call risk templates and the 15:30 scan job, on Phase 1b's `covered_calls` math; the "AI daily view" template and the 17:05 Desk AI job (02f §5–6).
+- **Imports and UI:** IBKR Flex import (Open Positions plus Open Lots), CSV import, the Holdings page (mockup D5), and the long-term stock page and AI brief (D11, D12, M8).
 - **Acceptance:** golden tests on fixture option chains; Flex import from a fixture statement; budget refusal.
 
 ### Phase 6: Paper trading

@@ -63,6 +63,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
   - Exchange data is licensed per person, so sharing one non-professional subscription inside the household's own apps is a known gray area. The owner accepted it.
 - **History and reference data:** free sources (section 5).
 - **Paid cost:** $14.50 a month as subscribed (the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle), or $16 if the probe shows option greeks need OPRA Top of Book. The first bill confirms it.
+- **Consensus EPS (owner, 2026-10-10):** Eulerpool's free tier after a 10-symbol pilot, with Finnhub free plus Alpha Vantage free as the fallback ([02f](02f-desk-indicators-and-ai-daily-design.md) §4). It adds no cost.
 
 ## 5. Hybrid Store: What We Keep and What We Fetch
 
@@ -74,6 +75,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
 | IV30 for IV rank | IBKR daily | IBKR one-year IV history (to verify in the spike) | `iv_daily` |
 | Swing and long-term lists | Alpaca free, 15 minutes delayed, refreshed every 15 minutes | n/a | n/a |
 | Fundamentals | n/a | SEC EDGAR XBRL (Finnhub basic financials as fallback), weekly | `fundamentals` |
+| Consensus EPS, analyst targets | n/a | Eulerpool free after a 10-symbol pilot; Finnhub free plus Alpha Vantage free as the fallback; daily after 16:30 ([02f](02f-desk-indicators-and-ai-daily-design.md) §4) | `consensus_snapshots`, `earnings_results`, `analyst_targets` |
 | Earnings, dividends, news | n/a | Finnhub free + yfinance, at 06:00 and hourly | `calendar_events`, `news_items` (7 days) |
 | Macro release dates | n/a | FRED release dates + a static FOMC file | `calendar_events` |
 
