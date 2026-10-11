@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "@clerk/react";
-import { changeApp, createControlsScheduler, fetchApps, nextPollDelayMs, pollDelayAfter, type AppId, type ControlsState, type ReadOutcome } from "@/lib/controls";
+import { createControlsController, type AppId, type ControlsController, type ControlsState } from "@/lib/controls";
 
 type AppControlsContextValue = {
   state: ControlsState | null;
@@ -22,32 +22,19 @@ export function useAppControls(): AppControlsContextValue {
   return value;
 }
 
-function isAbortError(value: unknown): boolean {
-  return value instanceof Error && value.name === "AbortError";
-}
-
 // Single session-scoped owner of fetching, polling and refresh for the whole
 // authenticated app: one PageShell render owns one of these, so cards,
 // detail pages and the Settings panel all read the same snapshot instead of
 // each issuing its own request.
 //
-// Response ordering & mutation exclusivity (fix round 2, Important #1):
-// `createControlsScheduler` (lib/controls.ts) is the one production
-// authority both `load()` and `change()` defer to. A read is refused
-// outright (`attemptRead()` returns null, no ticket taken) while a mutation
-// is in flight, rather than merely racing it on ticket order -- fix round
-// 1's plain ticket counter alone let a focus/timer read begun *during* a
-// pending PUT take a newer ticket than the PUT's, discarding the PUT's own
-// successful snapshot once it settled. `change()` still aborts whatever read
-// may already have been in flight *before* it began, and always calls
-// `endMutation()` (success or failure) so a new read can start again.
-//
-// Cycle scheduling (fix round 2, Important #2): `cycle()` only ever calls
-// `schedule()` for an "applied" or "failed" outcome; a "stale" one (this
-// read was invalidated by a newer read or a mutation) is a no-op for
-// scheduling too -- `pollDelayAfter` encodes exactly this, so an aborted
-// pre-mutation cycle can never replace the mutation's own 2s transition
-// reschedule with a stray 30s idle timer.
+// This component is a thin wrapper: every load/change/poll/ordering decision
+// lives in `createControlsController` (lib/controls.ts), a plain,
+// framework-free function this is the one production caller of -- not a
+// parallel reimplementation. One controller is created per Clerk session (so
+// a session switch gets a clean instance rather than a shared one wrestled
+// back to a fresh state); its callbacks are wired straight to React state,
+// and `stop()` both tears down its timer/in-flight request and makes every
+// pending/future callback from that instance a no-op.
 export function AppControlsProvider({ children }: { children: ReactNode }) {
   const { getToken, sessionId: rawSessionId } = useAuth();
   const sessionId = rawSessionId ?? null;
@@ -71,138 +58,52 @@ export function AppControlsProvider({ children }: { children: ReactNode }) {
     setMutating(false);
   }
 
-  // Refs give the imperative polling/abort/ordering logic below access to
-  // each render's latest value without re-running effects on every change;
-  // they are written only from effects (never during render), so a React
-  // Compiler-memoized render can never skip a write (react-hooks/refs).
-  const sessionIdRef = useRef(sessionId);
+  // `getToken` from Clerk is not guaranteed referentially stable; the
+  // controller's long-lived `getToken` callback always calls through to
+  // whatever this ref currently holds, written only from an effect
+  // (react-hooks/refs), so the controller itself never needs recreating
+  // just because this function identity changed.
+  const getTokenRef = useRef(getToken);
   useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
-
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  const abortRef = useRef<AbortController | null>(null);
-  const schedulerRef = useRef(createControlsScheduler());
-  const rescheduleRef = useRef<((result: ControlsState | null) => void) | null>(null);
-
-  // Returns a discriminated outcome so pollers can tell "nothing to
-  // reschedule from, someone newer already owns it" apart from "genuinely
-  // failed, schedule the idle cadence".
-  const load = useCallback(async (): Promise<ReadOutcome> => {
-    const attempt = schedulerRef.current.attemptRead();
-    if (!attempt) return { kind: "stale" }; // a mutation is pending; this read never started
-    const ownerSession = sessionIdRef.current;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    try {
-      const next = await fetchApps(() => getToken(), fetch, controller.signal);
-      if (!schedulerRef.current.isCurrent(attempt.ticket) || sessionIdRef.current !== ownerSession) return { kind: "stale" };
-      setState(next);
-      setError(null);
-      setLoading(false);
-      return { kind: "applied", state: next };
-    } catch (err) {
-      if (isAbortError(err) || !schedulerRef.current.isCurrent(attempt.ticket) || sessionIdRef.current !== ownerSession) {
-        return { kind: "stale" };
-      }
-      setError(err instanceof Error ? err.message : "App controls are unavailable.");
-      setLoading(false);
-      return { kind: "failed" };
-    }
+    getTokenRef.current = getToken;
   }, [getToken]);
 
-  const loadRef = useRef(load);
-  useEffect(() => {
-    loadRef.current = load;
-  }, [load]);
+  const controllerRef = useRef<ControlsController | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    const controller = createControlsController({
+      getToken: () => getTokenRef.current(),
+      onState: setState,
+      onLoading: setLoading,
+      onError: setError,
+      onMutating: setMutating,
+    });
+    controllerRef.current = controller;
+    controller.start();
 
-    function scheduleAt(delay: number) {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void cycle(), delay);
-    }
-    // Used for an *intentional* reschedule (a mutation's own settled
-    // outcome, success or failure) -- never "stale", so it always schedules,
-    // unlike `cycle()`'s own use of `pollDelayAfter` below.
-    function schedule(result: ControlsState | null) {
-      scheduleAt(nextPollDelayMs(result));
-    }
-    async function cycle() {
-      if (cancelled) return;
-      const outcome = await loadRef.current();
-      if (cancelled) return;
-      const delay = pollDelayAfter(outcome);
-      if (delay === null) return; // stale: a newer read or a mutation already owns scheduling
-      scheduleAt(delay);
-    }
     function onFocus() {
-      if (cancelled) return;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      void cycle();
+      controller.handleFocus();
     }
-
-    rescheduleRef.current = schedule;
-    void cycle();
     window.addEventListener("focus", onFocus);
 
     return () => {
-      cancelled = true;
-      if (rescheduleRef.current === schedule) rescheduleRef.current = null;
-      if (timer) clearTimeout(timer);
+      controller.stop();
       window.removeEventListener("focus", onFocus);
-      abortRef.current?.abort();
+      if (controllerRef.current === controller) controllerRef.current = null;
     };
   }, [sessionId]);
 
-  const change = useCallback(
-    async (id: AppId, enabled: boolean) => {
-      const current = stateRef.current;
-      if (!current) throw new Error("App controls are not loaded yet.");
-      const ownerSession = sessionIdRef.current;
-      // A pending read must never be allowed to resolve after, and
-      // overwrite, this mutation's result: abort it and take a newer ticket
-      // before the request is even sent. `beginMutation()` also blocks any
-      // *new* read from starting until `endMutation()` runs below.
-      abortRef.current?.abort();
-      const ticket = schedulerRef.current.beginMutation();
-      setMutating(true);
-      let applied: ControlsState | null = null;
-      try {
-        const next = await changeApp(id, enabled, current.revision, () => getToken(), fetch);
-        if (!schedulerRef.current.isCurrent(ticket) || sessionIdRef.current !== ownerSession) return;
-        setState(next);
-        setError(null);
-        applied = next;
-      } finally {
-        schedulerRef.current.endMutation();
-        setMutating(false);
-        // Reschedule from the mutation's own outcome (the fresh snapshot on
-        // success, or the pre-mutation state as the best-known fallback on
-        // failure) so background polling always has an active timer once
-        // this mutation is no longer blocking new reads -- whether or not a
-        // focus/timer attempt was refused while it was pending.
-        if (schedulerRef.current.isCurrent(ticket) && sessionIdRef.current === ownerSession) {
-          rescheduleRef.current?.(applied ?? current);
-        }
-      }
-    },
-    [getToken],
-  );
+  const refresh = useCallback(() => {
+    void controllerRef.current?.load();
+  }, []);
+
+  const change = useCallback((id: AppId, enabled: boolean) => {
+    if (!controllerRef.current) return Promise.reject(new Error("App controls are not ready yet."));
+    return controllerRef.current.change(id, enabled);
+  }, []);
 
   return (
-    <AppControlsContext.Provider value={{ state, loading, error, mutating, refresh: () => void loadRef.current(), change }}>
+    <AppControlsContext.Provider value={{ state, loading, error, mutating, refresh, change }}>
       {children}
     </AppControlsContext.Provider>
   );

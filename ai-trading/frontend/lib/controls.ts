@@ -310,16 +310,27 @@ export function nextPollDelayMs(state: ControlsState | null): number {
 // `createControlsScheduler` is what the provider actually calls for every
 // decision (it is not reimplemented there as a parallel/untested copy):
 // `attemptRead()` returns null outright (no ticket taken, no effect on the
-// current generation) whenever a mutation is pending; `beginMutation()` is
-// never refused and always takes a newer ticket than anything in flight;
-// `isCurrent()` is the one check both a settling read and a settling
-// mutation use to decide whether to apply/reschedule; `endMutation()` always
-// runs (success or failure) so a new read can begin again afterward.
+// current generation) whenever a mutation is pending; `isCurrent()` is the
+// one check both a settling read and a settling mutation use to decide
+// whether to apply/reschedule; `endMutation()` always runs (success or
+// failure) so a new read can begin again afterward.
+//
+// Fix-round-3 review found `beginMutation()` itself was not exclusive: it
+// always started a *second* mutation even while one was still pending,
+// taking a newer ticket than the first's -- so the first mutation's own
+// `finally` then unconditionally cleared the single `mutating` flag while
+// the second PUT was still in flight, reopening reads (and discarding the
+// second mutation's eventual snapshot the same way round 2 fixed for
+// reads-during-a-single-mutation). `beginMutation()` now refuses outright
+// (returns null, no ticket taken, no effect on the generation) whenever a
+// mutation is already pending; the caller (`createControlsController`
+// below) must reject the second `change()` before ever issuing its PUT,
+// not merely rely on the Settings UI disabling its buttons.
 export type ReadAttempt = { ticket: number };
 
 export type ControlsScheduler = {
   attemptRead(): ReadAttempt | null;
-  beginMutation(): number;
+  beginMutation(): number | null;
   isCurrent(ticket: number): boolean;
   endMutation(): void;
 };
@@ -333,7 +344,8 @@ export function createControlsScheduler(): ControlsScheduler {
       generation += 1;
       return { ticket: generation };
     },
-    beginMutation(): number {
+    beginMutation(): number | null {
+      if (mutating) return null;
       mutating = true;
       generation += 1;
       return generation;
@@ -363,4 +375,157 @@ export type ReadOutcome = { kind: "applied"; state: ControlsState } | { kind: "f
 export function pollDelayAfter(outcome: ReadOutcome): number | null {
   if (outcome.kind === "stale") return null;
   return nextPollDelayMs(outcome.kind === "applied" ? outcome.state : null);
+}
+
+// --- Controller: the actual async poll/mutation lifecycle ------------------
+//
+// Fix-round-3 review: round 2's tests exercised the pure scheduler/outcome
+// helpers directly (e.g. calling `scheduler.attemptRead()` in place of a
+// "focus" event), not the real async flow the React provider runs --
+// `change()`'s PUT resolved synchronously in those tests, so they could not
+// actually prove a concurrently-attempted read's fetch was suppressed, or
+// that a real aborted in-flight GET leaves a mutation's own 2s reschedule
+// alone. `createControlsController` is the fix: it *is* the production
+// load/change/cycle/schedule logic (fetch calls, AbortController, setTimeout,
+// the scheduler, deciding what to apply) extracted out of the "use client"
+// React component into one plain, framework-free function, injectable with a
+// fake `fetchImpl` and fake timer functions for deterministic, real-async
+// (real Promises, real microtask ordering, real AbortSignal propagation)
+// tests with no new test framework or dependency -- the same "hand-rolled
+// fake boundary, no mocking framework" style already used in lib/auth.test.ts.
+// `components/app-controls-provider.tsx` constructs exactly one of these per
+// authenticated session and wires its callbacks to React state; it contains
+// no parallel reimplementation of this logic.
+export type ControlsControllerDeps = {
+  getToken: () => Promise<string | null>;
+  onState: (state: ControlsState) => void;
+  onLoading: (loading: boolean) => void;
+  onError: (error: string | null) => void;
+  onMutating: (mutating: boolean) => void;
+  fetchImpl?: typeof fetch;
+  setTimeoutImpl?: (callback: () => void, delayMs: number) => unknown;
+  clearTimeoutImpl?: (handle: unknown) => void;
+};
+
+export type ControlsController = {
+  // Starts the initial read and the recurring poll; safe to call once per
+  // controller instance (one per authenticated session in the provider).
+  start(): void;
+  // Stops polling, aborts any in-flight request, and makes every pending or
+  // future callback from this instance a no-op -- the controller-level
+  // analogue of the old `sessionIdRef` check, scoped to one instance instead
+  // of compared against a ref.
+  stop(): void;
+  // An explicit, on-demand read (the Settings panel's Refresh button).
+  load(): Promise<ReadOutcome>;
+  change(id: AppId, enabled: boolean): Promise<void>;
+  // Called by the provider's `window` focus listener (kept out of this
+  // DOM-free module on purpose).
+  handleFocus(): void;
+};
+
+export function createControlsController(deps: ControlsControllerDeps): ControlsController {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const setTimeoutImpl = deps.setTimeoutImpl ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+  const clearTimeoutImpl = deps.clearTimeoutImpl ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+
+  const scheduler = createControlsScheduler();
+  let abortController: AbortController | null = null;
+  let timer: unknown = null;
+  let stopped = false;
+  let latestState: ControlsState | null = null;
+
+  function scheduleAt(delayMs: number): void {
+    if (timer !== null) clearTimeoutImpl(timer);
+    timer = setTimeoutImpl(() => void cycle(), delayMs);
+  }
+  // An *intentional* reschedule (a mutation's own settled outcome) always
+  // schedules -- unlike `cycle()`'s own use of `pollDelayAfter`, which must
+  // not for a "stale" read.
+  function scheduleFrom(result: ControlsState | null): void {
+    scheduleAt(nextPollDelayMs(result));
+  }
+
+  async function load(): Promise<ReadOutcome> {
+    const attempt = scheduler.attemptRead();
+    if (!attempt) return { kind: "stale" }; // a mutation is pending; this read never started
+    abortController?.abort();
+    const controller = new AbortController();
+    abortController = controller;
+    deps.onLoading(true);
+    try {
+      const next = await fetchApps(deps.getToken, fetchImpl, controller.signal);
+      if (stopped || !scheduler.isCurrent(attempt.ticket)) return { kind: "stale" };
+      latestState = next;
+      deps.onState(next);
+      deps.onError(null);
+      deps.onLoading(false);
+      return { kind: "applied", state: next };
+    } catch (err) {
+      if (stopped || isAbortError(err) || !scheduler.isCurrent(attempt.ticket)) return { kind: "stale" };
+      deps.onError(err instanceof Error ? err.message : "App controls are unavailable.");
+      deps.onLoading(false);
+      return { kind: "failed" };
+    }
+  }
+
+  async function cycle(): Promise<void> {
+    if (stopped) return;
+    const outcome = await load();
+    if (stopped) return;
+    const delay = pollDelayAfter(outcome);
+    if (delay === null) return; // stale: a newer read or a mutation already owns scheduling
+    scheduleAt(delay);
+  }
+
+  async function change(id: AppId, enabled: boolean): Promise<void> {
+    const current = latestState;
+    if (!current) throw new ControlsError("App controls are not loaded yet.");
+    // Mutation exclusivity (fix-round-3 review): refuse a second mutation
+    // outright, before ever aborting a read or sending a second PUT, rather
+    // than relying on the Settings UI disabling its buttons.
+    const ticket = scheduler.beginMutation();
+    if (ticket === null) throw new ControlsError("Another app change is already in progress. Please wait for it to finish.");
+    abortController?.abort();
+    deps.onMutating(true);
+    let applied: ControlsState | null = null;
+    try {
+      const next = await changeApp(id, enabled, current.revision, deps.getToken, fetchImpl);
+      if (stopped || !scheduler.isCurrent(ticket)) return;
+      latestState = next;
+      deps.onState(next);
+      deps.onError(null);
+      applied = next;
+    } finally {
+      scheduler.endMutation();
+      deps.onMutating(false);
+      // Reschedule from this mutation's own outcome (the fresh snapshot on
+      // success, or the pre-mutation state as the best-known fallback on
+      // failure) so background polling always has an active timer once this
+      // mutation stops blocking new reads -- whether or not a focus/timer
+      // attempt was refused while it was pending.
+      if (!stopped && scheduler.isCurrent(ticket)) scheduleFrom(applied ?? current);
+    }
+  }
+
+  return {
+    start(): void {
+      void cycle();
+    },
+    stop(): void {
+      stopped = true;
+      if (timer !== null) clearTimeoutImpl(timer);
+      abortController?.abort();
+    },
+    load,
+    change,
+    handleFocus(): void {
+      if (stopped) return;
+      if (timer !== null) {
+        clearTimeoutImpl(timer);
+        timer = null;
+      }
+      void cycle();
+    },
+  };
 }
