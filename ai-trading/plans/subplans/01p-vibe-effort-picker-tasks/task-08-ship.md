@@ -122,18 +122,19 @@ cat > "$T/build-release.sh" <<'SCRIPT'
 set -eu
 branch=$1 title=$2; shift 2
 git fetch -q origin dev main
-idx=$(mktemp -u "${TMPDIR:-/tmp}/release-index.XXXXXX"); export GIT_INDEX_FILE=$idx
+idx=$(mktemp "$(dirname "$0")/release-index.XXXXXX"); export GIT_INDEX_FILE=$idx
+trap 'rm -f "$idx"' EXIT
 git read-tree origin/main
 for p in "$@"; do
   entry=$(git ls-tree origin/dev -- "$p" | cut -f1)
-  [ -n "$entry" ] || { echo "not on origin/dev: $p" >&2; rm -f "$idx"; exit 1; }
-  git update-index --add --cacheinfo "$(printf '%s' "$entry" | awk '{print $1","$3}'),$p"
+  [ -n "$entry" ] || { echo "not on origin/dev: $p" >&2; exit 1; }
+  git restore --source=origin/dev --staged -- "$p"
 done
-tree=$(git write-tree); rm -f "$idx"; unset GIT_INDEX_FILE
+tree=$(git write-tree)
 [ "$tree" != "$(git rev-parse 'origin/main^{tree}')" ] || { echo "no changes versus origin/main" >&2; exit 1; }
 commit=$(git commit-tree "$tree" -p origin/main -m "$title")
-git push -q origin "$commit:refs/heads/$branch"
 git diff --stat origin/main "$commit"
+git push -q origin "$commit:refs/heads/$branch"
 SCRIPT
 chmod +x "$T/build-release.sh"
 
@@ -146,6 +147,8 @@ chmod +x "$T/build-release.sh"
 ```
 
 (List exactly the paths this batch touched — the fork gitlink, both plans, the measured results, `tools/vibe-eval/`, and `STATUS.md`. Omit any path this batch did not actually add. Step 7's `gh pr diff "$RELEASE_PR" --name-only` is the authoritative scoped-release check; `git diff origin/dev origin/main` would also show unrelated Desk work and is not suitable.)
+
+The original handoff's `git update-index --cacheinfo` cannot stage a `040000` directory entry (the task directories and `tools/vibe-eval/` are directories). `git restore --source=origin/dev --staged -- "$p"` inside the throwaway index copies their tracked descendants (and a gitlink) without touching any worktree. Tested with a scratch index against the same three path shapes before shipping; still inspect the release PR's exact file list.
 
 ```sh
 gh pr create --base main --head release/vibe-01o-01p \
