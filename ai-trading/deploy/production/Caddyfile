@@ -40,6 +40,10 @@ http://tradingagents.tobytran.dev:8080 {
 	# catch-all `handle`/rewrite so it never reaches ta-terminal. Any
 	# browser-supplied X-Family-App-Prefix is stripped before forward_auth so
 	# only this site establishes the (here, empty) prefix the app trusts.
+	# Review round 1 (Important): a signed-out top-level navigation to the
+	# research root or a canonical UUID descendant gets the same fixed-hub-
+	# login redirect as the terminal below, preserving only that validated
+	# path -- not a plain 401 (APIs/assets still 401, same as everywhere else).
 	@ta_research_host path /research /research/* /api/research /api/research/*
 	handle @ta_research_host {
 		route {
@@ -48,6 +52,15 @@ http://tradingagents.tobytran.dev:8080 {
 			forward_auth auth:8181 {
 				uri /__auth/check
 				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					@research_return {
+						header Sec-Fetch-Mode navigate
+						path_regexp research_return ^/research(/[0-9a-f-]+)?$
+					}
+					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch{re.research_return.1} 302
+					respond 401
+				}
 			}
 			reverse_proxy ta-research:8182 {
 				header_up X-Forwarded-Proto https

@@ -38,14 +38,30 @@ services:
     # Private research API + static shell (06): same tradingagents.env/appuser
     # UID as ta-terminal, but its own data volume -- never mounts ta-data, and
     # ta-data is never mounted here either (legacy terminal history stays
-    # terminal-only; see ta-research-data below).
+    # terminal-only; see ta-research-data below). Deliberately NOT on `ta`
+    # (review round 1, Critical): ta-research trusts the gateway-verified
+    # Cf-Access-Authenticated-User-Email/X-Family-App-Prefix headers on any
+    # connection, and ta-terminal is not a trusted gateway -- an authenticated
+    # terminal user sharing a network with ta-research could otherwise send a
+    # direct request with a forged identity header and read another family
+    # member's private research. `research` is its own network, joined only
+    # by `gateway` and this service (same isolation shape as `vibe`).
     image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ta-research:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
     restart: unless-stopped
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/tradingagents.env
+    environment:
+      # Trust forwarded identity/scheme headers only from this dedicated
+      # network's own fixed subnet (its only other member is `gateway`) --
+      # never "*" (that would blindly trust any future peer added to this
+      # network, not just the gateway). The worker subprocess this service
+      # launches still reaches the open internet for its own provider calls;
+      # this only scopes which peer's *forwarded headers* are trusted, not
+      # egress.
+      FORWARDED_ALLOW_IPS: "172.30.90.0/29"
     volumes:
       - ta-research-data:/home/appuser/.tradingagents
-    networks: [ta]
+    networks: [research]
     mem_limit: 1g
     pids_limit: 512
     security_opt: ["no-new-privileges:true"]
@@ -142,7 +158,7 @@ services:
     depends_on:
       ta-research:
         condition: service_started
-    networks: [gateway, ta, ahf, vibe, mirofish]
+    networks: [gateway, ta, ahf, vibe, research, mirofish]
     mem_limit: 64m
     security_opt: ["no-new-privileges:true"]
     healthcheck:
@@ -184,6 +200,14 @@ networks:
   ahf: {}
   vibe: {}
   gateway: {}
+  # Dedicated to gateway + ta-research only (review round 1, Critical): a
+  # fixed, small subnet so ta-research's own FORWARDED_ALLOW_IPS above can
+  # trust exactly this network's peers, not "*". /29 (6 usable addresses) is
+  # plenty for its two members.
+  research:
+    ipam:
+      config:
+        - subnet: 172.30.90.0/29
 
 volumes:
   ta-data: {}

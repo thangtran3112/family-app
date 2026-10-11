@@ -7,7 +7,7 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | hub (Worker + GCS) | `https://trading-hub.tobytran.dev/` | Static hub from GCS; `/u/*` and `/__auth/*` through `trading-origin` to Caddy (01l) |
 | `web` | `https://trading.tobytran.dev/` | The same hub, interim host until Desk Phase 4 takes it |
 | `ta-terminal` | `https://tradingagents.tobytran.dev/` | TradingAgents in ttyd + tmux; also `/u/tradingagents/` on the hub |
-| `ta-research` | internal only (`ta` network, port 8182) | Private, owner-scoped TradingAgents research API + static shell (06); `/research`, `/research/*`, `/api/research`, `/api/research/*` at the dedicated host, `/u/tradingagents/research...` on the hub. Own `ta-research-data` volume, never shares `ta-terminal`'s `ta-data` |
+| `ta-research` | internal only (own `research` network, port 8182) | Private, owner-scoped TradingAgents research API + static shell (06); `/research`, `/research/*`, `/api/research`, `/api/research/*` at the dedicated host, `/u/tradingagents/research...` on the hub. Own `ta-research-data` volume, never shares `ta-terminal`'s `ta-data`. Never on `ta` with `ta-terminal` -- see "Research (06)" below |
 | `ahf-terminal` | `https://ai-hedge-fund.tobytran.dev/` | ai-hedge-fund in ttyd + tmux; also `/u/ai-hedge-fund/` on the hub |
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
@@ -70,7 +70,11 @@ against the real service). It shares `ta-terminal`'s `tradingagents.env` and
 appuser UID but never its data volume: `ta-research-data` is private to this
 service, and the legacy `ta-data` volume stays terminal-only (no read mount
 by default; see the research plan for the explicit operator import path).
-Rollback behaves like every other service in `SERVICES` (`health-check.sh`):
+`ta-research` trusts the identity/prefix headers the gateway sets, so it is
+never on `ta` with `ta-terminal`: it has its own `research` network, joined
+only by `gateway` (same shape as `vibe`), with `FORWARDED_ALLOW_IPS` scoped
+to that network's own fixed subnet, not `"*"` (see `DIVERGENCE.md` "Network
+isolation"). Rollback behaves like every other service in `SERVICES` (`health-check.sh`):
 an unhealthy `ta-research` after a deploy triggers the same automatic
 previous-tag rollback as any other service, not a special case.
 

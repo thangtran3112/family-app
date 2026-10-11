@@ -68,17 +68,54 @@ loudly (ImportError) rather than silently diverging:
   `ta-research` service (not a stand-in), through real Caddy + real auth:
   forged-identity-header stripping, hub-prefix strip/overwrite, sibling-path
   rejection, signed-out navigation redirect preserving only a validated
-  root/UUID path, private list/detail/download denial to a non-owner,
-  denied nonowner sharing mutation, explicit share making a read-only read
-  possible, revoke making every fresh non-owner read 404 again, real
-  md/html/zip bytes with correct `Content-Type`/`Content-Disposition`, and
-  the owner's own sharing POST requiring a matching same-origin `Origin`
-  (checked independently against the hub prefix, the dedicated host's own
-  Host/Origin, and a direct, un-proxied plain-HTTP request standing in for
-  `deploy/local/Caddyfile`'s shape, which never forces `X-Forwarded-Proto`).
+  root/UUID path (at **both** the hub prefix and the dedicated host), APIs
+  staying 401 even with a navigate header, private list/detail/download
+  denial to a non-owner, denied nonowner sharing mutation, explicit share
+  making a read-only read possible, revoke making every fresh non-owner
+  read 404 again, real md/html/zip bytes with correct
+  `Content-Type`/`Content-Disposition`, the owner's own sharing POST
+  requiring a matching same-origin `Origin` (checked independently against
+  the hub prefix, the dedicated host's own Host/Origin, and a direct,
+  un-proxied plain-HTTP request standing in for `deploy/local/Caddyfile`'s
+  shape, which never forces `X-Forwarded-Proto`), and a real network-bypass
+  regression proving a legacy `ta`-network peer cannot reach `ta-research`'s
+  IP at all (not just its DNS alias — see "Network isolation" below).
   Fixtures for these checks are seeded with `ta_web.store`/`ta_web.reports`
   directly inside the running container (real, non-mocked persistence/export
   code) — never a real research run, which would need a live model call.
+
+## Network isolation (review round 1, Critical — fixed)
+
+`ta-research` trusts `Cf-Access-Authenticated-User-Email`/`X-Family-App-Prefix`
+on any connection it receives, because that trust is normally established by
+Caddy stripping/overwriting them before `forward_auth` — ta-research itself
+has no way to tell a header Caddy set from one a peer forged. Review round 1
+found it placed on the `ta` network alongside `ta-terminal`, so an
+authenticated terminal user could send a direct request straight to
+`ta-research:8182` with a forged identity header and read another family
+member's private research, bypassing Caddy entirely.
+
+Fixed with network segmentation, not an app-level credential (no new secret
+profile needed): `ta-research` now lives on its own `research` network
+(`docker-compose.yml`), joined only by `gateway` — the exact same isolation
+shape as the existing `vibe` network. `ta-terminal` is untouched, still on
+`ta` alone. The two networks share no peer except `gateway`, so there is no
+Docker-level route from `ta-terminal` to `ta-research` at all, by hostname or
+by raw IP. `ta-research`'s own `FORWARDED_ALLOW_IPS` is scoped to exactly
+this network's fixed `/29` subnet (`environment:`, mirroring how `vibe-trading`
+already sets it for its own dedicated network) instead of `"*"`, which would
+have blindly trusted any future peer added to the network, not just the
+gateway; `web.Dockerfile` no longer hardcodes the flag, so this stays a pure
+deploy/Compose concern. The research network is still a normal (non-`internal`)
+bridge, so the background worker subprocess `ta-research` launches keeps its
+own outbound internet access for real provider calls — only forwarded-header
+*trust* is scoped, never egress.
+
+`deploy/ci/smoke-test.sh` models both networks (one for `ta`/`ahf`/`vibe`/
+`gateway`, one reusing `research`'s exact subnet) and proves the fix with a
+real peer: from the `ta-terminal` stand-in's own container, a direct request
+to `ta-research`'s real IP (not its hostname — DNS absence alone would not
+prove isolation) with a forged identity header fails to connect at all.
 
 ## Verified integration (as of this change)
 

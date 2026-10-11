@@ -17,7 +17,7 @@ cleanup() {
   if ((${#containers[@]})); then
     docker rm -fv "${containers[@]}" >/dev/null 2>&1 || true
   fi
-  docker network rm smoke-gateway-net >/dev/null 2>&1 || true
+  docker network rm smoke-gateway-net smoke-research-net >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -268,9 +268,17 @@ process.stdout.write(`__ai_trading_session=${body}.${mac}`);
 }
 
 smoke_gateway() {
-  local net="smoke-gateway-net" key
-  docker network rm "$net" >/dev/null 2>&1 || true
+  # Two networks, modeling production (review round 1, Critical): ta-research
+  # is never a peer of ta-terminal. "$net" stands for the shared `ta`/`ahf`/
+  # `vibe`/`gateway` networks (the legacy terminal and its gateway both sit
+  # on it, same as today); "$net_research" stands for production's dedicated
+  # `research` network, reusing its exact subnet so ta-research's own
+  # FORWARDED_ALLOW_IPS can be tested unchanged from docker-compose.yml.
+  # Only smoke-caddy joins both -- it is the one real gateway peer.
+  local net="smoke-gateway-net" net_research="smoke-research-net" research_subnet="172.30.90.0/29" key
+  docker network rm "$net" "$net_research" >/dev/null 2>&1 || true
   docker network create "$net" >/dev/null
+  docker network create --subnet "$research_subnet" "$net_research" >/dev/null
   key="$(printf 'a%.0s' {1..64})"
 
   docker run -d --name smoke-auth --network "$net" --network-alias auth \
@@ -297,22 +305,60 @@ http.server.HTTPServer(("0.0.0.0", 7681), H).serve_forever()
 
   # Real ta-research service (06), not a stand-in: identity/prefix/CORS
   # enforcement and the private/share/revoke/download contract below all run
-  # against the real ta_web.app, reached through real Caddy + real auth.
-  # Published on its own port too, for the direct (no-Caddy) "local HTTP
-  # port" shape check further down. Fixtures are seeded with ta_web's own
-  # Store/reports modules inside this same container (real, non-mocked
-  # persistence/export code) -- never a real research run, which would need
-  # a real provider key and a live model call.
-  docker run -d --name smoke-ta-research --network "$net" --network-alias ta-research \
+  # against the real ta_web.app, reached through real Caddy + real auth. On
+  # "$net_research" ONLY -- never "$net" (where ta-terminal lives) -- with
+  # the same FORWARDED_ALLOW_IPS/subnet docker-compose.yml trusts in
+  # production. Published on its own port too, for the direct (no-Caddy)
+  # "local HTTP port" shape check further down and the readiness wait below
+  # (host port publishing bypasses both docker networks entirely, so it does
+  # not weaken the isolation this test exists to prove). Fixtures are seeded
+  # with ta_web's own Store/reports modules inside this same container (real,
+  # non-mocked persistence/export code) -- never a real research run, which
+  # would need a real provider key and a live model call.
+  docker run -d --name smoke-ta-research --network "$net_research" --network-alias ta-research \
+    -e "FORWARDED_ALLOW_IPS=$research_subnet" \
     -p 127.0.0.1:18182:8182 "$(image ta-research)" >/dev/null
   containers+=(smoke-ta-research)
   WAIT_SECONDS=30 expect_status 200 http://127.0.0.1:18182/__healthz
 
+  # Network-bypass regression (review round 1, Critical): a peer that only
+  # shares ta-terminal's own network must be unable to reach ta-research AT
+  # ALL, by raw IP -- not merely lacking its DNS alias. smoke-echo-upstream
+  # (the ta-terminal stand-in, "$net" only) tries ta-research's real IP on
+  # "$net_research" directly, with a forged identity header; a successful
+  # connection here would be exactly the bypass the review found.
+  local research_ip bypass_result
+  research_ip="$(docker inspect -f "{{(index .NetworkSettings.Networks \"$net_research\").IPAddress}}" smoke-ta-research)"
+  [[ -n "$research_ip" ]] || fail "could not determine smoke-ta-research's $net_research IP"
+  bypass_result="$(docker exec smoke-echo-upstream python3 -c "
+import socket
+import urllib.error
+import urllib.request
+
+req = urllib.request.Request(
+    'http://$research_ip:8182/api/research',
+    headers={'Cf-Access-Authenticated-User-Email': 'attacker@evil.com'},
+)
+try:
+    urllib.request.urlopen(req, timeout=3)
+    print('REACHED')
+except (urllib.error.URLError, OSError, socket.timeout):
+    print('UNREACHABLE')
+" 2>/dev/null)"
+  [[ "$bypass_result" == "UNREACHABLE" ]] \
+    || fail "a legacy-network peer (same network as ta-terminal) must not be able to reach ta-research at all by IP -- got: $bypass_result"
+  echo "ok   a legacy ta-network peer (same network as ta-terminal) cannot reach ta-research's IP at all -- real network isolation, not just a missing DNS alias"
+
+  # smoke-caddy is the one real peer that bridges both networks, same as the
+  # production gateway service (docker-compose.yml networks: [..., research]).
   docker run -d --name smoke-caddy --network "$net" -p 127.0.0.1:18080:8080 \
     -e VIBE_API_AUTH_KEY=smoke-key \
     -v "$PWD/ai-trading/deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro" \
     caddy:2-alpine >/dev/null
   containers+=(smoke-caddy)
+  docker network connect "$net_research" smoke-caddy
+  docker restart smoke-caddy >/dev/null
+  sleep 1
 
   local cookie expired_cookie body
   cookie="$(sign_smoke_cookie "$key" smoke@example.test 3600)"
@@ -542,6 +588,21 @@ with zipfile.ZipFile('$zip_path') as z:
   echo "ok   signed-out navigation to a research detail path preserves only the validated UUID path and discards the query"
   expect_status 401 http://127.0.0.1:18080/u/tradingagents/api/research -H 'Sec-Fetch-Mode: navigate'
   echo "ok   an unauthenticated research API request stays a plain 401 even with a navigate header"
+
+  # Review round 1 (Important): the dedicated host needs the identical
+  # root/UUID-only redirect, not a plain 401 -- it previously had no
+  # handle_response branch on this route at all.
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate' http://127.0.0.1:18080/research)"
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch" ]] \
+    || fail "dedicated host: signed-out navigation to the research root should redirect preserving the research path, got: $research_nav"
+  echo "ok   dedicated host: signed-out navigation to the research root redirects to the hub login with the research path preserved"
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate' \
+    'http://127.0.0.1:18080/research/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11?evil=%3Cscript%3E')"
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11" ]] \
+    || fail "dedicated host: signed-out navigation to a research UUID path should redirect preserving only the UUID path, got: $research_nav"
+  echo "ok   dedicated host: signed-out navigation to a research detail path preserves only the validated UUID path and discards the query"
+  expect_status 401 http://127.0.0.1:18080/api/research "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: an unauthenticated research API request stays a plain 401 even with a navigate header"
 
   # Swap the header-echo stand-in for a real ttyd to prove the WebSocket
   # handshake actually reaches a real upstream through forward_auth + reverse_proxy.

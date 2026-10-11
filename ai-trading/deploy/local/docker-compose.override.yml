@@ -11,7 +11,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8899:8899"
-    networks: [hub, ta, ahf, vibe, mirofish]
+    # `research` added for development only, same as the production gateway
+    # (review round 1): ta-research lives on its own dedicated network, not
+    # `ta`, so the local mock router must join it too to reach ta-research.
+    networks: [hub, ta, ahf, vibe, research, mirofish]
     depends_on:
       web:
         condition: service_started
