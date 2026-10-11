@@ -2,6 +2,7 @@ import http.client
 import json
 import os
 import socket
+import stat
 import sys
 import tempfile
 import threading
@@ -10,9 +11,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import server
 import state
 from runtime import RuntimeFailure
-from server import ACTOR_HEADER, MAX_BODY_BYTES, UnixServer, create_server
+from server import ACTOR_HEADER, GATE_UNAVAILABLE_BODY, MAX_BODY_BYTES, UnixServer, create_server
 from state import APP_IDS, APP_SERVICES, StateFailure, atomic_write, initial_state, read_state
 
 LINUX_ONLY = "SO_PEERCRED peer-credential checks require Linux"
@@ -231,6 +233,114 @@ class ServerTest(unittest.TestCase):
         code, _body = self.get("/apps", actor="user_fixture")
         self.assertEqual(code, 200)
 
+    # -- production entrypoint (no live Docker/socket resources) -----------------------
+
+    def test_main_wires_fixed_paths_starts_reconcile_after_bind_and_closes_cleanly(self):
+        """systemd runs `server.py` with no arguments. This proves the exact
+        wiring main() must do -- fixed Runtime/socket/state/lock paths, no
+        caller-configurable command/path/flag, reconcile started
+        asynchronously only after the (fake) server already exists (i.e.
+        after a real create_server() would have bound+listened), and a
+        clean server_close() in `finally` -- without ever touching a real
+        socket, Docker, or the filesystem paths involved.
+        """
+        calls = []
+        reconciled = threading.Event()
+        fake_runtime_instance = object()
+
+        class FakeServer:
+            def reconcile(self):
+                calls.append("reconcile")
+                reconciled.set()
+
+            def serve_forever(self):
+                calls.append("serve_forever")
+                # A real serve_forever() blocks; raising here simulates an
+                # eventual shutdown so main()'s `finally` still runs.
+                raise KeyboardInterrupt
+
+            def server_close(self):
+                calls.append("server_close")
+
+        fake_server = FakeServer()
+
+        def fake_runtime_ctor(app_dir, secrets_dir, runtime_dir):
+            calls.append(("Runtime", app_dir, secrets_dir, runtime_dir))
+            return fake_runtime_instance
+
+        def fake_create_server(socket_path, state_path, lock_path, runtime_obj, **kwargs):
+            calls.append(("create_server", socket_path, state_path, lock_path, runtime_obj))
+            return fake_server
+
+        with mock.patch("server.Runtime", side_effect=fake_runtime_ctor), \
+                mock.patch("server.create_server", side_effect=fake_create_server):
+            with self.assertRaises(KeyboardInterrupt):
+                server.main()
+
+        self.assertTrue(reconciled.wait(timeout=2))
+        self.assertIn("serve_forever", calls)
+        self.assertIn("server_close", calls)
+        # server_close ran even though serve_forever raised.
+        self.assertLess(calls.index("serve_forever"), calls.index("server_close"))
+
+        runtime_call = next(c for c in calls if isinstance(c, tuple) and c[0] == "Runtime")
+        self.assertEqual(runtime_call[1:], (server.APP_DIR, server.SECRETS_DIR, server.RUNTIME_DIR))
+        create_call = next(c for c in calls if isinstance(c, tuple) and c[0] == "create_server")
+        self.assertEqual(
+            create_call[1:],
+            (server.SOCKET_PATH, state.STATE_PATH, state.LOCK_PATH, fake_runtime_instance),
+        )
+
+    # -- socket bind ownership/permissions (systemd UMask=0077 safe) -------------------
+
+    def test_bind_fixes_root_gateway_0660_even_under_restrictive_umask(self):
+        """A systemd unit's `UMask=0077` would otherwise leave every fresh
+        bind() at mode 0700 -- unreachable by the gateway group -- on every
+        restart; an installer's one-time chmod can't survive that. server_bind
+        must fix ownership/mode itself, every time.
+        """
+        before_dir = self.socket_dir.stat()
+        previous_umask = os.umask(0o077)
+        try:
+            self.start_server(allowed_uid=os.getuid())
+        finally:
+            os.umask(previous_umask)
+        info = self.socket_path.stat()
+        self.assertEqual(info.st_uid, 0)
+        self.assertEqual(info.st_gid, os.getuid())
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o660)
+        after_dir = self.socket_dir.stat()
+        self.assertEqual((before_dir.st_dev, before_dir.st_ino), (after_dir.st_dev, after_dir.st_ino))
+        # The peer check still functions correctly at this mode/ownership.
+        code, _body = self.get("/apps", actor="user_fixture")
+        self.assertEqual(code, 200)
+
+    def test_bind_under_restrictive_umask_still_rejects_the_wrong_peer(self):
+        previous_umask = os.umask(0o077)
+        try:
+            server_obj = self.start_server(allowed_uid=os.getuid() + 1)
+        finally:
+            os.umask(previous_umask)
+        self.assertEqual(stat.S_IMODE(self.socket_path.stat().st_mode), 0o660)
+        self.assert_connection_rejected(server_obj, "/apps")
+        self.assertEqual(self.runtime.calls, [])
+
+    def test_socket_directory_owned_by_someone_else_is_refused(self):
+        os.chown(self.socket_dir, 65534, 65534)
+        try:
+            with self.assertRaises(Exception):
+                self.start_server()
+        finally:
+            os.chown(self.socket_dir, 0, 0)
+
+    def test_world_writable_socket_directory_is_refused(self):
+        os.chmod(self.socket_dir, 0o777)
+        try:
+            with self.assertRaises(Exception):
+                self.start_server()
+        finally:
+            os.chmod(self.socket_dir, 0o755)
+
     # -- actor / body schema / revision -------------------------------------------------
 
     def test_actor_schema_and_revision_fail_without_commands(self):
@@ -337,6 +447,93 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.app(body, "mirofish")["status"], "Stopped")
         self.assertEqual([call for call in self.runtime.calls if call[0] == "apply"], [])
         self.assertIsNone(read_state(self.state_path)["operation"])
+
+    # -- status precedence: live convergence wins over a stale stored error ------------
+
+    def _stored_error(self, app_id, error_code):
+        current = read_state(self.state_path)
+        current["results"][app_id] = {"changedAt": "2026-01-01T00:00:00Z", "errorCode": error_code}
+        atomic_write(self.state_path, current)
+
+    def test_needs_setup_overlays_even_a_stale_stored_error(self):
+        self.start_server()
+        current = read_state(self.state_path)
+        current["desired"]["mirofish"] = True
+        atomic_write(self.state_path, current)
+        self._stored_error("mirofish", "operation_failed")
+        self.runtime.needs_setup.add("mirofish")
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(code, 200)
+        app = self.app(body, "mirofish")
+        self.assertEqual(app["status"], "Needs setup")
+        self.assertIsNone(app["errorCode"])
+
+    def test_running_recovery_clears_a_stale_stored_error(self):
+        """An app that failed, then came back up on its own (or via reboot
+        reconciliation), must show Running -- the old error must never
+        permanently hide a successful external recovery.
+        """
+        self.start_server()
+        current = read_state(self.state_path)
+        current["desired"]["vibe-trading"] = True
+        atomic_write(self.state_path, current)
+        self._stored_error("vibe-trading", "operation_timeout")
+        self.runtime.running.add("vibe-trading")  # now actually up
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(code, 200)
+        app = self.app(body, "vibe-trading")
+        self.assertEqual(app["status"], "Running")
+        self.assertIsNone(app["errorCode"])
+
+    def test_stopped_recovery_clears_a_stale_stored_error(self):
+        self.start_server()
+        self._stored_error("mirofish", "operation_failed")  # desired off by default, not running
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(code, 200)
+        app = self.app(body, "mirofish")
+        self.assertEqual(app["status"], "Stopped")
+        self.assertIsNone(app["errorCode"])
+
+    def test_error_retained_only_while_group_is_actually_unhealthy(self):
+        self.start_server()
+        current = read_state(self.state_path)
+        current["desired"]["tradingagents"] = True
+        atomic_write(self.state_path, current)
+        self._stored_error("tradingagents", "operation_failed")
+        # Not actually running -> group_status is "Unhealthy", so the
+        # stored failure is retained and surfaced as Error.
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(code, 200)
+        app = self.app(body, "tradingagents")
+        self.assertEqual(app["status"], "Error")
+        self.assertEqual(app["errorCode"], "operation_failed")
+
+    def test_unhealthy_drift_with_no_stored_error(self):
+        self.start_server()
+        # Desired on (default) but only partially up -> group_status itself
+        # reports Unhealthy; with no stored failure, that's exactly what
+        # must surface, never a fabricated Error or Stopped/Running.
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(code, 200)
+        app = self.app(body, "tradingagents")
+        self.assertEqual(app["status"], "Unhealthy")
+        self.assertIsNone(app["errorCode"])
+
+    def test_other_app_results_preserved_through_an_unrelated_change(self):
+        self.start_server()
+        self._stored_error("ai-hedge-fund", "operation_timeout")  # stays off+unhealthy -> retained Error
+        code, body = self.get("/apps", "user_fixture")
+        self.assertEqual(self.app(body, "ai-hedge-fund")["status"], "Error")
+        # Changing a different app (vibe-trading is desired-on by default,
+        # so turning it off is a genuine change, not a no-op) must not
+        # touch ai-hedge-fund's stored result. `_stored_error` writes
+        # results directly without bumping revision, so the current
+        # revision is still the initial 0.
+        code, body = self.put("/apps/vibe-trading", {"enabled": False, "expectedRevision": 0}, "user_fixture")
+        self.assertEqual(code, 202)
+        self.assertEqual(self.app(body, "ai-hedge-fund")["status"], "Error")
+        self.assertEqual(self.app(body, "ai-hedge-fund")["errorCode"], "operation_timeout")
+        self.wait_for_operation_to_clear()
 
     # -- 503 on internal failure / corrupt state -------------------------------------------------
 
@@ -477,18 +674,49 @@ class ServerTest(unittest.TestCase):
     def test_gate_reports_ready_only_when_desired_on_and_converged(self):
         self.start_server()
         # Desired off by default -> unavailable.
-        code, _body = self.get("/gate/mirofish")
+        code, body = self.get("/gate/mirofish")
         self.assertEqual(code, 503)
+        self.assertEqual(body, GATE_UNAVAILABLE_BODY)
         self.put("/apps/tradingagents", {"enabled": True, "expectedRevision": 0}, "user_fixture")
         self.wait_for_operation_to_clear()
-        code, _body = self.get("/gate/tradingagents")
+        code, body = self.get("/gate/tradingagents")
         self.assertEqual(code, 204)
+        self.assertIsNone(body)  # 204 stays body-free -- "its only data is availability"
 
     def test_gate_server_degraded_and_corrupt_state_are_503(self):
-        server = self.start_server()
-        server._degraded.set()
-        code, _body = self.get("/gate/mirofish")
+        server_obj = self.start_server()
+        server_obj._degraded.set()
+        code, body = self.get("/gate/mirofish")
         self.assertEqual(code, 503)
+        self.assertEqual(body, GATE_UNAVAILABLE_BODY)
+
+    def test_gate_unavailable_body_is_fixed_actionable_and_bounded_no_identity_leak(self):
+        """Task 4 reads this exact, generic body -- never which app,
+        container, environment, or identity detail caused the 503, and
+        regardless of the underlying reason (degraded, corrupt state,
+        active operation, desired off, or a non-converged group).
+        """
+        self.start_server()
+        self.runtime.apply_failures["mirofish"] = RuntimeFailure("runtime_unavailable")
+        self.runtime.unhealthy.add("mirofish")
+        code, body = self.get("/gate/mirofish")
+        self.assertEqual(code, 503)
+        self.assertEqual(body, {
+            "error": "app_unavailable",
+            "message": "Open Trading Hub Settings to start the app or check its status.",
+        })
+        self.assertEqual(set(body), {"error", "message"})
+
+    def test_gate_response_is_no_store(self):
+        self.start_server()
+        conn = UnixHTTPConnection(self.socket_path)
+        try:
+            conn.request("GET", "/gate/mirofish", headers={})
+            resp = conn.getresponse()
+            self.assertEqual(resp.getheader("Cache-Control"), "no-store")
+            resp.read()
+        finally:
+            conn.close()
 
     # -- audit log -------------------------------------------------
 

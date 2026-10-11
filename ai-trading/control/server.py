@@ -42,7 +42,7 @@ import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from runtime import RuntimeFailure
+from runtime import Runtime, RuntimeFailure
 from state import (
     ACTIVE_STATUSES,
     ACTOR_ID,
@@ -50,6 +50,8 @@ from state import (
     APP_SERVICES,
     Busy,
     Conflict,
+    LOCK_PATH,
+    STATE_PATH,
     StateFailure,
     atomic_write,
     begin_change,
@@ -62,6 +64,18 @@ from state import (
 ACTOR_HEADER = "X-Verified-Actor"
 MAX_BODY_BYTES = 1024
 AUDIT_LOG_PATH = Path("/var/log/family-app/ai-trading-control/audit.log")
+
+# Fixed production entrypoint targets (systemd's ExecStart runs this module
+# with no arguments: no caller-configurable command, path, or admin flag).
+SOCKET_PATH = Path("/run/family-app/ai-trading-control/control.sock")
+APP_DIR = Path("/opt/family-app/ai-trading")
+SECRETS_DIR = Path("/etc/family-app/ai-trading")
+RUNTIME_DIR = Path("/run/family-app/ai-trading")
+
+GATE_UNAVAILABLE_BODY = {
+    "error": "app_unavailable",
+    "message": "Open Trading Hub Settings to start the app or check its status.",
+}
 
 _ALLOWED_METHODS = {
     "apps-list": frozenset({"GET"}),
@@ -219,7 +233,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _handle_gate(self, app_id):
         status = self.server.process_gate(app_id)
-        self._respond_empty(status)
+        if status == 204:
+            self._respond_empty(204)
+        else:
+            # Fixed, generic, actionable body only -- never which app,
+            # container, environment, or identity detail caused it.
+            self._respond_json(status, GATE_UNAVAILABLE_BODY)
 
     def _respond_json(self, code, payload):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -269,6 +288,19 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self._prepare_socket_path()
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = "local", 0
+        # bind() creates a fresh inode every time, subject to the current
+        # process umask (systemd's UMask=0077 would otherwise leave the
+        # socket mode 0700 -- unreachable by the gateway group -- on every
+        # restart; an installer's one-time chmod can't survive that). Fix
+        # ownership/mode explicitly on every bind, not just at install time.
+        # UID and GID are the same fixed dedicated identity (22001).
+        try:
+            os.chown(self.socket_path, 0, self.gateway_uid)
+            os.chmod(self.socket_path, 0o660)
+        except OSError as exc:
+            raise ServerFailure(
+                f"could not set root:gateway 0660 ownership on {self.socket_path}",
+            ) from exc
 
     # -- socket path safety -------------------------------------------------
 
@@ -303,7 +335,12 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
             info = directory.lstat()
         except OSError as exc:
             raise ServerFailure(f"socket directory {directory} is unavailable") from exc
-        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or stat.S_ISLNK(info.st_mode)
+            or info.st_uid != 0
+            or info.st_mode & 0o022
+        ):
             raise ServerFailure(f"socket directory {directory} is unsafe")
         return info
 
@@ -353,18 +390,25 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     # -- response payload -------------------------------------------------
 
     def _build_payload(self, state):
+        """Status precedence (common-context): an active matching operation
+        overlays everything. Otherwise the ACTUAL group status -- from one
+        shared batch, never a per-app re-query -- is authoritative: "Needs
+        setup" and genuine convergence ("Running"/"Stopped") always win,
+        even over a stale stored failure, so a successful external fix or
+        reboot reconciliation is never hidden behind an old Error and
+        "Needs setup" is never masked as a generic Error. A stored failure
+        is shown as "Error" only when the group is ACTUALLY still
+        non-converged ("Unhealthy") -- never permanently, never instead of
+        a live recovery. With no stored failure, a non-converged group is
+        plain "Unhealthy" drift.
+        """
         operation = state["operation"]
-        needed = []
-        for app_id in APP_IDS:
-            active = (
-                operation is not None
-                and operation["appId"] == app_id
-                and operation["status"] in ACTIVE_STATUSES
-            )
-            result = state["results"][app_id]
-            errored = (not active) and result is not None and result["errorCode"] is not None
-            if not active and not errored:
-                needed.append(app_id)
+        active_app_id = (
+            operation["appId"]
+            if operation is not None and operation["status"] in ACTIVE_STATUSES
+            else None
+        )
+        needed = [app_id for app_id in APP_IDS if app_id != active_app_id]
         observations = None
         if needed:
             services = tuple(service for app_id in needed for service in APP_SERVICES[app_id])
@@ -372,11 +416,7 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         apps = []
         for app_id in APP_IDS:
             desired = state["desired"][app_id]
-            if (
-                operation is not None
-                and operation["appId"] == app_id
-                and operation["status"] in ACTIVE_STATUSES
-            ):
+            if app_id == active_app_id:
                 apps.append({
                     "id": app_id,
                     "enabled": desired,
@@ -387,24 +427,20 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
                 })
                 continue
             result = state["results"][app_id]
-            if result is not None and result["errorCode"] is not None:
-                apps.append({
-                    "id": app_id,
-                    "enabled": desired,
-                    "status": "Error",
-                    "changedAt": result["changedAt"],
-                    "operationId": None,
-                    "errorCode": result["errorCode"],
-                })
-                continue
             live = self.runtime.group_status(app_id, desired, observations=observations)
+            if live in ("Needs setup", "Running", "Stopped"):
+                status, error_code = live, None
+            elif result is not None and result["errorCode"] is not None:
+                status, error_code = "Error", result["errorCode"]
+            else:
+                status, error_code = "Unhealthy", None
             apps.append({
                 "id": app_id,
                 "enabled": desired,
-                "status": live,
+                "status": status,
                 "changedAt": result["changedAt"] if result is not None else None,
                 "operationId": None,
-                "errorCode": None,
+                "errorCode": error_code,
             })
         return {"revision": state["revision"], "lastChangedAt": state["lastChange"], "apps": apps}
 
@@ -439,12 +475,12 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
             and operation["status"] in ACTIVE_STATUSES
         ):
             return 503
-        result = state["results"][app_id]
-        if result is not None and result["errorCode"] is not None:
-            return 503
         if not state["desired"][app_id]:
             return 503
         try:
+            # Live convergence alone decides readiness -- a stale stored
+            # failure never permanently hides a successful external fix or
+            # reboot reconciliation.
             ready = self.runtime.converged(app_id, True)
         except RuntimeFailure:
             return 503
@@ -665,3 +701,27 @@ class UnixServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 def create_server(socket_path, state_path, lock_path, runtime, gateway_uid=22001, audit_log_path=AUDIT_LOG_PATH):
     return UnixServer(socket_path, state_path, lock_path, runtime, gateway_uid, audit_log_path)
+
+
+def main():
+    """systemd's `ExecStart` runs this module directly with no arguments --
+    there is no production command/path/admin flag a caller can set. Every
+    path, the Compose project, and the owner UID are the fixed values
+    established across Tasks 1-3; `gateway_uid`/`audit_log_path` keep their
+    own fixed defaults too.
+    """
+    runtime_obj = Runtime(APP_DIR, SECRETS_DIR, RUNTIME_DIR)
+    server = create_server(SOCKET_PATH, STATE_PATH, LOCK_PATH, runtime_obj)
+    # Reconcile shares the lifecycle lock with deploy.sh and may block on it
+    # for a long time; it must only ever start on its own thread, and only
+    # after create_server() has already bound+listened (see module
+    # docstring) -- never before serve_forever() is reachable.
+    threading.Thread(target=server.reconcile, daemon=True).start()
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
