@@ -528,25 +528,33 @@ class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
         async with third.router.lifespan_context(third):
             pass
 
-    async def _start_and_wait_for_marker(self, client, marker_dir: Path, timeout: float) -> tuple[str, Path]:
-        """POST a new run and wait for its *child-written* marker file.
+    async def _start_run(self, client) -> str:
+        """POST a new run, assert 202, and return its id — kept separate from
+        the marker wait so a negative control can prove the *marker*
+        assertion failed, not merely that this earlier 202 check failed."""
+        made = await client.post("/api/research", headers=self.owner_headers, json=_inputs())
+        self.assertEqual(made.status_code, 202)
+        return made.json()["id"]
+
+    async def _wait_for_marker(self, marker: Path, expected: str, timeout: float) -> None:
+        """Poll until ``marker`` exists *and* contains exactly ``expected``.
 
         Waiting only for ``run_id`` to disappear from ``runner._children``
         proves a child was reaped, not that one ever launched — the
         production path still returns 202 even when ``Runner.start()``'s
         ``subprocess.Popen`` fails (caught internally as ``LAUNCH_FAILED``,
         never raised; `ta_web/runner.py`). The marker is written by the real
-        child process itself, so its existence is the actual launch proof.
+        child process itself, so reaching its exact expected content is the
+        actual launch proof. Polling the *content*, not re-reading once after
+        a bare existence check, avoids a transient empty read racing the
+        child's create-then-write.
         """
-        made = await client.post("/api/research", headers=self.owner_headers, json=_inputs())
-        self.assertEqual(made.status_code, 202)
-        run_id = made.json()["id"]
-        marker = marker_dir / f"{run_id}.marker"
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline and not marker.exists():
+        while time.monotonic() < deadline:
+            if marker.exists() and marker.read_text() == expected:
+                return
             await asyncio.sleep(0.02)
-        self.assertTrue(marker.exists(), "child process never launched/wrote its marker")
-        return run_id, marker
+        self.fail(f"child marker {marker.name} never reached expected content {expected!r}")
 
     async def test_production_lifespan_start_launches_real_child_without_llm(self):
         # The existing Runner._argv test seam (test_runner.py): a tiny real
@@ -573,11 +581,12 @@ class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
 
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
-                    run_id, marker = await self._start_and_wait_for_marker(client, marker_dir, timeout=5)
-
-                # The marker's exact, known content: the child really executed
-                # this script, not some other process incidentally touching the path.
-                self.assertEqual(marker.read_text(), "child-ran-ok")
+                    run_id = await self._start_run(client)
+                    marker = marker_dir / f"{run_id}.marker"
+                    # Exact, known content reached: the child really executed
+                    # this script, not some other process incidentally
+                    # touching the path, and not a transiently empty file.
+                    await self._wait_for_marker(marker, "child-ran-ok", timeout=5)
 
                 # Only now check the (weaker, separate) reaping claim.
                 deadline = time.monotonic() + 5
@@ -588,9 +597,10 @@ class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_marker_wait_proof_fails_when_child_never_launches(self):
         """Negative control for the fix above: force Runner.start's Popen to
         fail (its own documented, swallowed-OSError path — ``LAUNCH_FAILED``,
-        202 still returned, no child registered). ``_start_and_wait_for_marker``
-        must then itself raise, proving the marker assertion is a real
-        launch-proof and not vacuously true."""
+        202 still returned, no child registered). ``_wait_for_marker`` must
+        then itself raise with its own marker-specific message — proving
+        *that* assertion failed, not merely that the (separately-checked,
+        still-succeeding) 202 response failed."""
         marker_dir = Path(self.tmp.name) / "markers-negative"
         marker_dir.mkdir()
         app = create_app(self.root)
@@ -605,8 +615,14 @@ class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
             try:
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
-                    with self.assertRaises(AssertionError):
-                        await self._start_and_wait_for_marker(client, marker_dir, timeout=0.3)
+                    # Established separately, outside assertRaises: the POST
+                    # itself still succeeds even though Popen always fails.
+                    run_id = await self._start_run(client)
+                    marker = marker_dir / f"{run_id}.marker"
+                    with self.assertRaisesRegex(
+                        AssertionError, r"child marker .* never reached expected content"
+                    ):
+                        await self._wait_for_marker(marker, "child-ran-ok", timeout=0.3)
             finally:
                 subprocess.Popen = real_popen  # no real child was ever spawned; nothing else to clean up
 
