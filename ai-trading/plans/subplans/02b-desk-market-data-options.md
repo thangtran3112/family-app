@@ -38,7 +38,7 @@ Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (t
 
 | Option | Per month | Real-time coverage | Notes |
 |---|---|---|---|
-| **A. IBKR data login (chosen)** | $14.50–$16 | Stocks (all exchanges, extended hours), futures, option greeks; 250 ms | Uses existing accounts, and quotes match the IBKR order ticket. Billed per username; one session per username; $500 minimum equity for subscriptions. Live logins need a weekly 2FA re-login. |
+| **A. IBKR data login (chosen)** | $14.50 | Stocks (all exchanges, extended hours), futures, option greeks; 250 ms | Uses existing accounts, and quotes match the IBKR order ticket. Billed per username; one session per username; $500 minimum equity for subscriptions. Live logins need a weekly 2FA re-login. |
 | B. tastytrade free feed | $0 | Stocks, futures, greeks; streamed in batches of about 100 ms (adjustable) | Needs a new funded account per person, possibly with futures approval. Minute history about 43 days. Its tokens refresh without a person. No upstream app supports it. |
 | C. Data vendors only | $29 | Stocks IEX-only; futures *or* options 15 minutes delayed | Fails real-time futures |
 
@@ -53,7 +53,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
 |---|---|---|
 | US Securities Snapshot and Futures Value Bundle | $10 | Waived in months with at least $30 of commissions |
 | US Equity and Options Add-On Streaming Bundle | $4.50 | |
-| OPRA Level 1 | $1.50 | Only if it is not included in the add-on |
+| OPRA Level 1 | $1.50 | Not needed: the $4.50 add-on includes OPRA L1, per IBKR's documentation ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §3) |
 | No subscription | $0 | Free streaming from Cboe One + IEX venues only |
 
 ## 4. Decision (Owner, 2026-10-10)
@@ -62,7 +62,8 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
   - Both users share this one subscription.
   - Exchange data is licensed per person, so sharing one non-professional subscription inside the household's own apps is a known gray area. The owner accepted it.
 - **History and reference data:** free sources (section 5).
-- **Paid cost:** $14.50 a month as subscribed (the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle), or $16 if the probe shows option greeks need OPRA Top of Book. The first bill confirms it.
+- **Paid cost:** $14.50 a month as subscribed: the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle. IBKR's documentation says the add-on includes OPRA L1, so option greeks need no separate OPRA line ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §3). Task 0.5 and the first bill confirm it.
+- **Consensus EPS (owner, 2026-10-10):** Eulerpool's free tier after a 10-symbol pilot, with Finnhub free plus Alpha Vantage free as the fallback ([02f](02f-desk-indicators-and-ai-daily-design.md) §4). It adds no cost.
 
 ## 5. Hybrid Store: What We Keep and What We Fetch
 
@@ -74,6 +75,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
 | IV30 for IV rank | IBKR daily | IBKR one-year IV history (to verify in the spike) | `iv_daily` |
 | Swing and long-term lists | Alpaca free, 15 minutes delayed, refreshed every 15 minutes | n/a | n/a |
 | Fundamentals | n/a | SEC EDGAR XBRL (Finnhub basic financials as fallback), weekly | `fundamentals` |
+| Consensus EPS, analyst targets | n/a | Eulerpool free after a 10-symbol pilot; Finnhub free plus Alpha Vantage free as the fallback; daily after 16:30 ([02f](02f-desk-indicators-and-ai-daily-design.md) §4) | `consensus_snapshots`, `earnings_results`, `analyst_targets` |
 | Earnings, dividends, news | n/a | Finnhub free + yfinance, at 06:00 and hourly | `calendar_events`, `news_items` (7 days) |
 | Macro release dates | n/a | FRED release dates + a static FOMC file | `calendar_events` |
 

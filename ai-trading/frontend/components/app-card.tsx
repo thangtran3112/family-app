@@ -1,81 +1,60 @@
 import Link from "next/link";
-import { ArrowRight, ExternalLink, Keyboard, Tablet } from "lucide-react";
-import { appIcons, type HubApp } from "@/lib/apps";
-import { StatusBadge } from "@/components/status-badge";
+import { ArrowUpRight, Clock3 } from "lucide-react";
+import { appIcons, getAppLaunch, type HubApp } from "@/lib/apps";
 
-const deviceHints = {
-  keyboard: { Icon: Keyboard, label: "Keyboard recommended" },
-  touch: { Icon: Tablet, label: "Works on touch" },
-} as const;
-
-function CardBody({ app }: { app: HubApp }) {
-  const Icon = appIcons[app.icon];
-  const device = deviceHints[app.device];
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-          <Icon aria-hidden size={20} />
-        </div>
-        <h3 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">{app.name}</h3>
-        <StatusBadge app={app} />
-      </div>
-      <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{app.summary}</p>
-      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Good for:</span> {app.goodFor}
-      </p>
-      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Cost:</span> {app.costNote}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {app.tags.slice(0, 3).map((tag) => (
-          <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {tag}
-          </span>
-        ))}
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <device.Icon aria-hidden size={14} />
-          {device.label}
-        </span>
-        {app.kind === "terminal" && (
-          <span className="inline-flex items-center gap-1">
-            Open in hub
-            <ArrowRight aria-hidden size={14} />
-          </span>
-        )}
-        {app.kind === "external" && (
-          <span className="inline-flex items-center gap-1">
-            Opens in a new tab
-            <ExternalLink aria-hidden size={14} />
-          </span>
-        )}
-        {app.kind === "upstream-setup" && (
-          <span className="inline-flex items-center gap-1">Setup required before launch</span>
-        )}
-      </div>
-    </>
-  );
-}
+const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 export function AppCard({ app }: { app: HubApp }) {
-  if (app.status === "planned") {
+  const Icon = appIcons[app.icon];
+  const launch = getAppLaunch(app);
+
+  if (!launch) {
     return (
-      <div
-        aria-disabled="true"
-        className="flex min-h-[200px] flex-col rounded-xl border border-dashed border-border bg-card p-6 opacity-70"
-      >
-        <CardBody app={app} />
+      <div role="group" aria-disabled="true" className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 rounded-xl border border-border p-5 xl:px-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-border text-muted-foreground md:row-span-2">
+          <Icon aria-hidden size={20} strokeWidth={1.5} />
+        </div>
+        <h2 className="text-base leading-[22px] font-semibold">{app.name}</h2>
+        <span className="flex items-center gap-1.5 text-xs leading-[18px] text-muted-foreground md:row-span-2">
+          <Clock3 aria-hidden size={14} />Planned
+        </span>
+        <p className="col-span-3 text-sm leading-[22px] text-muted-foreground md:col-span-1 md:col-start-2 md:text-[13px] md:leading-5">
+          {app.summary}<span className="hidden xl:inline"> Separate from these research tools.</span>
+        </p>
       </div>
     );
   }
+
+  const primary = app.slug === "tradingagents";
+  const badge = app.kind === "terminal" ? "Terminal" : app.kind === "upstream-setup" ? "Setup required" : app.slug === "mirofish" ? "Experimental" : "Web app";
+
   return (
-    <Link
-      href={`/apps/${app.slug}`}
-      className="flex min-h-[200px] flex-col rounded-xl border border-border bg-card p-6 transition-[color,background-color,border-color,transform] duration-150 ease-out hover:border-accent motion-safe:hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-    >
-      <CardBody app={app} />
-    </Link>
+    <article className="flex min-h-[232px] min-w-0 flex-col gap-4 rounded-xl border border-border bg-card p-5 md:min-h-[244px] xl:min-h-[208px] xl:px-6 xl:py-[22px]">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-muted ${primary ? "text-accent" : "text-foreground"}`}>
+          <Icon aria-hidden size={22} strokeWidth={1.5} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl leading-[26px] font-semibold tracking-[-0.025em]">
+            <Link href={`/apps/${app.slug}`} className={`rounded hover:text-accent ${FOCUS_RING}`}>{app.name}</Link>
+          </h2>
+          <p className="mt-0.5 text-xs leading-[18px] text-muted-foreground">{app.subtitle}</p>
+        </div>
+        <span className="shrink-0 rounded-[5px] border border-border px-2 py-1 text-[11px] leading-4 text-muted-foreground">{badge}</span>
+      </div>
+      <p className="max-w-[450px] text-[15px] leading-[22px] text-muted-foreground">{app.summary}</p>
+      <div className="mt-auto flex items-center justify-between gap-4">
+        <p className="min-w-0 text-xs leading-[18px] text-muted-foreground">{app.launchNote}</p>
+        <Link
+          href={launch.href}
+          target={launch.newTab ? "_blank" : undefined}
+          rel={launch.newTab ? "noopener" : undefined}
+          aria-label={`${launch.label}: ${app.name}${launch.newTab ? " (opens in a new tab)" : ""}`}
+          className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] px-4 text-[13px] leading-5 font-semibold transition-colors duration-150 motion-reduce:transition-none ${primary ? "bg-accent text-on-accent hover:bg-accent/90" : "bg-muted text-foreground hover:bg-muted/70"} ${FOCUS_RING}`}
+        >
+          {launch.label}<ArrowUpRight aria-hidden size={15} strokeWidth={1.6} />
+        </Link>
+      </div>
+    </article>
   );
 }

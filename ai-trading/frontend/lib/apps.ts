@@ -1,11 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { Bot, Fish, LineChart, MessagesSquare, Rocket } from "lucide-react";
+import { Fish, LineChart, MessagesSquare, Monitor, Network } from "lucide-react";
 
 export const hubCategories = [
-  { id: "research", label: "Research and analysis" },
-  { id: "funds", label: "Funds and backtesting" },
-  { id: "simulation", label: "Simulation lab" },
-  { id: "desk", label: "Family desk" },
+  { id: "research", label: "Research" },
+  { id: "funds", label: "Backtesting" },
+  { id: "simulation", label: "Simulation" },
+  { id: "desk", label: "Family Desk" },
 ] as const;
 
 export type CategoryId = (typeof hubCategories)[number]["id"];
@@ -13,17 +13,19 @@ export type CategoryId = (typeof hubCategories)[number]["id"];
 export type AppIconKey = "tradingAgents" | "hedgeFund" | "vibeTrading" | "familyDesk" | "mirofish";
 
 export const appIcons: Record<AppIconKey, LucideIcon> = {
-  tradingAgents: Bot,
+  tradingAgents: Network,
   hedgeFund: LineChart,
   vibeTrading: MessagesSquare,
-  familyDesk: Rocket,
+  familyDesk: Monitor,
   mirofish: Fish,
 };
 
 type BaseApp = {
   slug: string;
   name: string;
+  subtitle: string;
   summary: string;
+  launchNote: string;
   category: CategoryId;
   tags: readonly string[];
   icon: AppIconKey;
@@ -66,12 +68,14 @@ export const hubApps: readonly HubApp[] = [
     terminalPath: "/u/tradingagents/",
     hostUrl: "https://tradingagents.tobytran.dev/",
     name: "TradingAgents",
+    subtitle: "Single-stock research",
     category: "research",
     tags: ["Multi-agent debate", "Single ticker", "Written report"],
     icon: "tradingAgents",
     device: "keyboard",
-    summary: "A team of AI analysts debates one ticker and returns Buy, Hold, or Sell with a written report.",
-    goodFor: "A deep second opinion on one stock before a trade.",
+    summary: "Let a team of analysts debate one ticker and give you a written second opinion.",
+    launchNote: "Multi-agent analysis",
+    goodFor: "A second opinion on one stock.",
     costNote: "Each analysis makes dozens of LLM calls; every call is billed to the family provider keys (no spend limit set).",
   },
   {
@@ -81,12 +85,14 @@ export const hubApps: readonly HubApp[] = [
     terminalPath: "/u/ai-hedge-fund/",
     hostUrl: "https://ai-hedge-fund.tobytran.dev/",
     name: "AI Hedge Fund",
+    subtitle: "Funds & backtesting",
     category: "funds",
     tags: ["Investor personas", "Backtests", "Free market data"],
     icon: "hedgeFund",
     device: "keyboard",
     summary:
-      "Investor personas (Buffett, Munger, Graham, Lynch, Druckenmiller) and quant models run a simulated fund with backtests and a paper book.",
+      "Test investor-persona strategies against market history in a simulated fund.",
+    launchNote: "Free prices + SEC filings",
     goodFor: "Testing value and growth ideas against history.",
     costNote: "Market data from free sources (Alpaca daily prices, SEC filings); the earnings-surprise model is not supported. LLM usage billed to the family provider keys.",
   },
@@ -96,11 +102,13 @@ export const hubApps: readonly HubApp[] = [
     status: "live",
     url: vibeTradingUrl,
     name: "Vibe-Trading",
+    subtitle: "Conversational research",
     category: "research",
     tags: ["Natural language", "Strategy backtests", "Skill library"],
     icon: "vibeTrading",
     device: "touch",
-    summary: "A research agent you talk to in plain English, with charts, strategy backtests, and a large skill library.",
+    summary: "Explore an idea in plain English, then research, chart, and backtest it.",
+    launchNote: "Natural-language workflows",
     goodFor: "Exploring an idea or backtesting a strategy described in words.",
     costNote: "LLM usage billed to the family provider keys; market data from free sources.",
     firstVisitNote: ["Nothing to set up: your hub sign-in also signs you in to Vibe-Trading."],
@@ -111,12 +119,14 @@ export const hubApps: readonly HubApp[] = [
     status: "live",
     url: mirofishUrl,
     name: "MiroFish",
+    subtitle: "Simulation lab",
     category: "simulation",
     tags: ["Multi-agent simulation", "Upload to report", "Experimental"],
     icon: "mirofish",
     device: "touch",
     summary:
-      "Experimental simulation lab: upload source material and watch thousands of AI agents with independent memory interact in a digital sandbox, then read a report. Financial prediction is not shipped upstream yet.",
+      "Upload source material, simulate a world of agents, and read the resulting report.",
+    launchNote: "Not for financial prediction",
     goodFor: "Trying the original MiroFish simulator — not stock, futures, or broker analysis.",
     costNote: "Zep Cloud free tier plus LLM usage billed to the family provider keys, both kept server-side.",
     firstVisitNote: ["Nothing to set up: your hub sign-in also signs you in to MiroFish."],
@@ -127,11 +137,13 @@ export const hubApps: readonly HubApp[] = [
     status: "planned",
     release: "Release 2",
     name: "Family Desk",
+    subtitle: "Our own workspace",
     category: "desk",
     tags: ["Morning scan", "Covered calls", "Alerts"],
     icon: "familyDesk",
     device: "touch",
-    summary: "Our own assistant: morning scan, covered-call scan, alerts, and chat.",
+    summary: "Our strategy-first workspace for alerts and paper trading.",
+    launchNote: "Separate from these research tools",
     goodFor: "Daily habits for both of us, built on the best ideas from the other three apps.",
     costNote: "Not built yet.",
   },
@@ -139,4 +151,24 @@ export const hubApps: readonly HubApp[] = [
 
 export function findApp(slug: string): HubApp | undefined {
   return hubApps.find((app) => app.slug === slug);
+}
+
+export function filterHubApps(apps: readonly HubApp[], query: string, category: CategoryId | "all") {
+  const q = query.trim().toLowerCase();
+  return apps.filter((app) => {
+    if (category !== "all" && app.category !== category) return false;
+    const categoryLabel = hubCategories.find((entry) => entry.id === app.category)?.label ?? "";
+    return [app.name, app.subtitle, app.summary, app.launchNote, app.goodFor, app.costNote, categoryLabel, ...app.tags]
+      .some((field) => field.toLowerCase().includes(q));
+  });
+}
+
+export function getAppLaunch(app: HubApp) {
+  if (app.kind === "planned") return null;
+  if (app.kind === "external") return { href: app.url, label: "Open app", newTab: true };
+  return {
+    href: `/apps/${app.slug}`,
+    label: app.kind === "terminal" ? (app.slug === "tradingagents" ? "Open workspace" : "Open terminal") : "View setup",
+    newTab: false,
+  };
 }
