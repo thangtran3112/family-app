@@ -90,10 +90,13 @@ def calculate_ev_ebitda_value(
 
     `ev_ebitda_ratios[0]` is the current period's ratio (used with `enterprise_value` to back out
     today's EBITDA); the median is over however many of the given periods (most recent first,
-    typically up to 8 quarters) have a ratio. `None` when `enterprise_value` or the current ratio
-    is missing or zero. The implied equity value floors at 0 rather than going negative.
+    typically up to 8 quarters) have a ratio. `None` when `enterprise_value`, `market_cap`, or the
+    current ratio is missing (a missing `market_cap` must not fabricate a net debt of zero), or
+    the current ratio is zero. The implied equity value floors at 0 rather than going negative.
     """
     if not enterprise_value or not ev_ebitda_ratios:
+        return None
+    if market_cap is None:
         return None
     current_ratio = ev_ebitda_ratios[0]
     if not current_ratio:
@@ -102,7 +105,7 @@ def calculate_ev_ebitda_value(
     valid_ratios = [ratio for ratio in ev_ebitda_ratios if ratio]
     median_multiple = statistics.median(valid_ratios)
     implied_ev = median_multiple * ebitda_now
-    net_debt = enterprise_value - (market_cap or 0)
+    net_debt = enterprise_value - market_cap
     return max(implied_ev - net_debt, 0.0)
 
 
@@ -190,7 +193,9 @@ def _enhanced_dcf_value(
 ) -> float | None:
     """Three-stage DCF (high growth years 1-3, declining transition years 4-7, terminal value),
     discounted to the present and discounted further by an FCF-volatility quality factor.
-    `None` when `fcf_history` is empty or its most recent entry is not positive.
+    `None` when `fcf_history` is empty or its most recent entry is not positive, or when `wacc` is
+    at or below zero or at or below the terminal growth rate derived from `revenue_growth` (the
+    Gordon terminal value is invalid there; no silent rate substitution).
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -203,6 +208,8 @@ def _enhanced_dcf_value(
         high_growth = min(high_growth, 0.10)
     transition_growth = (high_growth + 0.03) / 2
     terminal_growth = min(0.03, high_growth * 0.6)
+    if wacc <= 0 or wacc <= terminal_growth:
+        return None
 
     base_fcf = max(fcf_current, fcf_avg_3yr * 0.85)  # a conservative floor under a sharp dip
     pv = 0.0
@@ -214,8 +221,6 @@ def _enhanced_dcf_value(
         pv += projected / (1 + wacc) ** year
 
     final_fcf = base_fcf * (1 + high_growth) ** 3 * (1 + transition_growth) ** 4
-    if wacc <= terminal_growth:
-        terminal_growth = wacc * 0.8  # keep the terminal value finite and positive
     terminal_value = final_fcf * (1 + terminal_growth) / (wacc - terminal_growth)
     pv_terminal = terminal_value / (1 + wacc) ** 7
 
@@ -230,8 +235,9 @@ def calculate_dcf_scenarios(
     scales growth and WACC (bear: half the growth, 1.2x WACC; bull: 1.5x growth, 0.9x WACC).
 
     Returns `{"scenarios": {"bear", "base", "bull"}, "expected_value", "range", "upside",
-    "downside"}`. `None` when `fcf_history` is empty or its most recent entry is not positive (the
-    same condition that makes every scenario unavailable).
+    "downside"}`. `None` when `fcf_history` is empty or its most recent entry is not positive, or
+    when any scenario's own-scaled `wacc` (bear 1.2x, base 1x, bull 0.9x the given `wacc`) ends up
+    at or below its terminal growth rate — one unusable scenario makes the whole set unavailable.
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -245,6 +251,8 @@ def calculate_dcf_scenarios(
         name: _enhanced_dcf_value(fcf_history, wacc * wacc_adj, market_cap, base_revenue_growth * growth_adj)
         for name, (growth_adj, wacc_adj) in adjustments.items()
     }
+    if any(value is None for value in scenarios.values()):
+        return None
     expected_value = scenarios["bear"] * 0.2 + scenarios["base"] * 0.6 + scenarios["bull"] * 0.2
     return {
         "scenarios": scenarios,

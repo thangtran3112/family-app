@@ -54,6 +54,11 @@ def test_ev_ebitda_value_is_unavailable_without_a_current_ratio_or_enterprise_va
     assert valuation.calculate_ev_ebitda_value(12000.0, 9000.0, []) is None
 
 
+def test_ev_ebitda_value_is_unavailable_without_a_market_cap():
+    # A missing market cap must not fabricate a net debt of zero.
+    assert valuation.calculate_ev_ebitda_value(12000.0, None, [12.0, 11.0, 13.0, 10.0, 14.0]) is None
+
+
 def test_residual_income_value_hand_checked():
     # book = 5000/2.5 = 2000; ri0 = 400 - 0.10*2000 = 200.
     value = valuation.calculate_residual_income_value(market_cap=5000.0, net_income=400.0, price_to_book_ratio=2.5)
@@ -94,6 +99,25 @@ def test_dcf_scenarios_is_unavailable_for_non_positive_or_missing_cash_flow():
     assert valuation.calculate_dcf_scenarios([], wacc=0.10, market_cap=1.0) is None
     assert valuation.calculate_dcf_scenarios([0.0, 10.0], wacc=0.10, market_cap=1.0) is None
     assert valuation.calculate_dcf_scenarios([-5.0], wacc=0.10, market_cap=1.0) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_wacc_is_zero():
+    # wacc=0 cannot discount anything; the Gordon terminal value is undefined at wacc<=0, so every
+    # scenario (even bear's 1.2x and bull's 0.9x of zero) is unavailable, not a crash.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.0, market_cap=1.0) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_a_scenarios_wacc_settles_at_its_terminal_growth():
+    # revenue_growth=0.1 caps every scenario's terminal growth at 0.03; wacc=0.03 puts the base
+    # scenario's own-scaled wacc (0.03 * 1.0) exactly at that terminal growth.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.03, market_cap=1.0, revenue_growth=0.1) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_one_scenario_breaches_its_terminal_growth():
+    # Same 0.03 terminal growth for every scenario at revenue_growth=0.1; wacc=0.033 only drops the
+    # bull scenario's own-scaled wacc (0.033 * 0.9 = 0.0297) below it, while bear (0.0396) and base
+    # (0.033) both clear 0.03. One unusable scenario still makes the whole set unavailable.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.033, market_cap=1.0, revenue_growth=0.1) is None
 
 
 def test_blended_value_with_all_three_other_methods_is_the_literal_02h_blend():

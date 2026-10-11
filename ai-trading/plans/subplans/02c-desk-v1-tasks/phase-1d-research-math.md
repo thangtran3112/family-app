@@ -73,6 +73,8 @@ This round's fixes first (the scoped re-review's own "critical" and "important" 
 14. **`valuation.py` returns `None`, never `0` or a crash, for unavailable inputs.** Unaffected by any revision.
 15. **A denominator that would be non-positive also gives `None`, which upstream never checked.** Unaffected by any revision.
 16. **`calculate_ev_ebitda_value` and `calculate_wacc` each lost one dead parameter** (`debt_to_equity`, `growth_metrics`). Unaffected by any revision.
+50. **`calculate_ev_ebitda_value` gives `None` for a missing `market_cap`, not a net debt of zero.** The prototype's `net_debt = enterprise_value - (market_cap or 0)` silently fabricated a market cap of zero when it was unknown, inflating net debt and understating the implied equity value instead of reporting it unavailable. New this round (task review round 1, Important finding).
+51. **`_enhanced_dcf_value`'s Gordon terminal value gives `None` when `wacc` is at or below zero or at or below the terminal growth rate, instead of silently substituting `terminal_growth = wacc * 0.8`.** The prototype's silent adjustment changed an assumption without saying so, and still divided by zero when `wacc` was exactly 0. `calculate_dcf_scenarios` now gives `None` for the whole scenario set if any one scenario's own-scaled `wacc` breaches its terminal growth this way, rather than arithmetic over a missing scenario value. New this round (task review round 1, Important finding).
 
 ### earnings_reaction.py
 
@@ -143,7 +145,7 @@ These modules are pure; the phases that actually run them in the Desk still have
 - Supplies per-symbol `InstrumentSpec` values, **including `commission_per_unit`** (decision 23, Most-consequential #6): futures from Phase 1c's `core/futures.py` contract specs (multiplier, tick size, and the contract's own per-contract commission), stocks by the default (`InstrumentSpec()`, multiplier 1, tick $0.01, $0.005/share) when a symbol is omitted from the map.
 - Presents results with 02h §2's honest-results labels ("Survivorship: this list was chosen today"; "Past results do not predict paper or live results") next to every backtest's statistics, including the required benchmark comparison.
 
-All paths below are relative to `ai-trading/packages/family-desk/` unless they start with `ai-trading/`. Commands run in the directory a step names. Every GREEN step's full-suite count is a **delta**, not an absolute total: the absolute total is Phase 1c's final count (whatever `phase-1c-technicals-and-futures.md` lands at) **plus** this phase's delta. This plan was written against the Phase-1b-only baseline (169 passed, no Phase 1c); verified fresh, this phase's five tasks grow that baseline by 94 (5 + 18 + 8 + 26 + 37 — see each task's own Step for its GREEN count), for 263 passed if Phase 1c has not yet merged when Phase 1d starts.
+All paths below are relative to `ai-trading/packages/family-desk/` unless they start with `ai-trading/`. Commands run in the directory a step names. Every GREEN step's full-suite count is a **delta**, not an absolute total: the absolute total is Phase 1c's final count (whatever `phase-1c-technicals-and-futures.md` lands at) **plus** this phase's delta. This plan was written against the Phase-1b-only baseline (169 passed, no Phase 1c); verified fresh, this phase's five tasks grow that baseline by 98 (5 + 22 + 8 + 26 + 37 — see each task's own Step for its GREEN count), for 267 passed if Phase 1c has not yet merged when Phase 1d starts.
 
 ### Task 1d.1: As-of helpers
 
@@ -608,6 +610,11 @@ def test_ev_ebitda_value_is_unavailable_without_a_current_ratio_or_enterprise_va
     assert valuation.calculate_ev_ebitda_value(12000.0, 9000.0, []) is None
 
 
+def test_ev_ebitda_value_is_unavailable_without_a_market_cap():
+    # A missing market cap must not fabricate a net debt of zero.
+    assert valuation.calculate_ev_ebitda_value(12000.0, None, [12.0, 11.0, 13.0, 10.0, 14.0]) is None
+
+
 def test_residual_income_value_hand_checked():
     # book = 5000/2.5 = 2000; ri0 = 400 - 0.10*2000 = 200.
     value = valuation.calculate_residual_income_value(market_cap=5000.0, net_income=400.0, price_to_book_ratio=2.5)
@@ -648,6 +655,25 @@ def test_dcf_scenarios_is_unavailable_for_non_positive_or_missing_cash_flow():
     assert valuation.calculate_dcf_scenarios([], wacc=0.10, market_cap=1.0) is None
     assert valuation.calculate_dcf_scenarios([0.0, 10.0], wacc=0.10, market_cap=1.0) is None
     assert valuation.calculate_dcf_scenarios([-5.0], wacc=0.10, market_cap=1.0) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_wacc_is_zero():
+    # wacc=0 cannot discount anything; the Gordon terminal value is undefined at wacc<=0, so every
+    # scenario (even bear's 1.2x and bull's 0.9x of zero) is unavailable, not a crash.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.0, market_cap=1.0) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_a_scenarios_wacc_settles_at_its_terminal_growth():
+    # revenue_growth=0.1 caps every scenario's terminal growth at 0.03; wacc=0.03 puts the base
+    # scenario's own-scaled wacc (0.03 * 1.0) exactly at that terminal growth.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.03, market_cap=1.0, revenue_growth=0.1) is None
+
+
+def test_dcf_scenarios_is_unavailable_when_one_scenario_breaches_its_terminal_growth():
+    # Same 0.03 terminal growth for every scenario at revenue_growth=0.1; wacc=0.033 only drops the
+    # bull scenario's own-scaled wacc (0.033 * 0.9 = 0.0297) below it, while bear (0.0396) and base
+    # (0.033) both clear 0.03. One unusable scenario still makes the whole set unavailable.
+    assert valuation.calculate_dcf_scenarios([100.0] * 8, wacc=0.033, market_cap=1.0, revenue_growth=0.1) is None
 
 
 def test_blended_value_with_all_three_other_methods_is_the_literal_02h_blend():
@@ -795,10 +821,13 @@ def calculate_ev_ebitda_value(
 
     `ev_ebitda_ratios[0]` is the current period's ratio (used with `enterprise_value` to back out
     today's EBITDA); the median is over however many of the given periods (most recent first,
-    typically up to 8 quarters) have a ratio. `None` when `enterprise_value` or the current ratio
-    is missing or zero. The implied equity value floors at 0 rather than going negative.
+    typically up to 8 quarters) have a ratio. `None` when `enterprise_value`, `market_cap`, or the
+    current ratio is missing (a missing `market_cap` must not fabricate a net debt of zero), or
+    the current ratio is zero. The implied equity value floors at 0 rather than going negative.
     """
     if not enterprise_value or not ev_ebitda_ratios:
+        return None
+    if market_cap is None:
         return None
     current_ratio = ev_ebitda_ratios[0]
     if not current_ratio:
@@ -807,7 +836,7 @@ def calculate_ev_ebitda_value(
     valid_ratios = [ratio for ratio in ev_ebitda_ratios if ratio]
     median_multiple = statistics.median(valid_ratios)
     implied_ev = median_multiple * ebitda_now
-    net_debt = enterprise_value - (market_cap or 0)
+    net_debt = enterprise_value - market_cap
     return max(implied_ev - net_debt, 0.0)
 
 
@@ -895,7 +924,9 @@ def _enhanced_dcf_value(
 ) -> float | None:
     """Three-stage DCF (high growth years 1-3, declining transition years 4-7, terminal value),
     discounted to the present and discounted further by an FCF-volatility quality factor.
-    `None` when `fcf_history` is empty or its most recent entry is not positive.
+    `None` when `fcf_history` is empty or its most recent entry is not positive, or when `wacc` is
+    at or below zero or at or below the terminal growth rate derived from `revenue_growth` (the
+    Gordon terminal value is invalid there; no silent rate substitution).
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -908,6 +939,8 @@ def _enhanced_dcf_value(
         high_growth = min(high_growth, 0.10)
     transition_growth = (high_growth + 0.03) / 2
     terminal_growth = min(0.03, high_growth * 0.6)
+    if wacc <= 0 or wacc <= terminal_growth:
+        return None
 
     base_fcf = max(fcf_current, fcf_avg_3yr * 0.85)  # a conservative floor under a sharp dip
     pv = 0.0
@@ -919,8 +952,6 @@ def _enhanced_dcf_value(
         pv += projected / (1 + wacc) ** year
 
     final_fcf = base_fcf * (1 + high_growth) ** 3 * (1 + transition_growth) ** 4
-    if wacc <= terminal_growth:
-        terminal_growth = wacc * 0.8  # keep the terminal value finite and positive
     terminal_value = final_fcf * (1 + terminal_growth) / (wacc - terminal_growth)
     pv_terminal = terminal_value / (1 + wacc) ** 7
 
@@ -935,8 +966,9 @@ def calculate_dcf_scenarios(
     scales growth and WACC (bear: half the growth, 1.2x WACC; bull: 1.5x growth, 0.9x WACC).
 
     Returns `{"scenarios": {"bear", "base", "bull"}, "expected_value", "range", "upside",
-    "downside"}`. `None` when `fcf_history` is empty or its most recent entry is not positive (the
-    same condition that makes every scenario unavailable).
+    "downside"}`. `None` when `fcf_history` is empty or its most recent entry is not positive, or
+    when any scenario's own-scaled `wacc` (bear 1.2x, base 1x, bull 0.9x the given `wacc`) ends up
+    at or below its terminal growth rate — one unusable scenario makes the whole set unavailable.
     """
     if not fcf_history or fcf_history[0] <= 0:
         return None
@@ -950,6 +982,8 @@ def calculate_dcf_scenarios(
         name: _enhanced_dcf_value(fcf_history, wacc * wacc_adj, market_cap, base_revenue_growth * growth_adj)
         for name, (growth_adj, wacc_adj) in adjustments.items()
     }
+    if any(value is None for value in scenarios.values()):
+        return None
     expected_value = scenarios["bear"] * 0.2 + scenarios["base"] * 0.6 + scenarios["bull"] * 0.2
     return {
         "scenarios": scenarios,
@@ -1034,7 +1068,7 @@ SOFTWARE.
 - [ ] **Step 5: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_valuation.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `18 passed`, ruff clean, then the full suite grows by 18 over Task 1d.1's count (23 total growth over the pre-1d baseline).
+Expected: `22 passed`, ruff clean, then the full suite grows by 22 over Task 1d.1's count (27 total growth over the pre-1d baseline).
 
 - [ ] **Step 6: Commit.**
 
@@ -1319,7 +1353,7 @@ def summarize(reactions: list[EventReaction | None]) -> ReactionSummary | None:
 - [ ] **Step 5: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_earnings_reaction.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `8 passed`, ruff clean, then the full suite grows by 8 over Task 1d.2's count (31 total growth over the pre-1d baseline).
+Expected: `8 passed`, ruff clean, then the full suite grows by 8 over Task 1d.2's count (35 total growth over the pre-1d baseline).
 
 - [ ] **Step 6: Commit.**
 
@@ -2570,7 +2604,7 @@ def _hold_bars(trade: Trade, index: pd.Index) -> int:
 - [ ] **Step 4: Run the tests and lint.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_backtest.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `26 passed`, ruff clean, then the full suite grows by 26 over Task 1d.3's count (57 total growth over the pre-1d baseline).
+Expected: `26 passed`, ruff clean, then the full suite grows by 26 over Task 1d.3's count (61 total growth over the pre-1d baseline).
 
 - [ ] **Step 5: Commit.**
 
@@ -3017,7 +3051,7 @@ def settle_all(calls: list[AiCall], prices: dict[str, pd.DataFrame], spy: pd.Ser
 - [ ] **Step 5: Run every suite.**
 
 Run (in `backend/`): `uv run pytest -q tests/test_settlement.py && uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-Expected: `37 passed`, ruff clean, then the full suite grows by 37 over Task 1d.4's count (94 total growth over the pre-1d baseline — 263 passed if Phase 1c has not yet merged when Phase 1d starts).
+Expected: `37 passed`, ruff clean, then the full suite grows by 37 over Task 1d.4's count (98 total growth over the pre-1d baseline — 267 passed if Phase 1c has not yet merged when Phase 1d starts).
 
 - [ ] **Step 6: Commit.**
 
