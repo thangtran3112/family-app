@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> This file is the master plan. Each task has its own file under [01o-vibe-answer-integrity-tasks/](01o-vibe-answer-integrity-tasks/); an implementer reads this file's Global Constraints and Test Runner plus their own task file. Every code block in the task files was applied and run, in order, on a fresh export of the pinned fork commit: each task's tests fail first for the stated reason and pass after its diff, and 2,000+ grounding-related tests plus the whole backend suite pass at the end.
+> This file is the master plan. Each task has its own file under [01o-vibe-answer-integrity-tasks/](01o-vibe-answer-integrity-tasks/); an implementer reads this file's Global Constraints and Test Runner plus their own task file. Tasks 2–8 were replayed red→green on a scratch clone. Task 9 was revised by owner on 2026-10-11 (no Jina Reader at all) and must be tested against the real fork before verification numbers are claimed.
 
-**Goal:** A completed Vibe-Trading analysis reaches the user with its figures visible. The figure gate keeps and marks what it could not verify instead of cutting it or replacing the answer, and the checker's deterministic false rejections, the reader's anonymous refusals and the missing consensus fields are repaired.
+**Goal:** A completed Vibe-Trading analysis reaches the user with its figures visible; the checker stops discarding valid work, Yahoo's existing consensus fields survive, and Jina-backed full-page reading is disabled pending a separate safe-reader design.
 
-**Architecture:** A new `flagged_release` sits beside upstream's `redacted_release` and is called from `AgentLoop` once the revision budget is spent. Small repairs go into `figures.py`, `policies.py` and `evidence.py`; the system prompt gains three sentences; `get_stock_profile` and `read_url` each get a small, tested change. Every change lives in the fork (`packages/vibe-trading`, branch `family-app`) and carries its row in `DIVERGENCE.md` in the same commit.
+**Architecture:** A new `flagged_release` sits beside upstream's `redacted_release` and is called from `AgentLoop` once the revision budget is spent. Small repairs go into `figures.py`, `policies.py` and `evidence.py`; the system prompt gains structured-data guidance; `get_stock_profile` returns fields it already fetched. `read_url` is unavailable in local and MCP catalogs, with no Jina request path. Every fork change carries its `DIVERGENCE.md` row in the same commit.
 
 **Tech Stack:** Python 3.11, pytest with xdist, the fork's `agent/src/agent/grounding` package; a shell script and two Python scripts for the eval tools.
 
@@ -23,7 +23,8 @@
 - **Events.** With a flagged figure the loop emits the trace event `answer_released_flagged` and `grounding_status` stage `released_flagged` (with `flagged` and `removed`); with none flagged the legacy `answer_released_redacted` and `released_redacted`, and their reason text, are unchanged. The run stays `degraded: true`.
 - **Repairs.** R2: a sign before the currency mark is the value's sign. R3: a percent figure whose formula has a literal `100` operand is also compared in points. R5: a currency-marked figure may quote a leaf of `_EXACT_REF_MONEY_LEAVES` through a ref that names that exact field, and the operands of a money-derived figure may be any observed money leaf of its symbol; a pooled tool or call ref, a ratio, a return and a count never ground a money figure, and the percent filter is unchanged. **R4 (resolving `tool::field` when the tool ran once) is deliberately not implemented:** upstream pins the opposite in `tests/test_grounding_unknown_call_id_refs.py` ("a known tool keeps its existing correction reason") and in `_tool_field_ref_candidates` ("the hint never selects a call"), and one extra draft does not justify forking it.
 - **Out of scope.** Grounding SEC statement values (XBRL concept names with a `_units` map, and scale words such as "billion"); making artifact files or calculator outputs evidence; a kind-agnostic match for pooled refs; a direct-fetch reader fallback (needs an SSRF guard); changing `MAX_GROUNDING_REVISIONS`; styling the marks in the UI.
-- **Tests** live in `agent/tests`, are offline (Yahoo is mocked, no network), and use `pytestmark = pytest.mark.unit` where the module has no marker. Never print, log or commit a secret; the Jina key is read from the environment only.
+- **No Jina** (owner, 2026-10-11): do not add `JINA_API_KEY`, call `r.jina.ai`, or replace it with an arbitrary direct fetch. Hide `read_url` from local and MCP tool catalogs and keep direct calls inert. A future safe reader needs its own design.
+- **Tests** live in `agent/tests`, are offline (Yahoo is mocked, no network), and use `pytestmark = pytest.mark.unit` where the module has no marker. Never print, log or commit a secret.
 
 ## Review Focus
 
@@ -48,7 +49,7 @@ The inputs and conditions most likely to bite a person using this, with the test
 | `.../agent/loop.py` | Calls `flagged_release`; events and reason text | 6 |
 | `.../agent/context.py` | Three prompt sentences | 7 |
 | `.../tools/stock_profile_tool.py` | Revenue range, extra revision counts, `earnings_history` | 8 |
-| `.../tools/web_reader_tool.py` | Optional `JINA_API_KEY`, refusal text | 9 |
+| `.../tools/web_reader_tool.py`, `agent/mcp_server.py`, `.../tools/web_search_tool.py` | Disable Jina requests and reader exposure; remove stale tool guidance | 9 |
 | `packages/vibe-trading/DIVERGENCE.md` | One Backend row per change; behaviours to preserve; verification | 2 to 10 |
 | `.../agent/tests/` | One new or extended test module per task | 2 to 9 |
 
@@ -89,7 +90,7 @@ python3.11 -m venv "$VENV"
 | 6 | [Release the flagged draft from the loop](01o-vibe-answer-integrity-tasks/task-06-loop-release.md) | fork |
 | 7 | [Tell the model how to file web numbers and which tools to open with](01o-vibe-answer-integrity-tasks/task-07-prompt-guidance.md) | fork |
 | 8 | [get_stock_profile keeps the revenue range and adds EPS surprise history](01o-vibe-answer-integrity-tasks/task-08-profile-data.md) | fork |
-| 9 | [read_url sends an optional JINA_API_KEY and stops retries on a refusal](01o-vibe-answer-integrity-tasks/task-09-reader-key.md) | fork |
+| 9 | [Disable Jina-backed read_url everywhere](01o-vibe-answer-integrity-tasks/task-09-disable-reader.md) | fork |
 | 10 | [Ledger sections, full suite and live verification](01o-vibe-answer-integrity-tasks/task-10-ledger-and-verification.md) | fork and superproject |
 
 Order matters only where an interface says so: Task 6 consumes Task 5; Task 8's new field names are already in Task 4's allow-list; everything else is independent, and each task ends with its own commit so a reviewer can reject one and approve its neighbour.
@@ -97,3 +98,37 @@ Order matters only where an interface says so: Task 6 consumes Task 5; Task 8's 
 ## Done When
 
 Task 10's live check on the same prompts shows what spec section 1 asks: no run ends in the stub, runs keep their figures with marks where the gate could not verify them, only the cut-class reasons are cut, `get_stock_profile` is used on the consensus, earnings and news prompts, and the results are recorded in [01o-vibe-answer-integrity-results.md](01o-vibe-answer-integrity-results.md). The backend suite passes, and every fork commit carries its ledger row.
+
+## Task Briefs
+
+The executor's `task-start` script extracts these headings. Each linked file is the **full** brief; read it after `task-start` before editing.
+
+### Task 1: Eval tooling and baseline
+Full brief: [task-01-eval-tooling-and-baseline.md](01o-vibe-answer-integrity-tasks/task-01-eval-tooling-and-baseline.md).
+
+### Task 2: Signed currency declarations
+Full brief: [task-02-signed-currency-declarations.md](01o-vibe-answer-integrity-tasks/task-02-signed-currency-declarations.md).
+
+### Task 3: Percent notes
+Full brief: [task-03-percent-notes.md](01o-vibe-answer-integrity-tasks/task-03-percent-notes.md).
+
+### Task 4: Exact field money refs
+Full brief: [task-04-exact-field-money-refs.md](01o-vibe-answer-integrity-tasks/task-04-exact-field-money-refs.md).
+
+### Task 5: Flagged release
+Full brief: [task-05-flagged-release.md](01o-vibe-answer-integrity-tasks/task-05-flagged-release.md).
+
+### Task 6: Loop release
+Full brief: [task-06-loop-release.md](01o-vibe-answer-integrity-tasks/task-06-loop-release.md).
+
+### Task 7: Prompt guidance
+Full brief: [task-07-prompt-guidance.md](01o-vibe-answer-integrity-tasks/task-07-prompt-guidance.md).
+
+### Task 8: Profile data
+Full brief: [task-08-profile-data.md](01o-vibe-answer-integrity-tasks/task-08-profile-data.md).
+
+### Task 9: Disable Jina reader
+Full brief: [task-09-disable-reader.md](01o-vibe-answer-integrity-tasks/task-09-disable-reader.md).
+
+### Task 10: Ledger and live verification
+Full brief: [task-10-ledger-and-verification.md](01o-vibe-answer-integrity-tasks/task-10-ledger-and-verification.md).

@@ -1,6 +1,6 @@
 # Vibe Per-Chat Reasoning Effort: Design
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** approved by the owner; implementation plan written ([01p-vibe-effort-picker-plan.md](01p-vibe-effort-picker-plan.md)), awaiting plan review. Planning added a test-only fix for an existing IBKR xdist order dependency required by the combined SP1+SP2 full-suite gate.
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** approved by the owner; native implementation approved 2026-10-11. A test-only IBKR xdist order fix was committed first as execution preflight because the SP1 baseline was red.
 
 Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-integrity.md) (ships in the same batch), `packages/vibe-trading/DIVERGENCE.md`. Code paths are under `packages/vibe-trading/` at fork commit `d402c2df`.
 
@@ -79,7 +79,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 - **Frontend (vitest):** options come from the API; selecting sends `reasoning_effort` in the POST body and Default sends none; the initial value comes from the last assistant metadata; disabled while streaming; a probe failure keeps the badge; locale parity.
 - **Live, sponsored key:** real chats at `low` and `xhigh` on `gpt-6.1-sol` and at `none` on `gpt-5.5` report the level in their message metadata and complete; a refused level returns 400 with the list; a committee run's `run.json` shows the chosen level. A probe matrix over the twelve models already probed (01n section 3.2) compares the picker's list with real acceptance on the Responses route, including `o3`, whose offered `xhigh` fails today.
 - **Real browser:** the picker follows the model, a change applies to the next message, a reload restores the last level, Chinese and Arabic render, no console errors or failed requests.
-- Existing product suites pass, then `ai-trading/deploy/ci/smoke-test.sh vibe-trading`. The combined `-n 8` run exposed a pre-existing order-dependent `threading.local` test in `test_ibkr_local.py`; Task 4 initializes its fake test state with `monkeypatch.setattr(..., raising=False)` (test-only, no IBKR product change) before the full-suite gate.
+- Existing product suites pass, then `ai-trading/deploy/ci/smoke-test.sh vibe-trading`. The required `-n 8` baseline exposed a pre-existing order-dependent `threading.local` test in `test_ibkr_local.py`; execution preflight commit `f9b8c2e` initializes its fake state with `monkeypatch.setattr(..., raising=False)` (test-only, no IBKR product change), so Task 4 does not repeat it.
 
 ## 8. DIVERGENCE.md Entries
 
@@ -91,7 +91,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview), [01o](01o-vibe-answer-i
 | `agent/src/providers/chat.py`, `agent/src/providers/llm.py` | `ChatLLM` and `build_llm` take an optional `reasoning_effort` that wins over the environment value in the three provider branches; the runtime snapshot reports the effective level. | Same. |
 | `agent/src/tools/__init__.py`, `tools/swarm_tool.py`, `swarm/runtime.py`, `swarm/worker.py` | The level reaches every committee worker and `run.json`. | The committee must use the chat's level. |
 | `agent/tests/test_settings_api.py`, `test_chat_llm_lifecycle.py`, `test_session_service_lifecycle.py`, `test_swarm_tool_variables.py`; new `test_reasoning_effort_override.py` | Extended and new tests for sections 5.1 to 5.3. | |
-| `agent/tests/test_ibkr_local.py` | Test-only: fake-broker thread-local state initializes even when the test runs first in an xdist worker (`raising=False` at three setup sites). | The combined SP1+SP2 `-n 8` suite failed twice on the untouched test's missing `refcount`; the same isolated test also fails on the original pinned fork. |
+| `agent/tests/test_ibkr_local.py` | Test-only preflight commit `f9b8c2e`: fake-broker thread-local state initializes even when a test runs first in an xdist worker (`raising=False` at three setup sites). | The SP1 `-n 8` baseline had eight setup failures; the isolated test fails on the original pinned fork. |
 | `frontend/src/components/chat/ModelRuntimeBar.tsx`, new `ReasoningEffortSelect.tsx` | The selector replaces the read-only badge. | |
 | `frontend/src/pages/Agent.tsx`, `frontend/src/lib/api.ts` | Per-chat choice; `sendMessage` options. | |
 | `frontend/src/i18n/locales/*.json` (9 files) | `agent.reasoningEffortDefault`, `agent.reasoningEffortHint`. | The locale parity test. |

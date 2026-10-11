@@ -21,7 +21,7 @@ Part of [01o-vibe-answer-integrity-plan.md](../01o-vibe-answer-integrity-plan.md
 vt_test tests -q -n 8
 ```
 
-Expected: no failures. On the validated tree: 17,502 passed, 77 skipped, about 37 seconds with `-n 8`. Write down the real passed and skipped counts for Step 7.
+Expected: no failures. The earlier scratch tree, before the no-Jina revision to Task 9, had 17,502 passed and 77 skipped. Record the **new** counts; do not use the old figure as the acceptance criterion.
 
 - [ ] **Step 2: Run the live check.** The prompts are the seven that reach the gate; they take 5 to 15 minutes each and run in parallel (about 15 minutes in total). `serve_local.sh` starts the server from this worktree's fork, so the run exercises the commits you just made.
 
@@ -37,7 +37,7 @@ kill $(lsof -tiTCP:18901 -sTCP:LISTEN)
 
 Expected: every run `completed`; **no `STUB`**. Most runs `clean` or `FLAGGED`. A `CUT` is acceptable only for a cut-class reason (a `proposed` level, a draft with no `figures` block, `outside_observed_range`, `symbol_mismatch`, `unsourced_symbol_figures`); check each by reading the last validation in `$HOMEDIR/.vibe-trading/runs/<run_id>/artifacts/grounding_evidence.json`. `get_stock_profile` is called on the consensus, earnings and news prompts (S02, S03, S09). Single runs vary: if one prompt misses, rerun that prompt once before concluding.
 
-The reference outcome from the plan-validation run of this same code (same prompts, same model and effort, 2026-10-10):
+Reference only: this 2026-10-10 run had the old Jina-backed reader enabled. Task 9's no-Jina change may alter tool calls and answer contents; judge the new runs by the contract above rather than these exact figures:
 
 | Prompt | Drafts | Issues | Outcome | `web_search` | `get_stock_profile` |
 |---|---:|---:|---|---:|---:|
@@ -74,8 +74,9 @@ Release 1 research-quality changes (2026-10-10; sub-projects 1 and 2 of
 `ai-trading/plans/subplans/01n-vibe-research-quality.md`): on real US-equity runs the
 grounding gate cut figures, or replaced the whole answer, for numbers it could not verify,
 and none of ten runs on the previous pin finished clean. The gate now keeps and marks such
-figures `(unverified※)`, its deterministic false rejections are repaired, the reader can
-send a key, and the profile tool returns the consensus fields it used to drop. The
+figures `(unverified※)`, its deterministic false rejections are repaired, Jina-backed
+`read_url` is disabled in both local and MCP catalogs (a replacement requires a separate
+design), and the profile tool returns the consensus fields it used to drop. The
 reasoning effort can also be chosen per chat message. Each difference is a row below.
 
 ## Changes
@@ -103,6 +104,10 @@ with:
    when the field is a listed money leaf (`_EXACT_REF_MONEY_LEAVES`). A pooled tool or call
    ref, a ratio, a return and a count never ground a money figure.
 
+No-Jina rule: `read_url` stays unavailable in local and MCP tool catalogs; its direct
+compatibility function returns an error without HTTP. No Jina key or request path is
+configured. A safe full-page reader needs a future approved design.
+
 ## Reapplying after a sync
 ```
 
@@ -119,7 +124,8 @@ with:
 ```text
 Expect conflicts in `Settings.tsx`, `settings_routes.py`, `api.ts` and the locale
 JSON files, and in the grounding package (`release.py`, `policies.py`, `evidence.py`,
-`figures.py`), `loop.py` and `context.py`. Resolve in favour of upstream's structure,
+`figures.py`), `loop.py`, `context.py`, `web_reader_tool.py`, `web_search_tool.py` and
+`mcp_server.py`. Resolve in favour of upstream's structure,
 then restore the behaviours above, and re-run the live check of
 `ai-trading/plans/subplans/01o-vibe-answer-integrity.md` section 7 (an upstream sync
 already fixed some earlier false rejections, so check which repairs are still needed). Then:
@@ -136,10 +142,11 @@ measurements with the shipping branch's run in Task 10):
 - Backend: `cd agent && python -m pytest tests -q -n 8` gave 17,502 passed, 77 skipped, 0 failed.
 - Live, same prompts as the baseline in `ai-trading/plans/subplans/01o-vibe-answer-integrity-results.md`, gate on, `gpt-6.1-sol` at `xhigh`: 2 clean, 5 flagged, 0 cut, 0 stub. The baseline was ten runs and none finished clean.
 - Spot-check of five flagged figures in the covered-call answer against tool results: 5 of 5 correct: MSFT.US close $535.07 (market-data close and option-chain underlying), call strike $560, option bid $10.70, ask $11.60 (same option-chain row), covered-position gamma −0.7073 (−100 × pricing-tool gamma 0.007073).
-- Not covered: SEC statement values (XBRL concept names with `_units`, scale words such as "billion"), calculator outputs as evidence, a direct-fetch reader fallback.
+- No-Jina checks: `read_url` absent from local and MCP catalogs; direct compatibility call returns `unavailable` without network; no Jina key is configured.
+- Not covered: SEC statement values (XBRL concept names with `_units`, scale words such as "billion"), calculator outputs as evidence, a future safe full-page reader.
 ```
 
-- [ ] **Step 5: Record the results.** Append this to `ai-trading/plans/subplans/01o-vibe-answer-integrity-results.md`, with your own run's table (or the reference table above if the numbers match in outcome):
+- [ ] **Step 5: Record the results.** Append a table to `ai-trading/plans/subplans/01o-vibe-answer-integrity-results.md` using the **actual** Step 2 output. The layout below comes from the old reader-enabled validation run; replace all row values even if the outcome labels happen to match. Also record Task 9's no-Jina catalog and no-network test results.
 
 ```markdown
 ## After: the same prompts with the answer-integrity changes (fork `family-app`, Tasks 2 to 9)

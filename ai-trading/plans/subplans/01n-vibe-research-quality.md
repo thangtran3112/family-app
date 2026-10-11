@@ -92,7 +92,7 @@ There is no clear winner: the spread is 0.45 of 5 points, the judges agree on ra
 
 | # | Sub-project | What | Spec | Ships |
 |---|---|---|---|---|
-| 1 | Answer integrity and tool reliability | Flag unverifiable figures instead of cutting them or replacing the answer; repair the checker's deterministic false rejections; `cited` guidance for web numbers; richer `get_stock_profile`; optional Jina key | [01o](01o-vibe-answer-integrity.md) | Batch 1, deploy |
+| 1 | Answer integrity and tool reliability | Flag unverifiable figures instead of cutting them or replacing the answer; repair deterministic false rejections; `cited` guidance for web numbers; richer `get_stock_profile`; disable Jina-backed `read_url` everywhere | [01o](01o-vibe-answer-integrity.md) | Batch 1, deploy |
 | 2 | Per-chat reasoning effort | Effort selector in the chat bar; optional `reasoning_effort` per message, validated per model, also applied to committee runs; honest effort probe | [01p](01p-vibe-effort-picker.md) | Batch 1 |
 | 2b | Chat model picker | Per-message model beside the effort selector, on the same plumbing; needs a short list of offered models | sketched in 01p section 11 | After 2, owner decides |
 | 3 | Golden set and judge | About 25 sample questions in 8 categories; deterministic checks, SEC oracle facts, two Claude judges; leaderboard by model × effort × tool; lives outside the fork | later | Batch 2, no deploy |
@@ -120,5 +120,5 @@ Order 1 → 2 → 3 → 4 → 5. Each sub-project gets its own spec, plan and re
 
 - Paid data sources, TipRanks and EODHD (section 3.4).
 - Offering effort `max`: the Responses API accepts it for Sol but only a real request can prove it per model, and the owner asked for `xhigh` or more, which the picker already gives.
-- A direct-fetch fallback for `read_url`: it needs an SSRF guard (private addresses, DNS rebinding, redirects); an authenticated reader removes the observed failures first.
+- A replacement `read_url`: owner rejected Jina entirely on 2026-10-11. This batch disables the local/MCP tool; a safe public-page reader needs its own design with SSRF protection (private addresses, DNS rebinding, redirects).
 - Changing the committee's gating to a heavier approval flow, or any trading automation.

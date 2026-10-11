@@ -56,7 +56,7 @@ All paths below are relative to `ai-trading/packages/vibe-trading/` unless they 
 | `agent/src/swarm/runtime.py` | `start_run`, `_execute_run`, `_execute_layer`, `_run_worker_with_retries` thread `reasoning_effort`; `run.reasoning_effort` uses the override when given | 4 |
 | `agent/src/swarm/worker.py` | `run_worker(..., reasoning_effort=None)` → `ChatLLM(model_name=..., reasoning_effort=...)` | 4 |
 | `agent/tests/test_swarm_status_hydration.py`, `test_swarm_m4_e2e.py`, `test_swarm_m5_trust_model.py` | Pre-existing `FakeRuntime.start_run` / `_stub_llm_factory` test doubles accept the new keyword | 4 |
-| `agent/tests/test_ibkr_local.py` | Test-only: initialize the fake broker's `threading.local` attributes even when xdist runs the test first; required for the combined SP1+SP2 `-n 8` gate | 4 |
+| `agent/tests/test_ibkr_local.py` | Test-only preflight commit `f9b8c2e`: initialize fake broker `threading.local` attributes even when xdist runs the test first; already done before SP1 because its baseline was red | before SP1 Task 1 |
 | `frontend/src/lib/api.ts` | `sendMessage(sid, content, opts?: { reasoningEffort?: string })` | 5 |
 | `frontend/src/lib/__tests__/api.test.ts` | New: body omits/includes `reasoning_effort` | 5 |
 | `frontend/src/components/chat/ReasoningEffortSelect.tsx` | New: the `<select>`, badge fallback, re-probe-and-reset logic | 5 |
@@ -79,3 +79,31 @@ All paths below are relative to `ai-trading/packages/vibe-trading/` unless they 
 6. [task-06-agent-wiring.md](01p-vibe-effort-picker-tasks/task-06-agent-wiring.md) — `Agent.tsx` per-chat state and the three send call sites
 7. [task-07-live-verification.md](01p-vibe-effort-picker-tasks/task-07-live-verification.md) — live probe matrix, real chats, browser walkthrough, DIVERGENCE.md Verification section
 8. [task-08-ship.md](01p-vibe-effort-picker-tasks/task-08-ship.md) — Batch 1 ship (shared with sub-project 1): full suites, image build, PR, release, deploy
+
+## Task Briefs
+
+The executor's `task-start` script extracts these headings. Each linked file is the full task brief.
+
+### Task 1: Honest probe and cache
+Full brief: [task-01-honest-probe-cache.md](01p-vibe-effort-picker-tasks/task-01-honest-probe-cache.md).
+
+### Task 2: LLM override
+Full brief: [task-02-build-llm-override.md](01p-vibe-effort-picker-tasks/task-02-build-llm-override.md).
+
+### Task 3: Request validation and service threading
+Full brief: [task-03-request-validation-service-threading.md](01p-vibe-effort-picker-tasks/task-03-request-validation-service-threading.md).
+
+### Task 4: Swarm threading
+Full brief: [task-04-swarm-threading.md](01p-vibe-effort-picker-tasks/task-04-swarm-threading.md).
+
+### Task 5: Frontend selector
+Full brief: [task-05-frontend-selector.md](01p-vibe-effort-picker-tasks/task-05-frontend-selector.md).
+
+### Task 6: Agent wiring
+Full brief: [task-06-agent-wiring.md](01p-vibe-effort-picker-tasks/task-06-agent-wiring.md).
+
+### Task 7: Live verification
+Full brief: [task-07-live-verification.md](01p-vibe-effort-picker-tasks/task-07-live-verification.md).
+
+### Task 8: Ship
+Full brief: [task-08-ship.md](01p-vibe-effort-picker-tasks/task-08-ship.md).

@@ -4,7 +4,7 @@ Part of [01o-vibe-answer-integrity-plan.md](../01o-vibe-answer-integrity-plan.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The system prompt says that a number read in a `web_search` or `read_url` result is `cited`, never `observed` (all 33 `no_evidence` issues were such numbers), that a value passed into a calculator tool is that tool's input and not an observation (a covered-call answer cited a payoff tool's input echo as the source of the market price), and that US-equity research opens with the structured tools (`web_search` was 73 of 368 tool calls). A prompt change alters model behaviour, so the live check in Task 10 is the acceptance test; the unit test only pins the wording.
+**Goal:** The system prompt says that a number read in a `web_search` result is `cited`, never `observed` (all 33 `no_evidence` issues were such numbers), that a value passed into a calculator tool is that tool's input and not an observation (a covered-call answer cited a payoff tool's input echo as the source of the market price), and that US-equity research opens with structured tools. `read_url` is disabled in Task 9; do not tell the agent to use it.
 
 **Files:**
 - Modify (append a test): `ai-trading/packages/vibe-trading/agent/tests/test_agent_output_discipline.py`
@@ -24,7 +24,7 @@ def test_the_prompt_files_web_numbers_as_cited_and_prefers_the_structured_us_too
     tools that already hold consensus, targets and estimates sat unused."""
     flat = " ".join(_SYSTEM_PROMPT.split())
 
-    assert "A number read in a `web_search` or `read_url` result is `cited`, never `observed`" in flat
+    assert "A number read in a `web_search` result is `cited`, never `observed`" in flat
     assert "For US equities, start with the structured tools" in flat
     assert "A value you passed into `options_payoff`, `options_pricing` or `financial_rigor` is that tool's input" in flat
     assert flat.index("`get_stock_profile`") < flat.index("use `web_search` only for what they do not return")
@@ -53,8 +53,8 @@ index f8d83b9..26715b6 100644
    percentage is not a level, so state the price it implies;
    `cited` — from a source other than this session's tools: name the source in the
 -  same sentence as the figure, and in `note`;
-+  same sentence as the figure, and in `note`. A number read in a `web_search` or
-+  `read_url` result is `cited`, never `observed`: those tools return text, not
++  same sentence as the figure, and in `note`. A number read in a `web_search`
++  result is `cited`, never `observed`: it returns text, not
 +  checked values. A value you passed into `options_payoff`, `options_pricing` or
 +  `financial_rigor` is that tool's input, not an observation: declare it from the
 +  tool that returned it (`get_market_data`, `get_options_chain`, ...), and declare
@@ -90,7 +90,7 @@ Expected: `63 passed` for the first file and no failures in the others.
 Insert the row below into the **Backend** table of `ai-trading/packages/vibe-trading/DIVERGENCE.md`, immediately above the row that starts with ``| `tests/test_settings_api.py` |`` (so rows stay in task order):
 
 ```markdown
-| `agent/src/agent/context.py` | Three additions to the system prompt: a number read in a `web_search` or `read_url` result is `cited`, never `observed`; a value passed into `options_payoff`, `options_pricing` or `financial_rigor` is that tool's input, not an observation, so it is declared from the tool that returned it; for US equities start with `get_stock_profile`, `get_financial_statements`, `get_sec_filings` and `get_stock_news` and use `web_search` only for what they lack. Tests: `tests/test_agent_output_discipline.py`. | All 33 `no_evidence` rejections in six real runs were `web_search` numbers declared `observed`; `web_search` was 73 of 368 tool calls; a covered-call answer cited a payoff tool's input echo as the source of the market price. |
+| `agent/src/agent/context.py` | Three additions to the system prompt: a number read in a `web_search` result is `cited`, never `observed` (the Jina-backed `read_url` is disabled); a value passed into `options_payoff`, `options_pricing` or `financial_rigor` is that tool's input, not an observation, so it is declared from the tool that returned it; for US equities start with `get_stock_profile`, `get_financial_statements`, `get_sec_filings` and `get_stock_news` and use `web_search` only for what they lack. Tests: `tests/test_agent_output_discipline.py`. | All 33 `no_evidence` rejections in six real runs were `web_search` numbers declared `observed`; `web_search` was 73 of 368 tool calls; a covered-call answer cited a payoff tool's input echo as the source of the market price. |
 ```
 
 - [ ] **Step 6: Commit.**

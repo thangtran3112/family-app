@@ -9,7 +9,7 @@ All paths below are relative to `ai-trading/packages/vibe-trading/` unless noted
 **Files:**
 - Modify: `agent/src/tools/__init__.py`, `agent/src/tools/swarm_tool.py`, `agent/src/swarm/runtime.py`, `agent/src/swarm/worker.py`
 - Create/Test: `agent/tests/test_reasoning_effort_swarm_threading.py`
-- Modify/Test: `agent/tests/test_swarm_status_hydration.py`, `agent/tests/test_swarm_m4_e2e.py`, `agent/tests/test_swarm_m5_trust_model.py`, `agent/tests/test_ibkr_local.py` (the last is test-only order stability for required `-n 8` suite)
+- Modify/Test: `agent/tests/test_swarm_status_hydration.py`, `agent/tests/test_swarm_m4_e2e.py`, `agent/tests/test_swarm_m5_trust_model.py`
 - Modify: `DIVERGENCE.md` (backend rows in the same commit)
 
 ## Interfaces
@@ -717,38 +717,13 @@ with:
 Run: `python -m pytest tests/test_swarm_*.py tests/test_cli_swarm_*.py -q -n 4`
 Expected: `400 passed`.
 
-- [ ] **Step 13: Reproduce and fix a pre-existing test-order failure that blocks the required parallel suite.**
-
-Before editing, run from `agent/`:
+- [ ] **Step 13: Run the full backend suite; require green before continuing.** The pre-existing `test_ibkr_local.py` xdist order dependency has already been fixed test-only on `family-app` in preflight commit `f9b8c2e` (with its own DIVERGENCE.md row). Do **not** repeat that change or stage its file in this task.
 
 ```sh
-python -m pytest tests/test_ibkr_local.py::test_quote_keeps_polling_when_ticker_is_nan -q
-```
-
-Expected on the pinned fork commit: **FAIL** at line 309, `AttributeError: <_thread._local ...> has no attribute 'refcount'`. The test's `monkeypatch.setattr` assumed a prior test had created a thread-local attribute in the same worker; xdist changes test order and isolated runs fail too. This was reproduced against both the untouched fork and the combined SP1+SP2 scratch tree; it is a test-only defect, not an IBKR product-code failure.
-
-In `agent/tests/test_ibkr_local.py`, replace the **three** identical pairs (around lines 268–269, 309–310 and 364–365; the last is inside `_install_fake_ib`) exactly:
-
-```python
-    monkeypatch.setattr(local._pool._local, "refcount", 0)
-    monkeypatch.setattr(local._pool._local, "ib", None)
-```
-
-with:
-
-```python
-    monkeypatch.setattr(local._pool._local, "refcount", 0, raising=False)
-    monkeypatch.setattr(local._pool._local, "ib", None, raising=False)
-```
-
-`raising=False` permits the test to **initialize** thread-local state when no previous test ran on this worker; it does not touch production code. Run the single test again, then the full suite:
-
-```sh
-python -m pytest tests/test_ibkr_local.py::test_quote_keeps_polling_when_ticker_is_nan -q
 python -m pytest tests -q -n 8
 ```
 
-Expected: single test passes, then no failures. The **combined** SP1+SP2 scratch tree with this six-line test-only fix gave **17,531 passed, 77 skipped**; frontend `tsc -b`, 79 files/765 Vitest tests and the Vite build also passed. If any other test fails, investigate; a standalone pass alone is not evidence that the full suite passed.
+Expected: zero failures. The old combined scratch tree had 17,531 passed / 77 skipped before Task 9 changed to no Jina; use the actual current result, not that stale count. If a test fails, investigate and require a full green rerun.
 
 ---
 
@@ -766,13 +741,12 @@ Replace it with itself plus two new rows directly after:
 | `tests/test_reasoning_effort_message_validation.py`, `test_reasoning_effort_service_threading.py` | New. `test_session_tool_trail.py`, `test_session_service_mcp.py` updated (their `ChatLLM` test doubles accept `**kwargs`). | |
 | `src/tools/__init__.py`, `src/tools/swarm_tool.py`, `src/swarm/runtime.py`, `src/swarm/worker.py` | `reasoning_effort` threads from `build_registry` through `SwarmTool`, `SwarmRuntime.start_run`/`_execute_run`/`_execute_layer`/`_run_worker_with_retries`, to `run_worker`'s `ChatLLM`. `run.reasoning_effort` uses the override when given, else the environment value. | The committee must use the chat's level for every agent and record it in `run.json`. |
 | `tests/test_reasoning_effort_swarm_threading.py` | New. `test_swarm_status_hydration.py`, `test_swarm_m4_e2e.py`, `test_swarm_m5_trust_model.py` updated (their `start_run`/`ChatLLM` test doubles accept the new keyword). | |
-| `tests/test_ibkr_local.py` | Three fake-broker setup sites initialize `threading.local`'s `refcount` and `ib` with `monkeypatch.setattr(..., raising=False)`; production IBKR code unchanged. | Its first isolated run failed with `AttributeError: ... has no attribute 'refcount'`; the required `-n 8` full suite failed twice after SP1+SP2 combined. |
 ```
 
 - [ ] **Step 15: Commit.**
 
 ```
-git -C ai-trading/packages/vibe-trading add agent/src/tools/swarm_tool.py agent/src/tools/__init__.py agent/src/swarm/runtime.py agent/src/swarm/worker.py agent/tests/test_reasoning_effort_swarm_threading.py agent/tests/test_swarm_status_hydration.py agent/tests/test_swarm_m4_e2e.py agent/tests/test_swarm_m5_trust_model.py agent/tests/test_ibkr_local.py DIVERGENCE.md
+git -C ai-trading/packages/vibe-trading add agent/src/tools/swarm_tool.py agent/src/tools/__init__.py agent/src/swarm/runtime.py agent/src/swarm/worker.py agent/tests/test_reasoning_effort_swarm_threading.py agent/tests/test_swarm_status_hydration.py agent/tests/test_swarm_m4_e2e.py agent/tests/test_swarm_m5_trust_model.py DIVERGENCE.md
 git -C ai-trading/packages/vibe-trading commit -m "feat(family-app): thread the chat's reasoning effort to every committee worker"
 ```
 

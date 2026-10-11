@@ -1,6 +1,6 @@
 # Vibe Answer Integrity and Tool Reliability: Design
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** approved by the owner; implementation plan written ([01o-vibe-answer-integrity-plan.md](01o-vibe-answer-integrity-plan.md)). This text was revised while planning: the plan validated each change on the pinned code, and section 5 records what that changed against the first approved draft (R4 dropped, R5 narrowed, three rules added).
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** implemented and locally verified in the fork (Tasks 2–10 of [01o-vibe-answer-integrity-plan.md](01o-vibe-answer-integrity-plan.md)); ships with 01p in Batch 1. Section 5 records the revisions against the first approved draft (R4 dropped, R5 narrowed, three rules added, Jina Reader removed).
 
 Related: [01n](01n-vibe-research-quality.md) (overview and evidence; read its section 3.1 first), [01p](01p-vibe-effort-picker.md) (ships in the same batch), [results](01o-vibe-answer-integrity-results.md), `packages/vibe-trading/DIVERGENCE.md`. Code paths are under `packages/vibe-trading/agent/src/` at fork commit `d402c2df`.
 
@@ -14,6 +14,7 @@ Related: [01n](01n-vibe-research-quality.md) (overview and evidence; read its se
   - Every figure the final check could not verify carries `(unverified※)`, there is one footnote, and the count equals `released.figures_flagged` in `grounding_evidence.json`.
   - Drafts rejected per run do not rise (baseline mean 2.8) and fall where the repairs apply.
   - `get_stock_profile` is called on the consensus, earnings and news prompts (the baseline never called it on the earnings prompt). `web_search` counts are reported, not targeted: the structured-first sentence did not change them consistently.
+  - No Jina Reader requests: `read_url` is absent from local and MCP tool catalogs, and direct legacy calls return an unavailable result without network access. A new full-page reader is a later design.
 - Non-goals: disabling the gate, changing identity locking or the recovery rounds, new data providers (sub-project 4).
 
 ## 2. Owner Decisions
@@ -68,7 +69,7 @@ What these repairs deliberately do not do: they do not accept a pooled `get_stoc
 
 Three additions to `agent/context.py`:
 
-- A number read in a `web_search` or `read_url` result is `cited` (source named in the same sentence as the figure), never `observed`. All 33 `no_evidence` issues were `observed` figures with a `web_search` ref.
+- A number read in a `web_search` result is `cited` (source named in the same sentence as the figure), never `observed`. All 33 `no_evidence` issues were `observed` figures with a `web_search` ref. `read_url` is no longer offered (R8).
 - A value passed into `options_payoff`, `options_pricing` or `financial_rigor` is that tool's input, not an observation: declare it from the tool that returned it (`get_market_data`, `get_options_chain`, ...), and declare what the calculator computes as `derived` with its formula. A covered-call answer had cited a payoff tool's input echo as the source of the market price.
 - For US equities, call `get_stock_profile`, `get_financial_statements`, `get_sec_filings` and `get_stock_news` before `web_search`, and use `web_search` only for what they lack.
 
@@ -77,7 +78,7 @@ Prompt changes alter model behaviour, so the live before/after (section 7) is th
 ### 5.4 Tool data and reliability (R7, R8)
 
 - **R7 `tools/stock_profile_tool.py`.** `_earnings_trend` keeps `revenue_low`, `revenue_high`, `revenue_analysts`, `revenue_growth` (Yahoo's `revenueEstimate` carries `avg`, `low`, `high`, `numberOfAnalysts`, `growth`, `yearAgoRevenue`; the tool kept only `avg`) and the other revision counts Yahoo's `epsRevisions` carries: `eps_revisions_up_7d`, `eps_revisions_down_7d` and `eps_revisions_down_90d`. Yahoo has no upward 90-day count (the payload holds `upLast7days`, `upLast30days`, `downLast7Days`, `downLast30days`, `downLast90days`), so the tool returns what exists and the answer must not infer the rest. A new section `earnings_history` reads Yahoo's `earningsHistory` module (verified for NVDA: four quarters of `quarter`, `epsActual`, `epsEstimate`, `epsDifference`, `surprisePercent`) as `quarter`, `eps_actual`, `eps_estimate`, `eps_difference`, `surprise_percent`. It joins `_SECTION_MODULES` and the default sections.
-- **R8 `tools/web_reader_tool.py`.** When `JINA_API_KEY` is set, send it as a bearer token to the reader; redact it even if a successful page, error body or exception echoes it, before logging or returning content. A 401 or 403 from the reader returns an error that tells the model to stop retrying that page and, without a key, that the reader refuses anonymous access. Without the key behaviour is otherwise unchanged. The reader's own documentation puts anonymous callers at 20 requests per minute per IP and a free key at 500 per minute per key, and says a key does not unblock sites that refuse the reader. The owner's free key goes in `ai-trading/vibe-trading`; the code is inert until then.
+- **R8 no Jina Reader (owner revision, 2026-10-11).** Do not request a Jina key or make any call to `r.jina.ai`. `WebReaderTool.check_available()` is false, so local and swarm registries do not offer `read_url`; remove the `@mcp.tool` registration for the MCP wrapper. Keep `read_url(url, no_cache=False)` as an inert compatibility function returning `{"status":"error","error":"read_url is unavailable; use get_stock_profile, get_sec_filings, get_stock_news or web_search"}` without HTTP, and remove the Jina-specific request code. Retire the bundled `web-reader` skill, remove its grants and stale `read_url` instructions from swarm presets/other skills and the system prompt, and update published tool/skill inventories. Old public-page reader tests are replaced with tests proving no network and no tool exposure; security scanning of the other tools stays covered. A direct-fetch replacement is deferred: arbitrary-URL fetching needs a separate SSRF-safe design.
 
 ## 6. What Does Not Change
 
@@ -88,7 +89,7 @@ Prompt changes alter model behaviour, so the live before/after (section 7) is th
 
 ## 7. Testing and Verification
 
-- **Unit tests** (fork `agent/tests/`), written first and watched failing for the stated reason: `test_grounding_flagged_release.py` (20 tests: keep and mark; cut for a proposed level, an unknown reason and a draft with no block; the fail-closed cases; forged marks; Chinese; a table cell; a repeated figure; a currency suffix; `no_symbol`; a bare year; the recorded artifact), `test_grounding_percent_notes.py`, `test_grounding_exact_field_refs.py` (the repairs and every still-rejected control), additions to `test_grounding_figures_contract.py`, `test_grounding_release.py` (one loop-level test), `test_agent_output_discipline.py`, `test_stock_profile_tool.py` and `test_web_reader_security.py`. Fixtures are synthetic, modelled on the recorded failures; the profile tool is run with Yahoo mocked so the evidence envelope is the real one.
+- **Unit tests** (fork `agent/tests/`), written first and watched failing for the stated reason: `test_grounding_flagged_release.py` (20 tests: keep and mark; cut for a proposed level, an unknown reason and a draft with no block; the fail-closed cases; forged marks; Chinese; a table cell; a repeated figure; a currency suffix; `no_symbol`; a bare year; the recorded artifact), `test_grounding_percent_notes.py`, `test_grounding_exact_field_refs.py` (the repairs and every still-rejected control), additions to `test_grounding_figures_contract.py`, `test_grounding_release.py` (one loop-level test), `test_agent_output_discipline.py`, `test_stock_profile_tool.py` and a no-Jina test for direct calls/local registry/MCP catalog. Fixtures are synthetic, modelled on the recorded failures; the profile tool is run with Yahoo mocked so the evidence envelope is the real one.
 - **Existing suites pass unchanged**, including upstream's loop-level redaction tests and `test_grounding_unknown_call_id_refs.py`, then the whole backend suite (`python -m pytest agent/tests -q -n 8`).
 - **Live before and after** on the prompts that reach the gate, gate on, `xhigh`, recorded in [the results](01o-vibe-answer-integrity-results.md): outcome, drafts rejected, issues, marks, `web_search` and `get_stock_profile` calls. The baseline is ten runs on the pinned code; the check after the changes is run with `tools/vibe-eval/` (new, committed with the plan).
 - **Spot-check** of flagged figures against the tool results in the stored runs, recorded as `n of m correct`: the gate cannot match a value the model passed through a calculator, but the value is usually right and the mark is the honest label.
@@ -107,7 +108,7 @@ One Backend row per change, each in the same commit as its change (their exact t
 | `agent/src/agent/loop.py` | Calls `flagged_release`; the `released_flagged` status and `answer_released_flagged` event |
 | `agent/src/agent/context.py` | The three prompt sentences |
 | `agent/src/tools/stock_profile_tool.py` | Revenue range, extra revision counts, `earnings_history` |
-| `agent/src/tools/web_reader_tool.py` | Optional `JINA_API_KEY`; refusal text |
+| `agent/src/tools/web_reader_tool.py`, `agent/mcp_server.py`, `agent/src/tools/web_search_tool.py` | No Jina requests or exposed `read_url`; keep an inert compatibility function and route agents to structured tools/search |
 
 Behaviours to preserve through a sync (new items 4 and 5):
 
@@ -119,13 +120,14 @@ Behaviours to preserve through a sync (new items 4 and 5):
 ## 9. Rollout and Owner Actions
 
 - Ships in Batch 1 with 01p. The deploy also applies `LANGCHAIN_USE_RESPONSES_API=true` (already in Firestore). It restarts the containers and kills in-flight runs, so check for active runs first.
-- Optional owner action: register a free Jina reader key and store it as `JINA_API_KEY` in `ai-trading/vibe-trading` (the assistant cannot register accounts). Keep it out of the chat and the repository: `printf '%s' "$KEY" | common/config/family_config.py set ai-trading/vibe-trading JINA_API_KEY`.
+- No new account, key or provider configuration. No Jina calls remain reachable through Vibe's local or MCP tools. Replacing `read_url` with a safe full-page reader requires a separate owner-approved design.
 - Rollback: revert the fork commits and move the gitlink back; no data migration, and `grounding_evidence.json` readers ignore the new fields.
 
 ## 10. Risks
 
 - **A flagged figure is wrong.** It is visibly marked and footnoted; the stub and cut paths remain for invention and for a draft that declared nothing; the unit post-condition and the live spot-check measure it. Upstream chose to fail closed; the owner chose to inform.
 - **Flags on correct figures.** Model-passed calculator inputs, computed payoffs and refs the checker does not resolve stay flagged (a covered-call answer still carried about ten marks). They are honest labels, not errors, and sub-project 3 measures how often a correct figure is flagged.
+- **Less web depth until a replacement reader exists.** Search snippets and the structured US tools remain; arbitrary web pages and PDF documents are not readable through `read_url`. Presets that relied on it must report unavailable evidence rather than fabricate figures.
 - **Upstream conflicts.** The hunks are small and mostly additive methods; the sync skill reads the new DIVERGENCE rows, and every sync re-runs the live check.
 - **Allow-list drift.** A new upstream reason defaults to cut, which is the safe direction.
 
