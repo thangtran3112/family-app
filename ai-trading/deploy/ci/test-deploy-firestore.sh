@@ -70,10 +70,12 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_SH="$SCRIPT_DIR/../production/deploy.sh"
 HEALTH_SH="$SCRIPT_DIR/../production/health-check.sh"
+MIROFISH_LIB_SH="$SCRIPT_DIR/../production/mirofish-runtime.sh"
 COMPOSE_FILE="$SCRIPT_DIR/../production/docker-compose.yml"
 MIROFISH_COMPOSE_FILE="$SCRIPT_DIR/../production/docker-compose.mirofish.yml"
 [[ -f "$DEPLOY_SH" ]] || { echo "test-deploy-firestore: missing $DEPLOY_SH" >&2; exit 1; }
 [[ -f "$HEALTH_SH" ]] || { echo "test-deploy-firestore: missing $HEALTH_SH" >&2; exit 1; }
+[[ -f "$MIROFISH_LIB_SH" ]] || { echo "test-deploy-firestore: missing $MIROFISH_LIB_SH" >&2; exit 1; }
 
 TEST_ROOT="$(mktemp -d)"
 # cleanup is called explicitly at the very end (below) for the two normal
@@ -98,14 +100,25 @@ fail() {
   echo "    FAIL: $*" >&2
 }
 
-# source_lib: deploy.sh's own function definitions, with its main-flow block
-# (everything after the "--- main flow below this line" marker) excluded, so
-# sourcing it only loads functions -- render_profiles, stage_secrets,
-# rollback, etc. -- without also running a real deploy. IMAGE_TAG must
-# already be a valid-looking commit SHA before this is sourced: the one
-# top-level validation line above that marker runs immediately on source.
+# source_lib: the shared mirofish-runtime.sh library's own content (Task 2,
+# app-controls: install_secret_file, mirofish_env_valid, file_mode_octal,
+# cleanup_mirofish_scratch, restore_or_remove_mirofish, activate_mirofish and
+# their tracking globals), copied in literally ahead of deploy.sh's own
+# function definitions, with deploy.sh's main-flow block (everything after
+# the "--- main flow below this line" marker) excluded -- so sourcing the
+# result only loads functions, without also running a real deploy. Copying
+# the library's actual content (not deploy.sh's own `source
+# "$SCRIPT_DIR/mirofish-runtime.sh"` line, which this filters out below) is
+# required: that line resolves relative to deploy.sh's OWN real location via
+# BASH_SOURCE, which points at $LIB_FILE (under $TEST_ROOT, not
+# production/) once this function's own extracted copy is what gets
+# sourced -- so deploy.sh's own copy of that statement would try (and fail)
+# to source a nonexistent "$TEST_ROOT/mirofish-runtime.sh". IMAGE_TAG must
+# already be a valid-looking commit SHA before this is sourced: deploy.sh's
+# one top-level validation line above that marker runs immediately on source.
 source_lib() {
-  awk '/^# --- main flow below this line;/{exit} {print}' "$DEPLOY_SH"
+  cat "$MIROFISH_LIB_SH"
+  awk '/^# --- main flow below this line;/{exit} !/^source "\$SCRIPT_DIR\/mirofish-runtime\.sh"$/{print}' "$DEPLOY_SH"
 }
 LIB_FILE="$TEST_ROOT/deploy-lib.sh"
 source_lib >"$LIB_FILE"
