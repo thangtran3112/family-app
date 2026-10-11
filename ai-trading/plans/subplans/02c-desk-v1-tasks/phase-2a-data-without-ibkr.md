@@ -1,27 +1,32 @@
 # Phase 2a: Data Foundation Without IBKR
 
-Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints, Review Focus, and Shared Interfaces first. Builds on [Phase 1c](phase-1c-technicals-and-futures.md) and [Phase 1d](phase-1d-research-math.md).
+Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints, Review Focus, and Shared Interfaces first. Builds on [Phase 1c](phase-1c-technicals-and-futures.md) and [Phase 1d](phase-1d-research-math.md). Restructured from its first rendering by [02j](../02j-common-data-providers-design.md) (the provider-pattern design, owner-approved 2026-10-11), which moves every data source behind one registry.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Subagents work in a `.worktrees/` worktree on their own `feature/*` branch; the main session merges that branch into `feature/toby` (root `AGENTS.md`).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]` syntax for tracking. Subagents work in a `.worktrees/` worktree on their own `feature/*` branch; the main session merges that branch into `feature/toby` (root `AGENTS.md`).
 
-**Goal:** give the Desk every free (non-IBKR) data source it needs — Alpaca bars, SEC EDGAR fundamentals, FRED macro, and the consensus-EPS fallback chain (Eulerpool, Finnhub, Alpha Vantage) — in a new shared package, `ai-trading/common`, plus the Desk's own Postgres schema, bar store, futures roll map, and streaming-slot allocator. The IBKR client (2b) and every table beyond `bars_1d`/`bars_1h`/`bars_1m`/`futures_rolls` wait for their own phase. No deploy; nothing here runs in production yet.
+**Goal:** give the Desk every free (non-IBKR) data source it needs — Alpaca bars, SEC EDGAR fundamentals, FRED macro, Finnhub news/calendar, Alpha Vantage and Eulerpool consensus-EPS — behind one provider registry in a new shared package, `ai-trading/common`, plus the Desk's own Postgres schema, bar store, futures roll map, and streaming-slot allocator. The IBKR client (2b) and every table beyond `bars_1d`/`bars_1h`/`bars_1m`/`futures_rolls` wait for their own phase. No deploy; nothing here runs in production yet.
 
 **Architecture:**
-- **`ai-trading/common/`** (new uv project, import package `ai_trading_common`, shared by every ai-trading app, never importing the Desk): `errors.py` (the provider-error taxonomy), `quality.py` (the `Quality` label), `http.py` (a throttled, soft-ban-aware HTTP client, adapted from Vibe-Trading), `bars.py` (the shared `Bars` shape and closed-bar guards, adapted from TradingAgents' hygiene rules), `fallback.py` (one generic fallback-chaining helper), `testing.py` (network-free test doubles, exported so the Desk's own tests can reuse them), `alpaca.py` (daily/hourly/minute bars), `sec_edgar.py` (point-in-time CompanyFacts and 8-K Item 2.02 dates, adapted from TradingAgents), `fred.py` (vintage-pinned observations and release dates, adapted from TradingAgents), `finnhub.py`, `alphavantage.py`, `eulerpool.py` (consensus-EPS providers), and `consensus.py` (the normalized types and fallback chains over all three).
-- **The Desk (`packages/family-desk/backend`)** depends on `ai-trading-common` as an editable path source from `ai_trading.data.backfill` only — the one module that imports both packages. `ai_trading.db` gets a minimal SQLAlchemy 2 engine/session helper, four typed models (`bars_1d`, `bars_1h`, `bars_1m`, `futures_rolls`), and an Alembic migration (`0001`). `ai_trading.data` gets the bar store (`bars.py`: closed-bar-only upserts, as-of reads, backfill planning, 1-minute retention), the futures roll map (`rolls.py`: contiguous windows and a difference-back-adjusted continuous series), the streaming-slot allocator (`slots.py`), and the Alpaca backfill glue (`backfill.py`).
+- **`ai-trading/common/`** (new uv project, import package `ai_trading_common`, shared by every ai-trading app, never importing the Desk):
+  - `errors.py` (the provider-error taxonomy), `quality.py` (the `Quality` label), `http.py` (a throttled, soft-ban-aware HTTP client, adapted from Vibe-Trading), `bars.py` (the shared `Bars` shape and closed-bar guards, adapted from TradingAgents' hygiene rules), `fallback.py` (one generic fallback-chaining helper), `testing.py` (network-free test doubles, exported so the Desk's own tests can reuse them) — the package's core, unchanged by 02j;
+  - `types.py` (vendor-neutral result types — `Fact`, `EarningsAnnouncement`, `Observation`, `NewsItem`, `EarningsEvent`, `ConsensusSnapshot`, `EarningsResult`, `AnalystTargets` — and their as-of selectors), `sources.py` (one `@runtime_checkable` `Protocol` per data kind), `registry.py` (`Kind`, `Provider`, `REGISTRY`, `DEFAULT_CHAINS`, `DataSources.from_env()`), `_provider.py` (`Provider`'s actual definition, a leaf module re-exported as `registry.Provider` to avoid an import cycle with `providers/*`) — 02j's new layout;
+  - `providers/alpaca.py` (daily/hourly/minute bars), `providers/sec_edgar.py` (point-in-time CompanyFacts and 8-K Item 2.02 dates, adapted from TradingAgents), `providers/fred.py` (vintage-pinned observations and release dates, adapted from TradingAgents), `providers/finnhub.py`, `providers/alphavantage.py`, `providers/eulerpool.py` (consensus-EPS providers) — each holding its vendor's raw client, one `<Name>Source` adapter mapping its records into `types.py` objects, and a `PROVIDER` registry entry.
+  - `consensus.py` from the plan's first rendering is gone: its normalized types moved to `types.py`, its per-vendor adapters moved into each vendor's own `providers/<name>.py`, and its fallback chains moved into `registry.py`'s generic chain classes.
+- **The Desk (`packages/family-desk/backend`)** depends on `ai-trading-common` as an editable path source. `ai_trading.data.backfill` takes a `BarsSource` (`ai_trading_common.sources`) — the one module that imports both packages, and it imports only `ai_trading_common.sources`/`errors`, never `ai_trading_common.providers` (02j §7, the import boundary, enforced by a dedicated test). `ai_trading.db` gets a minimal SQLAlchemy 2 engine/session helper, four typed models (`bars_1d`, `bars_1h`, `bars_1m`, `futures_rolls`), and an Alembic migration (`0001`). `ai_trading.data` gets the bar store (`bars.py`: closed-bar-only upserts, as-of reads, backfill planning, 1-minute retention), the futures roll map (`rolls.py`: contiguous windows and a difference-back-adjusted continuous series), the streaming-slot allocator (`slots.py`), and the backfill glue (`backfill.py`).
 - CI's `desk` job gains a `postgres:17` service and a new step that runs `ai-trading/common`'s own suite before the existing Contracts/Backend steps.
 - Stooq (the daily pre-2016 fallback 02b §5 originally planned) is dropped: its CSV endpoint is gated behind a JS proof-of-work challenge with no API key offered (ruling D8). The Desk's effective history start is 2016-01-01 (Alpaca's free Basic plan) unless IBKR backfills further back in 2b.
 
 **Tech Stack:** Python 3.12, uv, pandas, `requests`, `exchange-calendars` (common); SQLAlchemy 2, Alembic, `psycopg[binary]` 3, PostgreSQL 17 (Desk `ai_trading.db`/`ai_trading.data`). No new frontend dependency.
 
 **Spec:**
+- [02j](../02j-common-data-providers-design.md): the provider-pattern design this restructure implements — layout, data kinds, the registry/chain/config rules, and this plan's task split (§11)
 - [02c](../02c-desk-v1-implementation-plan.md) Global Constraints, Review Focus, Shared Interfaces, Phase 2 outline
 - [02b §5](../02b-desk-market-data-options.md): the hybrid store — what's kept, what's fetched live, and refresh rules
 - [02a §7](../02a-desk-v1-strategies-design.md): streaming slots (priority order, failure handling); [02a §11](../02a-desk-v1-strategies-design.md): the reuse map's Phase 2 rows
 - [02f §4](../02f-desk-indicators-and-ai-daily-design.md): consensus EPS — the fields, the pilot, the fallback
 - `ai-trading/AGENTS.md`: secrets, Firestore, upstream rules, "Our Code"
 
-Source reports (not committed; the prototype trail behind this plan): `ai-trading/temp/p2a-proto/final/REPORT-FINAL.md`, `ai-trading/temp/p2a-proto/common/REPORT-P1.md`, `common-p2/REPORT-P2.md`, `common-p3/REPORT-P3.md`, `common-p3/PILOT-EULERPOOL.md`, `family-desk/REPORT-P4.md`, and `ai-trading/temp/plan-writing-ledger-2a.md` (D1–D11 and every ruling).
+Source reports (not committed; the prototype trail behind this plan): `ai-trading/temp/p2a-proto/final/REPORT-FINAL.md` (the 02j restructure), `ai-trading/temp/p2a-proto/common/REPORT-P1.md`, `common-p2/REPORT-P2.md`, `common-p3/REPORT-P3.md`, `common-p3/PILOT-EULERPOOL.md`, `family-desk/REPORT-P4.md`, and `ai-trading/temp/plan-writing-ledger-2a.md` (D1–D11 and every ruling). The pre-restructure prototype tree is kept at `ai-trading/temp/p2a-proto/final-pre-02j/` for reference only.
 
 ## Global Constraints
 
@@ -32,85 +37,102 @@ Source reports (not committed; the prototype trail behind this plan): `ai-tradin
 - **Secrets (AGENTS.md):** keys are read only through `python3 common/config/family_config.py run ai-trading/desk -- <cmd>` from the repository root, with `CLOUDSDK_ACTIVE_CONFIG_NAME=personal` set. Never print, log, or save a key, a token, or the SEC `User-Agent` value. Recorded fixtures hold only response bodies (never request headers); any `token`/`apikey`/`api_key` query parameter is stripped before a fixture is written.
 - **Fixtures are already committed** on `feature/toby` (commit `ae6ec0f`; the Eulerpool calendar fixture re-recorded in `c602b52`) under `ai-trading/common/tests/fixtures/` and `ai-trading/packages/family-desk/backend/tests/fixtures/`. Every task below references them by path; none are embedded in this plan.
 - **Attribution:** code adapted from an upstream app gets a header (upstream path, commit, license, what changed) and a row in the receiving package's `THIRD_PARTY_NOTICES.md`. Apache-2.0 files (TradingAgents) are marked as modified, with the full upstream `LICENSE` text. A "pattern" reuse (an idea, no code copied) needs no notice. Nothing from MiroFish.
-- **Layout:** `ai-trading/common` never imports the Desk or any other ai-trading package. The Desk depends on it only through `[tool.uv.sources] ai-trading-common = { path = "../../../common", editable = true }`, and only `ai_trading.data.backfill` imports `ai_trading_common`.
+- **Layout (02j):** `ai-trading/common` never imports the Desk or any other ai-trading package. `types.py` and `sources.py` import no vendor module; `registry.py` is the only module that imports `providers/*`; each `providers/<name>.py` imports `Provider` from the leaf module `_provider.py`, never from `registry.py` (no import cycle). The Desk depends on common only through `[tool.uv.sources] ai-trading-common = { path = "../../../common", editable = true }`, and only `ai_trading.data.backfill` imports `ai_trading_common` — and only its `sources`/`errors` modules, never `ai_trading_common.providers` (an import-boundary test enforces this).
 - `ai_trading.core` (unchanged by this phase) still does no I/O and reads no clock; `ai_trading.data` and `ai_trading.db` are this phase's first I/O-performing modules.
 - Commits are one line, with no trailer. Do not push.
 
 ## Decisions for Owner Review
 
-The ledger's D1–D11 first, then every consequential prototype decision from the lane reports, most consequential first, grouped by the module that carries it.
+The provider-pattern decisions 02j itself made, **owner-approved 2026-10-11**, first; then the prototype's own implementation decisions in carrying 02j out, most consequential first; then the ledger's D1–D11 (updated where the restructure changed what they describe), grouped by the module that carries each.
 
-**Ledger rulings (D1–D11):**
+**02j's own decisions (owner-approved 2026-10-11):**
 
-1. **D1 — `ai-trading/common` is a uv project named `ai-trading-common`, import package `ai_trading_common` under `src/`.** The Desk depends on it as an editable path source (`[tool.uv.sources]`), never a published package. Alternative: a namespace package shared by editing `sys.path`. Reason: a real uv project gets its own lockfile, its own CI step, and is independently installable by any future ai-trading app without the Desk's `pyproject.toml` in the loop. (2a.1, 2a.7)
-2. **D2 — `ai-trading/market-data/` (the open-source lane's existing Alpaca/SEC client) is left untouched.** `alpaca.py` is moved into `ai_trading_common`, not deleted from `market-data/`; the open-source lane switches to the common package on its own schedule. Reason: this phase's brief is scoped to the Desk; touching another lane's working code without its own review is out of scope. (2a.2)
-3. **D3 — Phase 2a creates only `bars_1d`, `bars_1h`, `bars_1m`, and `futures_rolls`.** Every other table in 02c's Shared Interfaces (`consensus_snapshots`, `earnings_results`, `analyst_targets`, the strategy/alert/order tables, and so on) is added by the phase that first needs it, not reserved here. Alternative: create every table 02c lists for Phase 2 up front. Reason: 02c's own Phase 2 outline said "every table" without specifying which phase adds which; an owner review narrowed this to "tables arrive per phase," so a table's migration lands with the code that writes and reads it, not months before. (2a.7)
-4. **D4 — the Postgres role and schema init under `deploy/postgres/` moves to Phase 3**, where `desk-postgres` first joins the deploy compose file. Alternative: stand up the role/schema init now, unused until Phase 3. Reason: there is no deployed Postgres to initialize until Phase 3; building init scripts for infrastructure that does not exist yet is speculative work with no test that can exercise it for real. (not in this phase's scope)
-5. **D5 — DB tests key off `DESK_TEST_DATABASE_URL`: skipped locally when unset, a hard failure in CI (`DESK_REQUIRE_DB=1`) so a broken database story never silently reports green.** `scripts/test-db.sh` starts a throwaway `postgres:17` container for a local, no-flags-needed run. Alternative: mock the database in every test. Reason: the bar store and migration tests are exactly the code whose correctness depends on a real Postgres (upsert semantics, constraint names, `compare_metadata` drift) — a mock would test the mock, not the store. (2a.7)
-6. **D6 — continuous futures are difference back-adjusted at each roll; the latest segment stays unadjusted, at real prices.** Alternative: ratio (percentage) back-adjustment, or no adjustment at all (a raw stitch with a visible gap). Reason: 02a's Review Focus 4 requires "indicators and levels must not see a fake gap between contracts" when the front month changes; difference adjustment (the industry-standard "Jones" method) achieves that while an unadjusted stitch would show a fake overnight gap exactly at every roll, and the latest segment staying at real prices means a live position's P&L is never computed against an adjusted price it didn't actually trade at. (2a.8)
-7. **D7 — read models and typed evidence snapshots for tools and card backs move to the phases that consume them (3, 5, 7), not built in 2a.** Alternative: build a generic "evidence snapshot" type now, speculatively. Reason: 02h's typed evidence snapshot shape is driven by what each consuming tool actually needs; building it before any consumer exists risks guessing a shape that has to change once Phase 3/5/7 start, for no present benefit. (not in this phase's scope)
-8. **D8 — Stooq is dropped; there is no pre-2016 daily fallback in 2a.** Live-checked first (`curl` against `stooq.com`, `stooq.pl`, and a `static.stooq.com` guess, with and without a browser `User-Agent`): every host answers either a JavaScript proof-of-work challenge page or HTTP 404, with no API key offered anywhere. Per the brief's own rule ("if it needs a key or a captcha now, stop that part and report; never build a scraper"), this is exactly that case. The Desk's effective daily-history start is 2016-01-01 (Alpaca's free Basic plan); IBKR can backfill further back in Phase 2b if the owner wants it, with no new provider added here. (2a.2, 2a.8; see 02b §5 and 02d edits below)
-9. **D9 — Alpaca snapshots for the 15-minute swing/long-term list refresh move to Phase 3**, with the scheduler job that actually uses them. Not built in 2a. (not in this phase's scope)
-10. **D10 — Finnhub's dividend endpoint and Alpha Vantage's `OVERVIEW` (analyst target/rating) endpoint are dropped; ex-dividend dates wait on IBKR's dividends tick (2b) or a possible free Eulerpool path (Phase 5 probes once).** Live-confirmed dead on the free plans used here: Finnhub's `stock/dividend` answers HTTP 403 on every attempt; Alpha Vantage's `OVERVIEW` answers HTTP 200 with an `"Information": "...premium endpoint..."` note on three separate attempts, contradicting the (stale) research notes that had called it free. Neither was ever called from `consensus.py`'s fallback chains, so dropping them costs no behavior that existed. (2a.5, 2a.6)
-11. **D11 — fallback is per data class, with one necessary per-field exception for analyst targets; the one shared fallback-chaining helper is generic over its return type (`first_success[T]`), not `Bars`-specific.** `ConsensusSnapshot` and `EarningsResult` fall back per whole record set (Eulerpool primary). `AnalystTargets` cannot: Finnhub's free plan has rating counts but no target price, and Alpha Vantage's only target field is premium-gated — so a Finnhub-sourced fallback carries real counts and `None` targets rather than refusing the whole record or guessing a price, matching 02f §4's own prediction for this path ("analyst targets are then unavailable," scoped to the target fields). The prototype's first pass had two near-duplicate fallback helpers (`fallback.with_fallback`, typed to `Bars`, and a local `consensus.py` copy of the same precedence rule for other types); this plan keeps only the generic one, `first_success[T](calls) -> tuple[T, bool]`, and a caller relabels its own result type (`dataclasses.replace(result, quality="fallback")`) using the returned `is_primary` flag. Alternative: keep two near-identical helpers. Reason: one generic helper is less code than two copies of the same precedence rule, with no loss of type safety at the call site (every caller already knows its own return type). (2a.1, 2a.6)
+1. **One env var per data kind, `DATA_PROVIDERS_<KIND>`** (a comma-separated provider list, e.g. `DATA_PROVIDERS_CONSENSUS=eulerpool,alphavantage`), read once at startup from wherever every env value lives (the app's Firestore profile). Unset means the default chain (`DEFAULT_CHAINS`) applies. Alternative: one flat `DATA_PROVIDERS` var naming every provider, with chain order implicit. Reason: one var per kind is the unit a deploy actually changes ("move consensus to provider X"), and keeps the unknown-name/wrong-kind validation scoped to exactly the var that named the mistake. (2a.1)
+2. **Fail fast at startup; a missing API key is not a startup error.** `DataSources.from_env` raises `ValueError` (naming the env var) when a chain's list is empty, names an unknown provider, or names a provider that doesn't serve that kind. A provider with no key configured is only caught when it is actually called (`NotConfigured`), and the chain moves on to the next provider. Reason: a typo in a provider name or kind is a deploy-time mistake that should never reach runtime; a missing key for a provider nobody is currently routing through should never block startup of the providers that do have keys. (2a.1)
+3. **Build once per provider, shared across every kind it serves.** `DataSources.from_env` builds each named provider's adapter at most once (`Provider.build(env, http)`), keyed by name, and reuses that instance across every kind chain it appears in. Alternative: build a fresh adapter per kind, even for the same provider. Reason: a provider (e.g. Eulerpool, which serves `consensus`, `earnings`, and `targets`) constructing its own HTTP session or holding any per-instance state should not do that three times for one `DataSources`. (2a.1)
+4. **A non-primary chain result is relabeled `quality="fallback"`**, uniformly: each record in a list, a single record, or `Bars`; a plain value (e.g. `release_dates`' `list[date]`) passes through unchanged, since it has no `quality` field to relabel. The chain decides the label — never the adapter, which always reports its own native quality (`eod`), since the same adapter can be primary in one deployment's override and secondary in another's default chain. Alternative: let each adapter hardcode its own fallback label, as the plan's first rendering's `consensus.py` did. Reason: an adapter cannot know its own chain position; only the chain (`registry.py`'s `_chain_call`/`_relabel`) does. (2a.1, 2a.6)
+5. **The import boundary is enforced by a test, not just a convention.** Desk code may import `ai_trading_common.types`, `sources`, `registry`, `bars`, `errors`, `quality` (and `testing` in tests), never `ai_trading_common.providers` — a Desk test (`test_import_boundary.py`) walks every `.py` under `src/ai_trading/` with `ast` and fails on any `ai_trading_common` import outside that allowlist, in every form: a bare `import ai_trading_common` (attribute access would reach `providers`), `import ai_trading_common.providers.x`, `from ai_trading_common.providers... import ...`, and `from ai_trading_common import providers`. The test first proves it flags each of those forms. Reason: importing a provider module directly would let Desk code bind to one vendor, defeating the whole point of the registry (02j §1: swapping a vendor needs no edits to the code that uses the data). (2a.8)
+6. **`Provider` is defined in a leaf module, `_provider.py`, not directly in `registry.py`, and re-exported as `registry.Provider`.** A first attempt (confirmed by actually running the suite) defined `Provider` directly in `registry.py`, relying on `providers/<name>.py`'s `from ai_trading_common.registry import Provider` resolving against the partially-initialized `registry` module already in `sys.modules` — this works only when `registry.py` is imported before any `providers.<name>` module, but every provider's own test (e.g. `tests/providers/test_alpaca.py`) imports its provider module directly, starting the cycle from the other end and failing with `AttributeError: partially initialized module ... has no attribute 'PROVIDER'`. Alternative: a single-direction-only import trick (rejected: it silently breaks depending on which module a caller imports first). `_provider.py` is a leaf module importable from either direction with no cycle, and `Provider` stays reachable at `ai_trading_common.registry.Provider`, the name 02j §5 fixes. (2a.1)
+
+**The prototype's own decisions in carrying 02j out, most consequential first:**
+
+7. **Every adapter method returns its own primary quality (`eod`) unconditionally** — a correction from the plan's first-rendering `consensus.py`, which hardcoded `quality="fallback"` inside its Alpha Vantage/Finnhub adapter functions because those free functions *knew* they were always secondary. Under the registry, the same `AlphaVantageSource`/`FinnhubSource` can be primary in one deployment's override and secondary in another's default chain, so the adapter always reports its native quality and the chain relabels. Pinned by every `test_*_source_adapter`'s `quality == "eod"` assertion ("the chain, not the adapter, decides fallback labeling"). (2a.2–2a.5)
+8. **`_relabel` is one generic function for every return shape**, not a per-kind special case: `Bars` and every `types.py` record are frozen dataclasses with a `quality` field, so `dataclasses.replace` handles all of them uniformly; a `list[date]` (`release_dates`) has no such attribute per item and passes through unchanged — matching the spec's "plain values ... returned unchanged" literally rather than special-casing `MacroSource.release_dates` in the chain class itself. (2a.1)
+9. **`test_backfill.py` still constructs `AlpacaBars` directly** (from its new `providers.alpaca` path) and passes it as `bars_source=`, rather than going through `DataSources.from_env`, while `test_end_to_end.py` was rewritten to go through `from_env`. 02j's own item only names the end-to-end test for the `from_env` rewrite; `test_backfill.py`'s own scenarios (contiguous ranges, the 2016 clamp, a mid-backfill `Unavailable`) are about `backfill`'s own logic against a `BarsSource`-shaped fake, not about registry wiring — `AlpacaBars` already satisfies `BarsSource` structurally, so passing it directly keeps those tests focused and avoids constructing a whole `DataSources` (five other providers' adapters) just to reach one chain. (2a.8)
+10. **`EightKFiling`/`eight_k_as_of` stay in `providers/sec_edgar.py`, not `types.py`.** 02j §4 names `facts_as_of`, `announcements_as_of`, and `news_as_of` as the `types.py` selectors; it does not fold SEC's own internal 8-K representation (which still carries `items`, a field the neutral `EarningsAnnouncement` deliberately drops) into the shared types. `eight_k_as_of` operates on that SEC-internal shape and is provider-internal machinery feeding `SecEdgarSource.announcements()`'s mapping, not a type any other provider could produce. (2a.3)
+11. **Finnhub's, Alpha Vantage's, and Eulerpool's `_build` functions read keys with `env.get("X", "")`**, never `env["X"]` — a missing key must not be a startup error (02j §5), and each raw client's existing `if not self.api_key: raise NotConfigured(...)` already does the right thing once called; `_build` only has to avoid a `KeyError` at construction time. (2a.2–2a.5)
+
+**Ledger rulings (D1–D11), updated for the restructure where a ruling's own mechanism changed:**
+
+12. **D1 — `ai-trading/common` is a uv project named `ai-trading-common`, import package `ai_trading_common` under `src/`.** The Desk depends on it as an editable path source (`[tool.uv.sources]`), never a published package. Alternative: a namespace package shared by editing `sys.path`. Reason: a real uv project gets its own lockfile, its own CI step, and is independently installable by any future ai-trading app without the Desk's `pyproject.toml` in the loop. (2a.1, 2a.7)
+13. **D2 — `ai-trading/market-data/` (the open-source lane's existing Alpaca/SEC client) is left untouched.** `alpaca.py`'s logic is moved into `ai_trading_common.providers.alpaca`, not deleted from `market-data/`; the open-source lane switches to the common package on its own schedule. Reason: this phase's brief is scoped to the Desk; touching another lane's working code without its own review is out of scope. (2a.2)
+14. **D3 — Phase 2a creates only `bars_1d`, `bars_1h`, `bars_1m`, and `futures_rolls`.** Every other table in 02c's Shared Interfaces (`consensus_snapshots`, `earnings_results`, `analyst_targets`, the strategy/alert/order tables, and so on) is added by the phase that first needs it, not reserved here. Alternative: create every table 02c lists for Phase 2 up front. Reason: 02c's own Phase 2 outline said "every table" without specifying which phase adds which; an owner review narrowed this to "tables arrive per phase," so a table's migration lands with the code that writes and reads it, not months before. (2a.7)
+15. **D4 — the Postgres role and schema init under `deploy/postgres/` moves to Phase 3**, where `desk-postgres` first joins the deploy compose file. Alternative: stand up the role/schema init now, unused until Phase 3. Reason: there is no deployed Postgres to initialize until Phase 3; building init scripts for infrastructure that does not exist yet is speculative work with no test that can exercise it for real. (not in this phase's scope)
+16. **D5 — DB tests key off `DESK_TEST_DATABASE_URL`: skipped locally when unset, a hard failure in CI (`DESK_REQUIRE_DB=1`) so a broken database story never silently reports green.** `scripts/test-db.sh` starts a throwaway `postgres:17` container for a local, no-flags-needed run. Alternative: mock the database in every test. Reason: the bar store and migration tests are exactly the code whose correctness depends on a real Postgres (upsert semantics, constraint names, `compare_metadata` drift) — a mock would test the mock, not the store. (2a.7)
+17. **D6 — continuous futures are difference back-adjusted at each roll; the latest segment stays unadjusted, at real prices.** Alternative: ratio (percentage) back-adjustment, or no adjustment at all (a raw stitch with a visible gap). Reason: 02a's Review Focus 4 requires "indicators and levels must not see a fake gap between contracts" when the front month changes; difference adjustment (the industry-standard "Jones" method) achieves that while an unadjusted stitch would show a fake overnight gap exactly at every roll, and the latest segment staying at real prices means a live position's P&L is never computed against an adjusted price it didn't actually trade at. (2a.8)
+18. **D7 — read models and typed evidence snapshots for tools and card backs move to the phases that consume them (3, 5, 7), not built in 2a.** Alternative: build a generic "evidence snapshot" type now, speculatively. Reason: 02h's typed evidence snapshot shape is driven by what each consuming tool actually needs; building it before any consumer exists risks guessing a shape that has to change once Phase 3/5/7 start, for no present benefit. (not in this phase's scope)
+19. **D8 — Stooq is dropped; there is no pre-2016 daily fallback in 2a.** Live-checked first (`curl` against `stooq.com`, `stooq.pl`, and a `static.stooq.com` guess, with and without a browser `User-Agent`): every host answers either a JavaScript proof-of-work challenge page or HTTP 404, with no API key offered anywhere. Per the brief's own rule ("if it needs a key or a captcha now, stop that part and report; never build a scraper"), this is exactly that case. The Desk's effective daily-history start is 2016-01-01 (Alpaca's free Basic plan); IBKR can backfill further back in Phase 2b if the owner wants it, with no new provider added here. (2a.2, 2a.8; see 02b §5 and 02d edits below)
+20. **D9 — Alpaca snapshots for the 15-minute swing/long-term list refresh move to Phase 3**, with the scheduler job that actually uses them. Not built in 2a. (not in this phase's scope)
+21. **D10 — Finnhub's dividend endpoint and Alpha Vantage's `OVERVIEW` (analyst target/rating) endpoint are dropped; ex-dividend dates wait on IBKR's dividends tick (2b) or a possible free Eulerpool path (Phase 5 probes once).** Live-confirmed dead on the free plans used here: Finnhub's `stock/dividend` answers HTTP 403 on every attempt; Alpha Vantage's `OVERVIEW` answers HTTP 200 with an `"Information": "...premium endpoint..."` note on three separate attempts, contradicting the (stale) research notes that had called it free. Neither was ever called from any chain, so dropping them costs no behavior that existed. (2a.4, 2a.6)
+22. **D11 — fallback is per data class, with one necessary per-field exception for analyst targets; the fallback-chaining logic runs through the registry's generic chain classes, not per-caller code.** `ConsensusSnapshot` and `EarningsResult` fall back per whole record set (Eulerpool primary). `AnalystTargets` cannot: Finnhub's free plan has rating counts but no target price, and Alpha Vantage's only target field is premium-gated — so a Finnhub-sourced fallback carries real counts and `None` targets rather than refusing the whole record or guessing a price, matching 02f §4's own prediction for this path ("analyst targets are then unavailable," scoped to the target fields). Under 02j's registry, this precedence lives once in `registry.py`'s `_chain_call`/`fallback.first_success` (`first_success[T](calls) -> tuple[T, bool]`), shared by every kind's chain class (`_ConsensusChain`, `_EarningsChain`, `_TargetsChain`, ...) — the plan's first-rendering `consensus.py` had this same helper but called by free functions per data class; the restructure moves the calling code into the registry so a caller never constructs the chain itself. A caller never relabels its own result; `registry.py`'s `_relabel` does it once, generically (decision 8 above). (2a.1, 2a.6)
 
 **`http.py` (2a.1):**
 
-12. **`ThrottledClient.get` returns every non-{429, 403-ban-prone, 5xx, timeout} status as-is, rather than mapping every HTTP status itself.** `http.py` has no idea what a 401 or 404 means to a specific provider (Alpaca: bad key / unknown symbol; SEC: unidentified request / nothing at this CIK); that mapping belongs in each client. Keeps `http.py` provider-agnostic, matching Vibe-Trading's original scope.
-13. **A soft-ban latch fires on a 429 from any host, or a 403 only on a host the caller declares `ban_prone`.** SEC returns a bare HTML 403 for an unidentified `User-Agent` and should latch; Alpaca's 403 means a rejected key and must not latch (a caller fixing its key would otherwise wait out a needless cooldown). The caller, not `http.py`, knows which is which.
-14. **`Unavailable`'s message never carries the failing URL or its query string.** A `requests.ConnectionError`'s own text includes the full URL, and several providers (FRED, Finnhub, Eulerpool, Alpha Vantage) put the API key in the query string — so the exception is built from the error's type name alone, raised `from None`, never from the caught exception's own text. Pinned by `test_unavailable_never_carries_the_failing_url_or_its_query_key`.
-15. **Clock, sleep, and jitter are all injectable**, so tests pin the throttle's exact timing with a fake clock rather than a real `time.sleep`.
+23. **`ThrottledClient.get` returns every non-{429, 403-ban-prone, 5xx, timeout} status as-is, rather than mapping every HTTP status itself.** `http.py` has no idea what a 401 or 404 means to a specific provider (Alpaca: bad key / unknown symbol; SEC: unidentified request / nothing at this CIK); that mapping belongs in each client. Keeps `http.py` provider-agnostic, matching Vibe-Trading's original scope.
+24. **A soft-ban latch fires on a 429 from any host, or a 403 only on a host the caller declares `ban_prone`.** SEC returns a bare HTML 403 for an unidentified `User-Agent` and should latch; Alpaca's 403 means a rejected key and must not latch (a caller fixing its key would otherwise wait out a needless cooldown). The caller, not `http.py`, knows which is which.
+25. **`Unavailable`'s message never carries the failing URL or its query string.** A `requests.ConnectionError`'s own text includes the full URL, and several providers (FRED, Finnhub, Eulerpool, Alpha Vantage) put the API key in the query string — so the exception is built from the error's type name alone, raised `from None`, never from the caught exception's own text. Pinned by `test_unavailable_never_carries_the_failing_url_or_its_query_key`.
+26. **Clock, sleep, and jitter are all injectable**, so tests pin the throttle's exact timing with a fake clock rather than a real `time.sleep`.
 
-**`bars.py` and `alpaca.py` (2a.1, 2a.2):**
+**`bars.py` and `providers/alpaca.py` (2a.1, 2a.2):**
 
-16. **`validate` drops a bad row, not the whole frame.** Alternative: reject the whole frame on any bad row (TradingAgents' own stale-frame check is frame-level, but its row-cleaning functions already drop rows, not frames). Reason: a vendor's one malformed print (a zero close, a `high < low` tick) is common and should not blank out an otherwise-good day of bars; a vendor with no good rows at all still ends up empty, which the caller's existing `NoData` path already covers.
-17. **`drop_unclosed`'s 1h session-close cap only applies when a bar starts inside the regular session.** Alternative (a literal reading of "a session's short last hour closes early"): always cap an hourly bar at the session's regular close. Reason: a real Alpaca fixture (the 2025-11-28 half day, 13:00 ET close) has an hourly bar starting at 16:00 ET, in the post-market session, three hours after the regular close already passed. The literal rule would cap that bar's close at 13:00 ET — already in the past relative to its own 16:00 start — marking it "closed" the instant it starts: a repainting risk in the opposite direction (serving a forming extended-hours bar as final). The cap only fires when `session_open <= start < session_close`; an extended-hours bar always gets its own full 60 minutes. Pinned by `test_1h_post_close_extended_hours_bar_still_needs_its_own_60_minutes`, found from the live fixture, not invented.
-18. **An unknown Alpaca symbol is mapped from *either* an empty `bars` array or HTTP 404 to `NoData`.** Live-tested behavior for a genuinely bad ticker was not risked against the real account; both documented/plausible shapes are handled defensively.
-19. **`is_stale` is not built in this phase** (no caller needs it yet — the Desk's own staleness check is `ai_trading.data.bars.read_bars`'s as-of cut, not a separate freshness probe). `bars.py` ships `validate` and `drop_unclosed` only.
+27. **`validate` drops a bad row, not the whole frame.** Alternative: reject the whole frame on any bad row (TradingAgents' own stale-frame check is frame-level, but its row-cleaning functions already drop rows, not frames). Reason: a vendor's one malformed print (a zero close, a `high < low` tick) is common and should not blank out an otherwise-good day of bars; a vendor with no good rows at all still ends up empty, which the caller's existing `NoData` path already covers.
+28. **`drop_unclosed`'s 1h session-close cap only applies when a bar starts inside the regular session.** Alternative (a literal reading of "a session's short last hour closes early"): always cap an hourly bar at the session's regular close. Reason: a real Alpaca fixture (the 2025-11-28 half day, 13:00 ET close) has an hourly bar starting at 16:00 ET, in the post-market session, three hours after the regular close already passed. The literal rule would cap that bar's close at 13:00 ET — already in the past relative to its own 16:00 start — marking it "closed" the instant it starts: a repainting risk in the opposite direction (serving a forming extended-hours bar as final). The cap only fires when `session_open <= start < session_close`; an extended-hours bar always gets its own full 60 minutes. Pinned by `test_1h_post_close_extended_hours_bar_still_needs_its_own_60_minutes`, found from the live fixture, not invented.
+29. **An unknown Alpaca symbol is mapped from *either* an empty `bars` array or HTTP 404 to `NoData`.** Live-tested behavior for a genuinely bad ticker was not risked against the real account; both documented/plausible shapes are handled defensively.
+30. **`is_stale` is not built in this phase** (no caller needs it yet — the Desk's own staleness check is `ai_trading.data.bars.read_bars`'s as-of cut, not a separate freshness probe). `bars.py` ships `validate` and `drop_unclosed` only.
+31. **`AlpacaBars` is itself `BarsSource`; no separate adapter wrapper.** It already returns `Bars`, the shared vendor-neutral type, so no `AlpacaSource` wrapper class is needed (02j §2: "where a raw client already returns vendor-neutral types, the client class itself may be the `<Name>Source`"). Likewise `Fred` is itself `MacroSource` (`observations` and `release_dates` already return `types.Observation`/`list[date]`). (2a.2, 2a.3)
 
-**`sec_edgar.py` (2a.3):**
+**`providers/sec_edgar.py` (2a.3):**
 
-20. **An unrecognized duration span (outside the quarterly/YTD/annual day-count buckets) is dropped, not guessed or widened to the nearest bucket.** A span that fits no bucket is far more likely a data artifact than a new kind of real period; matching it to the nearest bucket would silently mislabel, say, a 7-month fact as a 6-month one.
-21. **A later amendment of the same period wins only from its own filed date — never before.** Example, live-confirmed: Apple's fiscal-2007 net income read $3,496M from the original 10-K (filed 2009-10-27) until a 10-K/A (filed 2010-01-25) restated it to $3,495M; a run as-of 2009-12-01 must still see $3,496M. Pinned by `test_a_later_amendment_wins_only_from_its_own_filed_date`.
-22. **`item_202_filings(ticker, since)` pages into `filings.recent`'s older sibling, `filings.files`, only as far as `since` needs — newest page first, stopping as soon as a fetched page's own `filingFrom` reaches `since`.** Alternative: read only `filings.recent` (the brief's original, narrower scope) and accept that a heavy filer's "recent" window may not reach back far enough. Reason: live data disproved the assumption that `recent` covers "roughly the last ~1,000 filings" — JPMorgan's `recent` is 26,293 rows but still only reaches back to 2025-10-10 (about a year), the same wall-clock span as AAPL's much smaller `recent`. An earnings-reaction model needing several quarters of 8-K history for a heavy filer reliably needs this paging. The stop decision reads already-fetched `files` metadata (`filingFrom`/`filingTo`), never fetches a page "just in case." A failed page raises `Unavailable`, never a silently partial list. Pinned by `TestItem202Pagination`'s four tests.
-23. **`_oldest_filing_date` scans every `filingDate` in a block rather than trusting array order or reading the last element.** The recorded AAPL fixture disproved the "sorted descending" assumption live: `filingDate` is not globally sorted (filing types interleave).
-24. **SEC's two rate-limited hosts (`www.sec.gov`, `data.sec.gov`) share one throttle bucket**, since SEC's fair-access policy rate-limits `sec.gov` as one site-wide budget (10 req/s), not per-subdomain.
-25. **No on-disk or in-memory cache in `SecEdgar`**, unlike `ai-trading/market-data/sec.py`'s 24-hour TTL cache. The shared `ThrottledClient`/`AlpacaBars` don't cache either; adding caching only here would be an inconsistent extra concern for this client to own. A cache is a fine later addition at the Desk's own data layer, which already owns refresh scheduling.
+32. **An unrecognized duration span (outside the quarterly/YTD/annual day-count buckets) is dropped, not guessed or widened to the nearest bucket.** A span that fits no bucket is far more likely a data artifact than a new kind of real period; matching it to the nearest bucket would silently mislabel, say, a 7-month fact as a 6-month one.
+33. **A later amendment of the same period wins only from its own filed date — never before.** Example, live-confirmed: Apple's fiscal-2007 net income read $3,496M from the original 10-K (filed 2009-10-27) until a 10-K/A (filed 2010-01-25) restated it to $3,495M; a run as-of 2009-12-01 must still see $3,496M. Pinned by `test_a_later_amendment_wins_only_from_its_own_filed_date`.
+34. **`item_202_filings(ticker, since)` pages into `filings.recent`'s older sibling, `filings.files`, only as far as `since` needs — newest page first, stopping as soon as a fetched page's own `filingFrom` reaches `since`.** Alternative: read only `filings.recent` (the brief's original, narrower scope) and accept that a heavy filer's "recent" window may not reach back far enough. Reason: live data disproved the assumption that `recent` covers "roughly the last ~1,000 filings" — JPMorgan's `recent` is 26,293 rows but still only reaches back to 2025-10-10 (about a year), the same wall-clock span as AAPL's much smaller `recent`. An earnings-reaction model needing several quarters of 8-K history for a heavy filer reliably needs this paging. The stop decision reads already-fetched `files` metadata (`filingFrom`/`filingTo`), never fetches a page "just in case." A failed page raises `Unavailable`, never a silently partial list. Pinned by `TestItem202Pagination`'s four tests.
+35. **`_oldest_filing_date` scans every `filingDate` in a block rather than trusting array order or reading the last element.** The recorded AAPL fixture disproved the "sorted descending" assumption live: `filingDate` is not globally sorted (filing types interleave).
+36. **SEC's two rate-limited hosts (`www.sec.gov`, `data.sec.gov`) share one throttle bucket**, since SEC's fair-access policy rate-limits `sec.gov` as one site-wide budget (10 req/s), not per-subdomain.
+37. **No on-disk or in-memory cache in `SecEdgar`**, unlike `ai-trading/market-data/sec.py`'s 24-hour TTL cache. The shared `ThrottledClient`/`AlpacaBars` don't cache either; adding caching only here would be an inconsistent extra concern for this client to own. A cache is a fine later addition at the Desk's own data layer, which already owns refresh scheduling.
 
-**`fred.py` (2a.4):**
+**`providers/fred.py` (2a.3):**
 
-26. **Both `realtime_start` and `realtime_end` are pinned to `as_of`, not left at FRED's own "today" default.** Live-confirmed real revisions: CPIAUCSL's 2019-06-01 observation read 255.305 at its first realtime window (2019-07-20) and 255.213 by a 2024-03-01 vintage; a backtest dated before a revision must see the value as first published, never the later number.
-27. **FRED's 400 responses are disambiguated by the `error_message` text, not the status code alone** (`"api_key"` → `NotConfigured`; `"series_id"` → `NoData`; otherwise `Unavailable`), confirmed live: a bad key and an unknown series both answer HTTP 400, with only the message text naming which variable is wrong.
-28. **An empty observation range after filtering FRED's `"."` missing-value marker raises `NoData`, not an empty list.** A FRED series/window genuinely has nothing else to page through (unlike `item_202_filings`' "more exists in `filings.files`" case), so an empty vintage-pinned window is the provider's complete and final answer.
-29. **`release_dates` does not vintage-pin `realtime_start`/`realtime_end`**; `as_of` is a plain filter (`d <= as_of`) over the dates FRED returns. The vintage-pinning rule is about *data* revisions; a release *date* either is or isn't known yet, and the plain filter avoids relying on an unconfirmed assumption about how `release/dates`'s own realtime parameters behave.
+38. **Both `realtime_start` and `realtime_end` are pinned to `as_of`, not left at FRED's own "today" default.** Live-confirmed real revisions: CPIAUCSL's 2019-06-01 observation read 255.305 at its first realtime window (2019-07-20) and 255.213 by a 2024-03-01 vintage; a backtest dated before a revision must see the value as first published, never the later number.
+39. **FRED's 400 responses are disambiguated by the `error_message` text, not the status code alone** (`"api_key"` → `NotConfigured`; `"series_id"` → `NoData`; otherwise `Unavailable`), confirmed live: a bad key and an unknown series both answer HTTP 400, with only the message text naming which variable is wrong.
+40. **An empty observation range after filtering FRED's `"."` missing-value marker raises `NoData`, not an empty list.** A FRED series/window genuinely has nothing else to page through (unlike `item_202_filings`' "more exists in `filings.files`" case), so an empty vintage-pinned window is the provider's complete and final answer.
+41. **`release_dates` does not vintage-pin `realtime_start`/`realtime_end`**; `as_of` is a plain filter (`d <= as_of`) over the dates FRED returns. The vintage-pinning rule is about *data* revisions; a release *date* either is or isn't known yet, and the plain filter avoids relying on an unconfirmed assumption about how `release/dates`'s own realtime parameters behave.
 
-**`finnhub.py`, `alphavantage.py`, `eulerpool.py` (2a.5):**
+**`providers/finnhub.py`, `providers/alphavantage.py`, `providers/eulerpool.py` (2a.4, 2a.5):**
 
-30. **Finnhub's `stock/recommendation` (buy/hold/sell trend counts) is free** — confirmed live, correcting the earlier research notes that had marked it unverified/absent. This is what makes `AnalystTargets`' per-field Finnhub fallback worth having at all: without it, a Finnhub fallback would have nothing to offer `AnalystTargets`, not just a partial record.
-31. **`QuotaExceeded(Unavailable)` lives in `alphavantage.py`, not in the shared `errors.py`.** Alpha Vantage signals a bad/demo key, a premium-gated endpoint, *and* its rate limit (daily cap or per-second burst — the wording is identical for both, confirmed live by firing three near-simultaneous calls) all as HTTP 200 with an `"Information"` note; distinguishing "try a different provider, maybe retry later" from "this key/endpoint will never work" needs its own subclass, kept local to the one client that needs it.
-32. **Eulerpool's real API was found via `https://eulerpool.com/llms-full.txt`, not its marketing/docs site**, which returns HTTP 403 to any non-browser `GET` (a Cloudflare bot gate, the same shape as Stooq's). The actual API host (`api.eulerpool.com`) is not behind that gate; no scraping was needed.
-33. **`eulerpool.py` uses `/research/recommendations/{ticker}` for `AnalystTargets`, not also `/equity/price-target-consensus/{id}`.** Live-checked: `recommendations` already returns buy/hold/sell counts *and* mean/median/high/low targets in one response; the other endpoint duplicates only the target fields with no new information.
-
-**`consensus.py` (2a.6):**
-
-34. **`_merge_by_period` joins Eulerpool's calendar and surprise rows by date proximity, not by equal dates — they carry different dates for the same event.** The calendar's `date` is the report's filing date; the surprise's `date` is the fiscal period it reports on (the period end), confirmed live for AAPL (period end 2026-06-30 reported 2026-07-30, a 30-day gap): treating them as the same key, as an earlier pass did, produced duplicate rows and mislabeled a period end as a report date. The fix: `EarningsResult.period_end` becomes `date | None`; each surprise row joins the first calendar row (in list order) whose `report_date` falls in `(period_end, period_end + 90 days]` — long enough that a period always finds its own report (filed within weeks), short enough that it never reaches the next quarter's report (filed 110+ days after the prior period's end); a calendar row joins at most one surprise. A merged row takes `period_end`/`fiscal_year`/`fiscal_quarter` from the surprise and `report_date` from the calendar, with `eps_estimate`/`eps_actual`/`surprise`/`surprise_percent` from the surprise when present, else the calendar. An unmatched surprise keeps `report_date=None`; an unmatched calendar row (older history, or the upcoming undated-actual entry) keeps `period_end=None`. Sorting and every other `period_end` use now tolerate `None` (`r.period_end or r.report_date`, since every row has at least one). Pinned by `test_fixture_calendar_and_surprises_merge_into_one_row_per_period_with_both_dates_right` (real re-recorded AAPL data), `test_an_unmatched_surprise_has_no_report_date`, `test_an_unmatched_calendar_row_has_no_period_end`, and `test_the_90_day_join_window_boundary` (exactly 90 days matches, 91 does not).
+42. **Finnhub's `stock/recommendation` (buy/hold/sell trend counts) is free** — confirmed live, correcting the earlier research notes that had marked it unverified/absent. This is what makes `AnalystTargets`' per-field Finnhub fallback worth having at all: without it, a Finnhub fallback would have nothing to offer `AnalystTargets`, not just a partial record. Its target prices are left `None` (Finnhub's free plan has no price-target endpoint, confirmed live), which is why `DEFAULT_CHAINS["targets"]` lists it after Eulerpool rather than merging the two (02j §6: "out of scope: merging fields across providers").
+43. **`QuotaExceeded(Unavailable)` lives in `alphavantage.py`, not in the shared `errors.py`.** Alpha Vantage signals a bad/demo key, a premium-gated endpoint, *and* its rate limit (daily cap or per-second burst — the wording is identical for both, confirmed live by firing three near-simultaneous calls) all as HTTP 200 with an `"Information"` note; distinguishing "try a different provider, maybe retry later" from "this key/endpoint will never work" needs its own subclass, kept local to the one client that needs it.
+44. **Eulerpool's real API was found via `https://eulerpool.com/llms-full.txt`, not its marketing/docs site**, which returns HTTP 403 to any non-browser `GET` (a Cloudflare bot gate, the same shape as Stooq's). The actual API host (`api.eulerpool.com`) is not behind that gate; no scraping was needed.
+45. **`eulerpool.py` uses `/research/recommendations/{ticker}` for `AnalystTargets`, not also `/equity/price-target-consensus/{id}`.** Live-checked: `recommendations` already returns buy/hold/sell counts *and* mean/median/high/low targets in one response; the other endpoint duplicates only the target fields with no new information.
+46. **`_merge_by_period` (in `providers/eulerpool.py`) joins Eulerpool's calendar and surprise rows by date proximity, not by equal dates — they carry different dates for the same event.** The calendar's `date` is the report's filing date; the surprise's `date` is the fiscal period it reports on (the period end), confirmed live for AAPL (period end 2026-06-30 reported 2026-07-30, a 30-day gap): treating them as the same key, as an earlier pass did, produced duplicate rows and mislabeled a period end as a report date. The fix: `EarningsResult.period_end` is `date | None`; each surprise row joins the first calendar row (in list order) whose `report_date` falls in `(period_end, period_end + 90 days]` — long enough that a period always finds its own report (filed within weeks), short enough that it never reaches the next quarter's report (filed 110+ days after the prior period's end); a calendar row joins at most one surprise. A merged row takes `period_end`/`fiscal_year`/`fiscal_quarter` from the surprise and `report_date` from the calendar, with `eps_estimate`/`eps_actual`/`surprise`/`surprise_percent` from the surprise when present, else the calendar. An unmatched surprise keeps `report_date=None`; an unmatched calendar row (older history, or the upcoming undated-actual entry) keeps `period_end=None`. Sorting and every other `period_end` use tolerate `None` (`r.period_end or r.report_date`, since every row has at least one). This join is Eulerpool-internal (its own two endpoints), not cross-provider fallback — that lives in `registry.py`. Pinned by `test_fixture_calendar_and_surprises_merge_into_one_row_per_period_with_both_dates_right` (real re-recorded AAPL data), `test_an_unmatched_surprise_has_no_report_date`, `test_an_unmatched_calendar_row_has_no_period_end`, and `test_the_90_day_join_window_boundary` (exactly 90 days matches, 91 does not).
 
 **`ai_trading.data.bars` and `backfill.py` (2a.7, 2a.8):**
 
-35. **`upsert_bars` validates every row before writing any of them (whole-frame atomicity): it raises `ValueError` — and writes nothing — if any row has not closed by `now`.** Alternative: silently drop just the unclosed rows. A forming bar must never be stored at all (Review Focus 2); silently dropping rows could let a caller believe a partial write succeeded when the input was bad.
-36. **`read_bars` recomputes each row's close time against `as_of` at read time, not from write-time.** A bar can be closed and stored *now* yet still be "in the future" relative to an earlier `as_of` a backtest or chat tool replays against (Review Focus 6: no look-ahead). Pinned by `test_read_as_of_ignores_a_later_mutation_of_a_future_bar`: mutating an already-stored, already-closed-by-`now` bar must not change what an earlier `as_of` sees.
-37. **`missing_sessions` for an intraday timeframe treats a whole session with *any* stored bar as present**, even with gaps inside it: "quiet minutes are normal," but a session with zero bars at all is a real gap.
-38. **Contract symbols are `<product><month code><last digit of year>`** (e.g. `ESZ6` for December 2026), the shortest form `futures._extract_product`'s suffix regex accepts — matching how CME itself abbreviates a front-month symbol. Alternative: a 4-digit year (`ESZ2026`); either form parses.
-39. **Backfill's contiguous-range grouping uses the exchange calendar, not list adjacency**: `_contiguous_ranges` checks `previous_session(asset, day) == <last day in the current range>`, so a session that is already stored (sitting between two missing ones) correctly splits the fetch into two ranges instead of bridging a gap that is not actually missing-contiguous. Pinned by `TestProviderErrorMidway`.
-40. **A provider error propagates with its own type, carrying a note naming where it stopped** (`exc.add_note(...)`, stdlib Python 3.11+), rather than being wrapped in a new exception type. A caller's `except Unavailable` still works, and "where did it stop" is answered without inventing a wrapper.
-41. **`backfill` and `upsert_bars` never commit.** Matches the store's existing contract: a caller that catches a mid-backfill error and commits keeps every range written before the failure, exactly as `TestProviderErrorMidway` demonstrates.
-42. **Slot allocation grants one `SlotDecision` per symbol, not per demand.** A symbol's priority kind is its highest-priority demand's kind; ties within a kind use the earliest `since`, then the symbol — so the final order (and the cap cutoff) is `(priority, since, symbol)`, fully deterministic regardless of input order. Pinned by `test_allocation_is_deterministic_regardless_of_input_order`.
+47. **`upsert_bars` validates every row before writing any of them (whole-frame atomicity): it raises `ValueError` — and writes nothing — if any row has not closed by `now`.** Alternative: silently drop just the unclosed rows. A forming bar must never be stored at all (Review Focus 2); silently dropping rows could let a caller believe a partial write succeeded when the input was bad.
+48. **`read_bars` recomputes each row's close time against `as_of` at read time, not from write-time.** A bar can be closed and stored *now* yet still be "in the future" relative to an earlier `as_of` a backtest or chat tool replays against (Review Focus 6: no look-ahead). Pinned by `test_read_as_of_ignores_a_later_mutation_of_a_future_bar`: mutating an already-stored, already-closed-by-`now` bar must not change what an earlier `as_of` sees.
+49. **`missing_sessions` for an intraday timeframe treats a whole session with *any* stored bar as present**, even with gaps inside it: "quiet minutes are normal," but a session with zero bars at all is a real gap.
+50. **Contract symbols are `<product><month code><last digit of year>`** (e.g. `ESZ6` for December 2026), the shortest form `futures._extract_product`'s suffix regex accepts — matching how CME itself abbreviates a front-month symbol. Alternative: a 4-digit year (`ESZ2026`); either form parses.
+51. **Backfill's contiguous-range grouping uses the exchange calendar, not list adjacency**: `_contiguous_ranges` checks `previous_session(asset, day) == <last day in the current range>`, so a session that is already stored (sitting between two missing ones) correctly splits the fetch into two ranges instead of bridging a gap that is not actually missing-contiguous. Pinned by `TestProviderErrorMidway`.
+52. **A provider error propagates with its own type, carrying a note naming where it stopped** (`exc.add_note(...)`, stdlib Python 3.11+), rather than being wrapped in a new exception type. A caller's `except Unavailable` still works, and "where did it stop" is answered without inventing a wrapper.
+53. **`backfill` and `upsert_bars` never commit.** Matches the store's existing contract: a caller that catches a mid-backfill error and commits keeps every range written before the failure, exactly as `TestProviderErrorMidway` demonstrates.
+54. **Slot allocation grants one `SlotDecision` per symbol, not per demand.** A symbol's priority kind is its highest-priority demand's kind; ties within a kind use the earliest `since`, then the symbol — so the final order (and the cap cutoff) is `(priority, since, symbol)`, fully deterministic regardless of input order. Pinned by `test_allocation_is_deterministic_regardless_of_input_order`.
+55. **Finnhub's earnings results carry no report date.** `/stock/earnings` gives each result's fiscal period end (`period`) but not when it was reported; `FinnhubSource.earnings_results` sets `report_date=None` rather than reusing the period end, which would date the result weeks too early and break no-look-ahead (plan review, 2026-10-11). Alpha Vantage's `EARNINGS` does carry a real `reportedDate` and keeps it. (2a.4)
+56. **The conformance test checks call shapes, not just method names.** A runtime-checkable Protocol's `isinstance` passes an adapter whose method merely exists (for example `consensus(self, symbol)` without `now`); `test_conformance.py` also binds every Protocol method's full parameter list onto the adapter's method with `inspect.signature(...).bind`, so a wrong signature fails in CI instead of at the first real call (plan review, 2026-10-11). (2a.6)
 
 ## Review Focus
 
 1. **A forming bar must never be stored, and a stored bar must never be served to an earlier `as_of` than it actually closed at.** Pinned by `test_upsert_raises_on_a_bar_not_yet_closed` and `test_read_as_of_ignores_a_later_mutation_of_a_future_bar` (Task 2a.8).
 2. **An outage must never look like "no data", and "no data" must never look like an outage — across every provider, not just one.** Pinned by each client's own `NotConfigured`/`Unavailable`/`SoftBanned` vs. `NoData` tests (Tasks 2a.2–2a.6) and `first_success`'s own precedence tests (`test_a_transient_failure_is_reported_over_a_later_no_data`, Task 2a.1).
-3. **A secret (an API key, the SEC `User-Agent`) must never leak into an exception message, a recorded fixture, or a log line.** Pinned by `test_unavailable_never_carries_the_failing_url_or_its_query_key` (Task 2a.1) and every `scripts/record.py` recorder's own `_strip_secrets` call (Tasks 2a.2–2a.6).
+3. **A secret (an API key, the SEC `User-Agent`) must never leak into an exception message, a recorded fixture, or a log line.** Pinned by `test_unavailable_never_carries_the_failing_url_or_its_query_key` (Task 2a.1) and every `scripts/record.py` recorder's own `_strip_secrets` call (Tasks 2a.2–2a.5).
 4. **The futures roll must never show a fake price gap between contracts, and must raise rather than guess when two contracts share no bar near the roll.** Pinned by `test_continuous_back_adjusts_by_the_difference_at_each_roll` and `test_continuous_raises_when_contracts_share_no_bar_near_the_roll` (Task 2a.8).
 5. **A mid-backfill provider failure must leave every range already written intact, and must say where it stopped — never a silent partial state and never a wrapped, untyped exception.** Pinned by `TestProviderErrorMidway` (Task 2a.8).
 6. **An intraday bar edge (a half day's early close, a DST change, a post-market bar after the regular close) must never be mis-closed in either direction** — serving a forming bar as final, or withholding an already-closed one. Pinned by `test_1h_post_close_extended_hours_bar_still_needs_its_own_60_minutes`, `test_1h_caps_the_last_bin_at_the_session_close`, and the DST-change fixture tests (Tasks 2a.1–2a.2).
@@ -122,17 +144,18 @@ These modules are complete and tested in isolation; the phases that actually sch
 **Phase 3 (runtime and alerts):**
 - Schedules `ai_trading.data.bars.prune_1m` and `ai_trading.data.rolls.store_roll_windows` on a job cadence — this phase only ships them as callable functions, nothing calls them yet.
 - Adds Alpaca snapshots for the 15-minute swing/long-term list refresh (ruling D9), and brings up `desk-postgres` in the deploy compose file, with the role/schema init this phase deliberately deferred (ruling D4).
-- Starts the daily consensus-EPS snapshot job (`consensus_snapshots`/`earnings_results`/`analyst_targets`, run once per symbol after 16:30 ET per 02f §4) — `ai-trading-common`'s `consensus.py` only computes a snapshot when called; nothing stores one yet, so revision history (7/30/90-day) only starts accruing once this job exists.
+- Builds `DataSources.from_env()` once at process startup and passes the needed source into each job (`ai_trading.data.backfill` already takes a `BarsSource`, not a vendor client) — starts the daily consensus-EPS snapshot job (`consensus_snapshots`/`earnings_results`/`analyst_targets`, run once per symbol after 16:30 ET per 02f §4) through `sources.consensus`/`sources.earnings`/`sources.targets`; nothing stores a snapshot yet, so revision history (7/30/90-day) only starts accruing once this job exists.
 
 **Phase 5 (long-term, covered calls, Desk AI):**
-- Gets the us-gaap concept list `ai_trading.core.valuation` needs, and maps it onto `SecEdgar.company_facts(concepts=...)` — this phase's client is shaped to serve that call but builds no valuation-input mapping itself (`NetIncomeLoss`, a depreciation/amortization tag, `PaymentsToAcquirePropertyPlantAndEquipment`, `NetCashProvidedByUsedInOperatingActivities`, `Assets`/`AssetsCurrent`, `Liabilities`/`LiabilitiesCurrent`, `CashAndCashEquivalentsAtCarryingValue`, a debt tag, and `StockholdersEquity`).
-- Gets ex-dividend dates, from either Eulerpool's `/equity/dividend-quality/{identifier}` `lastExDate` field (confirmed free and live, AAPL: `"lastExDate":"2026-08-10"` — but only the *most recent* ex-date, not a history) or IBKR's dividends tick (2b). `/equity/dividends/{identifier}`'s `period` field has a full per-payment history but its exact meaning (declaration vs. record vs. ex-date) was not resolved from a single live check; confirming it against a known dividend calendar is this phase's job if full ex-dividend history is wanted, not 2a's.
+- Gets the us-gaap concept list `ai_trading.core.valuation` needs, and maps it onto `sources.fundamentals.facts(concepts=...)` — this phase's client is shaped to serve that call but builds no valuation-input mapping itself (`NetIncomeLoss`, a depreciation/amortization tag, `PaymentsToAcquirePropertyPlantAndEquipment`, `NetCashProvidedByUsedInOperatingActivities`, `Assets`/`AssetsCurrent`, `Liabilities`/`LiabilitiesCurrent`, `CashAndCashEquivalentsAtCarryingValue`, a debt tag, and `StockholdersEquity`).
+- Gets ex-dividend dates, from either Eulerpool's `/equity/dividend-quality/{identifier}` `lastExDate` field (confirmed free and live, AAPL: `"lastExDate":"2026-08-10"` — but only the *most recent* ex-date, not a history) or IBKR's dividends tick (2b). `/equity/dividends/{identifier}`'s `period` field has a full per-payment history but its exact meaning (declaration vs. record vs. ex-date) was not resolved from a single live check; confirming it against a known dividend calendar is this phase's job if full ex-dividend history is wanted, not 2a's. If a new free provider is added for this, it follows 02j §8's checklist (an adapter, a `REGISTRY` line, Firestore config) with no caller change.
 
 **2b (the IBKR client):**
+- Adds `providers/ibkr.py` with `PROVIDER` serving `bars`, and changes `DEFAULT_CHAINS["bars"]` (or `DATA_PROVIDERS_BARS` in Firestore) to put it first — no change to `ai_trading.data.backfill`, which already takes the `BarsSource` Protocol, not a vendor class.
 - Can backfill daily history before 2016-01-01 if the owner wants it (ruling D8); no new provider is added for this in 2a.
 
-**Everywhere a future bars fallback chain is added:**
-- `first_success[T]`'s generic signature drops the automatic `Bars`-specific relabeling `fallback.with_fallback` used to do; any future bars fallback chain (e.g. a second intraday provider) needs its own one-line `dataclasses.replace(bars, quality="fallback")`, the same pattern `consensus.py` already uses three times.
+**Everywhere a future provider is added for an existing kind:**
+- Follow 02j §8's checklist: an adapter module under `providers/`, one `REGISTRY` line, Firestore config pointing a `DATA_PROVIDERS_<KIND>` chain at it, redeploy. No caller code changes, because every caller only ever sees a `DataSources` built from `registry.py`.
 - `backend/tests/fixtures/alpaca/daily_range_aapl.json` duplicates `common/tests/fixtures/alpaca/daily_range_aapl.json` by necessity (`ai_trading_common`'s own `tests/` directory is not part of the installed package, so the Desk's `backfill` tests need their own copy of the fixture body and their own `FakeResponse`/`FakeSession`/`make_client` doubles, which live in `ai_trading_common.testing` and are imported directly rather than duplicated as Python — only the JSON fixture itself is duplicated).
 
 ## Parallel execution lanes
@@ -142,23 +165,26 @@ Four lanes, usable as separate subagent/worktree tasks once their dependency is 
 | Lane | Tasks | Depends on | Appends to |
 |---|---|---|---|
 | **Common core** | 2a.1 | nothing | — |
-| **Common providers** | 2a.2 → 2a.3 → 2a.4 → 2a.5 → 2a.6, in order | 2a.1 | `scripts/record.py` (each task inserts its own recorder function and extends `_RECORDERS`, always anchored on the current `_RECORDERS` block), `THIRD_PARTY_NOTICES.md` (each task anchors its own row/section insertion), `.github/workflows/ai-trading-ci.yml`'s uv cache glob (2a.1 only) |
-| **Desk database** | 2a.7 | nothing (can start from the start, in parallel with 2a.1–2a.6) | `.github/workflows/ai-trading-ci.yml`'s `desk` job (the `postgres:17` service and the Backend step's env, independent of the Common-core step 2a.1 adds) |
-| **Desk data layer** | 2a.8 | 2a.2 (Alpaca client) and 2a.7 (db models) | — |
+| **Common providers** | 2a.2 → 2a.3 → 2a.4 → 2a.5 → 2a.6, in order | 2a.1 | `registry.py`'s sorted `REGISTRY`/`DEFAULT_CHAINS` dicts and its `from ai_trading_common.providers import (...)` block (each task inserts its own alphabetically-sorted lines), `scripts/record.py` (each task inserts its own recorder function and extends `_RECORDERS`, always anchored on the current `_RECORDERS` block), `THIRD_PARTY_NOTICES.md` (each task anchors its own row/section insertion), `.github/workflows/ai-trading-ci.yml`'s uv cache glob (2a.1 only) |
+| **Desk database** | 2a.7 | 2a.1 (its `[tool.uv.sources]` path dependency on `ai-trading-common` cannot lock until `common/pyproject.toml` exists); then in parallel with 2a.2–2a.6 | `.github/workflows/ai-trading-ci.yml`'s `desk` job (the `postgres:17` service and the Backend step's env, independent of the Common-core step 2a.1 adds) |
+| **Desk data layer** | 2a.8 | 2a.2 (Alpaca provider), 2a.6 (the real registry wired up with every kind's default chain), and 2a.7 (db models) | — |
 
-2a.2–2a.6 cannot parallelize *inside* the Common-providers lane: each task's `scripts/record.py` edit is anchored on the previous task's `_RECORDERS` dict, so they must land in order. 2a.3, 2a.4, and 2a.5 are otherwise independent of each other's *client* code (SEC/FRED/consensus-EPS providers share no state) — a team with more throttle budget to spend on separate owner-approved fixture-recording sessions could write their client+test content in parallel and resolve the `scripts/record.py`/`THIRD_PARTY_NOTICES.md` merge by hand at the end, but this plan assumes the simpler in-order path. 2a.7 has no dependency on common at all (the Desk's own models/migrations need no provider client) and can run fully in parallel with the whole Common-providers lane. 2a.8 is the one task that needs both lanes finished: it imports `ai_trading_common.alpaca` (2a.2) into a module built on `ai_trading.db.models` (2a.7).
+2a.2–2a.6 cannot parallelize *inside* the Common-providers lane: each task's `REGISTRY`/`DEFAULT_CHAINS`/`scripts/record.py` edits are anchored on the previous task's state, so they must land in order. 2a.3's two clients (SEC EDGAR, FRED) and 2a.4's two clients (Finnhub, Alpha Vantage) are each otherwise independent of the other's *client* code (no shared state) — a team with more throttle budget to spend on separate owner-approved fixture-recording sessions could write their content in parallel and resolve the shared-file merges by hand, but this plan assumes the simpler in-order path. 2a.7 has no dependency on common at all (the Desk's own models/migrations need no provider client) and can run fully in parallel with the whole Common-providers lane.
 
-Per-task test-count deltas (common baseline 0; backend baseline 525, the count before this phase, with every Phase 1/1b/1c/1d test passing and no DB test existing yet) are given in each task's own Step. Every count was re-run against the finished prototype (`ai-trading/temp/p2a-proto/final/`) to confirm it: common's full suite is 150 passed in 0.4s; the backend's full suite is 556 passed with a real Postgres (`scripts/test-db.sh`) in about 19s, or 541 passed + 15 skipped without one (`DESK_TEST_DATABASE_URL` unset); both suites are ruff-clean (`ruff check .` and `ruff format --check .`).
+2a.8 is the one task that needs every provider task merged, not just Alpaca: its end-to-end test builds `DataSources.from_env()` with the real `REGISTRY`, and `from_env` requires *every* kind to have a non-empty default chain (2a.1's `REGISTRY`/`DEFAULT_CHAINS` start empty — `from_env` would raise `ValueError` for every kind until all six providers' lines exist). 2a.8 also needs 2a.7's db models for its own bar store and backfill glue. Its `backfill.py` imports only `ai_trading_common.sources`/`errors` (2a.1), not any one provider's module — the registry, not the provider, is 2a.8's real common-side dependency.
+
+Per-task test-count deltas (common baseline 0; backend baseline 525, the count before this phase, with every Phase 1/1b/1c/1d test passing and no DB test existing yet) are given in each task's own Step. Every count was re-run against the finished, 02j-restructured prototype (`ai-trading/temp/p2a-proto/final/`) to confirm it: common's full suite is 177 passed in about 9s; the backend's full suite is 557 passed with a real Postgres (`scripts/test-db.sh`) in about 34s, or 542 passed + 15 skipped without one (`DESK_TEST_DATABASE_URL` unset); both suites are ruff-clean (`ruff check .` and `ruff format --check .`).
 
 All paths below are relative to `ai-trading/` unless they start with a repository-root path. Commands run in the directory a step names.
 
 ---
 
-### Task 2a.1: Common core — errors, quality, HTTP, bars, fallback, testing doubles
+### Task 2a.1: Common core — errors, quality, HTTP, bars, fallback, testing doubles, and the empty provider registry
 
 **Files:**
 - Create: `common/pyproject.toml`, `common/src/ai_trading_common/__init__.py`, `common/src/ai_trading_common/errors.py`, `common/src/ai_trading_common/quality.py`, `common/src/ai_trading_common/http.py`, `common/src/ai_trading_common/bars.py`, `common/src/ai_trading_common/fallback.py`, `common/src/ai_trading_common/testing.py`
-- Create: `common/tests/test_errors.py`, `common/tests/test_bars.py`, `common/tests/test_http.py`, `common/tests/test_fallback.py`
+- Create: `common/src/ai_trading_common/_provider.py`, `common/src/ai_trading_common/types.py`, `common/src/ai_trading_common/sources.py`, `common/src/ai_trading_common/registry.py`, `common/src/ai_trading_common/providers/__init__.py`
+- Create: `common/tests/test_errors.py`, `common/tests/test_bars.py`, `common/tests/test_http.py`, `common/tests/test_fallback.py`, `common/tests/test_types.py`, `common/tests/test_registry.py`
 - Create: `common/THIRD_PARTY_NOTICES.md`
 - Modify: `.github/workflows/ai-trading-ci.yml`
 
@@ -171,6 +197,9 @@ All paths below are relative to `ai-trading/` unless they start with a repositor
   - `ai_trading_common.bars.{Bars, Timeframe, BarValidationError, COLUMNS, to_utc, validate, drop_unclosed, is_stale}`
   - `ai_trading_common.fallback.first_success[T](calls: Sequence[Callable[[], T]]) -> tuple[T, bool]`
   - `ai_trading_common.testing.{FakeClock, FakeResponse, FakeSession, make_client}`
+  - `ai_trading_common.types.{Span, Timing, Fact, EarningsAnnouncement, Observation, NewsItem, EarningsEvent, ConsensusSnapshot, EarningsResult, AnalystTargets, facts_as_of, announcements_as_of, news_as_of}`
+  - `ai_trading_common.sources.{BarsSource, FundamentalsSource, EarningsAnnouncementsSource, MacroSource, NewsSource, EarningsCalendarSource, ConsensusSource, EarningsSource, TargetsSource}` (`@runtime_checkable` Protocols)
+  - `ai_trading_common.registry.{Kind, Provider, REGISTRY, DEFAULT_CHAINS, KIND_PROTOCOLS, DataSources}`, with `REGISTRY = {}` and `DEFAULT_CHAINS = {}` (every provider task below adds its own lines) and `DataSources.from_env(env=os.environ, *, http=None, registry=REGISTRY, defaults=DEFAULT_CHAINS) -> DataSources`
 
 - [ ] **Step 1: Create the package skeleton.**
 
@@ -214,7 +243,11 @@ testpaths = ["tests"]
 `common/src/ai_trading_common/__init__.py`:
 
 ```python
-"""Shared provider errors, quality labels, throttled HTTP, and bar hygiene for ai-trading."""
+"""Shared data providers for ai-trading, behind one registry (02j).
+
+Callers use `ai_trading_common.registry.DataSources` (and `types`, `sources`, `bars`, `errors`,
+`quality`); `providers/*` is an internal implementation detail, never imported directly.
+"""
 ```
 
 - [ ] **Step 2: Write the failing tests for `errors.py`.** `common/tests/test_errors.py`:
@@ -1147,12 +1180,888 @@ def first_success[T](calls: Sequence[Callable[[], T]]) -> tuple[T, bool]:
     raise first_no_data
 ```
 
-- [ ] **Step 18: Run everything and lint.**
+- [ ] **Step 18: Write the failing tests for `types.py`.** `common/tests/test_types.py`:
+
+```python
+"""The as-of selectors (02j §4): `facts_as_of`, `announcements_as_of`, `news_as_of`.
+
+Pure functions on `types.py` objects -- no network, no provider fixture needed. Each provider's
+own parsing into these types is covered by its own `tests/providers/test_<name>.py`.
+"""
+
+from datetime import date
+
+import pandas as pd
+
+from ai_trading_common.types import EarningsAnnouncement, Fact, NewsItem, announcements_as_of, facts_as_of, news_as_of
+
+
+def _fact(period_end, filed, value=1.0, concept="Assets", unit="USD", span="instant", reference="a") -> Fact:
+    return Fact(
+        concept=concept,
+        unit=unit,
+        value=value,
+        period_start=None,
+        period_end=period_end,
+        span=span,
+        fiscal_year=None,
+        fiscal_period=None,
+        form="10-K",
+        filed=filed,
+        reference=reference,
+        provider="sec_edgar",
+        quality="eod",
+    )
+
+
+class TestFactsAsOf:
+    def test_a_fact_filed_after_as_of_is_unknown(self):
+        facts = [_fact(date(2020, 1, 1), date(2020, 2, 1))]
+        assert facts_as_of(facts, date(2020, 1, 15)) == []
+
+    def test_a_later_amendment_wins_only_from_its_own_filed_date(self):
+        end, concept, span = date(2007, 9, 29), "NetIncomeLoss", "annual"
+        original = _fact(end, date(2009, 10, 27), value=3496.0, concept=concept, span=span, reference="orig")
+        amendment = _fact(end, date(2010, 1, 25), value=3495.0, concept=concept, span=span, reference="amend")
+        facts = [original, amendment]
+        assert [f.value for f in facts_as_of(facts, date(2009, 12, 1))] == [3496.0]
+        assert [f.value for f in facts_as_of(facts, date(2010, 2, 1))] == [3495.0]
+
+    def test_different_spans_of_the_same_period_end_are_kept_separately(self):
+        end = date(2020, 3, 31)
+        quarterly = _fact(end, date(2020, 4, 1), value=10.0, concept="Revenues", span="quarterly")
+        annual = _fact(end, date(2020, 5, 1), value=40.0, concept="Revenues", span="annual", reference="b")
+        assert len(facts_as_of([quarterly, annual], date(2020, 6, 1))) == 2
+
+
+class TestAnnouncementsAsOf:
+    def test_only_announcements_known_by_as_of_are_kept_and_sorted(self):
+        announcements = [
+            EarningsAnnouncement(
+                symbol="AAPL", announced_on=date(2024, 3, 1), reference="later", provider="sec_edgar", quality="eod"
+            ),
+            EarningsAnnouncement(
+                symbol="AAPL", announced_on=date(2024, 1, 1), reference="earlier", provider="sec_edgar", quality="eod"
+            ),
+        ]
+        got = announcements_as_of(announcements, date(2024, 2, 1))
+        assert [a.reference for a in got] == ["earlier"]
+
+
+class TestNewsAsOf:
+    def test_drops_anything_published_after_the_cutoff(self):
+        early = NewsItem(
+            symbol="AAPL",
+            headline="early",
+            publisher="x",
+            url="",
+            published_at=pd.Timestamp("2026-01-01T00:00:00Z"),
+            provider="finnhub",
+            quality="eod",
+        )
+        late = NewsItem(
+            symbol="AAPL",
+            headline="late",
+            publisher="x",
+            url="",
+            published_at=pd.Timestamp("2026-01-02T00:00:00Z"),
+            provider="finnhub",
+            quality="eod",
+        )
+        got = news_as_of([early, late], pd.Timestamp("2026-01-01T12:00:00Z"))
+        assert got == [early]
+```
+
+- [ ] **Step 19: Run it and watch it fail.**
+
+Run (in `common/`): `uv run pytest -q tests/test_types.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.types'`.
+
+- [ ] **Step 20: Implement `types.py`.**
+
+```python
+"""Vendor-neutral result types and their as-of selectors (02j §4).
+
+Every result record carries `provider: str` and `quality: Quality`, so a registry chain
+(`registry.py`) can label a fallback result without knowing the vendor's own shape. The one
+exception is `Bars`, which stays in `bars.py` with its existing `source` field holding the
+provider name.
+
+No module here imports a vendor module (`providers/*`): a provider's own client maps its
+records into these types inside its adapter, never the other way around.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Literal
+
+import pandas as pd
+
+from ai_trading_common.quality import Quality
+
+Span = Literal["instant", "quarterly", "ytd_6m", "ytd_9m", "annual"]
+Timing = Literal["before_open", "after_close", "unknown"]
+
+
+@dataclass(frozen=True)
+class Fact:
+    """One fundamentals fact (e.g. SEC CompanyFacts) as the provider reported it: a value, its
+    span, and when it was filed. `reference` is the provider's own filing/record identifier
+    (SEC's accession number)."""
+
+    concept: str
+    unit: str
+    value: float
+    period_start: date | None  # None for an instant fact (a balance-sheet line)
+    period_end: date
+    span: Span
+    fiscal_year: int | None
+    fiscal_period: str | None  # "Q1".."Q4", "FY"
+    form: str
+    filed: date
+    reference: str
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class EarningsAnnouncement:
+    """One earnings-announcement date. For SEC, the 8-K Item 2.02 filing date (ai-hedge-fund
+    `hedge_fund/signals/pead.py`'s pattern: the 8-K, not the 10-Q, is the announcement date)."""
+
+    symbol: str
+    announced_on: date
+    reference: str
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class Observation:
+    """One macro-series observation at a pinned ALFRED vintage."""
+
+    series_id: str
+    date: date  # the observation period (a day, or a month's/quarter's first day)
+    value: float
+    realtime_start: date
+    realtime_end: date
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class NewsItem:
+    symbol: str
+    headline: str
+    publisher: str  # renamed from `source` so it isn't confused with the provider
+    url: str
+    published_at: pd.Timestamp  # UTC
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class EarningsEvent:
+    """One earnings-calendar entry. `timing` normalizes a vendor's own before/after-close code
+    (Finnhub's `bmo`/`amc`)."""
+
+    symbol: str
+    report_date: date
+    timing: Timing
+    fiscal_year: int | None
+    fiscal_quarter: int | None
+    eps_estimate: float | None
+    eps_actual: float | None
+    revenue_estimate: float | None
+    revenue_actual: float | None
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class ConsensusSnapshot:
+    """EPS estimates for one fiscal period, with the analyst count (02f §4)."""
+
+    symbol: str
+    period_end: date
+    period_kind: str  # "quarter" | "annual"
+    fiscal_year: int | None
+    fiscal_quarter: int | None
+    eps_mean: float | None
+    eps_high: float | None
+    eps_low: float | None
+    analyst_count: int | None
+    provider: str
+    quality: Quality
+    as_of: pd.Timestamp
+
+
+@dataclass(frozen=True)
+class EarningsResult:
+    """Reported-vs-estimated EPS with surprise, and the report date."""
+
+    symbol: str
+    period_end: date | None  # None for a calendar row never joined to a surprise (see providers/eulerpool.py)
+    fiscal_year: int | None
+    fiscal_quarter: int | None
+    report_date: date | None
+    report_time: str | None
+    eps_estimate: float | None
+    eps_actual: float | None
+    surprise: float | None
+    surprise_percent: float | None
+    provider: str
+    quality: Quality
+    as_of: pd.Timestamp
+
+
+@dataclass(frozen=True)
+class AnalystTargets:
+    """Rating counts and the low/mean/high price target."""
+
+    symbol: str
+    target_mean: float | None
+    target_median: float | None
+    target_high: float | None
+    target_low: float | None
+    strong_buy: int | None
+    buy: int | None
+    hold: int | None
+    sell: int | None
+    strong_sell: int | None
+    provider: str
+    quality: Quality
+    as_of: pd.Timestamp
+
+
+def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:
+    """Pure point-in-time selector: only facts filed on or before `as_of`.
+
+    A period reported more than once (an amendment) keeps only its latest filing on or before
+    `as_of` -- an amendment counts from the day it was filed, never before. Example seen live:
+    Apple's fiscal 2007 net income read $3,496M from the original 10-K (filed 2009-10-27) until
+    a 10-K/A (filed 2010-01-25) restated it to $3,495M; a run `as_of` 2009-12-01 must still see
+    $3,496M.
+    """
+    known = [f for f in facts if f.filed <= as_of]
+    latest: dict[tuple[str, str, date, Span], Fact] = {}
+    for fact in sorted(known, key=lambda f: f.filed):
+        key = (fact.concept, fact.unit, fact.period_end, fact.span)
+        latest[key] = fact  # later filings sort last and overwrite earlier ones
+    return sorted(latest.values(), key=lambda f: (f.concept, f.period_end))
+
+
+def announcements_as_of(announcements: list[EarningsAnnouncement], as_of: date) -> list[EarningsAnnouncement]:
+    """Pure selector: announcements known by `as_of` (an announcement's own date is itself)."""
+    return sorted((a for a in announcements if a.announced_on <= as_of), key=lambda a: a.announced_on)
+
+
+def news_as_of(items: list[NewsItem], as_of: pd.Timestamp) -> list[NewsItem]:
+    """Only news published at or before `as_of` (02h, Review Focus 6: as-of discipline).
+
+    Pattern from TradingAgents' news handling: "unavailable" (the client call itself failing)
+    is kept apart from "no news" (this returning an empty list) -- this selector only ever
+    narrows an already-fetched list.
+    """
+    return [item for item in items if item.published_at <= as_of]
+```
+
+- [ ] **Step 21: Run it and watch it pass.**
+
+Run (in `common/`): `uv run pytest -q tests/test_types.py`
+Expected: `5 passed`.
+
+- [ ] **Step 22: Implement `sources.py`** (no new failing test of its own: it only declares Protocols, exercised by `test_registry.py` and `test_conformance.py` below and in Task 2a.6).
+
+```python
+"""One runtime-checkable `Protocol` per data kind (02j §3).
+
+`registry.py` is the only module that builds concrete providers; this module only names the
+shape each kind's provider (or chain) must have, so `registry.py`'s conformance test can check
+`isinstance(adapter, SomeSource)` and a caller can type-hint against the Protocol instead of a
+vendor class. No vendor module is imported here.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Protocol, runtime_checkable
+
+import pandas as pd
+
+from ai_trading_common.bars import Bars, Timeframe
+from ai_trading_common.types import (
+    AnalystTargets,
+    ConsensusSnapshot,
+    EarningsAnnouncement,
+    EarningsEvent,
+    EarningsResult,
+    Fact,
+    NewsItem,
+    Observation,
+)
+
+
+@runtime_checkable
+class BarsSource(Protocol):
+    def bars(
+        self, symbol: str, timeframe: Timeframe, start: pd.Timestamp, end: pd.Timestamp, *, now: pd.Timestamp
+    ) -> Bars: ...
+
+
+@runtime_checkable
+class FundamentalsSource(Protocol):
+    def facts(self, symbol: str, *, as_of: date, concepts: tuple[str, ...] | None = None) -> list[Fact]: ...
+
+
+@runtime_checkable
+class EarningsAnnouncementsSource(Protocol):
+    def announcements(self, symbol: str, *, since: date) -> list[EarningsAnnouncement]: ...
+
+
+@runtime_checkable
+class MacroSource(Protocol):
+    def observations(self, series_id: str, start: date, end: date, *, as_of: date) -> list[Observation]: ...
+
+    def release_dates(self, series_id: str, *, as_of: date | None = None) -> list[date]: ...
+
+
+@runtime_checkable
+class NewsSource(Protocol):
+    def news(self, symbol: str, start: date, end: date) -> list[NewsItem]: ...
+
+
+@runtime_checkable
+class EarningsCalendarSource(Protocol):
+    def earnings_calendar(self, symbol: str, start: date, end: date) -> list[EarningsEvent]: ...
+
+
+@runtime_checkable
+class ConsensusSource(Protocol):
+    def consensus(self, symbol: str, *, now: pd.Timestamp) -> list[ConsensusSnapshot]: ...
+
+
+@runtime_checkable
+class EarningsSource(Protocol):
+    def earnings_results(self, symbol: str, *, now: pd.Timestamp) -> list[EarningsResult]: ...
+
+
+@runtime_checkable
+class TargetsSource(Protocol):
+    def analyst_targets(self, symbol: str, *, now: pd.Timestamp) -> AnalystTargets: ...
+```
+
+- [ ] **Step 23: Create the (empty) `providers` package.** `common/src/ai_trading_common/providers/__init__.py` is an empty file — it only marks the package; every provider task below (2a.2–2a.5) adds one module under it.
+
+- [ ] **Step 24: Implement `_provider.py`** (the leaf module `registry.py` re-exports `Provider` from — see Decision 6 above for why it isn't defined directly in `registry.py`).
+
+```python
+"""`Provider`'s actual definition (internal).
+
+Lives in its own leaf module, with no dependency on `registry.py` or `providers/*`, so that
+`providers/<name>.py` modules can import it without a `registry.py` <-> `providers` import
+cycle regardless of which module a caller (or a test) imports first. `registry.py` re-exports
+it as `ai_trading_common.registry.Provider`, which is the name §5 fixes -- this file is not
+part of the public layout.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_trading_common.http import ThrottledClient
+
+
+@dataclass(frozen=True)
+class Provider:
+    """One vendor's registry entry. `build(env, http)` returns the vendor's adapter -- an object
+    implementing every kind in `kinds`. Called at most once per `from_env` run; the same instance
+    is shared across every kind chain it appears in (§5: "one adapter per vendor")."""
+
+    name: str
+    kinds: tuple[str, ...]
+    build: Callable[[Mapping[str, str], ThrottledClient], object]
+```
+
+- [ ] **Step 25: Write the failing tests for `registry.py`, against a synthetic fake registry (never the real six vendors — Task 2a.6 covers the real `REGISTRY`).** `common/tests/test_registry.py`:
+
+```python
+"""`DataSources.from_env` (02j §5, §9 "Registry" and "Swap").
+
+Uses a small, synthetic registry/defaults covering all nine kinds with fake adapters -- not the
+real six vendors -- so these tests pin the registry *machinery* (defaults, env override, startup
+failures, whitespace, build-once, swapping a provider) independently of any real provider's
+shape. `test_conformance.py` and `test_chains.py` cover the real `REGISTRY`.
+"""
+
+import pandas as pd
+import pytest
+
+from ai_trading_common.errors import Unavailable
+from ai_trading_common.registry import DataSources, Provider
+
+NOW = pd.Timestamp("2026-10-11T00:00:00Z")
+
+
+class FakeAdapter:
+    """Implements every Protocol method across all nine kinds with trivial canned values, so one
+    fake can serve as the provider for any kind in a test's custom `registry=`/`defaults=`."""
+
+    def __init__(self, label: str, *, raises: Exception | None = None) -> None:
+        self.label = label
+        self.raises = raises
+        self.build_count = 0
+
+    def _value(self):
+        if self.raises is not None:
+            raise self.raises
+        return self.label
+
+    def bars(self, symbol, timeframe, start, end, *, now):
+        return self._value()
+
+    def facts(self, symbol, *, as_of, concepts=None):
+        return [self._value()]
+
+    def announcements(self, symbol, *, since):
+        return [self._value()]
+
+    def observations(self, series_id, start, end, *, as_of):
+        return [self._value()]
+
+    def release_dates(self, series_id, *, as_of=None):
+        return [self._value()]
+
+    def news(self, symbol, start, end):
+        return [self._value()]
+
+    def earnings_calendar(self, symbol, start, end):
+        return [self._value()]
+
+    def consensus(self, symbol, *, now):
+        return [self._value()]
+
+    def earnings_results(self, symbol, *, now):
+        return [self._value()]
+
+    def analyst_targets(self, symbol, *, now):
+        return self._value()
+
+
+_ALL_KINDS = (
+    "bars",
+    "fundamentals",
+    "earnings_announcements",
+    "macro",
+    "news",
+    "earnings_calendar",
+    "consensus",
+    "earnings",
+    "targets",
+)
+
+
+def _provider(name: str, adapter: FakeAdapter, kinds: tuple[str, ...] = _ALL_KINDS) -> Provider:
+    def build(env, http):
+        adapter.build_count += 1
+        return adapter
+
+    return Provider(name=name, kinds=kinds, build=build)
+
+
+def _full_setup(*, extra: dict[str, Provider] | None = None) -> tuple[dict[str, Provider], dict[str, tuple[str, ...]]]:
+    """A complete registry/defaults pair covering all nine kinds with one shared fake provider
+    named "fake", so a test only has to override the one kind (or provider) it cares about."""
+    fake = FakeAdapter("fake")
+    registry = {"fake": _provider("fake", fake)}
+    if extra:
+        registry.update(extra)
+    defaults = {kind: ("fake",) for kind in _ALL_KINDS}
+    return registry, defaults
+
+
+class TestDefaults:
+    def test_an_unset_env_var_uses_the_default_chain(self):
+        registry, defaults = _full_setup()
+        sources = DataSources.from_env(env={}, registry=registry, defaults=defaults)
+        assert sources.bars.bars("AAPL", "1d", None, None, now=NOW) == "fake"
+
+
+class TestEnvOverride:
+    def test_an_env_var_reorders_a_chain(self):
+        a, b = FakeAdapter("a"), FakeAdapter("b")
+        registry, defaults = _full_setup(
+            extra={"a": _provider("a", a, kinds=("consensus",)), "b": _provider("b", b, kinds=("consensus",))}
+        )
+        defaults = {**defaults, "consensus": ("b", "a")}  # default: b primary
+
+        by_default = DataSources.from_env(env={}, registry=registry, defaults=defaults)
+        assert by_default.consensus.consensus("AAPL", now=NOW) == ["b"]
+
+        overridden = DataSources.from_env(env={"DATA_PROVIDERS_CONSENSUS": "a,b"}, registry=registry, defaults=defaults)
+        assert overridden.consensus.consensus("AAPL", now=NOW) == ["a"]
+
+
+class TestStartupFailures:
+    def test_an_empty_list_raises_value_error_naming_the_var(self):
+        registry, defaults = _full_setup()
+        with pytest.raises(ValueError, match="DATA_PROVIDERS_BARS"):
+            DataSources.from_env(env={"DATA_PROVIDERS_BARS": ""}, registry=registry, defaults=defaults)
+
+    def test_an_unknown_provider_name_raises_value_error(self):
+        registry, defaults = _full_setup()
+        with pytest.raises(ValueError, match="unknown provider 'nope'"):
+            DataSources.from_env(env={"DATA_PROVIDERS_BARS": "nope"}, registry=registry, defaults=defaults)
+
+    def test_a_provider_that_does_not_serve_the_kind_raises_value_error(self):
+        only_bars = FakeAdapter("only_bars")
+        registry, defaults = _full_setup(extra={"only_bars": _provider("only_bars", only_bars, kinds=("bars",))})
+        with pytest.raises(ValueError, match="does not serve 'macro'"):
+            DataSources.from_env(env={"DATA_PROVIDERS_MACRO": "only_bars"}, registry=registry, defaults=defaults)
+
+
+class TestWhitespace:
+    def test_surrounding_whitespace_in_a_list_is_tolerated(self):
+        a, b = FakeAdapter("a"), FakeAdapter("b")
+        registry, defaults = _full_setup(
+            extra={"a": _provider("a", a, kinds=("consensus",)), "b": _provider("b", b, kinds=("consensus",))}
+        )
+        sources = DataSources.from_env(
+            env={"DATA_PROVIDERS_CONSENSUS": " a , b "}, registry=registry, defaults=defaults
+        )
+        assert sources.consensus.consensus("AAPL", now=NOW) == ["a"]
+
+
+class TestBuildOnce:
+    def test_a_provider_used_in_two_kinds_is_built_exactly_once(self):
+        shared = FakeAdapter("shared")
+        registry, defaults = _full_setup(extra={"shared": _provider("shared", shared)})
+        defaults = {**defaults, "bars": ("shared",), "macro": ("shared",)}
+        DataSources.from_env(env={}, registry=registry, defaults=defaults)
+        assert shared.build_count == 1
+
+
+class TestSwap:
+    def test_a_fake_provider_through_registry_serves_data_with_no_caller_change(self):
+        fake = FakeAdapter("swapped-in")
+        registry, defaults = _full_setup(extra={"custom": _provider("custom", fake, kinds=("bars",))})
+        sources = DataSources.from_env(env={"DATA_PROVIDERS_BARS": "custom"}, registry=registry, defaults=defaults)
+        assert sources.bars.bars("AAPL", "1d", None, None, now=NOW) == "swapped-in"
+
+    def test_when_the_primary_raises_unavailable_the_next_providers_result_is_labeled_fallback(self):
+        from dataclasses import dataclass
+
+        from ai_trading_common.quality import Quality
+
+        @dataclass(frozen=True)
+        class Labeled:
+            value: str
+            quality: Quality
+
+        class PrimaryFails:
+            def bars(self, symbol, timeframe, start, end, *, now):
+                raise Unavailable("primary", "down")
+
+        class SecondarySucceeds:
+            def bars(self, symbol, timeframe, start, end, *, now):
+                return Labeled("secondary", "eod")
+
+        registry, defaults = _full_setup(
+            extra={
+                "primary": Provider(name="primary", kinds=("bars",), build=lambda env, http: PrimaryFails()),
+                "secondary": Provider(name="secondary", kinds=("bars",), build=lambda env, http: SecondarySucceeds()),
+            }
+        )
+        sources = DataSources.from_env(
+            env={"DATA_PROVIDERS_BARS": "primary,secondary"}, registry=registry, defaults=defaults
+        )
+        got = sources.bars.bars("AAPL", "1d", None, None, now=NOW)
+        assert got.value == "secondary"
+        assert got.quality == "fallback"
+```
+
+- [ ] **Step 26: Run it and watch it fail.**
+
+Run (in `common/`): `uv run pytest -q tests/test_registry.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.registry'`.
+
+- [ ] **Step 27: Implement `registry.py`, with `REGISTRY` and `DEFAULT_CHAINS` both empty** — every provider task below (2a.2–2a.5) adds its own lines.
+
+```python
+"""Provider registry, default chains, and `DataSources.from_env()` (02j §5-6).
+
+Adding a provider for a kind is one new line in `REGISTRY` (and, to make it the default,
+`DEFAULT_CHAINS`); no caller code changes, because every caller only ever sees a `DataSources`
+built from this module, typed to the `sources.py` Protocols.
+
+**Import note:** `Provider`'s actual definition lives in `_provider.py`, a leaf module with no
+dependency on this module or on `providers/*`, and is re-exported here as
+`ai_trading_common.registry.Provider` (the name §5 fixes). This avoids a `registry.py` <->
+`providers/*.py` import cycle: each `providers/<name>.py` module imports `Provider` from
+`_provider` directly, never from `registry.py`, so importing a provider module on its own (as
+its own tests do) never needs this module to exist yet.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from typing import Literal
+
+from ai_trading_common._provider import Provider
+from ai_trading_common.fallback import first_success
+from ai_trading_common.http import ThrottledClient
+from ai_trading_common.sources import (
+    BarsSource,
+    ConsensusSource,
+    EarningsAnnouncementsSource,
+    EarningsCalendarSource,
+    EarningsSource,
+    FundamentalsSource,
+    MacroSource,
+    NewsSource,
+    TargetsSource,
+)
+
+__all__ = ("Kind", "Provider", "REGISTRY", "DEFAULT_CHAINS", "DataSources", "KIND_PROTOCOLS")
+
+Kind = Literal[
+    "bars",
+    "fundamentals",
+    "earnings_announcements",
+    "macro",
+    "news",
+    "earnings_calendar",
+    "consensus",
+    "earnings",
+    "targets",
+]
+
+#: Every kind, in `DataSources`' own field order. Fixed, not derived from `DEFAULT_CHAINS`, so
+#: `DataSources` is always built with all nine fields regardless of how small a custom
+#: `registry=`/`defaults=` override is (a test overriding one kind still needs the rest).
+_KINDS: tuple[Kind, ...] = (
+    "bars",
+    "fundamentals",
+    "earnings_announcements",
+    "macro",
+    "news",
+    "earnings_calendar",
+    "consensus",
+    "earnings",
+    "targets",
+)
+
+
+def _relabel(result: object) -> object:
+    """A non-primary chain result, relabeled `quality="fallback"` (02j §6).
+
+    `Bars` and every `types.py` record carry a `quality` field and support `dataclasses.replace`
+    (all frozen dataclasses); a plain value (e.g. `release_dates`' `list[date]`) has no `quality`
+    attribute and is returned unchanged, per the spec ("Plain values ... are returned unchanged").
+    """
+    if isinstance(result, list):
+        return [replace(item, quality="fallback") if hasattr(item, "quality") else item for item in result]
+    if hasattr(result, "quality"):
+        return replace(result, quality="fallback")
+    return result
+
+
+def _chain_call(providers: Sequence[object], method: str, *args: object, **kwargs: object) -> object:
+    """Try `method` on each provider in order via `fallback.first_success`; relabel a non-primary
+    result. Shared by every kind's chain class below so the fallback precedence lives in exactly
+    one place."""
+    calls = [(lambda provider=provider: getattr(provider, method)(*args, **kwargs)) for provider in providers]
+    result, is_primary = first_success(calls)
+    return result if is_primary else _relabel(result)
+
+
+@dataclass(frozen=True)
+class _BarsChain:
+    providers: tuple[BarsSource, ...]
+
+    def bars(self, symbol, timeframe, start, end, *, now):
+        return _chain_call(self.providers, "bars", symbol, timeframe, start, end, now=now)
+
+
+@dataclass(frozen=True)
+class _FundamentalsChain:
+    providers: tuple[FundamentalsSource, ...]
+
+    def facts(self, symbol, *, as_of, concepts=None):
+        return _chain_call(self.providers, "facts", symbol, as_of=as_of, concepts=concepts)
+
+
+@dataclass(frozen=True)
+class _EarningsAnnouncementsChain:
+    providers: tuple[EarningsAnnouncementsSource, ...]
+
+    def announcements(self, symbol, *, since):
+        return _chain_call(self.providers, "announcements", symbol, since=since)
+
+
+@dataclass(frozen=True)
+class _MacroChain:
+    providers: tuple[MacroSource, ...]
+
+    def observations(self, series_id, start, end, *, as_of):
+        return _chain_call(self.providers, "observations", series_id, start, end, as_of=as_of)
+
+    def release_dates(self, series_id, *, as_of=None):
+        return _chain_call(self.providers, "release_dates", series_id, as_of=as_of)
+
+
+@dataclass(frozen=True)
+class _NewsChain:
+    providers: tuple[NewsSource, ...]
+
+    def news(self, symbol, start, end):
+        return _chain_call(self.providers, "news", symbol, start, end)
+
+
+@dataclass(frozen=True)
+class _EarningsCalendarChain:
+    providers: tuple[EarningsCalendarSource, ...]
+
+    def earnings_calendar(self, symbol, start, end):
+        return _chain_call(self.providers, "earnings_calendar", symbol, start, end)
+
+
+@dataclass(frozen=True)
+class _ConsensusChain:
+    providers: tuple[ConsensusSource, ...]
+
+    def consensus(self, symbol, *, now):
+        return _chain_call(self.providers, "consensus", symbol, now=now)
+
+
+@dataclass(frozen=True)
+class _EarningsChain:
+    providers: tuple[EarningsSource, ...]
+
+    def earnings_results(self, symbol, *, now):
+        return _chain_call(self.providers, "earnings_results", symbol, now=now)
+
+
+@dataclass(frozen=True)
+class _TargetsChain:
+    providers: tuple[TargetsSource, ...]
+
+    def analyst_targets(self, symbol, *, now):
+        return _chain_call(self.providers, "analyst_targets", symbol, now=now)
+
+
+#: Kind -> its chain class and its Protocol (the latter used by the conformance test to check
+#: each registered provider's adapter against every kind it claims to serve).
+_CHAIN_CLASSES: dict[Kind, type] = {
+    "bars": _BarsChain,
+    "fundamentals": _FundamentalsChain,
+    "earnings_announcements": _EarningsAnnouncementsChain,
+    "macro": _MacroChain,
+    "news": _NewsChain,
+    "earnings_calendar": _EarningsCalendarChain,
+    "consensus": _ConsensusChain,
+    "earnings": _EarningsChain,
+    "targets": _TargetsChain,
+}
+
+KIND_PROTOCOLS: dict[Kind, type] = {
+    "bars": BarsSource,
+    "fundamentals": FundamentalsSource,
+    "earnings_announcements": EarningsAnnouncementsSource,
+    "macro": MacroSource,
+    "news": NewsSource,
+    "earnings_calendar": EarningsCalendarSource,
+    "consensus": ConsensusSource,
+    "earnings": EarningsSource,
+    "targets": TargetsSource,
+}
+
+
+#: One line per provider, sorted by name -- a provider task (02j §11, 2a.2-2a.5) adds exactly
+#: one line here. Empty in this task: every provider task below adds its own line.
+REGISTRY: dict[str, Provider] = {}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3). Empty in this task.
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {}
+
+
+@dataclass(frozen=True)
+class DataSources:
+    """One attribute per kind, each a chain object implementing that kind's Protocol -- a caller
+    cannot tell a one-provider chain from a multi-provider fallback chain."""
+
+    bars: BarsSource
+    fundamentals: FundamentalsSource
+    earnings_announcements: EarningsAnnouncementsSource
+    macro: MacroSource
+    news: NewsSource
+    earnings_calendar: EarningsCalendarSource
+    consensus: ConsensusSource
+    earnings: EarningsSource
+    targets: TargetsSource
+
+    @staticmethod
+    def from_env(
+        env: Mapping[str, str] = os.environ,
+        *,
+        http: ThrottledClient | None = None,
+        registry: Mapping[str, Provider] = REGISTRY,
+        defaults: Mapping[Kind, tuple[str, ...]] = DEFAULT_CHAINS,
+    ) -> DataSources:
+        """Builds every kind's chain from `env`'s `DATA_PROVIDERS_<KIND>` overrides, falling back
+        to `defaults`. Fails fast (`ValueError`, naming the env var) when a list is empty, names
+        an unknown provider, or names a provider that doesn't serve that kind -- a missing API
+        key is never a startup error (the provider itself raises `NotConfigured` when called).
+        Each named provider is built at most once and shared across every kind it serves.
+        """
+        http = http or ThrottledClient()
+        built: dict[str, object] = {}
+
+        def adapter_for(name: str) -> object:
+            if name not in built:
+                built[name] = registry[name].build(env, http)
+            return built[name]
+
+        kinds: dict[Kind, object] = {}
+        for kind in _KINDS:
+            var = f"DATA_PROVIDERS_{kind.upper()}"
+            raw = env.get(var)
+            names = defaults.get(kind, ()) if raw is None else tuple(part.strip() for part in raw.split(","))
+            if not names or any(not name for name in names):
+                raise ValueError(f"{var} must name at least one provider")
+            providers: list[object] = []
+            for name in names:
+                if name not in registry:
+                    raise ValueError(f"{var} names unknown provider {name!r}")
+                if kind not in registry[name].kinds:
+                    raise ValueError(f"{var}: provider {name!r} does not serve {kind!r}")
+                providers.append(adapter_for(name))
+            kinds[kind] = _CHAIN_CLASSES[kind](tuple(providers))
+
+        return DataSources(**kinds)
+```
+
+Note: `test_registry.py`'s tests all pass their own `registry=`/`defaults=` (never the real, still-empty module-level `REGISTRY`/`DEFAULT_CHAINS`), so they pass with these left empty.
+
+- [ ] **Step 28: Run it and watch it pass.**
+
+Run (in `common/`): `uv run pytest -q tests/test_registry.py`
+Expected: `9 passed`.
+
+- [ ] **Step 29: Run everything and lint.**
 
 Run (in `common/`): `uv lock && uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `44 passed` (6 + 15 + 13 + 10), ruff clean, 0 skipped. (`testing.py` is collected only as a module import, not a test file — it carries no `test_*` functions of its own.)
+Expected: `44 passed` (6 errors + 15 bars + 13 http + 10 fallback) `+ 5 types + 9 registry` = `58 passed` total, ruff clean, 0 skipped. (`testing.py` is collected only as a module import, not a test file — it carries no `test_*` functions of its own.)
 
-- [ ] **Step 19: Write `THIRD_PARTY_NOTICES.md`.**
+- [ ] **Step 30: Write `THIRD_PARTY_NOTICES.md`.**
 
 ```markdown
 # Third-Party Notices
@@ -1408,7 +2317,7 @@ The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LIC
 ```
 ```
 
-- [ ] **Step 20: Add the CI step that runs this package's suite, and widen the uv cache glob.** In `.github/workflows/ai-trading-ci.yml`, replace:
+- [ ] **Step 31: Add the CI step that runs this package's suite, and widen the uv cache glob.** In `.github/workflows/ai-trading-ci.yml`, replace:
 
 ```yaml
       - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
@@ -1437,11 +2346,11 @@ with:
       - name: Contracts (Zod, fixtures, JSON Schema drift)
 ```
 
-- [ ] **Step 21: Commit.**
+- [ ] **Step 32: Commit.**
 
 ```bash
-git add ai-trading/common/pyproject.toml ai-trading/common/uv.lock ai-trading/common/src/ai_trading_common/__init__.py ai-trading/common/src/ai_trading_common/errors.py ai-trading/common/src/ai_trading_common/quality.py ai-trading/common/src/ai_trading_common/http.py ai-trading/common/src/ai_trading_common/bars.py ai-trading/common/src/ai_trading_common/fallback.py ai-trading/common/src/ai_trading_common/testing.py ai-trading/common/tests/test_errors.py ai-trading/common/tests/test_bars.py ai-trading/common/tests/test_http.py ai-trading/common/tests/test_fallback.py ai-trading/common/THIRD_PARTY_NOTICES.md .github/workflows/ai-trading-ci.yml
-git commit -m "feat(ai-trading): ai-trading-common core -- errors, quality, throttled HTTP, bar hygiene, fallback"
+git add ai-trading/common/pyproject.toml ai-trading/common/uv.lock ai-trading/common/src/ai_trading_common/__init__.py ai-trading/common/src/ai_trading_common/errors.py ai-trading/common/src/ai_trading_common/quality.py ai-trading/common/src/ai_trading_common/http.py ai-trading/common/src/ai_trading_common/bars.py ai-trading/common/src/ai_trading_common/fallback.py ai-trading/common/src/ai_trading_common/testing.py ai-trading/common/src/ai_trading_common/_provider.py ai-trading/common/src/ai_trading_common/types.py ai-trading/common/src/ai_trading_common/sources.py ai-trading/common/src/ai_trading_common/registry.py ai-trading/common/src/ai_trading_common/providers/__init__.py ai-trading/common/tests/test_errors.py ai-trading/common/tests/test_bars.py ai-trading/common/tests/test_http.py ai-trading/common/tests/test_fallback.py ai-trading/common/tests/test_types.py ai-trading/common/tests/test_registry.py ai-trading/common/THIRD_PARTY_NOTICES.md .github/workflows/ai-trading-ci.yml
+git commit -m "feat(ai-trading): ai-trading-common core and provider registry skeleton (02j)"
 ```
 
 ---
@@ -1449,24 +2358,24 @@ git commit -m "feat(ai-trading): ai-trading-common core -- errors, quality, thro
 ### Task 2a.2: Alpaca bars, and `scripts/record.py`
 
 **Files:**
-- Create: `common/src/ai_trading_common/alpaca.py`, `common/scripts/record.py`
-- Create: `common/tests/test_alpaca.py`, `common/tests/test_alpaca_fixtures.py`
-- Modify: `common/THIRD_PARTY_NOTICES.md`
+- Create: `common/src/ai_trading_common/providers/alpaca.py`, `common/scripts/record.py`
+- Create: `common/tests/providers/__init__.py`, `common/tests/providers/test_alpaca.py`, `common/tests/providers/test_alpaca_fixtures.py`
+- Modify: `common/src/ai_trading_common/registry.py`, `common/THIRD_PARTY_NOTICES.md`
 
 **Interfaces:**
-- Consumes: `ai_trading_common.bars.{Bars, Timeframe, drop_unclosed, to_utc, validate}` (2a.1), `ai_trading_common.errors.{NoData, NotConfigured, ProviderError, Unavailable}` (2a.1), `ai_trading_common.http.ThrottledClient` (2a.1), `ai_trading_common.testing.{FakeResponse, make_client}` (2a.1).
-- Produces: `ai_trading_common.alpaca.AlpacaBars(key_id, secret, *, http=None).bars(symbol, timeframe, start, end, *, now, adjustment="all") -> Bars`.
+- Consumes: `ai_trading_common.bars.{Bars, Timeframe, drop_unclosed, to_utc, validate}`, `ai_trading_common.errors.{NoData, NotConfigured, ProviderError, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}`, `ai_trading_common._provider.Provider` (2a.1).
+- Produces: `ai_trading_common.providers.alpaca.AlpacaBars(key_id, secret, *, http=None).bars(symbol, timeframe, start, end, *, now, adjustment="all") -> Bars` (itself a `BarsSource`, no separate adapter), its module-level `PROVIDER: Provider` (`kinds=("bars",)`), and `REGISTRY["alpaca"]`/`DEFAULT_CHAINS["bars"] = ("alpaca",)` for 2a.6's conformance/fallback tests and 2a.8's end-to-end test to rely on.
 
 Fixture paths used (already committed, `ae6ec0f`): `common/tests/fixtures/alpaca/{daily_range_aapl,daily_range_spy,hourly_dst_change,minute_dst_change,hourly_half_day,minute_half_day,minute_paginated,minute_paginated_page{2..7}}.json`.
 
-- [ ] **Step 1: Write the failing tests.** `common/tests/test_alpaca.py`:
+- [ ] **Step 1: Write the failing tests.** `common/tests/providers/__init__.py` is empty (marks the test package). `common/tests/providers/test_alpaca.py`:
 
 ```python
 import pandas as pd
 import pytest
 
-from ai_trading_common.alpaca import AlpacaBars
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
+from ai_trading_common.providers.alpaca import AlpacaBars
 from ai_trading_common.testing import FakeResponse, make_client
 
 
@@ -1567,10 +2476,10 @@ class TestIntradayBars:
 
 - [ ] **Step 2: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_alpaca.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.alpaca'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_alpaca.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.alpaca'`.
 
-- [ ] **Step 3: Implement `alpaca.py`.**
+- [ ] **Step 3: Implement `providers/alpaca.py`.**
 
 ```python
 """Alpaca bars: daily (eod), hourly and 1-minute (delayed-15m) history.
@@ -1581,21 +2490,28 @@ needed: same author, not an upstream project. Changes: the throttled HTTP
 layer and bar hygiene guards from this package, the shared `Timeframe`s
 ("1d"/"1h"/"1m" instead of just daily), and the free plan's two guards (the SIP
 embargo and the 200-requests-a-minute throttle).
+
+`AlpacaBars` already returns `Bars` -- the shared, vendor-neutral type -- so it
+*is* this module's `BarsSource` adapter; no separate wrapper class is added
+(02j §2: "Where a raw client already returns vendor-neutral types ... the
+client class itself may be the `<Name>Source`").
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from urllib.parse import quote
 
 import pandas as pd
 
+from ai_trading_common._provider import Provider
 from ai_trading_common.bars import Bars, Timeframe, drop_unclosed, to_utc, validate
 from ai_trading_common.errors import NoData, NotConfigured, ProviderError, Unavailable
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.quality import Quality
 
-PROVIDER = "alpaca"
+PROVIDER_NAME = "alpaca"
 BASE = "https://data.alpaca.markets/v2/stocks"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
 HOST_KEY = "alpaca"
@@ -1630,13 +2546,13 @@ class AlpacaBars:
         adjustment: str = "all",
     ) -> Bars:
         if not (self.key_id and self.secret):
-            raise NotConfigured(PROVIDER, "no API key configured")
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
 
         start_utc, end_utc, now_utc = to_utc(start), to_utc(end), to_utc(now)
         capped_end = min(end_utc, now_utc - SIP_EMBARGO)
         quality = _QUALITY[timeframe]
         if capped_end < start_utc:
-            return Bars(frame=_empty_frame(timeframe), source=PROVIDER, quality=quality)
+            return Bars(frame=_empty_frame(timeframe), source=PROVIDER_NAME, quality=quality)
 
         params = {
             "timeframe": _ALPACA_TIMEFRAME[timeframe],
@@ -1660,19 +2576,19 @@ class AlpacaBars:
                 break
 
         if not rows:
-            raise NoData(PROVIDER, f"no bars for {symbol!r} between {start_utc} and {capped_end}")
+            raise NoData(PROVIDER_NAME, f"no bars for {symbol!r} between {start_utc} and {capped_end}")
 
         frame = _to_frame(rows, timeframe)
         frame = validate(frame, timeframe)
         frame = drop_unclosed(frame, timeframe, now_utc)
-        return Bars(frame=frame, source=PROVIDER, quality=quality)
+        return Bars(frame=frame, source=PROVIDER_NAME, quality=quality)
 
     def _get(self, symbol: str, params: dict) -> dict:
         url = f"{BASE}/{quote(symbol)}/bars"
         headers = {"APCA-API-KEY-ID": self.key_id, "APCA-API-SECRET-KEY": self.secret}
         response = self._http.get(
             url,
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=USER_AGENT,
             min_interval=MIN_INTERVAL_S,
@@ -1680,15 +2596,15 @@ class AlpacaBars:
             headers=headers,
         )
         if response.status_code in (401, 403):
-            raise NotConfigured(PROVIDER, f"key rejected (HTTP {response.status_code})")
+            raise NotConfigured(PROVIDER_NAME, f"key rejected (HTTP {response.status_code})")
         if response.status_code == 404:
-            raise NoData(PROVIDER, f"unknown symbol {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"unknown symbol {symbol!r}")
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             return response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
 
 
 def _empty_frame(timeframe: Timeframe) -> pd.DataFrame:
@@ -1717,19 +2633,73 @@ def _to_frame(rows: list[dict], timeframe: Timeframe) -> pd.DataFrame:
             index=pd.to_datetime([r["t"] for r in rows], utc=True),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise ProviderError(PROVIDER, f"malformed bar: {exc}") from exc
+        raise ProviderError(PROVIDER_NAME, f"malformed bar: {exc}") from exc
 
     if timeframe == "1d":
         raw.index = raw.index.tz_convert("America/New_York").date
     return raw
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> AlpacaBars:
+    return AlpacaBars(env.get("ALPACA_API_KEY_ID", ""), env.get("ALPACA_API_SECRET_KEY", ""), http=http)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("bars",), build=_build)
 ```
 
 - [ ] **Step 4: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_alpaca.py`
+Run (in `common/`): `uv run pytest -q tests/providers/test_alpaca.py`
 Expected: `10 passed`.
 
-- [ ] **Step 5: Write the failing fixture-contract tests.** `common/tests/test_alpaca_fixtures.py`:
+- [ ] **Step 5: Wire Alpaca into the registry.** In `common/src/ai_trading_common/registry.py`, replace:
+
+```python
+from ai_trading_common._provider import Provider
+from ai_trading_common.fallback import first_success
+from ai_trading_common.http import ThrottledClient
+from ai_trading_common.sources import (
+```
+
+with:
+
+```python
+from ai_trading_common._provider import Provider
+from ai_trading_common.fallback import first_success
+from ai_trading_common.http import ThrottledClient
+from ai_trading_common.providers import alpaca
+from ai_trading_common.sources import (
+```
+
+then replace:
+
+```python
+#: One line per provider, sorted by name -- a provider task (02j §11, 2a.2-2a.5) adds exactly
+#: one line here. Empty in this task: every provider task below adds its own line.
+REGISTRY: dict[str, Provider] = {}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3). Empty in this task.
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {}
+```
+
+with:
+
+```python
+#: One line per provider, sorted by name -- a provider task (02j §11, 2a.2-2a.5) adds exactly
+#: one line here.
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+}
+```
+
+- [ ] **Step 6: Write the fixture-contract tests.** `common/tests/providers/test_alpaca_fixtures.py`:
 
 ```python
 """Contract tests against real Alpaca responses recorded by scripts/record.py.
@@ -1744,10 +2714,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from ai_trading_common.alpaca import AlpacaBars
+from ai_trading_common.providers.alpaca import AlpacaBars
 from ai_trading_common.testing import FakeResponse, make_client
 
-FIXTURES = Path(__file__).parent / "fixtures" / "alpaca"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "alpaca"
 
 
 def load(name: str) -> dict:
@@ -1835,12 +2805,12 @@ class TestPaginationFixture:
         assert got.frame.index.is_monotonic_increasing
 ```
 
-- [ ] **Step 6: Run it and watch it pass.**
+- [ ] **Step 7: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_alpaca_fixtures.py`
+Run (in `common/`): `uv run pytest -q tests/providers/test_alpaca_fixtures.py`
 Expected: `6 passed`.
 
-- [ ] **Step 7: Write `scripts/record.py`.**
+- [ ] **Step 8: Write `scripts/record.py`.**
 
 ```python
 """Re-record fixtures for provider clients, from live calls, secrets stripped.
@@ -1863,6 +2833,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -1949,7 +2920,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 8: Add the "ours, moved" notice.** Append this new section to `THIRD_PARTY_NOTICES.md`, after the TradingAgents section's closing ` ```` ` fence:
+- [ ] **Step 9: Add the "ours, moved" notice.** Append this new section to `THIRD_PARTY_NOTICES.md`, after the TradingAgents section's closing ` ```` ` fence:
 
 ```markdown
 
@@ -1957,37 +2928,39 @@ if __name__ == "__main__":
 
 Not a third party: `alpaca.py` was moved here from `ai-trading/market-data/` per
 the Phase 2 reuse map (02a §11, "move"). Same author, no license notice needed.
-See `src/ai_trading_common/alpaca.py`'s module docstring for what changed.
+See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what changed.
 ```
 
-- [ ] **Step 9: Run everything and lint.**
+- [ ] **Step 10: Run everything and lint.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `60 passed` (44 + 10 + 6), ruff clean, 0 skipped.
+Expected: `74 passed` (58 + 10 + 6), ruff clean, 0 skipped.
 
-- [ ] **Step 10: Commit.**
+- [ ] **Step 11: Commit.**
 
 ```bash
-git add ai-trading/common/src/ai_trading_common/alpaca.py ai-trading/common/scripts/record.py ai-trading/common/tests/test_alpaca.py ai-trading/common/tests/test_alpaca_fixtures.py ai-trading/common/THIRD_PARTY_NOTICES.md
-git commit -m "feat(ai-trading): Alpaca bars client and the fixture recorder script"
+git add ai-trading/common/src/ai_trading_common/providers/alpaca.py ai-trading/common/src/ai_trading_common/registry.py ai-trading/common/scripts/record.py ai-trading/common/tests/providers/__init__.py ai-trading/common/tests/providers/test_alpaca.py ai-trading/common/tests/providers/test_alpaca_fixtures.py ai-trading/common/THIRD_PARTY_NOTICES.md
+git commit -m "feat(ai-trading): Alpaca bars provider, registered for the bars chain"
 ```
 
 ---
 
-### Task 2a.3: SEC EDGAR, including 8-K paging
+### Task 2a.3: SEC EDGAR (with 8-K paging) and FRED
 
 **Files:**
-- Create: `common/src/ai_trading_common/sec_edgar.py`
-- Create: `common/tests/test_sec_edgar.py`, `common/tests/test_sec_edgar_fixtures.py`
-- Modify: `common/scripts/record.py`, `common/THIRD_PARTY_NOTICES.md`
+- Create: `common/src/ai_trading_common/providers/sec_edgar.py`, `common/src/ai_trading_common/providers/fred.py`
+- Create: `common/tests/providers/test_sec_edgar.py`, `common/tests/providers/test_sec_edgar_fixtures.py`, `common/tests/providers/test_fred.py`, `common/tests/providers/test_fred_fixtures.py`
+- Modify: `common/src/ai_trading_common/registry.py`, `common/scripts/record.py`, `common/THIRD_PARTY_NOTICES.md`
 
 **Interfaces:**
-- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}` (2a.1).
-- Produces: `ai_trading_common.sec_edgar.{Fact, EightKFiling, Span, facts_as_of, eight_k_as_of, SecEdgar}`, with `SecEdgar(user_agent, *, http=None).company_facts(ticker, as_of, *, concepts=None) -> list[Fact]` and `.item_202_filings(ticker, since) -> list[EightKFiling]`.
+- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}`, `ai_trading_common._provider.Provider` (2a.1); `ai_trading_common.types.{Fact, EarningsAnnouncement, Span, Observation, facts_as_of}` (2a.1).
+- Produces:
+  - `ai_trading_common.providers.sec_edgar.{EightKFiling, eight_k_as_of, SecEdgar, SecEdgarSource}`, with `SecEdgar(user_agent, *, http=None).company_facts(ticker, as_of, *, concepts=None) -> list[Fact]` and `.item_202_filings(ticker, since) -> list[EightKFiling]`; `SecEdgarSource(client).facts(...)`/`.announcements(...)` implementing `FundamentalsSource`/`EarningsAnnouncementsSource`; `REGISTRY["sec_edgar"]`, `DEFAULT_CHAINS["fundamentals"] = ("sec_edgar",)`, `DEFAULT_CHAINS["earnings_announcements"] = ("sec_edgar",)`.
+  - `ai_trading_common.providers.fred.Fred` (itself a `MacroSource`, no separate adapter), with `Fred(api_key, *, http=None).observations(series_id, start, end, *, as_of) -> list[Observation]` and `.release_dates(series_id, *, as_of=None) -> list[date]`; `REGISTRY["fred"]`, `DEFAULT_CHAINS["macro"] = ("fred",)`.
 
-Fixture paths used (already committed): `common/tests/fixtures/sec_edgar/{company_tickers,companyfacts_aapl,companyfacts_msft,submissions_aapl,submissions_msft,submissions_jpm,submissions_jpm_page1}.json`.
+Fixture paths used (already committed): `common/tests/fixtures/sec_edgar/{company_tickers,companyfacts_aapl,companyfacts_msft,submissions_aapl,submissions_msft,submissions_jpm,submissions_jpm_page1}.json`; `common/tests/fixtures/fred/{cpiaucsl_early,cpiaucsl_revised,unrate_early,unrate_revised,cpi_release,cpi_release_dates}.json`.
 
-- [ ] **Step 1: Write the failing tests.** `common/tests/test_sec_edgar.py`:
+- [ ] **Step 1: Write the failing SEC EDGAR tests.** `common/tests/providers/test_sec_edgar.py`:
 
 ```python
 from datetime import date
@@ -1995,9 +2968,8 @@ from datetime import date
 import pytest
 
 from ai_trading_common.errors import NoData, NotConfigured, SoftBanned, Unavailable
-from ai_trading_common.sec_edgar import (
+from ai_trading_common.providers.sec_edgar import (
     EightKFiling,
-    Fact,
     SecEdgar,
     _classify_span,
     _oldest_filing_date,
@@ -2005,7 +2977,6 @@ from ai_trading_common.sec_edgar import (
     _parse_item_202,
     _parse_item_202_block,
     eight_k_as_of,
-    facts_as_of,
 )
 from ai_trading_common.testing import FakeResponse, make_client
 
@@ -2071,6 +3042,9 @@ class TestParseFacts:
         by_concept = {f.concept: f for f in facts}
         assert by_concept["Assets"].span == "instant"
         assert by_concept["Assets"].period_start is None
+        assert by_concept["Assets"].provider == "sec_edgar"
+        assert by_concept["Assets"].quality == "eod"
+        assert by_concept["Assets"].reference == "a1"
         assert by_concept["NetIncomeLoss"].span == "annual"
         assert by_concept["NetIncomeLoss"].period_start == date(2019, 1, 1)
 
@@ -2105,74 +3079,6 @@ class TestParseFacts:
             }
         }
         assert _parse_facts(payload) == []
-
-
-class TestFactsAsOf:
-    def test_a_fact_filed_after_as_of_is_unknown(self):
-        facts = [
-            Fact("Assets", "USD", 1.0, None, date(2020, 1, 1), "instant", None, None, "10-K", date(2020, 2, 1), "a1")
-        ]
-        assert facts_as_of(facts, date(2020, 1, 15)) == []
-
-    def test_a_later_amendment_wins_only_from_its_own_filed_date(self):
-        original = Fact(
-            "NetIncomeLoss",
-            "USD",
-            3496.0,
-            date(2006, 10, 1),
-            date(2007, 9, 29),
-            "annual",
-            2009,
-            "FY",
-            "10-K",
-            date(2009, 10, 27),
-            "orig",
-        )
-        amendment = Fact(
-            "NetIncomeLoss",
-            "USD",
-            3495.0,
-            date(2006, 10, 1),
-            date(2007, 9, 29),
-            "annual",
-            2009,
-            "FY",
-            "10-K/A",
-            date(2010, 1, 25),
-            "amend",
-        )
-        facts = [original, amendment]
-        assert [f.value for f in facts_as_of(facts, date(2009, 12, 1))] == [3496.0]
-        assert [f.value for f in facts_as_of(facts, date(2010, 2, 1))] == [3495.0]
-
-    def test_different_spans_of_the_same_period_end_are_kept_separately(self):
-        quarterly = Fact(
-            "Revenues",
-            "USD",
-            10.0,
-            date(2020, 1, 1),
-            date(2020, 3, 31),
-            "quarterly",
-            2020,
-            "Q1",
-            "10-Q",
-            date(2020, 4, 1),
-            "a",
-        )
-        annual = Fact(
-            "Revenues",
-            "USD",
-            40.0,
-            date(2019, 4, 1),
-            date(2020, 3, 31),
-            "annual",
-            2020,
-            "FY",
-            "10-K",
-            date(2020, 5, 1),
-            "b",
-        )
-        assert len(facts_as_of([quarterly, annual], date(2020, 6, 1))) == 2
 
 
 class TestParseItem202:
@@ -2376,10 +3282,10 @@ class TestItem202Pagination:
 
 - [ ] **Step 2: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_sec_edgar.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.sec_edgar'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_sec_edgar.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.sec_edgar'`.
 
-- [ ] **Step 3: Implement `sec_edgar.py`.**
+- [ ] **Step 3: Implement `providers/sec_edgar.py`.**
 
 ```python
 """SEC EDGAR: point-in-time CompanyFacts and 8-K Item 2.02 announcement dates.
@@ -2394,27 +3300,33 @@ amendment rule ("a period reported more than once takes its latest filing on
 or before the date"). Changes from both: this returns typed `Fact` rows, not
 a rendered statement or a flattened label map, so a caller (valuation, a
 chart) picks its own concepts and aggregation; the point-in-time cut is its
-own pure `facts_as_of(facts, as_of)` function, so it is testable and reusable
-without a network call per cut; errors map to this package's shared
-`ProviderError` hierarchy instead of TradingAgents' `NoMarketDataError`/
-`VendorUnavailableError`; and the 8-K Item 2.02 reader is new (ai-hedge-fund
-`hedge_fund/signals/pead.py`'s "the 8-K is the announcement date, not the
-10-Q" pattern — idea only, no code copied).
+own pure `facts_as_of(facts, as_of)` function (now in `ai_trading_common.types`),
+so it is testable and reusable without a network call per cut; errors map to
+this package's shared `ProviderError` hierarchy instead of TradingAgents'
+`NoMarketDataError`/`VendorUnavailableError`; and the 8-K Item 2.02 reader is
+new (ai-hedge-fund `hedge_fund/signals/pead.py`'s "the 8-K is the announcement
+date, not the 10-Q" pattern -- idea only, no code copied).
 
 No key or account: SEC requires only a declared User-Agent identifying the
 caller (`SEC_USER_AGENT`), and refuses an unidentified request with 403.
+
+`SecEdgarSource` adapts this raw client to `FundamentalsSource`
+(`facts`) and `EarningsAnnouncementsSource` (`announcements`), mapping its own
+`EightKFiling` records into the shared `EarningsAnnouncement` type (02j §4).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
 
+from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.types import EarningsAnnouncement, Fact, Span, facts_as_of
 
-PROVIDER = "sec_edgar"
+PROVIDER_NAME = "sec_edgar"
 
 # SEC's fair-access policy rate-limits sec.gov as one site-wide bucket (10
 # requests/second), not per-subdomain, so www.sec.gov and data.sec.gov share
@@ -2429,8 +3341,6 @@ SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 # is a flat document at this sibling path to the root submissions URL — same
 # column-array shape as `filings.recent` itself, not nested under "filings".
 SUBMISSIONS_PAGE_URL = "https://data.sec.gov/submissions/{name}"
-
-Span = Literal["instant", "quarterly", "ytd_6m", "ytd_9m", "annual"]
 
 # (low days, high days, span) a duration fact's start-to-end length falls
 # into. From TradingAgents' `_SPANS`/`_YEAR_TO_DATE`: a quarter runs ~90 days;
@@ -2459,25 +3369,10 @@ def _classify_span(start: date | None, end: date) -> Span | None:
 
 
 @dataclass(frozen=True)
-class Fact:
-    """One us-gaap fact as SEC reported it: a value, its span, and when it was filed."""
-
-    concept: str
-    unit: str
-    value: float
-    period_start: date | None  # None for an instant fact (a balance-sheet line)
-    period_end: date
-    span: Span
-    fiscal_year: int | None
-    fiscal_period: str | None  # "Q1".."Q4", "FY"
-    form: str
-    filed: date
-    accession: str
-
-
-@dataclass(frozen=True)
 class EightKFiling:
-    """An 8-K filing and the items it covers."""
+    """An 8-K filing and the items it covers (SEC-internal; `announcements()` maps this into
+    the shared `EarningsAnnouncement`, which has no `items` field -- not every provider can
+    report the broader set of form items an 8-K carries)."""
 
     filed: date
     accession: str
@@ -2515,28 +3410,12 @@ def _parse_facts(payload: dict, *, concepts: tuple[str, ...] | None = None) -> l
                         fiscal_period=entry.get("fp"),
                         form=entry["form"],
                         filed=date.fromisoformat(entry["filed"]),
-                        accession=entry["accn"],
+                        reference=entry["accn"],
+                        provider=PROVIDER_NAME,
+                        quality="eod",
                     )
                 )
     return out
-
-
-def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:
-    """Pure point-in-time selector: only facts filed on or before `as_of`.
-
-    A period reported more than once (an amendment) keeps only its latest
-    filing on or before `as_of` — an amendment counts from the day it was
-    filed, never before. Example seen live: Apple's fiscal 2007 net income
-    read $3,496M from the original 10-K (filed 2009-10-27) until a 10-K/A
-    (filed 2010-01-25) restated it to $3,495M; a run `as_of` 2009-12-01 must
-    still see $3,496M.
-    """
-    known = [f for f in facts if f.filed <= as_of]
-    latest: dict[tuple[str, str, date, Span], Fact] = {}
-    for fact in sorted(known, key=lambda f: f.filed):
-        key = (fact.concept, fact.unit, fact.period_end, fact.span)
-        latest[key] = fact  # later filings sort last and overwrite earlier ones
-    return sorted(latest.values(), key=lambda f: (f.concept, f.period_end))
 
 
 def _parse_item_202_block(block: dict) -> list[EightKFiling]:
@@ -2641,35 +3520,66 @@ class SecEdgar:
         for entry in payload.values():
             if entry.get("ticker", "").upper() == wanted:
                 return f"{int(entry['cik_str']):010d}"
-        raise NoData(PROVIDER, f"{ticker!r} is not a US SEC filer")
+        raise NoData(PROVIDER_NAME, f"{ticker!r} is not a US SEC filer")
 
     def _get_json(self, url: str) -> dict:
         if not self.user_agent:
-            raise NotConfigured(PROVIDER, "no SEC_USER_AGENT configured")
+            raise NotConfigured(PROVIDER_NAME, "no SEC_USER_AGENT configured")
         response = self._http.get(
             url,
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=self.user_agent,
             min_interval=MIN_INTERVAL_S,
             ban_prone=True,  # an unidentified or malformed User-Agent gets a latching 403
         )
         if response.status_code == 404:
-            raise NoData(PROVIDER, f"SEC has nothing at {url}")
+            raise NoData(PROVIDER_NAME, f"SEC has nothing at {url}")
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             return response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
+
+
+class SecEdgarSource:
+    """Adapts `SecEdgar` to `FundamentalsSource` and `EarningsAnnouncementsSource`."""
+
+    def __init__(self, client: SecEdgar) -> None:
+        self._client = client
+
+    def facts(self, symbol: str, *, as_of: date, concepts: tuple[str, ...] | None = None) -> list[Fact]:
+        return self._client.company_facts(symbol, as_of, concepts=concepts)
+
+    def announcements(self, symbol: str, *, since: date) -> list[EarningsAnnouncement]:
+        filings = self._client.item_202_filings(symbol, since)
+        return [
+            EarningsAnnouncement(
+                symbol=symbol,
+                announced_on=filing.filed,
+                reference=filing.accession,
+                provider=PROVIDER_NAME,
+                quality="eod",
+            )
+            for filing in filings
+        ]
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> SecEdgarSource:
+    client = SecEdgar(env.get("SEC_USER_AGENT", ""), http=http)
+    return SecEdgarSource(client)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("fundamentals", "earnings_announcements"), build=_build)
 ```
 
 - [ ] **Step 4: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_sec_edgar.py`
-Expected: `30 passed`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_sec_edgar.py`
+Expected: `27 passed`.
 
-- [ ] **Step 5: Write the failing fixture-contract tests.** `common/tests/test_sec_edgar_fixtures.py`:
+- [ ] **Step 5: Write the failing fixture-contract tests.** `common/tests/providers/test_sec_edgar_fixtures.py`:
 
 ```python
 """Contract tests against real SEC EDGAR responses recorded by scripts/record.py.
@@ -2679,13 +3589,13 @@ tests/fixtures/sec_edgar/, replayed through a fake session.
 """
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
-from ai_trading_common.sec_edgar import SecEdgar
+from ai_trading_common.providers.sec_edgar import SecEdgar, SecEdgarSource, eight_k_as_of
 from ai_trading_common.testing import FakeResponse, make_client
 
-FIXTURES = Path(__file__).parent / "fixtures" / "sec_edgar"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "sec_edgar"
 
 
 def load(name: str) -> dict:
@@ -2718,6 +3628,7 @@ class TestCompanyFactsFixture:
         sec, _ = sec_for("company_tickers", "companyfacts_aapl")
         facts = sec.company_facts("AAPL", date(2026, 1, 1), concepts=("Assets",))
         assert facts and all(f.period_start is None and f.span == "instant" for f in facts)
+        assert all(f.provider == "sec_edgar" and f.quality == "eod" for f in facts)
 
 
 class TestSubmissionsFixture:
@@ -2733,10 +3644,6 @@ class TestSubmissionsFixture:
         assert all("2.02" in f.items for f in got)
 
     def test_filings_are_known_from_their_own_filed_date_not_before(self):
-        from datetime import timedelta
-
-        from ai_trading_common.sec_edgar import eight_k_as_of
-
         sec, _ = sec_for("company_tickers", "submissions_aapl")
         all_filings = sec.item_202_filings("AAPL", since=self.AAPL_RECENT_FLOOR)
         earliest = min(f.filed for f in all_filings)
@@ -2768,14 +3675,76 @@ class TestJpmPagingFixture:
         sec, session = sec_for("company_tickers", "submissions_jpm")
         sec.item_202_filings("JPM", since=self.RECENT_FLOOR)
         assert len(session.calls) == 2  # no filings.files page fetched
+
+
+class TestSecEdgarSourceAdapter:
+    """Maps the recorded fixtures into the shared neutral types (02j §9: "Adapters")."""
+
+    def test_facts_returns_shared_fact_type(self):
+        sec, _ = sec_for("company_tickers", "companyfacts_aapl")
+        source = SecEdgarSource(sec)
+        facts = source.facts("AAPL", as_of=date(2026, 1, 1), concepts=("Assets",))
+        assert facts
+        assert all(f.provider == "sec_edgar" and f.quality == "eod" for f in facts)
+
+    def test_announcements_maps_8k_filings_into_earnings_announcements(self):
+        sec, _ = sec_for("company_tickers", "submissions_aapl")
+        source = SecEdgarSource(sec)
+        got = source.announcements("AAPL", since=TestSubmissionsFixture.AAPL_RECENT_FLOOR)
+        assert got
+        assert all(a.symbol == "AAPL" and a.provider == "sec_edgar" and a.quality == "eod" for a in got)
+        assert all(isinstance(a.reference, str) and a.announced_on for a in got)
 ```
 
 - [ ] **Step 6: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_sec_edgar_fixtures.py`
-Expected: `6 passed`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_sec_edgar_fixtures.py`
+Expected: `8 passed`.
 
-- [ ] **Step 7: Add the SEC recorder functions.** In `scripts/record.py`, replace:
+- [ ] **Step 7: Wire SEC EDGAR into the registry.** In `common/src/ai_trading_common/registry.py`, replace:
+
+```python
+from ai_trading_common.providers import alpaca
+```
+
+with:
+
+```python
+from ai_trading_common.providers import alpaca, sec_edgar
+```
+
+then replace:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+}
+```
+
+with:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "fundamentals": ("sec_edgar",),
+}
+```
+
+- [ ] **Step 8: Add the SEC recorder functions.** In `scripts/record.py`, replace:
 
 ```python
 _RECORDERS = {
@@ -2932,14 +3901,58 @@ def record_jpm_paging() -> None:
     print("JPM page1 rows kept:", len(trimmed_page["form"]), "Item 2.02 8-Ks in page1:", page_item_202)
 
 
+def record_fred() -> None:
+    """FRED fixtures: two vintages each of CPIAUCSL and UNRATE that differ (a
+    live-confirmed revision), and one release-dates sample.
+    """
+    key = os.environ["FRED_API_KEY"]
+    out = FIXTURES / "fred"
+    out.mkdir(parents=True, exist_ok=True)
+    base = "https://api.stlouisfed.org/fred"
+
+    def get(path, params):
+        response = requests.get(f"{base}/{path}", params={**params, "api_key": key, "file_type": "json"}, timeout=30)
+        response.raise_for_status()
+        return response
+
+    # Live-confirmed revisions (see REPORT-P2.md): CPIAUCSL's 2019-06-01 value
+    # moved from 255.305 (first published) to 255.213 (by the 2024 vintage);
+    # UNRATE's 2019-06-01 value moved from 3.7 to 3.6 in the 2021 vintage.
+    cases = [
+        ("cpiaucsl_early", "CPIAUCSL", "2019-06-01", "2019-06-01", "2019-07-20"),
+        ("cpiaucsl_revised", "CPIAUCSL", "2019-06-01", "2019-06-01", "2024-03-01"),
+        ("unrate_early", "UNRATE", "2019-06-01", "2019-06-01", "2019-08-01"),
+        ("unrate_revised", "UNRATE", "2019-06-01", "2019-06-01", "2021-02-01"),
+    ]
+    for name, series_id, start, end, pit in cases:
+        params = {
+            "series_id": series_id,
+            "observation_start": start,
+            "observation_end": end,
+            "realtime_start": pit,
+            "realtime_end": pit,
+        }
+        response = get("series/observations", params)
+        _write(out / f"{name}.json", params, response.json())
+        print(name, response.json().get("observations"))
+
+    release = get("series/release", {"series_id": "CPIAUCSL"})
+    release_id = release.json()["releases"][0]["id"]
+    release_dates = get("release/dates", {"release_id": release_id, "limit": 6, "sort_order": "desc"})
+    _write(out / "cpi_release.json", {"series_id": "CPIAUCSL"}, release.json())
+    _write(out / "cpi_release_dates.json", {"release_id": release_id}, release_dates.json())
+    print("release dates kept:", len(release_dates.json().get("release_dates") or []))
+
+
 _RECORDERS = {
     "alpaca": record_alpaca,
     "sec": record_sec,
     "sec_jpm": record_jpm_paging,
+    "fred": record_fred,
 }
 ```
 
-- [ ] **Step 8: Add the SEC EDGAR row and the market-data comparison note.** In `THIRD_PARTY_NOTICES.md`, replace:
+- [ ] **Step 9: Add the SEC EDGAR row and the market-data comparison note.** In `THIRD_PARTY_NOTICES.md`, replace:
 
 ```markdown
 | `src/ai_trading_common/bars.py` (`drop_unclosed`, `is_stale`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py` (`_assert_ohlcv_not_stale`), `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the ideas of inclusive ends (each client's own request range, not this module) and stale-frame rejection (`is_stale`, parameterized by a caller-supplied `max_age` instead of the fixed `MAX_OHLCV_STALE_DAYS`); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
@@ -2949,7 +3962,8 @@ with:
 
 ```markdown
 | `src/ai_trading_common/bars.py` (`drop_unclosed`, `is_stale`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py` (`_assert_ohlcv_not_stale`), `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the ideas of inclusive ends (each client's own request range, not this module) and stale-frame rejection (`is_stale`, parameterized by a caller-supplied `max_age` instead of the fixed `MAX_OHLCV_STALE_DAYS`); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
-| `src/ai_trading_common/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
+| `src/ai_trading_common/providers/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows (now in `ai_trading_common.types`, 02j) instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function (also in `types.py`) instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
+| `src/ai_trading_common/providers/fred.py` | `tradingagents/dataflows/vendors/fred.py` | Kept the ALFRED vintage-pinning idea: both `realtime_start` and `realtime_end` set to the as-of date so a past run sees the value as first published. Changed: returns typed `Observation` rows (now in `ai_trading_common.types`, 02j) instead of a rendered markdown report; dropped the friendly-alias table, the look-back-day window, and the `pytz`/America-Chicago "FRED's own today" clamp (this client's `as_of` always names a historical date the caller chose, never "now"); errors map to this package's `ProviderError` hierarchy instead of raising bare `ValueError`/a vendor-specific `NotConfiguredError`; adds `release_dates` (new, not present upstream) |
 ```
 
 Then, in the same file, replace:
@@ -2959,7 +3973,7 @@ Then, in the same file, replace:
 
 Not a third party: `alpaca.py` was moved here from `ai-trading/market-data/` per
 the Phase 2 reuse map (02a §11, "move"). Same author, no license notice needed.
-See `src/ai_trading_common/alpaca.py`'s module docstring for what changed.
+See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what changed.
 ```
 
 with:
@@ -2969,44 +3983,17 @@ with:
 
 Not a third party: `alpaca.py` was moved here from `ai-trading/market-data/` per
 the Phase 2 reuse map (02a §11, "move"). Same author, no license notice needed.
-See `src/ai_trading_common/alpaca.py`'s module docstring for what changed.
+See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what changed.
 
 `sec_edgar.py` also compares its design with `ai-trading/market-data/sec.py`
 (ours; left untouched) and keeps that file's ticker-to-CIK lookup (including
 the `BRK.B` -> `BRK-B` mapping) and its "404 means nothing here" handling,
 alongside TradingAgents' span classification and amendment rule above. Same
-author, no license notice needed; see `src/ai_trading_common/sec_edgar.py`'s
-module docstring.
+author, no license notice needed; see
+`src/ai_trading_common/providers/sec_edgar.py`'s module docstring.
 ```
 
-- [ ] **Step 9: Run everything and lint.**
-
-Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `96 passed` (60 + 30 + 6), ruff clean, 0 skipped.
-
-- [ ] **Step 10: Commit.**
-
-```bash
-git add ai-trading/common/src/ai_trading_common/sec_edgar.py ai-trading/common/tests/test_sec_edgar.py ai-trading/common/tests/test_sec_edgar_fixtures.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
-git commit -m "feat(ai-trading): SEC EDGAR client -- point-in-time CompanyFacts and 8-K Item 2.02 paging"
-```
-
----
-
-### Task 2a.4: FRED
-
-**Files:**
-- Create: `common/src/ai_trading_common/fred.py`
-- Create: `common/tests/test_fred.py`, `common/tests/test_fred_fixtures.py`
-- Modify: `common/scripts/record.py`, `common/THIRD_PARTY_NOTICES.md`
-
-**Interfaces:**
-- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}` (2a.1).
-- Produces: `ai_trading_common.fred.{Observation, Fred}`, with `Fred(api_key, *, http=None).observations(series_id, start, end, *, as_of) -> list[Observation]` and `.release_dates(series_id, *, as_of=None) -> list[date]`.
-
-Fixture paths used (already committed): `common/tests/fixtures/fred/{cpiaucsl_early,cpiaucsl_revised,unrate_early,unrate_revised,cpi_release,cpi_release_dates}.json`.
-
-- [ ] **Step 1: Write the failing tests.** `common/tests/test_fred.py`:
+- [ ] **Step 10: Write the failing FRED tests.** `common/tests/providers/test_fred.py`:
 
 ```python
 from datetime import date
@@ -3014,8 +4001,9 @@ from datetime import date
 import pytest
 
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
-from ai_trading_common.fred import Fred, Observation
+from ai_trading_common.providers.fred import Fred
 from ai_trading_common.testing import FakeResponse, make_client
+from ai_trading_common.types import Observation
 
 # Live-probed FRED error bodies (see REPORT-P2.md): a 400 always carries a
 # JSON `error_message`, distinguished by which variable name it names.
@@ -3048,6 +4036,8 @@ class TestObservations:
                 value=258.82,
                 realtime_start=date(2020, 6, 1),
                 realtime_end=date(2020, 6, 1),
+                provider="fred",
+                quality="eod",
             )
         ]
         params = session.calls[0][1]
@@ -3127,12 +4117,12 @@ class TestReleaseDates:
             fred.release_dates("NOT_A_SERIES")
 ```
 
-- [ ] **Step 2: Run it and watch it fail.**
+- [ ] **Step 11: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_fred.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.fred'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_fred.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.fred'`.
 
-- [ ] **Step 3: Implement `fred.py`.**
+- [ ] **Step 12: Implement `providers/fred.py`.**
 
 ```python
 """FRED: vintage-pinned observations and release dates for the macro calendar.
@@ -3150,17 +4140,23 @@ Chicago "FRED's own today" clamp (`_fred_today`), since this client's
 never "now" read off the wall clock. Errors map to this package's shared
 `ProviderError` hierarchy instead of raising `ValueError`/a vendor-specific
 `NotConfiguredError`.
+
+`Fred` already returns `Observation` from `ai_trading_common.types` and its
+own `release_dates` returns plain `list[date]`, so it *is* this module's
+`MacroSource` adapter -- no separate wrapper class.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import date
 
+from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.types import Observation
 
-PROVIDER = "fred"
+PROVIDER_NAME = "fred"
 HOST_KEY = "fred"
 BASE = "https://api.stlouisfed.org/fred"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
@@ -3171,15 +4167,6 @@ MIN_INTERVAL_S = 60.0 / 120.0
 # FRED's own marker for "nothing published for this date at this vintage"
 # (as opposed to a real `0`).
 _MISSING_VALUE = "."
-
-
-@dataclass(frozen=True)
-class Observation:
-    series_id: str
-    date: date  # the observation period (a day, or a month's/quarter's first day)
-    value: float
-    realtime_start: date
-    realtime_end: date
 
 
 class Fred:
@@ -3217,12 +4204,14 @@ class Fred:
                 value=float(row["value"]),
                 realtime_start=date.fromisoformat(row["realtime_start"]),
                 realtime_end=date.fromisoformat(row["realtime_end"]),
+                provider=PROVIDER_NAME,
+                quality="eod",
             )
             for row in rows
             if row.get("value") != _MISSING_VALUE
         ]
         if not out:
-            raise NoData(PROVIDER, f"no {series_id} observations in [{start}, {end}] at the {as_of} vintage")
+            raise NoData(PROVIDER_NAME, f"no {series_id} observations in [{start}, {end}] at the {as_of} vintage")
         return out
 
     def release_dates(self, series_id: str, *, as_of: date | None = None) -> list[date]:
@@ -3235,21 +4224,21 @@ class Fred:
         release_payload = self._get("series/release", {"series_id": series_id})
         releases = release_payload.get("releases") or []
         if not releases:
-            raise NoData(PROVIDER, f"no release found for series {series_id!r}")
+            raise NoData(PROVIDER_NAME, f"no release found for series {series_id!r}")
         release_id = releases[0]["id"]
 
         dates_payload = self._get("release/dates", {"release_id": release_id})
         dates = sorted(date.fromisoformat(row["date"]) for row in dates_payload.get("release_dates") or [])
         if not dates:
-            raise NoData(PROVIDER, f"no release dates for series {series_id!r}")
+            raise NoData(PROVIDER_NAME, f"no release dates for series {series_id!r}")
         return dates if as_of is None else [d for d in dates if d <= as_of]
 
     def _get(self, path: str, params: dict) -> dict:
         if not self.api_key:
-            raise NotConfigured(PROVIDER, "no FRED_API_KEY configured")
+            raise NotConfigured(PROVIDER_NAME, "no FRED_API_KEY configured")
         response = self._http.get(
             f"{BASE}/{path}",
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=USER_AGENT,
             min_interval=MIN_INTERVAL_S,
@@ -3258,11 +4247,11 @@ class Fred:
         if response.status_code == 400:
             raise self._error_for_400(response)
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             return response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
 
     def _error_for_400(self, response) -> Exception:
         """FRED answers every bad request with HTTP 400 and a JSON error_message.
@@ -3280,18 +4269,25 @@ class Fred:
             message = response.text
         lowered = message.lower()
         if "api_key" in lowered:
-            return NotConfigured(PROVIDER, f"key rejected: {message}")
+            return NotConfigured(PROVIDER_NAME, f"key rejected: {message}")
         if "series_id" in lowered:
-            return NoData(PROVIDER, f"unknown series: {message}")
-        return Unavailable(PROVIDER, f"HTTP 400: {message}")
+            return NoData(PROVIDER_NAME, f"unknown series: {message}")
+        return Unavailable(PROVIDER_NAME, f"HTTP 400: {message}")
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> Fred:
+    return Fred(env.get("FRED_API_KEY", ""), http=http)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("macro",), build=_build)
 ```
 
-- [ ] **Step 4: Run it and watch it pass.**
+- [ ] **Step 13: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_fred.py`
+Run (in `common/`): `uv run pytest -q tests/providers/test_fred.py`
 Expected: `11 passed`.
 
-- [ ] **Step 5: Write the failing fixture-contract tests.** `common/tests/test_fred_fixtures.py`:
+- [ ] **Step 14: Write the failing fixture-contract tests.** `common/tests/providers/test_fred_fixtures.py`:
 
 ```python
 """Contract tests against real FRED responses recorded by scripts/record.py."""
@@ -3300,10 +4296,10 @@ import json
 from datetime import date
 from pathlib import Path
 
-from ai_trading_common.fred import Fred
+from ai_trading_common.providers.fred import Fred
 from ai_trading_common.testing import FakeResponse, make_client
 
-FIXTURES = Path(__file__).parent / "fixtures" / "fred"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "fred"
 
 
 def load(name: str) -> dict:
@@ -3351,119 +4347,91 @@ class TestReleaseDatesFixture:
         assert len(got) == len(dates_body["release_dates"])
 ```
 
-- [ ] **Step 6: Run it and watch it pass.**
+- [ ] **Step 15: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_fred_fixtures.py`
+Run (in `common/`): `uv run pytest -q tests/providers/test_fred_fixtures.py`
 Expected: `4 passed`.
 
-- [ ] **Step 7: Add the FRED recorder function.** In `scripts/record.py`, replace:
+- [ ] **Step 16: Wire FRED into the registry.** In `common/src/ai_trading_common/registry.py`, replace:
 
 ```python
-_RECORDERS = {
-    "alpaca": record_alpaca,
-    "sec": record_sec,
-    "sec_jpm": record_jpm_paging,
+from ai_trading_common.providers import alpaca, sec_edgar
+```
+
+with:
+
+```python
+from ai_trading_common.providers import alpaca, fred, sec_edgar
+```
+
+then replace:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "fundamentals": ("sec_edgar",),
 }
 ```
 
 with:
 
 ```python
-def record_fred() -> None:
-    """FRED fixtures: two vintages each of CPIAUCSL and UNRATE that differ (a
-    live-confirmed revision), and one release-dates sample.
-    """
-    key = os.environ["FRED_API_KEY"]
-    out = FIXTURES / "fred"
-    out.mkdir(parents=True, exist_ok=True)
-    base = "https://api.stlouisfed.org/fred"
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
 
-    def get(path, params):
-        response = requests.get(f"{base}/{path}", params={**params, "api_key": key, "file_type": "json"}, timeout=30)
-        response.raise_for_status()
-        return response
-
-    # Live-confirmed revisions (see REPORT-P2.md): CPIAUCSL's 2019-06-01 value
-    # moved from 255.305 (first published) to 255.213 (by the 2024 vintage);
-    # UNRATE's 2019-06-01 value moved from 3.7 to 3.6 in the 2021 vintage.
-    cases = [
-        ("cpiaucsl_early", "CPIAUCSL", "2019-06-01", "2019-06-01", "2019-07-20"),
-        ("cpiaucsl_revised", "CPIAUCSL", "2019-06-01", "2019-06-01", "2024-03-01"),
-        ("unrate_early", "UNRATE", "2019-06-01", "2019-06-01", "2019-08-01"),
-        ("unrate_revised", "UNRATE", "2019-06-01", "2019-06-01", "2021-02-01"),
-    ]
-    for name, series_id, start, end, pit in cases:
-        params = {
-            "series_id": series_id,
-            "observation_start": start,
-            "observation_end": end,
-            "realtime_start": pit,
-            "realtime_end": pit,
-        }
-        response = get("series/observations", params)
-        _write(out / f"{name}.json", params, response.json())
-        print(name, response.json().get("observations"))
-
-    release = get("series/release", {"series_id": "CPIAUCSL"})
-    release_id = release.json()["releases"][0]["id"]
-    release_dates = get("release/dates", {"release_id": release_id, "limit": 6, "sort_order": "desc"})
-    _write(out / "cpi_release.json", {"series_id": "CPIAUCSL"}, release.json())
-    _write(out / "cpi_release_dates.json", {"release_id": release_id}, release_dates.json())
-    print("release dates kept:", len(release_dates.json().get("release_dates") or []))
-
-
-_RECORDERS = {
-    "alpaca": record_alpaca,
-    "sec": record_sec,
-    "sec_jpm": record_jpm_paging,
-    "fred": record_fred,
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
 }
 ```
 
-- [ ] **Step 8: Add the FRED row.** In `THIRD_PARTY_NOTICES.md`, replace:
+- [ ] **Step 17: Add the FRED row.** In `THIRD_PARTY_NOTICES.md`, the row was already added together with SEC EDGAR's in Step 9 above; no further edit is needed here.
 
-```markdown
-| `src/ai_trading_common/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
-```
-
-with:
-
-```markdown
-| `src/ai_trading_common/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
-| `src/ai_trading_common/fred.py` | `tradingagents/dataflows/vendors/fred.py` | Kept the ALFRED vintage-pinning idea: both `realtime_start` and `realtime_end` set to the as-of date so a past run sees the value as first published. Changed: returns typed `Observation` rows instead of a rendered markdown report; dropped the friendly-alias table, the look-back-day window, and the `pytz`/America-Chicago "FRED's own today" clamp (this client's `as_of` always names a historical date the caller chose, never "now"); errors map to this package's `ProviderError` hierarchy instead of raising bare `ValueError`/a vendor-specific `NotConfiguredError`; adds `release_dates` (new, not present upstream) |
-```
-
-- [ ] **Step 9: Run everything and lint.**
+- [ ] **Step 18: Run everything and lint.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `111 passed` (96 + 11 + 4), ruff clean, 0 skipped.
+Expected: `124 passed` (74 + 27 + 8 + 11 + 4), ruff clean, 0 skipped.
 
-- [ ] **Step 10: Commit.**
+- [ ] **Step 19: Commit.**
 
 ```bash
-git add ai-trading/common/src/ai_trading_common/fred.py ai-trading/common/tests/test_fred.py ai-trading/common/tests/test_fred_fixtures.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
-git commit -m "feat(ai-trading): FRED client -- vintage-pinned observations and release dates"
+git add ai-trading/common/src/ai_trading_common/providers/sec_edgar.py ai-trading/common/src/ai_trading_common/providers/fred.py ai-trading/common/src/ai_trading_common/registry.py ai-trading/common/tests/providers/test_sec_edgar.py ai-trading/common/tests/providers/test_sec_edgar_fixtures.py ai-trading/common/tests/providers/test_fred.py ai-trading/common/tests/providers/test_fred_fixtures.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
+git commit -m "feat(ai-trading): SEC EDGAR and FRED providers, registered for fundamentals/earnings_announcements/macro"
 ```
 
 ---
 
-### Task 2a.5: Finnhub, Alpha Vantage, and Eulerpool clients
+### Task 2a.4: Finnhub and Alpha Vantage
 
 **Files:**
-- Create: `common/src/ai_trading_common/finnhub.py`, `common/src/ai_trading_common/alphavantage.py`, `common/src/ai_trading_common/eulerpool.py`
-- Create: `common/tests/test_finnhub.py`, `common/tests/test_alphavantage.py`, `common/tests/test_eulerpool.py`
-- Modify: `common/scripts/record.py`
+- Create: `common/src/ai_trading_common/providers/finnhub.py`, `common/src/ai_trading_common/providers/alphavantage.py`
+- Create: `common/tests/providers/test_finnhub.py`, `common/tests/providers/test_alphavantage.py`
+- Modify: `common/src/ai_trading_common/registry.py`, `common/scripts/record.py`, `common/THIRD_PARTY_NOTICES.md`
 
 **Interfaces:**
-- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}` (2a.1).
-- Produces (2a.6's `consensus.py` relies on all of these):
-  - `ai_trading_common.finnhub.{EarningsCalendarEntry, NewsItem, RecommendationTrend, EarningsSurprise, FinnhubClient, news_as_of}`, with `FinnhubClient(api_key, *, http=None).earnings_calendar(symbol, start, end)`, `.company_news(symbol, start, end)`, `.recommendation_trends(symbol)`, `.earnings_surprises(symbol)`
-  - `ai_trading_common.alphavantage.{EpsEstimate, ReportedEarnings, QuotaExceeded, AlphaVantageClient}`, with `AlphaVantageClient(api_key, *, http=None).earnings_estimates(symbol)` and `.earnings(symbol)`
-  - `ai_trading_common.eulerpool.{EstimatePeriod, CalendarEntry, EarningsSurprise, Recommendation, EulerpoolClient}`, with `EulerpoolClient(api_key, *, http=None).estimates(symbol)`, `.earnings_calendar(symbol)`, `.earnings_surprises(symbol)`, `.recommendations(symbol)`
+- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}`, `ai_trading_common._provider.Provider` (2a.1); `ai_trading_common.types.{AnalystTargets, EarningsEvent, EarningsResult, NewsItem, Timing, ConsensusSnapshot, news_as_of}` (2a.1).
+- Produces:
+  - `ai_trading_common.providers.finnhub.{EarningsCalendarEntry, RecommendationTrend, EarningsSurprise, FinnhubClient, FinnhubSource}`, with `FinnhubClient(api_key, *, http=None).earnings_calendar(symbol, start, end)`, `.company_news(symbol, start, end)`, `.recommendation_trends(symbol)`, `.earnings_surprises(symbol)`; `FinnhubSource` implementing `NewsSource`, `EarningsCalendarSource`, and partially `EarningsSource`/`TargetsSource`; `REGISTRY["finnhub"]`, `DEFAULT_CHAINS["news"] = ("finnhub",)`, `DEFAULT_CHAINS["earnings_calendar"] = ("finnhub",)`.
+  - `ai_trading_common.providers.alphavantage.{EpsEstimate, ReportedEarnings, QuotaExceeded, AlphaVantageClient, AlphaVantageSource}`, with `AlphaVantageClient(api_key, *, http=None).earnings_estimates(symbol)` and `.earnings(symbol)`; `AlphaVantageSource` implementing `ConsensusSource`/`EarningsSource`; `REGISTRY["alphavantage"]` (2a.5 adds its `DEFAULT_CHAINS["consensus"]`/`["earnings"]` lines, once Eulerpool — the chain's primary — also exists).
 
-Fixture paths used (already committed): `common/tests/fixtures/finnhub/{calendar_earnings_aapl,calendar_earnings_empty,company_news_aapl,company_news_empty,stock_earnings_aapl,stock_recommendation_aapl,bad_key_401}.json`; `common/tests/fixtures/alphavantage/{earnings_estimates_aapl,earnings_aapl,quota_note,unknown_symbol_empty}.json`; `common/tests/fixtures/eulerpool/{estimates_aapl,estimates_empty_brkb,calendar_aapl,surprises_aapl,recommendations_aapl,bad_key_401,unknown_symbol_404,unknown_recommendations_404}.json`.
+Fixture paths used (already committed): `common/tests/fixtures/finnhub/{calendar_earnings_aapl,calendar_earnings_empty,company_news_aapl,company_news_empty,stock_earnings_aapl,stock_recommendation_aapl,bad_key_401}.json`; `common/tests/fixtures/alphavantage/{earnings_estimates_aapl,earnings_aapl,quota_note,unknown_symbol_empty}.json`.
 
-- [ ] **Step 1: Write the failing Finnhub tests.** `common/tests/test_finnhub.py`:
+- [ ] **Step 1: Write the failing Finnhub tests.** `common/tests/providers/test_finnhub.py`:
 
 ```python
 """Contract tests against real Finnhub responses recorded by scripts/record.py."""
@@ -3475,10 +4443,11 @@ from pathlib import Path
 import pandas as pd
 
 from ai_trading_common.errors import NoData, NotConfigured
-from ai_trading_common.finnhub import FinnhubClient, news_as_of
+from ai_trading_common.providers.finnhub import FinnhubClient, FinnhubSource
 from ai_trading_common.testing import FakeResponse, make_client
+from ai_trading_common.types import news_as_of
 
-FIXTURES = Path(__file__).parent / "fixtures" / "finnhub"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "finnhub"
 
 
 def load(name: str) -> dict:
@@ -3575,14 +4544,63 @@ def test_news_as_of_is_pure_and_order_preserving():
     items = client.company_news("AAPL", date(2026, 10, 1), date(2026, 10, 11))
     got = news_as_of(items, now)
     assert got == [item for item in items if item.published_at <= now]
+
+
+class TestFinnhubSourceAdapter:
+    """Maps the recorded fixtures into the shared neutral types (02j §9: "Adapters")."""
+
+    def test_news_renames_source_to_publisher(self):
+        source = FinnhubSource(client_for("company_news_aapl"))
+        got = source.news("AAPL", date(2026, 10, 1), date(2026, 10, 11))
+        assert got and all(item.publisher for item in got)
+        assert all(item.provider == "finnhub" and item.quality == "eod" for item in got)
+
+    def test_earnings_calendar_maps_amc_hour_code_to_after_close_timing(self):
+        source = FinnhubSource(client_for("calendar_earnings_aapl"))
+        got = source.earnings_calendar("AAPL", date(2026, 1, 1), date(2026, 12, 31))
+        assert got[0].timing == "after_close"
+        assert got[0].provider == "finnhub"
+
+    def test_unknown_hour_code_maps_to_unknown_timing(self):
+        client, _, _ = make_client(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "earningsCalendar": [
+                            {"symbol": "AAPL", "date": "2026-01-01", "hour": "", "year": 2026, "quarter": 1}
+                        ]
+                    },
+                )
+            ]
+        )
+        source = FinnhubSource(FinnhubClient("key", http=client))
+        got = source.earnings_calendar("AAPL", date(2026, 1, 1), date(2026, 12, 31))
+        assert got[0].timing == "unknown"
+
+    def test_analyst_targets_has_counts_but_no_prices(self):
+        source = FinnhubSource(client_for("stock_recommendation_aapl"))
+        got = source.analyst_targets("AAPL", now=pd.Timestamp("2026-10-11T00:00:00Z"))
+        assert got.target_mean is None
+        assert got.target_high is None
+        assert got.buy >= 0
+        assert got.quality == "eod"  # the chain, not the adapter, decides fallback labeling
+
+    def test_earnings_results_maps_surprises(self):
+        source = FinnhubSource(client_for("stock_earnings_aapl"))
+        got = source.earnings_results("AAPL", now=pd.Timestamp("2026-10-11T00:00:00Z"))
+        assert got and got[0].surprise is not None
+        assert got[0].provider == "finnhub"
+        # a fiscal period end is not a report date: claiming one would date the result too early
+        assert all(r.report_date is None and r.period_end is not None for r in got)
 ```
 
 - [ ] **Step 2: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_finnhub.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.finnhub'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_finnhub.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.finnhub'`.
 
-- [ ] **Step 3: Implement `finnhub.py`.**
+- [ ] **Step 3: Implement `providers/finnhub.py`.**
 
 ```python
 """Finnhub: earnings calendar, company news, and whichever of EPS estimates,
@@ -3604,26 +4622,39 @@ Probed live against a real key (2026-10-11):
   "Premium" note.
 - A bad key is HTTP 401 (``{"error": "Invalid API key"}``); an unknown
   symbol or an empty date range is HTTP 200 with an empty array `[]`.
+
+`FinnhubSource` adapts the raw client to `NewsSource`, `EarningsCalendarSource`,
+and (partially) `EarningsSource`/`TargetsSource`. Its targets adapter returns
+the real buy/hold/sell counts with every target price `None`: Finnhub's free
+plan has no price-target endpoint (confirmed live) -- a partial substitute,
+not an equally-complete alternative, which is why it is listed after Eulerpool
+in `DEFAULT_CHAINS["targets"]` rather than merged with it (02j §6: "Out of
+scope: merging fields across providers").
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 import pandas as pd
 
+from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.types import AnalystTargets, EarningsEvent, EarningsResult, NewsItem, Timing
 
-PROVIDER = "finnhub"
+PROVIDER_NAME = "finnhub"
 BASE = "https://finnhub.io/api/v1"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
 HOST_KEY = "finnhub"
 
 # The free plan allows 60 calls a minute (brief, confirmed by Finnhub's own docs).
 MIN_INTERVAL_S = 60.0 / 60.0
+
+_TIMING: dict[str, Timing] = {"bmo": "before_open", "amc": "after_close"}
 
 
 @dataclass(frozen=True)
@@ -3637,15 +4668,6 @@ class EarningsCalendarEntry:
     eps_actual: float | None
     revenue_estimate: float | None
     revenue_actual: float | None
-
-
-@dataclass(frozen=True)
-class NewsItem:
-    symbol: str
-    headline: str
-    source: str
-    url: str
-    published_at: pd.Timestamp  # UTC
 
 
 @dataclass(frozen=True)
@@ -3682,60 +4704,50 @@ class FinnhubClient:
         body = self._get("/calendar/earnings", {"symbol": symbol, "from": start.isoformat(), "to": end.isoformat()})
         rows = body.get("earningsCalendar") or []
         if not rows:
-            raise NoData(PROVIDER, f"no earnings-calendar entries for {symbol!r} between {start} and {end}")
+            raise NoData(PROVIDER_NAME, f"no earnings-calendar entries for {symbol!r} between {start} and {end}")
         return [_to_calendar_entry(r) for r in rows]
 
     def company_news(self, symbol: str, start: date, end: date) -> list[NewsItem]:
         body = self._get("/company-news", {"symbol": symbol, "from": start.isoformat(), "to": end.isoformat()})
         if not body:
-            raise NoData(PROVIDER, f"no news for {symbol!r} between {start} and {end}")
+            raise NoData(PROVIDER_NAME, f"no news for {symbol!r} between {start} and {end}")
         return [_to_news_item(r) for r in body]
 
     def recommendation_trends(self, symbol: str) -> list[RecommendationTrend]:
         body = self._get("/stock/recommendation", {"symbol": symbol})
         if not body:
-            raise NoData(PROVIDER, f"no recommendation trend for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no recommendation trend for {symbol!r}")
         return [_to_recommendation(r) for r in body]
 
     def earnings_surprises(self, symbol: str) -> list[EarningsSurprise]:
         body = self._get("/stock/earnings", {"symbol": symbol})
         if not body:
-            raise NoData(PROVIDER, f"no earnings surprises for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no earnings surprises for {symbol!r}")
         return [_to_surprise(r) for r in body]
 
     def _get(self, path: str, params: dict[str, str]) -> Any:
         if not self.api_key:
-            raise NotConfigured(PROVIDER, "no API key configured")
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
         merged = dict(params)
         merged["token"] = self.api_key
         response = self._http.get(
             f"{BASE}{path}",
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=USER_AGENT,
             min_interval=MIN_INTERVAL_S,
             params=merged,
         )
         if response.status_code == 401:
-            raise NotConfigured(PROVIDER, "key rejected (HTTP 401)")
+            raise NotConfigured(PROVIDER_NAME, "key rejected (HTTP 401)")
         if response.status_code == 403:
-            raise NotConfigured(PROVIDER, f"{path} not entitled on this plan (HTTP 403)")
+            raise NotConfigured(PROVIDER_NAME, f"{path} not entitled on this plan (HTTP 403)")
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             return response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
-
-
-def news_as_of(items: list[NewsItem], as_of: pd.Timestamp) -> list[NewsItem]:
-    """Only news published at or before `as_of` (02h, Review Focus 6: as-of discipline).
-
-    Pattern from TradingAgents' news handling: "unavailable" (the client call
-    itself failing) is kept apart from "no news" (this returning an empty
-    list) -- this selector only ever narrows an already-fetched list.
-    """
-    return [item for item in items if item.published_at <= as_of]
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
 
 
 def _to_calendar_entry(row: dict[str, Any]) -> EarningsCalendarEntry:
@@ -3756,9 +4768,11 @@ def _to_news_item(row: dict[str, Any]) -> NewsItem:
     return NewsItem(
         symbol=row.get("related") or "",
         headline=row["headline"],
-        source=row.get("source") or "",
+        publisher=row.get("source") or "",
         url=row.get("url") or "",
         published_at=pd.Timestamp(row["datetime"], unit="s", tz="UTC"),
+        provider=PROVIDER_NAME,
+        quality="eod",
     )
 
 
@@ -3785,14 +4799,148 @@ def _to_surprise(row: dict[str, Any]) -> EarningsSurprise:
         surprise=row.get("surprise"),
         surprise_percent=row.get("surprisePercent"),
     )
+
+
+class FinnhubSource:
+    """Adapts `FinnhubClient` to `NewsSource`, `EarningsCalendarSource`, and partially to
+    `EarningsSource`/`TargetsSource`."""
+
+    def __init__(self, client: FinnhubClient) -> None:
+        self._client = client
+
+    def news(self, symbol: str, start: date, end: date) -> list[NewsItem]:
+        return self._client.company_news(symbol, start, end)
+
+    def earnings_calendar(self, symbol: str, start: date, end: date) -> list[EarningsEvent]:
+        entries = self._client.earnings_calendar(symbol, start, end)
+        return [
+            EarningsEvent(
+                symbol=e.symbol,
+                report_date=e.report_date,
+                timing=_TIMING.get(e.hour, "unknown"),
+                fiscal_year=e.fiscal_year,
+                fiscal_quarter=e.fiscal_quarter,
+                eps_estimate=e.eps_estimate,
+                eps_actual=e.eps_actual,
+                revenue_estimate=e.revenue_estimate,
+                revenue_actual=e.revenue_actual,
+                provider=PROVIDER_NAME,
+                quality="eod",
+            )
+            for e in entries
+        ]
+
+    def earnings_results(self, symbol: str, *, now: pd.Timestamp) -> list[EarningsResult]:
+        surprises = self._client.earnings_surprises(symbol)
+        return [
+            EarningsResult(
+                symbol=s.symbol,
+                period_end=s.period_end,
+                fiscal_year=s.fiscal_year,
+                fiscal_quarter=s.fiscal_quarter,
+                report_date=None,  # /stock/earnings gives only the fiscal period end, not when it was reported
+                report_time=None,
+                eps_estimate=s.eps_estimate,
+                eps_actual=s.eps_actual,
+                surprise=s.surprise,
+                surprise_percent=s.surprise_percent,
+                provider=PROVIDER_NAME,
+                quality="eod",
+                as_of=now,
+            )
+            for s in surprises
+        ]
+
+    def analyst_targets(self, symbol: str, *, now: pd.Timestamp) -> AnalystTargets:
+        """Counts only: Finnhub's free plan has no price-target endpoint (confirmed live)."""
+        rows = self._client.recommendation_trends(symbol)
+        latest = max(rows, key=lambda r: r.period)
+        return AnalystTargets(
+            symbol=latest.symbol,
+            target_mean=None,
+            target_median=None,
+            target_high=None,
+            target_low=None,
+            strong_buy=latest.strong_buy,
+            buy=latest.buy,
+            hold=latest.hold,
+            sell=latest.sell,
+            strong_sell=latest.strong_sell,
+            provider=PROVIDER_NAME,
+            quality="eod",
+            as_of=now,
+        )
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> FinnhubSource:
+    client = FinnhubClient(env.get("FINNHUB_API_KEY", ""), http=http)
+    return FinnhubSource(client)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("news", "earnings_calendar", "earnings", "targets"), build=_build)
 ```
 
 - [ ] **Step 4: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_finnhub.py`
-Expected: `10 passed`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_finnhub.py`
+Expected: `15 passed`.
 
-- [ ] **Step 5: Write the failing Alpha Vantage tests.** `common/tests/test_alphavantage.py`:
+- [ ] **Step 5: Wire Finnhub into the registry.** In `common/src/ai_trading_common/registry.py`, replace:
+
+```python
+from ai_trading_common.providers import alpaca, fred, sec_edgar
+```
+
+with:
+
+```python
+from ai_trading_common.providers import alpaca, finnhub, fred, sec_edgar
+```
+
+then replace:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
+}
+```
+
+with:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "earnings_calendar": ("finnhub",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
+    "news": ("finnhub",),
+}
+```
+
+Note: Finnhub also serves `earnings` and `targets` (it's in `PROVIDER.kinds`), but its line in those two kinds' `DEFAULT_CHAINS` entries is not added here — `earnings`/`targets` are multi-provider chains whose default order (Eulerpool first) is fixed once by Task 2a.5, the task that adds the last provider those chains need.
+
+- [ ] **Step 6: Write the failing Alpha Vantage tests.** `common/tests/providers/test_alphavantage.py`:
 
 ```python
 """Contract tests against real Alpha Vantage responses recorded by scripts/record.py."""
@@ -3800,11 +4948,13 @@ Expected: `10 passed`.
 import json
 from pathlib import Path
 
-from ai_trading_common.alphavantage import AlphaVantageClient, QuotaExceeded
+import pandas as pd
+
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
+from ai_trading_common.providers.alphavantage import AlphaVantageClient, AlphaVantageSource, QuotaExceeded
 from ai_trading_common.testing import FakeResponse, make_client
 
-FIXTURES = Path(__file__).parent / "fixtures" / "alphavantage"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "alphavantage"
 
 
 def load(name: str) -> dict:
@@ -3873,14 +5023,30 @@ def test_no_key_is_not_configured_without_a_request():
         pass
     else:
         raise AssertionError("expected NotConfigured")
+
+
+class TestAlphaVantageSourceAdapter:
+    """Maps the recorded fixtures into the shared neutral types (02j §9: "Adapters")."""
+
+    def test_consensus_maps_estimates(self):
+        source = AlphaVantageSource(client_for("earnings_estimates_aapl"))
+        got = source.consensus("AAPL", now=pd.Timestamp("2026-10-11T00:00:00Z"))
+        assert got and got[0].provider == "alphavantage"
+        assert got[0].quality == "eod"  # the chain, not the adapter, decides fallback labeling
+
+    def test_earnings_results_maps_reported_earnings(self):
+        source = AlphaVantageSource(client_for("earnings_aapl"))
+        got = source.earnings_results("AAPL", now=pd.Timestamp("2026-10-11T00:00:00Z"))
+        assert got and got[0].surprise is not None
+        assert got[0].provider == "alphavantage"
 ```
 
-- [ ] **Step 6: Run it and watch it fail.**
+- [ ] **Step 7: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_alphavantage.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.alphavantage'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_alphavantage.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.alphavantage'`.
 
-- [ ] **Step 7: Implement `alphavantage.py`.**
+- [ ] **Step 8: Implement `providers/alphavantage.py`.**
 
 ```python
 """Alpha Vantage: `EARNINGS_ESTIMATES` (consensus + revisions) and `EARNINGS`
@@ -3909,19 +5075,26 @@ call budget (the controller had already spent 1 of the plan's 25/day):
   cannot be told apart by text; `QuotaExceeded` covers both.
 - An unrecognized symbol is HTTP 200 with an empty object `{}` (confirmed
   live for `EARNINGS`) -- no `"Error Message"`, no `"Information"`.
+
+`AlphaVantageSource` adapts the raw client to `ConsensusSource` and
+`EarningsSource`. Alpha Vantage is never in `DEFAULT_CHAINS["targets"]` --
+no free target/rating field exists on this provider at all.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
 
+from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.types import ConsensusSnapshot, EarningsResult
 
-PROVIDER = "alphavantage"
+PROVIDER_NAME = "alphavantage"
 BASE = "https://www.alphavantage.co/query"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
 HOST_KEY = "alphavantage"
@@ -3989,34 +5162,34 @@ class AlphaVantageClient:
         body = self._get("EARNINGS_ESTIMATES", symbol)
         rows = body.get("estimates") or []
         if not rows:
-            raise NoData(PROVIDER, f"no earnings estimates for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no earnings estimates for {symbol!r}")
         return [_to_eps_estimate(symbol, r) for r in rows]
 
     def earnings(self, symbol: str) -> list[ReportedEarnings]:
         body = self._get("EARNINGS", symbol)
         rows = body.get("quarterlyEarnings") or []
         if not rows:
-            raise NoData(PROVIDER, f"no reported earnings for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no reported earnings for {symbol!r}")
         return [_to_reported(symbol, r) for r in rows]
 
     def _get(self, function: str, symbol: str) -> dict[str, Any]:
         if not self.api_key:
-            raise NotConfigured(PROVIDER, "no API key configured")
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
         params = {"function": function, "symbol": symbol, "apikey": self.api_key}
         response = self._http.get(
             BASE,
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=USER_AGENT,
             min_interval=MIN_INTERVAL_S,
             params=params,
         )
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             body = response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
         note = body.get("Information") if isinstance(body, dict) else None
         if note:
             lowered = note.lower()
@@ -4025,12 +5198,12 @@ class AlphaVantageClient:
             # free key rate limit ... and instantly unlock all premium endpoints"),
             # so a substring check for that phrase alone would misclassify it.
             if "request" in lowered and ("per second" in lowered or "per day" in lowered):
-                raise QuotaExceeded(PROVIDER, "rate limit reached (daily cap or per-second burst; see docstring)")
+                raise QuotaExceeded(PROVIDER_NAME, "rate limit reached (daily cap or per-second burst; see docstring)")
             if "demo" in lowered:
-                raise NotConfigured(PROVIDER, "demo API key is not a real entitlement")
+                raise NotConfigured(PROVIDER_NAME, "demo API key is not a real entitlement")
             if "premium endpoint" in lowered:
-                raise NotConfigured(PROVIDER, f"{function} not entitled on this plan")
-            raise Unavailable(PROVIDER, f"unrecognized Information note: {note!r}")
+                raise NotConfigured(PROVIDER_NAME, f"{function} not entitled on this plan")
+            raise Unavailable(PROVIDER_NAME, f"unrecognized Information note: {note!r}")
         return body
 
 
@@ -4082,26 +5255,267 @@ def _to_reported(symbol: str, row: dict[str, Any]) -> ReportedEarnings:
         surprise_percent=_to_float(row.get("surprisePercentage")),
         report_time=row.get("reportTime"),
     )
+
+
+class AlphaVantageSource:
+    """Adapts `AlphaVantageClient` to `ConsensusSource` and `EarningsSource`."""
+
+    def __init__(self, client: AlphaVantageClient) -> None:
+        self._client = client
+
+    def consensus(self, symbol: str, *, now: pd.Timestamp) -> list[ConsensusSnapshot]:
+        rows = self._client.earnings_estimates(symbol)
+        return [
+            ConsensusSnapshot(
+                symbol=r.symbol,
+                period_end=r.period_end.date(),
+                period_kind="annual" if r.horizon == "fiscal year" else "quarter",
+                fiscal_year=r.fiscal_year,
+                fiscal_quarter=r.fiscal_quarter,
+                eps_mean=r.eps_mean,
+                eps_high=r.eps_high,
+                eps_low=r.eps_low,
+                analyst_count=r.analyst_count,
+                provider=PROVIDER_NAME,
+                quality="eod",
+                as_of=now,
+            )
+            for r in rows
+        ]
+
+    def earnings_results(self, symbol: str, *, now: pd.Timestamp) -> list[EarningsResult]:
+        rows = self._client.earnings(symbol)
+        return [
+            EarningsResult(
+                symbol=r.symbol,
+                period_end=r.fiscal_date_ending.date(),
+                fiscal_year=r.fiscal_date_ending.year,
+                fiscal_quarter=r.fiscal_date_ending.quarter,
+                report_date=r.reported_date.date() if r.reported_date is not None else None,
+                report_time=r.report_time,
+                eps_estimate=r.estimated_eps,
+                eps_actual=r.reported_eps,
+                surprise=r.surprise,
+                surprise_percent=r.surprise_percent,
+                provider=PROVIDER_NAME,
+                quality="eod",
+                as_of=now,
+            )
+            for r in rows
+        ]
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> AlphaVantageSource:
+    client = AlphaVantageClient(env.get("ALPHA_VANTAGE_API_KEY", ""), http=http)
+    return AlphaVantageSource(client)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("consensus", "earnings"), build=_build)
 ```
 
-- [ ] **Step 8: Run it and watch it pass.**
+- [ ] **Step 9: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_alphavantage.py`
-Expected: `7 passed`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_alphavantage.py`
+Expected: `9 passed`.
 
-- [ ] **Step 9: Write the failing Eulerpool tests.** `common/tests/test_eulerpool.py`:
+- [ ] **Step 10: Wire Alpha Vantage into the registry.** In `common/src/ai_trading_common/registry.py`, replace:
 
 ```python
-"""Contract tests against real Eulerpool responses recorded by scripts/record.py."""
+from ai_trading_common.providers import alpaca, finnhub, fred, sec_edgar
+```
+
+with:
+
+```python
+from ai_trading_common.providers import (
+    alpaca,
+    alphavantage,
+    finnhub,
+    fred,
+    sec_edgar,
+)
+```
+
+then replace:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+```
+
+with:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "alphavantage": alphavantage.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+```
+
+`DEFAULT_CHAINS` gains no new line here: Alpha Vantage is never primary for any kind, and `consensus`/`earnings`/`targets`' default chains are fixed once, by Task 2a.5 (the task that adds Eulerpool, their primary).
+
+- [ ] **Step 11: Add the Finnhub and Alpha Vantage recorder functions.** In `scripts/record.py`, add `import time` next to the existing `import json`/`import os`/`import sys` imports (`record_alphavantage` sleeps between its two calls to respect the free plan's per-second burst limit). Then replace:
+
+```python
+_RECORDERS = {
+    "alpaca": record_alpaca,
+    "sec": record_sec,
+    "sec_jpm": record_jpm_paging,
+    "fred": record_fred,
+}
+```
+
+with:
+
+```python
+def record_finnhub() -> None:
+    key = os.environ["FINNHUB_API_KEY"]
+    out = FIXTURES / "finnhub"
+    out.mkdir(parents=True, exist_ok=True)
+
+    def get(path: str, params: dict) -> requests.Response:
+        merged = dict(params, token=key)
+        response = requests.get(f"https://finnhub.io/api/v1{path}", params=merged, timeout=30)
+        return response
+
+    cases = [
+        ("calendar_earnings_aapl", "/calendar/earnings", {"symbol": "AAPL", "from": "2026-01-01", "to": "2026-12-31"}),
+        ("calendar_earnings_empty", "/calendar/earnings", {"from": "1990-01-01", "to": "1990-01-02"}),
+        ("company_news_aapl", "/company-news", {"symbol": "AAPL", "from": "2026-10-01", "to": "2026-10-11"}),
+        ("company_news_empty", "/company-news", {"symbol": "AAPL", "from": "2026-10-12", "to": "2026-10-12"}),
+        ("stock_earnings_aapl", "/stock/earnings", {"symbol": "AAPL"}),
+        ("stock_recommendation_aapl", "/stock/recommendation", {"symbol": "AAPL"}),
+        # `/stock/dividend` is not recorded: confirmed 403 on every free plan
+        # key (controller ruling -- it can never work on the free plans, so no
+        # `dividends()` client method exists to exercise against it).
+    ]
+    for name, path, params in cases:
+        response = get(path, params)
+        _write(out / f"{name}.json", params, response.json())
+        print(name, "HTTP", response.status_code)
+
+    bad_response = requests.get(
+        "https://finnhub.io/api/v1/stock/earnings", params={"symbol": "AAPL", "token": "not-a-real-key"}, timeout=30
+    )
+    _write(out / "bad_key_401.json", {}, bad_response.json())
+    print("bad_key_401 HTTP", bad_response.status_code)
+
+
+def record_alphavantage() -> None:
+    """Re-records Alpha Vantage fixtures live. **Costs real daily-quota calls**
+    (2 per symbol for `earnings_estimates`/`earnings`): the free plan allows
+    25 calls a day total, so only run this with a fresh day's budget in mind.
+    """
+    key = os.environ["ALPHA_VANTAGE_API_KEY"]
+    out = FIXTURES / "alphavantage"
+    out.mkdir(parents=True, exist_ok=True)
+
+    def get(function: str, symbol: str, api_key: str) -> requests.Response:
+        params = {"function": function, "symbol": symbol, "apikey": api_key}
+        return requests.get("https://www.alphavantage.co/query", params=params, timeout=30)
+
+    symbol = "AAPL"
+    estimates = get("EARNINGS_ESTIMATES", symbol, key)
+    _write(out / "earnings_estimates_aapl.json", {"function": "EARNINGS_ESTIMATES", "symbol": symbol}, estimates.json())
+    print("earnings_estimates_aapl HTTP", estimates.status_code)
+    time.sleep(2)
+
+    earnings = get("EARNINGS", symbol, key)
+    _write(out / "earnings_aapl.json", {"function": "EARNINGS", "symbol": symbol}, earnings.json())
+    print("earnings_aapl HTTP", earnings.status_code)
+    # `OVERVIEW` (the analyst-target/rating endpoint) is not recorded: confirmed
+    # premium-gated on every key tried (controller ruling -- it can never work
+    # on the free plans, so no `overview_targets()` client method exists to
+    # exercise against it).
+
+
+_RECORDERS = {
+    "alpaca": record_alpaca,
+    "sec": record_sec,
+    "sec_jpm": record_jpm_paging,
+    "fred": record_fred,
+    "finnhub": record_finnhub,
+    "alphavantage": record_alphavantage,
+}
+```
+
+- [ ] **Step 12: Run everything and lint.**
+
+Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
+Expected: `148 passed` (124 + 15 + 9), ruff clean, 0 skipped.
+
+- [ ] **Step 13: Add the "no notice needed" section.** Append to `THIRD_PARTY_NOTICES.md`:
+
+```markdown
+
+## No notice needed: `providers/finnhub.py`, `providers/alphavantage.py`
+
+No upstream code is adapted. `finnhub.py`'s `news_as_of` (now in
+`ai_trading_common.types`, 02j) reuses the *idea* of TradingAgents' news
+handling -- "unavailable" (the client call itself failing) kept apart from
+"no news" (an empty, successfully-fetched list) -- with no code copied, so
+per the brief ("A 'pattern' reuse ... needs no notice") this carries no
+entry.
+
+`providers/finnhub.py` and `providers/alphavantage.py` are both written fresh
+against each provider's own public API documentation (Finnhub's and Alpha
+Vantage's official docs).
+```
+
+- [ ] **Step 14: Commit.**
+
+```bash
+git add ai-trading/common/src/ai_trading_common/providers/finnhub.py ai-trading/common/src/ai_trading_common/providers/alphavantage.py ai-trading/common/src/ai_trading_common/registry.py ai-trading/common/tests/providers/test_finnhub.py ai-trading/common/tests/providers/test_alphavantage.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
+git commit -m "feat(ai-trading): Finnhub and Alpha Vantage providers, registered for news/earnings_calendar/consensus/earnings"
+```
+
+---
+
+### Task 2a.5: Eulerpool, including the calendar/surprise join
+
+**Files:**
+- Create: `common/src/ai_trading_common/providers/eulerpool.py`
+- Create: `common/tests/providers/test_eulerpool.py`
+- Modify: `common/src/ai_trading_common/registry.py`, `common/scripts/record.py`, `common/THIRD_PARTY_NOTICES.md`
+
+
+**Interfaces:**
+- Consumes: `ai_trading_common.errors.{NoData, NotConfigured, Unavailable}`, `ai_trading_common.http.ThrottledClient`, `ai_trading_common.testing.{FakeResponse, make_client}`, `ai_trading_common._provider.Provider` (2a.1); `ai_trading_common.types.{AnalystTargets, ConsensusSnapshot, EarningsResult}` (2a.1).
+- Produces: `ai_trading_common.providers.eulerpool.{EstimatePeriod, CalendarEntry, EarningsSurprise, Recommendation, EulerpoolClient, EulerpoolSource}`, with `EulerpoolClient(api_key, *, http=None).estimates(symbol)`, `.earnings_calendar(symbol)`, `.earnings_surprises(symbol)`, `.recommendations(symbol)`; `EulerpoolSource` implementing `ConsensusSource`/`EarningsSource`/`TargetsSource`; `REGISTRY["eulerpool"]`, and — this task's lines land last, since they are the ones that need every other provider task's module to already exist — `DEFAULT_CHAINS["consensus"] = ("eulerpool", "alphavantage")`, `DEFAULT_CHAINS["earnings"] = ("eulerpool", "finnhub", "alphavantage")`, `DEFAULT_CHAINS["targets"] = ("eulerpool", "finnhub")`.
+
+Fixture paths used (already committed, the calendar fixture re-recorded in `c602b52`): `common/tests/fixtures/eulerpool/{estimates_aapl,estimates_empty_brkb,calendar_aapl,surprises_aapl,recommendations_aapl,bad_key_401,unknown_symbol_404,unknown_recommendations_404}.json`.
+
+- [ ] **Step 1: Write the failing Eulerpool tests.** `common/tests/providers/test_eulerpool.py`:
+
+```python
+"""Contract tests against real Eulerpool responses recorded by scripts/record.py, plus the
+earnings-calendar/surprise join that lives entirely inside this adapter (not cross-provider
+fallback -- that lives in `registry.py`)."""
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 from ai_trading_common.errors import NoData, NotConfigured
-from ai_trading_common.eulerpool import EulerpoolClient
+from ai_trading_common.providers.eulerpool import (
+    CalendarEntry,
+    EarningsSurprise,
+    EulerpoolClient,
+    EulerpoolSource,
+)
 from ai_trading_common.testing import FakeResponse, make_client
 
-FIXTURES = Path(__file__).parent / "fixtures" / "eulerpool"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "eulerpool"
+NOW = pd.Timestamp("2026-10-11T21:00:00Z")
 
 
 def load(name: str) -> dict:
@@ -4191,14 +5605,183 @@ class TestErrors:
             pass
         else:
             raise AssertionError("expected NotConfigured")
+
+
+class TestEulerpoolSourceAdapter:
+    """Maps the recorded fixtures into the shared neutral types (02j §9: "Adapters")."""
+
+    def test_consensus_maps_estimates(self):
+        source = EulerpoolSource(client_for("estimates_aapl"))
+        got = source.consensus("AAPL", now=NOW)
+        assert got and got[0].provider == "eulerpool"
+        assert got[0].quality == "eod"  # the chain, not the adapter, decides fallback labeling
+
+    def test_analyst_targets_carries_both_counts_and_prices(self):
+        source = EulerpoolSource(client_for("recommendations_aapl"))
+        got = source.analyst_targets("AAPL", now=NOW)
+        assert got.target_mean is not None
+        assert got.buy >= 0
+        assert got.provider == "eulerpool"
+
+
+class TestEarningsResultsCalendarSurpriseJoin:
+    """`EulerpoolSource.earnings_results` merges its own calendar and surprise endpoints by
+    period (`_merge_by_period`), since neither endpoint alone carries both the report date and
+    the fiscal period it covers."""
+
+    def test_merges_calendar_and_surprises_by_period(self):
+        # The calendar's date is the report date; the surprise's date is the fiscal period end
+        # that report covers -- the two must stay distinct fields on the merged row, not collapse
+        # onto each other (the bug this test was rewritten to catch).
+        calendar = [
+            CalendarEntry(
+                symbol="AAPL",
+                report_date=date(2026, 7, 30),
+                eps_estimate=1.9,
+                eps_actual=2.02,
+                revenue_estimate=None,
+                revenue_actual=None,
+            )
+        ]
+        surprises = [
+            EarningsSurprise(
+                symbol="AAPL",
+                period_end=date(2026, 6, 30),
+                fiscal_year=2026,
+                fiscal_quarter=3,
+                eps_estimate=1.9,
+                eps_actual=2.02,
+                eps_difference=0.12,
+                surprise_percent=6.3,
+            )
+        ]
+        client, _, _ = make_client([])  # unused: calendar/surprises are stubbed below
+        source = EulerpoolSource(EulerpoolClient("key", http=client))
+        source._client.earnings_calendar = lambda symbol: calendar  # noqa: SLF001
+        source._client.earnings_surprises = lambda symbol: surprises  # noqa: SLF001
+        got = source.earnings_results("AAPL", now=NOW)
+        assert len(got) == 1
+        assert got[0].period_end == date(2026, 6, 30)
+        assert got[0].report_date == date(2026, 7, 30)
+        assert got[0].surprise == 0.12
+        assert got[0].fiscal_quarter == 3
+
+    def test_fixture_calendar_and_surprises_merge_into_one_row_per_period_with_both_dates_right(self):
+        """Real recorded AAPL data: the calendar's report dates and the surprise history's period
+        ends genuinely differ (a report lands about a month after its own period end), so this
+        pins the join against real-world data, not just a hand-built example."""
+        client, _, _ = make_client(
+            [FakeResponse(200, load("calendar_aapl")["body"]), FakeResponse(200, load("surprises_aapl")["body"])]
+        )
+        source = EulerpoolSource(EulerpoolClient("key", http=client))
+        got = source.earnings_results("AAPL", now=NOW)
+
+        matched = {r.period_end: r for r in got if r.period_end is not None}
+        assert matched[date(2026, 6, 30)].report_date == date(2026, 7, 30)
+        assert matched[date(2026, 3, 31)].report_date == date(2026, 4, 29)
+        assert matched[date(2025, 12, 31)].report_date == date(2026, 1, 29)
+        assert matched[date(2025, 9, 30)].report_date == date(2025, 10, 30)
+        assert len(matched) == 4  # every recorded surprise row found its report
+
+    def test_an_unmatched_surprise_has_no_report_date(self):
+        surprises = [
+            EarningsSurprise(
+                symbol="AAPL",
+                period_end=date(2020, 6, 30),  # far older than any calendar row recorded here
+                fiscal_year=2020,
+                fiscal_quarter=3,
+                eps_estimate=1.0,
+                eps_actual=1.1,
+                eps_difference=0.1,
+                surprise_percent=10.0,
+            )
+        ]
+        client, _, _ = make_client([])
+        source = EulerpoolSource(EulerpoolClient("key", http=client))
+        source._client.earnings_calendar = lambda symbol: []  # noqa: SLF001
+        source._client.earnings_surprises = lambda symbol: surprises  # noqa: SLF001
+        got = source.earnings_results("AAPL", now=NOW)
+        assert len(got) == 1
+        assert got[0].period_end == date(2020, 6, 30)
+        assert got[0].report_date is None
+
+    def test_an_unmatched_calendar_row_has_no_period_end(self):
+        calendar = [
+            CalendarEntry(
+                symbol="AAPL",
+                report_date=date(2001, 7, 17),  # the oldest recorded row: no surprise reaches back this far
+                eps_estimate=0.0028,
+                eps_actual=0.003,
+                revenue_estimate=None,
+                revenue_actual=None,
+            )
+        ]
+        client, _, _ = make_client([])
+        source = EulerpoolSource(EulerpoolClient("key", http=client))
+        source._client.earnings_calendar = lambda symbol: calendar  # noqa: SLF001
+        source._client.earnings_surprises = lambda symbol: []  # noqa: SLF001
+        got = source.earnings_results("AAPL", now=NOW)
+        assert len(got) == 1
+        assert got[0].period_end is None
+        assert got[0].report_date == date(2001, 7, 17)
+
+    def test_the_90_day_join_window_boundary(self):
+        period_end = date(2026, 6, 30)
+        surprises = [
+            EarningsSurprise(
+                symbol="AAPL",
+                period_end=period_end,
+                fiscal_year=2026,
+                fiscal_quarter=3,
+                eps_estimate=1.9,
+                eps_actual=2.02,
+                eps_difference=0.12,
+                surprise_percent=6.3,
+            )
+        ]
+        at_the_boundary = [
+            CalendarEntry(
+                symbol="AAPL",
+                report_date=period_end + timedelta(days=90),  # exactly 90 days: must match
+                eps_estimate=1.9,
+                eps_actual=2.02,
+                revenue_estimate=None,
+                revenue_actual=None,
+            )
+        ]
+        past_the_boundary = [
+            CalendarEntry(
+                symbol="AAPL",
+                report_date=period_end + timedelta(days=91),  # one day past: must not match
+                eps_estimate=1.9,
+                eps_actual=2.02,
+                revenue_estimate=None,
+                revenue_actual=None,
+            )
+        ]
+
+        client, _, _ = make_client([])
+        matched_source = EulerpoolSource(EulerpoolClient("key", http=client))
+        matched_source._client.earnings_calendar = lambda symbol: at_the_boundary  # noqa: SLF001
+        matched_source._client.earnings_surprises = lambda symbol: surprises  # noqa: SLF001
+        matched = matched_source.earnings_results("AAPL", now=NOW)
+        assert len(matched) == 1
+        assert matched[0].report_date == period_end + timedelta(days=90)
+
+        unmatched_source = EulerpoolSource(EulerpoolClient("key", http=client))
+        unmatched_source._client.earnings_calendar = lambda symbol: past_the_boundary  # noqa: SLF001
+        unmatched_source._client.earnings_surprises = lambda symbol: surprises  # noqa: SLF001
+        unmatched = unmatched_source.earnings_results("AAPL", now=NOW)
+        assert len(unmatched) == 2  # the surprise and the calendar row both stay unmatched
+        assert all(r.report_date is None for r in unmatched if r.period_end == period_end)
 ```
 
-- [ ] **Step 10: Run it and watch it fail.**
+- [ ] **Step 2: Run it and watch it fail.**
 
-Run (in `common/`): `uv run pytest -q tests/test_eulerpool.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.eulerpool'`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_eulerpool.py`
+Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.providers.eulerpool'`.
 
-- [ ] **Step 11: Implement `eulerpool.py`.**
+- [ ] **Step 3: Implement `providers/eulerpool.py`.**
 
 ```python
 """Eulerpool: analyst estimates, earnings calendar/surprises, and targets/recommendations.
@@ -4241,18 +5824,29 @@ with an empty array, not an error either.
 No documented per-minute rate limit was found (only the "100,000
 requests/month, non-commercial" plan ceiling); `MIN_INTERVAL_S` is this
 lane's own conservative choice, not a published number.
+
+`EulerpoolSource` adapts the raw client to `ConsensusSource`, `EarningsSource`,
+and `TargetsSource`. Its `earnings_results` joins Eulerpool's own earnings-
+calendar and earnings-surprises endpoints (see `_merge_by_period` below) --
+purely an Eulerpool-internal join, not cross-provider fallback (that lives in
+`registry.py`).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from datetime import date, timedelta
 from typing import Any
 
+import pandas as pd
+
+from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.types import AnalystTargets, ConsensusSnapshot, EarningsResult
 
-PROVIDER = "eulerpool"
+PROVIDER_NAME = "eulerpool"
 BASE = "https://api.eulerpool.com/api/1"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
 HOST_KEY = "eulerpool"
@@ -4326,48 +5920,48 @@ class EulerpoolClient:
     def estimates(self, symbol: str) -> list[EstimatePeriod]:
         rows = self._get(f"/equity/estimates/{symbol}", not_found=f"no estimates coverage for {symbol!r}")
         if not rows:
-            raise NoData(PROVIDER, f"no estimates for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no estimates for {symbol!r}")
         return [_to_estimate_period(symbol, r) for r in rows]
 
     def earnings_calendar(self, symbol: str) -> list[CalendarEntry]:
         rows = self._get(f"/calendar/earnings-by-symbol/{symbol}", not_found=f"no earnings calendar for {symbol!r}")
         if not rows:
-            raise NoData(PROVIDER, f"no earnings-calendar entries for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no earnings-calendar entries for {symbol!r}")
         return [_to_calendar_entry(r) for r in rows]
 
     def earnings_surprises(self, symbol: str) -> list[EarningsSurprise]:
         rows = self._get(f"/calendar/earnings-surprises/{symbol}", not_found=f"no earnings surprises for {symbol!r}")
         if not rows:
-            raise NoData(PROVIDER, f"no earnings surprises for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no earnings surprises for {symbol!r}")
         return [_to_surprise(r) for r in rows]
 
     def recommendations(self, symbol: str) -> list[Recommendation]:
         rows = self._get(f"/research/recommendations/{symbol}", not_found=f"no recommendations for {symbol!r}")
         if not rows:
-            raise NoData(PROVIDER, f"no recommendations for {symbol!r}")
+            raise NoData(PROVIDER_NAME, f"no recommendations for {symbol!r}")
         return [_to_recommendation(symbol, r) for r in rows]
 
     def _get(self, path: str, *, not_found: str) -> Any:
         if not self.api_key:
-            raise NotConfigured(PROVIDER, "no API key configured")
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
         response = self._http.get(
             f"{BASE}{path}",
-            provider=PROVIDER,
+            provider=PROVIDER_NAME,
             host_key=HOST_KEY,
             user_agent=USER_AGENT,
             min_interval=MIN_INTERVAL_S,
             params={"token": self.api_key},
         )
         if response.status_code == 401:
-            raise NotConfigured(PROVIDER, "key rejected (HTTP 401)")
+            raise NotConfigured(PROVIDER_NAME, "key rejected (HTTP 401)")
         if response.status_code == 404:
-            raise NoData(PROVIDER, not_found)
+            raise NoData(PROVIDER_NAME, not_found)
         if response.status_code != 200:
-            raise Unavailable(PROVIDER, f"HTTP {response.status_code}")
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
         try:
             return response.json()
         except ValueError as exc:
-            raise Unavailable(PROVIDER, f"malformed JSON body: {exc}") from exc
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
 
 
 def _to_estimate_period(symbol: str, row: dict[str, Any]) -> EstimatePeriod:
@@ -4425,710 +6019,9 @@ def _to_recommendation(symbol: str, row: dict[str, Any]) -> Recommendation:
         target_high=row.get("targetHigh"),
         target_low=row.get("targetLow"),
     )
-```
 
-- [ ] **Step 12: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_eulerpool.py`
-Expected: `9 passed`.
-
-- [ ] **Step 13: Add the Finnhub, Alpha Vantage, and Eulerpool recorder functions.** In `scripts/record.py`, add `import time` next to the existing `import json`/`import os`/`import sys` imports (`record_alphavantage` sleeps between its two calls to respect the free plan's per-second burst limit). Then replace:
-
-```python
-_RECORDERS = {
-    "alpaca": record_alpaca,
-    "sec": record_sec,
-    "sec_jpm": record_jpm_paging,
-    "fred": record_fred,
-}
-```
-
-with:
-
-```python
-def record_finnhub() -> None:
-    key = os.environ["FINNHUB_API_KEY"]
-    out = FIXTURES / "finnhub"
-    out.mkdir(parents=True, exist_ok=True)
-
-    def get(path: str, params: dict) -> requests.Response:
-        merged = dict(params, token=key)
-        response = requests.get(f"https://finnhub.io/api/v1{path}", params=merged, timeout=30)
-        return response
-
-    cases = [
-        ("calendar_earnings_aapl", "/calendar/earnings", {"symbol": "AAPL", "from": "2026-01-01", "to": "2026-12-31"}),
-        ("calendar_earnings_empty", "/calendar/earnings", {"from": "1990-01-01", "to": "1990-01-02"}),
-        ("company_news_aapl", "/company-news", {"symbol": "AAPL", "from": "2026-10-01", "to": "2026-10-11"}),
-        ("company_news_empty", "/company-news", {"symbol": "AAPL", "from": "2026-10-12", "to": "2026-10-12"}),
-        ("stock_earnings_aapl", "/stock/earnings", {"symbol": "AAPL"}),
-        ("stock_recommendation_aapl", "/stock/recommendation", {"symbol": "AAPL"}),
-        # `/stock/dividend` is not recorded: confirmed 403 on every free plan
-        # key (controller ruling -- it can never work on the free plans, so no
-        # `dividends()` client method exists to exercise against it).
-    ]
-    for name, path, params in cases:
-        response = get(path, params)
-        _write(out / f"{name}.json", params, response.json())
-        print(name, "HTTP", response.status_code)
-
-    bad_response = requests.get(
-        "https://finnhub.io/api/v1/stock/earnings", params={"symbol": "AAPL", "token": "not-a-real-key"}, timeout=30
-    )
-    _write(out / "bad_key_401.json", {}, bad_response.json())
-    print("bad_key_401 HTTP", bad_response.status_code)
-
-
-def record_alphavantage() -> None:
-    """Re-records Alpha Vantage fixtures live. **Costs real daily-quota calls**
-    (2 per symbol for `earnings_estimates`/`earnings`): the free plan allows
-    25 calls a day total, so only run this with a fresh day's budget in mind.
-    """
-    key = os.environ["ALPHA_VANTAGE_API_KEY"]
-    out = FIXTURES / "alphavantage"
-    out.mkdir(parents=True, exist_ok=True)
-
-    def get(function: str, symbol: str, api_key: str) -> requests.Response:
-        params = {"function": function, "symbol": symbol, "apikey": api_key}
-        return requests.get("https://www.alphavantage.co/query", params=params, timeout=30)
-
-    symbol = "AAPL"
-    estimates = get("EARNINGS_ESTIMATES", symbol, key)
-    _write(out / "earnings_estimates_aapl.json", {"function": "EARNINGS_ESTIMATES", "symbol": symbol}, estimates.json())
-    print("earnings_estimates_aapl HTTP", estimates.status_code)
-    time.sleep(2)
-
-    earnings = get("EARNINGS", symbol, key)
-    _write(out / "earnings_aapl.json", {"function": "EARNINGS", "symbol": symbol}, earnings.json())
-    print("earnings_aapl HTTP", earnings.status_code)
-    # `OVERVIEW` (the analyst-target/rating endpoint) is not recorded: confirmed
-    # premium-gated on every key tried (controller ruling -- it can never work
-    # on the free plans, so no `overview_targets()` client method exists to
-    # exercise against it).
-
-
-def record_eulerpool() -> None:
-    key = os.environ["EULERPOOL_API_KEY"]
-    out = FIXTURES / "eulerpool"
-    out.mkdir(parents=True, exist_ok=True)
-
-    def get(path: str) -> requests.Response:
-        return requests.get(f"https://api.eulerpool.com/api/1{path}", params={"token": key}, timeout=30)
-
-    cases = [
-        ("estimates_aapl", "/equity/estimates/AAPL"),
-        ("estimates_empty_brkb", "/equity/estimates/BRK.B"),
-        ("calendar_aapl", "/calendar/earnings-by-symbol/AAPL"),
-        ("surprises_aapl", "/calendar/earnings-surprises/AAPL"),
-        ("recommendations_aapl", "/research/recommendations/AAPL"),
-    ]
-    for name, path in cases:
-        response = get(path)
-        _write(out / f"{name}.json", {}, response.json())
-        print(name, "HTTP", response.status_code)
-
-    bad = requests.get(
-        "https://api.eulerpool.com/api/1/equity/estimates/AAPL", params={"token": "not-a-real-key"}, timeout=30
-    )
-    _write(out / "bad_key_401.json", {}, bad.json())
-    print("bad_key_401 HTTP", bad.status_code)
-
-    unknown = requests.get(
-        "https://api.eulerpool.com/api/1/equity/estimates/ZZZZINVALIDXYZ", params={"token": key}, timeout=30
-    )
-    _write(out / "unknown_symbol_404.json", {}, unknown.json())
-    print("unknown_symbol_404 HTTP", unknown.status_code)
-
-    unknown_rec = requests.get(
-        "https://api.eulerpool.com/api/1/research/recommendations/ZZZZINVALIDXYZ", params={"token": key}, timeout=30
-    )
-    _write(out / "unknown_recommendations_404.json", {}, unknown_rec.json())
-    print("unknown_recommendations_404 HTTP", unknown_rec.status_code)
-
-
-_RECORDERS = {
-    "alpaca": record_alpaca,
-    "sec": record_sec,
-    "sec_jpm": record_jpm_paging,
-    "fred": record_fred,
-    "finnhub": record_finnhub,
-    "alphavantage": record_alphavantage,
-    "eulerpool": record_eulerpool,
-}
-```
-
-- [ ] **Step 14: Run everything and lint.**
-
-Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `137 passed` (111 + 10 + 7 + 9), ruff clean, 0 skipped.
-
-- [ ] **Step 15: Add the "no notice needed" section.** Append to `THIRD_PARTY_NOTICES.md`:
-
-```markdown
-
-## No notice needed: `finnhub.py`, `alphavantage.py`, `eulerpool.py`, `consensus.py`
-
-No upstream code is adapted. `finnhub.py`'s `news_as_of` reuses the *idea* of
-TradingAgents' news handling -- "unavailable" (the client call itself
-failing) kept apart from "no news" (an empty, successfully-fetched list) --
-with no code copied, so per the brief ("A 'pattern' reuse ... needs no
-notice") this file carries no entry.
-
-`finnhub.py`, `alphavantage.py`, `eulerpool.py`, and `consensus.py` are all
-written fresh against each provider's own public API documentation
-(Finnhub's and Alpha Vantage's official docs; Eulerpool's
-`https://eulerpool.com/llms-full.txt` endpoint reference, since the
-marketing/docs site itself returns HTTP 403 to a non-browser `GET`).
-```
-
-- [ ] **Step 16: Commit.**
-
-```bash
-git add ai-trading/common/src/ai_trading_common/finnhub.py ai-trading/common/src/ai_trading_common/alphavantage.py ai-trading/common/src/ai_trading_common/eulerpool.py ai-trading/common/tests/test_finnhub.py ai-trading/common/tests/test_alphavantage.py ai-trading/common/tests/test_eulerpool.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
-git commit -m "feat(ai-trading): Finnhub, Alpha Vantage, and Eulerpool consensus-EPS clients"
-```
-
----
-
-### Task 2a.6: `consensus.py`, and folding the pilot into 02d
-
-**Files:**
-- Create: `common/src/ai_trading_common/consensus.py`
-- Create: `common/tests/test_consensus.py`
-- Modify: `common/scripts/record.py`
-- Modify: `common/tests/fixtures/eulerpool/calendar_aapl.json` (re-recorded; see "Fixture note" below)
-- Modify: `ai-trading/plans/subplans/02d-desk-spike-results.md`
-
-**Interfaces:**
-- Consumes: `ai_trading_common.fallback.first_success` (2a.1), `ai_trading_common.finnhub.{EarningsSurprise, FinnhubClient}` (2a.5), `ai_trading_common.alphavantage.{AlphaVantageClient, EpsEstimate, ReportedEarnings}` (2a.5), `ai_trading_common.eulerpool.{CalendarEntry, EarningsSurprise, EulerpoolClient}` (2a.5).
-- Produces: `ai_trading_common.consensus.{ConsensusSnapshot, EarningsResult, AnalystTargets, consensus_snapshots, earnings_results, analyst_targets}`, used directly by Phase 3's daily snapshot job (not built here).
-
-**Fixture note (nothing to record in this task):** `common/tests/fixtures/eulerpool/calendar_aapl.json` was re-recorded after the plan review and the new version is already committed (`c602b52`, superseding the `ae6ec0f` copy); 2a.5's tests pass on it too. Why — the originally committed sample only covered AAPL's 2001–2002 earnings calendar, with no overlap against `surprises_aapl.json`'s 2025–2026 window, so the fixture-based merge test below (Step 1, `test_fixture_calendar_and_surprises_merge_into_one_row_per_period_with_both_dates_right`) had nothing real to join. Re-recorded live (`GET /calendar/earnings-by-symbol/AAPL`) and trimmed to 7 rows: the original two oldest rows (2001-07-17, 2001-10-17, kept for the "unmatched calendar row" shape) plus the four report dates that cover `surprises_aapl.json`'s four periods (2025-10-30, 2026-01-29, 2026-04-29, 2026-07-30) and the upcoming undated-actual entry (2026-11-02). No secrets in the body (the key travels in the query string, already stripped by `scripts/record.py`'s `_strip_secrets`).
-
-- [ ] **Step 1: Write the failing tests.** `common/tests/test_consensus.py`:
-
-```python
-"""Unit tests for the fallback chains in consensus.py.
-
-Uses small fake clients (not fixture-driven HTTP) so the precedence and
-per-field composition rules are pinned independently of any one provider's
-real response shape; test_eulerpool.py/test_finnhub.py/test_alphavantage.py
-already cover each client's own parsing against real fixtures.
-"""
-
-from datetime import date, timedelta
-
-import pandas as pd
-import pytest
-
-from ai_trading_common.consensus import analyst_targets, consensus_snapshots, earnings_results
-from ai_trading_common.errors import NoData, NotConfigured, Unavailable
-
-NOW = pd.Timestamp("2026-10-11T21:00:00Z")
-
-
-class FakeEulerpool:
-    def __init__(self, *, estimates=None, calendar=None, surprises=None, recommendations=None, raises=None):
-        self._estimates, self._calendar, self._surprises, self._recommendations = (
-            estimates,
-            calendar,
-            surprises,
-            recommendations,
-        )
-        self._raises = raises
-
-    def estimates(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._estimates
-
-    def earnings_calendar(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._calendar
-
-    def earnings_surprises(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._surprises
-
-    def recommendations(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._recommendations
-
-
-class FakeFinnhub:
-    def __init__(self, *, surprises=None, recommendations=None, raises=None):
-        self._surprises, self._recommendations, self._raises = surprises, recommendations, raises
-
-    def earnings_surprises(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._surprises
-
-    def recommendation_trends(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._recommendations
-
-
-class FakeAlphaVantage:
-    def __init__(self, *, estimates=None, earnings=None, raises=None):
-        self._estimates, self._earnings, self._raises = estimates, earnings, raises
-
-    def earnings_estimates(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._estimates
-
-    def earnings(self, symbol):
-        if self._raises:
-            raise self._raises
-        return self._earnings
-
-
-def eulerpool_estimate_row(eps_mean=5.0, quarter=1):
-    from ai_trading_common.eulerpool import EstimatePeriod
-
-    return EstimatePeriod(
-        symbol="AAPL",
-        period_end=date(2026, 12, 31),
-        fiscal_year=2026,
-        fiscal_quarter=quarter,
-        eps_mean=eps_mean,
-        eps_high=eps_mean + 1,
-        eps_low=eps_mean - 1,
-        eps_analyst_count=10,
-        revenue_mean=None,
-        revenue_high=None,
-        revenue_low=None,
-        revenue_analyst_count=None,
-    )
-
-
-def av_estimate_row():
-    from ai_trading_common.alphavantage import EpsEstimate
-
-    return EpsEstimate(
-        symbol="AAPL",
-        period_end=pd.Timestamp("2026-12-31"),
-        horizon="fiscal quarter",
-        fiscal_year=2026,
-        fiscal_quarter=4,
-        eps_mean=4.5,
-        eps_high=5.0,
-        eps_low=4.0,
-        analyst_count=8,
-        eps_mean_7d_ago=4.4,
-        eps_mean_30d_ago=4.3,
-        eps_mean_60d_ago=None,
-        eps_mean_90d_ago=None,
-        revisions_up_7d=2,
-        revisions_down_7d=0,
-        revisions_up_30d=3,
-        revisions_down_30d=1,
-    )
-
-
-def finnhub_recommendation_row():
-    from ai_trading_common.finnhub import RecommendationTrend
-
-    return RecommendationTrend(
-        symbol="AAPL", period=date(2026, 9, 1), strong_buy=10, buy=20, hold=5, sell=1, strong_sell=0
-    )
-
-
-def eulerpool_recommendation_row():
-    from ai_trading_common.eulerpool import Recommendation
-
-    return Recommendation(
-        symbol="AAPL",
-        period=date(2026, 9, 1),
-        strong_buy=12,
-        buy=22,
-        hold=15,
-        sell=3,
-        strong_sell=1,
-        target_mean=340.72,
-        target_median=360,
-        target_high=400,
-        target_low=245,
-    )
-
-
-class TestConsensusSnapshotsFallback:
-    def test_eulerpool_primary_keeps_eod_quality(self):
-        euler = FakeEulerpool(estimates=[eulerpool_estimate_row()])
-        got = consensus_snapshots("AAPL", eulerpool=euler, alphavantage=None, now=NOW)
-        assert got[0].quality == "eod"
-        assert got[0].provider == "eulerpool"
-
-    def test_alphavantage_fallback_is_relabeled(self):
-        euler = FakeEulerpool(raises=Unavailable("eulerpool", "down"))
-        av = FakeAlphaVantage(estimates=[av_estimate_row()])
-        got = consensus_snapshots("AAPL", eulerpool=euler, alphavantage=av, now=NOW)
-        assert got[0].quality == "fallback"
-        assert got[0].provider == "alphavantage"
-
-    def test_a_transient_failure_beats_a_later_no_data(self):
-        euler = FakeEulerpool(raises=Unavailable("eulerpool", "down"))
-        av = FakeAlphaVantage(raises=NoData("alphavantage", "none"))
-        with pytest.raises(Unavailable):
-            consensus_snapshots("AAPL", eulerpool=euler, alphavantage=av, now=NOW)
-
-    def test_both_no_data_raises_no_data(self):
-        euler = FakeEulerpool(raises=NoData("eulerpool", "none"))
-        av = FakeAlphaVantage(raises=NoData("alphavantage", "none"))
-        with pytest.raises(NoData):
-            consensus_snapshots("AAPL", eulerpool=euler, alphavantage=av, now=NOW)
-
-
-class TestEarningsResultsFallback:
-    def test_eulerpool_merges_calendar_and_surprises_by_period(self):
-        # The calendar's date is the report date; the surprise's date is the fiscal period end
-        # that report covers -- the two must stay distinct fields on the merged row, not collapse
-        # onto each other (the bug this test was rewritten to catch).
-        from ai_trading_common.eulerpool import CalendarEntry, EarningsSurprise
-
-        calendar = [
-            CalendarEntry(
-                symbol="AAPL",
-                report_date=date(2026, 7, 30),
-                eps_estimate=1.9,
-                eps_actual=2.02,
-                revenue_estimate=None,
-                revenue_actual=None,
-            )
-        ]
-        surprises = [
-            EarningsSurprise(
-                symbol="AAPL",
-                period_end=date(2026, 6, 30),
-                fiscal_year=2026,
-                fiscal_quarter=3,
-                eps_estimate=1.9,
-                eps_actual=2.02,
-                eps_difference=0.12,
-                surprise_percent=6.3,
-            )
-        ]
-        euler = FakeEulerpool(calendar=calendar, surprises=surprises)
-        got = earnings_results("AAPL", eulerpool=euler, finnhub=None, alphavantage=None, now=NOW)
-        assert len(got) == 1
-        assert got[0].period_end == date(2026, 6, 30)
-        assert got[0].report_date == date(2026, 7, 30)
-        assert got[0].surprise == 0.12
-        assert got[0].fiscal_quarter == 3
-
-    def test_fixture_calendar_and_surprises_merge_into_one_row_per_period_with_both_dates_right(self):
-        """Real recorded AAPL data: the calendar's report dates and the surprise history's period
-        ends genuinely differ (a report lands about a month after its own period end), so this
-        pins the join against real-world data, not just a hand-built example."""
-        from pathlib import Path
-
-        from ai_trading_common.eulerpool import EulerpoolClient
-        from ai_trading_common.testing import FakeResponse, make_client
-
-        fixtures = Path(__file__).parent / "fixtures" / "eulerpool"
-
-        def load(name: str) -> dict:
-            import json
-
-            return json.loads((fixtures / f"{name}.json").read_text())
-
-        client, _, _ = make_client(
-            [FakeResponse(200, load("calendar_aapl")["body"]), FakeResponse(200, load("surprises_aapl")["body"])]
-        )
-        euler = EulerpoolClient("key", http=client)
-        got = earnings_results("AAPL", eulerpool=euler, finnhub=None, alphavantage=None, now=NOW)
-
-        matched = {r.period_end: r for r in got if r.period_end is not None}
-        assert matched[date(2026, 6, 30)].report_date == date(2026, 7, 30)
-        assert matched[date(2026, 3, 31)].report_date == date(2026, 4, 29)
-        assert matched[date(2025, 12, 31)].report_date == date(2026, 1, 29)
-        assert matched[date(2025, 9, 30)].report_date == date(2025, 10, 30)
-        assert len(matched) == 4  # every recorded surprise row found its report
-
-    def test_an_unmatched_surprise_has_no_report_date(self):
-        from ai_trading_common.eulerpool import EarningsSurprise
-
-        surprises = [
-            EarningsSurprise(
-                symbol="AAPL",
-                period_end=date(2020, 6, 30),  # far older than any calendar row recorded here
-                fiscal_year=2020,
-                fiscal_quarter=3,
-                eps_estimate=1.0,
-                eps_actual=1.1,
-                eps_difference=0.1,
-                surprise_percent=10.0,
-            )
-        ]
-        euler = FakeEulerpool(calendar=[], surprises=surprises)
-        got = earnings_results("AAPL", eulerpool=euler, finnhub=None, alphavantage=None, now=NOW)
-        assert len(got) == 1
-        assert got[0].period_end == date(2020, 6, 30)
-        assert got[0].report_date is None
-
-    def test_an_unmatched_calendar_row_has_no_period_end(self):
-        from ai_trading_common.eulerpool import CalendarEntry
-
-        calendar = [
-            CalendarEntry(
-                symbol="AAPL",
-                report_date=date(2001, 7, 17),  # the oldest recorded row: no surprise reaches back this far
-                eps_estimate=0.0028,
-                eps_actual=0.003,
-                revenue_estimate=None,
-                revenue_actual=None,
-            )
-        ]
-        euler = FakeEulerpool(calendar=calendar, surprises=[])
-        got = earnings_results("AAPL", eulerpool=euler, finnhub=None, alphavantage=None, now=NOW)
-        assert len(got) == 1
-        assert got[0].period_end is None
-        assert got[0].report_date == date(2001, 7, 17)
-
-    def test_the_90_day_join_window_boundary(self):
-        from ai_trading_common.eulerpool import CalendarEntry, EarningsSurprise
-
-        period_end = date(2026, 6, 30)
-        surprises = [
-            EarningsSurprise(
-                symbol="AAPL",
-                period_end=period_end,
-                fiscal_year=2026,
-                fiscal_quarter=3,
-                eps_estimate=1.9,
-                eps_actual=2.02,
-                eps_difference=0.12,
-                surprise_percent=6.3,
-            )
-        ]
-        at_the_boundary = [
-            CalendarEntry(
-                symbol="AAPL",
-                report_date=period_end + timedelta(days=90),  # exactly 90 days: must match
-                eps_estimate=1.9,
-                eps_actual=2.02,
-                revenue_estimate=None,
-                revenue_actual=None,
-            )
-        ]
-        past_the_boundary = [
-            CalendarEntry(
-                symbol="AAPL",
-                report_date=period_end + timedelta(days=91),  # one day past: must not match
-                eps_estimate=1.9,
-                eps_actual=2.02,
-                revenue_estimate=None,
-                revenue_actual=None,
-            )
-        ]
-
-        matched = earnings_results(
-            "AAPL",
-            eulerpool=FakeEulerpool(calendar=at_the_boundary, surprises=surprises),
-            finnhub=None,
-            alphavantage=None,
-            now=NOW,
-        )
-        assert len(matched) == 1
-        assert matched[0].report_date == period_end + timedelta(days=90)
-
-        unmatched = earnings_results(
-            "AAPL",
-            eulerpool=FakeEulerpool(calendar=past_the_boundary, surprises=surprises),
-            finnhub=None,
-            alphavantage=None,
-            now=NOW,
-        )
-        assert len(unmatched) == 2  # the surprise and the calendar row both stay unmatched
-        assert all(r.report_date is None for r in unmatched if r.period_end == period_end)
-
-    def test_finnhub_tried_before_alphavantage(self):
-        from ai_trading_common.finnhub import EarningsSurprise as FinnhubSurprise
-
-        euler = FakeEulerpool(raises=Unavailable("eulerpool", "down"))
-        finnhub = FakeFinnhub(
-            surprises=[
-                FinnhubSurprise(
-                    symbol="AAPL",
-                    period_end=date(2026, 7, 30),
-                    fiscal_year=2026,
-                    fiscal_quarter=3,
-                    eps_estimate=1.9,
-                    eps_actual=2.02,
-                    surprise=0.12,
-                    surprise_percent=6.3,
-                )
-            ]
-        )
-        av = FakeAlphaVantage(raises=AssertionError("should not be reached"))
-        got = earnings_results("AAPL", eulerpool=euler, finnhub=finnhub, alphavantage=av, now=NOW)
-        assert got[0].provider == "finnhub"
-        assert got[0].quality == "fallback"
-
-
-class TestAnalystTargetsFallback:
-    def test_eulerpool_primary_carries_targets_and_counts(self):
-        euler = FakeEulerpool(recommendations=[eulerpool_recommendation_row()])
-        got = analyst_targets("AAPL", eulerpool=euler, finnhub=None, now=NOW)
-        assert got.quality == "eod"
-        assert got.target_mean == 340.72
-        assert got.buy == 22
-
-    def test_finnhub_fallback_has_counts_but_no_targets(self):
-        euler = FakeEulerpool(raises=Unavailable("eulerpool", "down"))
-        finnhub = FakeFinnhub(recommendations=[finnhub_recommendation_row()])
-        got = analyst_targets("AAPL", eulerpool=euler, finnhub=finnhub, now=NOW)
-        assert got.quality == "fallback"
-        assert got.provider == "finnhub"
-        assert got.buy == 20
-        assert got.target_mean is None
-        assert got.target_high is None
-
-    def test_not_configured_falls_through_like_unavailable(self):
-        euler = FakeEulerpool(raises=NotConfigured("eulerpool", "no key"))
-        finnhub = FakeFinnhub(recommendations=[finnhub_recommendation_row()])
-        got = analyst_targets("AAPL", eulerpool=euler, finnhub=finnhub, now=NOW)
-        assert got.provider == "finnhub"
-```
-
-- [ ] **Step 2: Run it and watch it fail.**
-
-Run (in `common/`): `uv run pytest -q tests/test_consensus.py`
-Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading_common.consensus'`.
-
-- [ ] **Step 3: Implement `consensus.py`.**
-
-```python
-"""Normalized consensus-EPS types and the Eulerpool-then-Finnhub/AV fallback chain.
-
-02f §4 needs three things per symbol: EPS estimates by quarter/fiscal-year
-with analyst counts (`ConsensusSnapshot`), reported-vs-estimated results
-with surprise and the next earnings date (`EarningsResult`), and analyst
-rating counts with the low/mean/high target (`AnalystTargets`). Each carries
-its `provider` and `as_of` (02h, Review Focus 6: an as-of discipline, since
-a consensus number is a point-in-time snapshot, not a live value) and a
-`Quality` label (`eod` for a primary-source snapshot, `fallback` for a
-secondary one -- never `realtime`/`delayed-15m`, which describe market
-data, not a once-a-day consensus figure).
-
-**Fallback granularity, decided per data class, not uniformly:**
-
-- `ConsensusSnapshot` and `EarningsResult` fall back *per whole record set*:
-  Eulerpool primary, Alpha Vantage (for estimates) or Finnhub-then-Alpha-
-  Vantage (for results) secondary -- the same whole-response relabeling
-  `fallback.with_fallback` already does for bars, just not reusing that
-  function directly (it is typed to `Bars`; see "possible core change" below).
-- `AnalystTargets` falls back *per field group*, because no single secondary
-  provider can replace Eulerpool for it: Finnhub's free `stock/recommendation`
-  has the buy/hold/sell counts but not a target price (`stock/price-target`
-  is premium, confirmed live), and Alpha Vantage's only target field
-  (`OVERVIEW`'s `AnalystTargetPrice`) is itself premium-gated on this
-  lane's key (confirmed live). A Finnhub-sourced fallback therefore carries
-  real counts and `None` targets, rather than refusing the whole record or
-  inventing a target -- 02f §4's own prediction for this path ("Analyst
-  targets are then unavailable"), scoped to the target fields specifically,
-  not the whole type.
-
-Uses the shared `ai_trading_common.fallback.first_success` for the chaining
-precedence (a transient failure anywhere in the chain is reported ahead of a
-`NoData` collected from another provider) -- promoted there from this
-module per the controller's ruling, so a bars fallback chain and this one
-share the same primitive instead of each re-deriving it.
-"""
-
-from __future__ import annotations
-
-from collections.abc import Callable
-from dataclasses import dataclass, replace
-from datetime import date, timedelta
-
-import pandas as pd
-
-from ai_trading_common.alphavantage import AlphaVantageClient, EpsEstimate, ReportedEarnings
-from ai_trading_common.eulerpool import CalendarEntry, EulerpoolClient
-from ai_trading_common.eulerpool import EarningsSurprise as EulerpoolSurprise
-from ai_trading_common.fallback import first_success
-from ai_trading_common.finnhub import EarningsSurprise as FinnhubSurprise
-from ai_trading_common.finnhub import FinnhubClient
-from ai_trading_common.quality import Quality
-
-
-@dataclass(frozen=True)
-class ConsensusSnapshot:
-    symbol: str
-    period_end: date
-    period_kind: str  # "quarter" | "annual"
-    fiscal_year: int | None
-    fiscal_quarter: int | None
-    eps_mean: float | None
-    eps_high: float | None
-    eps_low: float | None
-    analyst_count: int | None
-    provider: str
-    quality: Quality
-    as_of: pd.Timestamp
-
-
-@dataclass(frozen=True)
-class EarningsResult:
-    symbol: str
-    period_end: date | None  # None for a calendar row never joined to a surprise (see _merge_by_period)
-    fiscal_year: int | None
-    fiscal_quarter: int | None
-    report_date: date | None
-    report_time: str | None
-    eps_estimate: float | None
-    eps_actual: float | None
-    surprise: float | None
-    surprise_percent: float | None
-    provider: str
-    quality: Quality
-    as_of: pd.Timestamp
-
-
-@dataclass(frozen=True)
-class AnalystTargets:
-    symbol: str
-    target_mean: float | None
-    target_median: float | None
-    target_high: float | None
-    target_low: float | None
-    strong_buy: int | None
-    buy: int | None
-    hold: int | None
-    sell: int | None
-    strong_sell: int | None
-    provider: str
-    quality: Quality
-    as_of: pd.Timestamp
-
-
-# ---- Eulerpool adapters ----------------------------------------------------
-
-
-def _from_eulerpool_estimate(row, *, as_of: pd.Timestamp) -> ConsensusSnapshot:
-    return ConsensusSnapshot(
-        symbol=row.symbol,
-        period_end=row.period_end,
-        period_kind="quarter" if row.fiscal_quarter else "annual",
-        fiscal_year=row.fiscal_year,
-        fiscal_quarter=row.fiscal_quarter,
-        eps_mean=row.eps_mean,
-        eps_high=row.eps_high,
-        eps_low=row.eps_low,
-        analyst_count=row.eps_analyst_count,
-        provider="eulerpool",
-        quality="eod",
-        as_of=as_of,
-    )
-
-
-def _from_eulerpool_calendar(row: CalendarEntry, *, as_of: pd.Timestamp) -> EarningsResult:
+def _from_calendar(row: CalendarEntry, *, as_of: pd.Timestamp) -> EarningsResult:
     """`period_end` starts `None`: the calendar carries only the report date, never the fiscal
     period it reports on; `_merge_by_period` fills it in once (if) this row is joined to a
     surprise row that does carry it."""
@@ -5143,13 +6036,13 @@ def _from_eulerpool_calendar(row: CalendarEntry, *, as_of: pd.Timestamp) -> Earn
         eps_actual=row.eps_actual,
         surprise=None,
         surprise_percent=None,
-        provider="eulerpool",
+        provider=PROVIDER_NAME,
         quality="eod",
         as_of=as_of,
     )
 
 
-def _from_eulerpool_surprise(row: EulerpoolSurprise, *, as_of: pd.Timestamp) -> EarningsResult:
+def _from_surprise(row: EarningsSurprise, *, as_of: pd.Timestamp) -> EarningsResult:
     """`report_date` starts `None`: the surprise history carries only the fiscal period end,
     never the report date; `_merge_by_period` fills it in once (if) this row is joined to a
     calendar row that does carry it."""
@@ -5164,162 +6057,10 @@ def _from_eulerpool_surprise(row: EulerpoolSurprise, *, as_of: pd.Timestamp) -> 
         eps_actual=row.eps_actual,
         surprise=row.eps_difference,
         surprise_percent=row.surprise_percent,
-        provider="eulerpool",
+        provider=PROVIDER_NAME,
         quality="eod",
         as_of=as_of,
     )
-
-
-def _from_eulerpool_recommendation(row, *, as_of: pd.Timestamp) -> AnalystTargets:
-    return AnalystTargets(
-        symbol=row.symbol,
-        target_mean=row.target_mean,
-        target_median=row.target_median,
-        target_high=row.target_high,
-        target_low=row.target_low,
-        strong_buy=row.strong_buy,
-        buy=row.buy,
-        hold=row.hold,
-        sell=row.sell,
-        strong_sell=row.strong_sell,
-        provider="eulerpool",
-        quality="eod",
-        as_of=as_of,
-    )
-
-
-# ---- Alpha Vantage adapters -------------------------------------------------
-
-
-def _from_av_estimate(row: EpsEstimate, *, as_of: pd.Timestamp) -> ConsensusSnapshot:
-    return ConsensusSnapshot(
-        symbol=row.symbol,
-        period_end=row.period_end.date(),
-        period_kind="annual" if row.horizon == "fiscal year" else "quarter",
-        fiscal_year=row.fiscal_year,
-        fiscal_quarter=row.fiscal_quarter,
-        eps_mean=row.eps_mean,
-        eps_high=row.eps_high,
-        eps_low=row.eps_low,
-        analyst_count=row.analyst_count,
-        provider="alphavantage",
-        quality="fallback",
-        as_of=as_of,
-    )
-
-
-def _from_av_reported(row: ReportedEarnings, *, as_of: pd.Timestamp) -> EarningsResult:
-    return EarningsResult(
-        symbol=row.symbol,
-        period_end=row.fiscal_date_ending.date(),
-        fiscal_year=row.fiscal_date_ending.year,
-        fiscal_quarter=row.fiscal_date_ending.quarter,
-        report_date=row.reported_date.date() if row.reported_date is not None else None,
-        report_time=row.report_time,
-        eps_estimate=row.estimated_eps,
-        eps_actual=row.reported_eps,
-        surprise=row.surprise,
-        surprise_percent=row.surprise_percent,
-        provider="alphavantage",
-        quality="fallback",
-        as_of=as_of,
-    )
-
-
-# ---- Finnhub adapters --------------------------------------------------
-
-
-def _from_finnhub_surprise(row: FinnhubSurprise, *, as_of: pd.Timestamp) -> EarningsResult:
-    return EarningsResult(
-        symbol=row.symbol,
-        period_end=row.period_end,
-        fiscal_year=row.fiscal_year,
-        fiscal_quarter=row.fiscal_quarter,
-        report_date=row.period_end,
-        report_time=None,
-        eps_estimate=row.eps_estimate,
-        eps_actual=row.eps_actual,
-        surprise=row.surprise,
-        surprise_percent=row.surprise_percent,
-        provider="finnhub",
-        quality="fallback",
-        as_of=as_of,
-    )
-
-
-def _from_finnhub_recommendation(row, *, as_of: pd.Timestamp) -> AnalystTargets:
-    """Counts only: Finnhub's free plan has no price-target endpoint (confirmed live)."""
-    return AnalystTargets(
-        symbol=row.symbol,
-        target_mean=None,
-        target_median=None,
-        target_high=None,
-        target_low=None,
-        strong_buy=row.strong_buy,
-        buy=row.buy,
-        hold=row.hold,
-        sell=row.sell,
-        strong_sell=row.strong_sell,
-        provider="finnhub",
-        quality="fallback",
-        as_of=as_of,
-    )
-
-
-# ---- Fallback chains --------------------------------------------------
-
-
-def consensus_snapshots(
-    symbol: str,
-    *,
-    eulerpool: EulerpoolClient | None,
-    alphavantage: AlphaVantageClient | None,
-    now: pd.Timestamp,
-) -> list[ConsensusSnapshot]:
-    """EPS estimates by period. Eulerpool primary; Alpha Vantage secondary.
-
-    Finnhub is not in this chain: its one source of consensus EPS
-    mean/high/low, `/stock/eps-estimate`, is premium-gated on the free plan
-    (confirmed live).
-    """
-    calls: list[Callable[[], list[ConsensusSnapshot]]] = []
-    if eulerpool is not None:
-        calls.append(lambda: [_from_eulerpool_estimate(r, as_of=now) for r in eulerpool.estimates(symbol)])
-    if alphavantage is not None:
-        calls.append(lambda: [_from_av_estimate(r, as_of=now) for r in alphavantage.earnings_estimates(symbol)])
-    result, is_primary = first_success(calls)
-    return result if is_primary else [replace(r, quality="fallback") for r in result]
-
-
-def earnings_results(
-    symbol: str,
-    *,
-    eulerpool: EulerpoolClient | None,
-    finnhub: FinnhubClient | None,
-    alphavantage: AlphaVantageClient | None,
-    now: pd.Timestamp,
-) -> list[EarningsResult]:
-    """Reported-vs-estimated results with surprise, and the next earnings date.
-
-    Eulerpool primary (its earnings-calendar and earnings-surprises
-    endpoints, merged); Finnhub then Alpha Vantage secondary (both serve
-    quarterly surprises free; the brief's order, 02f §4).
-    """
-
-    def from_eulerpool() -> list[EarningsResult]:
-        calendar = [_from_eulerpool_calendar(r, as_of=now) for r in eulerpool.earnings_calendar(symbol)]
-        surprises = [_from_eulerpool_surprise(r, as_of=now) for r in eulerpool.earnings_surprises(symbol)]
-        return _merge_by_period(calendar, surprises)
-
-    calls: list[Callable[[], list[EarningsResult]]] = []
-    if eulerpool is not None:
-        calls.append(from_eulerpool)
-    if finnhub is not None:
-        calls.append(lambda: [_from_finnhub_surprise(r, as_of=now) for r in finnhub.earnings_surprises(symbol)])
-    if alphavantage is not None:
-        calls.append(lambda: [_from_av_reported(r, as_of=now) for r in alphavantage.earnings(symbol)])
-    result, is_primary = first_success(calls)
-    return result if is_primary else [replace(r, quality="fallback") for r in result]
 
 
 #: A report always follows its own fiscal period's end, and the next quarter's report lands
@@ -5374,43 +6115,148 @@ def _merge_by_period(calendar: list[EarningsResult], surprises: list[EarningsRes
     return sorted(merged + unmatched_calendar, key=lambda r: r.period_end or r.report_date)
 
 
-def analyst_targets(
-    symbol: str,
-    *,
-    eulerpool: EulerpoolClient | None,
-    finnhub: FinnhubClient | None,
-    now: pd.Timestamp,
-) -> AnalystTargets:
-    """Rating counts and the low/mean/high target. Eulerpool primary.
+class EulerpoolSource:
+    """Adapts `EulerpoolClient` to `ConsensusSource`, `EarningsSource`, and `TargetsSource`."""
 
-    A Finnhub fallback carries real buy/hold/sell counts but `None` targets
-    (see module docstring) -- it is not folded into `first_success`,
-    because it is a partial substitute, not an equally-complete alternative.
-    """
+    def __init__(self, client: EulerpoolClient) -> None:
+        self._client = client
 
-    def from_eulerpool() -> AnalystTargets:
-        rows = eulerpool.recommendations(symbol)
-        return _from_eulerpool_recommendation(max(rows, key=lambda r: r.period), as_of=now)
+    def consensus(self, symbol: str, *, now: pd.Timestamp) -> list[ConsensusSnapshot]:
+        rows = self._client.estimates(symbol)
+        return [
+            ConsensusSnapshot(
+                symbol=r.symbol,
+                period_end=r.period_end,
+                period_kind="quarter" if r.fiscal_quarter else "annual",
+                fiscal_year=r.fiscal_year,
+                fiscal_quarter=r.fiscal_quarter,
+                eps_mean=r.eps_mean,
+                eps_high=r.eps_high,
+                eps_low=r.eps_low,
+                analyst_count=r.eps_analyst_count,
+                provider=PROVIDER_NAME,
+                quality="eod",
+                as_of=now,
+            )
+            for r in rows
+        ]
 
-    def from_finnhub() -> AnalystTargets:
-        rows = finnhub.recommendation_trends(symbol)
-        return _from_finnhub_recommendation(max(rows, key=lambda r: r.period), as_of=now)
+    def earnings_results(self, symbol: str, *, now: pd.Timestamp) -> list[EarningsResult]:
+        calendar = [_from_calendar(r, as_of=now) for r in self._client.earnings_calendar(symbol)]
+        surprises = [_from_surprise(r, as_of=now) for r in self._client.earnings_surprises(symbol)]
+        return _merge_by_period(calendar, surprises)
 
-    calls: list[Callable[[], AnalystTargets]] = []
-    if eulerpool is not None:
-        calls.append(from_eulerpool)
-    if finnhub is not None:
-        calls.append(from_finnhub)
-    result, is_primary = first_success(calls)
-    return result if is_primary else replace(result, quality="fallback")
+    def analyst_targets(self, symbol: str, *, now: pd.Timestamp) -> AnalystTargets:
+        rows = self._client.recommendations(symbol)
+        latest = max(rows, key=lambda r: r.period)
+        return AnalystTargets(
+            symbol=latest.symbol,
+            target_mean=latest.target_mean,
+            target_median=latest.target_median,
+            target_high=latest.target_high,
+            target_low=latest.target_low,
+            strong_buy=latest.strong_buy,
+            buy=latest.buy,
+            hold=latest.hold,
+            sell=latest.sell,
+            strong_sell=latest.strong_sell,
+            provider=PROVIDER_NAME,
+            quality="eod",
+            as_of=now,
+        )
+
+
+def _build(env: Mapping[str, str], http: ThrottledClient) -> EulerpoolSource:
+    client = EulerpoolClient(env.get("EULERPOOL_API_KEY", ""), http=http)
+    return EulerpoolSource(client)
+
+
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("consensus", "earnings", "targets"), build=_build)
 ```
 
 - [ ] **Step 4: Run it and watch it pass.**
 
-Run (in `common/`): `uv run pytest -q tests/test_consensus.py`
-Expected: `13 passed`.
+Run (in `common/`): `uv run pytest -q tests/providers/test_eulerpool.py`
+Expected: `16 passed`.
 
-- [ ] **Step 5: Add the dividends probe recorder.** In `scripts/record.py`, replace:
+- [ ] **Step 5: Wire Eulerpool into the registry, and fix every multi-provider kind's default chain.** In `common/src/ai_trading_common/registry.py`, replace:
+
+```python
+from ai_trading_common.providers import (
+    alpaca,
+    alphavantage,
+    finnhub,
+    fred,
+    sec_edgar,
+)
+```
+
+with:
+
+```python
+from ai_trading_common.providers import (
+    alpaca,
+    alphavantage,
+    eulerpool,
+    finnhub,
+    fred,
+    sec_edgar,
+)
+```
+
+then replace:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "alphavantage": alphavantage.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "earnings_announcements": ("sec_edgar",),
+    "earnings_calendar": ("finnhub",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
+    "news": ("finnhub",),
+}
+```
+
+with:
+
+```python
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "alphavantage": alphavantage.PROVIDER,
+    "eulerpool": eulerpool.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
+
+#: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "consensus": ("eulerpool", "alphavantage"),
+    "earnings": ("eulerpool", "finnhub", "alphavantage"),
+    "earnings_announcements": ("sec_edgar",),
+    "earnings_calendar": ("finnhub",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
+    "news": ("finnhub",),
+    "targets": ("eulerpool", "finnhub"),
+}
+```
+
+Every kind now has a non-empty default chain: `REGISTRY` and `DEFAULT_CHAINS` are complete, and `DataSources.from_env()` with no `registry=`/`defaults=` override (the real six vendors, no env vars set) now succeeds end to end — which Task 2a.6's conformance test and Task 2a.8's end-to-end test both rely on.
+
+- [ ] **Step 6: Add the Eulerpool recorder function.** In `scripts/record.py`, replace:
 
 ```python
 _RECORDERS = {
@@ -5420,13 +6266,51 @@ _RECORDERS = {
     "fred": record_fred,
     "finnhub": record_finnhub,
     "alphavantage": record_alphavantage,
-    "eulerpool": record_eulerpool,
 }
 ```
 
 with:
 
 ```python
+def record_eulerpool() -> None:
+    key = os.environ["EULERPOOL_API_KEY"]
+    out = FIXTURES / "eulerpool"
+    out.mkdir(parents=True, exist_ok=True)
+
+    def get(path: str) -> requests.Response:
+        return requests.get(f"https://api.eulerpool.com/api/1{path}", params={"token": key}, timeout=30)
+
+    cases = [
+        ("estimates_aapl", "/equity/estimates/AAPL"),
+        ("estimates_empty_brkb", "/equity/estimates/BRK.B"),
+        ("calendar_aapl", "/calendar/earnings-by-symbol/AAPL"),
+        ("surprises_aapl", "/calendar/earnings-surprises/AAPL"),
+        ("recommendations_aapl", "/research/recommendations/AAPL"),
+    ]
+    for name, path in cases:
+        response = get(path)
+        _write(out / f"{name}.json", {}, response.json())
+        print(name, "HTTP", response.status_code)
+
+    bad = requests.get(
+        "https://api.eulerpool.com/api/1/equity/estimates/AAPL", params={"token": "not-a-real-key"}, timeout=30
+    )
+    _write(out / "bad_key_401.json", {}, bad.json())
+    print("bad_key_401 HTTP", bad.status_code)
+
+    unknown = requests.get(
+        "https://api.eulerpool.com/api/1/equity/estimates/ZZZZINVALIDXYZ", params={"token": key}, timeout=30
+    )
+    _write(out / "unknown_symbol_404.json", {}, unknown.json())
+    print("unknown_symbol_404 HTTP", unknown.status_code)
+
+    unknown_rec = requests.get(
+        "https://api.eulerpool.com/api/1/research/recommendations/ZZZZINVALIDXYZ", params={"token": key}, timeout=30
+    )
+    _write(out / "unknown_recommendations_404.json", {}, unknown_rec.json())
+    print("unknown_recommendations_404 HTTP", unknown_rec.status_code)
+
+
 def record_eulerpool_dividends_probe() -> None:
     """Report-only live probe (controller ruling 3): is there a free Eulerpool
     endpoint with ex-dividend dates? Prints HTTP status and a trimmed body
@@ -5452,14 +6336,406 @@ _RECORDERS = {
 }
 ```
 
-This probe is run once, by hand, against the owner's real key, and never writes a fixture; its output (not re-run as part of this task's own verification) is folded into 02d by Step 7 below, since it was already run live during the prototype (see "Eulerpool dividends finding" in `REPORT-FINAL.md`).
+This probe is run once, by hand, against the owner's real key, and never writes a fixture; its output (not re-run as part of this task's own verification) is folded into 02d by Task 2a.6's Step 7, since it was already run live during the prototype (see "Eulerpool dividends finding" in `REPORT-FINAL.md`).
 
-- [ ] **Step 6: Run everything and lint, confirming the full common suite.**
+- [ ] **Step 7: Update the "no notice needed" section for Eulerpool.** In `THIRD_PARTY_NOTICES.md`, replace:
+
+```markdown
+
+## No notice needed: `providers/finnhub.py`, `providers/alphavantage.py`
+
+No upstream code is adapted. `finnhub.py`'s `news_as_of` (now in
+`ai_trading_common.types`, 02j) reuses the *idea* of TradingAgents' news
+handling -- "unavailable" (the client call itself failing) kept apart from
+"no news" (an empty, successfully-fetched list) -- with no code copied, so
+per the brief ("A 'pattern' reuse ... needs no notice") this carries no
+entry.
+
+`providers/finnhub.py` and `providers/alphavantage.py` are both written fresh
+against each provider's own public API documentation (Finnhub's and Alpha
+Vantage's official docs).
+```
+
+with:
+
+```markdown
+
+## No notice needed: `providers/finnhub.py`, `providers/alphavantage.py`, `providers/eulerpool.py`
+
+No upstream code is adapted. `finnhub.py`'s `news_as_of` (now in
+`ai_trading_common.types`, 02j) reuses the *idea* of TradingAgents' news
+handling -- "unavailable" (the client call itself failing) kept apart from
+"no news" (an empty, successfully-fetched list) -- with no code copied, so
+per the brief ("A 'pattern' reuse ... needs no notice") this carries no
+entry.
+
+`providers/finnhub.py`, `providers/alphavantage.py`, and
+`providers/eulerpool.py` are all written fresh against each provider's own
+public API documentation (Finnhub's and Alpha Vantage's official docs;
+Eulerpool's `https://eulerpool.com/llms-full.txt` endpoint reference, since
+the marketing/docs site itself returns HTTP 403 to a non-browser `GET`).
+`registry.py`, `types.py`, and `sources.py` (02j) are this package's own
+design, written fresh against no upstream reference.
+```
+
+- [ ] **Step 8: Run everything and lint, confirming the full common suite.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `150 passed` (137 + 13), ruff clean, 0 skipped. This is common's final count for Phase 2a.
+Expected: `164 passed` (148 + 16), ruff clean, 0 skipped.
 
-- [ ] **Step 7: Fold the pilot result into 02d.** In `ai-trading/plans/subplans/02d-desk-spike-results.md`, append a new numbered finding after finding 9 ("Paper account ID prefix") and before "## Notes for Phase 3 (from the documentation research)". Replace:
+- [ ] **Step 9: Commit.**
+
+```bash
+git add ai-trading/common/src/ai_trading_common/providers/eulerpool.py ai-trading/common/src/ai_trading_common/registry.py ai-trading/common/tests/providers/test_eulerpool.py ai-trading/common/scripts/record.py ai-trading/common/THIRD_PARTY_NOTICES.md
+git commit -m "feat(ai-trading): Eulerpool provider; every kind now has a complete default chain"
+```
+
+---
+
+### Task 2a.6: The conformance test, the real-adapter fallback test, `README.md`, and folding the pilot into 02d
+
+**Files:**
+- Create: `common/tests/test_conformance.py`, `common/tests/test_chains.py`
+- Create: `common/README.md`
+- Modify: `ai-trading/plans/subplans/02d-desk-spike-results.md`
+
+**Interfaces:**
+- Consumes: `ai_trading_common.registry.{REGISTRY, DEFAULT_CHAINS, KIND_PROTOCOLS, DataSources, Provider}` (2a.1–2a.5, now complete); `ai_trading_common.testing.{FakeResponse, make_client}` (2a.1); `ai_trading_common.types.{AnalystTargets, ConsensusSnapshot, EarningsResult}` (2a.1); `ai_trading_common.errors.{NotConfigured, Unavailable}` (2a.1).
+- Produces: nothing new for later tasks — this task only adds tests, documentation, and the pilot write-up. Task 2a.8 relies on `REGISTRY`/`DEFAULT_CHAINS` being complete (true since Task 2a.5), not on anything added here.
+
+- [ ] **Step 1: Write the conformance test, over the real registry.** `common/tests/test_conformance.py`:
+
+```python
+"""Every registered provider's adapter is an instance of each declared kind's Protocol (02j §9:
+"Conformance"). Built with empty keys and a fake-backed `ThrottledClient` so this test never
+touches the network -- it only checks shape, never behavior (each provider's own
+`tests/providers/test_<name>.py` covers behavior).
+
+A runtime-checkable Protocol's `isinstance` only checks that each method exists, so each method's
+signature is also bound against the Protocol's own call shape: an adapter missing a parameter
+(say, `now`) fails here instead of at the first real call."""
+
+import inspect
+
+import pytest
+
+from ai_trading_common.registry import KIND_PROTOCOLS, REGISTRY
+from ai_trading_common.testing import make_client
+
+
+def _protocol_call(method) -> tuple[list[object], dict[str, object]]:
+    """Dummy arguments in the Protocol method's own shape: positional parameters by position,
+    keyword-only ones by name, optional ones included."""
+    params = list(inspect.signature(method).parameters.values())[1:]  # drop `self`
+    args = [object() for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    kwargs = {p.name: object() for p in params if p.kind is p.KEYWORD_ONLY}
+    return args, kwargs
+
+
+@pytest.mark.parametrize("name", sorted(REGISTRY))
+def test_every_kind_a_provider_declares_is_actually_satisfied(name):
+    provider = REGISTRY[name]
+    http, _, _ = make_client([])
+    adapter = provider.build({}, http)
+    for kind in provider.kinds:
+        protocol = KIND_PROTOCOLS[kind]
+        assert isinstance(adapter, protocol), f"{name}'s adapter does not satisfy {protocol.__name__} for {kind!r}"
+        for method_name, method in vars(protocol).items():
+            if method_name.startswith("_") or not callable(method):
+                continue
+            args, kwargs = _protocol_call(method)
+            try:
+                inspect.signature(getattr(adapter, method_name)).bind(*args, **kwargs)
+            except TypeError as exc:
+                pytest.fail(f"{name}.{method_name} does not accept {protocol.__name__}'s call: {exc}")
+
+
+def test_every_kind_in_default_chains_is_served_by_every_provider_it_names():
+    from ai_trading_common.registry import DEFAULT_CHAINS
+
+    for kind, names in DEFAULT_CHAINS.items():
+        for name in names:
+            assert kind in REGISTRY[name].kinds, f"{name!r} is in DEFAULT_CHAINS[{kind!r}] but does not serve it"
+```
+
+- [ ] **Step 2: Run it and watch it pass** (every provider and every `DEFAULT_CHAINS` line already exists after Task 2a.5; no implementation step is needed here).
+
+Run (in `common/`): `uv run pytest -q tests/test_conformance.py`
+Expected: `7 passed` (one per registered provider, plus the `DEFAULT_CHAINS` consistency test).
+
+- [ ] **Step 3: Write `test_chains.py`** — light per-kind wiring tests for the three multi-provider kinds against Protocol-conforming fakes (the generic precedence law itself is already exhaustively pinned once, in `test_fallback.py`), plus `TestRealAdapterFallback`: the one real-adapter, fixture-backed fallback test the brief asks for.
+
+```python
+"""Multi-provider chain precedence (02j §9), two ways:
+
+- `Test*Chain` classes: light wiring tests per multi-provider kind (consensus, earnings,
+  targets), using Protocol-conforming fakes -- confirms each chain calls the right method with
+  the right keyword arguments and relabels correctly. The generic precedence law itself (a
+  transient failure anywhere beats a later `NoData`, etc.) is already exhaustively pinned in
+  `test_fallback.py`; these tests only pin the *wiring*, not re-derive the law.
+- `TestRealAdapterFallback`: the one real-adapter, fixture-backed fallback test the brief asks
+  for -- real `REGISTRY` adapters, a fake HTTP layer, Eulerpool failing live-shaped (bounded
+  retries exhausted), Alpha Vantage's real recorded fixture winning, labeled `fallback`.
+"""
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pandas as pd
+
+from ai_trading_common.errors import NotConfigured, Unavailable
+from ai_trading_common.registry import REGISTRY, DataSources, Provider
+from ai_trading_common.testing import FakeResponse, make_client
+from ai_trading_common.types import AnalystTargets, ConsensusSnapshot, EarningsResult
+
+NOW = pd.Timestamp("2026-10-11T21:00:00Z")
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _snapshot(provider: str) -> ConsensusSnapshot:
+    return ConsensusSnapshot(
+        symbol="AAPL",
+        period_end=date(2026, 12, 31),
+        period_kind="annual",
+        fiscal_year=2026,
+        fiscal_quarter=None,
+        eps_mean=5.0,
+        eps_high=6.0,
+        eps_low=4.0,
+        analyst_count=10,
+        provider=provider,
+        quality="eod",
+        as_of=NOW,
+    )
+
+
+def _result(provider: str) -> EarningsResult:
+    return EarningsResult(
+        symbol="AAPL",
+        period_end=date(2026, 6, 30),
+        fiscal_year=2026,
+        fiscal_quarter=3,
+        report_date=date(2026, 7, 30),
+        report_time=None,
+        eps_estimate=1.9,
+        eps_actual=2.02,
+        surprise=0.12,
+        surprise_percent=6.3,
+        provider=provider,
+        quality="eod",
+        as_of=NOW,
+    )
+
+
+def _targets(provider: str, *, with_prices: bool) -> AnalystTargets:
+    return AnalystTargets(
+        symbol="AAPL",
+        target_mean=340.72 if with_prices else None,
+        target_median=360 if with_prices else None,
+        target_high=400 if with_prices else None,
+        target_low=245 if with_prices else None,
+        strong_buy=10,
+        buy=20,
+        hold=5,
+        sell=1,
+        strong_sell=0,
+        provider=provider,
+        quality="eod",
+        as_of=NOW,
+    )
+
+
+class FakeConsensus:
+    def __init__(self, *, result=None, raises=None):
+        self._result, self._raises = result, raises
+
+    def consensus(self, symbol, *, now):
+        if self._raises:
+            raise self._raises
+        return self._result
+
+
+class FakeEarnings:
+    def __init__(self, *, result=None, raises=None):
+        self._result, self._raises = result, raises
+
+    def earnings_results(self, symbol, *, now):
+        if self._raises:
+            raise self._raises
+        return self._result
+
+
+class FakeTargets:
+    def __init__(self, *, result=None, raises=None):
+        self._result, self._raises = result, raises
+
+    def analyst_targets(self, symbol, *, now):
+        if self._raises:
+            raise self._raises
+        return self._result
+
+
+def _sources_with(**overrides) -> DataSources:
+    """A `DataSources` where only the kinds in `overrides` matter; every other kind falls back to
+    a trivial, never-called stub (each test here only calls the kind(s) it overrides)."""
+    registry = dict(REGISTRY)
+    defaults = {
+        "bars": ("alpaca",),
+        "fundamentals": ("sec_edgar",),
+        "earnings_announcements": ("sec_edgar",),
+        "macro": ("fred",),
+        "news": ("finnhub",),
+        "earnings_calendar": ("finnhub",),
+        "consensus": ("eulerpool", "alphavantage"),
+        "earnings": ("eulerpool", "finnhub", "alphavantage"),
+        "targets": ("eulerpool", "finnhub"),
+    }
+    for kind, (names, adapter) in overrides.items():
+        names_tuple = tuple(names) if isinstance(names, list) else names
+        for i in range(len(names_tuple)):
+            key = f"_fake_{kind}_{i}"
+            registry[key] = Provider(name=key, kinds=(kind,), build=lambda env, http, a=adapter[i]: a)
+        defaults[kind] = tuple(f"_fake_{kind}_{i}" for i in range(len(names_tuple)))
+    return DataSources.from_env(env={}, registry=registry, defaults=defaults)
+
+
+class TestConsensusChain:
+    def test_eulerpool_primary_keeps_its_own_quality(self):
+        sources = _sources_with(consensus=(["a"], [FakeConsensus(result=[_snapshot("a")])]))
+        got = sources.consensus.consensus("AAPL", now=NOW)
+        assert got[0].quality == "eod"
+
+    def test_a_later_providers_result_is_relabeled_fallback(self):
+        primary = FakeConsensus(raises=Unavailable("eulerpool", "down"))
+        secondary = FakeConsensus(result=[_snapshot("alphavantage")])
+        sources = _sources_with(consensus=(["a", "b"], [primary, secondary]))
+        got = sources.consensus.consensus("AAPL", now=NOW)
+        assert got[0].quality == "fallback"
+        assert got[0].provider == "alphavantage"
+
+
+class TestEarningsChain:
+    def test_finnhub_tried_before_alphavantage(self):
+        primary = FakeEarnings(raises=Unavailable("eulerpool", "down"))
+        finnhub = FakeEarnings(result=[_result("finnhub")])
+        av = FakeEarnings(raises=AssertionError("should not be reached"))
+        sources = _sources_with(earnings=(["e", "f", "a"], [primary, finnhub, av]))
+        got = sources.earnings.earnings_results("AAPL", now=NOW)
+        assert got[0].provider == "finnhub"
+        assert got[0].quality == "fallback"
+
+
+class TestTargetsChain:
+    def test_finnhub_fallback_has_counts_but_no_targets(self):
+        primary = FakeTargets(raises=Unavailable("eulerpool", "down"))
+        finnhub = FakeTargets(result=_targets("finnhub", with_prices=False))
+        sources = _sources_with(targets=(["e", "f"], [primary, finnhub]))
+        got = sources.targets.analyst_targets("AAPL", now=NOW)
+        assert got.quality == "fallback"
+        assert got.provider == "finnhub"
+        assert got.target_mean is None
+        assert got.buy == 20
+
+    def test_not_configured_falls_through_like_unavailable(self):
+        primary = FakeTargets(raises=NotConfigured("eulerpool", "no key"))
+        finnhub = FakeTargets(result=_targets("finnhub", with_prices=False))
+        sources = _sources_with(targets=(["e", "f"], [primary, finnhub]))
+        got = sources.targets.analyst_targets("AAPL", now=NOW)
+        assert got.provider == "finnhub"
+
+
+class TestRealAdapterFallback:
+    """Real `REGISTRY` adapters (Eulerpool, Alpha Vantage), a fake HTTP layer: Eulerpool fails
+    the way a real outage looks (bounded retries exhausted -> `Unavailable`), Alpha Vantage's
+    real recorded fixture answers -- the result must come back labeled `fallback`."""
+
+    def test_eulerpool_unavailable_falls_back_to_alphavantages_fixture(self):
+        av_body = json.loads((FIXTURES / "alphavantage" / "earnings_estimates_aapl.json").read_text())["body"]
+        # Eulerpool's 4 bounded retries, then Alpha Vantage's real fixture.
+        responses = [FakeResponse(500, {}) for _ in range(4)] + [FakeResponse(200, av_body)]
+        http, session, _ = make_client(responses)
+
+        sources = DataSources.from_env(
+            env={
+                "DATA_PROVIDERS_CONSENSUS": "eulerpool,alphavantage",
+                "EULERPOOL_API_KEY": "fake-eulerpool-key",
+                "ALPHA_VANTAGE_API_KEY": "fake-av-key",
+            },
+            http=http,
+        )
+
+        got = sources.consensus.consensus("AAPL", now=NOW)
+
+        assert len(session.calls) == 5  # 4 failed Eulerpool attempts + 1 successful Alpha Vantage call
+        assert got
+        assert all(row.provider == "alphavantage" and row.quality == "fallback" for row in got)
+```
+
+- [ ] **Step 4: Run it and watch it pass.**
+
+Run (in `common/`): `uv run pytest -q tests/test_chains.py`
+Expected: `6 passed`.
+
+- [ ] **Step 5: Run everything and lint, confirming the full common suite — this is common's final count for Phase 2a.**
+
+Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
+Expected: `177 passed` (164 + 7 + 6), ruff clean, 0 skipped.
+
+- [ ] **Step 6: Write `common/README.md`.**
+
+````markdown
+# ai-trading-common
+
+Every external data source for ai-trading lives here, behind one provider pattern
+([02j](../plans/subplans/02j-common-data-providers-design.md)). Callers never talk to a vendor
+directly; they build a `DataSources` and read through it.
+
+## Layout
+
+```
+src/ai_trading_common/
+  errors.py quality.py http.py bars.py fallback.py testing.py   core
+  types.py     vendor-neutral result types and their as-of selectors
+  sources.py   one runtime-checkable Protocol per data kind
+  registry.py  Kind, Provider, REGISTRY, DEFAULT_CHAINS, DataSources.from_env()
+  providers/   alpaca.py sec_edgar.py fred.py finnhub.py alphavantage.py eulerpool.py
+```
+
+Each `providers/<name>.py` holds that vendor's raw client, one `<Name>Source` adapter mapping
+its records into `types.py` objects, and a `PROVIDER` registry entry. `registry.py` is the only
+module that imports `providers/*`.
+
+## The rule
+
+Callers use `DataSources` (built once via `DataSources.from_env()`), plus `types`, `sources`,
+`bars`, `errors`, `quality` (and `testing` in tests). **Never import `ai_trading_common.providers`
+directly** -- the Desk enforces this with an import-boundary test; any other caller should too.
+
+A `DataSources` attribute (`bars`, `consensus`, `targets`, ...) is a chain: it tries its
+`DATA_PROVIDERS_<KIND>` providers in order (env override, else `DEFAULT_CHAINS`), relabeling a
+non-primary result `quality="fallback"`. A missing key is never a startup error -- that provider
+raises `NotConfigured` when called, and the chain moves on.
+
+## Replacing a provider
+
+See [02j §8](../plans/subplans/02j-common-data-providers-design.md#8-replacing-a-provider-the-checklist):
+add `providers/x.py` (client, `XSource`, `PROVIDER`, fixtures, tests), add one `REGISTRY` line,
+store the key and point `DATA_PROVIDERS_<KIND>` at it in Firestore, redeploy. No caller changes.
+
+## Re-recording fixtures
+
+```bash
+cd /Users/tobytran/personal/family-app && CLOUDSDK_ACTIVE_CONFIG_NAME=personal \
+  python3 common/config/family_config.py run ai-trading/desk -- \
+  sh -c 'cd ai-trading/common && uv run python scripts/record.py <provider>'
+```
+
+See `scripts/record.py`'s docstring and `_RECORDERS` for provider names. Fixtures hold only
+response bodies, secrets stripped before they're written.
+````
+
+- [ ] **Step 7: Fold the pilot result into 02d.** In `ai-trading/plans/subplans/02d-desk-spike-results.md`, append two new numbered findings after finding 9 ("Paper account ID prefix") and before "## Notes for Phase 3 (from the documentation research)". Replace:
 
 ```markdown
 ### 9. Paper account ID prefix
@@ -5501,11 +6777,13 @@ additional daily quota.
   notes behind 02b/02f had marked it unverified/pessimistic; this is what gives `AnalystTargets` a
   fallback with real counts (if not a target price) when Eulerpool is down.
 
-**Decision:** **Eulerpool is the consensus-EPS primary**, matching 02f §4's own call. Alpha Vantage
-is kept as the `ConsensusSnapshot`/`EarningsResult` fallback; Finnhub is kept as the
-`AnalystTargets` fallback (counts only, no target price — see Task 2a.6's module docstring for
-`consensus.py`). Method and result recorded here per the brief; the pilot script and its replayed
-response bodies are not committed (temp-only prototype artifacts).
+**Decision:** **Eulerpool is the consensus-EPS primary**, matching 02f §4's own call — and, under
+02j's registry (owner-approved 2026-10-11), the `DEFAULT_CHAINS["consensus"]`/`["earnings"]`/
+`["targets"]` entries `registry.py` carries. Alpha Vantage is kept as the `ConsensusSnapshot`/
+`EarningsResult` fallback; Finnhub is kept as the `AnalystTargets` fallback (counts only, no
+target price — see `providers/finnhub.py`'s module docstring). Method and result recorded here
+per the brief; the pilot script and its replayed response bodies are not committed (temp-only
+prototype artifacts).
 
 ### 11. Eulerpool ex-dividend dates (Phase 2a probe, for Phase 5)
 
@@ -5519,10 +6797,11 @@ quality/{id}`, `/equity/dividends-by-fy/{id}`, via `scripts/record.py eulerpool_
 | `/equity/dividends-by-fy/{id}` | 200 | Dividends grouped by fiscal year, no per-event dates |
 
 **Decision:** `/equity/dividend-quality/{identifier}`'s `lastExDate` is a free, confirmed path to
-*the most recent* ex-dividend date — not a full history. Phase 5 either uses it directly, or
-resolves `/equity/dividends`'s `period` field against a known dividend calendar first if a full
-ex-dividend history is wanted; IBKR's dividends tick (2b) is the other option. No client is built
-in Phase 2a (ruling D10): this is a report-only finding.
+*the most recent* ex-dividend date — not a full history. Phase 5 either uses it directly through
+a new provider method added to `providers/eulerpool.py` (following 02j §8's checklist: no caller
+change beyond the new method), or resolves `/equity/dividends`'s `period` field against a known
+dividend calendar first if a full ex-dividend history is wanted; IBKR's dividends tick (2b) is the
+other option. No client method is built in Phase 2a (ruling D10): this is a report-only finding.
 
 ## Notes for Phase 3 (from the documentation research)
 ```
@@ -5530,8 +6809,8 @@ in Phase 2a (ruling D10): this is a report-only finding.
 - [ ] **Step 8: Commit.**
 
 ```bash
-git add ai-trading/common/src/ai_trading_common/consensus.py ai-trading/common/tests/test_consensus.py ai-trading/common/scripts/record.py ai-trading/common/tests/fixtures/eulerpool/calendar_aapl.json ai-trading/plans/subplans/02d-desk-spike-results.md
-git commit -m "feat(ai-trading): consensus-EPS normalized types and fallback chains; fold the Eulerpool pilot into 02d"
+git add ai-trading/common/tests/test_conformance.py ai-trading/common/tests/test_chains.py ai-trading/common/README.md ai-trading/plans/subplans/02d-desk-spike-results.md
+git commit -m "test(ai-trading): registry conformance and real-adapter fallback tests; common README; fold the Eulerpool pilot into 02d"
 ```
 
 ---
@@ -5580,12 +6859,33 @@ dependencies = [
 ]
 ```
 
-and, right after the closing `]` of `[dependency-groups]`'s `dev` list (before `[build-system]`), insert:
+Then, in the same file, replace:
 
 ```toml
+[dependency-groups]
+dev = [
+    "datamodel-code-generator==0.83.0",  # exact: its output is checked in
+    "pytest>=9.0",
+    "ruff>=0.17",
+]
+
+[build-system]
+```
+
+with:
+
+```toml
+[dependency-groups]
+dev = [
+    "datamodel-code-generator==0.83.0",  # exact: its output is checked in
+    "pytest>=9.0",
+    "ruff>=0.17",
+]
 
 [tool.uv.sources]
 ai-trading-common = { path = "../../../common", editable = true }
+
+[build-system]
 ```
 
 Run (in `backend/`): `uv lock && uv sync`
@@ -6155,20 +7455,20 @@ git commit -m "feat(ai-trading): Desk Postgres schema -- bars_1d/1h/1m, futures_
 
 ---
 
-### Task 2a.8: The Desk data layer — bars, rolls, slots, backfill
+### Task 2a.8: The Desk data layer — bars, rolls, slots, backfill (through `BarsSource`), and the import boundary
 
 **Files:**
-- Create: `packages/family-desk/backend/src/ai_trading/data/bars.py`, `.../data/rolls.py`, `.../data/slots.py`, `.../data/backfill.py`
-- Create: `packages/family-desk/backend/tests/test_bars_store.py`, `.../tests/test_rolls.py`, `.../tests/test_slots.py`, `.../tests/test_backfill.py`, `.../tests/test_end_to_end.py`
-- Modify: `ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md`, `ai-trading/plans/subplans/02b-desk-market-data-options.md`, `ai-trading/plans/STATUS.md`
+- Create: `packages/family-desk/backend/src/ai_trading/data/__init__.py` (empty, marks the new `ai_trading.data` package), `.../data/bars.py`, `.../data/rolls.py`, `.../data/slots.py`, `.../data/backfill.py`
+- Create: `packages/family-desk/backend/tests/test_bars_store.py`, `.../tests/test_rolls.py`, `.../tests/test_slots.py`, `.../tests/test_backfill.py`, `.../tests/test_end_to_end.py`, `.../tests/test_import_boundary.py`
+- Modify: `ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md`, `ai-trading/plans/subplans/02b-desk-market-data-options.md`, `ai-trading/plans/STATUS.md`, `ai-trading/AGENTS.md`
 
 **Interfaces:**
-- Consumes: `ai_trading.db.models.{Bar1d, Bar1h, Bar1m, FuturesRoll}` (2a.7); `ai_trading.core.calendar.{ET, Asset, session, previous_session}` and `ai_trading.core.futures.{MONTH_CODES, front_month, roll_date, _extract_product}` (Phase 1/1c, unmodified); `ai_trading_common.alpaca.AlpacaBars` and `ai_trading_common.errors.ProviderError` (2a.2) — only `backfill.py` imports `ai_trading_common`.
+- Consumes: `ai_trading.db.models.{Bar1d, Bar1h, Bar1m, FuturesRoll}` (2a.7); `ai_trading.core.calendar.{ET, Asset, session, previous_session}` and `ai_trading.core.futures.{MONTH_CODES, front_month, roll_date, _extract_product}` (Phase 1/1c, unmodified); `ai_trading_common.sources.BarsSource` and `ai_trading_common.errors.ProviderError` (2a.1) — only `backfill.py` imports `ai_trading_common`, and only its `sources`/`errors` modules, never `ai_trading_common.providers` (02j §7).
 - Produces:
   - `ai_trading.data.bars.{Timeframe, bar_close, upsert_bars, read_bars, missing_sessions, prune_1m}`
   - `ai_trading.data.rolls.{RollWindow, roll_windows, store_roll_windows, continuous}`
   - `ai_trading.data.slots.{SlotKind, SlotDemand, SlotDecision, allocate}`
-  - `ai_trading.data.backfill.{ALPACA_FREE_HISTORY_START, BackfillResult, backfill}`
+  - `ai_trading.data.backfill.{ALPACA_FREE_HISTORY_START, BackfillResult, backfill}`, with `backfill(session_, symbol, timeframe, asset, start, end, *, bars_source: BarsSource, now) -> BackfillResult`
 
 Fixture path used (already committed, copied from `common/tests/fixtures/alpaca/daily_range_aapl.json` since `ai_trading_common`'s own `tests/` is not part of the installed package): `packages/family-desk/backend/tests/fixtures/alpaca/daily_range_aapl.json`.
 
@@ -6940,8 +8240,8 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from ai_trading_common.alpaca import AlpacaBars
 from ai_trading_common.errors import Unavailable
+from ai_trading_common.providers.alpaca import AlpacaBars
 from ai_trading_common.testing import FakeResponse, make_client
 
 from ai_trading.core.calendar import et
@@ -6976,7 +8276,7 @@ class TestFillsFromARecordedFixture:
         start, end = date(2026, 1, 2), date(2026, 1, 5)
         now = et(end, "20:00")
 
-        result = backfill(db_session, "AAPL", "1d", "stock", start, end, alpaca=alpaca, now=now)
+        result = backfill(db_session, "AAPL", "1d", "stock", start, end, bars_source=alpaca, now=now)
         db_session.commit()
 
         assert result.requested == (start, end)
@@ -7001,7 +8301,7 @@ class TestClampsPre2016History:
         alpaca, session_ = _alpaca_from(FakeResponse(200, body))
         now = et(end, "20:00")
 
-        result = backfill(db_session, "AAPL", "1d", "stock", start, end, alpaca=alpaca, now=now)
+        result = backfill(db_session, "AAPL", "1d", "stock", start, end, bars_source=alpaca, now=now)
         db_session.commit()
 
         assert result.uncovered == [date(2015, 12, 30), date(2015, 12, 31)]
@@ -7025,7 +8325,7 @@ class TestProviderErrorMidway:
         alpaca, session_ = _alpaca_from(FakeResponse(200, first_range_body), *failing_responses)
 
         with pytest.raises(Unavailable) as excinfo:
-            backfill(db_session, "AAPL", "1d", "stock", DAY, THIRD_DAY, alpaca=alpaca, now=now)
+            backfill(db_session, "AAPL", "1d", "stock", DAY, THIRD_DAY, bars_source=alpaca, now=now)
         db_session.commit()
 
         assert any("backfill stopped" in note for note in excinfo.value.__notes__)
@@ -7051,13 +8351,16 @@ Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading
 - [ ] **Step 16: Implement `data/backfill.py`.**
 
 ```python
-"""Backfills the missing sessions for one symbol/timeframe from Alpaca.
+"""Backfills the missing sessions for one symbol/timeframe from a `BarsSource`.
 
-Glue between `ai_trading_common.alpaca.AlpacaBars` and the bar store
+Glue between `ai_trading_common.sources.BarsSource` (a single provider or a registry chain --
+the caller decides which, via `ai_trading_common.registry.DataSources`) and the bar store
 (`ai_trading.data.bars`): `missing_sessions` finds the gaps, this module groups them into
-contiguous trading-session ranges, fetches each range through Alpaca, and `upsert_bars`s it
-under Alpaca's own source label. `ai_trading_common` never imports the Desk; this is the one
-module on the Desk side that imports both packages.
+contiguous trading-session ranges, fetches each range through the source, and `upsert_bars`s it
+under the source's own returned `Bars.source` label. `ai_trading_common` never imports the Desk;
+this is the one module on the Desk side that imports both packages -- and it imports only
+`ai_trading_common.sources`/`errors`, never `ai_trading_common.providers` (02j §7: the import
+boundary, enforced by `tests/test_import_boundary.py`).
 """
 
 from __future__ import annotations
@@ -7066,8 +8369,8 @@ from dataclasses import dataclass
 from datetime import date
 
 import pandas as pd
-from ai_trading_common.alpaca import AlpacaBars
 from ai_trading_common.errors import ProviderError
+from ai_trading_common.sources import BarsSource
 from sqlalchemy.orm import Session
 
 from ai_trading.core.calendar import Asset, previous_session, session
@@ -7121,10 +8424,10 @@ def backfill(
     start: date,
     end: date,
     *,
-    alpaca: AlpacaBars,
+    bars_source: BarsSource,
     now: pd.Timestamp,
 ) -> BackfillResult:
-    """Fills every missing `symbol`/`timeframe` session in `[start, end]` from Alpaca.
+    """Fills every missing `symbol`/`timeframe` session in `[start, end]` from `bars_source`.
 
     A provider error (`ai_trading_common.errors.ProviderError` and its subclasses --
     `NotConfigured`, `Unavailable`, `SoftBanned`, `NoData`) propagates to the caller with its
@@ -7145,7 +8448,7 @@ def backfill(
         assert start_session is not None and end_session is not None  # missing_sessions only names real sessions
 
         try:
-            bars = alpaca.bars(symbol, timeframe, start_session.extended_open, end_session.extended_close, now=now)
+            bars = bars_source.bars(symbol, timeframe, start_session.extended_open, end_session.extended_close, now=now)
         except ProviderError as exc:
             exc.add_note(f"backfill stopped fetching {symbol} {timeframe} {range_start}..{range_end}")
             raise
@@ -7164,20 +8467,24 @@ __all__ = ("ALPACA_FREE_HISTORY_START", "BackfillResult", "backfill")
 Run (in `backend/`): `./scripts/test-db.sh tests/test_backfill.py`
 Expected: `3 passed`.
 
-- [ ] **Step 18: Write the failing end-to-end test.** `tests/test_end_to_end.py`:
+- [ ] **Step 18: Write the failing end-to-end test, through `DataSources.from_env` (02j §7: the same path the Desk's real runtime uses).** `tests/test_end_to_end.py`:
 
 ```python
 """End-to-end: a recorded Alpaca daily fixture goes through `backfill`, then `read_bars`, then
 `ai_trading.core.evaluate.evaluate` with a simple template -- proving the client's frame shape
 (`ai_trading_common.bars.Bars`), the store's shape (`ai_trading.data.bars`), and the core's
 shape (`ai_trading.core.evaluate`) actually agree. Needs a real Postgres (`scripts/test-db.sh`).
+
+Goes through `ai_trading_common.registry.DataSources.from_env` (not `AlpacaBars` directly), the
+same way the Desk's real runtime builds its data sources (02j §7) -- `backfill` only ever sees
+the `BarsSource` Protocol, never a vendor class.
 """
 
 import json
 from datetime import date
 from pathlib import Path
 
-from ai_trading_common.alpaca import AlpacaBars
+from ai_trading_common.registry import DataSources
 from ai_trading_common.testing import FakeResponse, make_client
 
 from ai_trading.contracts.strategy_spec_v1 import StrategySpecV1
@@ -7191,13 +8498,15 @@ FIXTURES = Path(__file__).parent / "fixtures" / "alpaca"
 
 def test_backfilled_alpaca_bars_evaluate_cleanly(db_session):
     body = json.loads((FIXTURES / "daily_range_aapl.json").read_text())["body"]
-    client, _, _ = make_client([FakeResponse(200, body)])
-    alpaca = AlpacaBars("kid", "sec", http=client)
+    http, _, _ = make_client([FakeResponse(200, body)])
+    sources = DataSources.from_env(
+        env={"ALPACA_API_KEY_ID": "fake-id", "ALPACA_API_SECRET_KEY": "fake-secret"}, http=http
+    )
 
     start, end = date(2026, 1, 2), date(2026, 1, 14)
     now = et(end, "20:00")  # after the fixture's last session has closed
 
-    result = backfill(db_session, "AAPL", "1d", "stock", start, end, alpaca=alpaca, now=now)
+    result = backfill(db_session, "AAPL", "1d", "stock", start, end, bars_source=sources.bars, now=now)
     db_session.commit()
     assert result.uncovered == []
     assert len(result.written) == 9  # every trading day in the fixture's range
@@ -7228,20 +8537,78 @@ def test_backfilled_alpaca_bars_evaluate_cleanly(db_session):
 - [ ] **Step 19: Run it and watch it pass.**
 
 Run (in `backend/`): `./scripts/test-db.sh tests/test_end_to_end.py`
-Expected: `1 passed`. No shape mismatch between the client, the store, and the core's `evaluate` — the frame index type, column names, and dtypes agree at every hop on the first run.
+Expected: `1 passed`. No shape mismatch between the client, the store, and the core's `evaluate` — the frame index type, column names, and dtypes agree at every hop on the first run, and `DataSources.from_env`'s real `REGISTRY` resolves to Alpaca for `bars` with no override needed.
 
-- [ ] **Step 20: Run the full backend suite and lint, both with and without a database.**
+- [ ] **Step 20: Write the import-boundary test (02j §7).** `tests/test_import_boundary.py`:
+
+```python
+"""The Desk's import boundary with `ai_trading_common` (02j §7): Desk code imports only
+`ai_trading_common.types`, `sources`, `registry`, `bars`, `errors`, `quality`, and -- in tests
+only -- `testing`. It never imports `ai_trading_common.providers`: that module is an
+implementation detail of the registry, and importing it from the Desk would let a caller bypass
+`DataSources`'s fallback chains and bind to one vendor directly, defeating the whole point of
+the registry (02j §1: swapping a vendor needs no edits to the code that uses the data).
+"""
+
+import ast
+from pathlib import Path
+
+SRC = Path(__file__).resolve().parents[1] / "src" / "ai_trading"
+ALLOWED = {f"ai_trading_common.{name}" for name in ("types", "sources", "registry", "bars", "errors", "quality")}
+
+
+def _violations(source: str) -> list[str]:
+    """Every `ai_trading_common` import outside `ALLOWED`, in any form: `import ai_trading_common`
+    (attribute access reaches `providers`), `import ai_trading_common.providers.x`,
+    `from ai_trading_common.providers... import ...`, and `from ai_trading_common import providers`."""
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "ai_trading_common":
+                modules = [f"ai_trading_common.{alias.name}" for alias in node.names]
+            else:
+                modules = [node.module]
+        else:
+            continue
+        found += [m for m in modules if m.split(".")[0] == "ai_trading_common" and m not in ALLOWED]
+    return found
+
+
+def test_desk_code_imports_only_the_public_ai_trading_common_modules():
+    for forbidden in (
+        "import ai_trading_common",
+        "import ai_trading_common.providers.alpaca",
+        "from ai_trading_common import providers",
+        "from ai_trading_common.providers import alpaca",
+        "from ai_trading_common.providers.alpaca import AlpacaBars",
+        "from ai_trading_common import testing",
+    ):
+        assert _violations(forbidden), forbidden
+    assert _violations("from ai_trading_common.registry import DataSources\nfrom ai_trading_common import types") == []
+
+    offenders = {str(path): found for path in sorted(SRC.rglob("*.py")) if (found := _violations(path.read_text()))}
+    assert offenders == {}
+```
+
+- [ ] **Step 21: Run it and watch it pass.**
+
+Run (in `backend/`): `uv run pytest -q tests/test_import_boundary.py`
+Expected: `1 passed`.
+
+- [ ] **Step 22: Run the full backend suite and lint, both with and without a database — this is the backend's final count for Phase 2a.**
 
 Run (in `backend/`): `./scripts/test-db.sh`
-Expected: `556 passed` (527 + 13 + 7 + 5 + 3 + 1).
+Expected: `557 passed` (527 + 13 + 7 + 5 + 3 + 1 + 1).
 
 Run (in `backend/`): `uv run pytest -q -rs`
-Expected: `541 passed, 15 skipped` (the 15 skips are exactly the 2 migration tests plus the DB-only tests from this task: 8 in `test_bars_store.py`, 1 in `test_rolls.py`, 3 in `test_backfill.py`, 1 in `test_end_to_end.py`).
+Expected: `542 passed, 15 skipped` (the 15 skips are exactly the DB-only tests: 2 migration, 8 in `test_bars_store.py`, 1 in `test_rolls.py`, 3 in `test_backfill.py`, 1 in `test_end_to_end.py`; `test_import_boundary.py` needs no database and always runs).
 
 Run (in `backend/`): `uv run ruff check . && uv run ruff format --check .`
 Expected: ruff clean.
 
-- [ ] **Step 21: Update 02c's Phases table.** In `ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md`, replace:
+- [ ] **Step 23: Update 02c's Phases table.** In `ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md`, replace:
 
 ```markdown
 | 2. Data foundation | `ai-trading/common` providers (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
@@ -7250,10 +8617,22 @@ Expected: ruff clean.
 with:
 
 ```markdown
-| 2. Data foundation | `ai-trading/common` providers (Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
+| 2. Data foundation | `ai-trading/common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
 ```
 
-- [ ] **Step 22: Update 02c's Phase 2 outline in place.** In the same file, replace:
+- [ ] **Step 24: Update 02c's Shared Interfaces row for `ai-trading/common/` to the 02j layout.** In the same file, replace:
+
+```markdown
+| Shared ai-trading code | `ai-trading/common/` (Phase 2): `http.py` (throttle), provider errors and as-of guards, the clients (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, consensus EPS, IBKR), and cross-package types |
+```
+
+with:
+
+```markdown
+| Shared ai-trading code | `ai-trading/common/` (Phase 2a, restructured by 02j): `types.py`, `sources.py`, `registry.py` (`Kind`, `Provider`, `REGISTRY`, `DEFAULT_CHAINS`, `DataSources.from_env()`), `providers/` (Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool; IBKR in 2b), plus `errors.py`/`quality.py`/`http.py`/`bars.py`/`fallback.py`/`testing.py`. Callers build one `DataSources` and read through it — never `ai_trading_common.providers` directly |
+```
+
+- [ ] **Step 25: Update 02c's Phase 2 outline in place.** In the same file, replace:
 
 ```markdown
 ### Phase 2: Data foundation (2a without IBKR, 2b the IBKR client)
@@ -7295,21 +8674,22 @@ with:
 ```markdown
 ### Phase 2: Data foundation (2a without IBKR, done; 2b the IBKR client)
 
-**Scope (2a, done — [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md)):**
+**Scope (2a, done — [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md), restructured by [02j](02j-common-data-providers-design.md) to one provider registry):**
 - **`ai-trading/common/`** (new):
   - `http.py` (copied from Vibe-Trading's throttle) with a soft-ban latch;
   - typed provider errors and one generic fallback-chaining helper (`first_success[T]`);
-  - bar hygiene guards, and "never cache a trading day that has not closed".
-- **Clients:**
+  - bar hygiene guards, and "never cache a trading day that has not closed";
+  - `types.py`/`sources.py`/`registry.py`: vendor-neutral types, one Protocol per data kind, and `DataSources.from_env()` — swapping a vendor means an adapter, one `REGISTRY` line, and config, never a caller-code change.
+- **Providers (behind the registry):**
   - Alpaca, moved from `ai-trading/market-data/` together with the open-source lane;
   - SEC EDGAR, by filing date and span, including 8-K `filings.files` paging;
   - FRED, with vintages and release dates;
   - Finnhub: earnings calendar, company news, recommendation trends, earnings surprises;
   - consensus EPS: the Eulerpool 10-symbol pilot, written up in 02d, with Finnhub and Alpha Vantage as the fallback (02f §4). Stooq is dropped (its CSV endpoint is gated behind a JS proof-of-work challenge with no API key offered); the Desk's effective daily-history start is 2016-01-01 unless 2b's IBKR client backfills further back.
-- **2b:** the IBKR client through `ib_async`. Paper and data profiles and ports, the market-data type, live 1-minute bars, futures history, daily IV, option snapshots, and what-if margin.
+- **2b:** the IBKR client through `ib_async`, added as `providers/ibkr.py` with no change to any caller. Paper and data profiles and ports, the market-data type, live 1-minute bars, futures history, daily IV, option snapshots, and what-if margin.
 - **Desk `ai_trading.db` (2a):** SQLAlchemy and Alembic for `bars_1d`, `bars_1h`, `bars_1m`, and `futures_rolls` only — every other table in Shared Interfaces arrives with the phase that first needs it (owner decision). The Postgres role and schema init under `deploy/postgres/` moves to Phase 3, where `desk-postgres` first joins the deploy compose file.
 - **Desk `ai_trading.data` (2a):**
-  - the bar store (closed-bar-only upserts, as-of reads, backfill planning, 1-minute retention) and the Alpaca backfill glue;
+  - the bar store (closed-bar-only upserts, as-of reads, backfill planning, 1-minute retention) and the backfill glue, which takes a `BarsSource`, never a vendor class;
   - the roll map (contiguous windows, difference back-adjusted continuous series), using Phase 1c's dates;
   - the streaming slot manager.
   - Read models and typed evidence snapshots for tools and card backs move to the phases that consume them (3, 5, 7).
@@ -7318,6 +8698,7 @@ with:
 
 **Acceptance:**
 - contract tests on recorded responses, with no network in CI;
+- a conformance test that every registered provider's adapter satisfies every kind's Protocol it declares;
 - store tests against a real Postgres container;
 - the roll test (no cross-contract gap) and the slot-priority test;
 - the throttle's limits;
@@ -7326,7 +8707,7 @@ with:
 **Size:** about 10 tasks: 2a with 8 (done), 2b with 2.
 ```
 
-- [ ] **Step 23: Remove 02b §5's Stooq mentions.** In `ai-trading/plans/subplans/02b-desk-market-data-options.md`, replace:
+- [ ] **Step 26: Remove 02b §5's Stooq mentions.** In `ai-trading/plans/subplans/02b-desk-market-data-options.md`, replace:
 
 ```markdown
 | US stocks and ETFs | IBKR, 250 ms, pre/post market | Alpaca free: daily since 2016, hourly 5 years, 1-minute 30 days. Stooq for daily before 2016, marked `fallback`. | `bars_1d`, `bars_1h`, `bars_1m` (1-minute rolling 90 days) |
@@ -7338,7 +8719,7 @@ with:
 | US stocks and ETFs | IBKR, 250 ms, pre/post market | Alpaca free: daily since 2016, hourly 5 years, 1-minute 30 days. No source for daily history before 2016 (Stooq's CSV endpoint is gated behind a JS proof-of-work challenge with no API key offered, confirmed dead 2026-10-11, Phase 2a); IBKR can backfill further back in Phase 2b if the owner wants it. | `bars_1d`, `bars_1h`, `bars_1m` (1-minute rolling 90 days) |
 ```
 
-- [ ] **Step 24: Append a sentence to STATUS.md's "5+" row.** In `ai-trading/plans/STATUS.md`, find the row beginning `| 5+ | Release 2 plan and build (Desk v1) |` and, inside its description cell, replace:
+- [ ] **Step 27: Append a sentence to STATUS.md's "5+" row.** In `ai-trading/plans/STATUS.md`, find the row beginning `| 5+ | Release 2 plan and build (Desk v1) |` and, inside its description cell, replace:
 
 ```markdown
 Phase 1d (research math) done: as-of helpers, valuation methods, earnings reaction, the backtest engine, AI call settlement.
@@ -7347,12 +8728,25 @@ Phase 1d (research math) done: as-of helpers, valuation methods, earnings reacti
 with:
 
 ```markdown
-Phase 1d (research math) done: as-of helpers, valuation methods, earnings reaction, the backtest engine, AI call settlement. Phase 2a (data foundation without IBKR) done: `ai-trading-common` providers (Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, the consensus-EPS fallback chains), the Desk Postgres schema (`bars_1d`/`1h`/`1m`, `futures_rolls`), the bar store, the futures roll map, the streaming-slot allocator, and Alpaca backfill, with CI's `postgres:17` service.
+Phase 1d (research math) done: as-of helpers, valuation methods, earnings reaction, the backtest engine, AI call settlement. Phase 2a (data foundation without IBKR) done: `ai-trading-common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, the consensus-EPS fallback chains), the Desk Postgres schema (`bars_1d`/`1h`/`1m`, `futures_rolls`), the bar store, the futures roll map, the streaming-slot allocator, and Alpaca backfill through `DataSources`, with CI's `postgres:17` service.
 ```
 
-- [ ] **Step 25: Commit.**
+- [ ] **Step 28: Add one rule line to `ai-trading/AGENTS.md`'s "Our Code (owner, 2026-10-10)" section.** In `ai-trading/AGENTS.md`, replace:
+
+```markdown
+- Packages under `packages/` never import from each other. Code that two or more ai-trading packages share (data-provider clients such as Alpaca and IBKR, a shared database schema, shared types) lives in `ai-trading/common/`.
+```
+
+with:
+
+```markdown
+- Packages under `packages/` never import from each other. Code that two or more ai-trading packages share (data-provider clients such as Alpaca and IBKR, a shared database schema, shared types) lives in `ai-trading/common/`.
+- External data sources live in `ai-trading/common` behind the provider registry (02j); callers use `ai_trading_common.registry.DataSources` and never import `ai_trading_common.providers` directly.
+```
+
+- [ ] **Step 29: Commit.**
 
 ```bash
-git add ai-trading/packages/family-desk/backend/src/ai_trading/data ai-trading/packages/family-desk/backend/tests/test_bars_store.py ai-trading/packages/family-desk/backend/tests/test_rolls.py ai-trading/packages/family-desk/backend/tests/test_slots.py ai-trading/packages/family-desk/backend/tests/test_backfill.py ai-trading/packages/family-desk/backend/tests/test_end_to_end.py ai-trading/packages/family-desk/backend/tests/fixtures/alpaca/daily_range_aapl.json ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md ai-trading/plans/subplans/02b-desk-market-data-options.md ai-trading/plans/STATUS.md
-git commit -m "feat(ai-trading): Desk data layer -- bar store, futures roll map, slot allocator, Alpaca backfill"
+git add ai-trading/packages/family-desk/backend/src/ai_trading/data ai-trading/packages/family-desk/backend/tests/test_bars_store.py ai-trading/packages/family-desk/backend/tests/test_rolls.py ai-trading/packages/family-desk/backend/tests/test_slots.py ai-trading/packages/family-desk/backend/tests/test_backfill.py ai-trading/packages/family-desk/backend/tests/test_end_to_end.py ai-trading/packages/family-desk/backend/tests/test_import_boundary.py ai-trading/packages/family-desk/backend/tests/fixtures/alpaca/daily_range_aapl.json ai-trading/plans/subplans/02c-desk-v1-implementation-plan.md ai-trading/plans/subplans/02b-desk-market-data-options.md ai-trading/plans/STATUS.md ai-trading/AGENTS.md
+git commit -m "feat(ai-trading): Desk data layer -- bar store, futures roll map, slot allocator, backfill through BarsSource, import boundary"
 ```
