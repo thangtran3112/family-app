@@ -258,6 +258,7 @@ Source: https://github.com/virattt/ai-hedge-fund (v1 history; pinned tip as `ai-
 | Desk file | Adapted from | Changes |
 |---|---|---|
 | `backend/src/ai_trading/core/valuation.py` | `src/agents/valuation.py` at commit `6c41ae8` | No framework ties (plain numbers in, a number or `None` out); a non-positive cash flow, a missing input, or a rate that does not clear its matching growth rate gives `None` instead of `0`; dropped two parameters unused by the original function bodies (`calculate_wacc`'s `debt_to_equity`, `calculate_dcf_scenarios`'s `growth_metrics`); added `blended_value` (02h section 4) |
+| `backend/src/ai_trading/core/earnings_reaction.py` | `hedge_fund/event_study/engine.py`, `stats.py` at commit `78b779c` | Single stock, no cross-sectional aggregation; dropped the t-test and bootstrap CI (and the scipy dependency they need); dropped `r_squared`; announcement dates are given, not derived, and must already be a trading day (no weekend/holiday snapping here) |
 
 ```text
 MIT License
