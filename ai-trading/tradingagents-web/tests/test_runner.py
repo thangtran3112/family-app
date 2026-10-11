@@ -532,39 +532,81 @@ class RunnerTestCase(unittest.TestCase):
 
         popen_entered = threading.Event()
         let_popen_return = threading.Event()
+        close_attempting_acquire = threading.Event()
+        spawned_procs = []  # any real child Popen actually created, for cleanup
+
         import subprocess as subprocess_module
 
         real_popen = subprocess_module.Popen
+        real_lock = runner._lock
 
         def fake_popen(argv, **kwargs):
             popen_entered.set()
             let_popen_return.wait(timeout=5)
-            return real_popen(argv, **kwargs)
+            proc = real_popen(argv, **kwargs)
+            spawned_procs.append(proc)
+            return proc
 
+        start_thread = threading.Thread(target=runner.start, args=(run["id"],))
+
+        class _HandshakeLock:
+            """Wraps the real lock to signal the exact moment a thread other
+            than start_thread (i.e. close_thread) reaches its own lock
+            statement — proving close() got there, as opposed to merely "the
+            test slept a while and close_thread's state object still looked
+            alive". Delegates the actual acquire/release to the real lock, so
+            whether that attempt then blocks (fixed code, contended) or
+            succeeds immediately (pre-fix code, uncontended because start()
+            isn't holding the lock during Popen) is still decided for real."""
+
+            def __enter__(self):
+                if threading.current_thread() is not start_thread:
+                    close_attempting_acquire.set()
+                real_lock.acquire()
+                return self
+
+            def __exit__(self, *exc_info):
+                real_lock.release()
+                return False
+
+        runner._lock = _HandshakeLock()
         subprocess_module.Popen = fake_popen
+
+        start_thread_started = close_thread_started = False
+        close_thread = threading.Thread(target=runner.close)
         try:
-            start_thread = threading.Thread(target=runner.start, args=(run["id"],))
             start_thread.start()
+            start_thread_started = True
             self.assertTrue(popen_entered.wait(timeout=5), "start() never reached Popen")
 
-            close_thread = threading.Thread(target=runner.close)
             close_thread.start()
-            time.sleep(0.1)  # scheduling nudge only; the assertion below is the real check
-            # The fix holds one lock across start()'s whole closing-check +
-            # Popen + register, shared with close()'s closing-flag + snapshot.
-            # Popen is still blocked (held open by let_popen_return), so if
-            # close() has already finished here, it did so WITHOUT that lock
-            # ever serializing against start() — exactly the reported bug.
+            close_thread_started = True
+            self.assertTrue(
+                close_attempting_acquire.wait(timeout=5),
+                "close() never reached its own lock acquisition",
+            )
+            # Popen is still held open by let_popen_return, and close() has
+            # just attempted the very lock start() took before calling Popen.
+            # If the fix's lock genuinely spans that call, close() must still
+            # be blocked here — a direct consequence of real lock contention,
+            # not a scheduler-timing guess (the handshake above is what makes
+            # this check meaningful: it proves close() already tried).
             self.assertTrue(
                 close_thread.is_alive(),
                 "close() returned before start() could register its child (the orphan race)",
             )
-
-            let_popen_return.set()
-            start_thread.join(timeout=10)
-            close_thread.join(timeout=10)
         finally:
+            let_popen_return.set()  # always release the gate so nothing can hang
+            if start_thread_started:
+                start_thread.join(timeout=10)
+            if close_thread_started:
+                close_thread.join(timeout=10)
             subprocess_module.Popen = real_popen
+            runner._lock = real_lock
+            for proc in spawned_procs:  # clean up any real child, pass or fail
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait(timeout=5)
 
         self.assertFalse(start_thread.is_alive())
         self.assertFalse(close_thread.is_alive())
