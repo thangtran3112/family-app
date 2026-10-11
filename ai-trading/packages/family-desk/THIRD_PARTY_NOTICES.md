@@ -10,6 +10,7 @@ Source: https://github.com/HKUDS/Vibe-Trading (pinned as `ai-trading/packages/vi
 |---|---|---|
 | `backend/src/ai_trading/core/options_math.py` | `agent/src/quantlib/options.py` | Standard-library math instead of numpy/scipy; calls and puts only; no barrier options |
 | `backend/src/ai_trading/core/levels.py` (`support_resistance`, `_clusters`) | `agent/src/tools/pattern_tool.py` (`find_peaks_valleys`, `support_resistance`) | Confirmed pivots only; the nearest level to the previous close |
+| `backend/src/ai_trading/core/futures.py` (`SPECS`, `MONTH_CODES`, `_extract_product`) | `agent/backtest/engines/global_futures.py` (`_MULTIPLIER`, `_extract_product`) | Only the Desk's 12 contracts (no margins, price limits, commissions, or backtest engine); dollars-per-tick, listed months, and session hours added |
 
 ```text
 MIT License
