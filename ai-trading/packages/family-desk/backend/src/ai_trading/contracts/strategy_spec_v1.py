@@ -39,7 +39,7 @@ class Watch(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    runOn: Literal["bar_close_1m", "premarket_0830", "daily_close", "weekly"]
+    runOn: Literal["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]
     session: Literal["regular", "extended"]
     universe: Universe | Universe1
 
@@ -73,6 +73,16 @@ class LevelOperand4(SpecModel):
     )
     days: Annotated[int, Field(ge=20, le=260)]
     level: Literal["support", "resistance"]
+
+
+class LevelOperand5(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    level: Literal["pivot"]
+    method: Literal["classic", "fibonacci", "camarilla"]
+    period: Literal["session", "week", "month"]
+    point: Literal["P", "R1", "R2", "R3", "S1", "S2", "S3"]
 
 
 class Limits(SpecModel):
@@ -135,8 +145,8 @@ class PaperOrder(SpecModel):
     )
     side: Literal["buy", "sell"]
     size: Size | Size1 | Size2 | Size3
-    stop: Stop | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
-    target: Target | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    stop: Stop | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
+    target: Target | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
 
 
 class SeriesOperand1(SpecModel):
@@ -151,7 +161,7 @@ class SeriesOperand2(SpecModel):
         extra="forbid",
     )
     length: Annotated[int, Field(ge=2, le=500)]
-    series: Literal["sma", "ema", "rsi", "atr"]
+    series: Literal["sma", "ema", "rsi", "atr", "cci", "momentum", "williams_r", "vwma", "hull_ma"]
 
 
 class SeriesOperand3(SpecModel):
@@ -160,6 +170,105 @@ class SeriesOperand3(SpecModel):
     )
     lookbackDays: Annotated[int, Field(ge=1, le=60)]
     series: Literal["rvol"]
+
+
+class SeriesOperand4(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    fast: Annotated[int, Field(ge=2, le=500)]
+    line: Literal["line", "signal", "histogram"]
+    series: Literal["macd"]
+    signal: Annotated[int, Field(ge=2, le=500)]
+    slow: Annotated[int, Field(ge=2, le=500)]
+
+
+class SeriesOperand5(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    length: Annotated[int, Field(ge=2, le=500)]
+    line: Literal["k", "d"]
+    series: Literal["stochastic"]
+    smoothD: Annotated[int, Field(ge=1, le=500)]
+    smoothK: Annotated[int, Field(ge=1, le=500)]
+
+
+class SeriesOperand6(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    line: Literal["k", "d"]
+    rsiLength: Annotated[int, Field(ge=2, le=500)]
+    series: Literal["stoch_rsi"]
+    smoothD: Annotated[int, Field(ge=1, le=500)]
+    smoothK: Annotated[int, Field(ge=1, le=500)]
+    stochLength: Annotated[int, Field(ge=2, le=500)]
+
+
+class SeriesOperand7(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    length: Annotated[int, Field(ge=2, le=500)]
+    line: Literal["adx", "plus_di", "minus_di"]
+    series: Literal["adx"]
+
+
+class SeriesOperand8(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    fast: Annotated[int, Field(ge=2, le=500)]
+    series: Literal["awesome_oscillator"]
+    slow: Annotated[int, Field(ge=2, le=500)]
+
+
+class SeriesOperand9(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    length: Annotated[int, Field(ge=2, le=500)]
+    line: Literal["bull", "bear"]
+    series: Literal["bull_bear_power"]
+
+
+class SeriesOperand10(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    fast: Annotated[int, Field(ge=2, le=500)]
+    mid: Annotated[int, Field(ge=2, le=500)]
+    series: Literal["ultimate_oscillator"]
+    slow: Annotated[int, Field(ge=2, le=500)]
+
+
+class SeriesOperand11(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    baseLength: Annotated[int, Field(ge=2, le=500)]
+    conversionLength: Annotated[int, Field(ge=2, le=500)]
+    line: Literal["conversion", "base", "span_a", "span_b"]
+    series: Literal["ichimoku"]
+    spanBLength: Annotated[int, Field(ge=2, le=500)]
+
+
+class SeriesOperand12(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    length: Annotated[int, Field(ge=2, le=500)]
+    medianLength: Annotated[int, Field(ge=2, le=500)]
+    series: Literal["atr_pct"]
+
+
+class SeriesOperand13(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    part: Literal["oscillators", "moving_averages", "summary"]
+    series: Literal["bias"]
 
 
 class TimeBetweenCondition(SpecModel):
@@ -190,19 +299,19 @@ class WithinPctCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
     op: Literal["within_pct"]
     pct: Annotated[float, Field(gt=0.0, le=100.0)]
-    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
 
 
 class CompareCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
     op: Literal["gt", "gte", "lt", "lte", "crosses_above", "crosses_below"]
-    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4
+    right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
 
 
 class StrategySpecV1(SpecModel):

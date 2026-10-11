@@ -35,7 +35,7 @@ Paths below are relative to `ai-trading/` unless they start with `../`.
 
 Each phase gets a task file under `plans/subplans/02c-desk-v1-tasks/` (writing-plans skill, written from a tested prototype in `temp/`), owner review, then subagent-driven execution in a `.worktrees/` worktree merged back into `feature/toby`, and one pull request to `dev`.
 
-1. **Phase 1c task file** (`phase-1c-technicals-and-futures.md`): pure code, written from a tested prototype. It covers the 02f §3 indicators, pivots, and bias with their blocks and cadences, and the 02g §4 futures specs, roll dates, and micro-first sizer. Reuse Vibe-Trading's futures tables and its ADX and Ichimoku (02a §11).
+1. **Phase 1c and 1d task files are written** (2026-10-11), from tested prototypes and independently reviewed; they await the owner's review. Then run 1c through subagent-driven development, then 1d. For reference, the 1c file: pure code, written from a tested prototype. It covers the 02f §3 indicators, pivots, and bias with their blocks and cadences, and the 02g §4 futures specs, roll dates, and micro-first sizer. Reuse Vibe-Trading's futures tables and its ADX and Ichimoku (02a §11).
 2. **Phase 1d task file** (`phase-1d-research-math.md`): the as-of helpers, valuation (copied from ai-hedge-fund v1), earnings reaction, the backtest engine core, and AI call settlement (02h).
 3. **Phase 2a plan, data without IBKR**, then 3 → 4 → 5, 6, 6b → 7 (02c Execution Map). The open-source lane owns `ai-trading/market-data/`; move it into `common/` together with that lane, never alone.
 4. **When IBKR approves the data user:** Task 0.5 with the owner (weekday market hours; also confirm that greeks arrive through the $4.50 add-on), Task 0.6, then Phase 2b (the IBKR client).
