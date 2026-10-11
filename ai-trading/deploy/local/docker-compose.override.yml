@@ -17,6 +17,8 @@ services:
         condition: service_started
       ta-terminal:
         condition: service_started
+      ta-research:
+        condition: service_started
       ahf-terminal:
         condition: service_started
       vibe-trading:

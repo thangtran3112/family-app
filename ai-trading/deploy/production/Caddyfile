@@ -34,20 +34,44 @@ http://vibe-trading.tobytran.dev:8080 {
 # top-level navigation is sent to the hub login with a fixed returnTo; every
 # other unauthenticated request (token, ws) keeps the plain 401.
 http://tradingagents.tobytran.dev:8080 {
-	route {
-		request_header -Cf-Access-Authenticated-User-Email
-		forward_auth auth:8181 {
-			uri /__auth/check
-			copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
-			@denied status 401
-			handle_response @denied {
-				@navigate header Sec-Fetch-Mode navigate
-				redir @navigate https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2F 302
-				respond 401
+	# Research (06) is reached unprefixed at this dedicated host -- exact
+	# root + slash-descendant matchers, same anti-sibling-wildcard reasoning
+	# as @tradingagents/@aihedgefund below -- handled ahead of the terminal's
+	# catch-all `handle`/rewrite so it never reaches ta-terminal. Any
+	# browser-supplied X-Family-App-Prefix is stripped before forward_auth so
+	# only this site establishes the (here, empty) prefix the app trusts.
+	@ta_research_host path /research /research/* /api/research /api/research/*
+	handle @ta_research_host {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			request_header -X-Family-App-Prefix
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			reverse_proxy ta-research:8182 {
+				header_up X-Forwarded-Proto https
+				header_up Host {host}
 			}
 		}
-		rewrite * /u/tradingagents{uri}
-		reverse_proxy ta-terminal:7681
+	}
+
+	handle {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					@navigate header Sec-Fetch-Mode navigate
+					redir @navigate https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2F 302
+					respond 401
+				}
+			}
+			rewrite * /u/tradingagents{uri}
+			reverse_proxy ta-terminal:7681
+		}
 	}
 }
 
@@ -83,9 +107,52 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 	# unchanged.
 	@tradingagents path /u/tradingagents /u/tradingagents/*
 	@aihedgefund path /u/ai-hedge-fund /u/ai-hedge-fund/*
+	# Exact root + slash-descendant matchers for research (06), same reasoning
+	# as @tradingagents/@aihedgefund -- a bare /u/tradingagents/research*
+	# prefix wildcard would also match an unrelated sibling like
+	# /u/tradingagents/research-evil. These four paths are also matched by
+	# @tradingagents's own /u/tradingagents/* wildcard, so this `handle` must
+	# run before `handle @tradingagents` below (handle blocks are mutually
+	# exclusive; first match wins) or they would reach the terminal instead.
+	@ta_research path /u/tradingagents/research /u/tradingagents/research/* /u/tradingagents/api/research /u/tradingagents/api/research/*
 
 	handle /__auth/* {
 		reverse_proxy auth:8181
+	}
+
+	handle @ta_research {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			request_header -X-Family-App-Prefix
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					# Only a top-level navigation to the research root or a
+					# canonical-shaped UUID descendant is redirected -- never
+					# an API/asset fetch under the same matcher (those stay a
+					# plain 401, same as every other unauthenticated
+					# request). The captured group is restricted to
+					# lowercase hex and hyphen characters only, so no query
+					# or path-injection value can ever reach the redirect
+					# target; any query string on the original request is
+					# never referenced here at all, so it is always discarded.
+					@research_return {
+						header Sec-Fetch-Mode navigate
+						path_regexp research_return ^/u/tradingagents/research(/[0-9a-f-]+)?$
+					}
+					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftrading-hub.tobytran.dev%2Fu%2Ftradingagents%2Fresearch{re.research_return.1} 302
+					respond 401
+				}
+			}
+			uri strip_prefix /u/tradingagents
+			reverse_proxy ta-research:8182 {
+				header_up X-Family-App-Prefix /u/tradingagents
+				header_up X-Forwarded-Proto https
+				header_up Host {host}
+			}
+		}
 	}
 
 	# A bare sequence of directives inside `handle` is NOT executed in the

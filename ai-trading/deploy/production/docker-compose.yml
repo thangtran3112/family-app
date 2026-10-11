@@ -34,6 +34,28 @@ services:
       start_period: 10s
       retries: 3
 
+  ta-research:
+    # Private research API + static shell (06): same tradingagents.env/appuser
+    # UID as ta-terminal, but its own data volume -- never mounts ta-data, and
+    # ta-data is never mounted here either (legacy terminal history stays
+    # terminal-only; see ta-research-data below).
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ta-research:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/tradingagents.env
+    volumes:
+      - ta-research-data:/home/appuser/.tradingagents
+    networks: [ta]
+    mem_limit: 1g
+    pids_limit: 512
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8182/__healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
   ahf-terminal:
     image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ahf-terminal:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
     restart: unless-stopped
@@ -117,6 +139,9 @@ services:
     labels:
       # Set by deploy.sh: a changed Caddyfile recreates this container.
       com.family-app.caddyfile-sha256: ${AI_TRADING_CADDYFILE_SHA256:-unset}
+    depends_on:
+      ta-research:
+        condition: service_started
     networks: [gateway, ta, ahf, vibe, mirofish]
     mem_limit: 64m
     security_opt: ["no-new-privileges:true"]
@@ -162,6 +187,7 @@ networks:
 
 volumes:
   ta-data: {}
+  ta-research-data: {}
   ahf-data: {}
   vibe-runs: {}
   vibe-sessions: {}
