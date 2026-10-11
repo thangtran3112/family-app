@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { hubApps } from "@/lib/apps";
-import type { AppId, AppState } from "@/lib/controls";
+import { isRefreshableConflict, retryDesiredEnabled, retryRequiresStopConfirmation, type AppId, type AppState } from "@/lib/controls";
 import { useAppControls } from "@/components/app-controls-provider";
 
 const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -29,12 +29,12 @@ function statusColorClass(status: AppState["status"]): string {
 }
 
 export function AppControlsPanel() {
-  const { state, loading, error, refresh, change } = useAppControls();
+  const { state, loading, error, mutating, refresh, change } = useAppControls();
   const [confirming, setConfirming] = useState<AppId | null>(null);
   const [pending, setPending] = useState<AppId | null>(null);
   const [rowError, setRowError] = useState<{ id: AppId; message: string } | null>(null);
 
-  const busy = pending !== null || !!state?.apps.some((app) => app.status === "Starting" || app.status === "Stopping");
+  const busy = mutating || pending !== null || !!state?.apps.some((app) => app.status === "Starting" || app.status === "Stopping");
 
   async function runChange(id: AppId, enabled: boolean) {
     setPending(id);
@@ -44,15 +44,19 @@ export function AppControlsPanel() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not update this app.";
       setRowError({ id, message });
-      if (/changed|refresh/i.test(message)) refresh();
+      if (isRefreshableConflict(message)) refresh();
     } finally {
       setPending(null);
     }
   }
 
+  // Retry always reconciles the stored desired choice (never an opposite
+  // toggle); a desired-Off retry goes through the same Stop confirmation a
+  // fresh stop would require, because a failed stop may have left work
+  // running.
   function retry(app: AppState) {
-    if (app.enabled) void runChange(app.id, true);
-    else setConfirming(app.id);
+    if (retryRequiresStopConfirmation(app)) setConfirming(app.id);
+    else void runChange(app.id, retryDesiredEnabled(app));
   }
 
   const confirmingApp = confirming ? (state?.apps.find((app) => app.id === confirming) ?? null) : null;
@@ -69,7 +73,7 @@ export function AppControlsPanel() {
         <button
           type="button"
           onClick={refresh}
-          disabled={loading}
+          disabled={loading || mutating}
           className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:opacity-60 motion-reduce:transition-none ${FOCUS_RING}`}
         >
           <RefreshCw aria-hidden size={15} className={loading ? "animate-spin motion-reduce:animate-none" : undefined} />

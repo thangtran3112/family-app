@@ -1,6 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changeApp, fetchApps, isAppConfirmedRunning, isAppKnownStopped, type AppId, type ControlsState } from "./controls.ts";
+import {
+  ACTIVE_POLL_MS,
+  appLaunchGate,
+  changeApp,
+  createGenerationGate,
+  fetchApps,
+  IDLE_POLL_MS,
+  isRefreshableConflict,
+  launchBlockedCopy,
+  nextPollDelayMs,
+  retryDesiredEnabled,
+  retryRequiresStopConfirmation,
+  type AppId,
+  type AppState,
+  type ControlsState,
+} from "./controls.ts";
 
 // Hand-checked fixture matching the exact public DTO from common-context.md:
 // {revision, lastChangedAt, apps: [{id, enabled, status, changedAt, operationId, errorCode}]}.
@@ -159,18 +174,161 @@ test("rejects a negative or boolean-like revision", async () => {
   await assert.rejects(fetchApps(async () => "tok", async () => jsonResponse(boolRevision)));
 });
 
-test("isAppConfirmedRunning is true only for an enabled app actually Running", () => {
-  const state = controlsFixture();
-  assert.equal(isAppConfirmedRunning(state, "tradingagents"), true);
-  assert.equal(isAppConfirmedRunning(state, "mirofish"), false);
-  assert.equal(isAppConfirmedRunning(null, "tradingagents"), false);
-  assert.equal(isAppConfirmedRunning(state, "not-a-real-app" as AppId), false);
+test("rejects an invalid lastChangedAt or changedAt timestamp", async () => {
+  const badTop = controlsFixture();
+  (badTop as unknown as { lastChangedAt: string }).lastChangedAt = "2026-01-01 00:00:00";
+  await assert.rejects(fetchApps(async () => "tok", async () => jsonResponse(badTop)));
+
+  const badApp = controlsFixture();
+  badApp.apps[0] = { ...badApp.apps[0], changedAt: "2026-01-01T00:00:00+05:00" };
+  await assert.rejects(fetchApps(async () => "tok", async () => jsonResponse(badApp)), /timestamp/i);
 });
 
-test("isAppKnownStopped stays false while unknown, true only once confirmed not running", () => {
+test("accepts both the server's Z form and an explicit +00:00/-00:00 UTC offset", async () => {
+  for (const stamp of ["2026-01-01T00:00:00Z", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00.123-00:00"]) {
+    const good = controlsFixture();
+    good.lastChangedAt = stamp;
+    good.apps[0] = { ...good.apps[0], changedAt: stamp };
+    const result = await fetchApps(async () => "tok", async () => jsonResponse(good));
+    assert.equal(result.lastChangedAt, stamp);
+  }
+});
+
+test("rejects a malformed or non-canonical operationId", async () => {
+  for (const bad of ["not-a-uuid", "00000000-0000-0000-8000-000000000000", "0000000a-0000-4000-8000-00000000000z", "0000000A-0000-4000-8000-00000000000B"]) {
+    const state = controlsFixture();
+    state.apps[0] = { ...state.apps[0], operationId: bad };
+    await assert.rejects(fetchApps(async () => "tok", async () => jsonResponse(state)), /operation/i);
+  }
+});
+
+test("accepts a canonical lowercase UUID4 operationId", async () => {
   const state = controlsFixture();
-  assert.equal(isAppKnownStopped(null, "tradingagents"), false, "no snapshot yet: not definitely stopped");
-  assert.equal(isAppKnownStopped(state, "not-a-real-app" as AppId), false, "missing entry: not definitely stopped");
-  assert.equal(isAppKnownStopped(state, "tradingagents"), false, "actually running");
-  assert.equal(isAppKnownStopped(state, "mirofish"), true, "actually stopped");
+  state.apps[0] = { ...state.apps[0], operationId: "00000000-0000-4000-8000-000000000000" };
+  const result = await fetchApps(async () => "tok", async () => jsonResponse(state));
+  assert.equal(result.apps[0].operationId, "00000000-0000-4000-8000-000000000000");
+});
+
+test("appLaunchGate: Running is the only available status, regardless of the desired flag", () => {
+  const state = controlsFixture();
+  assert.deepEqual(appLaunchGate(state, "tradingagents"), { kind: "available" });
+  // control/runtime.py's group_status never actually returns Running for a
+  // desired-off app, but the client must not rely on that invariant either:
+  // live `status` alone decides availability, never the cached `enabled` flag.
+  const desiredOffButRunning = controlsFixture();
+  desiredOffButRunning.apps[3] = { ...desiredOffButRunning.apps[3], enabled: false, status: "Running" };
+  assert.deepEqual(appLaunchGate(desiredOffButRunning, "mirofish"), { kind: "available" });
+});
+
+test("appLaunchGate: every non-Running status is its own blocked status, never collapsed into Stopped", () => {
+  const state = controlsFixture();
+  for (const status of ["Starting", "Stopping", "Needs setup", "Unhealthy", "Error"] as const) {
+    state.apps[3] = { ...state.apps[3], status };
+    assert.deepEqual(appLaunchGate(state, "mirofish"), { kind: "blocked", status });
+  }
+  state.apps[3] = { ...state.apps[3], status: "Stopped" };
+  assert.deepEqual(appLaunchGate(state, "mirofish"), { kind: "blocked", status: "Stopped" });
+});
+
+test("appLaunchGate is unknown (not blocked, not available) while unloaded or missing", () => {
+  const state = controlsFixture();
+  assert.deepEqual(appLaunchGate(null, "tradingagents"), { kind: "unknown" });
+  assert.deepEqual(appLaunchGate(state, "not-a-real-app" as AppId), { kind: "unknown" });
+});
+
+test("launchBlockedCopy gives distinct, status-specific wording and never says 'off' for a non-Stopped status", () => {
+  const seen = new Set<string>();
+  for (const status of ["Stopped", "Starting", "Stopping", "Needs setup", "Unhealthy", "Error"] as const) {
+    const copy = launchBlockedCopy(status);
+    seen.add(copy.headline);
+    if (status !== "Stopped") assert.doesNotMatch(copy.headline, /off|stopped/i);
+  }
+  assert.equal(seen.size, 6, "every status has distinct wording");
+});
+
+test("retry reconciles the stored desired choice and never flips it", () => {
+  const on: AppState = { ...controlsFixture().apps[0], enabled: true };
+  const off: AppState = { ...controlsFixture().apps[3], enabled: false };
+  assert.equal(retryDesiredEnabled(on), true);
+  assert.equal(retryDesiredEnabled(off), false);
+});
+
+test("retry of a desired-Off app requires the same Stop confirmation; desired-On does not", () => {
+  const on: AppState = { ...controlsFixture().apps[0], enabled: true };
+  const off: AppState = { ...controlsFixture().apps[3], enabled: false };
+  assert.equal(retryRequiresStopConfirmation(on), false);
+  assert.equal(retryRequiresStopConfirmation(off), true);
+});
+
+test("isRefreshableConflict matches the exact 409 message changeApp throws", () => {
+  assert.equal(isRefreshableConflict("Someone else already changed this app. Refresh to see the latest state."), true);
+  assert.equal(isRefreshableConflict("Your session has expired. Please sign in again."), false);
+});
+
+test("nextPollDelayMs is idle (30s) with no transition and active (2s) with any Starting/Stopping app", () => {
+  const idle = controlsFixture();
+  assert.equal(nextPollDelayMs(idle), IDLE_POLL_MS);
+  assert.equal(nextPollDelayMs(null), IDLE_POLL_MS);
+
+  const starting = controlsFixture();
+  starting.apps[0] = { ...starting.apps[0], status: "Starting" };
+  assert.equal(nextPollDelayMs(starting), ACTIVE_POLL_MS);
+
+  const stopping = controlsFixture();
+  stopping.apps[3] = { ...stopping.apps[3], status: "Stopping" };
+  assert.equal(nextPollDelayMs(stopping), ACTIVE_POLL_MS);
+
+  // transition -> idle: once the settled snapshot shows no app transitioning,
+  // cadence returns to 30s even though an earlier call reported 2s.
+  assert.equal(nextPollDelayMs(starting), ACTIVE_POLL_MS);
+  assert.equal(nextPollDelayMs(idle), IDLE_POLL_MS);
+});
+
+test("generation gate: only the most recently begun ticket is ever accepted, independent of settle order", () => {
+  const gate = createGenerationGate();
+  const read1 = gate.begin();
+  const mutation = gate.begin(); // e.g. a PUT issued while read1 is still in flight
+  assert.equal(gate.accepts(mutation), true);
+  // read1 settling *after* the mutation must not be allowed to overwrite it,
+  // even though it carries no information about the mutation's existence.
+  assert.equal(gate.accepts(read1), false);
+
+  const read2 = gate.begin();
+  assert.equal(gate.accepts(mutation), false, "mutation is now also superseded");
+  assert.equal(gate.accepts(read2), true);
+});
+
+test("generation gate accepts a ticket that is still the latest when it resolves", () => {
+  const gate = createGenerationGate();
+  const only = gate.begin();
+  assert.equal(gate.accepts(only), true);
+});
+
+test("integration: a deferred GET that resolves after a PUT never overwrites the PUT's result", async () => {
+  // Exactly the scenario from fix-round-1 review Important #2, driven
+  // through the real fetchApps/changeApp/createGenerationGate -- the same
+  // three production pieces app-controls-provider.tsx composes -- with a
+  // controllable deferred GET response, not a copy/mock of the provider.
+  const gate = createGenerationGate();
+  let resolveGet!: (value: Response) => void;
+  const getResponse = new Promise<Response>((resolve) => {
+    resolveGet = resolve;
+  });
+
+  const getTicket = gate.begin();
+  const getOutcome = fetchApps(async () => "tok", async () => getResponse).then(
+    (value) => (gate.accepts(getTicket) ? value : null),
+    () => null,
+  );
+
+  // A PUT is issued (and settles) while the GET above is still pending --
+  // it takes a newer ticket than the GET's.
+  const putTicket = gate.begin();
+  const putResult = await changeApp("mirofish", true, 0, async () => "tok", async () => jsonResponse(controlsFixture(5), 202));
+  assert.equal(gate.accepts(putTicket), true);
+  assert.equal(putResult.revision, 5);
+
+  // Only now does the stale GET resolve, carrying an older revision.
+  resolveGet(jsonResponse(controlsFixture(0)));
+  assert.equal(await getOutcome, null, "the stale GET must be dropped, not applied, after a newer mutation already settled");
 });

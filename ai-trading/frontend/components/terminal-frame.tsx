@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowUpRight, ExternalLink, Info, RotateCw, Settings, Terminal } from "lucide-react";
 import { appIcons, type ExternalApp, type TerminalApp } from "@/lib/apps";
-import { isAppKnownStopped } from "@/lib/controls";
+import { appLaunchGate, launchBlockedCopy } from "@/lib/controls";
 import { useAppControls } from "@/components/app-controls-provider";
 
 const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -12,8 +12,11 @@ const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:
 export function TerminalFrame({ app }: { app: TerminalApp }) {
   const [connection, setConnection] = useState(0);
   const Icon = appIcons[app.icon];
-  const { state } = useAppControls();
-  const stopped = isAppKnownStopped(state, app.slug);
+  const { state, error } = useAppControls();
+  // See app-card.tsx for why a failed refresh (`error`) is treated the same
+  // as "unknown" rather than trusting a now-unconfirmed cached snapshot.
+  const gate = appLaunchGate(error ? null : state, app.slug);
+  const blocked = gate.kind === "blocked" ? launchBlockedCopy(gate.status) : null;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-6 pt-7 pb-8 md:p-8 xl:px-10 xl:pt-9 xl:pb-7">
@@ -25,10 +28,10 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
           </div>
           <p className="mt-3 text-[15px] leading-6 text-muted-foreground">{app.summary} Run the original app here.</p>
         </div>
-        {stopped ? (
+        {blocked ? (
           <Link
             href="/settings"
-            aria-label={`${app.name} is off. Open Settings to turn it back on.`}
+            aria-label={`${app.name} ${blocked.headline} Open Settings.`}
             className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-[7px] bg-muted px-[18px] text-[13px] leading-5 font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
           >
             Open Settings<Settings aria-hidden size={16} strokeWidth={1.6} />
@@ -54,10 +57,10 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
       </div>
 
       <div className="mt-7 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_276px]">
-        {stopped ? (
+        {blocked ? (
           <section aria-label={`${app.name} status`} className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-border p-8 text-center">
-            <p className="font-medium">{app.name} is turned off right now.</p>
-            <p className="text-sm text-muted-foreground">Turn it back on in Settings. Your existing data stays put.</p>
+            <p className="font-medium">{app.name} {blocked.headline}</p>
+            <p className="text-sm text-muted-foreground">{blocked.detail}</p>
             <Link href="/settings" className={`mt-2 inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-border px-4 text-[13px] font-semibold transition-colors duration-150 hover:bg-muted motion-reduce:transition-none ${FOCUS_RING}`}>
               Open Settings<Settings aria-hidden size={16} />
             </Link>
@@ -97,16 +100,17 @@ export function TerminalFrame({ app }: { app: TerminalApp }) {
 // The interactive half of the external-app detail page (app/apps/[slug]/
 // page.tsx): that page stays a Server Component for generateStaticParams/
 // generateMetadata, so the controls-aware launch CTA lives here instead,
-// alongside TerminalFrame's identical running/stopped split.
+// alongside TerminalFrame's identical gate.
 export function ExternalLaunch({ app }: { app: ExternalApp }) {
-  const { state } = useAppControls();
-  const stopped = isAppKnownStopped(state, app.slug);
+  const { state, error } = useAppControls();
+  const gate = appLaunchGate(error ? null : state, app.slug);
+  const blocked = gate.kind === "blocked" ? launchBlockedCopy(gate.status) : null;
 
-  if (stopped) {
+  if (blocked) {
     return (
       <div className="mt-6 rounded-[10px] border border-border p-4 text-left">
-        <p className="text-sm font-medium text-foreground">{app.name} is turned off right now.</p>
-        <p className="mt-2 text-sm text-muted-foreground">Turn it back on in Settings. Your existing data stays put.</p>
+        <p className="text-sm font-medium text-foreground">{app.name} {blocked.headline}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{blocked.detail}</p>
         <Link
           href="/settings"
           className={`mt-4 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] bg-muted px-4 py-3 text-[13px] font-semibold text-foreground transition-colors duration-150 hover:bg-muted/70 motion-reduce:transition-none ${FOCUS_RING}`}
