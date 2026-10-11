@@ -329,7 +329,7 @@ Chart overlays come from Vibe-Trading's `indicators.ts` (copy).
 
 **Scope:**
 - **Imports:** IBKR Flex (Open Positions plus Open Lots), CSV, and the Holdings page.
-- **Fundamentals:** fundamentals and valuation from SEC data and Phase 1d; the consensus EPS and earnings-reaction cards (D11, D19).
+- **Fundamentals:** fundamentals and valuation from SEC data and Phase 1d; the consensus EPS and earnings-reaction cards (D11, D19). The valuation card states when a number rests on one of `core/valuation.py`'s documented fallbacks: WACC with missing debt or cash treated as no debt, a default credit spread for a missing interest coverage, the default volatility discount, or a 5% revenue growth when growth is missing (Phase 1d review).
 - **Covered calls:** the 15:30 covered-call scan, the income and short-call risk templates, and the coverage, roll, income, and assignment views (D13, D14, M9; 02g §3).
 - **Desk AI verdict** at 17:05 (02f §5):
   - four votes and a structured verdict, checked in code;
