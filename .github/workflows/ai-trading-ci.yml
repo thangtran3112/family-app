@@ -126,9 +126,18 @@ jobs:
         run: ai-trading/deploy/ci/test-deploy-firestore.sh
       - name: app-controls deploy/installer test (Task 5)
         run: ai-trading/deploy/ci/test-app-controls-deploy.sh
-      - name: Control helper tests (Task 5)
-        working-directory: ai-trading/control
-        run: python3 -m unittest discover -s . -v
+      - name: Control helper tests (Task 5/7)
+        # Must run as root on real Linux, matching the private helper's
+        # actual production identity (control/state.py's owner_uid
+        # defaults to 0; its own SO_PEERCRED/ownership checks are
+        # Linux-only and intentionally fail closed for any other owner --
+        # never weakened here). The GitHub-hosted Ubuntu runner itself
+        # executes job steps as non-root UID 1001, which fails test
+        # setup's root-ownership validation before assertions even run --
+        # a disposable, network-disabled container run as its default
+        # root user is required, not the host shell directly. Read-only
+        # source mount only; no chmod/ownership change on the host.
+        run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
       - name: render-env.sh test (A9a2)
         run: ai-trading/deploy/ci/test-render-env.sh
       - name: Auth service tests
