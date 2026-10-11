@@ -29,12 +29,18 @@ RESEARCH_NET="${ID}-rnet"
 # fixture's subnet never collides with this one's.
 RESEARCH_SUBNET="${CONTROL_TEST_RESEARCH_SUBNET:-172.31.95.0/29}"
 SOCK_VOLUME="${ID}-sock"
-# Under ai-trading/temp/ (gitignored scratch, AGENTS.md), not /tmp or
-# /var/folders: this host's Docker runs in a Colima Lima VM that only
-# mounts $HOME by default, so a bind mount under the system temp dir would
-# silently appear empty inside every container below.
-FIXTURE_DIR="$ROOT/ai-trading/temp/${ID}-fixture"
+# Fix round 1 review: never under ai-trading/ (not even gitignored scratch --
+# the binding constraints forbid key/token material anywhere in the
+# repository, cleanup notwithstanding) and not the approved opencode temp
+# dir either: on this host, Docker runs in a Colima Lima VM that mounts only
+# $HOME by default (confirmed empirically -- a bind mount under either
+# /tmp/* or /private/var/folders/*/T/opencode/* silently appears EMPTY
+# inside a container, even the approved one). A unique, 0700, trap-cleaned
+# scratch directory under $HOME's own cache dir is outside the repository
+# and still Colima-mountable.
+FIXTURE_DIR="$HOME/.cache/ai-trading-controls-test-fixture/${ID}"
 mkdir -p "$FIXTURE_DIR"
+chmod 0700 "$FIXTURE_DIR"
 GATEWAY_UID=22001
 ALLOWED_ORIGIN="https://fixture.tobytran.dev"
 ALLOWED_EMAIL="fixture@example.test"
@@ -133,12 +139,41 @@ import threading
 from pathlib import Path
 
 sys.path.insert(0, "/app/control")
+import server as server_module  # noqa: E402
 from server import create_server  # noqa: E402
 from state import atomic_write, initial_state  # noqa: E402
 
 STATE_PATH = Path("/data/control.json")
 LOCK_PATH = Path("/data/.control.lock")
 SOCKET_PATH = Path("/run/family-app/ai-trading-control/control.sock")
+RECEIVED_HEADERS_LOG = Path("/data/received-headers.log")
+
+# Fix round 1 review: prove, not just declare by Caddyfile text, that
+# neither Authorization nor Cookie ever reaches this private helper.
+# Observation-only wrapper around the REAL, unmodified _Handler -- records
+# header PRESENCE only (never the header value, never any token/cookie
+# content) to a file inside this ephemeral container, then delegates to the
+# real dispatch unchanged via super(). This never alters routing, auth, or
+# response behavior; it only makes an already-true-or-false fact assertable
+# from the test script.
+_RealHandler = server_module._Handler
+
+
+class _ObservingHandler(_RealHandler):
+    def _dispatch(self, method):
+        try:
+            with open(RECEIVED_HEADERS_LOG, "a", encoding="utf-8") as f:
+                f.write(
+                    f"path={self.path} "
+                    f"has_authorization={self.headers.get('Authorization') is not None} "
+                    f"has_cookie={self.headers.get('Cookie') is not None}\n"
+                )
+        except OSError:
+            pass
+        return super()._dispatch(method)
+
+
+server_module._Handler = _ObservingHandler
 
 
 class FakeRuntime:
@@ -311,11 +346,15 @@ ok "an unauthenticated app request is 401 before the availability gate is ever c
 
 cookie="$(sign_session_cookie "$ALLOWED_EMAIL" 3600)"
 status="$(curl -s -o /dev/null -w '%{http_code}' --cookie "$cookie" "$BASE/u/tradingagents/")"
+stopped_headers="$(curl -s -D - -o /dev/null --cookie "$cookie" "$BASE/u/tradingagents/")"
 body="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/")"
 [[ "$status" == "503" ]] || fail "expected 503 for an authenticated request to a stopped app, got $status"
-[[ "$body" == *'"app_unavailable"'* && "$body" == *'Open Trading Hub Settings'* ]] \
-  || fail "expected the helper's own actionable app_unavailable body, got: $body"
-ok "an authenticated request to a desired-but-not-converged app gets the helper's own actionable 503 (not a generic error)"
+# Exact fixed contract (not a substring): control/server.py's own
+# GATE_UNAVAILABLE_BODY, byte for byte, plus its no-store Cache-Control.
+[[ "$body" == '{"error":"app_unavailable","message":"Open Trading Hub Settings to start the app or check its status."}' ]] \
+  || fail "expected the helper's exact fixed app_unavailable body, got: $body"
+grep -qi '^cache-control: no-store' <<<"$stopped_headers" || fail "expected Cache-Control: no-store on the stopped-app 503, got: $stopped_headers"
+ok "an authenticated request to a desired-but-not-converged app gets the helper's own exact, no-store, actionable 503 (not a generic error)"
 
 # === 4. control API: cookie alone is never sufficient ===
 
@@ -390,7 +429,23 @@ audit="$(docker exec "${ID}-control" cat /data/audit.log)"
 [[ "$audit" != *"attacker_spoofed"* ]] || fail "a client-forged X-Verified-Actor leaked into the helper's own audit log: $audit"
 ok "a client-supplied X-Verified-Actor is always overwritten by the gateway-verified subject before it ever reaches the helper"
 
-# === 10. wrong peer UID: filesystem group access is not enough, SO_PEERCRED still denies it ===
+# === 10. credential stripping: the private helper itself never receives Authorization or Cookie ===
+# Fix round 1 review: the Caddyfile declares `header_up -Authorization` /
+# `header_up -Cookie` on both the availability forward_auth and the
+# /__control/* reverse_proxy, but that is only Caddyfile text until proven
+# at the real helper boundary. Every request so far (steps 2-9) sent a real
+# cookie, a real bearer, or both, straight at Caddy -- if either leaked
+# through, the real helper's own observation log (above) would show it.
+
+header_log="$(docker exec "${ID}-control" cat /data/received-headers.log 2>/dev/null || true)"
+[[ -n "$header_log" ]] || fail "the helper observed no requests at all -- this assertion would be vacuous"
+[[ "$header_log" != *"has_authorization=True"* ]] \
+  || fail "the private helper received an Authorization header -- Caddy's header_up -Authorization did not strip it: $header_log"
+[[ "$header_log" != *"has_cookie=True"* ]] \
+  || fail "the private helper received a Cookie header -- Caddy's header_up -Cookie did not strip it: $header_log"
+ok "the private helper never receives Authorization or Cookie end-to-end, across every gate and control-API request made so far"
+
+# === 11. wrong peer UID: filesystem group access is not enough, SO_PEERCRED still denies it ===
 
 bad_uid_result="$(docker run --rm --user "9999:$GATEWAY_UID" -v "$SOCK_VOLUME:/run/family-app/ai-trading-control:ro" \
   curlimages/curl:latest -s -o /dev/null -w '%{http_code}' --max-time 3 \
@@ -399,14 +454,19 @@ bad_uid_result="$(docker run --rm --user "9999:$GATEWAY_UID" -v "$SOCK_VOLUME:/r
   || fail "a peer at the wrong UID (same GID, filesystem-permitted) was still served -- SO_PEERCRED check did not reject it"
 ok "a peer with the wrong UID (but the right GID -- filesystem permissions alone would allow it) is rejected by the real SO_PEERCRED check"
 
-# === 11. outage: the control helper itself is gone -> Caddy's own generic 503, never the app_unavailable body ===
+# === 12. outage: the control helper itself is gone -> Caddy's own generic 503, never the app_unavailable body ===
 
 docker rm -fv "${ID}-control" >/dev/null 2>&1 || true
 outage_status="$(curl -s -o /dev/null -w '%{http_code}' --cookie "$cookie" "$BASE/u/tradingagents/")"
+outage_headers="$(curl -s -D - -o /dev/null --cookie "$cookie" "$BASE/u/tradingagents/")"
 outage_body="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/")"
 [[ "$outage_status" == "503" ]] || fail "expected 503 when the control helper itself is unreachable, got $outage_status"
-[[ "$outage_body" == *'"service_unavailable"'* ]] || fail "expected Caddy's own generic service_unavailable body during an outage, got: $outage_body"
-[[ "$outage_body" != *"app_unavailable"* ]] || fail "outage must not be mislabeled as the helper's own deliberate app_unavailable response"
-ok "a genuine socket outage (helper gone) produces Caddy's own fixed, generic 503 -- distinct from the helper's deliberate app_unavailable body"
+# Exact fixed contract (not a substring): the Caddyfile's own
+# `availability_errors` snippet body, byte for byte, plus its no-store
+# Cache-Control -- distinct from the helper's own app_unavailable body.
+[[ "$outage_body" == '{"error":"service_unavailable","message":"Trading service unavailable. Open Trading Hub Settings or try again."}' ]] \
+  || fail "expected Caddy's exact fixed service_unavailable body during an outage, got: $outage_body"
+grep -qi '^cache-control: no-store' <<<"$outage_headers" || fail "expected Cache-Control: no-store on the outage 503, got: $outage_headers"
+ok "a genuine socket outage (helper gone) produces Caddy's exact, no-store, generic 503 -- distinct from the helper's deliberate app_unavailable body"
 
 echo "test-app-controls-gateway.sh passed"
