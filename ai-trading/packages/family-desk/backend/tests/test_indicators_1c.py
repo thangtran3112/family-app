@@ -115,3 +115,43 @@ def test_ultimate_oscillator():
     out = indicators.ultimate_oscillator(bars, fast=2, mid=3, slow=4)
     np.testing.assert_allclose(out.to_numpy()[3:], [59.406308, 70.562771], atol=1e-5)
     assert out.iloc[:3].isna().all()  # NaN until `slow` (4) bars
+
+
+def test_vwma():
+    bars = ohlc([1, 1, 1, 1], [1, 1, 1, 1], [10, 12, 14, 16], [100, 200, 100, 300])
+    out = indicators.vwma(bars, length=2)
+    np.testing.assert_allclose(out.to_numpy()[1:], [11.333333, 12.666667, 15.5], atol=1e-5)
+    assert out.iloc[:1].isna().all()  # NaN until `length` (2) bars
+    zero_volume = ohlc([1, 1], [1, 1], [10, 12], [0, 0])
+    assert np.isnan(indicators.vwma(zero_volume, length=2).iloc[-1])
+
+
+def test_hull_ma_on_a_straight_line():
+    # on a perfectly linear series the Hull MA reproduces the series itself (a known identity).
+    out = indicators.hull_ma(series(1, 2, 3, 4, 5, 6, 7), length=4)
+    np.testing.assert_allclose(out.to_numpy()[4:], [5.0, 6.0, 7.0])
+    assert out.iloc[:4].isna().all()  # NaN until length + round(sqrt(length)) - 1 = 5 bars
+
+
+def test_ichimoku_no_look_ahead():
+    # conversion_length=2, base_length=3, span_b_length=4: every value uses only bars up to it.
+    bars = ohlc([12, 13, 11, 14, 15], [8, 9, 9, 10, 11], [10, 12, 10, 13, 14])
+    ic = indicators.ichimoku(bars, conversion_length=2, base_length=3, span_b_length=4)
+    np.testing.assert_allclose(ic.conversion.to_numpy()[1:], [10.5, 11.0, 11.5, 12.5])
+    np.testing.assert_allclose(ic.base.to_numpy()[2:], [10.5, 11.5, 12.0])
+    np.testing.assert_allclose(ic.span_a.to_numpy()[2:], [10.75, 11.5, 12.25])
+    np.testing.assert_allclose(ic.span_b.to_numpy()[3:], [11.0, 12.0])
+    assert ic.conversion.iloc[:1].isna().all()
+    assert ic.base.iloc[:2].isna().all()
+    assert ic.span_b.iloc[:3].isna().all()
+
+
+def test_atr_percent_and_volatility_label():
+    bars = ohlc(
+        [10, 10.2, 10.1, 12, 10.15],
+        [9.9, 10.0, 10.0, 9, 10.05],
+        [10, 10.1, 10.05, 10, 10.1],
+    )
+    ap = indicators.atr_percent(bars, length=1, median_length=3)
+    np.testing.assert_allclose(ap.pct.to_numpy(), [1.0, 1.980198, 0.995025, 30.0, 1.485149], atol=1e-5)
+    assert list(ap.label) == [None, None, "normal", "high", "normal"]

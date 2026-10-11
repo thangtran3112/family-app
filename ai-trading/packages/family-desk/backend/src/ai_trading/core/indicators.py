@@ -1,5 +1,6 @@
 """Indicators over bar series. Every value uses only its own and earlier bars."""
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -207,6 +208,81 @@ def ultimate_oscillator(bars: pd.DataFrame, fast: int = 7, mid: int = 14, slow: 
         return bp_sum / tr_sum.replace(0, np.nan)
 
     return 100 * (4 * average(fast) + 2 * average(mid) + average(slow)) / 7
+
+
+def vwma(bars: pd.DataFrame, length: int = 20) -> pd.Series:
+    """Volume-weighted moving average of the close. NaN until `length` bars, or wherever the
+    window's total volume is zero."""
+    pv_sum = (bars["close"] * bars["volume"]).rolling(length, min_periods=length).sum()
+    vol_sum = bars["volume"].rolling(length, min_periods=length).sum()
+    return pv_sum / vol_sum.replace(0, np.nan)
+
+
+def _wma(values: pd.Series, length: int) -> pd.Series:
+    """Linearly weighted moving average: the most recent bar weighs `length`, the oldest weighs 1."""
+    weights = np.arange(1, length + 1)
+    return values.rolling(length, min_periods=length).apply(lambda w: np.dot(w, weights) / weights.sum(), raw=True)
+
+
+def hull_ma(close: pd.Series, length: int = 9) -> pd.Series:
+    """Hull moving average: WMA(2 x WMA(close, length // 2) - WMA(close, length), round(sqrt(length))).
+    NaN until `length + round(sqrt(length)) - 1` bars (11 for the default 9)."""
+    half = max(1, length // 2)
+    root = max(1, round(math.sqrt(length)))
+    raw = 2 * _wma(close, half) - _wma(close, length)
+    return _wma(raw, root)
+
+
+@dataclass(frozen=True)
+class Ichimoku:
+    conversion: pd.Series  # tenkan-sen
+    base: pd.Series  # kijun-sen
+    span_a: pd.Series  # senkou span A
+    span_b: pd.Series  # senkou span B
+
+
+def ichimoku(
+    bars: pd.DataFrame, conversion_length: int = 9, base_length: int = 26, span_b_length: int = 52
+) -> Ichimoku:
+    """Conversion (tenkan-sen) and base (kijun-sen) lines, each the midpoint of the highest high
+    and lowest low over its own length, and leading spans A (midpoint of conversion and base) and
+    B (the same midpoint over `span_b_length`) -- all as they stand at each bar, with no forward
+    shift. A traditional chart plots a leading span `base_length` bars ahead of the bar it was
+    computed from, so a chart's value at bar t + base_length is this function's span_a/span_b
+    value at bar t; shifting is left to the chart, so this never exposes an unclosed future bar as
+    the "current" value. NaN until `conversion_length`, `base_length`, and `span_b_length` bars
+    respectively (span_a needs `base_length`, the larger of the two).
+
+    Adapted from Vibe-Trading `agent/src/skills/ichimoku/example_signal_engine.py`
+    (`_donchian_mid`, commit d402c2d; MIT License, see THIRD_PARTY_NOTICES.md). Changes: no
+    forward displacement, and conversion/base/span_a/span_b values only, no TK-cross signal.
+    """
+
+    def donchian_mid(length: int) -> pd.Series:
+        highest = bars["high"].rolling(length, min_periods=length).max()
+        lowest = bars["low"].rolling(length, min_periods=length).min()
+        return (highest + lowest) / 2
+
+    conversion = donchian_mid(conversion_length)
+    base = donchian_mid(base_length)
+    return Ichimoku(conversion, base, (conversion + base) / 2, donchian_mid(span_b_length))
+
+
+@dataclass(frozen=True)
+class AtrPercent:
+    pct: pd.Series  # ATR(length) / close * 100
+    label: pd.Series  # "low", "normal", "high", or None until the median is known
+
+
+def atr_percent(bars: pd.DataFrame, length: int = 14, median_length: int = 100) -> AtrPercent:
+    """ATR(length) as a percent of the close, and a volatility label against its own trailing
+    `median_length`-bar median: "low" below 0.8x that median, "high" above 1.25x, "normal"
+    otherwise. The label is None until the median is known. NaN/None until
+    `length + median_length - 1` bars (113 for the default 14,100)."""
+    pct = atr(bars, length) / bars["close"] * 100
+    median = pct.rolling(median_length, min_periods=median_length).median()
+    labels = np.select([pct < 0.8 * median, pct > 1.25 * median], ["low", "high"], default="normal")
+    return AtrPercent(pct, pd.Series(labels, index=bars.index, dtype=object).where(median.notna(), None))
 
 
 def session_vwap(ann: pd.DataFrame) -> pd.Series:

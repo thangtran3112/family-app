@@ -11,6 +11,7 @@ Source: https://github.com/HKUDS/Vibe-Trading (pinned as `ai-trading/packages/vi
 | `backend/src/ai_trading/core/options_math.py` | `agent/src/quantlib/options.py` | Standard-library math instead of numpy/scipy; calls and puts only; no barrier options |
 | `backend/src/ai_trading/core/levels.py` (`support_resistance`, `_clusters`) | `agent/src/tools/pattern_tool.py` (`find_peaks_valleys`, `support_resistance`) | Confirmed pivots only; the nearest level to the previous close |
 | `backend/src/ai_trading/core/indicators.py` (`adx`) | `agent/src/skills/technical-basic/example_signal_engine.py` (`compute_adx`), commit `d402c2d` | This module's Wilder seeding rule (mean of the first `length` valid values, via `_wilder`) instead of an EWM-only smoothing with no explicit seed |
+| `backend/src/ai_trading/core/indicators.py` (`ichimoku`, helper `donchian_mid`) | `agent/src/skills/ichimoku/example_signal_engine.py` (`_donchian_mid`), commit `d402c2d` | No forward displacement (so a value never reflects an unclosed future bar); conversion/base/span_a/span_b values only, no TK-cross signal |
 
 ```text
 MIT License
