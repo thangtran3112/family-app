@@ -528,30 +528,87 @@ class ProductionLifespanTestCase(unittest.IsolatedAsyncioTestCase):
         async with third.router.lifespan_context(third):
             pass
 
+    async def _start_and_wait_for_marker(self, client, marker_dir: Path, timeout: float) -> tuple[str, Path]:
+        """POST a new run and wait for its *child-written* marker file.
+
+        Waiting only for ``run_id`` to disappear from ``runner._children``
+        proves a child was reaped, not that one ever launched — the
+        production path still returns 202 even when ``Runner.start()``'s
+        ``subprocess.Popen`` fails (caught internally as ``LAUNCH_FAILED``,
+        never raised; `ta_web/runner.py`). The marker is written by the real
+        child process itself, so its existence is the actual launch proof.
+        """
+        made = await client.post("/api/research", headers=self.owner_headers, json=_inputs())
+        self.assertEqual(made.status_code, 202)
+        run_id = made.json()["id"]
+        marker = marker_dir / f"{run_id}.marker"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not marker.exists():
+            await asyncio.sleep(0.02)
+        self.assertTrue(marker.exists(), "child process never launched/wrote its marker")
+        return run_id, marker
+
     async def test_production_lifespan_start_launches_real_child_without_llm(self):
         # The existing Runner._argv test seam (test_runner.py): a tiny real
         # child script, never the real ta_web.worker module, so Runner.start's
         # actual subprocess plumbing is exercised without any provider/network/
-        # key dependency.
+        # key dependency. The script writes a known-content marker file under
+        # this test's own TMP dir — proof the child actually ran, not just
+        # that the Popen call was attempted.
         script = Path(self.tmp.name) / "noop_worker.py"
-        script.write_text("import sys\nsys.exit(0)\n")
+        script.write_text(
+            "import sys\nfrom pathlib import Path\nPath(sys.argv[1]).write_text('child-ran-ok')\n"
+        )
+        marker_dir = Path(self.tmp.name) / "markers"
+        marker_dir.mkdir()
+
+        def fake_argv(runner_self, id):
+            return [sys.executable, str(script), str(marker_dir / f"{id}.marker")]
 
         app = create_app(self.root)
-        with mock.patch.object(Runner, "_argv", lambda self, id: [sys.executable, str(script)]):
+        with mock.patch.object(Runner, "_argv", fake_argv):
             async with app.router.lifespan_context(app):
                 runner = app.state.start.__self__
                 self.assertIsInstance(runner, Runner)
 
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
-                    made = await client.post("/api/research", headers=self.owner_headers, json=_inputs())
-                    self.assertEqual(made.status_code, 202)
-                    run_id = made.json()["id"]
+                    run_id, marker = await self._start_and_wait_for_marker(client, marker_dir, timeout=5)
 
+                # The marker's exact, known content: the child really executed
+                # this script, not some other process incidentally touching the path.
+                self.assertEqual(marker.read_text(), "child-ran-ok")
+
+                # Only now check the (weaker, separate) reaping claim.
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline and run_id in runner._children:
                     await asyncio.sleep(0.02)
                 self.assertNotIn(run_id, runner._children)
+
+    async def test_marker_wait_proof_fails_when_child_never_launches(self):
+        """Negative control for the fix above: force Runner.start's Popen to
+        fail (its own documented, swallowed-OSError path — ``LAUNCH_FAILED``,
+        202 still returned, no child registered). ``_start_and_wait_for_marker``
+        must then itself raise, proving the marker assertion is a real
+        launch-proof and not vacuously true."""
+        marker_dir = Path(self.tmp.name) / "markers-negative"
+        marker_dir.mkdir()
+        app = create_app(self.root)
+
+        real_popen = subprocess.Popen
+
+        def failing_popen(*args, **kwargs):
+            raise OSError("simulated launch failure — no child ever starts")
+
+        async with app.router.lifespan_context(app):
+            subprocess.Popen = failing_popen
+            try:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url=_ORIGIN) as client:
+                    with self.assertRaises(AssertionError):
+                        await self._start_and_wait_for_marker(client, marker_dir, timeout=0.3)
+            finally:
+                subprocess.Popen = real_popen  # no real child was ever spawned; nothing else to clean up
 
     def test_module_import_has_no_filesystem_or_db_side_effect(self):
         with TemporaryDirectory() as fake_home:
