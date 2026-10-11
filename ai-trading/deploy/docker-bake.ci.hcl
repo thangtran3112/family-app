@@ -20,6 +20,11 @@ target "ta-terminal" {
   cache-to   = ["type=gha,scope=ai-trading-ta-terminal,mode=max"]
 }
 
+target "ta-research" {
+  cache-from = ["type=gha,scope=ai-trading-ta-research"]
+  cache-to   = ["type=gha,scope=ai-trading-ta-research,mode=max"]
+}
+
 target "ahf-terminal" {
   cache-from = ["type=gha,scope=ai-trading-ahf-terminal"]
   cache-to   = ["type=gha,scope=ai-trading-ahf-terminal,mode=max"]

@@ -17,7 +17,7 @@ cleanup() {
   if ((${#containers[@]})); then
     docker rm -fv "${containers[@]}" >/dev/null 2>&1 || true
   fi
-  docker network rm smoke-gateway-net >/dev/null 2>&1 || true
+  docker network rm smoke-gateway-net smoke-research-net >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -268,9 +268,17 @@ process.stdout.write(`__ai_trading_session=${body}.${mac}`);
 }
 
 smoke_gateway() {
-  local net="smoke-gateway-net" key
-  docker network rm "$net" >/dev/null 2>&1 || true
+  # Two networks, modeling production (review round 1, Critical): ta-research
+  # is never a peer of ta-terminal. "$net" stands for the shared `ta`/`ahf`/
+  # `vibe`/`gateway` networks (the legacy terminal and its gateway both sit
+  # on it, same as today); "$net_research" stands for production's dedicated
+  # `research` network, reusing its exact subnet so ta-research's own
+  # FORWARDED_ALLOW_IPS can be tested unchanged from docker-compose.yml.
+  # Only smoke-caddy joins both -- it is the one real gateway peer.
+  local net="smoke-gateway-net" net_research="smoke-research-net" research_subnet="172.30.90.0/29" key
+  docker network rm "$net" "$net_research" >/dev/null 2>&1 || true
   docker network create "$net" >/dev/null
+  docker network create --subnet "$research_subnet" "$net_research" >/dev/null
   key="$(printf 'a%.0s' {1..64})"
 
   docker run -d --name smoke-auth --network "$net" --network-alias auth \
@@ -295,11 +303,62 @@ http.server.HTTPServer(("0.0.0.0", 7681), H).serve_forever()
 ' >/dev/null
   containers+=(smoke-echo-upstream)
 
+  # Real ta-research service (06), not a stand-in: identity/prefix/CORS
+  # enforcement and the private/share/revoke/download contract below all run
+  # against the real ta_web.app, reached through real Caddy + real auth. On
+  # "$net_research" ONLY -- never "$net" (where ta-terminal lives) -- with
+  # the same FORWARDED_ALLOW_IPS/subnet docker-compose.yml trusts in
+  # production. Published on its own port too, for the direct (no-Caddy)
+  # "local HTTP port" shape check further down and the readiness wait below
+  # (host port publishing bypasses both docker networks entirely, so it does
+  # not weaken the isolation this test exists to prove). Fixtures are seeded
+  # with ta_web's own Store/reports modules inside this same container (real,
+  # non-mocked persistence/export code) -- never a real research run, which
+  # would need a real provider key and a live model call.
+  docker run -d --name smoke-ta-research --network "$net_research" --network-alias ta-research \
+    -e "FORWARDED_ALLOW_IPS=$research_subnet" \
+    -p 127.0.0.1:18182:8182 "$(image ta-research)" >/dev/null
+  containers+=(smoke-ta-research)
+  WAIT_SECONDS=30 expect_status 200 http://127.0.0.1:18182/__healthz
+
+  # Network-bypass regression (review round 1, Critical): a peer that only
+  # shares ta-terminal's own network must be unable to reach ta-research AT
+  # ALL, by raw IP -- not merely lacking its DNS alias. smoke-echo-upstream
+  # (the ta-terminal stand-in, "$net" only) tries ta-research's real IP on
+  # "$net_research" directly, with a forged identity header; a successful
+  # connection here would be exactly the bypass the review found.
+  local research_ip bypass_result
+  research_ip="$(docker inspect -f "{{(index .NetworkSettings.Networks \"$net_research\").IPAddress}}" smoke-ta-research)"
+  [[ -n "$research_ip" ]] || fail "could not determine smoke-ta-research's $net_research IP"
+  bypass_result="$(docker exec smoke-echo-upstream python3 -c "
+import socket
+import urllib.error
+import urllib.request
+
+req = urllib.request.Request(
+    'http://$research_ip:8182/api/research',
+    headers={'Cf-Access-Authenticated-User-Email': 'attacker@evil.com'},
+)
+try:
+    urllib.request.urlopen(req, timeout=3)
+    print('REACHED')
+except (urllib.error.URLError, OSError, socket.timeout):
+    print('UNREACHABLE')
+" 2>/dev/null)"
+  [[ "$bypass_result" == "UNREACHABLE" ]] \
+    || fail "a legacy-network peer (same network as ta-terminal) must not be able to reach ta-research at all by IP -- got: $bypass_result"
+  echo "ok   a legacy ta-network peer (same network as ta-terminal) cannot reach ta-research's IP at all -- real network isolation, not just a missing DNS alias"
+
+  # smoke-caddy is the one real peer that bridges both networks, same as the
+  # production gateway service (docker-compose.yml networks: [..., research]).
   docker run -d --name smoke-caddy --network "$net" -p 127.0.0.1:18080:8080 \
     -e VIBE_API_AUTH_KEY=smoke-key \
     -v "$PWD/ai-trading/deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro" \
     caddy:2-alpine >/dev/null
   containers+=(smoke-caddy)
+  docker network connect "$net_research" smoke-caddy
+  docker restart smoke-caddy >/dev/null
+  sleep 1
 
   local cookie expired_cookie body
   cookie="$(sign_smoke_cookie "$key" smoke@example.test 3600)"
@@ -343,6 +402,228 @@ http.server.HTTPServer(("0.0.0.0", 7681), H).serve_forever()
   [[ "$body" == "smoke@example.test" ]] || fail "terminal hostname: expected the verified email upstream, got: $body"
   echo "ok   terminal hostname replaces a spoofed identity header with the verified one"
   expect_status 401 http://127.0.0.1:18080/token -H 'Host: ai-hedge-fund.tobytran.dev'
+
+  # Research (06) routing/prefix/identity contract, both at the dedicated
+  # TradingAgents host and the hub's /u/tradingagents prefix, against the
+  # real ta-research service started above.
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "${ta_host[@]}" http://127.0.0.1:18080/research)"
+  [[ "$body" == *'data-app-prefix=""'* ]] || fail "dedicated host /research: expected the real shell with an empty trusted prefix -- got: $body"
+  echo "ok   dedicated host /research: real service renders the shell with an empty prefix (forged identity header replaced before reaching it)"
+  expect_status 401 http://127.0.0.1:18080/research "${ta_host[@]}" --cookie "$expired_cookie"
+  # Exact path list, not a bare prefix wildcard: an unrelated sibling like
+  # /researchevil must still fall through to the terminal's own catch-all
+  # (echoing the plain identity string -- the real ta-research app would
+  # 404 any unmatched path, but never even see this request), same
+  # anti-sibling-wildcard reasoning as @tradingagents/@aihedgefund.
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "${ta_host[@]}" http://127.0.0.1:18080/researchevil)"
+  [[ "$body" == "smoke@example.test" ]] || fail "dedicated host /researchevil should fall through to the terminal, not ta-research -- got: $body"
+  echo "ok   dedicated host /researchevil is not swallowed by the /research matcher"
+
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' http://127.0.0.1:18080/u/tradingagents/research)"
+  [[ "$body" == *'data-app-prefix="/u/tradingagents"'* ]] || fail "hub /u/tradingagents/research: expected the real shell with the hub prefix -- got: $body"
+  echo "ok   hub /u/tradingagents/research: real service renders the shell with the hub-overwritten prefix"
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' http://127.0.0.1:18080/u/tradingagents/researchevil)"
+  [[ "$body" == "smoke@example.test" ]] || fail "hub /u/tradingagents/researchevil should fall through to the terminal, not ta-research -- got: $body"
+  echo "ok   hub /u/tradingagents/researchevil is not swallowed by the /research matcher"
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/api/research
+
+  # Private/shared-read, nonowner-mutation, revoke, and real attachment-byte
+  # checks: seed one real completed+published run (ta_web.store/ta_web.reports,
+  # no model call) inside the running container, then exercise it only
+  # through real Caddy + real auth with two distinct synthetic identities.
+  local owner_a="research-owner@example.test" owner_b="research-reader@example.test"
+  local run_id
+  run_id="$(docker exec smoke-ta-research python3 -c '
+from datetime import UTC, datetime
+from pathlib import Path
+from ta_web.domain import Inputs, owner_key
+from ta_web.reports import publish
+from ta_web.store import Store
+
+store = Store(Path.home() / ".tradingagents")
+owner = owner_key("research-owner@example.test")
+today = datetime.now(UTC).date().isoformat()
+inputs = Inputs(ticker="SPY", analysis_date=today, asset_type="stock", analysts=["market"], research_depth=1)
+run = store.create(owner, inputs)
+store.update(
+    run["id"],
+    status="completed",
+    state={
+        "trade_date": today,
+        "market_report": "<script>window.bad=1</script> safe market smoke text",
+        "final_trade_decision": "Buy",
+    },
+)
+publish(store, run["id"])
+print(run["id"])
+')"
+  [[ -n "$run_id" ]] || fail "failed to seed a real completed research run inside smoke-ta-research"
+  echo "ok   seeded a real completed+published research run via ta_web.store/ta_web.reports (no model call)"
+
+  # Every hub-prefix call below sends the real production Host so the
+  # Origin checks below ("https://trading-hub.tobytran.dev") actually match
+  # what Caddy forwards (header_up Host {host}) -- without this, Caddy would
+  # forward the test's own default Host (127.0.0.1:18080) and every one of
+  # these same-origin POSTs would wrongly look cross-site.
+  local hub_host=(-H 'Host: trading-hub.tobytran.dev')
+  local owner_a_key owner_a_cookie owner_b_cookie hub="http://127.0.0.1:18080/u/tradingagents"
+  owner_a_key="$(python3 -c "import hashlib; print(hashlib.sha256('$owner_a'.strip().lower().encode()).hexdigest())")"
+  owner_a_cookie="$(sign_smoke_cookie "$key" "$owner_a" 3600)"
+  owner_b_cookie="$(sign_smoke_cookie "$key" "$owner_b" 3600)"
+
+  body="$(curl -s --cookie "$owner_a_cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "${hub_host[@]}" "$hub/api/research")"
+  python3 -c "
+import json
+d = json.loads('''$body''')
+assert d['owner_id'] == '$owner_a_key', d
+assert any(i['id'] == '$run_id' for i in d['items']), d
+" || fail "hub research list: expected the verified owner's id and the seeded private run -- got: $body"
+  echo "ok   hub research list: the real, verified (not forged) identity owns the seeded private run"
+
+  body="$(curl -s --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research")"
+  python3 -c "
+import json
+d = json.loads('''$body''')
+assert not any(i['id'] == '$run_id' for i in d['items']), d
+" || fail "hub research list: a private run must not appear in a different owner's list -- got: $body"
+  expect_status 404 "$hub/api/research/$run_id" "${hub_host[@]}" --cookie "$owner_b_cookie"
+  expect_status 404 "$hub/api/research/$run_id/download?format=md" "${hub_host[@]}" --cookie "$owner_b_cookie"
+  echo "ok   hub: a private run is invisible (list, detail, download) to a non-owner"
+  expect_status 200 "$hub/api/research/$run_id" "${hub_host[@]}" --cookie "$owner_a_cookie"
+
+  # Nonowner mutation denied: a reader can never flip this run's own sharing
+  # flag, even with a validly-authenticated, correctly-Origin'd request (a
+  # same-origin Origin is required here too -- the Guard's Origin check
+  # runs before the route handler's own ownership check either way).
+  expect_status 404 "$hub/api/research/$run_id/sharing" "${hub_host[@]}" --cookie "$owner_b_cookie" \
+    -X POST -H 'Origin: https://trading-hub.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":true}'
+  echo "ok   hub: nonowner sharing mutation denied (404, same as nonexistent -- never reveals existence)"
+
+  # CORS/Origin on the real API's own owner POST: missing/cross-site Origin
+  # denied, same-origin (matching the forwarded Host) accepted.
+  expect_status 403 "$hub/api/research/$run_id/sharing" "${hub_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Content-Type: application/json' -d '{"enabled":true}'
+  expect_status 403 "$hub/api/research/$run_id/sharing" "${hub_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://evil.example.test' -H 'Content-Type: application/json' -d '{"enabled":true}'
+  expect_status 200 "$hub/api/research/$run_id/sharing" "${hub_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://trading-hub.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":true}'
+  echo "ok   hub: owner's sharing POST requires a same-origin Origin (https, matching the forwarded Host)"
+
+  expect_status 200 "$hub/api/research/$run_id" "${hub_host[@]}" --cookie "$owner_b_cookie"
+  echo "ok   hub: an explicitly shared run becomes visible to a non-owner read"
+
+  body="$(curl -s --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research/$run_id/download?format=md")"
+  [[ "$body" == *"safe market smoke text"* ]] || fail "shared md download: expected the real published report text -- got: $body"
+  local dl_headers
+  dl_headers="$(curl -s -D - -o /dev/null --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research/$run_id/download?format=md")"
+  grep -qi '^content-type: text/markdown' <<<"$dl_headers" || fail "md download: wrong content-type -- $dl_headers"
+  grep -qiF "content-disposition: attachment; filename=\"$run_id" <<<"$dl_headers" || fail "md download: wrong content-disposition -- $dl_headers"
+  echo "ok   shared md download: real report bytes, text/markdown content-type, attachment disposition"
+
+  body="$(curl -s --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research/$run_id/download?format=html")"
+  [[ "$body" != *"<script>"* ]] || fail "html download still contains a raw <script> tag"
+  dl_headers="$(curl -s -D - -o /dev/null --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research/$run_id/download?format=html")"
+  grep -qi '^content-type: text/html' <<<"$dl_headers" || fail "html download: wrong content-type -- $dl_headers"
+  echo "ok   shared html download: hostile report input is not rendered as a raw <script> tag"
+
+  local zip_path="$PWD/ai-trading/temp/smoke-research-$run_id.zip"
+  mkdir -p "$(dirname "$zip_path")"
+  curl -s --cookie "$owner_b_cookie" "${hub_host[@]}" -o "$zip_path" "$hub/api/research/$run_id/download?format=zip"
+  dl_headers="$(curl -s -D - -o /dev/null --cookie "$owner_b_cookie" "${hub_host[@]}" "$hub/api/research/$run_id/download?format=zip")"
+  grep -qi '^content-type: application/zip' <<<"$dl_headers" || fail "zip download: wrong content-type -- $dl_headers"
+  python3 -c "
+import zipfile
+with zipfile.ZipFile('$zip_path') as z:
+    assert 'complete_report.md' in z.namelist(), z.namelist()
+" || fail "zip download: missing complete_report.md"
+  rm -f "$zip_path"
+  echo "ok   shared zip download: real archive, application/zip content-type, contains complete_report.md"
+
+  expect_status 200 "$hub/api/research/$run_id/sharing" "${hub_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://trading-hub.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":false}'
+  expect_status 404 "$hub/api/research/$run_id" "${hub_host[@]}" --cookie "$owner_b_cookie"
+  expect_status 404 "$hub/api/research/$run_id/download?format=md" "${hub_host[@]}" --cookie "$owner_b_cookie"
+  echo "ok   hub: revoke makes every fresh non-owner read (detail + download) 404 again"
+
+  # Dedicated host: the same Origin check is bound to ITS OWN host, not the
+  # hub's -- a hub-Origin'd POST here is cross-site and must still be denied.
+  expect_status 403 "http://127.0.0.1:18080/api/research/$run_id/sharing" "${ta_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://trading-hub.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":true}'
+  expect_status 200 "http://127.0.0.1:18080/api/research/$run_id/sharing" "${ta_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://tradingagents.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":true}'
+  expect_status 200 "http://127.0.0.1:18080/api/research/$run_id" "${ta_host[@]}" --cookie "$owner_b_cookie"
+  expect_status 200 "http://127.0.0.1:18080/api/research/$run_id/sharing" "${ta_host[@]}" --cookie "$owner_a_cookie" \
+    -X POST -H 'Origin: https://tradingagents.tobytran.dev' -H 'Content-Type: application/json' -d '{"enabled":false}'
+  echo "ok   dedicated host: owner's sharing POST is bound to its own Host/Origin, not the hub's"
+
+  # "local HTTP port" shape (deploy/local/Caddyfile never forces
+  # X-Forwarded-Proto, unlike production): direct to the real container,
+  # bypassing Caddy, so this exercises the real Guard's own scheme fallback
+  # -- not a value this test forces -- accepting a plain-http same-origin
+  # POST and still rejecting a cross-origin one.
+  expect_status 200 "http://127.0.0.1:18182/api/research/$run_id/sharing" \
+    -H "Cf-Access-Authenticated-User-Email: $owner_a" -H 'Origin: http://127.0.0.1:18182' \
+    -H 'Content-Type: application/json' -X POST -d '{"enabled":true}'
+  expect_status 403 "http://127.0.0.1:18182/api/research/$run_id/sharing" \
+    -H "Cf-Access-Authenticated-User-Email: $owner_a" -H 'Origin: https://evil.example.test' \
+    -H 'Content-Type: application/json' -X POST -d '{"enabled":true}'
+  expect_status 200 "http://127.0.0.1:18182/api/research/$run_id/sharing" \
+    -H "Cf-Access-Authenticated-User-Email: $owner_a" -H 'Origin: http://127.0.0.1:18182' \
+    -H 'Content-Type: application/json' -X POST -d '{"enabled":false}'
+  echo "ok   local HTTP shape (no forced scheme): the real app's Origin check still requires a matching, plain-http same-origin value"
+
+  local research_nav
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Sec-Fetch-Mode: navigate' http://127.0.0.1:18080/u/tradingagents/research)"
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftrading-hub.tobytran.dev%2Fu%2Ftradingagents%2Fresearch" ]] \
+    || fail "signed-out navigation to the research root should redirect preserving the research path, got: $research_nav"
+  echo "ok   signed-out navigation to the research root redirects to the hub login with the research path preserved"
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Sec-Fetch-Mode: navigate' \
+    'http://127.0.0.1:18080/u/tradingagents/research/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11?evil=%3Cscript%3E')"
+  # The captured "/<id>" is inserted verbatim (Caddy does not re-encode
+  # placeholder substitutions), so this one slash is literal rather than
+  # %2F-encoded like the rest of the static returnTo URL -- still a valid,
+  # unambiguous query value per RFC 3986 (query = *( pchar / "/" / "?" )).
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftrading-hub.tobytran.dev%2Fu%2Ftradingagents%2Fresearch/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11" ]] \
+    || fail "signed-out navigation to a research UUID path should redirect preserving only the UUID path, got: $research_nav"
+  echo "ok   signed-out navigation to a research detail path preserves only the validated UUID path and discards the query"
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/api/research -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   an unauthenticated research API request stays a plain 401 even with a navigate header"
+
+  # re-review 1 (Important): the redirect must accept ONLY a canonical
+  # lowercase UUID4 descendant, matching ta_web/store.py's own
+  # _validate_run_id contract exactly -- not any hex/hyphen string. A
+  # malformed, non-v4, or uppercase-spelled id must stay a plain 401.
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/---- -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/0b32e9ee-6e57-1b1b-9f0a-6c2a8c8d9b11 -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/0B32E9EE-6E57-4B1B-9F0A-6C2A8C8D9B11 -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   hub: a malformed, non-v4, or uppercase-spelled research id never triggers the redirect (stays 401)"
+  expect_status 401 http://127.0.0.1:18080/u/tradingagents/research/assets/app.mjs -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   hub: a research asset path is never redirected, even with a navigate header (stays 401)"
+
+  # Review round 1 (Important): the dedicated host needs the identical
+  # root/UUID-only redirect, not a plain 401 -- it previously had no
+  # handle_response branch on this route at all.
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate' http://127.0.0.1:18080/research)"
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch" ]] \
+    || fail "dedicated host: signed-out navigation to the research root should redirect preserving the research path, got: $research_nav"
+  echo "ok   dedicated host: signed-out navigation to the research root redirects to the hub login with the research path preserved"
+  research_nav="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate' \
+    'http://127.0.0.1:18080/research/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11?evil=%3Cscript%3E')"
+  [[ "$research_nav" == "302 https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch/0b32e9ee-6e57-4b1b-9f0a-6c2a8c8d9b11" ]] \
+    || fail "dedicated host: signed-out navigation to a research UUID path should redirect preserving only the UUID path, got: $research_nav"
+  echo "ok   dedicated host: signed-out navigation to a research detail path preserves only the validated UUID path and discards the query"
+  expect_status 401 http://127.0.0.1:18080/api/research "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: an unauthenticated research API request stays a plain 401 even with a navigate header"
+
+  # re-review 1 (Important): same canonical-UUID4-only restriction and
+  # asset-401 coverage as the hub, at the dedicated host (its matcher was
+  # fixed together with the hub's, for one consistent redirect contract).
+  expect_status 401 http://127.0.0.1:18080/research/---- "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/research/0b32e9ee-6e57-1b1b-9f0a-6c2a8c8d9b11 "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  expect_status 401 http://127.0.0.1:18080/research/0B32E9EE-6E57-4B1B-9F0A-6C2A8C8D9B11 "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: a malformed, non-v4, or uppercase-spelled research id never triggers the redirect (stays 401)"
+  expect_status 401 http://127.0.0.1:18080/research/assets/app.mjs "${ta_host[@]}" -H 'Sec-Fetch-Mode: navigate'
+  echo "ok   dedicated host: a research asset path is never redirected, even with a navigate header (stays 401 -- required dedicated APIs/assets coverage)"
 
   # Swap the header-echo stand-in for a real ttyd to prove the WebSocket
   # handshake actually reaches a real upstream through forward_auth + reverse_proxy.
