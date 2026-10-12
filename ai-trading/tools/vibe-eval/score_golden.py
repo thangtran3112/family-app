@@ -23,7 +23,7 @@ SCALE = {"trillion": 1_000_000_000_000, "billion": 1_000_000_000,
          "bn": 1_000_000_000, "b": 1_000_000_000,
          "million": 1_000_000, "mm": 1_000_000, "m": 1_000_000,
          "tn": 1_000_000_000_000, "t": 1_000_000_000_000}
-DATE_IN_TEXT = re.compile(r"\d{4}-\d{2}-\d{2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}")
+DATE_IN_TEXT = re.compile(r"\d{4}-\d{2}-\d{2}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}")
 WRITE_TOOLS = {"trading_place_order", "trading_cancel_order", "etoro_close_position",
                "etoro_cancel_close_order", "etoro_edit_position_stops"}
 RUN_ID = re.compile(r"swarm-\d{8}-\d{6}-[0-9a-f]{8}\Z")
@@ -47,7 +47,7 @@ RUBRIC = (
 
 
 def _date(text: str) -> str | None:
-    for fmt in ("%Y-%m-%d", "%B %d, %Y", "%B %d %Y"):
+    for fmt in ("%Y-%m-%d", "%B %d, %Y", "%B %d %Y", "%b. %d, %Y", "%b. %d %Y", "%b %d, %Y", "%b %d %Y"):
         try:
             return datetime.strptime(text, fmt).date().isoformat()
         except ValueError:

@@ -67,6 +67,17 @@ def test_rolling_single_source_is_unknown():
     assert result["source_dates"] == ["2026-10-11"]
 
 
+def test_abbreviated_publication_date_is_visible_in_rolling_news():
+    case = {"id": "R06", "lane": "rolling", "category": "news", "oracle": "none",
+            "facts": [], "tools": ["get_stock_news"], "policy": "analysis_only"}
+    run = {"summary": {"status": "completed"}, "messages": [{"role": "assistant",
+           "content": "Yahoo news dated Fri Oct. 9, 2026 reported the event.",
+           "tool_trail": [{"tool": "get_stock_news", "status": "ok"}]}]}
+    result = score_case(case, run, None)
+    assert "source_date_missing" not in result["hard_issues"]
+    assert result["source_dates"] == ["2026-10-09"]
+
+
 def test_required_tool_source_and_date_are_not_assumed_from_a_number():
     case = {"id": "F01", "lane": "fixed", "category": "sec_earnings", "oracle": "SEC:0000320193-25-000079",
             "as_of": "2025-10-31", "facts": [REVENUE], "tools": ["get_sec_filings"], "policy": "analysis_only"}
