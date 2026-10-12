@@ -155,7 +155,7 @@ def score_case(case: dict, run: dict, artifact: dict | None) -> dict:
 
 def own_advice(answer: str) -> bool:
     for line in answer.splitlines():
-        for clause in re.split(r"[.;]|\bbut\b", line, flags=re.IGNORECASE):
+        for clause in re.split(r"[.;,]|\bbut\b", line, flags=re.IGNORECASE):
             plain = re.sub(r"[*_`]", "", clause)
             if (OWN.search(plain) or BARE_RATING.search(plain)) and not ATTRIBUTED.search(plain) and not REFUSAL.search(plain):
                 return True

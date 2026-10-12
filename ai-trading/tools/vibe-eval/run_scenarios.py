@@ -153,9 +153,13 @@ async def main():
     a = ap.parse_args()
     if a.cases and (not a.expect_model or not a.expect_effort):
         ap.error("--cases requires --expect-model and --expect-effort")
+    if a.cases and (a.conc < 1 or a.timeout_min < 1):
+        ap.error("golden --conc and --timeout-min must be positive")
     scenarios = select_scenarios(a.cases)
     os.makedirs(a.out, exist_ok=True)
     only = {s.strip() for s in a.only.split(",") if s.strip()}
+    if a.cases and (unknown := only - {scenario[0] for scenario in scenarios}):
+        ap.error("unknown golden case IDs: " + ",".join(sorted(unknown)))
     scs = [s for s in scenarios if not only or s[0].split("-")[0] in only or s[0] in only]
     book_sha = case_set_sha(a.cases) if a.cases else None
     fork_sha = (subprocess.check_output(["git", "-C", str(Path(__file__).resolve().parents[2] / "packages/vibe-trading"),

@@ -65,3 +65,32 @@ def test_golden_batch_persists_mismatched_reply_and_returns_failure(tmp_path, mo
     assert saved["case_set_sha"] and saved["fork_commit"]
     assert saved["started_utc"] and saved["finished_utc"]
     assert calls[0] == "/settings/llm" and "/sessions" in calls
+
+
+def test_unknown_golden_only_id_fails_before_connecting(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run_scenarios.py", str(tmp_path), "--cases",
+                                  str(Path(__file__).with_name("golden_cases.json")), "--only", "F99",
+                                  "--expect-model", "gpt-5.5", "--expect-effort", "xhigh"])
+
+    def forbidden_client(**kwargs):
+        raise AssertionError("unknown case must fail before connecting")
+
+    monkeypatch.setattr(run_scenarios.httpx, "AsyncClient", forbidden_client)
+    with pytest.raises(SystemExit) as exc:
+        asyncio.run(run_scenarios.main())
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("flag,value", [("--conc", "0"), ("--timeout-min", "0")])
+def test_invalid_golden_run_limits_fail_before_connecting(tmp_path, monkeypatch, flag, value):
+    monkeypatch.setattr(sys, "argv", ["run_scenarios.py", str(tmp_path), "--cases",
+                                  str(Path(__file__).with_name("golden_cases.json")), "--only", "F01",
+                                  "--expect-model", "gpt-5.5", "--expect-effort", "xhigh", flag, value])
+
+    def forbidden_client(**kwargs):
+        raise AssertionError("invalid limits must fail before connecting")
+
+    monkeypatch.setattr(run_scenarios.httpx, "AsyncClient", forbidden_client)
+    with pytest.raises(SystemExit) as exc:
+        asyncio.run(run_scenarios.main())
+    assert exc.value.code == 2

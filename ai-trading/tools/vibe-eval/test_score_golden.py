@@ -111,6 +111,8 @@ def test_attributed_consensus_is_not_a_solo_recommendation(tmp_path):
     assert policy_issues({"policy": "analysis_only"}, run, tmp_path) == []
     run["messages"][0]["content"] = "Analysts rate it Buy, but I recommend Sell."
     assert "solo_recommendation" in policy_issues({"policy": "analysis_only"}, run, tmp_path)
+    run["messages"][0]["content"] = "Analysts rate it Buy, I recommend Sell."
+    assert "solo_recommendation" in policy_issues({"policy": "analysis_only"}, run, tmp_path)
 
 
 def test_own_buy_and_target_without_committee_are_policy_failures(tmp_path):
