@@ -74,9 +74,10 @@ download_and_verify_object() {
   gcloud storage cp "$uri" "$dest" >/dev/null || die "download failed: $uri"
 
   local meta generation md5_remote md5_local
-  meta=$(gcloud storage objects describe "$uri" --format='json(generation,md5Hash)')
+  # gcloud storage emits snake_case keys (md5_hash), not the JSON API's md5Hash.
+  meta=$(gcloud storage objects describe "$uri" --format=json)
   generation=$(jq -r '.generation' <<< "$meta")
-  md5_remote=$(jq -r '.md5Hash' <<< "$meta")
+  md5_remote=$(jq -r '.md5_hash' <<< "$meta")
   md5_local=$(openssl dgst -md5 -binary "$dest" | openssl base64)
   [[ "$md5_remote" == "$md5_local" ]] \
     || die "downloaded object digest does not match GCS metadata: $uri"

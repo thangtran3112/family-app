@@ -81,7 +81,8 @@ elif [[ "$1 $2 $3" == "storage objects describe" ]]; then
   dest="$4"; key="${dest#gs://*/}"
   gen=$(cat "$bucket_root/$key.generation"); md5=$(cat "$bucket_root/$key.md5")
   for a in "$@"; do case "$a" in --format=value\(generation\)) echo "$gen"; exit 0 ;; esac; done
-  printf '{"generation":"%s","md5Hash":"%s"}\n' "$gen" "$md5"
+  # Real `gcloud storage objects describe --format=json` keys (snake_case), captured 2026-10-12.
+  printf '{"generation":"%s","md5_hash":"%s"}\n' "$gen" "$md5"
 else
   echo "unsupported fake gcloud invocation: $*" >&2; exit 1
 fi
