@@ -109,7 +109,7 @@
 | 1b. Ported quant core | Option math, covered-call math, support/resistance, order sizing | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done (PR #104) |
 | 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | [phase-1c-technicals-and-futures.md](02c-desk-v1-tasks/phase-1c-technicals-and-futures.md) | Done |
 | 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | [phase-1d-research-math.md](02c-desk-v1-tasks/phase-1d-research-math.md) | Done |
-| 2. Data foundation | `ai-trading/common` providers (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | `phase-2-data.md` | Planned |
+| 2. Data foundation | `ai-trading/common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | `phase-3-runtime.md` | Planned |
 | 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | `phase-4-web.md` | Planned |
 | 5. Long-term, covered calls, Desk AI | Imports, Holdings, valuation and consensus cards, the covered-call scan and screens, the daily Desk AI verdict, the AI brief, the track record, the timeline | 1d, 3 (UI after 4) | `phase-5-long-term.md` | Planned |
@@ -147,7 +147,7 @@ These names are fixed for every phase. A task file may add names but must not re
 | Other backend modules | `ai_trading.data`, `ai_trading.db`, `ai_trading.engine`, `ai_trading.notify`, `ai_trading.broker`, `ai_trading.agent`, `ai_trading.api`, `ai_trading.jobs` |
 | Generated Pydantic models | `ai_trading.contracts.strategy_spec_v1` (generated; never hand-edited) |
 | Desk frontend | `packages/family-desk/frontend` (Phase 4) |
-| Shared ai-trading code | `ai-trading/common/` (Phase 2): `http.py` (throttle), provider errors and as-of guards, the clients (Alpaca, Stooq, SEC EDGAR, FRED, Finnhub, consensus EPS, IBKR), and cross-package types |
+| Shared ai-trading code | `ai-trading/common/` (Phase 2a, restructured by 02j): `types.py`, `sources.py`, `registry.py` (`Kind`, `Provider`, `REGISTRY`, `DEFAULT_CHAINS`, `DataSources.from_env()`), `providers/` (Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool; IBKR in 2b), plus `errors.py`/`quality.py`/`http.py`/`bars.py`/`fallback.py`/`testing.py`. Callers build one `DataSources` and read through it — never `ai_trading_common.providers` directly |
 | Attribution | each package's `THIRD_PARTY_NOTICES.md` |
 | Services | `api` (port 8000), `scheduler`, `ib-gateway` (paper API 4004 via the image's socat), `desk-postgres` (5432); all internal, with no host ports |
 | Data-quality labels | `realtime`, `delayed-15m`, `eod`, `fallback`, `unavailable` |
@@ -242,38 +242,39 @@ Black-Scholes and implied volatility (from Vibe-Trading), the 02 §6.3 covered-c
 
 **Size:** about 5 tasks.
 
-### Phase 2: Data foundation (2a without IBKR, 2b the IBKR client)
+### Phase 2: Data foundation (2a without IBKR, done; 2b the IBKR client)
 
-**Scope:**
+**Scope (2a, done — [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md), restructured by [02j](02j-common-data-providers-design.md) to one provider registry):**
 - **`ai-trading/common/`** (new):
   - `http.py` (copied from Vibe-Trading's throttle) with a soft-ban latch;
-  - typed provider errors and the fallback policy;
-  - bar hygiene guards, and "never cache a trading day that has not closed".
-- **Clients:**
+  - typed provider errors and one generic fallback-chaining helper (`first_success[T]`);
+  - bar hygiene guards, and "never cache a trading day that has not closed";
+  - `types.py`/`sources.py`/`registry.py`: vendor-neutral types, one Protocol per data kind, and `DataSources.from_env()` — swapping a vendor means an adapter, one `REGISTRY` line, and config, never a caller-code change.
+- **Providers (behind the registry):**
   - Alpaca, moved from `ai-trading/market-data/` together with the open-source lane;
-  - Stooq as the daily fallback;
-  - SEC EDGAR, by filing date and span;
+  - SEC EDGAR, by filing date and span, including 8-K `filings.files` paging;
   - FRED, with vintages and release dates;
-  - Finnhub: earnings calendar, dividends, news in publication windows;
-  - consensus EPS: the Eulerpool 10-symbol pilot, written up in 02d, then the free fallback (02f §4).
-- **2b:** the IBKR client through `ib_async`. Paper and data profiles and ports, the market-data type, live 1-minute bars, futures history, daily IV, option snapshots, and what-if margin.
-- **Desk `ai_trading.db`:** SQLAlchemy and Alembic for every table in Shared Interfaces, plus the role and schema init under `deploy/postgres/`.
-- **Desk `ai_trading.data`:**
-  - the bar store, with backfill when a symbol joins a watchlist;
-  - the roll map, using Phase 1c's dates;
-  - the streaming slot manager;
-  - read models, including typed evidence snapshots for tools and card backs.
+  - Finnhub: earnings calendar, company news, recommendation trends, earnings surprises;
+  - consensus EPS: the Eulerpool 10-symbol pilot, written up in 02d, with Finnhub and Alpha Vantage as the fallback (02f §4). Stooq is dropped (its CSV endpoint is gated behind a JS proof-of-work challenge with no API key offered); the Desk's effective daily-history start is 2016-01-01 unless 2b's IBKR client backfills further back.
+- **2b:** the IBKR client through `ib_async`, added as `providers/ibkr.py` with no change to any caller. Paper and data profiles and ports, the market-data type, live 1-minute bars, futures history, daily IV, option snapshots, and what-if margin.
+- **Desk `ai_trading.db` (2a):** SQLAlchemy and Alembic for `bars_1d`, `bars_1h`, `bars_1m`, and `futures_rolls` only — every other table in Shared Interfaces arrives with the phase that first needs it (owner decision). The Postgres role and schema init under `deploy/postgres/` moves to Phase 3, where `desk-postgres` first joins the deploy compose file.
+- **Desk `ai_trading.data` (2a):**
+  - the bar store (closed-bar-only upserts, as-of reads, backfill planning, 1-minute retention) and the backfill glue, which takes a `BarsSource`, never a vendor class;
+  - the roll map (contiguous windows, difference back-adjusted continuous series), using Phase 1c's dates;
+  - the streaming slot manager.
+  - Read models and typed evidence snapshots for tools and card backs move to the phases that consume them (3, 5, 7).
 
-**Reuse:** TradingAgents' router and errors (pattern), bar guards, SEC and FRED clients (adapt), and news windows (pattern); ai-hedge-fund's cache freshness rule and the 8-K announcement-date rule (pattern); Vibe-Trading's throttle (copy) and IBKR profiles (adapt).
+**Reuse:** TradingAgents' router and errors (pattern), bar guards, SEC and FRED clients (adapt), and news windows (pattern); ai-hedge-fund's cache freshness rule and the 8-K announcement-date rule (pattern); Vibe-Trading's throttle (copy) and IBKR profiles (adapt, 2b).
 
 **Acceptance:**
 - contract tests on recorded responses, with no network in CI;
+- a conformance test that every registered provider's adapter satisfies every kind's Protocol it declares;
 - store tests against a real Postgres container;
 - the roll test (no cross-contract gap) and the slot-priority test;
 - the throttle's limits;
 - the pilot report.
 
-**Size:** about 9 tasks: 2a with 7, 2b with 2.
+**Size:** about 10 tasks: 2a with 8 (done), 2b with 2.
 
 ### Phase 3: Runtime and alerts (deployed; the first `main` release)
 

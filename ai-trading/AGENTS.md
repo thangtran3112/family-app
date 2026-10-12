@@ -69,6 +69,7 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
 
 - `packages/family-desk/` is the Family Desk, our own code (Desk lane), not a submodule: `contracts/` (Zod strategy specs, fixtures, templates), `backend/` (Python), and `frontend/` (from Desk Phase 4).
 - Packages under `packages/` never import from each other. Code that two or more ai-trading packages share (data-provider clients such as Alpaca and IBKR, a shared database schema, shared types) lives in `ai-trading/common/`.
+- External data sources live in `ai-trading/common` behind the provider registry (02j); callers use `ai_trading_common.registry.DataSources` and never import `ai_trading_common.providers` directly.
 - Code adapted from an upstream app (ai-hedge-fund, Vibe-Trading, TradingAgents) is copied in with an attribution header and listed in the receiving package's `THIRD_PARTY_NOTICES.md`. Never copy from MiroFish (AGPL-3.0).
 
 ## Git

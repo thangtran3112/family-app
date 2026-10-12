@@ -65,6 +65,20 @@ jobs:
   desk:
     name: Desk contracts and backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: desk
+          POSTGRES_PASSWORD: desk
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U desk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -80,15 +94,27 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
         with:
           enable-cache: true
-          cache-dependency-glob: ai-trading/packages/family-desk/backend/uv.lock
+          cache-dependency-glob: |
+            ai-trading/packages/family-desk/backend/uv.lock
+            ai-trading/common/uv.lock
+      - name: Common (providers, throttle, bar hygiene)
+        working-directory: ai-trading/common
+        run: |
+          uv sync --locked
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest -q
       - name: Contracts (Zod, fixtures, JSON Schema drift)
         working-directory: ai-trading/packages/family-desk/contracts
         run: |
           pnpm install --frozen-lockfile
           pnpm typecheck
           pnpm test
-      - name: Backend (Pydantic parity and drift, core, templates)
+      - name: Backend (Pydantic parity and drift, core, templates, DB)
         working-directory: ai-trading/packages/family-desk/backend
+        env:
+          DESK_TEST_DATABASE_URL: postgresql+psycopg://desk:desk@localhost:5432/postgres
+          DESK_REQUIRE_DB: "1"
         run: |
           uv sync --locked
           uv run ruff check .
