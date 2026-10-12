@@ -30,7 +30,7 @@ variable "CLERK_PUBLISHABLE_KEY" {
 }
 
 group "default" {
-  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-trading", "mirofish-backend", "auth"]
+  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-trading", "mirofish-backend", "auth", "desk"]
 }
 
 target "web" {
@@ -98,6 +98,16 @@ target "vibe-trading" {
 target "auth" {
   context = "ai-trading/auth"
   tags    = ["${REGISTRY}/ai-trading-auth:${TAG}"]
+}
+
+target "desk" {
+  # Context is the ai-trading/ root, not packages/family-desk/backend -- its
+  # pyproject.toml resolves ai-trading-common as ../../../common, a sibling
+  # directory this build needs copied in with the same relative layout
+  # (see the Dockerfile's own header comment).
+  context    = "ai-trading"
+  dockerfile = "packages/family-desk/backend/Dockerfile"
+  tags       = ["${REGISTRY}/ai-trading-desk:${TAG}"]
 }
 
 target "mirofish-backend" {
