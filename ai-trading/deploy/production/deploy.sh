@@ -174,7 +174,7 @@ MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
 IMAGES_ENV="$APP_DIR/images.env"
-SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env cloudflared.env)
+SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env desk.env cloudflared.env)
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
@@ -515,7 +515,7 @@ render_profiles() {
   RENDER_SRC_DIR="$(mktemp -d "$SECRETS_DIR/.render-XXXXXX")"
   trap cleanup_scratch_dirs EXIT
   FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
-    "$family_config" render ai-trading/tradingagents ai-trading/ai-hedge-fund ai-trading/vibe-trading ai-trading/gateway ai-trading/market-data \
+    "$family_config" render ai-trading/tradingagents ai-trading/ai-hedge-fund ai-trading/vibe-trading ai-trading/gateway ai-trading/market-data ai-trading/desk \
       --out-dir "$RENDER_SRC_DIR"
   mv -f "$RENDER_SRC_DIR/gateway.env" "$RENDER_SRC_DIR/auth.env"
   # Caddy injects Vibe's API key after the Clerk check, so browsers never hold
