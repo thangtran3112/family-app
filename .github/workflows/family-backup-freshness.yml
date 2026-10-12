@@ -62,8 +62,10 @@ jobs:
 
           # storage.objects.list only -- never storage.objects.get. No
           # backup content is ever read or downloaded by this identity.
-          latest_updated="$(gcloud storage objects list "gs://${GCP_BACKUP_BUCKET}" \
-            --format='value(updated)' | sort -r | head -1)"
+          # /** recurses into the monthly/ and daily/ prefixes (a bare bucket URL lists
+          # only the top level, which is empty); the timestamp field is update_time.
+          latest_updated="$(gcloud storage objects list "gs://${GCP_BACKUP_BUCKET}/**" \
+            --format='value(update_time)' | sort -r | head -1)"
 
           if [[ -z "$latest_updated" ]]; then
             echo "::error::No backup objects found in gs://${GCP_BACKUP_BUCKET} at all"
