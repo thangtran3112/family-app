@@ -50,9 +50,11 @@ plus `signals`' unique constraint, not out of any streaming machinery.
 - **Deploy:** a new Dockerfile (one image, two entrypoints — `api`/`scheduler` pick their command),
   a `desk` bake target, two new compose services joining the **shared** VPS Postgres cluster (owner
   decision 2026-10-12, D-e — no `desk-postgres` container), a Caddy route for `/api/desk/*`, the
-  Desk's own Postgres role/schema onboarding script, and — a finding from writing this plan, not
-  anticipated by the brief (see Decision 5) — registering `api`/`scheduler` with the Trading Hub's
-  app-controls catalog so they actually get started.
+  Desk's own Postgres role/schema onboarding script, and a startup-retrying, heartbeat-checked
+  `scheduler` process. Registering `api`/`scheduler` with the Trading Hub's app-controls catalog so
+  they actually get started — a finding from writing this plan, not anticipated by the brief — is
+  **HELD** (Decision 5): it edits the open-source lane's shared control files and waits for the
+  owner's yes, so it ships as a separate follow-up commit, not part of this phase's release.
 
 **Tech Stack:** adds to Phase 2a's stack: FastAPI, `uvicorn[standard]`, `sse-starlette`,
 `requests` (direct dependency now — Phase 2a only reached it transitively through
@@ -103,8 +105,10 @@ Everything in 02c's Global Constraints applies. Scoped to Phase 3:
 
 Most consequential first. Each names the alternative considered and the reason for the choice
 actually shipped. Items 1–4 and 15–16 are owner-level (money, data correctness, production
-trust-boundary, release-scoping); the rest are lane-level implementation choices the integration
-carried forward, surfaced here because nothing earlier in the plan chain pinned them.
+trust-boundary, release-scoping); Item 5 is also owner-level and **HELD**, pending the owner's
+explicit approval (it edits the open-source lane's shared app-controls files); the rest are
+lane-level implementation choices the integration carried forward, surfaced here because nothing
+earlier in the plan chain pinned them.
 
 1. **The Desk's database joins the shared VPS Postgres cluster — no `desk-postgres` container
    (D-e, APPROVED 2026-10-12).** Alternative: a Desk-private Postgres container, like Phase 2a's
@@ -148,21 +152,26 @@ carried forward, surfaced here because nothing earlier in the plan chain pinned 
    reachable, but only if the probe they poll actually tells them whether the database answers
    (Task 3.7).
 
-5. **`api`/`scheduler` are registered as "protected" (always-on) services in the Trading Hub's
-   app-controls catalog (`control/catalog.json`, `control/state.py`), not left unregistered and
-   not added as a new toggleable app group.** This is a finding from writing this plan, not
-   anticipated by the brief or any lane report: the app-controls system (`control/state.py`,
-   `deploy.sh`'s `apply_selected_services`/`stop_disabled_groups`) was built after
-   `PROTO-BRIEF.md`, and it changes `compose up` from a blanket command to one that starts **only**
-   the services named in the catalog's `protected` list or an enabled `apps` group — a service
-   absent from both is never started by a real deploy, regardless of its own compose block.
-   Alternative: add a new toggleable `apps["desk"] = ["api", "scheduler"]` entry, giving the Desk
-   its own on/off switch in the hub's `/settings` page. Reason: Phase 3 ships no Settings-page
-   toggle for the Desk (that UI doesn't exist until Phase 4 at the earliest, and no plan has asked
-   for the Desk to be user-disablable the way TradingAgents/ai-hedge-fund/Vibe-Trading/MiroFish
-   are) — `api`/`scheduler` should simply always run once deployed, the same as `market-data`/
-   `auth`/`gateway`, which are also `protected`. Revisit if a later phase wants a Desk on/off
-   switch (Task 3.6).
+5. **HELD — registering `api`/`scheduler` as "protected" (always-on) services in the Trading Hub's
+   app-controls catalog (`control/catalog.json`, `control/state.py`) waits for the owner's yes.**
+   This is a finding from writing this plan, not anticipated by the brief or any lane report: the
+   app-controls system (`control/state.py`, `deploy.sh`'s `apply_selected_services`/
+   `stop_disabled_groups`) was built after `PROTO-BRIEF.md`, and it changes `compose up` from a
+   blanket command to one that starts **only** the services named in the catalog's `protected` list
+   or an enabled `apps` group — a service absent from both is never started by a real deploy,
+   regardless of its own compose block. `control/catalog.json` and `control/state.py` are shared
+   files owned by the open-source lane (ai-trading/AGENTS.md), not Desk-private — editing them is
+   held pending the owner's explicit approval rather than bundled into this phase's own release
+   (Task 3.6 ships `api`/`scheduler`'s compose services unregistered; without this registration a
+   real deploy will not start them). Alternative once approved: either register them as
+   `protected` (the original proposal below) or add a new toggleable `apps["desk"] = ["api",
+   "scheduler"]` entry, giving the Desk its own on/off switch in the hub's `/settings` page. Reason
+   for preferring `protected`: Phase 3 ships no Settings-page toggle for the Desk (that UI doesn't
+   exist until Phase 4 at the earliest, and no plan has asked for the Desk to be user-disablable
+   the way TradingAgents/ai-hedge-fund/Vibe-Trading/MiroFish are) — `api`/`scheduler` should simply
+   always run once deployed, the same as `market-data`/`auth`/`gateway`, which are also
+   `protected`. Revisit once the owner approves, and again if a later phase wants a Desk on/off
+   switch (Task 3.6, Task 3.8).
 
 6. **Slack and Telegram send a JSON body with a 10-second timeout — not `requests.post(url,
    payload)`.** Alternative (L1's original implementation): the bare, uncalled-out default
@@ -205,19 +214,20 @@ carried forward, surfaced here because nothing earlier in the plan chain pinned 
    `relogin_reminder.run` to also insert `deliveries` rows is a small, additive change — not done
    here because the brief didn't ask for it (Task 3.4).
 
-10. **`relogin_reminder`'s `severity="info"` (the brief's literal code) is kept even though it
-    reads as in tension with `notify.quiet_hours`'s own doc**, which groups
-    "gateway/job-overdue/re-login-reminder" under the `"system"/"risk"` quiet-hours-bypass set —
-    but `in_quiet_hours` only ever bypasses for literal severities `"system"`/`"risk"`, and
-    `"info"` is neither. Alternative: use `severity="system"` for `relogin_reminder`, matching
-    `watchdog`'s own alert (which the brief's code block for `watchdog` left unspecified, so L3
-    inferred `"system"` from the quiet-hours doc's stated intent). Reason: the brief's own code
-    sample for `relogin_reminder` is explicit (`severity="info"`), so the literal value was kept;
-    `watchdog`'s wasn't, so its intent was inferred instead. Practical impact today is low (18:00
-    ET Sunday rarely falls inside a default 22:00–07:00 quiet window), but it means a user who sets
-    a wider quiet window would have the re-login reminder silently suppressed during it while a
-    job-overdue alert never is. Confirm which severity is actually intended before this reaches
-    real users with a configurable quiet window (Task 3.2, 3.4).
+10. **`relogin_reminder` uses `severity="system"`, matching `watchdog`'s own alert — not the
+    brief's literal `severity="info"`.** `notify.quiet_hours.in_quiet_hours` only ever bypasses
+    quiet hours for literal severities `"system"`/`"risk"`, and `"info"` is neither; `"system"` is
+    what makes `relogin_reminder`'s alert a system alert, so quiet hours do not suppress it
+    (review fix F3, matching Decision 9's own framing of both `watchdog` and `relogin_reminder` as
+    "system-severity alerts"). Alternative: keep the brief's literal `severity="info"`. Reason: a
+    standing, once-a-week operator reminder to re-login to IBKR must actually reach the owner —
+    the brief's own code sample for `relogin_reminder` was explicit (`"info"`), so it was initially
+    kept literal while `watchdog`'s was inferred as `"system"` from `notify.quiet_hours`'s own doc
+    (which already grouped "gateway/job-overdue/re-login-reminder" under the `"system"/"risk"`
+    bypass set) — a user with a wide quiet window would otherwise have had this reminder silently
+    suppressed while a job-overdue alert never was, for no reason either alert's own intent
+    supports. `relogin_reminder` now matches `watchdog` exactly, closing the gap this decision
+    originally flagged (Task 3.2, 3.4).
 
 11. **A strategy version save auto-promotes `strategies.current_version_id` — there is no separate
     "activate version" endpoint.** `POST /api/desk/strategies/{id}/versions` sets
@@ -260,19 +270,21 @@ carried forward, surfaced here because nothing earlier in the plan chain pinned 
     Confirm the intended granularity before any dashboard or alert ever reports this number to an
     operator as "strategies evaluated" (Task 3.3).
 
-15. **The backup "Desk-specific prefix" promised in an earlier owner decision cannot be satisfied
-    literally once the Desk joins the shared cluster (D-d), and this phase adds zero new backup
-    code to work around it.** `infrastructure/backup/backup.sh`'s `discover_databases()` already
-    sweeps every database on the pointed-at cluster into **one** combined, encrypted archive per
-    run, under one `BACKUP_GCS_URI` prefix per host per run — there is no per-database path
-    segment, and `restore.sh` has no flag to restore a single app's database out of that archive.
-    The existing `family-app-backup.service`/`.timer` already covers `ai_trading_desk_db`
-    automatically the moment it exists on the cluster, naming its dump individually inside
-    `manifest.json` as `dumps/ai_trading_desk_db.dump`. **This needs an explicit owner
-    confirmation** that "named inside the one shared archive" satisfies the original
-    "Desk-specific GCS prefix" intent — a literal per-app prefix would require a second,
-    independent backup run against the same cluster (effectively a second `BACKUP_HOST_ID`),
-    which nobody has asked for and this phase does not build (Task 3.8).
+15. **Approved by the owner, 2026-10-12: the Desk database rides in the existing combined backup
+    archive (`backup.sh` dumps every cluster database into one archive per host). No separate
+    prefix. No confirmation pending.** The backup "Desk-specific prefix" promised in an earlier
+    owner decision could not be satisfied literally once the Desk joins the shared cluster (D-d),
+    and this phase adds zero new backup code to work around it:
+    `infrastructure/backup/backup.sh`'s `discover_databases()` already sweeps every database on the
+    pointed-at cluster into **one** combined, encrypted archive per run, under one `BACKUP_GCS_URI`
+    prefix per host per run — there is no per-database path segment, and `restore.sh` has no flag
+    to restore a single app's database out of that archive. The existing
+    `family-app-backup.service`/`.timer` already covers `ai_trading_desk_db` automatically the
+    moment it exists on the cluster, naming its dump individually inside `manifest.json` as
+    `dumps/ai_trading_desk_db.dump` — that is the owner-approved substitute for the original
+    "Desk-specific GCS prefix" intent. A literal per-app prefix would require a second, independent
+    backup run against the same cluster (effectively a second `BACKUP_HOST_ID`), which nobody has
+    asked for and this phase does not build (Task 3.8).
 
 16. **`ai_trading.api.main:app` is the one name both the Dockerfile's comment and
     `docker-compose.yml`'s `api` service `command:` use — not `ai_trading.api.app:app`.** The two
@@ -310,7 +322,7 @@ section (§4):
 | **3.3 Engine** | `ai_trading.engine` (all 5 files + tests) | 3.1 (`signals`/`alerts`/`deliveries`/`strategies`/`strategy_versions`); Phase 1's `evaluate`, Phase 2a's `data.bars` (already merged) | — |
 | **3.4 Jobs** | `ai_trading.jobs` (all 10 files + tests) | 3.1 (`strategies`/`strategy_versions`/`watchlists`/`watchlist_items`); 3.3's `engine.tick.tick` (stub it if 3.3 isn't finished yet); 3.2's `notify.dedupe.should_alert` | — |
 | **3.5 API** | `ai_trading.api` (all 10 files + tests) | 3.2's `dispatch_pending`, 3.3's `tick`/`compute_card_back`, 3.4's `backfill_on_join`, 3.1 | `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `sse-starlette`, dev `httpx`, the `api/*.py` `B008` per-file-ignore) |
-| **3.6 Deploy** | Dockerfile, `docker-bake.hcl`, `docker-compose.yml`, `Caddyfile`, `deploy.sh`, `control/catalog.json`, `control/state.py` | 3.5's `api/app.py`/`api/main.py` and 3.4's `jobs/scheduler.py` only for its `command:` lines — otherwise no code dependency, can be drafted in parallel with everything | none of 3.1–3.5's files |
+| **3.6 Deploy** | Dockerfile, `docker-bake.hcl`, `docker-compose.yml`, `Caddyfile`, `deploy.sh` | 3.5's `api/app.py`/`api/main.py` and 3.4's `jobs/scheduler.py`/`jobs/healthcheck.py` only for its `command:`/`healthcheck:` lines — otherwise no code dependency, can be drafted in parallel with everything | none of 3.1–3.5's files |
 | **3.7 Integration and readiness** | `/healthz` fix, the real `pyproject.toml` path, `.github/workflows/ai-trading-ci.yml` confirmation | 3.1–3.6 all merged | — |
 | **3.8 Release and operator checklist** | no code | 3.1–3.7 complete and verified | — |
 
@@ -3546,7 +3558,7 @@ git commit -m "Desk: ai_trading.engine (degraded quality, outbox, tick, card bac
 
 ## Task 3.4: Jobs — scheduler and its named jobs
 
-**Files:** `src/ai_trading/jobs/{__init__.py,clock.py,premarket.py,daily_close.py,weekly.py,refresh_15m.py,backfill_watchlist.py,watchdog.py,relogin_reminder.py,scheduler.py}`;
+**Files:** `src/ai_trading/jobs/{__init__.py,clock.py,premarket.py,daily_close.py,weekly.py,refresh_15m.py,backfill_watchlist.py,watchdog.py,relogin_reminder.py,healthcheck.py,scheduler.py}`;
 `tests/jobs/{conftest.py,test_clock.py,test_premarket.py,test_daily_close.py,test_weekly.py,test_refresh_15m.py,test_backfill_watchlist.py,test_watchdog.py,test_relogin_reminder.py,test_scheduler.py}`.
 
 **Interfaces:**
@@ -3558,7 +3570,10 @@ git commit -m "Desk: ai_trading.engine (degraded quality, outbox, tick, card bac
   `ai_trading.core.calendar.{ET, session}`.
 - Produces: `jobs.JobResult`, `jobs.clock.JobClock`, each job's `due_now`/`run`,
   `jobs.scheduler.{due_now, run_due, main}` — Task 3.6's compose `command:` runs
-  `python -m ai_trading.jobs.scheduler`.
+  `python -m ai_trading.jobs.scheduler`. Also `jobs.healthcheck.{heartbeat_path, touch, is_healthy,
+  main}` — `scheduler.main`'s loop calls `touch` every iteration, and Task 3.6's compose
+  `healthcheck:` for the `scheduler` service runs `python -m ai_trading.jobs.healthcheck` (review
+  fix F4: the scheduler had no health check and no startup retry).
 
 - [ ] **Step 1: Create `jobs/__init__.py`.**
 
@@ -3994,6 +4009,8 @@ from sqlalchemy.orm import Session
 
 from ai_trading.core.calendar import ET
 from ai_trading.db.models import Alert, User
+from ai_trading.jobs import JobResult
+from ai_trading.jobs.clock import JobClock
 from ai_trading.notify.dedupe import should_alert
 
 NAME = "relogin_reminder"
@@ -4007,53 +4024,156 @@ def due_now(now: datetime) -> bool:
     return et_now.weekday() == _SUNDAY and et_now.time() >= _SCHEDULED_ET
 
 
-def run(session_: Session, *, now: datetime) -> None:
-    """Writes one `alerts` row per user (kind="system", severity="info"), gated by
-    `should_alert` so a same-week re-fire is a no-op."""
+def run(session_: Session, clock: JobClock, *, now: datetime) -> JobResult:
+    """Writes one `alerts` row per user (kind="system", severity="system" -- F3/review fix:
+    `notify.quiet_hours.in_quiet_hours` only bypasses "system"/"risk" severities, and this is a
+    standing operator reminder that must still reach the owner inside their quiet hours, not a
+    routine "info" notice), gated by `should_alert` so a same-week re-fire is a no-op.
+
+    Marks `clock` on success (whether or not a new alert was actually written -- a dedupe-
+    suppressed call is still a successful run of this slot) so `scheduler.run_due` does not call
+    this again for the rest of today's open `due_now()` window (F1/F2)."""
     dedupe_key = f"relogin-reminder:{now.date()}"
-    if not should_alert(session_, dedupe_key=dedupe_key, cooldown=timedelta(days=6), now=now):
-        return
-    for user in session_.execute(select(User)).scalars():
-        session_.add(
-            Alert(
-                user_id=user.id,
-                kind="system",
-                severity="info",
-                dedupe_key=dedupe_key,
-                title="Re-login to IBKR",
-                body="IBKR's weekly session needs a fresh 2FA login before the market opens.",
-                created_at=now,
+    if should_alert(session_, dedupe_key=dedupe_key, cooldown=timedelta(days=6), now=now):
+        for user in session_.execute(select(User)).scalars():
+            session_.add(
+                Alert(
+                    user_id=user.id,
+                    kind="system",
+                    severity="system",
+                    dedupe_key=dedupe_key,
+                    title="Re-login to IBKR",
+                    body="IBKR's weekly session needs a fresh 2FA login before the market opens.",
+                    created_at=now,
+                )
             )
-        )
+    clock.mark(NAME, now.date())
+    return JobResult(NAME, ok=True)
 
 
 __all__ = ("NAME", "due_now", "run")
 ```
 
-- [ ] **Step 10: Create `jobs/scheduler.py`.**
+- [ ] **Step 10: Create `jobs/healthcheck.py`** (review fix F4c -- the scheduler's own Docker
+  healthcheck, Task 3.6's compose `healthcheck:` for the `scheduler` service runs this as
+  `python -m ai_trading.jobs.healthcheck`):
+
+```python
+"""`python -m ai_trading.jobs.healthcheck`: the `scheduler` compose service's Docker healthcheck
+(F4c). `scheduler` has no HTTP endpoint for Docker to poll (unlike `api`'s `/healthz`), so instead
+its own main loop touches a heartbeat file once per iteration (`scheduler.main`), and this process
+exits 0 only while that file is still fresh -- a stuck or crashed loop stops touching it and this
+starts failing within one `FRESH_SECONDS` window.
+"""
+
+import os
+import sys
+import time
+from pathlib import Path
+
+HEARTBEAT_PATH_VAR = "DESK_SCHEDULER_HEARTBEAT"
+DEFAULT_HEARTBEAT_PATH = "/tmp/desk-scheduler.heartbeat"
+FRESH_SECONDS = 180.0
+
+
+def heartbeat_path() -> Path:
+    return Path(os.environ.get(HEARTBEAT_PATH_VAR, DEFAULT_HEARTBEAT_PATH))
+
+
+def touch(path: Path) -> None:
+    """Creates (or updates the mtime of) `path`, creating its parent directory if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+
+
+def is_healthy(path: Path, *, now: float | None = None) -> bool:
+    """True iff `path` exists and was touched less than `FRESH_SECONDS` ago."""
+    try:
+        age = (time.time() if now is None else now) - path.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    return age < FRESH_SECONDS
+
+
+def main() -> int:
+    return 0 if is_healthy(heartbeat_path()) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+__all__ = (
+    "DEFAULT_HEARTBEAT_PATH",
+    "FRESH_SECONDS",
+    "HEARTBEAT_PATH_VAR",
+    "heartbeat_path",
+    "is_healthy",
+    "main",
+    "touch",
+)
+```
+
+- [ ] **Step 11: Create `jobs/scheduler.py`** (review fixes F1/F2/F4a/F4b: a `_SLOTTED` job that
+  already succeeded today is skipped rather than re-run every minute for the rest of its
+  `due_now()` window; `relogin_reminder` is wired into `_ORDER`/`_DUE_NOW`/the dispatch branches, so
+  it actually runs; `main()` retries the database connection on startup and touches a heartbeat
+  file every loop):
 
 ```python
 """The process entrypoint for the `scheduler` compose service (02c Phase 3)."""
 
+import logging
+import os
+import sys
 import time as _time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from ai_trading_common.registry import DataSources
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ai_trading.jobs import JobResult, daily_close, premarket, refresh_15m, watchdog, weekly
+from ai_trading.jobs import (
+    JobResult,
+    daily_close,
+    healthcheck,
+    premarket,
+    refresh_15m,
+    relogin_reminder,
+    watchdog,
+    weekly,
+)
 from ai_trading.jobs.clock import JobClock
 
+logger = logging.getLogger(__name__)
+
 #: `watchdog` last, so it sees this tick's own completions.
-_ORDER = ("premarket_0830", "daily_close", "weekly", "refresh_15m", "watchdog")
+_ORDER = ("premarket_0830", "daily_close", "weekly", "relogin_reminder", "refresh_15m", "watchdog")
+
+#: These jobs each fire once per day (or once per week) but their own `due_now()` is an open
+#: window (true for the rest of the day/week once their slot starts), not a single exact minute --
+#: without this gate, a successful run reran every minute for the rest of its window (F1/F2 review
+#: fix). `JobClock.succeeded_today` is what stops that: each of these jobs' own `run()` marks the
+#: clock only on success, so a failed run is still retried on the next tick. `refresh_15m` is
+#: meant to re-run every 15 minutes (not slotted this way) and `watchdog`'s own dedupe cooldown
+#: already gates its alerts, so neither belongs here.
+_SLOTTED = ("premarket_0830", "daily_close", "weekly", "relogin_reminder")
 
 _DUE_NOW = {
     "premarket_0830": premarket.due_now,
     "daily_close": daily_close.due_now,
     "weekly": weekly.due_now,
+    "relogin_reminder": relogin_reminder.due_now,
     "refresh_15m": refresh_15m.due_now,
     "watchdog": watchdog.due_now,
 }
+
+#: F4a: bounded startup retry against the shared Postgres cluster, which may still be cold when
+#: `scheduler` starts (same reasoning as `api`'s `/healthz`, but `scheduler` has no HTTP endpoint
+#: for Docker to poll, so the retry lives in-process instead).
+_STARTUP_RETRY_ATTEMPTS = 30
+_STARTUP_RETRY_DELAY_SECONDS = 2.0
 
 
 def due_now(now: datetime) -> list[str]:
@@ -4062,13 +4182,18 @@ def due_now(now: datetime) -> list[str]:
 
 
 def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now: datetime) -> list[JobResult]:
-    """Runs every due job in order (`_ORDER`). A job raising halts only that job (02c: "halting
-    on failure") -- caught here, logged as a `JobResult(ok=False, error=...)`, and does not stop
-    the remaining due jobs or crash the process."""
+    """Runs every due job in order (`_ORDER`). A `_SLOTTED` job that already succeeded today is
+    skipped without being called again -- see `_SLOTTED`'s own comment (F1/F2). A job raising
+    halts only that job (02c: "halting on failure") -- caught here, logged as a
+    `JobResult(ok=False, error=...)`, and does not stop the remaining due jobs or crash the
+    process."""
     due = set(due_now(now))
     results: list[JobResult] = []
     for name in _ORDER:
         if name not in due:
+            continue
+        if name in _SLOTTED and clock.succeeded_today(name, now):
+            results.append(JobResult(name, ok=True, ran=False))
             continue
         try:
             if name == "premarket_0830":
@@ -4077,6 +4202,8 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
                 results.append(daily_close.run(session, data_sources, clock, now=now))
             elif name == "weekly":
                 results.append(weekly.run(session, clock, now=now))
+            elif name == "relogin_reminder":
+                results.append(relogin_reminder.run(session, clock, now=now))
             elif name == "refresh_15m":
                 results.append(refresh_15m.run(session, data_sources, now=now))
             else:  # watchdog
@@ -4087,19 +4214,42 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
     return results
 
 
-def main() -> None:  # pragma: no cover -- the real loop; exercised through `run_due`'s own tests
-    import os
+def _wait_for_database(
+    engine,
+    *,
+    attempts: int = _STARTUP_RETRY_ATTEMPTS,
+    delay: float = _STARTUP_RETRY_DELAY_SECONDS,
+    sleep: Callable[[float], None] = _time.sleep,
+) -> None:
+    """F4a: tries `SELECT 1` against `engine` up to `attempts` times, `delay` seconds apart.
+    Returns as soon as one attempt succeeds. Exits the process non-zero (`sys.exit(1)`) once
+    `attempts` is exhausted -- `restart: unless-stopped` then retries the whole process."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return
+        except Exception:
+            logger.warning("database not reachable yet (attempt %d/%d)", attempt, attempts)
+            sleep(delay)
+    logger.error("database never became reachable after %d attempts; exiting", attempts)
+    sys.exit(1)
 
+
+def main() -> None:  # pragma: no cover -- the real loop; exercised through `run_due`'s own tests
     from ai_trading.db.engine import make_engine, make_session_factory
 
     engine = make_engine(os.environ["DESK_RUNTIME_DATABASE_URL"])
+    _wait_for_database(engine)
     factory = make_session_factory(engine)
     sources = DataSources.from_env()
     clock = JobClock()
+    heartbeat = healthcheck.heartbeat_path()
     while True:
         with factory() as session:
             run_due(session, sources, clock, now=datetime.now(UTC))
             session.commit()
+        healthcheck.touch(heartbeat)  # F4b: proves this loop iteration to ai_trading.jobs.healthcheck
         _time.sleep(60)
 
 
@@ -4110,7 +4260,7 @@ if __name__ == "__main__":
 __all__ = ("due_now", "run_due", "main")
 ```
 
-- [ ] **Step 11: Create `tests/jobs/conftest.py`** (network-free `BarsSource` double and shared
+- [ ] **Step 12: Create `tests/jobs/conftest.py`** (network-free `BarsSource` double and shared
   `owner`/`watchlist_with_items` fixtures, reused by `test_daily_close.py`,
   `test_refresh_15m.py`, `test_backfill_watchlist.py`, `test_watchdog.py`,
   `test_relogin_reminder.py`):
@@ -4203,7 +4353,7 @@ def watchlist_with_items(db_session: Session, owner: int) -> int:
     return watchlist_id
 ```
 
-- [ ] **Step 12: Create the 9 test files.**
+- [ ] **Step 13: Create the 9 test files.**
 
 `tests/jobs/test_clock.py`:
 
@@ -4631,15 +4781,18 @@ def test_weekly_is_only_checked_on_the_first_trading_day_of_the_week(db_session,
     assert "weekly" not in alerted
 ```
 
-`tests/jobs/test_relogin_reminder.py`:
+`tests/jobs/test_relogin_reminder.py` (review fixes F3/F1: `severity="system"`, and the clock-mark
+test/quiet-hours-delivery test this fix added):
 
 ```python
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from ai_trading.db.models import Alert
-from ai_trading.jobs import relogin_reminder
+from ai_trading.db.models import Alert, Delivery, User
+from ai_trading.jobs import JobResult, relogin_reminder
+from ai_trading.jobs.clock import JobClock
+from ai_trading.notify.dispatch import DeliveryOutcome, dispatch_pending
 
 
 def test_due_now_is_false_before_1800_on_sunday():
@@ -4659,39 +4812,85 @@ def test_due_now_is_false_on_a_weekday():
 def test_writes_one_alert_per_user(db_session, owner):
     now = datetime(2026, 10, 11, 22, 0, tzinfo=UTC)
 
-    relogin_reminder.run(db_session, now=now)
+    result = relogin_reminder.run(db_session, JobClock(), now=now)
 
+    assert result == JobResult(relogin_reminder.NAME, ok=True)
     rows = db_session.execute(select(Alert).where(Alert.user_id == owner)).scalars().all()
     assert len(rows) == 1
     assert rows[0].kind == "system"
-    assert rows[0].severity == "info"
+    # F3: "system" severity, not "info" -- `notify.quiet_hours.in_quiet_hours` only bypasses
+    # "system"/"risk" severities, and this reminder must still reach the owner inside quiet hours.
+    assert rows[0].severity == "system"
     assert rows[0].dedupe_key == f"relogin-reminder:{now.date()}"
 
 
 def test_dedupe_suppresses_a_same_week_refire(db_session, owner):
     first_sunday = datetime(2026, 10, 11, 22, 0, tzinfo=UTC)
-    relogin_reminder.run(db_session, now=first_sunday)
+    relogin_reminder.run(db_session, JobClock(), now=first_sunday)
 
-    relogin_reminder.run(db_session, now=first_sunday + timedelta(minutes=5))
+    relogin_reminder.run(db_session, JobClock(), now=first_sunday + timedelta(minutes=5))
     rows = db_session.execute(select(Alert).where(Alert.user_id == owner)).scalars().all()
     assert len(rows) == 1  # the second call, same day, is a no-op
 
     next_sunday = first_sunday + timedelta(days=7)
-    relogin_reminder.run(db_session, now=next_sunday)
+    relogin_reminder.run(db_session, JobClock(), now=next_sunday)
     rows = db_session.execute(select(Alert).where(Alert.user_id == owner)).scalars().all()
     assert len(rows) == 2  # a week later (past the 6-day cooldown), it fires again
+
+
+def test_run_marks_the_clock_on_success_so_the_scheduler_does_not_rerun_it(db_session, owner):
+    clock = JobClock()
+    now = datetime(2026, 10, 11, 22, 0, tzinfo=UTC)
+
+    relogin_reminder.run(db_session, clock, now=now)
+
+    assert clock.succeeded_today(relogin_reminder.NAME, now) is True
+
+
+def test_the_reminder_alert_still_delivers_during_quiet_hours(db_session, owner):
+    """F3: a `system`-severity alert's delivery must not be suppressed by quiet hours, even when
+    the user's quiet hours cover the whole day -- the regression this review fix closed (the
+    reminder previously used severity="info", which `in_quiet_hours` does NOT bypass)."""
+    now = datetime(2026, 10, 11, 22, 0, tzinfo=UTC)
+    db_session.execute(
+        User.__table__.update()
+        .where(User.id == owner)
+        .values(settings={"quiet_hours": {"start": "00:00", "end": "23:59"}})
+    )
+
+    relogin_reminder.run(db_session, JobClock(), now=now)
+    alert = db_session.execute(select(Alert).where(Alert.user_id == owner)).scalar_one()
+    delivery = Delivery(alert_id=alert.id, channel="telegram")
+    db_session.add(delivery)
+    db_session.flush()
+
+    class _FakeChannel:
+        name = "telegram"
+
+        def send(self, *, title: str, body: str, severity: str) -> None:
+            return None
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": _FakeChannel()}, now=now)
+
+    assert outcomes == [DeliveryOutcome(delivery.id, "sent")]
+    assert delivery.status == "sent"
 ```
 
-`tests/jobs/test_scheduler.py`:
+`tests/jobs/test_scheduler.py` (review fixes F1/F2/F4a/F4b/F4c: slotted-job gating, `relogin_reminder`
+wiring, the startup-retry helper, and the heartbeat/healthcheck module):
 
 ```python
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from ai_trading.jobs import (
     JobResult,
     daily_close,
+    healthcheck,
     premarket,
     refresh_15m,
+    relogin_reminder,
     scheduler,
     watchdog,
     weekly,
@@ -4706,10 +4905,22 @@ class _FakeSources:
 def test_due_now_lists_only_jobs_that_are_due(monkeypatch):
     # `scheduler._DUE_NOW` binds each submodule's `due_now` once at import time, so patching it
     # directly (not the submodule's own attribute) is what actually takes effect here.
-    due = {"premarket_0830": True, "daily_close": False, "weekly": False, "refresh_15m": True, "watchdog": False}
+    due = {
+        "premarket_0830": True,
+        "daily_close": False,
+        "weekly": False,
+        "relogin_reminder": False,
+        "refresh_15m": True,
+        "watchdog": False,
+    }
     monkeypatch.setattr(scheduler, "_DUE_NOW", {name: (lambda now, v=v: v) for name, v in due.items()})
 
     assert scheduler.due_now(datetime(2026, 10, 6, 13, 30, tzinfo=UTC)) == ["premarket_0830", "refresh_15m"]
+
+
+def test_due_now_includes_relogin_reminder_on_sunday_at_1800_et():
+    # F2: relogin_reminder was missing from _DUE_NOW entirely, so it never ran.
+    assert "relogin_reminder" in scheduler.due_now(datetime(2026, 10, 11, 22, 0, tzinfo=UTC))
 
 
 def test_run_due_skips_jobs_that_are_not_due(monkeypatch):
@@ -4724,12 +4935,15 @@ def test_run_due_runs_jobs_in_order_with_watchdog_last(monkeypatch):
     monkeypatch.setattr(premarket, "run", lambda s, c, *, now: calls.append("premarket_0830") or JobResult("x", True))
     monkeypatch.setattr(daily_close, "run", lambda s, d, c, *, now: calls.append("daily_close") or JobResult("x", True))
     monkeypatch.setattr(weekly, "run", lambda s, c, *, now: calls.append("weekly") or JobResult("x", True))
+    monkeypatch.setattr(
+        relogin_reminder, "run", lambda s, c, *, now: calls.append("relogin_reminder") or JobResult("x", True)
+    )
     monkeypatch.setattr(refresh_15m, "run", lambda s, d, *, now: calls.append("refresh_15m") or JobResult("x", True))
     monkeypatch.setattr(watchdog, "run", lambda s, c, *, now: calls.append("watchdog") or [])
 
     scheduler.run_due(object(), _FakeSources(), JobClock(), now=datetime(2026, 10, 6, 13, 30, tzinfo=UTC))
 
-    assert calls == ["premarket_0830", "daily_close", "weekly", "refresh_15m", "watchdog"]
+    assert calls == ["premarket_0830", "daily_close", "weekly", "relogin_reminder", "refresh_15m", "watchdog"]
 
 
 def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
@@ -4741,6 +4955,7 @@ def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
     monkeypatch.setattr(premarket, "run", _boom)
     monkeypatch.setattr(daily_close, "run", lambda s, d, c, *, now: JobResult("daily_close", True))
     monkeypatch.setattr(weekly, "run", lambda s, c, *, now: JobResult("weekly", True))
+    monkeypatch.setattr(relogin_reminder, "run", lambda s, c, *, now: JobResult("relogin_reminder", True))
     monkeypatch.setattr(refresh_15m, "run", lambda s, d, *, now: JobResult("refresh_15m", True))
     monkeypatch.setattr(watchdog, "run", lambda s, c, *, now: [])
 
@@ -4751,6 +4966,7 @@ def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
     assert "boom" in by_name["premarket_0830"].error
     assert by_name["daily_close"].ok is True
     assert by_name["weekly"].ok is True
+    assert by_name["relogin_reminder"].ok is True
     assert by_name["refresh_15m"].ok is True
     assert by_name["watchdog"].ok is True
 
@@ -4778,19 +4994,174 @@ def test_a_late_wakeup_still_catches_up_premarket_exactly_once_this_call(monkeyp
 
     assert calls == [late_now]
     assert results == [JobResult("premarket_0830", True)]
+
+
+# -- F1/F2: a successful slotted job is gated by JobClock, a failed one is retried --------------
+
+
+def test_run_due_does_not_rerun_a_successful_slotted_job_the_next_minute(monkeypatch):
+    monkeypatch.setattr(scheduler, "_DUE_NOW", {**dict.fromkeys(scheduler._ORDER, lambda now: False)})
+    monkeypatch.setitem(scheduler._DUE_NOW, "daily_close", lambda now: True)
+    calls = []
+
+    def _succeed(s, d, c, *, now):
+        calls.append(now)
+        c.mark("daily_close", now.date())
+        return JobResult("daily_close", True)
+
+    monkeypatch.setattr(daily_close, "run", _succeed)
+    clock = JobClock()
+    now = datetime(2026, 10, 6, 20, 30, tzinfo=UTC)
+
+    first = scheduler.run_due(object(), _FakeSources(), clock, now=now)
+    second = scheduler.run_due(object(), _FakeSources(), clock, now=now + timedelta(minutes=1))
+
+    assert calls == [now]  # daily_close.run was never called the second time
+    assert first == [JobResult("daily_close", True)]
+    assert second == [JobResult("daily_close", ok=True, ran=False)]
+
+
+def test_run_due_retries_a_failed_slotted_job_on_the_next_tick(monkeypatch):
+    monkeypatch.setattr(scheduler, "_DUE_NOW", {**dict.fromkeys(scheduler._ORDER, lambda now: False)})
+    monkeypatch.setitem(scheduler._DUE_NOW, "daily_close", lambda now: True)
+    calls = []
+
+    def _boom(*args, **kwargs):
+        calls.append(1)
+        raise ValueError("boom")
+
+    monkeypatch.setattr(daily_close, "run", _boom)
+    clock = JobClock()
+    now = datetime(2026, 10, 6, 20, 30, tzinfo=UTC)
+
+    first = scheduler.run_due(object(), _FakeSources(), clock, now=now)
+    second = scheduler.run_due(object(), _FakeSources(), clock, now=now + timedelta(minutes=1))
+
+    assert len(calls) == 2  # a failed run never marks the clock, so the next tick retries it
+    assert first[0].ok is False
+    assert second[0].ok is False
+
+
+def test_run_due_fires_a_slotted_job_once_per_slot_across_many_ticks(monkeypatch):
+    monkeypatch.setattr(scheduler, "_DUE_NOW", {**dict.fromkeys(scheduler._ORDER, lambda now: False)})
+    monkeypatch.setitem(scheduler._DUE_NOW, "weekly", lambda now: True)
+    calls = []
+
+    def _succeed(s, c, *, now):
+        calls.append(now)
+        c.mark("weekly", now.date())
+        return JobResult("weekly", True)
+
+    monkeypatch.setattr(weekly, "run", _succeed)
+    clock = JobClock()
+    start = datetime(2026, 10, 6, 11, 0, tzinfo=UTC)
+
+    for minute in range(10):
+        scheduler.run_due(object(), _FakeSources(), clock, now=start + timedelta(minutes=minute))
+
+    assert calls == [start]  # fired exactly once across the whole 10-minute window
+
+
+# -- F4a: bounded startup retry -------------------------------------------------------------------
+
+
+class _FlakyEngine:
+    def __init__(self, fail_times: int) -> None:
+        self.fail_times = fail_times
+        self.calls = 0
+
+    def connect(self):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise OSError("database not reachable yet")
+        return _FakeConnection()
+
+
+class _FakeConnection:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def execute(self, _stmt):
+        return None
+
+
+def test_wait_for_database_returns_once_a_later_attempt_succeeds():
+    engine = _FlakyEngine(fail_times=2)
+    sleeps = []
+
+    scheduler._wait_for_database(engine, attempts=5, delay=0, sleep=sleeps.append)
+
+    assert engine.calls == 3
+    assert sleeps == [0, 0]
+
+
+def test_wait_for_database_exits_non_zero_after_exhausting_the_retry_limit():
+    engine = _FlakyEngine(fail_times=999)
+    sleeps = []
+
+    with pytest.raises(SystemExit) as exc_info:
+        scheduler._wait_for_database(engine, attempts=3, delay=0, sleep=sleeps.append)
+
+    assert exc_info.value.code == 1
+    assert engine.calls == 3
+    assert len(sleeps) == 3
+
+
+def test_wait_for_database_default_retry_limit_is_30_attempts_2s_apart():
+    assert scheduler._STARTUP_RETRY_ATTEMPTS == 30
+    assert scheduler._STARTUP_RETRY_DELAY_SECONDS == 2.0
+
+
+# -- F4b/F4c: heartbeat file + the healthcheck module ----------------------------------------------
+
+
+def test_touch_heartbeat_creates_the_file_and_its_parent_directory(tmp_path):
+    path = tmp_path / "sub" / "heartbeat"
+
+    healthcheck.touch(path)
+
+    assert path.exists()
+
+
+def test_healthcheck_is_healthy_fresh_vs_stale(tmp_path):
+    path = tmp_path / "heartbeat"
+    healthcheck.touch(path)
+    mtime = path.stat().st_mtime
+
+    assert healthcheck.is_healthy(path, now=mtime + 1) is True
+    assert healthcheck.is_healthy(path, now=mtime + healthcheck.FRESH_SECONDS + 1) is False
+
+
+def test_healthcheck_is_healthy_false_when_the_file_does_not_exist(tmp_path):
+    assert healthcheck.is_healthy(tmp_path / "missing") is False
+
+
+def test_healthcheck_main_exit_code_follows_heartbeat_freshness(tmp_path, monkeypatch):
+    path = tmp_path / "heartbeat"
+    monkeypatch.setenv(healthcheck.HEARTBEAT_PATH_VAR, str(path))
+
+    assert healthcheck.main() == 1  # no heartbeat written yet
+
+    healthcheck.touch(path)
+    assert healthcheck.main() == 0
 ```
 
-- [ ] **Step 13: Run it.**
+- [ ] **Step 14: Run it.**
 
 Run: `uv run pytest -q tests/jobs/test_clock.py tests/jobs/test_premarket.py
 tests/jobs/test_weekly.py tests/jobs/test_scheduler.py`
-Expected: `23 passed` (4 + 5 + 8 + 6, all offline).
+Expected: `34 passed` (4 + 5 + 8 + 17, all offline — `test_scheduler.py` grew from 6 to 17 tests with
+the F1/F2/F4a/F4b/F4c review fixes above).
 Run: `./scripts/test-db.sh tests/jobs/`
-Expected: `49 passed` (adds `test_daily_close.py` 6, `test_refresh_15m.py` 5,
-`test_backfill_watchlist.py` 3, `test_watchdog.py` 7, `test_relogin_reminder.py` 5 — 26 more, all
-DB-dependent files are a mix; the full-directory run is the one to trust).
+Expected: `62 passed` (adds `test_daily_close.py` 6, `test_refresh_15m.py` 5,
+`test_backfill_watchlist.py` 3, `test_watchdog.py` 7, `test_relogin_reminder.py` 7 — `
+test_relogin_reminder.py` grew from 5 to 7 tests with the F1/F3 review fixes above; the
+full-directory run is the one to trust).
 
-- [ ] **Step 14: Commit.**
+- [ ] **Step 15: Commit.**
 
 ```
 git add packages/family-desk/backend/src/ai_trading/jobs packages/family-desk/backend/tests/jobs
@@ -6419,19 +6790,23 @@ git commit -m "Desk: ai_trading.api (FastAPI, identity, REST, SSE quotes)"
 
 ---
 
-## Task 3.6: Deploy — Dockerfile, bake, compose, Caddy route, deploy.sh, app-controls
+## Task 3.6: Deploy — Dockerfile, bake, compose, Caddy route, deploy.sh
 
 **Files:**
 - Create: `packages/family-desk/backend/Dockerfile`
 - Modify: `deploy/docker-bake.hcl` (add target `desk`, add it to `group "default"`)
 - Modify: `deploy/production/docker-compose.yml` (add services `api`, `scheduler`; add network
-  `database`)
+  `database`; `scheduler` gets a `healthcheck:` running `python -m ai_trading.jobs.healthcheck`
+  — review fix F4)
 - Modify: `deploy/production/Caddyfile` (add `handle /api/desk/*`)
 - Modify: `deploy/production/deploy.sh` (2 lines: `SECRET_FILES`, `render_profiles`' call list)
-- Modify: `control/catalog.json` and `control/state.py` (Decision 5 — register `api`/`scheduler`
-  as protected)
 - No change: `deploy/production/health-check.sh` (its `SERVICES` is computed dynamically from the
   catalog now — see below)
+- **Not in this task (HELD, Decision 5):** `control/catalog.json` and `control/state.py` —
+  registering `api`/`scheduler` as protected app-controls services edits the open-source lane's
+  shared control files and waits for the owner's explicit yes (see Decision 5). Without this
+  registration, `deploy.sh`'s `apply_selected_services` does not start `api`/`scheduler` on a real
+  deploy; that registration is a separate, owner-approved follow-up, not part of this commit.
 
 **Interfaces:** no code interface; this task only needs 3.4's `jobs/scheduler.py` and 3.5's
 `api/app.py`/`api/main.py` to exist for its `command:` lines (the two existing module paths).
@@ -6442,10 +6817,10 @@ snapshot of `deploy.sh`/`health-check.sh`/`docker-compose.yml`, **before** the a
 (`control/catalog.json`, `control/state.py`, the `apply_selected_services`/`stop_disabled_groups`
 machinery) landed on `dev`. The steps below are written against the **current** real files — the
 new service blocks, the Caddy route, and the `deploy.sh` two-line diff are unchanged from the
-prototype's own content (they don't touch anything the app-controls system changed), but
-`health-check.sh` now needs **no edit at all** (explained in Step 5), and a **new** file pair
-(`control/catalog.json`/`control/state.py`) needs a 2-line change the prototype never anticipated
-(Decision 5).
+prototype's own content (they don't touch anything the app-controls system changed), and
+`health-check.sh` needs **no edit at all** (explained in Step 5). The app-controls registration
+itself (`control/catalog.json`/`control/state.py`) is Decision 5, HELD pending the owner's review —
+it is not applied by this task.
 
 - [ ] **Step 1: Create the Dockerfile.**
 
@@ -6591,10 +6966,19 @@ target "desk" {
     mem_limit: 512m
     pids_limit: 256
     security_opt: ["no-new-privileges:true"]
-    # No healthcheck block: this is a background loop with no HTTP endpoint
-    # to poll (same as market-data above). health-check.sh's service_ok()
-    # already treats a container with no Docker-level health check as
-    # passing so long as it's running.
+    healthcheck:
+      # F4: `scheduler` has no HTTP endpoint for Docker to poll (unlike
+      # `api`'s `/healthz`), so its own main loop touches a heartbeat file
+      # once per iteration (ai_trading.jobs.scheduler.main) and this
+      # healthcheck runs ai_trading.jobs.healthcheck in-process, which exits
+      # 0 only while that heartbeat is still fresh (< 180s old) -- a stuck or
+      # crashed loop stops touching it and this starts failing within one
+      # window.
+      test: ["CMD", "python", "-m", "ai_trading.jobs.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
 ```
 
 Then, in the top-level `networks:` block, add:
@@ -6631,11 +7015,12 @@ Then, in the top-level `networks:` block, add:
 
 ```
 
-No `import availability_gate desk` line (unlike the `/u/*`/`/api/*` MiroFish route): Step 6 below
-registers `api`/`scheduler` as **protected** (always-on), the same category `market-data`/`auth`/
-`gateway` are in, and no protected service's own Caddy route carries an availability gate —
-confirmed by grepping the current Caddyfile (`market-data` has no route needing one; every
-`import availability_gate <id>` line names a *toggleable* `apps` entry).
+No `import availability_gate desk` line (unlike the `/u/*`/`/api/*` MiroFish route): Decision 5
+(HELD) would register `api`/`scheduler` as **protected** (always-on), the same category
+`market-data`/`auth`/`gateway` are in, and no protected service's own Caddy route carries an
+availability gate — confirmed by grepping the current Caddyfile (`market-data` has no route
+needing one; every `import availability_gate <id>` line names a *toggleable* `apps` entry). This
+route carries no gate either way for now, since the app-controls registration itself is deferred.
 
 This makes the route exist and be correctly gated, but **not publicly reachable**: no hostname in
 `infrastructure/cloudflare/ai-trading/` points a Cloudflare Tunnel ingress rule at it yet (Decision
@@ -6670,49 +7055,13 @@ Replace with:
 
 No rename step needed (unlike `gateway` → `auth.env`): `family_config.py`'s `render` writes
 `<profile-basename>.env`, and the profile is already named `desk`. `CONFIG_FILES` already lists
-`docker-compose.yml`, `Caddyfile`, `health-check.sh`, `control/catalog.json`, and `control/state.py`
-— every file this task touches is already covered by `deploy.sh`'s existing atomic
-stage/validate/rollback machinery; no new `CONFIG_FILES` entry is needed. `prune_old_images`'s
+`docker-compose.yml`, `Caddyfile`, and `health-check.sh` — every file this task touches is already
+covered by `deploy.sh`'s existing atomic stage/validate/rollback machinery; no new `CONFIG_FILES`
+entry is needed (`control/catalog.json`/`control/state.py` are also in `CONFIG_FILES` already, for
+the hub's other apps, but this task does not touch them — Decision 5, HELD). `prune_old_images`'s
 existing `"$REGISTRY"/ai-trading-*:*` glob already covers the new `ai-trading-desk` image.
 
-- [ ] **Step 6 (Decision 5 — the finding this plan surfaces): register `api`/`scheduler` as
-  protected in the app-controls catalog.** `deploy.sh`'s `apply_selected_services`/
-  `stop_disabled_groups` no longer run a blanket `compose up`; they bring up **only** the services
-  named in `control/catalog.json`'s `protected` list or an enabled `apps` group. A service present
-  in `docker-compose.yml` but absent from both is **never started** by a real deploy. Since the
-  Desk ships no per-app Settings toggle in this phase (Decision 5), `api`/`scheduler` join
-  `protected` — the same category as `market-data`/`auth`/`gateway`.
-
-  In `control/catalog.json`, find:
-
-```json
-{"schemaVersion":1,"apps":{"tradingagents":["ta-terminal","ta-research"],"ai-hedge-fund":["ahf-terminal"],"vibe-trading":["vibe-trading"],"mirofish":["mirofish"]},"protected":["web","gateway","auth","cloudflared","market-data"]}
-```
-
-  Replace with:
-
-```json
-{"schemaVersion":1,"apps":{"tradingagents":["ta-terminal","ta-research"],"ai-hedge-fund":["ahf-terminal"],"vibe-trading":["vibe-trading"],"mirofish":["mirofish"]},"protected":["web","gateway","auth","cloudflared","market-data","api","scheduler"]}
-```
-
-  In `control/state.py`, find:
-
-```python
-_REQUIRED_PROTECTED = ("web", "gateway", "auth", "cloudflared", "market-data")
-```
-
-  Replace with:
-
-```python
-_REQUIRED_PROTECTED = ("web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler")
-```
-
-  `validate_catalog`'s `tuple(protected) != _REQUIRED_PROTECTED` check requires these two files to
-  agree exactly — both must change together. No other file hardcodes the protected list (confirmed
-  by grep: `deploy/ci/test-app-controls-deploy.sh`/`test-app-controls-gateway.sh` copy the real
-  `catalog.json` at test time rather than asserting its literal content, so they need no change).
-
-- [ ] **Step 7: Validate.** From the repository root:
+- [ ] **Step 6: Validate.** From the repository root:
 
 ```
 docker compose -f ai-trading/deploy/production/docker-compose.yml -f ai-trading/deploy/production/docker-compose.mirofish.yml config --quiet
@@ -6731,27 +7080,15 @@ assert 'ports' not in api and 'depends_on' not in api
 scheduler = cfg['services']['scheduler']
 assert scheduler['command'] == ['python', '-m', 'ai_trading.jobs.scheduler']
 assert set(scheduler['networks']) == {'database'}
+assert scheduler['healthcheck']['test'][-1] == 'ai_trading.jobs.healthcheck'  # F4d
 assert cfg['networks']['database']['external'] is True or cfg['networks']['database']['external']['name'] == 'postgres_default'
 print('ok')
 "
 ```
 
-Expected: `ok`. Then:
+Expected: `ok`.
 
-```
-python3 -c "import json; json.load(open('ai-trading/control/catalog.json'))" && echo "catalog.json parses"
-python3 -c "
-import sys
-sys.path.insert(0, 'ai-trading/control')
-import state
-assert 'api' in state.PROTECTED_SERVICES and 'scheduler' in state.PROTECTED_SERVICES
-print('protected services include api, scheduler')
-"
-```
-
-Expected: both lines print.
-
-- [ ] **Step 8: Run the two existing, unmodified offline deploy test scripts against the edited
+- [ ] **Step 7: Run the two existing, unmodified offline deploy test scripts against the edited
   files.**
 
 ```
@@ -6761,16 +7098,19 @@ bash deploy/ci/test-render-env.sh
 ```
 
 Expected: `RESULT: GREEN -- 54 cases, 0 failures` and `14 checks passed (render-env.sh)` — these
-two scripts are unaffected by the healthz fix or the app-controls catalog change (they test
+two scripts are unaffected by the healthz fix or the scheduler healthcheck change (they test
 `deploy.sh`'s secret-staging/rollback machinery and the CI-side Cloudflare tunnel-token fetch,
 neither of which this task's changes touch).
 
-- [ ] **Step 9: Commit.**
+- [ ] **Step 8: Commit.**
 
 ```
-git add packages/family-desk/backend/Dockerfile deploy/docker-bake.hcl deploy/production/docker-compose.yml deploy/production/Caddyfile deploy/production/deploy.sh control/catalog.json control/state.py
-git commit -m "Desk: deploy (Dockerfile, bake, compose, Caddy route, app-controls registration)"
+git add packages/family-desk/backend/Dockerfile deploy/docker-bake.hcl deploy/production/docker-compose.yml deploy/production/Caddyfile deploy/production/deploy.sh
+git commit -m "Desk: deploy (Dockerfile, bake, compose, Caddy route)"
 ```
+
+Decision 5's app-controls registration (`control/catalog.json`, `control/state.py`) is HELD — it is
+a separate, owner-approved follow-up commit, not part of this one.
 
 ---
 
@@ -6913,8 +7253,11 @@ uv sync
 uv run pytest -q -rs
 ```
 
-Expected: `649 passed, 0 failed, 105 skipped` (every skip is a DB-dependent test — 104 from before
-this plan's new work plus the 1 new `test_healthz.py` DB test).
+Expected: `660 passed, 0 failed, 107 skipped` (every skip is a DB-dependent test — 105 from before
+this review fix plus the 2 new `test_relogin_reminder.py` DB-dependent tests this fix added, F1/F3;
+of the 13 total tests this review fix added across `tests/jobs/test_scheduler.py` and
+`tests/jobs/test_relogin_reminder.py`, 11 are offline and 2 need the database — 649+11=660 passed,
+105+2=107 skipped, 754+13=767 collected).
 
 Run:
 
@@ -6922,10 +7265,10 @@ Run:
 ./scripts/test-db.sh
 ```
 
-Expected: `754 passed, 0 failed in <about 37s>` (the integrated prototype's own 750, plus the 4 new
-`test_healthz.py` tests). Confirm no stray container: `docker ps --format '{{.Names}}'` must not
-list a `desk-test-postgres-*` name after this command exits, and the host's pre-existing
-`lock-test-*` container (if any) must be untouched.
+Expected: `767 passed, 0 failed in <about 32s>` (754 from before this review fix, plus the 13 new
+tests this fix added across `test_scheduler.py` and `test_relogin_reminder.py`). Confirm no stray
+container: `docker ps --format '{{.Names}}'` must not list a `desk-test-postgres-*` name after this
+command exits, and the host's pre-existing `lock-test-*` container (if any) must be untouched.
 
 Run:
 
@@ -6934,21 +7277,22 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-Expected: `Ruff: No issues found` (lint) and `128 files already formatted` (ruff's own count — one
-source file, `src/ai_trading/contracts/strategy_spec_v1.py`, is excluded by
-`extend-exclude`, so the 129 tracked `.py` files under this package become 128 checked).
+Expected: `Ruff: No issues found` (lint) and `129 files already formatted` (ruff's own count — one
+new source file, `src/ai_trading/jobs/healthcheck.py` (F4c), joined the tracked set; one source
+file, `src/ai_trading/contracts/strategy_spec_v1.py`, is excluded by `extend-exclude`, so the 130
+tracked `.py` files under this package become 129 checked).
 
 - [ ] **Step 6: Re-run the deploy offline suites once more, for the record.**
 
 ```
-cd ../../../  # repository root
+cd ../../../../  # repository root (packages/family-desk/backend -> ai-trading -> repo root is 4 levels, not 3)
 bash ai-trading/deploy/ci/test-deploy-firestore.sh
 bash ai-trading/deploy/ci/test-render-env.sh
 ```
 
 Expected: `RESULT: GREEN -- 54 cases, 0 failures` and `14 checks passed (render-env.sh)` (Task
-3.6's Step 8 numbers, unchanged — these two scripts don't exercise `/healthz` or the app-controls
-catalog).
+3.6's Step 7 numbers, unchanged — these two scripts don't exercise `/healthz` or the scheduler
+healthcheck).
 
 - [ ] **Step 7: Commit.**
 
@@ -6968,6 +7312,15 @@ delivery authorization applies (AGENTS.md): after Task 3.7's verification is gre
 `health-check.sh` and confirm `api`/`scheduler` report healthy, and that the shared
 `family-app-postgres` cluster is reachable, before declaring the phase complete.
 
+**Decision 5 is HELD, separately from this release.** `ai-trading/control/catalog.json` and
+`ai-trading/control/state.py` are not part of this phase's release paths — until the owner approves
+Decision 5 and that 2-line registration lands in its own commit, `deploy.sh`'s
+`apply_selected_services` will **not** start `api`/`scheduler` on a real deploy (their compose
+blocks exist, but neither name is in `catalog.json`'s `protected` list), and `health-check.sh`'s
+dynamic `SERVICES` list will not include them either. Step 4's live verification below assumes
+Decision 5 has already been approved and applied; if it hasn't, the containers simply won't be
+running yet and Step 4 should be treated as blocked, not failed.
+
 - [ ] **Step 1: Confirm the scoped release paths.** This is the **first** `main` release carrying
   Desk code (02c). The release branch (from `origin/main`) carries only:
 
@@ -6977,18 +7330,18 @@ delivery authorization applies (AGENTS.md): after Task 3.7's verification is gre
   - `ai-trading/deploy/production/docker-compose.yml`
   - `ai-trading/deploy/production/Caddyfile`
   - `ai-trading/deploy/production/deploy.sh`
-  - `ai-trading/control/catalog.json`
-  - `ai-trading/control/state.py`
   - `infrastructure/vps/apps/ai-trading-desk.conf`
 
+  **Not in this release** (HELD, Decision 5): `ai-trading/control/catalog.json` and
+  `ai-trading/control/state.py` — that registration ships separately once the owner approves it.
+
   **Shared files touched beyond this phase's own lines** (confirm the diff contains nothing else):
-  `deploy/production/docker-compose.yml`, `deploy/production/Caddyfile`, `deploy/production/deploy.sh`,
-  `control/catalog.json`, `control/state.py` are all shared with the hub's four existing apps
-  (TradingAgents, ai-hedge-fund, Vibe-Trading, MiroFish) and the expense-tax stack's own use of the
-  shared Postgres cluster's network name. They must change **only** by the exact lines Tasks 3.6
-  names — never reformat, never touch another app's service block, and never touch anything under
-  `expense-tax-management/`. Never merge all of `dev` into `main` (would also release unrelated
-  expense-tax-management phases) — AGENTS.md.
+  `deploy/production/docker-compose.yml`, `deploy/production/Caddyfile`, `deploy/production/deploy.sh`
+  are all shared with the hub's four existing apps (TradingAgents, ai-hedge-fund, Vibe-Trading,
+  MiroFish) and the expense-tax stack's own use of the shared Postgres cluster's network name. They
+  must change **only** by the exact lines Task 3.6 names — never reformat, never touch another
+  app's service block, and never touch anything under `expense-tax-management/`. Never merge all of
+  `dev` into `main` (would also release unrelated expense-tax-management phases) — AGENTS.md.
 
 - [ ] **Step 2: VPS onboarding (operator, one time, before the first deploy that includes this
   phase).**
@@ -7023,15 +7376,13 @@ delivery authorization applies (AGENTS.md): after Task 3.7's verification is gre
      `packages/family-desk/backend/` on a host that can reach the VPS's Postgres (or via an
      operator one-shot container using the built `ai-trading-desk` image).
 
-- [ ] **Step 3: Backup confirmation (Decision 15).** Before or shortly after this phase's first
-  live deploy, get the owner's explicit confirmation that `ai_trading_desk_db`'s dump riding inside
-  the one shared `family-app-backup.service` archive (named individually as
-  `dumps/ai_trading_desk_db.dump` in `manifest.json`) satisfies the original "Desk-specific GCS
-  prefix" intent. No code or config action needed either way — this is a sign-off, not a build
-  step. If the owner wants a literal per-app prefix instead, that is new scope for a later phase
-  (a second backup run / `BACKUP_HOST_ID`), not a correction to this phase's work.
+**Decision 15 is approved — no backup confirmation step needed.** Approved by the owner,
+2026-10-12: the Desk database rides in the existing combined backup archive (`backup.sh` dumps
+every cluster database into one archive per host). No separate prefix. No confirmation pending.
+`ai_trading_desk_db`'s dump is named individually as `dumps/ai_trading_desk_db.dump` inside that
+one shared `family-app-backup.service` archive — nothing further to build or sign off on here.
 
-- [ ] **Step 4: Restore drill (operator, before relying on backups for this data).** Confirm
+- [ ] **Step 3: Restore drill (operator, before relying on backups for this data).** Confirm
   `infrastructure/backup/restore.sh` (or its documented manual procedure) can restore
   `ai_trading_desk_db` specifically out of the shared archive's `manifest.json`, into a scratch
   database, and that `alembic current` on the restored copy reports `0002` — proving the restore
@@ -7040,11 +7391,13 @@ delivery authorization applies (AGENTS.md): after Task 3.7's verification is gre
   already covers the database the moment it exists), but it must happen before the Desk is trusted
   with real strategies/alerts.
 
-- [ ] **Step 5: First live verification.** After the release lands on `main` and `deploy.sh` runs
-  against the real VPS:
+- [ ] **Step 4: First live verification.** After the release lands on `main` and `deploy.sh` runs
+  against the real VPS (and Decision 5's separate app-controls registration has been approved and
+  applied — see the HELD note above; until then `api`/`scheduler` are not started by a real deploy
+  at all):
 
-  1. `health-check.sh` reports `api`/`scheduler` healthy (its dynamic `SERVICES` list now includes
-     both, via Decision 5's catalog change).
+  1. `health-check.sh` reports `api`/`scheduler` healthy (its dynamic `SERVICES` list includes both
+     once Decision 5's catalog change has landed).
   2. `curl -fsS https://<the Caddy host>:8080/api/desk/strategies` (unauthenticated) returns `401`
      — proving the gateway's `forward_auth` actually gates the new route in production, not just in
      the offline Caddy check.
@@ -7078,9 +7431,9 @@ have work to do.
   "summary" bias + Classic pivots) — no new table or endpoint needed, the function is already
   pure and ready to call from a route this phase would add.
 - If the Desk ever needs a user-facing on/off switch in the hub's `/settings` page, that is new
-  scope on top of Decision 5 (today `api`/`scheduler` are simply always on, like `market-data`) —
-  would need a new `apps["desk"]` catalog entry and `_REQUIRED_APP_IDS` update, not a correction to
-  this phase.
+  scope on top of Decision 5 (HELD — once approved, `api`/`scheduler` are meant to simply always be
+  on, like `market-data`) — would need a new `apps["desk"]` catalog entry and `_REQUIRED_APP_IDS`
+  update, not a correction to this phase.
 - `trading.tobytran.dev` moves from `web:3000` to the Desk's own frontend here (AGENTS.md
   hostnames); the Cloudflare Tunnel ingress rule for `/api/desk/*` that D-b deliberately deferred
   also needs to exist before this route is publicly reachable.
@@ -7106,7 +7459,7 @@ have work to do.
   this phase, do it then — extending both jobs to fan out per-channel deliveries is small and
   additive, not a blocker for this phase's own paper-order work.
 
-**The restore drill (Task 3.8, Step 4):** keep re-running it after any future phase adds a new
+**The restore drill (Task 3.8, Step 3):** keep re-running it after any future phase adds a new
 table to the Desk's schema — the drill proves `alembic current` on the restored copy reports the
 *latest* revision at the time of the drill, not just `0002`.
 </content>
