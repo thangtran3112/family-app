@@ -235,6 +235,7 @@ status1=0
   install_fake_docker "$s1"
   install_fake_systemctl "$s1"
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -301,6 +302,7 @@ status2=0
   # installed this run's NEW content (forcing a real "mid/late-transaction
   # failure", not merely a staging-phase one) -- `compose up` itself fails.
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -316,6 +318,7 @@ status2=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -371,6 +374,7 @@ status3=0
   # the defaults (not active/not enabled) are what a fresh unit would be.
   install_fake_systemctl "$s3"
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -386,6 +390,7 @@ status3=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -542,6 +547,7 @@ status7=0
   export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG HEALTH_CHECK_ATTEMPTS
   install_fake_systemctl "$s7" 0 0
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   runuser() {
     echo "fake runuser $*" >>"$APP_DIR/runuser.log"
     # Drop "-u <user> --" and run the rest (curl) for real, against the
@@ -551,12 +557,14 @@ status7=0
   }
   export -f runuser
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   curl() {
     echo "fake curl $*" >>"$APP_DIR/curl.log"
     return 0
   }
   export -f curl
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -583,6 +591,7 @@ status7=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -695,6 +704,7 @@ status9=0
   # No prior unit exists -- UNIT_PRIOR_EXISTED=0, same as Case 3.
   install_fake_systemctl "$s9"
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   runuser() {
     echo "fake runuser $*" >>"$APP_DIR/runuser.log"
     shift 3
@@ -702,12 +712,14 @@ status9=0
   }
   export -f runuser
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   curl() {
     echo "fake curl $*" >>"$APP_DIR/curl.log"
     return 0
   }
   export -f curl
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -746,6 +758,7 @@ status9=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -800,6 +813,7 @@ status10=0
   # must actually verify it is up, same as any other matching-version rollback.
   install_fake_systemctl "$s10" 0 0
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   runuser() {
     echo "fake runuser $*" >>"$APP_DIR/runuser.log"
     shift 3
@@ -807,12 +821,14 @@ status10=0
   }
   export -f runuser
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   curl() {
     echo "fake curl $*" >>"$APP_DIR/curl.log"
     return 0
   }
   export -f curl
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -847,6 +863,7 @@ status10=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
@@ -906,6 +923,7 @@ status11=0
   # The untouched prior unit is genuinely ACTIVE and ENABLED.
   install_fake_systemctl "$s11" 0 0
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   runuser() {
     echo "fake runuser $*" >>"$APP_DIR/runuser.log"
     shift 3
@@ -913,12 +931,14 @@ status11=0
   }
   export -f runuser
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   curl() {
     echo "fake curl $*" >>"$APP_DIR/curl.log"
     return 0
   }
   export -f curl
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   docker() {
     echo "fake docker $*" >>"$APP_DIR/docker.log"
     case "${1:-}" in
@@ -945,6 +965,7 @@ status11=0
   }
   export -f docker
   # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
   stat() {
     if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
       printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
