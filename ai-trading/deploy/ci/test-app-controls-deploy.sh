@@ -668,6 +668,207 @@ except BlockingIOError:
 [[ "$status8" == 0 ]] || fail "case8: $(cat <<<"child CLI/inherited-lock scenario failed, see stderr above")"
 echo "    exit=$status8"
 
+echo "=== Case 9 (RED->rollback, final-review Important #1): a GENUINE FIRST ACTIVATION with a valid pre-controls last-good-tag rolls back to that tag -- the redeploy's own REAL health-check.sh must pass WITHOUT the just-stopped/disabled control helper, never loop for HEALTH_CHECK_ATTEMPTS and report 'rollback ... failed too' ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s9="$(new_scratch case9)"
+cp "$HEALTH_SH" "$s9/config-staging/health-check.sh"
+chmod 0755 "$s9/config-staging/health-check.sh"
+seed_control_state "$s9/control-state"
+printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$s9/app/last-good-tag"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s9/secrets/$name"
+  chmod 0600 "$s9/secrets/$name"
+done
+status9=0
+(
+  APP_DIR="$s9/app"
+  AI_TRADING_SECRETS_DIR="$s9/secrets"
+  ENV_STAGING_DIR="$s9/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s9/config-staging"
+  AI_TRADING_STATE_DIR="$s9/control-state"
+  AI_TRADING_UNIT_DIR="$s9/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s9/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=9999999999999999999999999999999999999999
+  HEALTH_CHECK_ATTEMPTS=1
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG HEALTH_CHECK_ATTEMPTS
+  # No prior unit exists -- UNIT_PRIOR_EXISTED=0, same as Case 3.
+  install_fake_systemctl "$s9"
+  # shellcheck disable=SC2329
+  runuser() {
+    echo "fake runuser $*" >>"$APP_DIR/runuser.log"
+    shift 3
+    "$@"
+  }
+  export -f runuser
+  # shellcheck disable=SC2329
+  curl() {
+    echo "fake curl $*" >>"$APP_DIR/curl.log"
+    return 0
+  }
+  export -f curl
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" up -d --no-deps"*)
+            # Fail only THIS run's own (new-tag) activation attempt; a
+            # later redeploy of the previous tag (rollback's own
+            # `deploy_tag "$previous"`) must succeed, exactly like a real
+            # "bad new release, good old one" rollback.
+            local n
+            n="$(cat "$APP_DIR/up_attempts.count" 2>/dev/null || echo 0)"
+            n=$((n + 1))
+            echo "$n" >"$APP_DIR/up_attempts.count"
+            [[ "$n" -eq 1 ]] && return 1
+            return 0
+            ;;
+          *" ps -q "*)
+            echo fakecontainerid
+            return 0
+            ;;
+          *" exec -T web "*) return 0 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      inspect)
+        case "$3" in
+          *State.Status*) echo running ;;
+          *) echo healthy ;;
+        esac
+        return 0
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$DEPLOY_SH" >"$s9/stdout.log" 2>"$s9/stderr.log"
+) || status9=$?
+if [[ "$status9" == 0 ]]; then
+  fail "case9: expected non-zero exit for the forced first deploy_tag failure (the original failure's exit code must still be reported), got 0: $(cat "$s9/stdout.log" 2>/dev/null)"
+fi
+grep -q 'rollback to .* failed too' "$s9/stderr.log" 2>/dev/null \
+  && fail "case9: the redeploy of the previous (pre-controls) tag must succeed, not report 'rollback ... failed too': $(cat "$s9/stderr.log" 2>/dev/null)"
+grep -q 'all services healthy; app controls ready; tunnel connected' "$s9/stdout.log" 2>/dev/null \
+  || fail "case9: expected the redeploy's own real health-check.sh to report success: $(cat "$s9/stdout.log" "$s9/stderr.log" 2>/dev/null)"
+grep -q 'is-active.*ai-trading-control.service' "$s9/systemctl.log" 2>/dev/null \
+  && fail "case9: a genuine first activation's rollback has no matching prior helper to verify -- control_helper_ready() must never be invoked for this redeploy's health check: $(cat "$s9/systemctl.log" 2>/dev/null)"
+grep -qx 'fake systemctl stop ai-trading-control.service' "$s9/systemctl.log" 2>/dev/null || fail "case9: a genuine first activation must still be STOPPED on rollback"
+grep -qx 'fake systemctl disable ai-trading-control.service' "$s9/systemctl.log" 2>/dev/null || fail "case9: a genuine first activation must still be DISABLED on rollback"
+[[ "$(cat "$s9/app/up_attempts.count" 2>/dev/null || echo 0)" -ge 2 ]] || fail "case9: expected a second 'compose up' attempt during the previous tag's redeploy"
+echo "    exit=$status9"
+
+echo "=== Case 10 (GREEN, final-review Important #1 positive control): a rollback restoring a GENUINELY PRIOR, previously-ACTIVE control helper must still VERIFY it via the real health-check.sh -- the skip added for Case 9 must never apply when a matching prior unit exists ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s10="$(new_scratch case10)"
+cp "$HEALTH_SH" "$s10/config-staging/health-check.sh"
+chmod 0755 "$s10/config-staging/health-check.sh"
+seed_control_state "$s10/control-state" '{"schemaVersion":1,"revision":5,"desired":{"tradingagents":false,"ai-hedge-fund":true,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+seed_prior_artifacts "$s10" "case10-prior"
+printf '%s\n' bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb >"$s10/app/last-good-tag"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s10/secrets/$name"
+  chmod 0600 "$s10/secrets/$name"
+done
+status10=0
+(
+  APP_DIR="$s10/app"
+  AI_TRADING_SECRETS_DIR="$s10/secrets"
+  ENV_STAGING_DIR="$s10/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s10/config-staging"
+  AI_TRADING_STATE_DIR="$s10/control-state"
+  AI_TRADING_UNIT_DIR="$s10/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s10/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=1010101010101010101010101010101010101010
+  HEALTH_CHECK_ATTEMPTS=1
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG HEALTH_CHECK_ATTEMPTS
+  # The prior unit is reported ACTIVE and ENABLED -- restore_or_remove_unit()
+  # restarts (never stops/disables) it, and this run's redeploy health-check
+  # must actually verify it is up, same as any other matching-version rollback.
+  install_fake_systemctl "$s10" 0 0
+  # shellcheck disable=SC2329
+  runuser() {
+    echo "fake runuser $*" >>"$APP_DIR/runuser.log"
+    shift 3
+    "$@"
+  }
+  export -f runuser
+  # shellcheck disable=SC2329
+  curl() {
+    echo "fake curl $*" >>"$APP_DIR/curl.log"
+    return 0
+  }
+  export -f curl
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" up -d --no-deps"*)
+            local n
+            n="$(cat "$APP_DIR/up_attempts.count" 2>/dev/null || echo 0)"
+            n=$((n + 1))
+            echo "$n" >"$APP_DIR/up_attempts.count"
+            [[ "$n" -eq 1 ]] && return 1
+            return 0
+            ;;
+          *" ps -q "*)
+            echo fakecontainerid
+            return 0
+            ;;
+          *" exec -T web "*) return 0 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      inspect)
+        case "$3" in
+          *State.Status*) echo running ;;
+          *) echo healthy ;;
+        esac
+        return 0
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$DEPLOY_SH" >"$s10/stdout.log" 2>"$s10/stderr.log"
+) || status10=$?
+if [[ "$status10" == 0 ]]; then
+  fail "case10: expected non-zero exit for the forced first deploy_tag failure, got 0: $(cat "$s10/stdout.log" 2>/dev/null)"
+fi
+grep -q 'rollback to .* failed too' "$s10/stderr.log" 2>/dev/null \
+  && fail "case10: the redeploy of the previous tag (matching prior, active helper restored) must succeed: $(cat "$s10/stderr.log" 2>/dev/null)"
+grep -q 'all services healthy; app controls ready; tunnel connected' "$s10/stdout.log" 2>/dev/null \
+  || fail "case10: expected the redeploy's own real health-check.sh to report success: $(cat "$s10/stdout.log" "$s10/stderr.log" 2>/dev/null)"
+grep -q 'is-active.*ai-trading-control.service' "$s10/systemctl.log" 2>/dev/null \
+  || fail "case10: a rollback restoring a matching, previously-active prior helper must still be VERIFIED by control_helper_ready() -- the Case 9 skip must not generalize to this scenario: $(cat "$s10/systemctl.log" 2>/dev/null)"
+grep -q 'fake runuser' "$s10/app/runuser.log" 2>/dev/null || fail "case10: expected control_helper_ready() to actually run during this redeploy's health check"
+echo "    exit=$status10"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then

@@ -949,6 +949,22 @@ rollback() {
   fi
   if [[ -n "$previous" && "$previous" != "$IMAGE_TAG" ]]; then
     echo "deploy: failed with status $status; rolling back to $previous" >&2
+    # final whole-branch review, Important #1: a genuine first activation
+    # (no prior unit existed -- restore_or_remove_unit above just stopped
+    # and disabled the helper it installed moments ago, by design) has no
+    # matching prior helper version to verify. The scratch health-check.sh
+    # this redeploy runs unconditionally requires an ACTIVE control helper
+    # otherwise, so without this it loops for the full
+    # HEALTH_CHECK_ATTEMPTS x HEALTH_CHECK_DELAY_SECONDS budget and then
+    # misreports this correct redeploy as "rollback ... failed too" even
+    # though the three real apps are already restored and running. Only
+    # this one specific case skips the check: UNIT_PRIOR_EXISTED==1 means
+    # restore_or_remove_unit restored and (if it was active) restarted a
+    # genuinely matching prior version, which the health check must keep
+    # verifying exactly as before.
+    if [[ "$UNIT_PRIOR_EXISTED" != 1 ]]; then
+      export HEALTH_CHECK_SKIP_CONTROL=1
+    fi
     deploy_tag "$previous" || echo "deploy: rollback to $previous failed too" >&2
   else
     echo "deploy: failed with status $status; no earlier tag to roll back to" >&2

@@ -184,7 +184,11 @@ controllable and stays always-on.
   about-to-be-discarded new one) and either restarts it (if the prior unit
   was active) or, on a genuine first activation with no prior version,
   stops and disables the just-installed unit — never leaving an
-  orphaned, now-unknown-version helper running.
+  orphaned, now-unknown-version helper running. That redeploy's own
+  health check skips verifying the control helper only in this one
+  case (no matching prior version to check against); it still requires
+  every other selected service and the tunnel, and still verifies the
+  helper normally whenever a prior version was restored.
 - **Preference snapshot across a deploy:** before `deploy.sh` touches any
   secret, config, or unit file, it snapshots the current desired on/off
   choices (`control/state.py snapshot`) to a private file under
