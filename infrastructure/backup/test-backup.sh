@@ -279,10 +279,12 @@ else
   trap 'rm -rf "$d" "$receipts_dir"' EXIT
   staging="$d/staging"; mkdir -p "$staging/dumps"
   echo '-- fake globals' > "$staging/globals.sql"
+  echo '-- fake role settings' > "$staging/role-settings.sql"
   echo 'fake dump 1' > "$staging/dumps/db1.dump"
   jq -n --arg v "17.4" \
     '{postgresql_version:$v, databases:["db1"], files:[
       {name:"globals.sql", bytes: 16, sha256: "'"$(sha256_file "$staging/globals.sql")"'"},
+      {name:"role-settings.sql", bytes: 22, sha256: "'"$(sha256_file "$staging/role-settings.sql")"'"},
       {name:"dumps/db1.dump", bytes: 12, sha256: "'"$(sha256_file "$staging/dumps/db1.dump")"'"}
     ]}' > "$staging/database-inventory.json"
 
