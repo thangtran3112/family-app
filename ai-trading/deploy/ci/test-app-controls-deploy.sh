@@ -1243,10 +1243,40 @@ EOF
   echo "=== Install Case 11 (GREEN): an existing stack adopts ANY actually running app, including MiroFish, instead of the fresh-host defaults ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   mkdir -p "$IROOT/override11"
+  # Hardened docker ps contract (was: ignored --format entirely and always
+  # printed a fixed, bare service-name list -- a real Docker daemon rejects
+  # install.sh's actual format template `{{index .Labels "..."}}` with
+  # "cannot index slice/array with type string" because `ps`'s own .Labels
+  # is a flat string, not a map, unlike `docker inspect`'s .Config.Labels.
+  # This fake now actually inspects the --format argument it is given and
+  # fails exactly like real Docker would for that broken accessor, so a
+  # regression back to `index .Labels` fails THIS install case, not just
+  # the separate genuine-Docker probe below.
   cat >"$IROOT/override11/docker" <<'EOF'
 #!/bin/bash
 if [[ "$1" == info ]]; then echo '[{"Name":"seccomp"}]'; exit 0; fi
-if [[ "$1" == ps ]]; then printf 'mirofish\nvibe-trading\n'; exit 0; fi
+if [[ "$1" == ps ]]; then
+  format=""
+  prev=""
+  for arg in "$@"; do
+    [[ "$prev" == --format ]] && format="$arg"
+    prev="$arg"
+  done
+  case "$format" in
+    *'index .Labels'*)
+      echo 'failed to execute template: template: :1:2: executing "" at <index .Labels "com.docker.compose.service">: error calling index: cannot index slice/array with type string' >&2
+      exit 1
+      ;;
+    '{{.Label "com.docker.compose.service"}}')
+      printf 'mirofish\nvibe-trading\n'
+      exit 0
+      ;;
+    *)
+      echo "fake docker ps: unexpected --format: $format" >&2
+      exit 1
+      ;;
+  esac
+fi
 exit 0
 EOF
   chmod +x "$IROOT/override11/docker"
@@ -1294,6 +1324,30 @@ echo VERIFY_OK
     echo "    exit=$rc12"
   else
     echo "    SKIP: debian:12-slim/apt-get unavailable -- real systemd-analyze probe not run"
+  fi
+
+  echo "=== Install Case 13 (GREEN, genuine Docker probe, task-5-review no-other-callers follow-up): the EXACT 'docker ps --format' template install.sh ships -- read from install.sh itself, never a hardcoded copy -- is run by the REAL local Docker daemon against a disposable, network-disabled, uniquely-labeled dummy container, and must correctly extract its compose-service label. Guards production even if a test-only fake's contract goes stale again: no Docker socket is mounted into any fixture above, and no ai-trading/expense container, image, volume, or real username is touched. =="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  probe_format="$(awk '/docker ps --filter/{found=1} found && /--format/{print; exit}' "$INSTALL_SH" \
+    | grep -oE "'\{\{[^']*\}\}'" | sed -E "s/^'(.*)'\$/\1/")"
+  if [[ -z "$probe_format" ]]; then
+    install_fail "install13: could not read install.sh's own 'docker ps --format' template"
+  else
+    probe_id="ai-trading-install-probe-$$"
+    probe_service="probe-service-$$"
+    rc13=0
+    (
+      trap 'docker rm -f "$probe_id" >/dev/null 2>&1 || true' EXIT
+      docker run -d --network none \
+        --label "com.docker.compose.project=$probe_id" \
+        --label "com.docker.compose.service=$probe_service" \
+        --name "$probe_id" busybox:1 sleep 30 >/dev/null
+      probe_got="$(docker ps --filter "label=com.docker.compose.project=$probe_id" --format "$probe_format")"
+      [[ "$probe_got" == "$probe_service" ]] \
+        || { echo "install13: expected '$probe_service' from the real daemon via install.sh's own template '$probe_format', got '$probe_got'" >&2; exit 1; }
+    ) 2>"$IROOT/install13-stderr.log" || rc13=$?
+    [[ "$rc13" == 0 ]] || install_fail "install13: $(cat "$IROOT/install13-stderr.log" 2>/dev/null)"
+    echo "    exit=$rc13"
   fi
 
   echo
