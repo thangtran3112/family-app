@@ -266,10 +266,19 @@ services:
     mem_limit: 512m
     pids_limit: 256
     security_opt: ["no-new-privileges:true"]
-    # No healthcheck block: this is a background loop with no HTTP endpoint
-    # to poll (same as market-data above). health-check.sh's service_ok()
-    # already treats a container with no Docker-level health check as
-    # passing so long as it's running.
+    healthcheck:
+      # F4: `scheduler` has no HTTP endpoint for Docker to poll (unlike
+      # `api`'s `/healthz`), so its own main loop touches a heartbeat file
+      # once per iteration (ai_trading.jobs.scheduler.main) and this
+      # healthcheck runs ai_trading.jobs.healthcheck in-process, which exits
+      # 0 only while that heartbeat is still fresh (< 180s old) -- a stuck or
+      # crashed loop stops touching it and this starts failing within one
+      # window.
+      test: ["CMD", "python", "-m", "ai_trading.jobs.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
 
 networks:
   hub: {}
