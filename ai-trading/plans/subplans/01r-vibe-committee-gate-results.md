@@ -18,10 +18,10 @@
 | Bridge contract | 12 passing; image health 200, unauthorized 401, missing-key 503 |
 | Family Desk backend against the additive shared type | 660 passing, 107 skipped; Ruff clean |
 | Family Desk contracts and hub frontend | TypeScript clean; contracts 47/47, hub 109/109 |
-| Fork backend at `602bca5` | 17,612 passing, 77 skipped; 24 upstream/library warnings |
+| Fork backend at `6e56e7b` | 17,614 passing, 77 skipped; 24 upstream/library warnings |
 | Fork frontend | TypeScript clean; Vitest 770/770; production build succeeded |
 | Deploy rollback and app controls | 56/56 render/rollback cases, 16/16 app-control shell cases, 13/13 installer cases, 120/120 control unit tests |
-| Full images/Caddy/Clerk | Docker Bake loaded all default images at fork `602bca5`; full real-Caddy smoke passed. MiroFish static export built separately |
+| Full images/Caddy/Clerk | Docker Bake loaded all default images at fork `6e56e7b`; full real-Caddy smoke passed. MiroFish static export built separately |
 | CI/config and evaluation tooling | `actionlint` clean; ShellCheck 0.9 with `-x` clean; Compose private-network/no-port check passed; golden tooling 51/51 |
 | Bridge footprint | 67.5 MiB local image; 54.46 MiB idle container memory (`--network none --read-only`) |
 
@@ -31,9 +31,9 @@ Targeted RED→GREEN tests cover source month versus fetch time (45-day bound), 
 
 The first local `gpt-6.1-sol` / `xhigh` pass used an earlier fork process. R07 completed in 1,472s without an own rating or target; F17 failed after 2,313s when the parent stall watchdog raced the committee's 1,800s wait. That failure motivated fork `488b429`; those runs **do not certify the final code**. The local browser showed F17's tool-stage progress without draft text, and sampled SSE replay contained no reasoning tail, tool preview or raw swarm report.
 
-An isolated Sol server running fork `eaf179a` completed F17 in 2,139s and R07 in 1,592s: both `completed` with no own rating/target, but both returned only the 95-character fixed fallback despite 24 and 21 tool calls. Unconditional generative rewriting discarded potentially safe analysis; fork `602bca5` first scans, independently classifies and revalidates the original prose before two bounded rewrite attempts, and persists a metadata-only release-check verdict. Fresh `xhigh` F17/R07 runs of that fix and post-reload history are **pending**. No model winner is declared: SP3's two calibration disagreements still require human adjudication. The `ai-trading/consensus` Firestore profile is absent, so live Finnhub corroboration and any own verdict/target are unavailable; the approved positive path is verified only with offline fake-source fixtures, **not** a live free Finnhub call.
+An isolated Sol server running fork `eaf179a` completed F17 in 2,139s and R07 in 1,592s: both `completed` with no own rating/target, but both returned only the 95-character fixed fallback despite 24 and 21 tool calls. A subsequent `602bca5` rerun also completed safely but returned the same fallback (F17 1,881s, R07 1,761s). The additional check had been revalidating an already-grounded, flagged release that existing Vibe intentionally permits; a real-ledger test proved that exact text fails a second `revalidate()` with `numeric_claim_conflict`. Fork `6e56e7b` accepts only the ledger's exact in-memory release hash after scanner and classifier checks; changed text still revalidates. A diagnostic `xhigh` R07 from the preceding fork and final-code F17/R07 quality verification remain **pending**. No model winner is declared: SP3's two calibration disagreements still require human adjudication. The `ai-trading/consensus` Firestore profile is absent, so live Finnhub corroboration and any own verdict/target are unavailable; the approved positive path is verified only with offline fake-source fixtures, **not** a live free Finnhub call.
 The offline golden scorer previously marked R07 `committee_missing` because safe session trails hide the automatic committee's run ID. Its parent-run proof check now yields no hard policy issue for either completed `eaf179a` case; it does **not** call an analysis-only proof an approved committee. Fresh `602bca5` output still needs scoring.
 
 ## Delivery state
 
-Fork `family-app` is pushed through `602bca5` and pinned in the isolated superproject branch; the superproject has not been pushed. Finished-phase `dev` PR, scoped `main` release, VPS deploy, CI and production browser verification have not yet happened. SP5 deploy-safe recovery remains a separate phase.
+Fork `family-app` is pushed through `6e56e7b` and pinned in the isolated superproject branch; the superproject has not been pushed. Finished-phase `dev` PR, scoped `main` release, VPS deploy, CI and production browser verification have not yet happened. SP5 deploy-safe recovery remains a separate phase.
