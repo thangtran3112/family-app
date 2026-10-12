@@ -112,6 +112,7 @@ services:
     environment:
       # Trust X-Forwarded-Proto from the tunnel so the same-site check sees https.
       FORWARDED_ALLOW_IPS: "*"
+      VIBE_CONSENSUS_URL: http://vibe-consensus:8000
     volumes:
       - vibe-runs:/app/agent/runs
       - vibe-sessions:/app/agent/sessions
@@ -136,6 +137,27 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 120s
+      retries: 3
+
+  vibe-consensus:
+    # No host port/Caddy route. Only the Vibe app group starts this service.
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-vibe-consensus:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-gateway.env
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-consensus.env
+    networks: [vibe]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
       retries: 3
 
   gateway:
