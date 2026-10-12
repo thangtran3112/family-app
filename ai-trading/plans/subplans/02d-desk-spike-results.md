@@ -119,6 +119,53 @@ Related:
 
 **Decision:** the guard value stays `DU` unless the probe shows otherwise.
 
+### 10. Consensus EPS: the Eulerpool 10-symbol pilot (Phase 2a)
+
+**Status: done.** Eulerpool, Finnhub, and (for 5 of the 10 symbols) Alpha Vantage were called live
+across AAPL, MSFT, NVDA, AMZN, GOOGL, JPM, KO, XOM, BRK.B, and RGR (Sturm Ruger, the "one small
+cap" symbol) — `estimates`, `earnings-by-symbol`, `earnings-surprises`, and `recommendations` on
+Eulerpool; earnings surprises and recommendation trends on Finnhub; `EARNINGS_ESTIMATES` on Alpha
+Vantage, replayed from bodies the same session had already fetched live rather than spending
+additional daily quota.
+
+**From the pilot:**
+- Eulerpool covered 39 of 40 data-class checks (10 symbols × 4 classes). The one gap — BRK.B's
+  (and BRK.A's) EPS estimates — is a genuine real-world coverage gap, confirmed empty live:
+  Berkshire does not have an analyst EPS-estimate consensus the way an operating company does.
+  Its earnings calendar, surprises, and recommendations/targets still have Berkshire covered.
+- Alpha Vantage's `EARNINGS_ESTIMATES` agreed with Eulerpool's nearest-fiscal-year EPS mean within
+  0.1–0.8% for all 5 compared symbols (AAPL 0.3%, MSFT 0.1%, NVDA 0.4%, AMZN 0.8%, GOOGL 0.1%),
+  the cross-check 02f §4 asked for.
+- Finnhub's `stock/recommendation` (buy/hold/sell trend counts) is free on this key — the research
+  notes behind 02b/02f had marked it unverified/pessimistic; this is what gives `AnalystTargets` a
+  fallback with real counts (if not a target price) when Eulerpool is down.
+
+**Decision:** **Eulerpool is the consensus-EPS primary**, matching 02f §4's own call — and, under
+02j's registry (owner-approved 2026-10-11), the `DEFAULT_CHAINS["consensus"]`/`["earnings"]`/
+`["targets"]` entries `registry.py` carries. Alpha Vantage is kept as the `ConsensusSnapshot`/
+`EarningsResult` fallback; Finnhub is kept as the `AnalystTargets` fallback (counts only, no
+target price — see `providers/finnhub.py`'s module docstring). Method and result recorded here
+per the brief; the pilot script and its replayed response bodies are not committed (temp-only
+prototype artifacts).
+
+### 11. Eulerpool ex-dividend dates (Phase 2a probe, for Phase 5)
+
+**Status: done**, report-only. Probed live (`GET /equity/dividends/{id}`, `/equity/dividend-
+quality/{id}`, `/equity/dividends-by-fy/{id}`, via `scripts/record.py eulerpool_dividends_probe`):
+
+| Endpoint | HTTP | Shape |
+|---|---|---|
+| `/equity/dividends/{id}` | 200 | Full per-payment history: `payDate` and `period`, neither explicitly labeled "ex-dividend" |
+| `/equity/dividend-quality/{id}` | 200 | A summary with an explicit `lastExDate` (confirmed live for AAPL), plus `yearsPaid`/`yearsNotDecreased`/`frequency`/`dividendYield` |
+| `/equity/dividends-by-fy/{id}` | 200 | Dividends grouped by fiscal year, no per-event dates |
+
+**Decision:** `/equity/dividend-quality/{identifier}`'s `lastExDate` is a free, confirmed path to
+*the most recent* ex-dividend date — not a full history. Phase 5 either uses it directly through
+a new provider method added to `providers/eulerpool.py` (following 02j §8's checklist: no caller
+change beyond the new method), or resolves `/equity/dividends`'s `period` field against a known
+dividend calendar first if a full ex-dividend history is wanted; IBKR's dividends tick (2b) is the
+other option. No client method is built in Phase 2a (ruling D10): this is a report-only finding.
+
 ## Notes for Phase 3 (from the documentation research)
 
 - **Gateway image:** `ghcr.io/gnzsnz/ib-gateway`. The stable tag is IB Gateway 10.50.1f with IBC 3.24.2. Pin the image by digest.
