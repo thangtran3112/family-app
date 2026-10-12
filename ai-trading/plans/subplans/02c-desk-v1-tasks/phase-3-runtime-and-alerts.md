@@ -53,8 +53,8 @@ plus `signals`' unique constraint, not out of any streaming machinery.
   Desk's own Postgres role/schema onboarding script, and a startup-retrying, heartbeat-checked
   `scheduler` process. Registering `api`/`scheduler` with the Trading Hub's app-controls catalog so
   they actually get started — a finding from writing this plan, not anticipated by the brief — is
-  **HELD** (Decision 5): it edits the open-source lane's shared control files and waits for the
-  owner's yes, so it ships as a separate follow-up commit, not part of this phase's release.
+  **APPROVED 2026-10-12** (Decision 5): it edits the open-source lane's shared control files, so it
+  ships as a separate follow-up PR (`feature/ai-trading-desk-decision5`), not inside the Phase 3 PR.
 
 **Tech Stack:** adds to Phase 2a's stack: FastAPI, `uvicorn[standard]`, `sse-starlette`,
 `requests` (direct dependency now — Phase 2a only reached it transitively through
@@ -105,8 +105,8 @@ Everything in 02c's Global Constraints applies. Scoped to Phase 3:
 
 Most consequential first. Each names the alternative considered and the reason for the choice
 actually shipped. Items 1–4 and 15–16 are owner-level (money, data correctness, production
-trust-boundary, release-scoping); Item 5 is also owner-level and **HELD**, pending the owner's
-explicit approval (it edits the open-source lane's shared app-controls files); the rest are
+trust-boundary, release-scoping); Item 5 is also owner-level and was **APPROVED on 2026-10-12**; it
+edits the open-source lane's shared app-controls files and ships in its own follow-up PR; the rest are
 lane-level implementation choices the integration carried forward, surfaced here because nothing
 earlier in the plan chain pinned them.
 
@@ -152,8 +152,9 @@ earlier in the plan chain pinned them.
    reachable, but only if the probe they poll actually tells them whether the database answers
    (Task 3.7).
 
-5. **HELD — registering `api`/`scheduler` as "protected" (always-on) services in the Trading Hub's
-   app-controls catalog (`control/catalog.json`, `control/state.py`) waits for the owner's yes.**
+5. **APPROVED 2026-10-12 — registering `api`/`scheduler` as "protected" (always-on) services in the
+   Trading Hub's app-controls catalog (`control/catalog.json`, `control/state.py`), with their tests and
+   the operator README sentence, ships in its own follow-up PR.**
    This is a finding from writing this plan, not anticipated by the brief or any lane report: the
    app-controls system (`control/state.py`, `deploy.sh`'s `apply_selected_services`/
    `stop_disabled_groups`) was built after `PROTO-BRIEF.md`, and it changes `compose up` from a
@@ -163,7 +164,7 @@ earlier in the plan chain pinned them.
    files owned by the open-source lane (ai-trading/AGENTS.md), not Desk-private — editing them is
    held pending the owner's explicit approval rather than bundled into this phase's own release
    (Task 3.6 ships `api`/`scheduler`'s compose services unregistered; without this registration a
-   real deploy will not start them). Alternative once approved: either register them as
+   real deploy will not start them). Alternative considered (not chosen): either register them as
    `protected` (the original proposal below) or add a new toggleable `apps["desk"] = ["api",
    "scheduler"]` entry, giving the Desk its own on/off switch in the hub's `/settings` page. Reason
    for preferring `protected`: Phase 3 ships no Settings-page toggle for the Desk (that UI doesn't
@@ -6805,9 +6806,9 @@ git commit -m "Desk: ai_trading.api (FastAPI, identity, REST, SSE quotes)"
 - Modify: `deploy/production/deploy.sh` (2 lines: `SECRET_FILES`, `render_profiles`' call list)
 - No change: `deploy/production/health-check.sh` (its `SERVICES` is computed dynamically from the
   catalog now — see below)
-- **Not in this task (HELD, Decision 5):** `control/catalog.json` and `control/state.py` —
+- **Not in this task (Decision 5, approved 2026-10-12, ships in its own follow-up PR):** `control/catalog.json` and `control/state.py` —
   registering `api`/`scheduler` as protected app-controls services edits the open-source lane's
-  shared control files and waits for the owner's explicit yes (see Decision 5). Without this
+  shared control files, so it ships in its own approved follow-up PR (see Decision 5). Without this
   registration, `deploy.sh`'s `apply_selected_services` does not start `api`/`scheduler` on a real
   deploy; that registration is a separate, owner-approved follow-up, not part of this commit.
 
@@ -6822,7 +6823,7 @@ machinery) landed on `dev`. The steps below are written against the **current** 
 new service blocks, the Caddy route, and the `deploy.sh` two-line diff are unchanged from the
 prototype's own content (they don't touch anything the app-controls system changed), and
 `health-check.sh` needs **no edit at all** (explained in Step 5). The app-controls registration
-itself (`control/catalog.json`/`control/state.py`) is Decision 5, HELD pending the owner's review —
+itself (`control/catalog.json`/`control/state.py`) is Decision 5, approved 2026-10-12 and shipped in its own follow-up PR —
 it is not applied by this task.
 
 - [ ] **Step 1: Create the Dockerfile.**
@@ -7019,7 +7020,7 @@ Then, in the top-level `networks:` block, add:
 ```
 
 No `import availability_gate desk` line (unlike the `/u/*`/`/api/*` MiroFish route): Decision 5
-(HELD) would register `api`/`scheduler` as **protected** (always-on), the same category
+(approved 2026-10-12; shipped in its own follow-up PR) would register `api`/`scheduler` as **protected** (always-on), the same category
 `market-data`/`auth`/`gateway` are in, and no protected service's own Caddy route carries an
 availability gate — confirmed by grepping the current Caddyfile (`market-data` has no route
 needing one; every `import availability_gate <id>` line names a *toggleable* `apps` entry). This
@@ -7061,7 +7062,7 @@ No rename step needed (unlike `gateway` → `auth.env`): `family_config.py`'s `r
 `docker-compose.yml`, `Caddyfile`, and `health-check.sh` — every file this task touches is already
 covered by `deploy.sh`'s existing atomic stage/validate/rollback machinery; no new `CONFIG_FILES`
 entry is needed (`control/catalog.json`/`control/state.py` are also in `CONFIG_FILES` already, for
-the hub's other apps, but this task does not touch them — Decision 5, HELD). `prune_old_images`'s
+the hub's other apps, but this task does not touch them — Decision 5, approved 2026-10-12). `prune_old_images`'s
 existing `"$REGISTRY"/ai-trading-*:*` glob already covers the new `ai-trading-desk` image.
 
 - [ ] **Step 6: Validate.** From the repository root:
@@ -7104,7 +7105,7 @@ Expected: `ok`.
   the test Caddy container at that same hardcoded path — mirroring how production bind-mounts the
   real helper's socket directory in, never the real host path itself. Case 8 (health-check.sh's
   `SERVICES`) is adjusted to confirm the file is *unchanged* and still dynamically computed (Decision
-  5 is HELD, so `api`/`scheduler` are not yet in the catalog `health-check.sh` reads), rather than
+  5 was HELD when this harness was written, so `api`/`scheduler` were not yet in the catalog `health-check.sh` reads; the follow-up PR adds them), rather than
   asserting a static list that no longer exists. Case 9 additionally confirms `handle /api/desk/*`
   carries no `import availability_gate` of its own (it is not yet a toggleable app-controls entry).
   Every other case (1–7, 10–11, 13) is unchanged from the prototype's own copy, and the case count
@@ -7146,8 +7147,8 @@ separate reconciliation commit on top of this one, `Desk: deploy health and offl
 lane that produced this commit was still working from the plan's pre-review-fix snapshot when it
 landed; this plan describes the finished, reconciled state.
 
-Decision 5's app-controls registration (`control/catalog.json`, `control/state.py`) is HELD — it is
-a separate, owner-approved follow-up commit, not part of this one.
+Decision 5's app-controls registration (`control/catalog.json`, `control/state.py`) is approved (2026-10-12) — it is
+a separate follow-up PR, not part of this one.
 
 ---
 
@@ -7281,6 +7282,8 @@ grep -n "working-directory: ai-trading/packages/family-desk/backend" -A 8 .githu
 Expected: the existing `postgres:17` service, `DESK_TEST_DATABASE_URL`/`DESK_REQUIRE_DB=1`, and
 `uv run pytest -q` are unchanged from before this phase.
 
+- [ ] **Step 4b: CI's `Scripts and compose` job needs the Desk env placeholder.** The job creates empty placeholder env files for the upstream apps and the gateway, then runs `docker compose config` on the production file. The `api` and `scheduler` services read `${AI_TRADING_SECRETS_DIR}/desk.env`, so the job fails with "env file .../desk.env not found" unless that placeholder exists. Add `desk` to the placeholder loop in the `scripts` job of `.github/workflows/ai-trading-ci.yml`, so the loop reads `for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway cloudflared auth market-data desk; do : >"$secrets/$name.env"; done`. Verify with the same two `docker compose config --quiet` commands against a placeholder directory. Both must pass. (Found on PR #121's first CI run, 2026-10-12; Step 4 above had checked only the `desk` job.)
+
 - [ ] **Step 5: Run the full suite, with and without Postgres, plus ruff.**
 
 Run (in `packages/family-desk/backend/`):
@@ -7349,13 +7352,13 @@ delivery authorization applies (AGENTS.md): after Task 3.7's verification is gre
 `health-check.sh` and confirm `api`/`scheduler` report healthy, and that the shared
 `family-app-postgres` cluster is reachable, before declaring the phase complete.
 
-**Decision 5 is HELD, separately from this release.** `ai-trading/control/catalog.json` and
-`ai-trading/control/state.py` are not part of this phase's release paths — until the owner approves
-Decision 5 and that 2-line registration lands in its own commit, `deploy.sh`'s
-`apply_selected_services` will **not** start `api`/`scheduler` on a real deploy (their compose
+**Decision 5 is approved (2026-10-12), and its registration ships with this release.**
+`ai-trading/control/catalog.json` and `ai-trading/control/state.py` are part of this release's paths
+(registered by the follow-up PR). Until that registration is on `main`, `deploy.sh`'s
+`apply_selected_services` would **not** start `api`/`scheduler` on a real deploy (their compose
 blocks exist, but neither name is in `catalog.json`'s `protected` list), and `health-check.sh`'s
-dynamic `SERVICES` list will not include them either. Step 4's live verification below assumes
-Decision 5 has already been approved and applied; if it hasn't, the containers simply won't be
+dynamic `SERVICES` list would not include them either. Step 4's live verification below assumes
+the registration is on `main`; if it isn't, the containers simply won't be
 running yet and Step 4 should be treated as blocked, not failed.
 
 - [ ] **Step 1: Confirm the scoped release paths.** This is the **first** `main` release carrying
@@ -7369,8 +7372,9 @@ running yet and Step 4 should be treated as blocked, not failed.
   - `ai-trading/deploy/production/deploy.sh`
   - `infrastructure/vps/apps/ai-trading-desk.conf`
 
-  **Not in this release** (HELD, Decision 5): `ai-trading/control/catalog.json` and
-  `ai-trading/control/state.py` — that registration ships separately once the owner approves it.
+  **Also in this release** (Decision 5, approved 2026-10-12): `ai-trading/control/catalog.json` and
+  `ai-trading/control/state.py`, with `ai-trading/control/test_state.py` and the operator sentence in
+  `ai-trading/deploy/production/README.md`.
 
   **Shared files touched beyond this phase's own lines** (confirm the diff contains nothing else):
   `deploy/production/docker-compose.yml`, `deploy/production/Caddyfile`, `deploy/production/deploy.sh`
@@ -7429,8 +7433,8 @@ one shared `family-app-backup.service` archive — nothing further to build or s
   with real strategies/alerts.
 
 - [ ] **Step 4: First live verification.** After the release lands on `main` and `deploy.sh` runs
-  against the real VPS (and Decision 5's separate app-controls registration has been approved and
-  applied — see the HELD note above; until then `api`/`scheduler` are not started by a real deploy
+  against the real VPS (Decision 5's app-controls registration is approved and ships in this release —
+  see the Decision 5 note above; until it is on `main`, `api`/`scheduler` are not started by a real deploy
   at all):
 
   1. `health-check.sh` reports `api`/`scheduler` healthy (its dynamic `SERVICES` list includes both
@@ -7468,8 +7472,8 @@ have work to do.
   "summary" bias + Classic pivots) — no new table or endpoint needed, the function is already
   pure and ready to call from a route this phase would add.
 - If the Desk ever needs a user-facing on/off switch in the hub's `/settings` page, that is new
-  scope on top of Decision 5 (HELD — once approved, `api`/`scheduler` are meant to simply always be
-  on, like `market-data`) — would need a new `apps["desk"]` catalog entry and `_REQUIRED_APP_IDS`
+  scope on top of Decision 5 (approved and shipped: `api`/`scheduler` simply always run, like
+  `market-data`) — would need a new `apps["desk"]` catalog entry and `_REQUIRED_APP_IDS`
   update, not a correction to this phase.
 - `trading.tobytran.dev` moves from `web:3000` to the Desk's own frontend here (AGENTS.md
   hostnames); the Cloudflare Tunnel ingress rule for `/api/desk/*` that D-b deliberately deferred
