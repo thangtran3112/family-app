@@ -7432,7 +7432,9 @@ one shared `family-app-backup.service` archive — nothing further to build or s
   already covers the database the moment it exists), but it must happen before the Desk is trusted
   with real strategies/alerts.
 
-- [ ] **Step 4: First live verification.** After the release lands on `main` and `deploy.sh` runs
+- [x] **Step 4: First live verification.** Done 2026-10-12. The first release (7734dc8, run 38281644651) failed its `api` health check, and its rollback also failed because the health check still required `api`/`scheduler`. The hotfix `34f4523` (PR #127: `python -m uvicorn`; run 38284543213) passed. Results: `api` and `scheduler` are healthy with zero restarts. The gateway returns 401 for an unauthenticated `/api/desk/strategies`. `api` `/healthz` returns 200. The scheduler's heartbeat is fresh, touched after each completed `run_due` and commit on a 60 s cadence, with no exceptions. It logs nothing on success, and no watchlists exist yet, so cycles have no market data to fetch. `expense-tax-postgres` and the expense services are healthy and were not restarted. Open items: the rollback gap (health-check scope) and the restore drill (Step 3).
+
+  Procedure as written: after the release lands on `main` and `deploy.sh` runs
   against the real VPS (Decision 5's app-controls registration is approved and ships in this release —
   see the Decision 5 note above; until it is on `main`, `api`/`scheduler` are not started by a real deploy
   at all):
