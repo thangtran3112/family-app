@@ -7391,56 +7391,31 @@ running yet and Step 4 should be treated as blocked, not failed.
   app's service block, and never touch anything under `expense-tax-management/`. Never merge all of
   `dev` into `main` (would also release unrelated expense-tax-management phases) — AGENTS.md.
 
-- [ ] **Step 2: VPS onboarding (operator, one time, before the first deploy that includes this
-  phase).**
+- [x] **Step 2: VPS onboarding (operator, one time) -- done 2026-10-12, with corrections.**
 
-  1. Confirm `infrastructure/vps/apps/ai-trading-desk.conf`'s `POSTGRES_IMAGE` value
-     (`pgvector/pgvector:pg17`) matches the shared cluster's **actual** current image — re-check
-     against `infrastructure/vps/apps/expense-tax-management.conf`'s live value or
-     `docker inspect` the running `postgres` container on the VPS; if they disagree, the operator
-     updates `ai-trading-desk.conf` to match the live value before the next step, never the other
-     way around.
-  2. Run `infrastructure/vps/bootstrap.sh --app infrastructure/vps/apps/ai-trading-desk.conf`
-     (or the equivalent `--only postgres`-scoped re-run per the VPS README's "Adding a new app"
-     section) against the real VPS. This generates `DESK_MIGRATOR_DB_PASSWORD`/
-     `DESK_RUNTIME_DB_PASSWORD` into `${SHARED_PG_DIR}/.env` (root-only, mode 0600) if not already
-     present, creates database `ai_trading_desk_db`, and runs `zz-20-desk-roles.sh` against it.
-  3. Fetch those two passwords once (`bootstrap.sh --fetch-secrets-to`, or `ssh ... cat
-     ${SHARED_PG_DIR}/.env`), then delete the local copy.
-  4. Set the runtime URL in Firestore profile `ai-trading/desk`, and the migrator URL in a separate
-     profile `ai-trading/desk-migrator` that `deploy.sh` never renders. `api` and `scheduler` load all of
-     `desk.env`, so a migrator URL in `ai-trading/desk` would give those containers DDL rights:
-     - `ai-trading/desk` `DESK_RUNTIME_DATABASE_URL` = `postgresql://desk_runtime:<password>@postgres:5432/ai_trading_desk_db`
-     - `ai-trading/desk-migrator` `DESK_MIGRATOR_DATABASE_URL` = `postgresql://desk_migrator:<password>@postgres:5432/ai_trading_desk_db`
+  The plan below assumed a shared `family-app-postgres` cluster. The VPS has none: its only Postgres is
+  the expense cluster (container `expense-tax-postgres`, compose project `postgres`, directory
+  `/opt/expense-tax-management/postgres`, network `postgres_default`). `bootstrap.sh --only postgres` for
+  this app would rewrite that directory's `docker-compose.yml` and collide with the running container, so it
+  was not run. What was done instead:
 
-     Write each with `python3 common/config/family_config.py set <target> <NAME>`, feeding the value on
-     stdin (never as an argument, never printed or logged).
-  5. Optionally also set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`/`SLACK_WEBHOOK_URL_OWNER`/
-     `SLACK_WEBHOOK_URL_SPOUSE` in the same profile whenever the owner is ready to wire those
-     channels in (Decision 7) — `api/app.py`'s `_build_channels` picks them up automatically on
-     the next deploy's restart, no code change needed.
-  6. Run the one-off migration as the migrator, before the release merges. The deploy starts `api` and
-     `scheduler`, which connect as `desk_runtime` and cannot CREATE/DROP. The migration cannot read
-     `DESK_MIGRATOR_DATABASE_URL` from the environment: `migrations/env.py` takes `sqlalchemy.url` from
-     `alembic.ini`, a localhost placeholder, and the tests set the URL in code. Postgres listens only on
-     the VPS's `127.0.0.1:5432`, so open a tunnel and point the URL at it. Validated against `postgres:17`
-     on the release tree (`0002 (head)`, 13 tables):
-     ```
-     ssh -N -L 15432:127.0.0.1:5432 -p <ssh-port> <user>@<vps-host>   # terminal 1, keep open
-     cd ai-trading/packages/family-desk/backend && uv sync --locked    # terminal 2, from the repo root
-     CLOUDSDK_ACTIVE_CONFIG_NAME=personal python3 ../../../../common/config/family_config.py run ai-trading/desk-migrator -- uv run python - <<'PY'
-     import os
-     from alembic import command
-     from alembic.config import Config
-     from sqlalchemy.engine import make_url
-     url = make_url(os.environ["DESK_MIGRATOR_DATABASE_URL"]).set(host="127.0.0.1", port=15432)
-     cfg = Config("alembic.ini")
-     cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
-     command.upgrade(cfg, "head")
-     command.current(cfg)
-     PY
-     ```
-     `command.current` must print `0002 (head)`.
+  1. Live image is `pgvector/pgvector:pg17`, matching `ai-trading-desk.conf`.
+  2. `ai_trading_desk_db` and the two roles were created inside `expense-tax-postgres` with `docker exec`,
+     running `zz-20-desk-roles.sh` (`POSTGRES_USER=postgres`, `POSTGRES_DB=ai_trading_desk_db`). The
+     passwords were passed over stdin. The compose file was not touched.
+  3. Passwords were generated locally and stored only as Firestore URLs (step 4). None was printed.
+  4. Firestore: `ai-trading/desk` `DESK_RUNTIME_DATABASE_URL` and `ai-trading/desk-migrator`
+     `DESK_MIGRATOR_DATABASE_URL`, both `postgresql+psycopg://...@postgres:5432/ai_trading_desk_db`. The
+     explicit `+psycopg` scheme is used. `postgresql://` also resolves to psycopg v3 under the locked
+     SQLAlchemy 2.1.4, but the explicit form does not depend on that default.
+  5. Optional channels (`TELEGRAM_*`, `SLACK_WEBHOOK_URL_*`) are still unset, pending owner keys.
+  6. The migration ran as the migrator over an SSH tunnel (`127.0.0.1:15432` to the VPS's
+     `127.0.0.1:5432`): `0002 (head)`. The runtime role connects with `search_path` `desk, pg_catalog`,
+     reads `desk.users`, and is denied `CREATE`.
+
+  Backups were installed the same day with `bootstrap.sh --only backup` against the expense project's
+  bucket (`infrastructure/gcp/backup/README.md`; PR #126). The first run dumped all six databases,
+  including `ai_trading_desk_db`, and wrote one object to the locked backup bucket.
 
 **Decision 15 is approved — no backup confirmation step needed.** Approved by the owner,
 2026-10-12: the Desk database rides in the existing combined backup archive (`backup.sh` dumps
@@ -7448,7 +7423,7 @@ every cluster database into one archive per host). No separate prefix. No confir
 `ai_trading_desk_db`'s dump is named individually as `dumps/ai_trading_desk_db.dump` inside that
 one shared `family-app-backup.service` archive — nothing further to build or sign off on here.
 
-- [ ] **Step 3: Restore drill (operator, before relying on backups for this data).** Confirm
+- [ ] **Step 3: Restore drill (operator, before relying on backups for this data).** Status 2026-10-12: backups are running (first object written); the drill is still pending. Confirm
   `infrastructure/backup/restore.sh` (or its documented manual procedure) can restore
   `ai_trading_desk_db` specifically out of the shared archive's `manifest.json`, into a scratch
   database, and that `alembic current` on the restored copy reports `0002` — proving the restore
