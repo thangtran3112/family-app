@@ -7363,16 +7363,27 @@ running yet and Step 4 should be treated as blocked, not failed.
 - [ ] **Step 1: Confirm the scoped release paths.** This is the **first** `main` release carrying
   Desk code (02c). The release branch (from `origin/main`) carries only:
 
+  - `ai-trading/common/` (the shared package; the Desk image copies it in, so the image cannot
+    build without it; found on the 2026-10-12 release dry run)
   - `ai-trading/packages/family-desk/backend/` (all of it, including
     `docker/postgres/zz-20-desk-roles.sh`)
+  - `ai-trading/packages/family-desk/contracts/` (the backend's contract and template tests read its
+    fixtures and generated schema; found on the same dry run)
   - `ai-trading/deploy/docker-bake.hcl`
   - `ai-trading/deploy/production/docker-compose.yml`
   - `ai-trading/deploy/production/Caddyfile`
   - `ai-trading/deploy/production/deploy.sh`
   - `infrastructure/vps/apps/ai-trading-desk.conf`
+  - `ai-trading/deploy/ci/test-l6-desk.sh` (the offline harness)
 
-  **Not in this release** (HELD, Decision 5): `ai-trading/control/catalog.json` and
-  `ai-trading/control/state.py` — that registration ships separately once the owner approves it.
+  **Not in this release:** `.github/workflows/ai-trading-ci.yml`. Its Desk job and the `desk.env`
+  placeholder run only on pull requests to `dev`, and `main`'s copy of that file is left unchanged.
+  The four shared production files above differ from `main` only by Desk lines, so they are taken
+  from `dev` as they are.
+
+  **Also in this release** (Decision 5, approved 2026-10-12): `ai-trading/control/catalog.json`,
+  `ai-trading/control/state.py`, `ai-trading/control/test_state.py`, and the operator sentence in
+  `ai-trading/deploy/production/README.md`. They come from the follow-up PR (#124), once that is on `dev`.
 
   **Shared files touched beyond this phase's own lines** (confirm the diff contains nothing else):
   `deploy/production/docker-compose.yml`, `deploy/production/Caddyfile`, `deploy/production/deploy.sh`
