@@ -319,6 +319,7 @@ class RuntimeTest(unittest.TestCase):
     def test_group_status_healthy_and_none_healthcheck_both_count_as_running(self):
         self.docker.containers = {
             "vibe-trading": {"id": "c1", "status": "running", "health": "none"},
+            "vibe-consensus": {"id": "c2", "status": "running", "health": "healthy"},
         }
         runtime_obj = self.runtime()
         self.assertEqual(runtime_obj.group_status("vibe-trading", True), "Running")
@@ -435,6 +436,7 @@ class RuntimeTest(unittest.TestCase):
         # Old two-argument calls keep working exactly as before.
         self.docker.containers = {
             "vibe-trading": {"id": "c1", "status": "running", "health": "healthy"},
+            "vibe-consensus": {"id": "c2", "status": "running", "health": "healthy"},
         }
         runtime_obj = self.runtime()
         self.assertEqual(runtime_obj.group_status("vibe-trading", True), "Running")

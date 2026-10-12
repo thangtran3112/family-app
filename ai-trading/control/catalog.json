@@ -1,1 +1,1 @@
-{"schemaVersion":1,"apps":{"tradingagents":["ta-terminal","ta-research"],"ai-hedge-fund":["ahf-terminal"],"vibe-trading":["vibe-trading"],"mirofish":["mirofish"]},"protected":["web","gateway","auth","cloudflared","market-data","api","scheduler"]}
+{"schemaVersion":1,"apps":{"tradingagents":["ta-terminal","ta-research"],"ai-hedge-fund":["ahf-terminal"],"vibe-trading":["vibe-consensus","vibe-trading"],"mirofish":["mirofish"]},"protected":["web","gateway","auth","cloudflared","market-data","api","scheduler"]}

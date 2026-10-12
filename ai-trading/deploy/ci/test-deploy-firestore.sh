@@ -193,6 +193,9 @@ for target in "${targets[@]}"; do
     printf 'ZEP_API_KEY=fake-zep-not-real\nLLM_API_KEY=fake-llm-not-real\n' >"$tmp"
   elif [[ "$profile" == vibe-trading && "${FAKE_FC_VIBE_NO_API_KEY:-}" != 1 ]]; then
     printf 'ANTHROPIC_API_KEY=fake-provider-not-real\nAPI_AUTH_KEY=fake-vibe-key-not-real\nFAKE_VALUE=fake-not-real-vibe-trading\n' >"$tmp"
+  elif [[ "$profile" == consensus ]]; then
+    [[ "${FAKE_FC_FINNHUB_KEY:-}" == 1 ]] || exit 2
+    printf 'FINNHUB_API_KEY=fake-test-value\n' >"$tmp"
   else
     printf 'FAKE_VALUE=fake-not-real-%s\n' "$profile" >"$tmp"
   fi
@@ -420,7 +423,7 @@ if [[ "$status" != 0 ]]; then
   fail "case1: expected exit 0, got $status"
 else
   # GNU stat -f prints filesystem data before failing; try -c first, then BSD -f.
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env cloudflared.env; do
     f="$s1/secrets/$name"
     [[ -f "$f" ]] || { fail "case1: missing $f"; continue; }
     [[ "$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f" 2>/dev/null)" == 600 ]] || fail "case1: $f not mode 600"
@@ -430,12 +433,43 @@ else
   grep -q 'fake-tunnel-token' "$s1/secrets/cloudflared.env" 2>/dev/null || fail "case1: cloudflared.env content mismatch"
   # The gateway (Caddy) gets only Vibe's API key, never Vibe's provider keys.
   [[ "$(cat "$s1/secrets/vibe-gateway.env" 2>/dev/null)" == 'VIBE_API_AUTH_KEY=fake-vibe-key-not-real' ]] || fail "case1: vibe-gateway.env must hold exactly VIBE_API_AUTH_KEY"
+  ! grep -q '^FINNHUB_API_KEY=' "$s1/secrets/vibe-consensus.env" || fail "case1: optional Finnhub key should be absent"
   shopt -s nullglob
   leftover=("$s1/secrets"/.render-*)
   shopt -u nullglob
   [[ ${#leftover[@]} -eq 0 ]] || fail "case1: root-only render scratch not cleaned: ${leftover[*]}"
 fi
 echo "    exit=$status"
+
+echo "=== Case 1b (GREEN): optional consensus profile is isolated from market-data and Vibe ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_consensus="$(new_scratch case_consensus)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_consensus/ci-staging/cloudflared.env"
+status="$(FAKE_FC_FINNHUB_KEY=1 run_scenario "$s_consensus")"
+[[ "$status" == 0 ]] || fail "consensus render expected success, got $status"
+grep -qx 'FINNHUB_API_KEY=fake-test-value' "$s_consensus/secrets/vibe-consensus.env" || fail "consensus key not isolated"
+! grep -Eq 'ALPACA|OPENAI|ANTHROPIC|VIBE_API_AUTH_KEY' "$s_consensus/secrets/vibe-consensus.env" || fail "consensus file contains another secret"
+! grep -q '^FINNHUB_API_KEY=' "$s_consensus/secrets/market-data.env" || fail "Finnhub key leaked into market-data"
+! grep -q '^FINNHUB_API_KEY=' "$s_consensus/secrets/vibe-trading.env" || fail "Finnhub key leaked into Vibe"
+[[ "$(stat -c '%a' "$s_consensus/secrets/vibe-consensus.env" 2>/dev/null || stat -f '%Lp' "$s_consensus/secrets/vibe-consensus.env" 2>/dev/null)" == 600 ]] || fail "consensus env mode is not 0600"
+
+echo "=== Case 1c (RED->rollback): prior consensus secret restored or first-time file removed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_consensus_rollback="$(new_scratch case_consensus_rollback)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_consensus_rollback/ci-staging/cloudflared.env"
+printf 'OLD_VALUE=prior-consensus\n' >"$s_consensus_rollback/secrets/vibe-consensus.env"
+chmod 0600 "$s_consensus_rollback/secrets/vibe-consensus.env"
+export DEPLOY_SH_FAIL_AFTER=vibe-consensus.env
+status="$(FAKE_FC_FINNHUB_KEY=1 run_scenario "$s_consensus_rollback")"
+unset DEPLOY_SH_FAIL_AFTER
+[[ "$status" != 0 ]] || fail "consensus rollback injection unexpectedly passed"
+grep -qx 'OLD_VALUE=prior-consensus' "$s_consensus_rollback/secrets/vibe-consensus.env" || fail "prior consensus secret not restored"
+s_consensus_first="$(new_scratch case_consensus_first)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_consensus_first/ci-staging/cloudflared.env"
+export DEPLOY_SH_FAIL_AFTER=vibe-consensus.env
+status="$(FAKE_FC_FINNHUB_KEY=1 run_scenario "$s_consensus_first")"
+unset DEPLOY_SH_FAIL_AFTER
+[[ "$status" != 0 && ! -e "$s_consensus_first/secrets/vibe-consensus.env" ]] || fail "new consensus secret survived rollback"
 
 echo "=== Case 2 (GREEN): redeploy over existing secrets -- new content wins, old content backed up to .previous/ ==="
 CASE_COUNT=$((CASE_COUNT + 1))
