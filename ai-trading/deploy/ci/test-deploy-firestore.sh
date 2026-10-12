@@ -112,28 +112,32 @@ fail() {
   echo "    FAIL: $*" >&2
 }
 
-# source_lib: the shared mirofish-runtime.sh library's own content (Task 2,
-# app-controls: install_secret_file, mirofish_env_valid, file_mode_octal,
-# cleanup_mirofish_scratch, restore_or_remove_mirofish, activate_mirofish and
-# their tracking globals), copied in literally ahead of deploy.sh's own
-# function definitions, with deploy.sh's main-flow block (everything after
-# the "--- main flow below this line" marker) excluded -- so sourcing the
-# result only loads functions, without also running a real deploy. Copying
-# the library's actual content (not deploy.sh's own `source
-# "$SCRIPT_DIR/mirofish-runtime.sh"` line, which this filters out below) is
-# required: that line resolves relative to deploy.sh's OWN real location via
-# BASH_SOURCE, which points at $LIB_FILE (under $TEST_ROOT, not
-# production/) once this function's own extracted copy is what gets
-# sourced -- so deploy.sh's own copy of that statement would try (and fail)
-# to source a nonexistent "$TEST_ROOT/mirofish-runtime.sh". IMAGE_TAG must
-# already be a valid-looking commit SHA before this is sourced: deploy.sh's
-# one top-level validation line above that marker runs immediately on source.
+# source_lib: deploy.sh's own function definitions (same marker-based
+# technique as source_health_lib below), with deploy.sh's main-flow block
+# (everything after the "--- main flow below this line" marker) excluded --
+# so sourcing the result only loads functions, without also running a real
+# deploy. IMAGE_TAG must already be a valid-looking commit SHA before this
+# is sourced: deploy.sh's one top-level validation line above that marker
+# runs immediately on source.
+#
+# Packaging-fix: deploy.sh's own library-source guard now prefers
+# $APP_CONFIG_STAGING_DIR/deploy/production/mirofish-runtime.sh (sourced
+# literally, unfiltered) whenever that directory is set -- every scenario
+# below already sets it to a per-scenario config-staging dir via
+# new_scratch()/stage_default_configs(), which now stages mirofish-
+# runtime.sh's REAL content (never a syntax-only stand-in), so this no
+# longer needs to special-case or filter out deploy.sh's own source line.
+# A handful of scenarios never set APP_CONFIG_STAGING_DIR at all (they only
+# exercise functions unrelated to MiroFish) -- for those, deploy.sh's own
+# fallback branch sources "$SCRIPT_DIR/mirofish-runtime.sh" relative to
+# wherever $LIB_FILE itself is sourced from, so a real copy is placed right
+# beside it below.
 source_lib() {
-  cat "$MIROFISH_LIB_SH"
-  awk '/^# --- main flow below this line;/{exit} !/^source "\$SCRIPT_DIR\/mirofish-runtime\.sh"$/{print}' "$DEPLOY_SH"
+  awk '/^# --- main flow below this line;/{exit} {print}' "$DEPLOY_SH"
 }
 LIB_FILE="$TEST_ROOT/deploy-lib.sh"
 source_lib >"$LIB_FILE"
+cp "$MIROFISH_LIB_SH" "$TEST_ROOT/mirofish-runtime.sh"
 
 # source_health_lib: health-check.sh's own function definitions (same
 # marker-based technique as source_lib above), so a case can call
@@ -220,16 +224,20 @@ stage_default_configs() {
   chmod 0755 "$dir/health-check.sh"
   # Task 5 (app-controls): the six new CONFIG_FILES entries. catalog.json
   # and state.py are the REAL repo files (see CONTROL_DIR_REAL above);
-  # runtime.py/server.py and the two standalone MiroFish-preparer scripts
-  # are trivial, syntactically valid stand-ins -- nothing in this
+  # runtime.py/server.py and the standalone prepare-mirofish.sh are
+  # trivial, syntactically valid stand-ins -- nothing in this
   # transaction-level fixture actually imports or runs them, they only need
-  # to pass py_compile/bash -n.
+  # to pass py_compile/bash -n. mirofish-runtime.sh must be the REAL repo
+  # file (packaging-fix): deploy.sh's own library-source guard now sources
+  # this exact staged path at the top of every scenario below (via
+  # $APP_CONFIG_STAGING_DIR), so a stand-in here would define none of the
+  # functions the rest of this script depends on.
   mkdir -p "$dir/control" "$dir/deploy/production"
   cp "$CONTROL_DIR_REAL/catalog.json" "$dir/control/catalog.json"
   cp "$CONTROL_DIR_REAL/state.py" "$dir/control/state.py"
   printf '"""fixture stand-in, never executed by this transaction-level test."""\n' >"$dir/control/runtime.py"
   printf '"""fixture stand-in, never executed by this transaction-level test."""\n' >"$dir/control/server.py"
-  printf '#!/usr/bin/env bash\n# fixture stand-in, never executed by this transaction-level test.\n' >"$dir/deploy/production/mirofish-runtime.sh"
+  cp "$MIROFISH_LIB_SH" "$dir/deploy/production/mirofish-runtime.sh"
   printf '#!/usr/bin/env bash\n# fixture stand-in, never executed by this transaction-level test.\nexit 0\n' >"$dir/deploy/production/prepare-mirofish.sh"
   chmod 0755 "$dir/deploy/production/prepare-mirofish.sh"
   # Task 5 (app-controls, fix round 1): deploy.sh's own stage_unit() now
