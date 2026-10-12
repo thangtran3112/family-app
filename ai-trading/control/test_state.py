@@ -46,7 +46,7 @@ class StateTest(unittest.TestCase):
         self.assertEqual(APP_IDS, ("tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish"))
         self.assertEqual(
             PROTECTED_SERVICES,
-            ("web", "gateway", "auth", "cloudflared", "market-data"),
+            ("web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler"),
         )
         self.assertEqual(CATALOG["schemaVersion"], 1)
         self.assertEqual(dict(CATALOG["apps"]), APP_SERVICES)
@@ -59,7 +59,7 @@ class StateTest(unittest.TestCase):
         })
         self.assertEqual(
             catalog["protected"],
-            ["web", "gateway", "auth", "cloudflared", "market-data"],
+            ["web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler"],
         )
         with self.assertRaises(ValueError):
             validate_catalog({**catalog, "extra": True})
@@ -78,7 +78,7 @@ class StateTest(unittest.TestCase):
     def test_selected_services_keeps_protected_and_gates_mirofish(self):
         state = initial_state(None)
         self.assertEqual(selected_services(state, False), (
-            "web", "gateway", "auth", "cloudflared", "market-data",
+            "web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler",
             "ta-terminal", "ta-research", "ahf-terminal", "vibe-trading",
         ))
         state["desired"]["mirofish"] = True
@@ -386,7 +386,7 @@ class StateTest(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 self.assertEqual(main(["services", "--mirofish-ready", "false", *args]), 0)
             self.assertEqual(output.getvalue().splitlines(), [
-                "web", "gateway", "auth", "cloudflared", "market-data",
+                "web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler",
                 "ta-terminal", "ta-research", "ahf-terminal", "vibe-trading",
             ])
 
