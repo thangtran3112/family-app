@@ -322,7 +322,7 @@ section (§4):
 | **3.3 Engine** | `ai_trading.engine` (all 5 files + tests) | 3.1 (`signals`/`alerts`/`deliveries`/`strategies`/`strategy_versions`); Phase 1's `evaluate`, Phase 2a's `data.bars` (already merged) | — |
 | **3.4 Jobs** | `ai_trading.jobs` (all 10 files + tests) | 3.1 (`strategies`/`strategy_versions`/`watchlists`/`watchlist_items`); 3.3's `engine.tick.tick` (stub it if 3.3 isn't finished yet); 3.2's `notify.dedupe.should_alert` | — |
 | **3.5 API** | `ai_trading.api` (all 10 files + tests) | 3.2's `dispatch_pending`, 3.3's `tick`/`compute_card_back`, 3.4's `backfill_on_join`, 3.1 | `pyproject.toml` (`fastapi`, `uvicorn[standard]`, `sse-starlette`, dev `httpx`, the `api/*.py` `B008` per-file-ignore) |
-| **3.6 Deploy** | Dockerfile, `docker-bake.hcl`, `docker-compose.yml`, `Caddyfile`, `deploy.sh` | 3.5's `api/app.py`/`api/main.py` and 3.4's `jobs/scheduler.py`/`jobs/healthcheck.py` only for its `command:`/`healthcheck:` lines — otherwise no code dependency, can be drafted in parallel with everything | none of 3.1–3.5's files |
+| **3.6 Deploy** | Dockerfile, `deploy/ci/test-l6-desk.sh`, `docker-bake.hcl`, `docker-compose.yml`, `Caddyfile`, `deploy.sh` | 3.5's `api/app.py`/`api/main.py` and 3.4's `jobs/scheduler.py`/`jobs/healthcheck.py` only for its `command:`/`healthcheck:` lines — otherwise no code dependency, can be drafted in parallel with everything | none of 3.1–3.5's files |
 | **3.7 Integration and readiness** | `/healthz` fix, the real `pyproject.toml` path, `.github/workflows/ai-trading-ci.yml` confirmation | 3.1–3.6 all merged | — |
 | **3.8 Release and operator checklist** | no code | 3.1–3.7 complete and verified | — |
 
@@ -6794,6 +6794,9 @@ git commit -m "Desk: ai_trading.api (FastAPI, identity, REST, SSE quotes)"
 
 **Files:**
 - Create: `packages/family-desk/backend/Dockerfile`
+- Create: `deploy/ci/test-l6-desk.sh` (offline L6 deploy harness, adapted from the integrated
+  prototype's own `temp/p3-proto/final/ai-trading/deploy/ci/test-l6-desk.sh` for this task's real
+  file layout and the app-controls availability gate — Step 7 below)
 - Modify: `deploy/docker-bake.hcl` (add target `desk`, add it to `group "default"`)
 - Modify: `deploy/production/docker-compose.yml` (add services `api`, `scheduler`; add network
   `database`; `scheduler` gets a `healthcheck:` running `python -m ai_trading.jobs.healthcheck`
@@ -7088,7 +7091,36 @@ print('ok')
 
 Expected: `ok`.
 
-- [ ] **Step 7: Run the two existing, unmodified offline deploy test scripts against the edited
+- [ ] **Step 7: Create and run the offline L6 deploy harness, `deploy/ci/test-l6-desk.sh`.** The
+  integrated prototype's own `temp/p3-proto/final/ai-trading/deploy/ci/test-l6-desk.sh` was written
+  against that prototype's pre-app-controls snapshot of the real files (same gap Step 3's own note
+  above describes); this task creates the real repository's copy, adapted for its actual file
+  layout (`packages/family-desk/backend/` lives directly under `ai-trading/`, not nested the way the
+  integration's own `final/` tree was) and for the app-controls availability gate (Task 4, 01g):
+  `/api/*` (MiroFish) now runs through `import availability_gate mirofish`, calling a control helper
+  over a unix socket at `/run/family-app/ai-trading-control/control.sock`, which no offline harness
+  may touch directly. Its real-Caddy routing check (Case 12) instead stands up a throwaway Python
+  control-helper stub listening on a unix socket inside its own temp directory, bind-mounted into
+  the test Caddy container at that same hardcoded path — mirroring how production bind-mounts the
+  real helper's socket directory in, never the real host path itself. Case 8 (health-check.sh's
+  `SERVICES`) is adjusted to confirm the file is *unchanged* and still dynamically computed (Decision
+  5 is HELD, so `api`/`scheduler` are not yet in the catalog `health-check.sh` reads), rather than
+  asserting a static list that no longer exists. Case 9 additionally confirms `handle /api/desk/*`
+  carries no `import availability_gate` of its own (it is not yet a toggleable app-controls entry).
+  Every other case (1–7, 10–11, 13) is unchanged from the prototype's own copy, and the case count
+  stays the same: 24 counted cases (plus Case 13, permanently informational-SKIP by design, same as
+  the prototype's own copy — the Dockerfile build it would otherwise need is run manually instead,
+  per `ai-trading/AGENTS.md`'s Verification section).
+
+```
+cd ai-trading
+bash deploy/ci/test-l6-desk.sh
+```
+
+Expected: `24 checks passed, 0 failed (test-l6-desk.sh)`, with Cases 10–12 actually running (not
+skipping) whenever a Docker daemon is available, and zero stray containers/networks left behind.
+
+- [ ] **Step 8: Run the two existing, unmodified offline deploy test scripts against the edited
   files.**
 
 ```
@@ -7102,12 +7134,17 @@ two scripts are unaffected by the healthz fix or the scheduler healthcheck chang
 `deploy.sh`'s secret-staging/rollback machinery and the CI-side Cloudflare tunnel-token fetch,
 neither of which this task's changes touch).
 
-- [ ] **Step 8: Commit.**
+- [ ] **Step 9: Commit.**
 
 ```
 git add packages/family-desk/backend/Dockerfile deploy/docker-bake.hcl deploy/production/docker-compose.yml deploy/production/Caddyfile deploy/production/deploy.sh
 git commit -m "Desk: deploy (Dockerfile, bake, compose, Caddy route)"
 ```
+
+`deploy/ci/test-l6-desk.sh` and the scheduler's `healthcheck:` block (Step 3/7 above) ship in a
+separate reconciliation commit on top of this one, `Desk: deploy health and offline harness` — the
+lane that produced this commit was still working from the plan's pre-review-fix snapshot when it
+landed; this plan describes the finished, reconciled state.
 
 Decision 5's app-controls registration (`control/catalog.json`, `control/state.py`) is HELD — it is
 a separate, owner-approved follow-up commit, not part of this one.
