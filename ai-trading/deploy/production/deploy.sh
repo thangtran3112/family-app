@@ -69,22 +69,65 @@
 #                             data and containerd's image store share it).
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 APP_DIR="${APP_DIR:-/opt/family-app/ai-trading}"
 SECRETS_DIR="${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}"
 REGISTRY="${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}"
 ENV_STAGING_DIR="${ENV_STAGING_DIR:-}"
 APP_CONFIG_STAGING_DIR="${APP_CONFIG_STAGING_DIR:-}"
 RUNTIME_ENV_DIR="${AI_TRADING_RUNTIME_ENV_DIR:-/run/family-app/ai-trading}"
-MIROFISH_REQUIRED_KEYS=(ZEP_API_KEY LLM_API_KEY)
-# Prior/new-state tracking for mirofish.env, mirrors PRIOR_EXISTED/.previous/
-# below but for the one optional MiroFish runtime file: MIROFISH_INSTALLED_THIS_RUN
-# is only ever 1 between a successful install and either activate_mirofish's
-# own post-install checks or restore_or_remove_mirofish() consuming it (both
-# reset it to 0), so a later, unrelated pipeline failure's rollback() never
-# redoes work activate_mirofish already finished or already self-healed.
-MIROFISH_RUNTIME_ENV_FILE=""
-MIROFISH_PRIOR_EXISTED=0
-MIROFISH_INSTALLED_THIS_RUN=0
+export APP_DIR SECRETS_DIR RUNTIME_ENV_DIR
+# Task 5 (app-controls): the shared lifecycle lock/state file a cooperating
+# control helper (control/server.py, installed by infrastructure/vps/
+# app-controls/install.sh) and every PUT/reconcile operation also use --
+# never a deploy-only copy. AI_TRADING_CONTROL_OWNER_UID is test-only (a
+# non-root test process cannot create a uid-0-owned lock/state file; never
+# set in production, where root deploys and the fixed default applies).
+STATE_DIR="${AI_TRADING_STATE_DIR:-/var/lib/family-app/ai-trading}"
+LOCK_PATH="$STATE_DIR/.control.lock"
+CONTROL_STATE_PATH="$STATE_DIR/control.json"
+LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
+CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
+CONTROL_SCRATCH_DIR=""
+CONTROL_SNAPSHOT_PATH=""
+# Task 5 (app-controls, fix round 1): the control helper's own systemd
+# unit. deploy.sh -- never install.sh, which only bootstraps the host
+# identity/directories/state before deploy.sh ever runs -- owns this
+# file's install/backup/restore/activation, under the SAME lifecycle lock
+# and the SAME rollback transaction as the six CONFIG_FILES control/*
+# entries, so "old deploy rollback must restore the matching helper/
+# runtime version ... roll back its activation" (task-5-brief) actually
+# holds: stage_unit()'s backup always runs before this run's own
+# install.sh bootstrap (which never touches this path) has had any chance
+# to overwrite it.
+UNIT_NAME=ai-trading-control.service
+UNIT_DIR="${AI_TRADING_UNIT_DIR:-/etc/systemd/system}"
+UNIT_INSTALLED_PATH="$UNIT_DIR/$UNIT_NAME"
+UNIT_STAGED_NAME="ai-trading-control.service"
+# Empty, never 0, until stage_unit() actually probes $UNIT_INSTALLED_PATH and
+# sets this explicitly -- a trusted KNOWN prior-absence signal, never a
+# default/unknown one. A deploy that fails before stage_unit ever runs (e.g.
+# a stage_configs failure) leaves this empty; rollback()'s own health-check
+# skip below must treat that as "unit state unknown, verify normally," never
+# as "no prior unit," since a genuinely untouched, still-active prior helper
+# may exist on disk in that case.
+UNIT_PRIOR_EXISTED=""
+UNIT_WAS_ACTIVE=0
+UNIT_WAS_ENABLED=0
+UNIT_STAGED=0
+UNIT_BACKUP_PATH=""
+# Shared MiroFish render/validate/install library (Task 2, app-controls):
+# defines install_secret_file, mirofish_env_valid, file_mode_octal,
+# cleanup_mirofish_scratch, restore_or_remove_mirofish, activate_mirofish
+# and their tracking globals (MIROFISH_REQUIRED_KEYS, MIROFISH_RUNTIME_ENV_FILE,
+# MIROFISH_PRIOR_EXISTED, MIROFISH_INSTALLED_THIS_RUN) -- also sourced
+# standalone by production/prepare-mirofish.sh so a later operator-triggered
+# MiroFish activation (control/runtime.py's Runtime.prepare_mirofish(), used
+# when an operator turns MiroFish on without a full redeploy) shares this
+# exact checked contract instead of a second copy.
+# shellcheck source=SCRIPTDIR/mirofish-runtime.sh
+source "$SCRIPT_DIR/mirofish-runtime.sh"
 MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
@@ -93,10 +136,22 @@ SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
-# The four declarative config files this script now owns end-to-end (A10a):
-# the workflow only stages them into APP_CONFIG_STAGING_DIR and no longer
-# installs any of them as the VPS's active config itself.
-CONFIG_FILES=(docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh)
+# The four declarative config files this script now owns end-to-end (A10a),
+# plus (Task 5, app-controls) the control helper's own code/catalog and the
+# standalone MiroFish preparer library it depends on at its deployed
+# location (control/runtime.py's PREPARE_MIROFISH_SCRIPT resolves relative
+# to its OWN installed path, two directories up then deploy/production/ --
+# see control/runtime.py's module docstring) -- all ten are staged,
+# validated, backed up and atomically installed as ONE transaction, and an
+# old-tag rollback restores every one of them together, never just the
+# original four. The workflow only stages them into APP_CONFIG_STAGING_DIR
+# (mirroring $APP_DIR's own nested layout) and no longer installs any of
+# them as the VPS's active config itself.
+CONFIG_FILES=(
+  docker-compose.yml docker-compose.mirofish.yml Caddyfile health-check.sh
+  control/catalog.json control/state.py control/runtime.py control/server.py
+  deploy/production/mirofish-runtime.sh deploy/production/prepare-mirofish.sh
+)
 # Same prior/new-state bookkeeping as PRIOR_EXISTED above, but for CONFIG_FILES.
 declare -A CONFIG_PRIOR_EXISTED=()
 # Armed by stage_configs once backups exist and the first atomic install has
@@ -137,20 +192,6 @@ validate_staged_file() {
     [[ -z "$line" || "$line" == '#'* ]] && continue
     [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.+$ ]] || die "$file: invalid line: $line"
   done <"$file"
-}
-
-# install_secret_file SRC DEST: writes DEST atomically (a root:root 0600 temp
-# file on DEST's filesystem, then `mv -f` over DEST) so a reader never sees a
-# partially-written file and a failure never leaves DEST truncated.
-install_secret_file() {
-  local src="$1" dest="$2" tmp
-  tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX")"
-  if [[ -n "${DEPLOY_SH_SKIP_CHOWN:-}" ]]; then
-    install -m 0600 "$src" "$tmp"
-  else
-    install -o root -g root -m 0600 "$src" "$tmp"
-  fi
-  mv -f "$tmp" "$dest"
 }
 
 compose() {
@@ -194,6 +235,226 @@ compose() {
 cleanup_scratch_dirs() {
   [[ -n "$RENDER_SRC_DIR" ]] && rm -rf "$RENDER_SRC_DIR"
   [[ -n "$CONFIG_BACKUP_DIR" ]] && rm -rf "$CONFIG_BACKUP_DIR"
+  # Task 5 (app-controls): this run's own root-only coordinator/state-CLI
+  # copy (see acquire_lifecycle_lock/prepare_control_scratch below) --
+  # removed on every exit, same as the other two scratch directories above.
+  [[ -n "$CONTROL_SCRATCH_DIR" ]] && rm -rf "$CONTROL_SCRATCH_DIR"
+  # This run's own backup of the prior systemd unit content (stage_unit
+  # below), a single file under $STATE_DIR rather than a whole scratch
+  # directory -- removed on every exit, once restore_or_remove_unit (if it
+  # ran at all) no longer needs it.
+  [[ -n "$UNIT_BACKUP_PATH" ]] && rm -f "$UNIT_BACKUP_PATH"
+  # Release the lifecycle lock (FD 9) LAST, after every other scratch
+  # cleanup above -- held from before any preference/config mutation
+  # (acquire_lifecycle_lock) through commit or rollback, on every exit path.
+  # Closing an fd that was never opened (a precondition failure before
+  # acquire_lifecycle_lock ever ran) is a silent no-op in bash.
+  exec 9>&- 2>/dev/null || true
+}
+
+# --- Task 5 (app-controls): lifecycle lock, persisted-preference
+# snapshot/restore, and explicit service selection. Every helper of
+# control/state.py's own CLI below shares the SAME lifecycle lock
+# (FD 9)/state file the control helper (control/server.py) and install.sh
+# use -- never a deploy-only duplicate. install.sh has already initialized
+# $CONTROL_STATE_PATH (adopting any already-running app, including MiroFish,
+# on a genuinely first install) by the time deploy.sh ever runs: deploy.sh
+# itself never (re-)initializes or adopts -- a missing/corrupt state file
+# fails this deploy closed, before any secret/config mutation, rather than
+# silently re-deriving fresh defaults over an operator's real choices.
+
+# flock_fd FD TIMEOUT_SECONDS: acquires a blocking (bounded-wait) exclusive
+# flock on an already-open FD -- the same BSD flock(2) semantics
+# state.py's own validate_inherited_lock already relies on, via a short
+# Python retry loop instead of shelling out to util-linux's `flock` binary
+# (not present on macOS, where this suite is also run directly -- see
+# AGENTS.md's own "Linux-only control tests" container guidance; `flock` as
+# a *command* is Linux-only, the underlying system call this reimplements
+# is standard, portable POSIX flock(2)). The lock is associated with the
+# OPEN FILE DESCRIPTION behind FD, not this short-lived python3 process, so
+# it remains held by the calling shell's own FD after python3 exits --
+# exactly like util-linux's own `flock -w N FD` (no command) form.
+flock_fd() {
+  local fd="$1" timeout="$2"
+  python3 -c '
+import fcntl
+import sys
+import time
+
+fd = int(sys.argv[1])
+deadline = time.monotonic() + float(sys.argv[2])
+while True:
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        sys.exit(0)
+    except BlockingIOError:
+        if time.monotonic() >= deadline:
+            sys.exit(1)
+        time.sleep(0.1)
+' "$fd" "$timeout"
+}
+
+# acquire_lifecycle_lock: opens/creates $LOCK_PATH at FD 9 and holds an
+# exclusive flock with a bounded wait (never indefinite -- a stuck PUT/
+# reconcile must not hang a deploy forever). Held from here through every
+# later preference/config mutation, health-check, and commit-or-rollback;
+# released only by cleanup_scratch_dirs' own EXIT trap, which this arms.
+acquire_lifecycle_lock() {
+  install -d -m 0700 "$STATE_DIR" || die "cannot create or validate the lifecycle state directory $STATE_DIR"
+  local old_umask
+  old_umask="$(umask)"
+  umask 077
+  exec 9>"$LOCK_PATH" || { umask "$old_umask"; die "cannot open lifecycle lock $LOCK_PATH"; }
+  umask "$old_umask"
+  flock_fd 9 "$LOCK_WAIT_SECONDS" || die "could not acquire the lifecycle lock within ${LOCK_WAIT_SECONDS}s; another operation is in progress"
+  # Single combined EXIT trap for every scratch directory AND the lock
+  # itself -- `trap ... EXIT` replaces, it does not chain, so this must be
+  # the one place anything arms it; render_profiles' own later, identical
+  # `trap cleanup_scratch_dirs EXIT` is then just a harmless idempotent re-arm.
+  trap cleanup_scratch_dirs EXIT
+}
+
+# prepare_control_scratch: copies this run's OWN staged control/state.py,
+# control/catalog.json and health-check.sh into a fresh root-only scratch
+# directory -- read from $APP_CONFIG_STAGING_DIR (what THIS deploy brings),
+# never from $APP_DIR/control (whatever is currently installed, which
+# restore_or_remove_configs may remove or revert to an older version partway
+# through this same run). Every later control/state.py invocation and the
+# health-check call inside deploy_tag() below use ONLY this scratch copy,
+# so a rollback to a pre-controls artifact set (first activation: the
+# control/* CONFIG_FILES entries had no prior version, so restore deletes
+# them) never deletes the very driver still needed to restore preferences or
+# select services for the previous tag's own redeploy.
+prepare_control_scratch() {
+  CONTROL_SCRATCH_DIR="$(mktemp -d "$APP_DIR/.control-scratch-XXXXXX")"
+  install -d -m 0755 "$CONTROL_SCRATCH_DIR/control"
+  cp -p "$APP_CONFIG_STAGING_DIR/control/state.py" "$CONTROL_SCRATCH_DIR/control/state.py"
+  cp -p "$APP_CONFIG_STAGING_DIR/control/catalog.json" "$CONTROL_SCRATCH_DIR/control/catalog.json"
+  cp -p "$APP_CONFIG_STAGING_DIR/health-check.sh" "$CONTROL_SCRATCH_DIR/health-check.sh"
+  chmod 0755 "$CONTROL_SCRATCH_DIR/health-check.sh"
+}
+
+# control_state_py ARGS...: this run's own scratch copy, never $APP_DIR's.
+control_state_py() {
+  python3 "$CONTROL_SCRATCH_DIR/control/state.py" "$@" --owner-uid "$CONTROL_OWNER_UID"
+}
+
+# snapshot_preferences: saves the CURRENT persisted choices (desired flags,
+# revision, results) to a fresh root-only scratch file before anything in
+# this deploy mutates secrets, config, or Compose state -- restored on
+# rollback by restore_preferences_on_rollback below. A missing or corrupt
+# $CONTROL_STATE_PATH fails this (and therefore the whole deploy) closed,
+# before any further mutation -- install.sh's own job is to have already
+# created/adopted it; deploy.sh never silently re-initializes it here.
+snapshot_preferences() {
+  CONTROL_SNAPSHOT_PATH="$(mktemp "$STATE_DIR/.snapshot-XXXXXX")"
+  control_state_py snapshot --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" \
+    --lock-fd 9 --output "$CONTROL_SNAPSHOT_PATH" \
+    || die "failed to snapshot the current app-control preferences"
+}
+
+# restore_preferences_on_rollback: used by rollback() to undo whatever this
+# run's own map_mirofish_dispatch_to_state (and any reconcile racing it)
+# changed -- restore_preferences always assigns a NEW, strictly greater
+# revision (state.py's own contract), so a rolled-back deploy never leaves a
+# stale/ambiguous revision behind. A no-op if snapshot_preferences never ran
+# (nothing to restore to yet).
+restore_preferences_on_rollback() {
+  [[ -n "$CONTROL_SNAPSHOT_PATH" && -f "$CONTROL_SNAPSHOT_PATH" ]] || return 0
+  control_state_py restore --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" \
+    --lock-fd 9 --snapshot "$CONTROL_SNAPSHOT_PATH" \
+    || echo "deploy: control: failed to restore prior app-control preferences; the persisted choices may not match the redeployed release" >&2
+}
+
+# read_desired_mirofish: the single current `desired.mirofish` boolean,
+# straight from the persisted state -- never re-derived from a "container
+# currently running" heuristic (task-5-brief: "not current-running
+# heuristic after adoption"). Drives whether activate_mirofish (below) is
+# asked to render MiroFish's credentials for this deploy at all.
+read_desired_mirofish() {
+  python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from state import read_state
+state = read_state(sys.argv[2], owner_uid=int(sys.argv[3]))
+print("true" if state["desired"]["mirofish"] else "false")
+' "$CONTROL_SCRATCH_DIR/control" "$CONTROL_STATE_PATH" "$CONTROL_OWNER_UID"
+}
+
+# map_mirofish_dispatch_to_state: folds the existing MIROFISH_ACTIVATE
+# operator input (1/0/keep/unset) into the SAME persisted desired state,
+# under the lock, before this deploy ever reads it back -- "1"/"0" apply
+# immediately; "keep" (and any other/unset value -- every plain push
+# deploy) is state.py's own existing no-op, preserving whatever preference
+# is already persisted (including one adopted at install time), rather than
+# deriving it fresh from which container happens to be running right now.
+map_mirofish_dispatch_to_state() {
+  local mode
+  case "${MIROFISH_ACTIVATE:-}" in
+    1) mode=1 ;;
+    0) mode=0 ;;
+    *) mode=keep ;;
+  esac
+  control_state_py set-mirofish --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" \
+    --lock-fd 9 --mode "$mode" \
+    || die "failed to update the persisted MiroFish preference"
+}
+
+# mirofish_ready_flag: the same COMPOSE_PROFILES=mirofish signal
+# health-check.sh's own mirofish_enabled() already uses -- set only by a
+# CONFIRMED, installed activate_mirofish() success for this run.
+mirofish_ready_flag() {
+  [[ "${COMPOSE_PROFILES:-}" == mirofish ]] && printf 'true\n' || printf 'false\n'
+}
+
+# all_catalog_services: every service name mapped to ANY app group in this
+# run's own scratch catalog.json -- read as plain data (never re-deriving
+# or duplicating state.py's own validation/selection logic), used only to
+# compute which groups are NOT selected (stop_disabled_groups below).
+all_catalog_services() {
+  python3 -c '
+import json
+import sys
+with open(sys.argv[1]) as handle:
+    data = json.load(handle)
+print("\n".join(service for services in data["apps"].values() for service in services))
+' "$CONTROL_SCRATCH_DIR/control/catalog.json"
+}
+
+# apply_selected_services: explicit, catalog-driven service selection --
+# task-5-brief's own snippet, verbatim in spirit: never a blanket
+# `compose up` that could silently revive an intentionally disabled group.
+# The command substitution is checked directly (never `mapfile <
+# <(command)`, which would hide a failing Python exit status).
+apply_selected_services() {
+  local mirofish_ready selected_text
+  mirofish_ready="$(mirofish_ready_flag)"
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready")" \
+    || die "control: failed to compute the selected service list"
+  [[ -n "$selected_text" ]] || die "control: selected service list is empty"
+  local selected=()
+  mapfile -t selected <<<"$selected_text"
+  compose up -d --no-deps --wait --wait-timeout 300 "${selected[@]}"
+}
+
+# stop_disabled_groups: every catalog service NOT in the currently selected
+# list is stopped explicitly, with the existing fixed 60s graceful timeout
+# -- never removed, never its volumes/images touched, and never left for a
+# dependency-driven `up` to silently revive. A no-op when nothing is disabled.
+stop_disabled_groups() {
+  local mirofish_ready selected_text all_text disabled=()
+  mirofish_ready="$(mirofish_ready_flag)"
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready")" \
+    || die "control: failed to compute the selected service list"
+  all_text="$(all_catalog_services)" || die "control: failed to read the service catalog"
+  local selected_set=$'\n'"$selected_text"$'\n'
+  local svc
+  while IFS= read -r svc; do
+    [[ -n "$svc" ]] || continue
+    [[ "$selected_set" == *$'\n'"$svc"$'\n'* ]] || disabled+=("$svc")
+  done <<<"$all_text"
+  ((${#disabled[@]})) || return 0
+  compose stop --timeout 60 "${disabled[@]}"
 }
 
 # render_profiles: VPS-side render of the four ai-trading Firestore profiles
@@ -237,53 +498,6 @@ secret_source_dir() {
     printf '%s\n' "$ENV_STAGING_DIR"
   else
     printf '%s\n' "$RENDER_SRC_DIR"
-  fi
-}
-
-# mirofish_env_valid FILE: soft (non-dying) sibling of validate_staged_file,
-# for the optional MiroFish profile only. A malformed or incomplete
-# ai-trading/mirofish profile must leave MiroFish disabled, never abort the
-# whole deploy -- so this returns 1 instead of calling die(). Checks the
-# same NUL/CR/KEY=value shape as validate_staged_file, plus presence of
-# every MIROFISH_REQUIRED_KEYS name (never echoes a value).
-mirofish_env_valid() {
-  local file="$1" line key
-  [[ -f "$file" ]] || return 1
-  cmp -s <(LC_ALL=C tr -d '\000' <"$file") "$file" || return 1
-  if LC_ALL=C grep -q $'\r' "$file"; then
-    return 1
-  fi
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" || "$line" == '#'* ]] && continue
-    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.+$ ]] || return 1
-  done <"$file"
-  for key in "${MIROFISH_REQUIRED_KEYS[@]}"; do
-    grep -q "^${key}=.\+$" "$file" || return 1
-  done
-}
-
-# file_mode_octal FILE: this file's permission bits as a 3-digit octal
-# string (e.g. "600"), GNU stat first (the real VPS), BSD/macOS stat as a
-# fallback (this repo's own offline tests).
-file_mode_octal() {
-  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
-}
-
-# cleanup_mirofish_scratch DIR: removes activate_mirofish's one-shot render
-# scratch directory, which may still contain the rendered ai-trading/mirofish
-# profile's plaintext values (review P2, round 3: a bare, unchecked `rm -rf`
-# here could fail silently and leave that secret-bearing directory sitting
-# on disk even on an otherwise fully successful activation). Explicitly
-# checked everywhere it's used: a failure on an already-failing path just
-# gets an extra path-only warning logged (the activation is being aborted
-# either way); a failure on the post-install-success path is escalated by
-# the caller into a hard activation failure instead of silently exporting
-# COMPOSE_PROFILES over a leftover copy of the rendered secret. Never prints
-# a key's value, only the scratch directory's own path.
-cleanup_mirofish_scratch() {
-  if ! rm -rf "$1"; then
-    echo "deploy: mirofish: failed to remove render scratch $1; it may still contain the rendered profile's values on disk" >&2
-    return 1
   fi
 }
 
@@ -343,193 +557,6 @@ stop_remove_mirofish_container() {
     echo "deploy: mirofish: best-effort stop/remove of the mirofish container failed; it may still be running -- check manually" >&2
     return 1
   fi
-}
-
-# restore_or_remove_mirofish: undoes activate_mirofish's one mutation this
-# run -- the mirofish.env it just installed -- the same prior/new-state
-# discipline restore_or_remove_secrets already applies to the five
-# SECRET_FILES. A no-op unless this run actually installed a new
-# mirofish.env (MIROFISH_INSTALLED_THIS_RUN); resets that flag immediately
-# so a second call (activate_mirofish's own post-install self-heal, then
-# later rollback() for an unrelated later failure) never re-applies it
-# twice. PRIOR_EXISTED=1 restores the pre-run backup and keeps
-# COMPOSE_PROFILES=mirofish (the previous good deploy had MiroFish active,
-# so a rollback to it should too); PRIOR_EXISTED=0 deletes the file this run
-# created and unsets COMPOSE_PROFILES (MiroFish was never active before
-# this run, so nothing should start it).
-#
-# Every restore/delete step is explicitly checked (review P2): a missing
-# backup, a failed install_secret_file, or a failed rm is never silently
-# ignored. On any such failure this returns 1 and -- the safe default when
-# the on-disk state can no longer be confirmed -- always unsets
-# COMPOSE_PROFILES rather than risk re-enabling MiroFish against a file
-# that was never actually restored. Never prints a key's value, only paths.
-#
-# Review P2, round 3: when restore/delete itself fails, a container this
-# same deploy already started (a successful `compose up` before a later
-# health-check/post-Compose failure triggered rollback) would otherwise
-# keep running with no corresponding mirofish.env and no COMPOSE_PROFILES
-# -- "MiroFish left disabled" in the log, but not in reality. Each of these
-# three failure branches also makes a best-effort
-# stop_remove_mirofish_container call; its own result is logged by that
-# function and never changes this function's outcome (already returning 1
-# either way) -- this is defense in depth on top of the file-state fix, not
-# a replacement for it.
-restore_or_remove_mirofish() {
-  [[ "$MIROFISH_INSTALLED_THIS_RUN" == 1 ]] || return 0
-  MIROFISH_INSTALLED_THIS_RUN=0
-  if [[ "$MIROFISH_PRIOR_EXISTED" == 1 ]]; then
-    if [[ ! -f "$RUNTIME_ENV_DIR/.previous/mirofish.env" ]]; then
-      echo "deploy: mirofish: rollback: missing backup $RUNTIME_ENV_DIR/.previous/mirofish.env; cannot restore, leaving MiroFish disabled" >&2
-      unset COMPOSE_PROFILES
-      stop_remove_mirofish_container || true
-      return 1
-    fi
-    if ! install_secret_file "$RUNTIME_ENV_DIR/.previous/mirofish.env" "$MIROFISH_RUNTIME_ENV_FILE"; then
-      echo "deploy: mirofish: rollback: failed to restore $MIROFISH_RUNTIME_ENV_FILE from backup; leaving MiroFish disabled" >&2
-      unset COMPOSE_PROFILES
-      stop_remove_mirofish_container || true
-      return 1
-    fi
-    export COMPOSE_PROFILES=mirofish
-  else
-    if ! rm -f "$MIROFISH_RUNTIME_ENV_FILE"; then
-      echo "deploy: mirofish: rollback: failed to remove $MIROFISH_RUNTIME_ENV_FILE; leaving MiroFish disabled" >&2
-      unset COMPOSE_PROFILES
-      stop_remove_mirofish_container || true
-      return 1
-    fi
-    unset COMPOSE_PROFILES
-    # Whole-branch review reopen: this run's own activate_mirofish may have
-    # already started a mirofish container (a successful `compose up`
-    # before some later, unrelated failure triggered this rollback) --
-    # removing mirofish.env alone doesn't stop it. Best-effort here,
-    # consistent with the three failure branches above and with rollback()'s
-    # own established "report, never block the rest of recovery" discipline
-    # -- the forward path's hard-fail gate is ensure_mirofish_stopped(),
-    # not this recovery path.
-    stop_remove_mirofish_container || true
-  fi
-}
-
-# activate_mirofish: operator opt-in (MIROFISH_ACTIVATE=1, or =keep while a
-# mirofish container is already running). Renders the
-# optional ai-trading/mirofish Firestore profile into a root-only scratch
-# directory, validates it holds every MIROFISH_REQUIRED_KEYS name (never
-# printing a value), backs up any mirofish.env this install is about to
-# replace (so a later failure elsewhere in this deploy can roll it back,
-# same as the five SECRET_FILES), and only on a *confirmed* install --
-# required keys present and mode exactly 0600, re-checked against the
-# installed file itself, not just the scratch copy -- exports
-# COMPOSE_PROFILES=mirofish so deploy_tag's `compose up` actually starts the
-# service.
-#
-# Every step below is its own explicit `if ! cmd; then ...; return 1; fi` (or
-# equivalent) -- this function is always called as `activate_mirofish ||
-# true` from main flow (a deliberate soft-failure contract: a failed/absent
-# MiroFish activation must never fail the other three apps' deploy), and
-# bash's errexit does not propagate out of *any* command run while
-# evaluating the left side of a `||` list, including every command inside a
-# function called that way. Relying on `set -e` here would mean a silently
-# failed install could still fall through to exporting COMPOSE_PROFILES --
-# never let that happen; every required step checks its own exit status.
-#
-# The very first thing this does, unconditionally, is unset any inherited
-# COMPOSE_PROFILES (a parent shell/CI export, or a stale value left over
-# from nothing at all in this process) so a prior run's activation -- or an
-# operator's leftover export -- can never bypass this run's own decision;
-# only a confirmed-good activation below ever re-sets it.
-activate_mirofish() {
-  unset COMPOSE_PROFILES
-  case "${MIROFISH_ACTIVATE:-}" in
-    1) ;;
-    keep)
-      [[ -n "$(compose ps -q --status running mirofish 2>/dev/null)" ]] || return 0
-      echo "deploy: mirofish: running; keeping it enabled for this deploy" >&2
-      ;;
-    *) return 0 ;;
-  esac
-  local family_config="$APP_DIR/family_config.py" scratch
-  if [[ ! -x "$family_config" ]]; then
-    echo "deploy: mirofish: missing $family_config; leaving MiroFish disabled" >&2
-    return 1
-  fi
-  if ! install -d -m 0700 "$RUNTIME_ENV_DIR"; then
-    echo "deploy: mirofish: failed to create $RUNTIME_ENV_DIR; leaving MiroFish disabled" >&2
-    return 1
-  fi
-  if ! scratch="$(mktemp -d "$RUNTIME_ENV_DIR/.mirofish-render-XXXXXX")"; then
-    echo "deploy: mirofish: failed to create a render scratch directory; leaving MiroFish disabled" >&2
-    return 1
-  fi
-  if ! FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
-       "$family_config" render ai-trading/mirofish --out-dir "$scratch"; then
-    cleanup_mirofish_scratch "$scratch"
-    echo "deploy: mirofish: render of ai-trading/mirofish failed; leaving MiroFish disabled" >&2
-    return 1
-  fi
-  if ! mirofish_env_valid "$scratch/mirofish.env"; then
-    cleanup_mirofish_scratch "$scratch"
-    echo "deploy: mirofish: ai-trading/mirofish profile missing a required key (${MIROFISH_REQUIRED_KEYS[*]}) or malformed; leaving MiroFish disabled" >&2
-    return 1
-  fi
-
-  MIROFISH_RUNTIME_ENV_FILE="$RUNTIME_ENV_DIR/mirofish.env"
-  if [[ -f "$MIROFISH_RUNTIME_ENV_FILE" ]]; then
-    if ! install -d -m 0700 "$RUNTIME_ENV_DIR/.previous" || ! cp -p "$MIROFISH_RUNTIME_ENV_FILE" "$RUNTIME_ENV_DIR/.previous/mirofish.env"; then
-      cleanup_mirofish_scratch "$scratch"
-      echo "deploy: mirofish: failed to back up the existing mirofish.env; leaving MiroFish disabled" >&2
-      return 1
-    fi
-    MIROFISH_PRIOR_EXISTED=1
-  else
-    MIROFISH_PRIOR_EXISTED=0
-  fi
-
-  if ! install_secret_file "$scratch/mirofish.env" "$MIROFISH_RUNTIME_ENV_FILE"; then
-    cleanup_mirofish_scratch "$scratch"
-    echo "deploy: mirofish: failed to install $MIROFISH_RUNTIME_ENV_FILE; leaving MiroFish disabled" >&2
-    return 1
-  fi
-  MIROFISH_INSTALLED_THIS_RUN=1
-
-  # test-only: see header doc. Lets test-deploy-firestore.sh force the
-  # cleanup immediately below to fail for real (a genuine permission-denied
-  # rm), without needing a separate hand-rolled timing hack in the test
-  # file. Never set this in production.
-  [[ -n "${DEPLOY_SH_MIROFISH_CHMOD_SCRATCH_AFTER_INSTALL:-}" ]] && chmod "$DEPLOY_SH_MIROFISH_CHMOD_SCRATCH_AFTER_INSTALL" "$scratch"
-
-  # Unlike every cleanup above (already aborting this activation regardless
-  # of whether cleanup itself also succeeds), this one guards a file that
-  # just got marked as successfully installed: a failed cleanup here must
-  # not silently fall through to exporting COMPOSE_PROFILES over a leftover
-  # scratch copy of the rendered secret (review P2, round 3) -- escalate it
-  # into a full activation failure and self-heal (restore the prior file,
-  # or remove what was just written) exactly like the two post-install
-  # validation checks right below.
-  if ! cleanup_mirofish_scratch "$scratch"; then
-    echo "deploy: mirofish: post-install cleanup failed; leaving MiroFish disabled" >&2
-    restore_or_remove_mirofish
-    return 1
-  fi
-
-  # Confirm the actual installed file -- not just the scratch copy -- before
-  # enabling anything. A failure here self-heals immediately (restores the
-  # prior file, or removes what was just written) rather than leaving a
-  # known-bad file for some later, unrelated failure's rollback to find.
-  if ! mirofish_env_valid "$MIROFISH_RUNTIME_ENV_FILE"; then
-    echo "deploy: mirofish: installed mirofish.env failed post-install validation; leaving MiroFish disabled" >&2
-    restore_or_remove_mirofish
-    return 1
-  fi
-  if [[ "$(file_mode_octal "$MIROFISH_RUNTIME_ENV_FILE")" != 600 ]]; then
-    echo "deploy: mirofish: installed mirofish.env is not mode 600; leaving MiroFish disabled" >&2
-    restore_or_remove_mirofish
-    return 1
-  fi
-
-  export COMPOSE_PROFILES=mirofish
-  echo "deploy: mirofish: ai-trading/mirofish profile rendered; MiroFish enabled for this deploy" >&2
 }
 
 # ensure_mirofish_stopped: whole-branch review reopen. Whenever this deploy
@@ -635,6 +662,13 @@ require_free_space() {
 
 deploy_tag() {
   local tag="$1" tmp
+  # Self-sufficient regardless of caller context: the normal main flow
+  # always calls prepare_control_scratch before deploy_tag ever runs, but
+  # rollback()'s own `deploy_tag "$previous"` redeploy is also directly
+  # reachable from a function-level test harness that only ever called
+  # stage_secrets/stage_configs (and never acquire_lifecycle_lock/
+  # prepare_control_scratch) -- lazily prepare it here too, exactly once.
+  [[ -n "$CONTROL_SCRATCH_DIR" ]] || prepare_control_scratch
   # A10a fix: compose() exports AI_TRADING_IMAGE_TAG="$IMAGE_TAG" (the global)
   # as an inline env var on every `docker compose` invocation, which always
   # takes precedence over the same name in --env-file $IMAGES_ENV below --
@@ -651,8 +685,32 @@ deploy_tag() {
   chmod 0644 "$tmp"
   mv -f "$tmp" "$IMAGES_ENV"
   compose pull
-  compose up -d --remove-orphans --wait --wait-timeout 300
-  "$APP_DIR/health-check.sh"
+  # Task 5 (app-controls): explicit, catalog-driven selection -- never a
+  # blanket `up` (which would silently revive an intentionally disabled
+  # group) and never `--remove-orphans` (this phase defines no removed
+  # service; a stopped/profiled app container must remain exactly as the
+  # operator left it). Disabled groups are stopped explicitly afterward,
+  # with their own fixed graceful timeout, never left for `up` to revive.
+  apply_selected_services
+  stop_disabled_groups
+  # The scratch copy of health-check.sh (this run's own, from
+  # $APP_CONFIG_STAGING_DIR) -- never "$APP_DIR/health-check.sh" directly,
+  # which a same-run rollback may already have restored to an OLDER,
+  # pre-controls version that assumes every standard service is on. This
+  # call (including a rollback's own `deploy_tag "$previous"`) always
+  # verifies the SAME effective selection this run just applied.
+  #
+  # task-5-review fix round 1, Important #2: the scratch health-check.sh
+  # must also be told to READ from this run's own scratch control/ module
+  # and the real persisted state path -- without these two explicit
+  # overrides it silently falls back to its own defaults
+  # ($APP_DIR/control, the hardcoded production state path), which is not
+  # necessarily this run's scratch copy or $CONTROL_STATE_PATH (e.g. when
+  # $STATE_DIR is ever customized, or during a same-run rollback where
+  # $APP_DIR/control may already be reverted/removed).
+  AI_TRADING_CONTROL_DIR="$CONTROL_SCRATCH_DIR/control" \
+  AI_TRADING_STATE_PATH="$CONTROL_STATE_PATH" \
+    "$CONTROL_SCRATCH_DIR/health-check.sh"
 }
 
 # restore_or_remove_secrets: used by rollback to undo a partially- or fully-
@@ -671,26 +729,45 @@ restore_or_remove_secrets() {
 }
 
 # config_mode NAME: the mode CONFIG_FILES entry NAME is always installed and
-# restored with -- 0755 for the one executable script, 0644 for the three
-# declarative files, exactly task-6-brief's atomic-install core.
+# restored with -- 0755 for the two executable scripts (health-check.sh and
+# the standalone prepare-mirofish.sh, invoked directly as its own
+# subprocess by control/runtime.py's Runtime.prepare_mirofish()), 0644 for
+# every declarative/library/code file, exactly task-6-brief's atomic-install
+# core, extended (Task 5) to the control/* and deploy/production/* entries.
 config_mode() {
-  if [[ "$1" == health-check.sh ]]; then
-    printf '0755\n'
-  else
-    printf '0644\n'
-  fi
+  case "$1" in
+    health-check.sh | deploy/production/prepare-mirofish.sh) printf '0755\n' ;;
+    *) printf '0644\n' ;;
+  esac
 }
 
 # install_config_file NAME SRC: installs SRC as $APP_DIR/NAME atomically (a
 # same-directory temp file with NAME's correct mode, then `mv -f` over the
 # destination -- a reader never sees a partially-written file, same
-# atomicity install_secret_file already gives the five SECRET_FILES).
-# Returns 1 on any failure (mktemp/install/mv) instead of letting a partial
-# temp file or a failed rename go unnoticed.
+# atomicity install_secret_file already gives the five SECRET_FILES). NAME
+# may be nested (e.g. "control/state.py"); the destination directory is
+# created first (0755, same as $APP_DIR itself) so the atomic temp file
+# lands in the SAME directory as its final destination. Returns 1 on any
+# failure (mkdir/mktemp/install/mv) instead of letting a partial temp file
+# or a failed rename go unnoticed.
 install_config_file() {
-  local name="$1" src="$2" mode tmp
+  local name="$1" src="$2" mode tmp destdir reldir
   mode="$(config_mode "$name")"
-  tmp="$(mktemp "$APP_DIR/.config-${name}.XXXXXX")" || return 1
+  reldir="$(dirname "$name")"
+  if [[ "$reldir" == "." ]]; then
+    # A flat (non-nested) name: $APP_DIR itself is the destination
+    # directory, assumed to already exist -- never `install -d` it here (a
+    # read-only $APP_DIR must stay read-only for this call to correctly
+    # fail; `install -d` on an EXISTING directory still chmod's it, which
+    # would silently repair an injected read-only test precondition, or
+    # widen a production directory's mode, before the real write is even
+    # attempted).
+    destdir="$APP_DIR"
+  else
+    destdir="$APP_DIR/$reldir"
+    install -d -m 0755 "$destdir" || return 1
+  fi
+  tmp="$(mktemp "$destdir/.$(basename "$name").XXXXXX")" || return 1
   install -m "$mode" "$src" "$tmp" || return 1
   mv -f "$tmp" "$APP_DIR/$name"
 }
@@ -732,6 +809,120 @@ restore_or_remove_configs() {
   return "$ok"
 }
 
+# validate_staged_unit: existence/symlink/regular-file checks, same
+# discipline as validate_staged_config_file, plus a real `systemd-analyze
+# verify` against the STAGED file when the binary is available (never
+# faked out in production; an offline test without systemd on PATH simply
+# skips this one check, same as every other optional-tool guard in this
+# file). Never installs/activates anything.
+validate_staged_unit() {
+  local file="$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME"
+  if [[ ! -e "$file" ]]; then
+    echo "deploy: missing staged $file" >&2
+    return 1
+  fi
+  if [[ -L "$file" || ! -f "$file" ]]; then
+    echo "deploy: staged $file must be a regular file, not a symlink or other path" >&2
+    return 1
+  fi
+  if command -v systemd-analyze >/dev/null 2>&1; then
+    systemd-analyze verify "$file" || {
+      echo "deploy: staged $UNIT_STAGED_NAME failed systemd-analyze verify" >&2
+      return 1
+    }
+  fi
+}
+
+# stage_unit: the systemd-unit analogue of stage_configs above, for the ONE
+# file deploy.sh manages outside $APP_DIR ($UNIT_INSTALLED_PATH, normally
+# /etc/systemd/system/ai-trading-control.service). Captures whether a prior
+# unit existed, and -- only when it did -- its own prior content plus
+# whether the service was active/enabled, BEFORE installing this run's
+# staged unit and (re)starting it. Called from main flow right after
+# stage_configs() has already installed this run's control/* code, so the
+# unit that starts always matches the code already on disk; undone by
+# restore_or_remove_unit on any later failure (task-5-review fix round 1,
+# Critical #1).
+stage_unit() {
+  validate_staged_unit
+  UNIT_WAS_ACTIVE=0
+  UNIT_WAS_ENABLED=0
+  if [[ -f "$UNIT_INSTALLED_PATH" && ! -L "$UNIT_INSTALLED_PATH" ]]; then
+    UNIT_PRIOR_EXISTED=1
+    UNIT_BACKUP_PATH="$(mktemp "$STATE_DIR/.unit-backup-XXXXXX")" || return 1
+    cp -p "$UNIT_INSTALLED_PATH" "$UNIT_BACKUP_PATH" || return 1
+    systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null && UNIT_WAS_ACTIVE=1
+    systemctl is-enabled --quiet "$UNIT_NAME" 2>/dev/null && UNIT_WAS_ENABLED=1
+  else
+    UNIT_PRIOR_EXISTED=0
+  fi
+  UNIT_STAGED=1
+  local tmp
+  tmp="$(mktemp "$UNIT_DIR/.$UNIT_NAME.XXXXXX")" || return 1
+  install -m 0644 "$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME" "$tmp" || return 1
+  mv -f "$tmp" "$UNIT_INSTALLED_PATH" || return 1
+  systemctl daemon-reload || return 1
+  systemctl enable "$UNIT_NAME" || return 1
+  # Reconciliation (control/server.py's reconcile(), run on the helper's own
+  # thread on every start) shares the SAME lifecycle lock this script
+  # already holds (FD 9) -- it blocks behind this deploy's own lock until
+  # commit-or-rollback releases it, so restarting here, mid-transaction,
+  # never lets an unverified reconcile touch Docker before this deploy
+  # finishes (task-5-review fix round 1: "No unverified boot reconcile
+  # outside transaction changing choices").
+  systemctl restart "$UNIT_NAME" || return 1
+}
+
+# restore_or_remove_unit: used by rollback to undo a partially- or
+# fully-applied stage_unit, the same prior/new-state discipline
+# restore_or_remove_configs already applies to the six control/*
+# CONFIG_FILES entries. A no-op unless this run actually got far enough to
+# arm UNIT_STAGED. A prior unit is restored byte-for-byte and left active
+# only if it was active before (task-5-brief: "old deploy rollback must
+# restore the matching helper/runtime version"); a genuinely first
+# activation (no prior unit at all) is stopped, disabled, and its just-
+# installed file removed -- never left running on a rolled-back deploy
+# (task-5-review fix round 1, Critical #1: "roll back its activation").
+restore_or_remove_unit() {
+  [[ "$UNIT_STAGED" == 1 ]] || return 0
+  UNIT_STAGED=0
+  if [[ "$UNIT_PRIOR_EXISTED" == 1 ]]; then
+    if [[ ! -f "$UNIT_BACKUP_PATH" ]]; then
+      echo "deploy: unit: rollback: missing backup for $UNIT_INSTALLED_PATH; cannot restore" >&2
+      return 1
+    fi
+    local tmp
+    tmp="$(mktemp "$UNIT_DIR/.$UNIT_NAME.XXXXXX")" 2>/dev/null || {
+      echo "deploy: unit: rollback: failed to restore $UNIT_INSTALLED_PATH from backup" >&2
+      return 1
+    }
+    if ! install -m 0644 "$UNIT_BACKUP_PATH" "$tmp" || ! mv -f "$tmp" "$UNIT_INSTALLED_PATH"; then
+      echo "deploy: unit: rollback: failed to restore $UNIT_INSTALLED_PATH from backup" >&2
+      return 1
+    fi
+    systemctl daemon-reload 2>/dev/null
+    if [[ "$UNIT_WAS_ACTIVE" == 1 ]]; then
+      systemctl restart "$UNIT_NAME" || {
+        echo "deploy: unit: rollback: restored $UNIT_INSTALLED_PATH but failed to restart it" >&2
+        return 1
+      }
+    else
+      systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    fi
+    if [[ "$UNIT_WAS_ENABLED" != 1 ]]; then
+      systemctl disable "$UNIT_NAME" 2>/dev/null || true
+    fi
+  else
+    systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    systemctl disable "$UNIT_NAME" 2>/dev/null || true
+    if ! rm -f "$UNIT_INSTALLED_PATH"; then
+      echo "deploy: unit: rollback: failed to remove $UNIT_INSTALLED_PATH" >&2
+      return 1
+    fi
+    systemctl daemon-reload 2>/dev/null || true
+  fi
+}
+
 rollback() {
   local status="$1" previous=""
   trap - ERR
@@ -749,11 +940,51 @@ rollback() {
   # vanished, through no fault of an external actor, and refusing to guess.
   restore_or_remove_mirofish || echo "deploy: mirofish: rollback error above; MiroFish left disabled, the rest of rollback continues" >&2
   restore_or_remove_configs || echo "deploy: config: rollback error above; one or more of docker-compose.yml/docker-compose.mirofish.yml/Caddyfile/health-check.sh may be left in an inconsistent state, the rest of rollback continues" >&2
+  # Unit restore runs AFTER config restore, same ordering reasoning as
+  # mirofish-before-config above: the service should only (re)start once
+  # the control/* code underneath it has already been returned to its own
+  # matching prior version, never the other way around.
+  restore_or_remove_unit || echo "deploy: unit: rollback error above; the control helper's unit/activation state may not match the rolled-back release, the rest of rollback continues" >&2
+  # Restore the pre-mutation persisted app-control preferences (Task 5) --
+  # a NEW, strictly greater revision, never a lowered one -- alongside the
+  # tag/secrets/config restore above, using this run's own scratch
+  # control/state.py (unaffected by whatever restore_or_remove_configs just
+  # did to $APP_DIR/control/state.py).
+  restore_preferences_on_rollback
   if [[ -f "$STATE_FILE" ]]; then
     previous="$(cat "$STATE_FILE")"
   fi
   if [[ -n "$previous" && "$previous" != "$IMAGE_TAG" ]]; then
     echo "deploy: failed with status $status; rolling back to $previous" >&2
+    # final whole-branch review, Important #1: a genuine first activation
+    # (no prior unit existed -- restore_or_remove_unit above just stopped
+    # and disabled the helper it installed moments ago, by design) has no
+    # matching prior helper version to verify. The scratch health-check.sh
+    # this redeploy runs unconditionally requires an ACTIVE control helper
+    # otherwise, so without this it loops for the full
+    # HEALTH_CHECK_ATTEMPTS x HEALTH_CHECK_DELAY_SECONDS budget and then
+    # misreports this correct redeploy as "rollback ... failed too" even
+    # though the three real apps are already restored and running.
+    #
+    # final re-review fix: this must key off a TRUSTED KNOWN absence, never
+    # a default/unknown one. UNIT_PRIOR_EXISTED starts EMPTY (not "0") and
+    # is only ever set to the literal string "0" by stage_unit() itself,
+    # right after it has actually probed $UNIT_INSTALLED_PATH and before any
+    # mutation -- so `== 0` here is only ever true when this run's own
+    # stage_unit() ran and genuinely found nothing. A deploy that fails
+    # BEFORE stage_unit ever runs (e.g. a stage_configs failure) leaves it
+    # empty; restore_or_remove_unit() is then a no-op (UNIT_STAGED never got
+    # set either), so whatever helper already existed on disk -- active or
+    # not -- was never touched by this run and must still be verified
+    # normally, exactly like any other rollback. Only a genuinely KNOWN
+    # first activation (UNIT_PRIOR_EXISTED == 1 restored/restarted a
+    # matching prior version; UNIT_PRIOR_EXISTED == 0 means stage_unit
+    # itself just stopped/disabled the only unit that ever existed) decides
+    # this either way -- an empty/unknown value always falls through to the
+    # normal, verifying path.
+    if [[ "$UNIT_PRIOR_EXISTED" == 0 ]]; then
+      export HEALTH_CHECK_SKIP_CONTROL=1
+    fi
     deploy_tag "$previous" || echo "deploy: rollback to $previous failed too" >&2
   else
     echo "deploy: failed with status $status; no earlier tag to roll back to" >&2
@@ -832,6 +1063,48 @@ validate_staged_config_file() {
   fi
 }
 
+# validate_staged_control_content NAME FILE (Task 5, app-controls): the
+# control helper's own code/catalog/library entries get type-specific
+# validation beyond validate_staged_config_file's existence/type checks
+# above -- every staged .py is byte-compiled (py_compile parses/compiles
+# only, it never executes module-level code) so a syntax error is caught
+# here, before any install; control/catalog.json's schema is validated by
+# importing the staged control/state.py standing beside it (its own
+# existing module-level _load_catalog() -> validate_catalog() call already
+# does this -- reused here rather than re-deriving the schema a second
+# time); and the two standalone MiroFish-preparer scripts get a `bash -n`
+# syntax check. Same die()-avoids-bypassing-the-rollback-trap discipline as
+# its neighbors: reports and returns 1, never exits.
+validate_staged_control_content() {
+  local name="$1" file="$2"
+  case "$name" in
+    *.py)
+      python3 -m py_compile "$file" || {
+        echo "deploy: control: staged $file has invalid Python syntax" >&2
+        return 1
+      }
+      ;;
+  esac
+  case "$name" in
+    control/catalog.json)
+      python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import state
+' "$(dirname "$file")" || {
+        echo "deploy: control: staged control/catalog.json failed schema validation" >&2
+        return 1
+      }
+      ;;
+    deploy/production/mirofish-runtime.sh | deploy/production/prepare-mirofish.sh)
+      bash -n "$file" || {
+        echo "deploy: control: staged $file has invalid bash syntax" >&2
+        return 1
+      }
+      ;;
+  esac
+}
+
 # validate_active_config_path NAME: before this run's stage_configs() ever
 # records NAME's prior existence or backs it up, refuse an active
 # $APP_DIR/NAME that is a symlink (valid-target or dangling) or any other
@@ -907,6 +1180,7 @@ stage_configs() {
   local name
   for name in "${CONFIG_FILES[@]}"; do
     validate_staged_config_file "$APP_CONFIG_STAGING_DIR/$name"
+    validate_staged_control_content "$name" "$APP_CONFIG_STAGING_DIR/$name"
   done
   validate_staged_compose
 
@@ -918,6 +1192,7 @@ stage_configs() {
   for name in "${CONFIG_FILES[@]}"; do
     if [[ -f "$APP_DIR/$name" ]]; then
       CONFIG_PRIOR_EXISTED[$name]=1
+      install -d -m 0755 "$CONFIG_BACKUP_DIR/$(dirname "$name")"
       cp -p "$APP_DIR/$name" "$CONFIG_BACKUP_DIR/$name"
     else
       CONFIG_PRIOR_EXISTED[$name]=0
@@ -948,6 +1223,23 @@ stage_configs() {
 for name in "${CONFIG_FILES[@]}"; do
   [[ -f "$APP_CONFIG_STAGING_DIR/$name" ]] || die "missing $APP_CONFIG_STAGING_DIR/$name; the workflow must stage it first"
 done
+[[ -f "$APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME" ]] || die "missing $APP_CONFIG_STAGING_DIR/$UNIT_STAGED_NAME; the workflow must stage it first"
+# Task 5 (app-controls): acquire the shared lifecycle lock (FD 9) before any
+# preference/config mutation -- held through health-check and commit-or-
+# rollback, released only on exit (cleanup_scratch_dirs' EXIT trap). This
+# run's own root-only coordinator/state-CLI copy is prepared immediately
+# after, from THIS run's staged files (never $APP_DIR's current ones), then
+# this deploy's pre-mutation preferences are snapshotted (restored on
+# rollback with a new, strictly greater revision) and the existing
+# MIROFISH_ACTIVATE operator input is folded into that same persisted state
+# -- install.sh has already initialized/adopted $CONTROL_STATE_PATH on a
+# genuinely first install; a missing or corrupt state file here fails this
+# deploy closed, before any further mutation, rather than silently
+# re-deriving fresh defaults.
+acquire_lifecycle_lock
+prepare_control_scratch
+snapshot_preferences
+map_mirofish_dispatch_to_state
 # Make room, then prove the pull fits, before Firestore, any container, or any
 # secret file is touched (a failed pull on a full disk also breaks rollback).
 prune_old_images
@@ -955,8 +1247,15 @@ require_free_space
 render_profiles
 # Opt-in only; a failed/absent MiroFish activation must not fail this
 # deploy of the other three apps, and must run before stage_secrets touches
-# any existing secret file or deploy_tag starts a single container.
-activate_mirofish || true
+# any existing secret file or deploy_tag starts a single container. Driven
+# by the PERSISTED preference (read_desired_mirofish), just folded in above
+# -- never re-derived from which container happens to be running right now.
+if [[ "$(read_desired_mirofish)" == true ]]; then
+  MIROFISH_ACTIVATE=1 activate_mirofish || true
+else
+  unset MIROFISH_ACTIVATE
+  activate_mirofish || true
+fi
 # Whole-branch review reopen: whenever the line above didn't just activate
 # MiroFish, prove it's actually stopped -- not just "unset" -- before
 # anything else in this deploy proceeds. A stop/verify failure aborts here,
@@ -964,6 +1263,10 @@ activate_mirofish || true
 ensure_mirofish_stopped
 stage_secrets
 stage_configs
+# Only after stage_configs() has installed this run's control/* code --
+# the unit that (re)starts here always matches the code already on disk.
+# Covered by the same rollback trap stage_secrets already armed above.
+stage_unit
 
 for name in "${SECRET_FILES[@]}"; do
   file="$SECRETS_DIR/$name"
