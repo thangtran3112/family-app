@@ -39,6 +39,22 @@ def test_conflicting_labeled_figures_are_unknown_not_first_value_wins():
     assert match_fact("Revenue: $416.161 billion or $500 billion?", REVENUE)["status"] == "unknown"
 
 
+def test_repeated_identical_labeled_date_is_unambiguous():
+    filing = ["filing date", "2025-10-30", "date", "0", "SEC:0000320193-25-000077"]
+    assert match_fact("SEC filing date: October 30, 2025. The filing date was October 30, 2025.", filing)["status"] == "pass"
+    assert match_fact("SEC filing date: October 30, 2025. The filing date was October 31, 2025.", filing)["status"] == "unknown"
+
+
+def test_filing_date_distinguishes_quarter_end_from_filing_day():
+    filing = ["filing date", "2025-10-30", "date", "0", "SEC:0000320193-25-000077"]
+    answer = ("SEC filing date for the earnings 8-K covering the fiscal quarter ended September 27, 2025 "
+              "was **October 30, 2025**. The filing date is **October 30, 2025**.")
+    assert match_fact(answer, filing)["status"] == "pass"
+    assert match_fact("Filing date was October 31, 2025 (not October 30, 2025).", filing)["status"] == "unknown"
+    repeated = answer + " That is the filing date. Do not confuse the filing date with stock reaction."
+    assert match_fact(repeated, filing)["status"] == "pass"
+
+
 def test_rolling_single_source_is_unknown():
     case = {"id": "R02", "lane": "rolling", "category": "consensus", "oracle": "none",
             "facts": [], "tools": ["get_stock_profile"], "policy": "analysis_only"}
@@ -102,6 +118,13 @@ def test_target_heading_is_advice_but_buy_sell_policy_phrase_is_not(tmp_path):
     assert "solo_recommendation" in policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path)
     run["messages"][0]["content"] = "Buy/Sell recommendations require committee review."
     assert policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path) == []
+
+
+def test_markdown_emphasized_base_case_target_still_requires_committee(tmp_path):
+    run = {"messages": [{"role": "assistant",
+                         "content": "I did not convene an investment committee. My own **12-month base-case price target is $234 (unverified※)**.",
+                         "tool_trail": []}]}
+    assert "solo_recommendation" in policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path)
 
 
 def test_committee_requires_matching_completed_run(tmp_path):
