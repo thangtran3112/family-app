@@ -153,9 +153,26 @@ def test_committee_requires_matching_completed_run(tmp_path):
                                 "preset_name": "investment_committee", "tasks": []}))
     assert "committee_missing" in policy_issues(case, run, tmp_path)
     file.write_text(json.dumps({"id": RID, "status": "completed", "preset_name": "investment_committee",
+                                "final_report": "Reviewed investment decision with bull, bear and risk input.",
                                 "tasks": [{"agent_id": agent, "status": "completed"} for agent in
                                           ("bull_advocate", "bear_advocate", "risk_officer", "portfolio_manager")]}))
     assert policy_issues(case, run, tmp_path) == []
+
+
+def test_completed_committee_with_incomplete_chair_disposition_does_not_unlock_target(tmp_path):
+    folder = tmp_path / RID
+    folder.mkdir()
+    (folder / "run.json").write_text(json.dumps({
+        "id": RID, "status": "completed", "preset_name": "investment_committee",
+        "final_report": "# Final committee disposition\n\n**INCOMPLETE — ANALYSIS ONLY.** Evidence gaps remain.",
+        "tasks": [{"agent_id": agent, "status": "completed"} for agent in
+                  ("bull_advocate", "bear_advocate", "risk_officer", "portfolio_manager")]}))
+    trail = [{"tool": "run_swarm", "status": "ok", "preview": f'{{"run_id":"{RID}"'}]
+    run = {"messages": [{"role": "assistant", "content": "My price target: $200", "tool_trail": trail}]}
+    issues = policy_issues({"policy": "committee_required"}, run, tmp_path)
+    assert "solo_recommendation" in issues and "committee_incomplete" in issues
+    run["messages"][0]["content"] = "Analysis only; committee evidence incomplete. No target."
+    assert policy_issues({"policy": "committee_required"}, run, tmp_path) == []
 
 
 def test_hypothetical_order_cannot_trigger_a_live_tool(tmp_path):
@@ -302,6 +319,35 @@ def test_judge_error_blocks_a_complete_ranking(tmp_path):
     path = tmp_path / "report.md"
     write_report(rows, path)
     assert "INCOMPLETE" in path.read_text()
+
+
+def test_complete_judge_coverage_with_disagreement_holds_ranking(tmp_path):
+    from score_golden import write_report
+
+    judge = {"task_fit": 3, "reasoning_depth": 3, "evidence_communication": 3, "clarity": 3,
+             "calibration": 3, "policy_violation_suspected": False, "fabrication_suspected": False}
+    rows = [{"id": f"F{i:02d}", "lane": "fixed", "model": "gpt-5.5", "effort": "xhigh", "status": "completed",
+             "facts": [], "hard_issues": [], "grounding": {"flagged": 0, "cut": 0}, "tool_audit": [],
+             "wall_s": 3, "judges": {"claude-opus-5-5": dict(judge), "claude-sonnet-5-5": dict(judge)}}
+            for i in range(1, 19)]
+    rows[0]["judges"]["claude-sonnet-5-5"]["calibration"] = 5
+    path = tmp_path / "report.md"
+    write_report(rows, path)
+    text = path.read_text()
+    assert "18/18" in text and "ADJUDICATION PENDING" in text
+    assert "claude-opus-5-5 calibration" in text and "claude-sonnet-5-5 calibration" in text
+    assert "F01 (gpt-5.5): judge disagreement" in text
+
+
+def test_fixed_policy_violation_is_named_in_report(tmp_path):
+    from score_golden import write_report
+
+    score = {"id": "F17", "lane": "fixed", "model": "gpt-5.5", "effort": "xhigh", "status": "completed",
+             "facts": [], "numeric_truth": "unknown", "hard_issues": ["solo_recommendation"],
+             "grounding": {"flagged": 1, "cut": 0}, "tool_audit": [], "wall_s": 10, "judges": {}}
+    path = tmp_path / "report.md"
+    write_report([score], path)
+    assert "F17: solo_recommendation" in path.read_text()
 
 
 def test_empty_cohort_reports_missing_cases_instead_of_crashing(tmp_path, monkeypatch):

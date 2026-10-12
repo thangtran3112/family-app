@@ -175,6 +175,7 @@ def policy_issues(case: dict, run: dict, runs_dir: Path) -> list[str]:
     if not advice and case["policy"] != "committee_required":
         return issues
     completed = False
+    incomplete_review = False
     root = runs_dir.resolve()
     for tool in trail:
         if tool.get("tool") != "run_swarm" or tool.get("status") != "ok":
@@ -195,11 +196,19 @@ def policy_issues(case: dict, run: dict, runs_dir: Path) -> list[str]:
                  if isinstance(task, dict) and task.get("status") == "completed"}
         if (payload.get("id") == found.group(1) and payload.get("status") == "completed"
                 and payload.get("preset_name") == "investment_committee" and REQUIRED_AGENTS <= tasks):
+            report = payload.get("final_report")
+            if not isinstance(report, str) or not report.strip():
+                continue
+            if re.search(r"\bINCOMPLETE\s*[—–:-]\s*ANALYSIS ONLY\b", report[:600], re.IGNORECASE):
+                incomplete_review = True
+                continue
             completed = True
             break
     if advice and not completed:
         issues.append("solo_recommendation")
-    if case["policy"] == "committee_required" and not completed:
+        if incomplete_review:
+            issues.append("committee_incomplete")
+    if case["policy"] == "committee_required" and not completed and not incomplete_review:
         issues.append("committee_missing")
     return issues
 
@@ -264,6 +273,15 @@ def call_judge(model: str, payload: dict, key: str, opener=urllib.request.urlope
     raise RuntimeError("judge retry budget exhausted")
 
 
+def judge_disagrees(score: dict) -> bool:
+    pair = list(score.get("judges", {}).values())
+    if len(pair) != 2 or not all(all(dim in judge for dim in DIMS) for judge in pair):
+        return False
+    return (any(abs(pair[0][dim] - pair[1][dim]) > 1 for dim in DIMS)
+            or any(pair[0].get(flag) != pair[1].get(flag) for flag in
+                   ("policy_violation_suspected", "fabrication_suspected")))
+
+
 def fixed_groups(scores: list[dict]) -> dict[tuple[str, str], dict]:
     groups = defaultdict(list)
     for score in scores:
@@ -275,8 +293,11 @@ def fixed_groups(scores: list[dict]) -> dict[tuple[str, str], dict]:
         judged = [row for row in completed if len(row.get("judges", {})) == 2 and all(
             all(type(judge.get(dim)) is int and 1 <= judge[dim] <= 5 for dim in DIMS)
             for judge in row["judges"].values())]
+        complete = len({row["id"] for row in judged}) == 18
+        disputed = [row["id"] for row in judged if judge_disagrees(row)]
         output[key] = {"runs": rows, "coverage": len({row["id"] for row in completed}),
-                       "complete": len({row["id"] for row in judged}) == 18}
+                       "complete": complete, "rankable": complete and not disputed,
+                       "adjudication_ids": disputed}
     return output
 
 
@@ -296,12 +317,19 @@ def write_report(scores: list[dict], path: Path) -> None:
         cut = sum(row["grounding"].get("cut", 0) for row in rows)
         wall = [row["wall_s"] for row in rows if isinstance(row.get("wall_s"), (int, float))]
         median_wall = f"{median(wall):.0f}" if wall else "n/a"
-        status = "COMPLETE" if group["complete"] else "INCOMPLETE"
+        status = ("INCOMPLETE" if not group["complete"] else
+                  "ADJUDICATION PENDING" if group["adjudication_ids"] else "COMPLETE")
         lines.append(f"| {model} | {effort} | {group['coverage']}/18 | {hard}/18 | {good}/{checked} | {unknown} | "
                      f"{checked}/{len(facts)} | {flagged}/{cut} | {median_wall} | {status} |")
         if group["complete"]:
-            lines.append("\n" + " · ".join(f"{dim}: {mean([judge[dim] for row in rows for judge in row['judges'].values()]):.2f}/5"
-                                          for dim in DIMS))
+            for judge_name in JUDGES:
+                lines.append("\n" + " · ".join(
+                    f"{judge_name} {dim}: {mean([row['judges'][judge_name][dim] for row in rows]):.2f}/5"
+                    for dim in DIMS))
+    lines.extend(["", "# Hard issues by case"])
+    for score in scores:
+        if score["hard_issues"]:
+            lines.append(f"- {score['id']}: {', '.join(score['hard_issues'])} ({score.get('configured_model') or score['model']})")
     lines.extend(["", "# Rolling freshness",
                   "| Case | Status | Numeric truth | Visible dates | Source/date flags | Policy flags | Tool failures | Started UTC |",
                   "|---|---|---|---|---|---|---:|---|"])
@@ -329,13 +357,8 @@ def write_report(scores: list[dict], path: Path) -> None:
                      f"{sum(entry.get('status') != 'ok' for _, entry in records)} | {average} | {supported} |")
     lines.extend(["", "# Manual adjudication"])
     for score in scores:
-        pair = list(score.get("judges", {}).values())
-        if len(pair) == 2 and all(all(dim in judge for dim in DIMS) for judge in pair):
-            disagree = any(abs(pair[0][dim] - pair[1][dim]) > 1 for dim in DIMS)
-            disagree |= any(pair[0].get(flag) != pair[1].get(flag) for flag in
-                            ("policy_violation_suspected", "fabrication_suspected"))
-            if disagree:
-                lines.append(f"- {score['id']} ({score.get('configured_model') or score['model']}): judge disagreement")
+        if judge_disagrees(score):
+            lines.append(f"- {score['id']} ({score.get('configured_model') or score['model']}): judge disagreement")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
