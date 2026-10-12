@@ -1326,7 +1326,7 @@ echo VERIFY_OK
     echo "    SKIP: debian:12-slim/apt-get unavailable -- real systemd-analyze probe not run"
   fi
 
-  echo "=== Install Case 13 (GREEN, genuine Docker probe, task-5-review no-other-callers follow-up): the EXACT 'docker ps --format' template install.sh ships -- read from install.sh itself, never a hardcoded copy -- is run by the REAL local Docker daemon against a disposable, network-disabled, uniquely-labeled dummy container, and must correctly extract its compose-service label. Guards production even if a test-only fake's contract goes stale again: no Docker socket is mounted into any fixture above, and no ai-trading/expense container, image, volume, or real username is touched. =="
+  echo "=== Install Case 13 (GREEN, genuine Docker probe, task-5-review no-other-callers follow-up): the EXACT 'docker ps --format' template install.sh ships -- read from install.sh itself, never a hardcoded copy -- is run by the REAL local Docker daemon against a disposable, network-disabled, uniquely-labeled dummy container, and must correctly extract its compose-service label. Guards production even if a test-only fake's contract goes stale again: no Docker socket is mounted into any fixture above, and no ai-trading/expense container, image, volume, or real username is touched. The dummy container runs python:3.12-slim (never busybox -- that name only ever appears inside this file's FAKE docker-compose.yml fixture *content*, never actually run as a container, so it is NOT guaranteed pulled on a cold runner); python:3.12-slim is the one image this very suite already actually pulls and runs moments earlier, in Install Case 1 above, so by construction it is always already cached here, with no new image, dependency, or network fetch added by this case ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   probe_format="$(awk '/docker ps --filter/{found=1} found && /--format/{print; exit}' "$INSTALL_SH" \
     | grep -oE "'\{\{[^']*\}\}'" | sed -E "s/^'(.*)'\$/\1/")"
@@ -1341,7 +1341,7 @@ echo VERIFY_OK
       docker run -d --network none \
         --label "com.docker.compose.project=$probe_id" \
         --label "com.docker.compose.service=$probe_service" \
-        --name "$probe_id" busybox:1 sleep 30 >/dev/null
+        --name "$probe_id" python:3.12-slim sleep 30 >/dev/null
       probe_got="$(docker ps --filter "label=com.docker.compose.project=$probe_id" --format "$probe_format")"
       [[ "$probe_got" == "$probe_service" ]] \
         || { echo "install13: expected '$probe_service' from the real daemon via install.sh's own template '$probe_format', got '$probe_got'" >&2; exit 1; }
