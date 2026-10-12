@@ -153,10 +153,19 @@ UNIT_BACKUP_PATH=""
 # from its own checkout, where mirofish-runtime.sh already sits beside it).
 MIROFISH_LIB_NAME="deploy/production/mirofish-runtime.sh"
 if [[ -n "$APP_CONFIG_STAGING_DIR" ]]; then
-  [[ -f "$APP_CONFIG_STAGING_DIR/$MIROFISH_LIB_NAME" ]] \
-    || die "missing staged $APP_CONFIG_STAGING_DIR/$MIROFISH_LIB_NAME; the workflow must stage it first"
+  MIROFISH_LIB_SRC="$APP_CONFIG_STAGING_DIR/$MIROFISH_LIB_NAME"
+  # Fix round 1 (review): this `source` executes the staged file -- as
+  # root, in production -- before validate_staged_config_file() (below)
+  # ever runs its own existence/symlink/regular-file checks on this same
+  # CONFIG_FILES entry, later, inside stage_configs(). Without an
+  # equivalent guard here first, a symlinked staged path would already
+  # have run by the time that later rejection fired. die() is defined
+  # above and safe to call this early: nothing has mutated anything yet.
+  [[ -e "$MIROFISH_LIB_SRC" ]] || die "missing staged $MIROFISH_LIB_SRC; the workflow must stage it first"
+  [[ -L "$MIROFISH_LIB_SRC" || ! -f "$MIROFISH_LIB_SRC" ]] \
+    && die "staged $MIROFISH_LIB_SRC must be a regular file, not a symlink or other path"
   # shellcheck source=/dev/null
-  source "$APP_CONFIG_STAGING_DIR/$MIROFISH_LIB_NAME"
+  source "$MIROFISH_LIB_SRC"
 else
   # shellcheck source=SCRIPTDIR/mirofish-runtime.sh
   source "$SCRIPT_DIR/mirofish-runtime.sh"
