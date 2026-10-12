@@ -96,6 +96,8 @@ def test_continuous_raises_when_contracts_share_no_bar_near_the_roll():
     }
     with pytest.raises(ValueError, match="no common bar"):
         rolls.continuous([w_old, w_new], bars)
+    with pytest.raises(ValueError, match="no bars supplied"):
+        rolls.continuous([w_old, w_new], {"ESH6": bars["ESH6"]})
 
 
 def test_continuous_of_a_single_window_is_unadjusted():

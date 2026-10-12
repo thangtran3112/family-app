@@ -1,6 +1,6 @@
 """SEC EDGAR: point-in-time CompanyFacts and 8-K Item 2.02 announcement dates.
 
-Adapted from TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py`
+Modified from TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py`
 (Apache License 2.0, upstream commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`;
 see THIRD_PARTY_NOTICES.md). Compared with `ai-trading/market-data/sec.py`
 (ours, open-source lane): kept that file's CIK lookup (`BRK.B` -> `BRK-B`) and

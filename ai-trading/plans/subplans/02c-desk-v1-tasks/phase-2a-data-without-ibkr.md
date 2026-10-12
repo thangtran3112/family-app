@@ -127,6 +127,7 @@ The provider-pattern decisions 02j itself made, **owner-approved 2026-10-11**, f
 54. **Slot allocation grants one `SlotDecision` per symbol, not per demand.** A symbol's priority kind is its highest-priority demand's kind; ties within a kind use the earliest `since`, then the symbol — so the final order (and the cap cutoff) is `(priority, since, symbol)`, fully deterministic regardless of input order. Pinned by `test_allocation_is_deterministic_regardless_of_input_order`.
 55. **Finnhub's earnings results carry no report date.** `/stock/earnings` gives each result's fiscal period end (`period`) but not when it was reported; `FinnhubSource.earnings_results` sets `report_date=None` rather than reusing the period end, which would date the result weeks too early and break no-look-ahead (plan review, 2026-10-11). Alpha Vantage's `EARNINGS` does carry a real `reportedDate` and keeps it. (2a.4)
 56. **The conformance test checks call shapes, not just method names.** A runtime-checkable Protocol's `isinstance` passes an adapter whose method merely exists (for example `consensus(self, symbol)` without `now`); `test_conformance.py` also binds every Protocol method's full parameter list onto the adapter's method with `inspect.signature(...).bind`, so a wrong signature fails in CI instead of at the first real call (plan review, 2026-10-11). (2a.6)
+57. **Whole-branch review fixes (2026-10-11).** The import-boundary test also rejects dynamic imports: `__import__(...)` and `importlib.import_module(...)` with a non-literal name, or with a provider name (a `DataSources`-only route is the only allowed one). `backfill` takes its history floor as the keyword `history_start`, defaulting to Alpaca's 2016 floor, so a later provider can backfill earlier history without a change here. `continuous()` raises `ValueError`, as its docstring says, when a window's contract has no bars. The FRED and SEC EDGAR headers say "Modified from" TradingAgents (Apache-2.0 section 4(b)). No test was added, so the approved counts stand. (2a.3 and 2a.8)
 
 ## Review Focus
 
@@ -3261,7 +3262,7 @@ Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading
 ```python
 """SEC EDGAR: point-in-time CompanyFacts and 8-K Item 2.02 announcement dates.
 
-Adapted from TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py`
+Modified from TradingAgents `tradingagents/dataflows/vendors/sec_edgar.py`
 (Apache License 2.0, upstream commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`;
 see THIRD_PARTY_NOTICES.md). Compared with `ai-trading/market-data/sec.py`
 (ours, open-source lane): kept that file's CIK lookup (`BRK.B` -> `BRK-B`) and
@@ -4098,7 +4099,7 @@ Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading
 ```python
 """FRED: vintage-pinned observations and release dates for the macro calendar.
 
-Adapted from TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache
+Modified from TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache
 License 2.0, upstream commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`; see
 THIRD_PARTY_NOTICES.md). Kept: pinning both `realtime_start` and
 `realtime_end` to the as-of date (ALFRED's vintage mechanism) so a backtest
@@ -7894,6 +7895,8 @@ def test_continuous_raises_when_contracts_share_no_bar_near_the_roll():
     }
     with pytest.raises(ValueError, match="no common bar"):
         rolls.continuous([w_old, w_new], bars)
+    with pytest.raises(ValueError, match="no bars supplied"):
+        rolls.continuous([w_old, w_new], {"ESH6": bars["ESH6"]})
 
 
 def test_continuous_of_a_single_window_is_unadjusted():
@@ -8018,10 +8021,14 @@ def continuous(
 
     Raises `ValueError` if two consecutive contracts share no bar on or before a window's
     `active_until`: back-adjusting across a gap would have to guess an offset, which this never
-    does (AGENTS.md "unknown data never fires or guesses").
+    does (AGENTS.md "unknown data never fires or guesses"). A window whose contract has no bars in
+    `bars_by_contract` raises `ValueError` too.
     """
     if not windows:
         return pd.Series(dtype=float)
+    absent = [w.contract_symbol for w in windows if w.contract_symbol not in bars_by_contract]
+    if absent:
+        raise ValueError(f"no bars supplied for contract {absent[0]!r}")
     ordered = sorted(windows, key=lambda w: w.active_from)
     pieces: list[pd.Series] = []
     offset = 0.0
@@ -8361,7 +8368,7 @@ class BackfillResult:
     `written`: the missing sessions a provider call was attempted for without error (a session
     with genuinely no bars in its own range, e.g. a quiet day, still counts -- `upsert_bars`
     simply stores nothing for it; this is not treated as a failure).
-    `uncovered`: missing sessions before `ALPACA_FREE_HISTORY_START`, clamped out of every
+    `uncovered`: missing sessions before `history_start` (default `ALPACA_FREE_HISTORY_START`), clamped out of every
     provider call and never fabricated.
     """
 
@@ -8397,6 +8404,7 @@ def backfill(
     *,
     bars_source: BarsSource,
     now: pd.Timestamp,
+    history_start: date = ALPACA_FREE_HISTORY_START,
 ) -> BackfillResult:
     """Fills every missing `symbol`/`timeframe` session in `[start, end]` from `bars_source`.
 
@@ -8409,8 +8417,8 @@ def backfill(
     caller that commits after catching the error keeps everything that did succeed.
     """
     missing = missing_sessions(session_, symbol, timeframe, asset, start, end)
-    uncovered = [day for day in missing if day < ALPACA_FREE_HISTORY_START]
-    to_fill = [day for day in missing if day >= ALPACA_FREE_HISTORY_START]
+    uncovered = [day for day in missing if day < history_start]
+    to_fill = [day for day in missing if day >= history_start]
 
     written: list[date] = []
     for range_start, range_end in _contiguous_ranges(asset, to_fill):
@@ -8526,12 +8534,27 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "ai_trading"
 ALLOWED = {f"ai_trading_common.{name}" for name in ("types", "sources", "registry", "bars", "errors", "quality")}
+DYNAMIC_IMPORTERS = frozenset({"__import__", "import_module"})
+
+
+def _dynamic_targets(node: ast.Call) -> list[str]:
+    """The module a dynamic import call names. A non-literal name could be anything, so it is
+    reported as a violation of its own."""
+    func = node.func
+    name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else ""
+    if name not in DYNAMIC_IMPORTERS or not node.args:
+        return []
+    target = node.args[0]
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        return [target.value]
+    return ["ai_trading_common.<non-literal dynamic import>"]
 
 
 def _violations(source: str) -> list[str]:
     """Every `ai_trading_common` import outside `ALLOWED`, in any form: `import ai_trading_common`
     (attribute access reaches `providers`), `import ai_trading_common.providers.x`,
-    `from ai_trading_common.providers... import ...`, and `from ai_trading_common import providers`."""
+    `from ai_trading_common.providers... import ...`, `from ai_trading_common import providers`,
+    and the dynamic forms `__import__(...)` and `importlib.import_module(...)`."""
     found: list[str] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -8541,6 +8564,8 @@ def _violations(source: str) -> list[str]:
                 modules = [f"ai_trading_common.{alias.name}" for alias in node.names]
             else:
                 modules = [node.module]
+        elif isinstance(node, ast.Call):
+            modules = _dynamic_targets(node)
         else:
             continue
         found += [m for m in modules if m.split(".")[0] == "ai_trading_common" and m not in ALLOWED]
@@ -8555,9 +8580,13 @@ def test_desk_code_imports_only_the_public_ai_trading_common_modules():
         "from ai_trading_common.providers import alpaca",
         "from ai_trading_common.providers.alpaca import AlpacaBars",
         "from ai_trading_common import testing",
+        "__import__('ai_trading_common.providers')",
+        "importlib.import_module('ai_trading_common.providers.alpaca')",
+        "importlib.import_module(name)",
     ):
         assert _violations(forbidden), forbidden
     assert _violations("from ai_trading_common.registry import DataSources\nfrom ai_trading_common import types") == []
+    assert _violations("importlib.import_module('ai_trading_common.registry')") == []
 
     offenders = {str(path): found for path in sorted(SRC.rglob("*.py")) if (found := _violations(path.read_text()))}
     assert offenders == {}

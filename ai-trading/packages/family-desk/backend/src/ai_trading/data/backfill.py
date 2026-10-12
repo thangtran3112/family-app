@@ -37,7 +37,7 @@ class BackfillResult:
     `written`: the missing sessions a provider call was attempted for without error (a session
     with genuinely no bars in its own range, e.g. a quiet day, still counts -- `upsert_bars`
     simply stores nothing for it; this is not treated as a failure).
-    `uncovered`: missing sessions before `ALPACA_FREE_HISTORY_START`, clamped out of every
+    `uncovered`: missing sessions before `history_start` (default `ALPACA_FREE_HISTORY_START`), clamped out of every
     provider call and never fabricated.
     """
 
@@ -73,6 +73,7 @@ def backfill(
     *,
     bars_source: BarsSource,
     now: pd.Timestamp,
+    history_start: date = ALPACA_FREE_HISTORY_START,
 ) -> BackfillResult:
     """Fills every missing `symbol`/`timeframe` session in `[start, end]` from `bars_source`.
 
@@ -85,8 +86,8 @@ def backfill(
     caller that commits after catching the error keeps everything that did succeed.
     """
     missing = missing_sessions(session_, symbol, timeframe, asset, start, end)
-    uncovered = [day for day in missing if day < ALPACA_FREE_HISTORY_START]
-    to_fill = [day for day in missing if day >= ALPACA_FREE_HISTORY_START]
+    uncovered = [day for day in missing if day < history_start]
+    to_fill = [day for day in missing if day >= history_start]
 
     written: list[date] = []
     for range_start, range_end in _contiguous_ranges(asset, to_fill):

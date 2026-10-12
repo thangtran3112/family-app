@@ -105,10 +105,14 @@ def continuous(
 
     Raises `ValueError` if two consecutive contracts share no bar on or before a window's
     `active_until`: back-adjusting across a gap would have to guess an offset, which this never
-    does (AGENTS.md "unknown data never fires or guesses").
+    does (AGENTS.md "unknown data never fires or guesses"). A window whose contract has no bars in
+    `bars_by_contract` raises `ValueError` too.
     """
     if not windows:
         return pd.Series(dtype=float)
+    absent = [w.contract_symbol for w in windows if w.contract_symbol not in bars_by_contract]
+    if absent:
+        raise ValueError(f"no bars supplied for contract {absent[0]!r}")
     ordered = sorted(windows, key=lambda w: w.active_from)
     pieces: list[pd.Series] = []
     offset = 0.0
