@@ -28,16 +28,10 @@ test("exported overview contains the approved shell without bypassing the auth l
   await assert.rejects(access(new URL("./out/apps/desk.html", import.meta.url)), { code: "ENOENT" });
 });
 
-test("exported navigation preserves hub details and safe external app links", async () => {
+test("exported navigation preserves hub details and excludes the unlaunchable Desk", async () => {
   const data = pageData(await page("index.html"));
   for (const slug of ["tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish"]) {
     assert.ok(data.includes(`"href":"/apps/${slug}"`));
-  }
-  for (const slug of ["vibe-trading", "mirofish"]) {
-    const app = pageData(await page(`apps/${slug}.html`));
-    assert.ok(app.includes(`"href":"https://${slug}.tobytran.dev"`));
-    assert.ok(app.includes('"target":"_blank"'));
-    assert.ok(app.includes('"rel":"noopener"'));
   }
   assert.ok(!data.includes('"href":"/apps/desk"'));
 });
@@ -48,5 +42,45 @@ test("terminal detail exports actual terminal destinations, not illustrative Pap
     assert.ok(data.includes(`"terminalPath":"/u/${slug}/"`));
     assert.ok(data.includes(`"hostUrl":"https://${slug}.tobytran.dev/"`));
     assert.doesNotMatch(data, /Enter ticker symbol:|Example state|Bull \/ bear debate/);
+  }
+});
+
+test("exported Settings route keeps the Clerk loading shell and wires in the app-controls components", async () => {
+  // AppControlsPanel/-Provider are "use client": like the rest of this app's
+  // authenticated tree, their own rendered JSX (status words, copy) is never
+  // part of the static server payload, only their module reference and
+  // props are -- Clerk gates everything behind the same loading shell until
+  // a real browser session exists, which is what the next test's "never a
+  // literal status word" check actually relies on (not a load-state race).
+  const html = await page("settings.html");
+  const data = pageData(html);
+  assert.match(html, /Loading secure workspace/);
+  assert.ok(data.includes("AppControlsProvider"));
+  assert.ok(data.includes("AppControlsPanel"));
+});
+
+test("exported Settings route never bakes a live app status into the static payload", async () => {
+  // No build-time Clerk session exists, so there is no real ControlsState
+  // to leak; this guards against a future default/fallback snapshot ever
+  // being rendered server-side instead of staying behind the client gate.
+  const data = pageData(await page("settings.html"));
+  assert.doesNotMatch(data, /\bRunning\b|\bStopping\b|\bStopped\b|\bUnhealthy\b/);
+});
+
+test("exported navigation exposes a Settings route alongside the four apps", async () => {
+  const data = pageData(await page("index.html"));
+  assert.ok(data.includes('"href":"/settings"'));
+});
+
+test("exported external-app launch destinations are real configuration props, not conditional launch HTML", async () => {
+  // Controller ruling (common-context.md): static assertions verify trusted
+  // configuration props/loading, not unconditional Running/Launch HTML.
+  // ExternalLaunch is "use client" (it needs live controls state), so its
+  // rendered anchor never reaches the static payload -- only the `app` prop
+  // passed into it does, which is what actually proves the real destination
+  // made it into the build, not a Paper mockup placeholder.
+  for (const slug of ["vibe-trading", "mirofish"]) {
+    const data = pageData(await page(`apps/${slug}.html`));
+    assert.ok(data.includes(`"url":"https://${slug}.tobytran.dev"`));
   }
 });

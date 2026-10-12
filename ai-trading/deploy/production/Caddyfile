@@ -8,6 +8,40 @@
 	auto_https off
 }
 
+# Task 4 (01g): the private app-control helper's own availability probe,
+# reused by every gated app route below. `{args[0]}` is the app's fixed
+# catalog ID (ai-trading/control/state.py APP_IDS) -- never caller-supplied.
+# Inserted AFTER each route's existing app auth and BEFORE its own
+# proxy/rewrite, so an unauthenticated request still gets a plain 401 (the
+# existing forward_auth above denies it first) and never reaches this gate.
+# Strips Authorization/Cookie first: the helper's /gate/{id} is a read-only,
+# peer-checked probe that never needs or trusts either.
+(availability_gate) {
+	forward_auth unix//run/family-app/ai-trading-control/control.sock {
+		uri /gate/{args[0]}
+		header_up -Authorization
+		header_up -Cookie
+		transport http {
+			dial_timeout 1s
+			response_header_timeout 7s
+		}
+	}
+}
+
+# A genuine Caddy transport error (dial/timeout against the control socket --
+# e.g. the helper is not running) becomes this fixed, generic body -- never
+# the raw 502. A *deliberate* 503 the helper itself returns (app stopped) is
+# a normal response, copied back by forward_auth/reverse_proxy as-is (its own
+# actionable "app_unavailable" body), so it is never rewritten here; neither
+# is a deliberately returned 401/403 or login redirect.
+(availability_errors) {
+	handle_errors 502 503 {
+		header Content-Type application/json
+		header Cache-Control no-store
+		respond `{"error":"service_unavailable","message":"Trading service unavailable. Open Trading Hub Settings or try again."}` 503
+	}
+}
+
 # Vibe's own hostname is not allowed around the Clerk gateway. Use a
 # host-specific HTTP site before the catch-all routes so /api/* also reaches
 # Vibe rather than the separate MiroFish backend.
@@ -18,6 +52,7 @@ http://vibe-trading.tobytran.dev:8080 {
 			uri /__auth/check
 			copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 		}
+		import availability_gate vibe-trading
 		reverse_proxy vibe-trading:8899 {
 			# TLS ends at Cloudflare; Vibe's same-site API check needs https.
 			header_up X-Forwarded-Proto https
@@ -26,6 +61,7 @@ http://vibe-trading.tobytran.dev:8080 {
 			header_up Authorization "Bearer {env.VIBE_API_AUTH_KEY}"
 		}
 	}
+	import availability_errors
 }
 
 # Terminal hostnames (01l). Same gate as the /u/* routes below; `/` is
@@ -67,6 +103,7 @@ http://tradingagents.tobytran.dev:8080 {
 					respond 401
 				}
 			}
+			import availability_gate tradingagents
 			reverse_proxy ta-research:8182 {
 				header_up X-Forwarded-Proto https
 				header_up Host {host}
@@ -87,10 +124,12 @@ http://tradingagents.tobytran.dev:8080 {
 					respond 401
 				}
 			}
+			import availability_gate tradingagents
 			rewrite * /u/tradingagents{uri}
 			reverse_proxy ta-terminal:7681
 		}
 	}
+	import availability_errors
 }
 
 http://ai-hedge-fund.tobytran.dev:8080 {
@@ -106,9 +145,11 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 				respond 401
 			}
 		}
+		import availability_gate ai-hedge-fund
 		rewrite * /u/ai-hedge-fund{uri}
 		reverse_proxy ahf-terminal:7681
 	}
+	import availability_errors
 }
 
 :8080 {
@@ -134,7 +175,14 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 	# exclusive; first match wins) or they would reach the terminal instead.
 	@ta_research path /u/tradingagents/research /u/tradingagents/research/* /u/tradingagents/api/research /u/tradingagents/api/research/*
 
-	handle /__auth/* {
+	# Exact public auth-path matcher (Task 4), not a broad /__auth/* prefix:
+	# /__auth/control-check is an internal-only endpoint that Caddy's own
+	# forward_auth blocks reach by connecting directly to auth:8181 -- never
+	# through this site's public routing. A broad prefix match would make it
+	# externally reachable too; this leaves it falling through to the 404
+	# catch-all below, same as any other unknown path.
+	@auth_public path /__auth/session /__auth/check /__auth/logout
+	handle @auth_public {
 		reverse_proxy auth:8181
 	}
 
@@ -170,6 +218,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 					respond 401
 				}
 			}
+			import availability_gate tradingagents
 			uri strip_prefix /u/tradingagents
 			reverse_proxy ta-research:8182 {
 				header_up X-Family-App-Prefix /u/tradingagents
@@ -194,6 +243,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 				uri /__auth/check
 				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 			}
+			import availability_gate tradingagents
 			reverse_proxy ta-terminal:7681
 		}
 	}
@@ -205,6 +255,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 				uri /__auth/check
 				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 			}
+			import availability_gate ai-hedge-fund
 			reverse_proxy ahf-terminal:7681
 		}
 	}
@@ -227,15 +278,38 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 				uri /__auth/check
 				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 			}
+			import availability_gate mirofish
 			reverse_proxy mirofish:5001
 		}
 	}
 
-	# /__control/* (01g, not yet reviewed) is reserved the same way: no
-	# block here, so it falls through to the 404 below until that plan
-	# adds one.
+	# Public app-control API (Task 4/01g): every GET/PUT requires a FRESH
+	# Clerk bearer, verified by /__auth/control-check -- the gateway cookie
+	# alone is never sufficient. `route` forces literal order (strip the
+	# client's own actor header, then only ever set our own from the
+	# verified subject), same reasoning as the handle blocks below.
+	@controls path /__control/apps /__control/apps/*
+	handle @controls {
+		route {
+			request_header -X-Verified-Actor
+			forward_auth auth:8181 {
+				uri /__auth/control-check
+				copy_headers X-Verified-Actor
+			}
+			uri strip_prefix /__control
+			reverse_proxy unix//run/family-app/ai-trading-control/control.sock {
+				header_up -Authorization
+				header_up -Cookie
+				transport http {
+					dial_timeout 1s
+					response_header_timeout 7s
+				}
+			}
+		}
+	}
 
 	handle {
 		respond 404
 	}
+	import availability_errors
 }

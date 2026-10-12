@@ -9,6 +9,10 @@ on:
       - "!ai-trading/**/*.md"
       - ".gitmodules"
       - ".github/workflows/ai-trading-ci.yml"
+      # Task 5 (app-controls): the Linux installer lives outside ai-trading/
+      # entirely -- without this, an installer-only change would never
+      # trigger this workflow's own scripts/shellcheck job at all.
+      - "infrastructure/vps/app-controls/**"
   workflow_dispatch:
 
 concurrency:
@@ -111,7 +115,8 @@ jobs:
         run: |
           shopt -s nullglob
           files=(ai-trading/deploy/upstream/terminal/*.sh ai-trading/deploy/ci/*.sh
-            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh)
+            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh
+            infrastructure/vps/app-controls/*.sh)
           shellcheck "${files[@]}"
       - name: Upload-mirofish-static mock-gcloud test
         run: ai-trading/deploy/ci/upload-mirofish-static.test.sh
@@ -119,6 +124,20 @@ jobs:
         run: ai-trading/deploy/ci/check-clerk-publishable-key.test.sh
       - name: deploy.sh Firestore-render test (A9a1)
         run: ai-trading/deploy/ci/test-deploy-firestore.sh
+      - name: app-controls deploy/installer test (Task 5)
+        run: ai-trading/deploy/ci/test-app-controls-deploy.sh
+      - name: Control helper tests (Task 5/7)
+        # Must run as root on real Linux, matching the private helper's
+        # actual production identity (control/state.py's owner_uid
+        # defaults to 0; its own SO_PEERCRED/ownership checks are
+        # Linux-only and intentionally fail closed for any other owner --
+        # never weakened here). The GitHub-hosted Ubuntu runner itself
+        # executes job steps as non-root UID 1001, which fails test
+        # setup's root-ownership validation before assertions even run --
+        # a disposable, network-disabled container run as its default
+        # root user is required, not the host shell directly. Read-only
+        # source mount only; no chmod/ownership change on the host.
+        run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
       - name: render-env.sh test (A9a2)
         run: ai-trading/deploy/ci/test-render-env.sh
       - name: Auth service tests
@@ -126,6 +145,10 @@ jobs:
         run: |
           npm ci
           npm test
+      - name: app-controls real-Caddy/auth/helper gateway test (Task 4/7)
+        # Needs ai-trading/auth/node_modules (real @clerk/backend), so it
+        # runs after "Auth service tests" installs them, never before.
+        run: ai-trading/deploy/ci/test-app-controls-gateway.sh
       - name: Market data tests
         working-directory: ai-trading/market-data
         run: python3 -m unittest discover -v

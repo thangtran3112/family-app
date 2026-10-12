@@ -4,6 +4,13 @@ services:
   cloudflared:
     profiles: ["production-only"]
 
+  # Task 4 (01g): the production gateway expects a private control socket
+  # directory that a local checkout never has, and it never mounts the real
+  # host's control socket or pretends to authorize controls -- the local
+  # mock `router` below is the whole local-only front door instead.
+  gateway:
+    profiles: ["production-only"]
+
   router:
     image: caddy:2-alpine
     volumes:

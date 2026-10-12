@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, Settings } from "lucide-react";
 import { appIcons, hubApps } from "@/lib/apps";
 import { HubBrand } from "@/components/header";
 import { AccountMenu } from "@/components/account-menu";
@@ -33,6 +33,13 @@ export function WorkspaceSidebar({ breadcrumb }: { breadcrumb?: string }) {
         </div>
       </nav>
       <div className="mt-auto space-y-4">
+        <Link
+          href="/settings"
+          aria-current={breadcrumb === "Settings" ? "page" : undefined}
+          className={`${NAV_LINK} ${breadcrumb === "Settings" ? "bg-card font-semibold text-accent" : "text-muted-foreground"}`}
+        >
+          <Settings aria-hidden size={18} strokeWidth={1.6} className="shrink-0" />Settings
+        </Link>
         <div className="border-t border-border px-3 pt-4">
           <p className="text-[13px] leading-[18px]">One hub. One sign-in.</p>
           <p className="mt-2 text-xs leading-[18px] text-muted-foreground">Your research tools, together.</p>

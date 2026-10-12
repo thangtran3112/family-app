@@ -15,13 +15,14 @@ fixture() {
   mkdir -p "$dir/apps" "$dir/_next/static/chunks"
   printf '<html>%s index</html>\n' "$marker" >"$dir/index.html"
   printf '<html>%s 404</html>\n' "$marker" >"$dir/404.html"
+  printf '<html>%s settings</html>\n' "$marker" >"$dir/settings.html"
   for app in tradingagents ai-hedge-fund vibe-trading mirofish; do
     printf '<html>%s %s</html>\n' "$marker" "$app" >"$dir/apps/$app.html"
   done
   printf 'console.log(%q)\n' "$marker" >"$dir/_next/static/chunks/app-abc123.js"
   printf 'icon-%s\n' "$marker" >"$dir/favicon.ico"
   # Next 16 exports an RSC segment index for each known route.
-  for route in '' login _not-found apps/tradingagents apps/ai-hedge-fund apps/vibe-trading apps/mirofish; do
+  for route in '' login settings _not-found apps/tradingagents apps/ai-hedge-fund apps/vibe-trading apps/mirofish; do
     mkdir -p "$dir/${route}"
     printf 'Flight segment index %s\n' "$marker" >"$dir/${route:+$route/}__next._index.txt"
   done
@@ -127,6 +128,15 @@ flight_gen="$(live_gen real-next-out __next._index.txt)"
 [[ "$(sed -n '2p' "$FAKE_GCS_ROOT/real-next-out/__next._index.txt/$flight_gen.meta")" == no-store ]] || fail "Flight index cache-control is wrong"
 pass "Flight segment index has component MIME and no-store"
 
+settings_gen="$(live_gen real-next-out settings.html)"
+[[ -n "$settings_gen" ]] || fail "settings.html did not upload"
+[[ "$(sed -n '1p' "$FAKE_GCS_ROOT/real-next-out/settings.html/$settings_gen.meta")" == 'text/html; charset=utf-8' ]] || fail "settings.html MIME is wrong"
+[[ "$(sed -n '2p' "$FAKE_GCS_ROOT/real-next-out/settings.html/$settings_gen.meta")" == no-store ]] || fail "settings.html cache-control is wrong"
+settings_segment_gen="$(live_gen real-next-out settings/__next.settings.__PAGE__.txt)"
+[[ -n "$settings_segment_gen" ]] || fail "settings page segment did not upload"
+[[ "$(sed -n '1p' "$FAKE_GCS_ROOT/real-next-out/settings/__next.settings.__PAGE__.txt/$settings_segment_gen.meta")" == text/x-component ]] || fail "settings page segment MIME is wrong"
+pass "known Settings route uploads with HTML MIME, component segment MIME and no-store"
+
 : >"$CALL_LOG"; OUTSIDE="$WORKDIR/outside-secret.txt"; echo 'sk-proj-THISISAFAKETAINTEDTOKEN1234567890' >"$OUTSIDE"
 SYMLINK="$WORKDIR/symlink"; fixture "$SYMLINK" symlink; ln -s "$OUTSIDE" "$SYMLINK/evil"
 out="$("$TARGET" "$SYMLINK" "$BUCKET" 2>&1)" && fail "symlink passed"
@@ -149,6 +159,20 @@ out="$("$TARGET" "$UNKNOWN_ROUTE" "$BUCKET" 2>&1)" && fail "unlisted route Fligh
 grep -q 'unexpected path' <<<"$out" || fail "wrong unlisted-route error: $out"
 [[ ! -s "$CALL_LOG" ]] || fail "unlisted route made cloud call"
 pass "Flight index for an unknown route is rejected before cloud calls"
+
+: >"$CALL_LOG"; UNKNOWN_SETTINGS="$WORKDIR/unknown-settings"; fixture "$UNKNOWN_SETTINGS" unknown-settings
+printf 'not a real settings segment\n' >"$UNKNOWN_SETTINGS/settings/__next._unknown.txt"
+out="$("$TARGET" "$UNKNOWN_SETTINGS" "$BUCKET" 2>&1)" && fail "unknown settings-like segment passed"
+grep -q 'unexpected path' <<<"$out" || fail "wrong unknown-settings-segment error: $out"
+[[ ! -s "$CALL_LOG" ]] || fail "unknown settings-like segment made cloud call"
+pass "an unlisted settings-like file is rejected before cloud calls, not wildcarded"
+
+: >"$CALL_LOG"; SETTINGS_ADMIN="$WORKDIR/settings-admin"; fixture "$SETTINGS_ADMIN" settings-admin
+printf '<html>fake admin page</html>\n' >"$SETTINGS_ADMIN/settings-admin.html"
+out="$("$TARGET" "$SETTINGS_ADMIN" "$BUCKET" 2>&1)" && fail "unlisted settings-admin.html passed"
+grep -q 'unexpected path' <<<"$out" || fail "wrong settings-admin.html error: $out"
+[[ ! -s "$CALL_LOG" ]] || fail "settings-admin.html made cloud call"
+pass "an unlisted settings-prefixed file is rejected before cloud calls, not wildcarded"
 
 : >"$CALL_LOG"; SECRET="$WORKDIR/secret"; fixture "$SECRET" secret; echo 'sk-proj-THISISAFAKETAINTEDTOKEN1234567890' >>"$SECRET/index.html"
 "$TARGET" "$SECRET" "$BUCKET" >/dev/null 2>&1 && fail "secret passed"
