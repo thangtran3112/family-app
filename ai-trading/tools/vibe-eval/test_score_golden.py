@@ -208,6 +208,23 @@ def test_valid_judge_reply_keeps_raw_response_for_scratch_audit():
     assert result["judge_model"] == "claude-sonnet-5-5"
 
 
+def test_json_fenced_judge_reply_is_valid_but_extra_prose_is_not():
+    reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 4, "clarity": 4,
+             "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,
+             "evidence_ids": ["fact-1"], "rationale": "SEC fact is cited."}
+    fenced = "```json\n" + json.dumps(reply) + "\n```"
+
+    def fake_open(request, timeout):
+        return io.BytesIO(json.dumps({"model": "claude-opus-5-5",
+                                      "content": [{"type": "text", "text": fenced}]}).encode())
+
+    payload = {"oracle_facts": [{"id": "fact-1"}]}
+    assert call_judge("claude-opus-5-5", payload, "test-key", opener=fake_open)["raw_reply"] == fenced
+    fenced = "Here is the answer:\n" + fenced
+    with pytest.raises(ValueError, match="judge schema"):
+        call_judge("claude-opus-5-5", payload, "test-key", opener=fake_open)
+
+
 def test_valid_sonnet_rationale_just_over_200_chars_is_accepted():
     reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 4, "clarity": 4,
              "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,

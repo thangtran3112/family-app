@@ -234,7 +234,8 @@ def call_judge(model: str, payload: dict, key: str, opener=urllib.request.urlope
             with opener(request, timeout=180) as response:
                 data = json.load(response)
             text = "".join(block.get("text", "") for block in data["content"] if block.get("type") == "text")
-            result = json.loads(text)
+            fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text.strip(), re.IGNORECASE | re.DOTALL)
+            result = json.loads(fenced.group(1) if fenced else text)
             if not isinstance(result, dict) or any(type(result.get(dim)) is not int or not 1 <= result[dim] <= 5 for dim in DIMS):
                 raise ValueError("judge schema invalid: dimensions")
             if any(type(result.get(flag)) is not bool for flag in ("policy_violation_suspected", "fabrication_suspected")):
