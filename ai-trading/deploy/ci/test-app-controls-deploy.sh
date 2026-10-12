@@ -530,7 +530,17 @@ got6="$(
 want6="$(python3 "$CONTROL_DIR_REAL/state.py" services --mirofish-ready false --state "$s6/control-state/control.json" --owner-uid "$(id -u)")"
 [[ "$got6" == "$want6" ]] || fail "case6: health-check.sh's selected list ($got6) does not match control/state.py's own ($want6)"
 echo "$got6" | grep -qw ahf-terminal && fail "case6: ai-hedge-fund is off and must not be selected"
+echo "$got6" | grep -qx vibe-consensus || fail "case6: Vibe On must select its private consensus bridge"
 echo "    got=$(echo "$got6" | tr '\n' ' ')"
+
+echo "=== Case 6b (GREEN): Vibe Off cannot revive its private consensus bridge ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s6b="$(new_scratch case6b)"
+seed_control_state "$s6b/control-state" '{"schemaVersion":1,"revision":0,"desired":{"tradingagents":true,"ai-hedge-fund":false,"vibe-trading":false,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+got6b="$(python3 "$CONTROL_DIR_REAL/state.py" services --mirofish-ready false --state "$s6b/control-state/control.json" --owner-uid "$(id -u)")"
+echo "$got6b" | grep -qx vibe-consensus && fail "case6b: Off Vibe selected consensus"
+echo "$got6b" | grep -qx vibe-trading && fail "case6b: Off Vibe selected app"
+echo "$got6b" | grep -qx ta-terminal || fail "case6b: unaffected TradingAgents app missing"
 
 echo "=== Case 7 (GREEN, task-5-review fix round 1 Important #2): the REAL health-check.sh, staged like any other CONFIG_FILES entry, is actually invoked through deploy.sh's real deploy_tag() call path (fake Docker/systemctl/runuser/curl) -- never the exit0 stand-in -- and correctly queries ONLY the selected (On) services, respecting a saved Off choice ==="
 CASE_COUNT=$((CASE_COUNT + 1))
