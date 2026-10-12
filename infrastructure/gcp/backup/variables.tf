@@ -58,6 +58,6 @@ variable "freshness_workflow_file" {
 
 variable "freshness_workflow_ref" {
   type        = string
-  description = "Git ref the freshness-monitor WIF provider's attribute condition is scoped to."
-  default     = "refs/heads/main"
+  description = "Git ref the freshness-monitor WIF provider's attribute condition is scoped to. dev is the repository's default branch, so the daily schedule (and workflow_dispatch from dev) runs from refs/heads/dev."
+  default     = "refs/heads/dev"
 }

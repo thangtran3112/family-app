@@ -98,7 +98,8 @@ elif [[ "$1 $2 $3" == "storage objects describe" ]]; then
       --format=value\(generation\)) echo "$gen"; exit 0 ;;
     esac
   done
-  printf '{"generation":"%s","md5Hash":"%s"}\n' "$gen" "$md5"
+  # Real `gcloud storage objects describe --format=json` keys (snake_case), captured 2026-10-12.
+  printf '{"generation":"%s","md5_hash":"%s"}\n' "$gen" "$md5"
 else
   echo "unsupported fake gcloud invocation: $*" >&2
   exit 1
@@ -140,7 +141,7 @@ full_object_uri=$(jq -r .object_uri "$WORKDIR/state/last-success.json")
 log "full backup set: $full_object_uri"
 
 log "seeding one more receipt and running backup.sh again (produces a daily delta)"
-sleep 3
+sleep 10
 echo daily-receipt-bytes > "$WORKDIR/src-receipts/daily-receipt.pdf"
 run_backup_against_source >"$WORKDIR/backup-daily.log" 2>&1 \
   || { cat "$WORKDIR/backup-daily.log" >&2; fail "daily backup against source failed"; }
@@ -149,7 +150,7 @@ daily_object_uri=$(jq -r .object_uri "$WORKDIR/state/last-success.json")
 log "daily delta set: $daily_object_uri"
 
 log "seeding one more receipt and running backup.sh a third time (produces a SECOND daily delta)"
-sleep 3
+sleep 10
 echo daily-receipt-2-bytes > "$WORKDIR/src-receipts/daily-receipt-2.pdf"
 run_backup_against_source >"$WORKDIR/backup-daily2.log" 2>&1 \
   || { cat "$WORKDIR/backup-daily2.log" >&2; fail "second daily backup against source failed"; }
