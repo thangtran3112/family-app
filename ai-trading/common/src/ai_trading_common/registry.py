@@ -22,6 +22,14 @@ from typing import Literal
 from ai_trading_common._provider import Provider
 from ai_trading_common.fallback import first_success
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.providers import (
+    alpaca,
+    alphavantage,
+    eulerpool,
+    finnhub,
+    fred,
+    sec_edgar,
+)
 from ai_trading_common.sources import (
     BarsSource,
     ConsensusSource,
@@ -190,12 +198,29 @@ KIND_PROTOCOLS: dict[Kind, type] = {
 
 
 #: One line per provider, sorted by name -- a provider task (02j §11, 2a.2-2a.5) adds exactly
-#: one line here. Empty in this task: every provider task below adds its own line.
-REGISTRY: dict[str, Provider] = {}
+#: one line here.
+REGISTRY: dict[str, Provider] = {
+    "alpaca": alpaca.PROVIDER,
+    "alphavantage": alphavantage.PROVIDER,
+    "eulerpool": eulerpool.PROVIDER,
+    "finnhub": finnhub.PROVIDER,
+    "fred": fred.PROVIDER,
+    "sec_edgar": sec_edgar.PROVIDER,
+}
 
 #: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the
-#: kinds it serves as the default chain's right-hand column (02j §3). Empty in this task.
-DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {}
+#: kinds it serves as the default chain's right-hand column (02j §3).
+DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
+    "bars": ("alpaca",),
+    "consensus": ("eulerpool", "alphavantage"),
+    "earnings": ("eulerpool", "finnhub", "alphavantage"),
+    "earnings_announcements": ("sec_edgar",),
+    "earnings_calendar": ("finnhub",),
+    "fundamentals": ("sec_edgar",),
+    "macro": ("fred",),
+    "news": ("finnhub",),
+    "targets": ("eulerpool", "finnhub"),
+}
 
 
 @dataclass(frozen=True)

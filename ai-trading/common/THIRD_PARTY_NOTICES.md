@@ -43,6 +43,8 @@ Attribution: TradingAgents (TauricResearch/TradingAgents). Apache License 2.0. T
 | Common file | Adapted from | Changes |
 |---|---|---|
 | `src/ai_trading_common/bars.py` (`drop_unclosed`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py`, `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the idea of inclusive ends (each client's own request range, not this module); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
+| `src/ai_trading_common/providers/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows (now in `ai_trading_common.types`, 02j) instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function (also in `types.py`) instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
+| `src/ai_trading_common/providers/fred.py` | `tradingagents/dataflows/vendors/fred.py` | Kept the ALFRED vintage-pinning idea: both `realtime_start` and `realtime_end` set to the as-of date so a past run sees the value as first published. Changed: returns typed `Observation` rows (now in `ai_trading_common.types`, 02j) instead of a rendered markdown report; dropped the friendly-alias table, the look-back-day window, and the `pytz`/America-Chicago "FRED's own today" clamp (this client's `as_of` always names a historical date the caller chose, never "now"); errors map to this package's `ProviderError` hierarchy instead of raising bare `ValueError`/a vendor-specific `NotConfiguredError`; adds `release_dates` (new, not present upstream) |
 
 The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LICENSE`):
 
@@ -249,3 +251,33 @@ The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LIC
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## `ai-trading/market-data/` (ours; open-source lane)
+
+Not a third party: `alpaca.py` was moved here from `ai-trading/market-data/` per
+the Phase 2 reuse map (02a §11, "move"). Same author, no license notice needed.
+See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what changed.
+
+`sec_edgar.py` also compares its design with `ai-trading/market-data/sec.py`
+(ours; left untouched) and keeps that file's ticker-to-CIK lookup (including
+the `BRK.B` -> `BRK-B` mapping) and its "404 means nothing here" handling,
+alongside TradingAgents' span classification and amendment rule above. Same
+author, no license notice needed; see
+`src/ai_trading_common/providers/sec_edgar.py`'s module docstring.
+
+## No notice needed: `providers/finnhub.py`, `providers/alphavantage.py`, `providers/eulerpool.py`
+
+No upstream code is adapted. `finnhub.py`'s `news_as_of` (now in
+`ai_trading_common.types`, 02j) reuses the *idea* of TradingAgents' news
+handling -- "unavailable" (the client call itself failing) kept apart from
+"no news" (an empty, successfully-fetched list) -- with no code copied, so
+per the brief ("A 'pattern' reuse ... needs no notice") this carries no
+entry.
+
+`providers/finnhub.py`, `providers/alphavantage.py`, and
+`providers/eulerpool.py` are all written fresh against each provider's own
+public API documentation (Finnhub's and Alpha Vantage's official docs;
+Eulerpool's `https://eulerpool.com/llms-full.txt` endpoint reference, since
+the marketing/docs site itself returns HTTP 403 to a non-browser `GET`).
+`registry.py`, `types.py`, and `sources.py` (02j) are this package's own
+design, written fresh against no upstream reference.
