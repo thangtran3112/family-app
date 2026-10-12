@@ -28,6 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AI_TRADING_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEPLOY_SH="$SCRIPT_DIR/../production/deploy.sh"
 HEALTH_SH="$SCRIPT_DIR/../production/health-check.sh"
+MIROFISH_LIB_SH="$SCRIPT_DIR/../production/mirofish-runtime.sh"
 INSTALL_SH="$AI_TRADING_DIR/../infrastructure/vps/app-controls/install.sh"
 UNIT_FILE="$AI_TRADING_DIR/../infrastructure/vps/app-controls/ai-trading-control.service"
 CONTROL_DIR_REAL="$AI_TRADING_DIR/control"
@@ -119,12 +120,17 @@ stage_default_configs() {
     printf '#!/usr/bin/env bash\nexit 0\n' >"$dir/health-check.sh"
   fi
   chmod 0755 "$dir/health-check.sh"
+  # mirofish-runtime.sh must be the REAL repo file (packaging-fix):
+  # deploy.sh's own library-source guard now sources this exact staged
+  # path (via $APP_CONFIG_STAGING_DIR) at the top of every case below, so a
+  # stand-in here would define none of the functions the rest of deploy.sh
+  # depends on.
   mkdir -p "$dir/control" "$dir/deploy/production"
   cp "$CONTROL_DIR_REAL/catalog.json" "$dir/control/catalog.json"
   cp "$CONTROL_DIR_REAL/state.py" "$dir/control/state.py"
   printf '"""fixture stand-in, new version."""\n' >"$dir/control/runtime.py"
   printf '"""fixture stand-in, new version."""\n' >"$dir/control/server.py"
-  printf '#!/usr/bin/env bash\n# fixture stand-in, new version.\n' >"$dir/deploy/production/mirofish-runtime.sh"
+  cp "$MIROFISH_LIB_SH" "$dir/deploy/production/mirofish-runtime.sh"
   printf '#!/usr/bin/env bash\n# fixture stand-in, new version.\nexit 0\n' >"$dir/deploy/production/prepare-mirofish.sh"
   chmod 0755 "$dir/deploy/production/prepare-mirofish.sh"
   printf '%s' "$FIXTURE_UNIT_CONTENT" >"$dir/ai-trading-control.service"
@@ -991,6 +997,242 @@ grep -q 'OLD unit stand-in, marker=case11-prior' "$s11/unit-dir/ai-trading-contr
   || fail "case11: the prior unit file content must stay byte-for-byte untouched -- it was never staged this run"
 echo "    exit=$status11"
 
+echo "=== Case 12 (GREEN, packaging-fix regression, REAL deployed layout): deploy.sh copied FLAT to \$APP_DIR/deploy.sh (the workflow's actual SCP/install target, never deploy.sh's own repo directory) with NO mirofish-runtime.sh colocated beside it -- only staged nested at config-staging/deploy/production/ like every other CONFIG_FILES entry -- must still source it and complete the full transaction ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s12="$(new_scratch case12)"
+# Copy deploy.sh's own BYTES to a location that does not colocate
+# mirofish-runtime.sh -- exactly what the workflow's own
+# `install ... /opt/family-app/ai-trading/deploy.sh` produces, and what
+# every OTHER case in this file (which instead runs $DEPLOY_SH in place,
+# inside its own repo directory where mirofish-runtime.sh genuinely sits
+# beside it) never actually exercises.
+cp "$DEPLOY_SH" "$s12/app/deploy.sh"
+seed_control_state "$s12/control-state"
+seed_prior_artifacts "$s12" "case12-prior"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s12/secrets/$name"
+  chmod 0600 "$s12/secrets/$name"
+done
+status12=0
+(
+  APP_DIR="$s12/app"
+  AI_TRADING_SECRETS_DIR="$s12/secrets"
+  ENV_STAGING_DIR="$s12/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s12/config-staging"
+  AI_TRADING_STATE_DIR="$s12/control-state"
+  AI_TRADING_UNIT_DIR="$s12/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s12/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_docker "$s12"
+  install_fake_systemctl "$s12"
+  # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$s12/app/deploy.sh" >"$s12/stdout.log" 2>"$s12/stderr.log"
+) || status12=$?
+if [[ "$status12" != 0 ]]; then
+  fail "case12: expected exit 0 against the real deployed-layout copy, got $status12: $(cat "$s12/stderr.log" 2>/dev/null)"
+fi
+grep -q 'No such file or directory' "$s12/stderr.log" 2>/dev/null \
+  && fail "case12: deploy.sh must never fail to find its own sourced library on the real deployed layout: $(cat "$s12/stderr.log" 2>/dev/null)"
+grep -q 'ai-trading is running' "$s12/stdout.log" 2>/dev/null \
+  || fail "case12: expected the deploy to actually complete: $(cat "$s12/stdout.log" "$s12/stderr.log" 2>/dev/null)"
+cmp -s "$s12/app/deploy/production/mirofish-runtime.sh" "$MIROFISH_LIB_SH" \
+  || fail "case12: the installed deploy/production/mirofish-runtime.sh must be replaced with this run's staged REAL content, byte-for-byte"
+echo "    exit=$status12"
+
+echo "=== Case 13 (RED->rollback, packaging-fix regression): same real deployed layout as Case 12, but a later deploy_tag failure must restore the GENUINELY PRIOR deploy/production/mirofish-runtime.sh byte-for-byte, never leave this run's new content installed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s13="$(new_scratch case13)"
+cp "$DEPLOY_SH" "$s13/app/deploy.sh"
+seed_control_state "$s13/control-state"
+seed_prior_artifacts "$s13" "case13-prior"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s13/secrets/$name"
+  chmod 0600 "$s13/secrets/$name"
+done
+status13=0
+(
+  APP_DIR="$s13/app"
+  AI_TRADING_SECRETS_DIR="$s13/secrets"
+  ENV_STAGING_DIR="$s13/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s13/config-staging"
+  AI_TRADING_STATE_DIR="$s13/control-state"
+  AI_TRADING_UNIT_DIR="$s13/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s13/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_systemctl "$s13"
+  # The failure happens AFTER stage_configs() has already installed this
+  # run's new deploy/production/mirofish-runtime.sh -- same
+  # mid/late-transaction-failure technique Case 2 uses.
+  # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" up -d --no-deps"*) return 1 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  # shellcheck disable=SC2317
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$s13/app/deploy.sh" >"$s13/stdout.log" 2>"$s13/stderr.log"
+) || status13=$?
+if [[ "$status13" == 0 ]]; then
+  fail "case13: expected non-zero exit for a forced deploy_tag failure, got 0: $(cat "$s13/stdout.log" 2>/dev/null)"
+fi
+# Evidence this run actually got past sourcing, staged its NEW content, and
+# reached deploy_tag's `compose up` BEFORE the forced failure -- otherwise
+# the assertion below (prior content restored) would pass vacuously even
+# against the original bug, where the script dies at the source line
+# itself and the prior file is merely left untouched, never genuinely
+# staged-then-rolled-back.
+grep -q ' up -d --no-deps' "$s13/app/docker.log" 2>/dev/null \
+  || fail "case13: expected this run to actually reach deploy_tag's compose up (proving sourcing/staging succeeded first): $(cat "$s13/stderr.log" 2>/dev/null)"
+grep -q 'OLD mirofish-runtime.sh stand-in, marker=case13-prior' "$s13/app/deploy/production/mirofish-runtime.sh" 2>/dev/null \
+  || fail "case13: rollback must restore deploy/production/mirofish-runtime.sh to its GENUINELY PRIOR content, byte-for-byte: $(cat "$s13/app/deploy/production/mirofish-runtime.sh" 2>/dev/null)"
+echo "    exit=$status13"
+
+echo "=== Case 14 (RED, packaging-fix fail-closed): real deployed layout, but the workflow staged an INCOMPLETE bundle missing deploy/production/mirofish-runtime.sh -- must die closed, BEFORE acquiring the lifecycle lock or touching any secret/control-state/prior-library byte, never silently fall back to an already-installed (possibly stale) copy ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s14="$(new_scratch case14)"
+cp "$DEPLOY_SH" "$s14/app/deploy.sh"
+seed_control_state "$s14/control-state"
+seed_prior_artifacts "$s14" "case14-prior"
+rm -f "$s14/config-staging/deploy/production/mirofish-runtime.sh"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s14/secrets/$name"
+  chmod 0600 "$s14/secrets/$name"
+done
+status14=0
+(
+  APP_DIR="$s14/app"
+  AI_TRADING_SECRETS_DIR="$s14/secrets"
+  ENV_STAGING_DIR="$s14/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s14/config-staging"
+  AI_TRADING_STATE_DIR="$s14/control-state"
+  AI_TRADING_UNIT_DIR="$s14/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s14/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=cccccccccccccccccccccccccccccccccccccccc
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_docker "$s14"
+  install_fake_systemctl "$s14"
+  bash "$s14/app/deploy.sh" >"$s14/stdout.log" 2>"$s14/stderr.log"
+) || status14=$?
+if [[ "$status14" == 0 ]]; then
+  fail "case14: expected non-zero exit for a staging bundle missing mirofish-runtime.sh, got 0: $(cat "$s14/stdout.log" 2>/dev/null)"
+fi
+grep -q 'missing staged .*mirofish-runtime\.sh' "$s14/stderr.log" 2>/dev/null \
+  || fail "case14: expected a clear 'missing staged ... mirofish-runtime.sh' message: $(cat "$s14/stderr.log" 2>/dev/null)"
+if [[ -f "$s14/control-state/control.json" ]]; then
+  grep -q '"revision":0' "$s14/control-state/control.json" \
+    || fail "case14: control.json's revision must never advance -- this must fail before acquiring the lifecycle lock or snapshotting preferences"
+else
+  fail "case14: control.json must still exist (install.sh already seeded it before this run)"
+fi
+if [[ -e "$s14/secrets/tradingagents.env" ]]; then
+  grep -q 'OLD_VALUE' "$s14/secrets/tradingagents.env" \
+    || fail "case14: no secret file may be touched before the missing-library check runs"
+else
+  fail "case14: the pre-seeded secret file must still exist"
+fi
+grep -q 'OLD mirofish-runtime.sh stand-in, marker=case14-prior' "$s14/app/deploy/production/mirofish-runtime.sh" 2>/dev/null \
+  || fail "case14: the genuinely prior deploy/production/mirofish-runtime.sh must stay byte-for-byte untouched -- this run must never have reached stage_configs at all"
+[[ -z "$(cat "$s14/systemctl.log" 2>/dev/null)" ]] \
+  || fail "case14: the control helper unit must never be touched before this check runs: $(cat "$s14/systemctl.log" 2>/dev/null)"
+echo "    exit=$status14"
+
+echo "=== Case 15 (RED, packaging-fix fix round 1, real deployed layout): the staged deploy/production/mirofish-runtime.sh is a SYMLINK to an arbitrary sentinel-writing script -- the early library-source guard must reject it (same existence/not-a-symlink/regular-file discipline validate_staged_config_file applies to every other CONFIG_FILES entry) BEFORE sourcing (executing) it, never after -- no sentinel, no secret/control-state/prior-library byte touched ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s15="$(new_scratch case15)"
+cp "$DEPLOY_SH" "$s15/app/deploy.sh"
+seed_control_state "$s15/control-state"
+seed_prior_artifacts "$s15" "case15-prior"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s15/secrets/$name"
+  chmod 0600 "$s15/secrets/$name"
+done
+# An arbitrary script OUTSIDE the staging directory entirely -- standing in
+# for "a compromised staging step points this script at an arbitrary path",
+# validate_staged_config_file's own stated threat. If the early guard ever
+# sources this (executes it, as root in production) before rejecting it,
+# this writes a sentinel file proving the compromise ran.
+mkdir -p "$s15/outside-staging"
+cat >"$s15/outside-staging/evil.sh" <<EOF
+#!/usr/bin/env bash
+echo PWNED >"$s15/outside-staging/sentinel"
+EOF
+chmod 0755 "$s15/outside-staging/evil.sh"
+rm -f "$s15/config-staging/deploy/production/mirofish-runtime.sh"
+ln -s "$s15/outside-staging/evil.sh" "$s15/config-staging/deploy/production/mirofish-runtime.sh"
+status15=0
+(
+  APP_DIR="$s15/app"
+  AI_TRADING_SECRETS_DIR="$s15/secrets"
+  ENV_STAGING_DIR="$s15/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s15/config-staging"
+  AI_TRADING_STATE_DIR="$s15/control-state"
+  AI_TRADING_UNIT_DIR="$s15/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s15/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=dddddddddddddddddddddddddddddddddddddddd
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_docker "$s15"
+  install_fake_systemctl "$s15"
+  bash "$s15/app/deploy.sh" >"$s15/stdout.log" 2>"$s15/stderr.log"
+) || status15=$?
+if [[ "$status15" == 0 ]]; then
+  fail "case15: expected non-zero exit for a symlinked staged mirofish-runtime.sh, got 0: $(cat "$s15/stdout.log" 2>/dev/null)"
+fi
+grep -q 'must be a regular file, not a symlink' "$s15/stderr.log" 2>/dev/null \
+  || fail "case15: expected a clear 'must be a regular file, not a symlink' rejection: $(cat "$s15/stderr.log" 2>/dev/null)"
+[[ -e "$s15/outside-staging/sentinel" ]] \
+  && fail "case15: the symlinked staged library must be REJECTED, never sourced/executed -- the sentinel file proves it ran"
+if [[ -f "$s15/control-state/control.json" ]]; then
+  grep -q '"revision":0' "$s15/control-state/control.json" \
+    || fail "case15: control.json's revision must never advance -- this must fail before acquiring the lifecycle lock"
+else
+  fail "case15: control.json must still exist (install.sh already seeded it before this run)"
+fi
+if [[ -e "$s15/secrets/tradingagents.env" ]]; then
+  grep -q 'OLD_VALUE' "$s15/secrets/tradingagents.env" \
+    || fail "case15: no secret file may be touched before the symlink rejection runs"
+else
+  fail "case15: the pre-seeded secret file must still exist"
+fi
+grep -q 'OLD mirofish-runtime.sh stand-in, marker=case15-prior' "$s15/app/deploy/production/mirofish-runtime.sh" 2>/dev/null \
+  || fail "case15: the genuinely prior deploy/production/mirofish-runtime.sh must stay byte-for-byte untouched"
+[[ -z "$(cat "$s15/systemctl.log" 2>/dev/null)" ]] \
+  || fail "case15: the control helper unit must never be touched before this check runs: $(cat "$s15/systemctl.log" 2>/dev/null)"
+echo "    exit=$status15"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
@@ -1243,10 +1485,40 @@ EOF
   echo "=== Install Case 11 (GREEN): an existing stack adopts ANY actually running app, including MiroFish, instead of the fresh-host defaults ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   mkdir -p "$IROOT/override11"
+  # Hardened docker ps contract (was: ignored --format entirely and always
+  # printed a fixed, bare service-name list -- a real Docker daemon rejects
+  # install.sh's actual format template `{{index .Labels "..."}}` with
+  # "cannot index slice/array with type string" because `ps`'s own .Labels
+  # is a flat string, not a map, unlike `docker inspect`'s .Config.Labels.
+  # This fake now actually inspects the --format argument it is given and
+  # fails exactly like real Docker would for that broken accessor, so a
+  # regression back to `index .Labels` fails THIS install case, not just
+  # the separate genuine-Docker probe below.
   cat >"$IROOT/override11/docker" <<'EOF'
 #!/bin/bash
 if [[ "$1" == info ]]; then echo '[{"Name":"seccomp"}]'; exit 0; fi
-if [[ "$1" == ps ]]; then printf 'mirofish\nvibe-trading\n'; exit 0; fi
+if [[ "$1" == ps ]]; then
+  format=""
+  prev=""
+  for arg in "$@"; do
+    [[ "$prev" == --format ]] && format="$arg"
+    prev="$arg"
+  done
+  case "$format" in
+    *'index .Labels'*)
+      echo 'failed to execute template: template: :1:2: executing "" at <index .Labels "com.docker.compose.service">: error calling index: cannot index slice/array with type string' >&2
+      exit 1
+      ;;
+    '{{.Label "com.docker.compose.service"}}')
+      printf 'mirofish\nvibe-trading\n'
+      exit 0
+      ;;
+    *)
+      echo "fake docker ps: unexpected --format: $format" >&2
+      exit 1
+      ;;
+  esac
+fi
 exit 0
 EOF
   chmod +x "$IROOT/override11/docker"
@@ -1294,6 +1566,30 @@ echo VERIFY_OK
     echo "    exit=$rc12"
   else
     echo "    SKIP: debian:12-slim/apt-get unavailable -- real systemd-analyze probe not run"
+  fi
+
+  echo "=== Install Case 13 (GREEN, genuine Docker probe, task-5-review no-other-callers follow-up): the EXACT 'docker ps --format' template install.sh ships -- read from install.sh itself, never a hardcoded copy -- is run by the REAL local Docker daemon against a disposable, network-disabled, uniquely-labeled dummy container, and must correctly extract its compose-service label. Guards production even if a test-only fake's contract goes stale again: no Docker socket is mounted into any fixture above, and no ai-trading/expense container, image, volume, or real username is touched. The dummy container runs python:3.12-slim (never busybox -- that name only ever appears inside this file's FAKE docker-compose.yml fixture *content*, never actually run as a container, so it is NOT guaranteed pulled on a cold runner); python:3.12-slim is the one image this very suite already actually pulls and runs moments earlier, in Install Case 1 above, so by construction it is always already cached here, with no new image, dependency, or network fetch added by this case ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  probe_format="$(awk '/docker ps --filter/{found=1} found && /--format/{print; exit}' "$INSTALL_SH" \
+    | grep -oE "'\{\{[^']*\}\}'" | sed -E "s/^'(.*)'\$/\1/")"
+  if [[ -z "$probe_format" ]]; then
+    install_fail "install13: could not read install.sh's own 'docker ps --format' template"
+  else
+    probe_id="ai-trading-install-probe-$$"
+    probe_service="probe-service-$$"
+    rc13=0
+    (
+      trap 'docker rm -f "$probe_id" >/dev/null 2>&1 || true' EXIT
+      docker run -d --network none \
+        --label "com.docker.compose.project=$probe_id" \
+        --label "com.docker.compose.service=$probe_service" \
+        --name "$probe_id" python:3.12-slim sleep 30 >/dev/null
+      probe_got="$(docker ps --filter "label=com.docker.compose.project=$probe_id" --format "$probe_format")"
+      [[ "$probe_got" == "$probe_service" ]] \
+        || { echo "install13: expected '$probe_service' from the real daemon via install.sh's own template '$probe_format', got '$probe_got'" >&2; exit 1; }
+    ) 2>"$IROOT/install13-stderr.log" || rc13=$?
+    [[ "$rc13" == 0 ]] || install_fail "install13: $(cat "$IROOT/install13-stderr.log" 2>/dev/null)"
+    echo "    exit=$rc13"
   fi
 
   echo
