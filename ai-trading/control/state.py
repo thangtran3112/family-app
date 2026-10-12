@@ -40,7 +40,7 @@ class Busy(StateFailure):
 
 
 _REQUIRED_APP_IDS = frozenset({"tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish"})
-_REQUIRED_PROTECTED = ("web", "gateway", "auth", "cloudflared", "market-data")
+_REQUIRED_PROTECTED = ("web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler")
 
 
 def validate_catalog(value):

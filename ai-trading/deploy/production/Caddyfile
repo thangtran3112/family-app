@@ -18,7 +18,18 @@
 # peer-checked probe that never needs or trusts either.
 (availability_gate) {
 	forward_auth unix//run/family-app/ai-trading-control/control.sock {
-		uri /gate/{args[0]}
+		# Explicit trailing `?` with nothing after it: per Caddy's `uri`/
+		# `rewrite` semantics, a bare path token with no `?` leaves the
+		# query string untouched (the bug -- a query-bearing app request,
+		# e.g. research pagination, got forwarded verbatim onto this
+		# fixed internal probe path, so control/server.py's strict,
+		# unchanged path router saw "tradingagents?limit=25&offset=0" as
+		# an unknown app and 404'd the whole request). An explicit `?`
+		# makes everything after it (here, nothing) the new query, so
+		# this private probe always goes out clean while the real
+		# downstream app request below (a separate, unrelated proxy call)
+		# keeps its original path AND query untouched.
+		uri /gate/{args[0]}?
 		header_up -Authorization
 		header_up -Cookie
 		transport http {

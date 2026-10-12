@@ -30,12 +30,12 @@ preflight() {
   pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1 \
     || die "destination PostgreSQL is not reachable at $PGHOST:$PGPORT"
 
-  # gcloud (and every client library it shells out to) reads
-  # GOOGLE_APPLICATION_CREDENTIALS, not RESTORE_GOOGLE_APPLICATION_CREDENTIALS
-  # -- without this, a real restore run with only the documented contract
-  # authenticates as whatever ambient credential happens to be on the
-  # operator's machine (or none at all), never the one actually supplied.
+  # gcloud authenticates from its own credential store, so GOOGLE_APPLICATION_CREDENTIALS
+  # alone is not enough -- without the override, a real restore run authenticates as
+  # whatever ambient credential happens to be on the operator's machine (or none at all),
+  # never the one actually supplied.
   export GOOGLE_APPLICATION_CREDENTIALS="$RESTORE_GOOGLE_APPLICATION_CREDENTIALS"
+  export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="$RESTORE_GOOGLE_APPLICATION_CREDENTIALS"
 
   [[ ! -e "$RESTORE_WORK_DIR" || -z "$(ls -A "$RESTORE_WORK_DIR" 2>/dev/null)" ]] \
     || die "RESTORE_WORK_DIR already exists and is not empty: $RESTORE_WORK_DIR"

@@ -73,6 +73,21 @@ resource "google_storage_bucket" "backup" {
   }
 }
 
+# Project-level exception to the organization's enforced
+# iam.disableServiceAccountKeyCreation constraint, for this project only. The
+# writer's key (README.md "No writer key") cannot be created without it; every
+# other project under the organization stays enforced.
+resource "google_org_policy_policy" "backup_allow_sa_key_creation" {
+  name   = "projects/${var.project_id}/policies/iam.disableServiceAccountKeyCreation"
+  parent = "projects/${var.project_id}"
+
+  spec {
+    rules {
+      enforce = "FALSE"
+    }
+  }
+}
+
 # The VPS-resident writer identity. Ruling: no key resource is created here
 # (google_service_account_key is deliberately absent) -- the private key
 # material for this account is created ONCE, by hand, with
@@ -90,6 +105,26 @@ resource "google_service_account" "backup_writer" {
 resource "google_storage_bucket_iam_member" "backup_writer_creator" {
   bucket = google_storage_bucket.backup.name
   role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.backup_writer.email}"
+}
+
+# gcloud storage cp checks the bucket, the destination object, and the
+# destination prefix (objects.list) before it uploads, and objects describe
+# reads the new generation back. So the writer also needs buckets.get,
+# objects.get, and objects.list on this bucket. The list exposes object names
+# only, and backups are age-encrypted; the writer still cannot replace or
+# delete anything.
+resource "google_project_iam_custom_role" "backup_object_getter" {
+  project     = var.project_id
+  role_id     = "expenseTaxBackupObjectGetter"
+  title       = "Expense Tax backup object getter"
+  description = "Backup bucket metadata, object names, and one object by name, for the writer's upload check. No delete."
+  permissions = ["storage.buckets.get", "storage.objects.get", "storage.objects.list"]
+}
+
+resource "google_storage_bucket_iam_member" "backup_writer_getter" {
+  bucket = google_storage_bucket.backup.name
+  role   = google_project_iam_custom_role.backup_object_getter.id
   member = "serviceAccount:${google_service_account.backup_writer.email}"
 }
 

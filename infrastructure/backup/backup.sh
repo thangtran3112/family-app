@@ -22,6 +22,8 @@ preflight() {
 
   [[ -r "$PGPASSWORD_FILE" ]] || die "PGPASSWORD_FILE is not a readable file: $PGPASSWORD_FILE"
   [[ -r "$GOOGLE_APPLICATION_CREDENTIALS" ]] || die "GOOGLE_APPLICATION_CREDENTIALS is not a readable file"
+  # gcloud authenticates from its own credential store, not GOOGLE_APPLICATION_CREDENTIALS.
+  export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="$GOOGLE_APPLICATION_CREDENTIALS"
   [[ -d "$RECEIPT_STORAGE_DIR" ]] || die "RECEIPT_STORAGE_DIR is not a directory: $RECEIPT_STORAGE_DIR"
   [[ -d "$BACKUP_STATE_DIR" ]] || die "BACKUP_STATE_DIR is not a directory: $BACKUP_STATE_DIR"
   [[ -d "$BACKUP_CIPHERTEXT_DIR" ]] || die "BACKUP_CIPHERTEXT_DIR is not a directory: $BACKUP_CIPHERTEXT_DIR"
