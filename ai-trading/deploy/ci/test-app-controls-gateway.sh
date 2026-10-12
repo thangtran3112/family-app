@@ -265,7 +265,11 @@ docker run -d --name "${ID}-research" --network "$RESEARCH_NET" --network-alias 
 import http.server
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"research-ok"
+        # Echo the exact request-target (path + query, raw) it received --
+        # this is what makes the query-preservation assertions below
+        # meaningful, instead of a fixed "research-ok" body that could not
+        # tell a corrupted query from an intact one.
+        body = self.path.encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers()
         self.wfile.write(body)
 http.server.HTTPServer(("0.0.0.0", 8182), H).serve_forever()
@@ -356,6 +360,18 @@ body="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/")"
 grep -qi '^cache-control: no-store' <<<"$stopped_headers" || fail "expected Cache-Control: no-store on the stopped-app 503, got: $stopped_headers"
 ok "an authenticated request to a desired-but-not-converged app gets the helper's own exact, no-store, actionable 503 (not a generic error)"
 
+# === 3b. regression: a query-bearing app request must not corrupt the shared availability probe ===
+# Before the fix, control/server.py's strict path router saw the app's own
+# query string appended onto the fixed internal "/gate/{id}" probe path
+# (Caddy's path-only `uri` rewrite retains the original query), 404'd it as
+# an unknown app, and that 404 was copied back as the whole response -- a
+# stopped app with a query string got a wrong 404 instead of its own
+# actionable 503.
+query_stopped_status="$(curl -s -o /dev/null -w '%{http_code}' --cookie "$cookie" "$BASE/u/tradingagents/research?limit=25&offset=0")"
+[[ "$query_stopped_status" == "503" ]] \
+  || fail "expected the stopped app's own 503 (not a 404 from a corrupted availability probe) for a query-bearing request, got $query_stopped_status"
+ok "a query-bearing request to a stopped app still gets the real 503, not a 404 from the query corrupting the availability probe"
+
 # === 4. control API: cookie alone is never sufficient ===
 
 expect_status 401 "$BASE/__control/apps" --cookie "$cookie"
@@ -409,6 +425,32 @@ until curl -s -H "Authorization: Bearer $token_valid" "$BASE/__control/apps" | g
   sleep 0.5
 done
 ok "tradingagents converges to Running after its PUT -- the real worker thread's apply() call to the FakeRuntime actually ran"
+
+# === 8b. regression: the research route's original path AND query reach the upstream exactly, once the app is Running ===
+# The dummy research upstream now echoes the exact request-target it saw, so
+# a mismatch here is impossible to miss -- it isn't just a status code.
+
+resp="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/research?limit=25&offset=0")"
+[[ "$resp" == "/research?limit=25&offset=0" ]] \
+  || fail "expected the research upstream to see /research?limit=25&offset=0 (prefix stripped, query untouched), got: $resp"
+ok "a query-bearing research request through the /u/tradingagents prefix route reaches the upstream with its exact original query"
+
+resp="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/research")"
+[[ "$resp" == "/research" ]] || fail "expected the research upstream to see /research (no query) for a query-less request, got: $resp"
+ok "a query-less research request is unaffected (no spurious '?' introduced)"
+
+resp="$(curl -s --cookie "$cookie" "$BASE/u/tradingagents/api/research?offset=0")"
+[[ "$resp" == "/api/research?offset=0" ]] \
+  || fail "expected the research upstream to see /api/research?offset=0 for the api/research sibling path, got: $resp"
+ok "a single-parameter (query-only) form on the api/research sibling path also reaches the upstream with its exact query"
+
+resp="$(curl -s -H 'Host: tradingagents.tobytran.dev' --cookie "$cookie" "$BASE/research?offset=5")"
+[[ "$resp" == "/research?offset=5" ]] \
+  || fail "expected the dedicated tradingagents.tobytran.dev host's unprefixed research route to preserve the query too, got: $resp"
+ok "the same shared availability-gate fix also preserves the query on the dedicated host's direct (unprefixed) research route"
+
+expect_status 401 "$BASE/u/tradingagents/research?limit=25&offset=0"
+ok "an unauthenticated query-bearing research request is still a plain 401, auth-before-availability preserved"
 
 expect_status 200 "$BASE/u/tradingagents/" --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com'
 echoed="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "$BASE/u/tradingagents/")"
