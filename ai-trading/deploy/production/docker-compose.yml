@@ -211,6 +211,66 @@ services:
     mem_limit: 128m
     security_opt: ["no-new-privileges:true"]
 
+  # Family Desk Phase 3 (02c; owner decision 2026-10-12, D-e): the Desk joins
+  # the shared VPS Postgres cluster instead of a Desk-private "desk-postgres"
+  # container. `database` below is this repo's OWN top-level network name,
+  # pointed at the shared cluster's real external network (`postgres_default`,
+  # the project-default name 30-postgres.sh's own Compose project creates) --
+  # the exact shape expense-tax-management/deploy/production/docker-compose.yml
+  # already uses for the same shared cluster. No desk-postgres service, no
+  # Desk-private network, and no Desk-private data volume: nothing here is
+  # Desk-private anymore. Neither service gets a `depends_on` on the cluster
+  # (D-e, Task 3.6): it lives in a different Compose project
+  # (family-app-postgres, ${SHARED_PG_DIR}), already running before Desk ever
+  # deploys -- Compose cannot condition on a container from another project,
+  # and no other app's compose file in this repo does either. Each service's
+  # own healthcheck/startup retry is the gate instead.
+  api:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-desk:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    command: uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
+    # The only Desk service on `gateway` -- so Caddy can reach it at
+    # api:8000 (Caddyfile's /api/desk/* route) -- plus `database` to reach
+    # the shared Postgres cluster at its `postgres` hostname.
+    networks: [database, gateway]
+    mem_limit: 512m
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # Generous retries/start_period (not this file's usual 3/10s): `api`
+      # has no depends_on on the shared cluster above (D-e health-gating
+      # note, Task 3.6). `/healthz` is a real READINESS check (Decision 4):
+      # it runs `SELECT 1` against the Desk database with a 1-second connect
+      # timeout on every call, returning 503 when the database can't be
+      # reached -- it makes one bounded attempt per call, not its own retry
+      # loop, so it's THIS healthcheck's interval/retries/start_period that
+      # give a cold/slow shared cluster time to become reachable, by polling
+      # the probe repeatedly rather than the probe itself looping.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+
+  scheduler:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-desk:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    command: python -m ai_trading.jobs.scheduler
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
+    # Database only -- never gateway (it's a background job loop, not an
+    # HTTP service Caddy ever reaches).
+    networks: [database]
+    mem_limit: 512m
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    # No healthcheck block: this is a background loop with no HTTP endpoint
+    # to poll (same as market-data above). health-check.sh's service_ok()
+    # already treats a container with no Docker-level health check as
+    # passing so long as it's running.
+
 networks:
   hub: {}
   ta: {}
@@ -225,6 +285,16 @@ networks:
     ipam:
       config:
         - subnet: 172.30.90.0/29
+  # The shared VPS Postgres cluster's own Compose project default network
+  # (infrastructure/vps/steps/30-postgres.sh's project directory is
+  # ${SHARED_PG_DIR}, so Compose's default "<project>_default" naming makes
+  # it postgres_default) -- external because that cluster is a different
+  # Compose project with its own lifecycle, already running before this
+  # project ever deploys. "database" is purely this file's own local name
+  # for it (same alias expense-tax-management's docker-compose.yml uses).
+  database:
+    external: true
+    name: postgres_default
 
 volumes:
   ta-data: {}
