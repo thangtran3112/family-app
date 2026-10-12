@@ -24,7 +24,20 @@ _URL_VAR = "DESK_TEST_DATABASE_URL"
 _REQUIRE_VAR = "DESK_REQUIRE_DB"
 _ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
-_TABLES = ("bars_1d", "bars_1h", "bars_1m", "futures_rolls")
+_TABLES = (
+    "bars_1d",
+    "bars_1h",
+    "bars_1m",
+    "futures_rolls",
+    "users",
+    "watchlists",
+    "watchlist_items",
+    "strategies",
+    "strategy_versions",
+    "signals",
+    "alerts",
+    "deliveries",
+)
 
 
 def _alembic_config(url: str) -> Config:
@@ -68,8 +81,11 @@ def db_engine() -> Iterator[Engine]:
 def db_session(db_engine: Engine) -> Iterator[Session]:
     """A session on a freshly truncated database, so tests can't see each other's rows."""
     with db_engine.begin() as conn:
+        # CASCADE: several of `_TABLES` FK each other (users -> ... -> deliveries); plain TRUNCATE
+        # on a table another listed table still references raises regardless of row content or
+        # loop order, since Postgres checks the constraint's existence, not current row counts.
         for table in _TABLES:
-            conn.execute(text(f'TRUNCATE TABLE "{table}"'))
+            conn.execute(text(f'TRUNCATE TABLE "{table}" CASCADE'))
     factory = sessionmaker(db_engine, expire_on_commit=False)
     with factory() as session:
         yield session
