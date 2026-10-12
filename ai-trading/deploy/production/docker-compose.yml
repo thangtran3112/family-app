@@ -147,17 +147,34 @@ services:
     # and using that exact value here.
     image: caddy:2-alpine
     restart: unless-stopped
+    # Task 4 (01g): the dedicated Caddy identity the control helper's
+    # SO_PEERCRED check trusts (ai-trading/control/server.py gateway_uid).
+    # Runs as this fixed UID/GID so the socket's root:gateway 0660 ownership
+    # actually grants (and only grants) this container group access.
+    user: "22001:22001"
     env_file:
       # Only VIBE_API_AUTH_KEY (derived by deploy.sh), injected for Vibe after the Clerk check.
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-gateway.env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Read-only: this container only ever connects to the already-bound
+      # control.sock the host helper owns; it never creates or writes here.
+      - /run/family-app/ai-trading-control:/run/family-app/ai-trading-control:ro
+    # Non-root Caddy has no write access to the image's default root-owned
+    # /config, /data (XDG_CONFIG_HOME/XDG_DATA_HOME); `admin off` means
+    # nothing here is actually persisted, so private, per-restart tmpfs is
+    # enough -- no named volume, no host state to clean up.
+    tmpfs:
+      - /config:uid=22001,gid=22001,mode=0700
+      - /data:uid=22001,gid=22001,mode=0700
     labels:
       # Set by deploy.sh: a changed Caddyfile recreates this container.
       com.family-app.caddyfile-sha256: ${AI_TRADING_CADDYFILE_SHA256:-unset}
-    depends_on:
-      ta-research:
-        condition: service_started
+    # No depends_on ta-research (review/01g): explicit enabled-service
+    # selection (deploy.sh) controls which app containers actually start,
+    # not an implicit lifecycle coupling from the gateway's own dependency
+    # graph -- an off TradingAgents group must never be implicitly revived
+    # just because gateway (always-on) starts.
     networks: [gateway, ta, ahf, vibe, research, mirofish]
     mem_limit: 64m
     security_opt: ["no-new-privileges:true"]

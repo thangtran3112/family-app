@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/auth.test.ts lib/apps.test.ts static-server.test.mjs",
+    "test": "node --test lib/auth.test.ts lib/apps.test.ts lib/controls.test.ts static-server.test.mjs",
     "test:export": "node --test export-layout.test.mjs"
   },
   "dependencies": {

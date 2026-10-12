@@ -11,6 +11,14 @@ import { isAllowedOrigin } from "./origin.js";
 const COOKIE_NAME = "__ai_trading_session";
 const COOKIE_MAX_AGE_SECONDS = 3600;
 const HEX_64 = /^[0-9a-f]{64}$/i;
+// Task 4: the private control helper's own actor-ID shape
+// (ai-trading/control/state.py ACTOR_ID) -- a verified Clerk `sub` must
+// already be this safe before it is ever forwarded as X-Verified-Actor.
+const ACTOR_ID = /^[A-Za-z0-9_-]{1,128}$/;
+// Caddy's forward_auth always calls this endpoint with GET and supplies the
+// browser's real verb via X-Forwarded-Method (task-4-reference.md) -- these
+// are the only two methods the public /__control/apps[/id] routes ever use.
+const CONTROL_FORWARDED_METHODS = new Set(["GET", "PUT"]);
 // Exactly one whitespace-free token after the scheme: "Bearer token extra"
 // or "Bearer tok\ten" must be malformed (400), not a token that merely fails
 // verification (401). `\S+` cannot itself contain whitespace, and `\s*$`
@@ -87,6 +95,35 @@ export function createAuthServer(env) {
     res.end();
   }
 
+  // Internal-only: Caddy's forward_auth is the only caller (it connects to
+  // the auth service directly, never through its own public site routing --
+  // see production/Caddyfile's exact public auth-path matcher). Every public
+  // control GET/PUT requires a FRESH Clerk bearer on every request; a
+  // gateway cookie is never read here, and a client-supplied X-Verified-Actor
+  // is never read either -- the only identity this can return is whatever
+  // the verifier itself just proved.
+  async function handleControlCheck(req, res) {
+    if (req.method !== "GET") return res.writeHead(405).end();
+    const forwardedMethod = req.headers["x-forwarded-method"];
+    if (!CONTROL_FORWARDED_METHODS.has(forwardedMethod)) return res.writeHead(405).end();
+    // Mutation Origin is checked before the Authorization header is even read.
+    if (forwardedMethod === "PUT" && !isAllowedOrigin(req.headers.origin, ALLOWED_ORIGINS)) {
+      return res.writeHead(403).end();
+    }
+    const token = bearerToken(req);
+    if (!token) return res.writeHead(401).end();
+    const claims = await verifyClerkToken(token, {
+      secretKey: CLERK_SECRET_KEY,
+      authorizedParties: allowedOrigins,
+      ...(verifyToken ? { verify: verifyToken } : {}),
+    });
+    if (!claims || !isAllowedEmail(claims.email, ALLOWED_EMAILS) || !ACTOR_ID.test(claims.sub)) {
+      return res.writeHead(401).end();
+    }
+    res.writeHead(204, { "x-verified-actor": claims.sub });
+    res.end();
+  }
+
   function handleLogout(req, res) {
     if (req.method !== "POST") return res.writeHead(405).end();
     if (!isAllowedOrigin(req.headers.origin, ALLOWED_ORIGINS)) return res.writeHead(403).end();
@@ -103,6 +140,7 @@ export function createAuthServer(env) {
     const { pathname } = new URL(req.url, "http://auth");
     if (pathname === "/__auth/session") return void handleSession(req, res);
     if (pathname === "/__auth/check") return void handleCheck(req, res);
+    if (pathname === "/__auth/control-check") return void handleControlCheck(req, res);
     if (pathname === "/__auth/logout") return void handleLogout(req, res);
     res.writeHead(404).end();
   });

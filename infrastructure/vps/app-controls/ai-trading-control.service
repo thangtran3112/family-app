@@ -1,0 +1,21 @@
+[Unit]
+Description=Family Trading Hub app controls
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=ai-trading-gateway
+RuntimeDirectory=family-app/ai-trading-control
+RuntimeDirectoryMode=0710
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /opt/family-app/ai-trading/control/server.py
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

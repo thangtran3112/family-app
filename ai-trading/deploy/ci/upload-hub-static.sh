@@ -35,9 +35,10 @@ validate_paths() {
   while IFS= read -r -d '' file; do
     rel="${file#"$OUT_DIR"/}"
     case "$rel" in
-      index.html|404.html|_not-found.html|login.html|favicon.ico|index.txt|login.txt|_not-found.txt|__next._tree.txt|__next._full.txt|__next._index.txt|__next.__PAGE__.txt|_next/static/*) ;;
+      index.html|404.html|_not-found.html|login.html|settings.html|favicon.ico|index.txt|login.txt|settings.txt|_not-found.txt|__next._tree.txt|__next._full.txt|__next._index.txt|__next.__PAGE__.txt|_next/static/*) ;;
       apps/tradingagents.html|apps/ai-hedge-fund.html|apps/vibe-trading.html|apps/mirofish.html|apps/tradingagents.txt|apps/ai-hedge-fund.txt|apps/vibe-trading.txt|apps/mirofish.txt) ;;
       login/__next._tree.txt|login/__next._full.txt|login/__next._index.txt|login/__next.login.__PAGE__.txt) ;;
+      settings/__next._tree.txt|settings/__next._full.txt|settings/__next._index.txt|settings/__next.settings.__PAGE__.txt) ;;
       _not-found/__next._tree.txt|_not-found/__next._full.txt|_not-found/__next._index.txt|_not-found/__next._not-found.__PAGE__.txt) ;;
       apps/tradingagents/__next._tree.txt|apps/tradingagents/__next._full.txt|apps/tradingagents/__next._index.txt|apps/tradingagents/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       apps/ai-hedge-fund/__next._tree.txt|apps/ai-hedge-fund/__next._full.txt|apps/ai-hedge-fund/__next._index.txt|apps/ai-hedge-fund/__next.apps.\$d\$slug.__PAGE__.txt) ;;
