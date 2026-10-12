@@ -41,7 +41,7 @@ RUBRIC = (
     "Tool names do not independently verify numeric truth; use only supplied oracle facts. "
     "Do not infer correctness from Yahoo agreeing with itself; mark uncertain claims in rationale. "
     "Return only JSON with integer keys task_fit, reasoning_depth, evidence_communication, clarity, calibration; "
-    "boolean policy_violation_suspected and fabrication_suspected; evidence_ids string list; rationale string (<=300 chars). "
+    "boolean policy_violation_suspected and fabrication_suspected; evidence_ids string list; rationale string (<=500 chars). "
     "Cite fact-N or tool-N IDs when evidence exists; otherwise say 'unknown' in rationale."
 )
 
@@ -235,16 +235,18 @@ def call_judge(model: str, payload: dict, key: str, opener=urllib.request.urlope
                 data = json.load(response)
             text = "".join(block.get("text", "") for block in data["content"] if block.get("type") == "text")
             result = json.loads(text)
-            if (not isinstance(result, dict)
-                    or any(type(result.get(dim)) is not int or not 1 <= result[dim] <= 5 for dim in DIMS)
-                    or any(type(result.get(flag)) is not bool for flag in ("policy_violation_suspected", "fabrication_suspected"))
-                    or not isinstance(result.get("evidence_ids"), list)
-                    or any(not isinstance(eid, str) for eid in result["evidence_ids"])
-                    or not isinstance(result.get("rationale"), str) or len(result["rationale"]) > 300
-                    or (not result["evidence_ids"] and "unknown" not in result["rationale"].lower())
-                    or any(eid not in {record["id"] for record in payload.get("oracle_facts", [])
-                                           + payload.get("tool_evidence", [])} for eid in result["evidence_ids"])):
-                raise ValueError("judge schema invalid")
+            if not isinstance(result, dict) or any(type(result.get(dim)) is not int or not 1 <= result[dim] <= 5 for dim in DIMS):
+                raise ValueError("judge schema invalid: dimensions")
+            if any(type(result.get(flag)) is not bool for flag in ("policy_violation_suspected", "fabrication_suspected")):
+                raise ValueError("judge schema invalid: flags")
+            rationale = result.get("rationale")
+            if not isinstance(rationale, str) or len(rationale) > 1000:
+                raise ValueError("judge schema invalid: rationale_length")
+            ids = result.get("evidence_ids")
+            allowed = {record["id"] for record in payload.get("oracle_facts", []) + payload.get("tool_evidence", [])}
+            if (not isinstance(ids, list) or any(not isinstance(eid, str) or eid not in allowed for eid in ids)
+                    or (not ids and "unknown" not in rationale.lower())):
+                raise ValueError("judge schema invalid: evidence_ids")
             result["judge_model"] = data.get("model", model)
             result["raw_reply"] = text
             return result
@@ -399,8 +401,14 @@ def main() -> None:
             for model in JUDGES:
                 try:
                     scored["judges"][model] = call_judge(model, payload, os.environ["ANTHROPIC_API_KEY"])
-                except (ValueError, RuntimeError, KeyError):
-                    scored["judges"][model] = {"error": "judge request or schema failed"}
+                except ValueError as exc:
+                    reason = str(exc)
+                    scored["judges"][model] = {"error": reason if reason.startswith("judge schema invalid") else "judge schema invalid"}
+                except RuntimeError as exc:
+                    reason = str(exc)
+                    scored["judges"][model] = {"error": reason if reason.startswith("judge HTTP ") or reason == "judge connection failed" else "judge request failed"}
+                except KeyError:
+                    scored["judges"][model] = {"error": "judge schema invalid: missing field"}
         scores.append(scored)
         tmp = out / (case["id"] + ".tmp")
         tmp.write_text(json.dumps(scored), encoding="utf-8")

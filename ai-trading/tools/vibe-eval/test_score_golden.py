@@ -221,6 +221,36 @@ def test_valid_sonnet_rationale_just_over_200_chars_is_accepted():
     assert result["rationale"] == "a" * 204
 
 
+def test_sonnet_rationale_slightly_over_300_chars_is_valid():
+    reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 4, "clarity": 4,
+             "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,
+             "evidence_ids": ["fact-1"], "rationale": "a" * 303}
+
+    def fake_open(request, timeout):
+        return io.BytesIO(json.dumps({"model": "claude-sonnet-5-5",
+                                      "content": [{"type": "text", "text": json.dumps(reply)}]}).encode())
+
+    assert call_judge("claude-sonnet-5-5", {"oracle_facts": [{"id": "fact-1"}]}, "test-key", opener=fake_open)["rationale"] == "a" * 303
+
+
+@pytest.mark.parametrize("override,reason", [
+    ({"rationale": "a" * 1001}, "rationale_length"),
+    ({"evidence_ids": ["tool-999"]}, "evidence_ids"),
+])
+def test_bad_judge_fields_report_safe_schema_reason(override, reason):
+    reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 4, "clarity": 4,
+             "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,
+             "evidence_ids": ["fact-1"], "rationale": "Valid source."}
+    reply.update(override)
+
+    def fake_open(request, timeout):
+        return io.BytesIO(json.dumps({"model": "claude-sonnet-5-5",
+                                      "content": [{"type": "text", "text": json.dumps(reply)}]}).encode())
+
+    with pytest.raises(ValueError, match=reason):
+        call_judge("claude-sonnet-5-5", {"oracle_facts": [{"id": "fact-1"}]}, "test-key", opener=fake_open)
+
+
 def test_report_never_merges_fixed_and_rolling_or_ranks_incomplete(tmp_path):
     from score_golden import write_report
     fixed = {"id": "F01", "lane": "fixed", "model": "gpt-6.1-sol", "effort": "xhigh", "status": "completed",
@@ -258,3 +288,32 @@ def test_empty_cohort_reports_missing_cases_instead_of_crashing(tmp_path, monkey
     assert len(report["scores"]) == 25
     assert all(score["status"] == "MISSING" for score in report["scores"])
     assert "INCOMPLETE" in (out / "report.md").read_text()
+
+
+def test_judge_failure_records_safe_reason_not_generic_error(tmp_path, monkeypatch):
+    import score_golden
+    from golden_cases import case_set_sha, load_cases
+
+    case = load_cases()[0]
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "F01.json").write_text(json.dumps({
+        "scenario": {"id": "F01", "category": case["category"], "prompt": case["prompt"]},
+        "summary": {"status": "completed", "model": "gpt-6.1-sol", "configured_model": "gpt-6.1-sol", "effort": "xhigh"},
+        "messages": [{"role": "assistant", "content": "SEC filing date 2025-10-31. Revenue $416.161 billion.",
+                      "tool_trail": [{"tool": "get_sec_filings", "status": "ok"}]}],
+        "case_set_sha": case_set_sha(), "fork_commit": "synthetic"}))
+
+    def failed_judge(model, payload, key):
+        raise ValueError("judge schema invalid: evidence_ids")
+
+    monkeypatch.setattr(score_golden, "call_judge", failed_judge)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    out = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", ["score_golden.py", str(Path(__file__).with_name("golden_cases.json")), str(runs),
+                                  "--runs-dir", str(tmp_path / "session-runs"), "--swarm-runs-dir", str(tmp_path / "swarm-runs"),
+                                  "--out", str(out), "--expect-model", "gpt-6.1-sol", "--expect-effort", "xhigh", "--judge"])
+    score_golden.main()
+    saved = json.loads((out / "F01.json").read_text())
+    assert saved["judges"]["claude-opus-5-5"]["error"] == "judge schema invalid: evidence_ids"
+    assert "test-key" not in json.dumps(saved)
