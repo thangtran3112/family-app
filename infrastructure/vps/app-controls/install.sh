@@ -233,7 +233,7 @@ running_services_json=null
 if [[ -f "$APP_DIR/docker-compose.yml" ]]; then
   running_services_json="$(
     docker ps --filter "label=com.docker.compose.project=$PROJECT" \
-      --format '{{index .Labels "com.docker.compose.service"}}' \
+      --format '{{.Label "com.docker.compose.service"}}' \
       | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))'
   )" || die "failed to query currently running services for adoption"
 fi
