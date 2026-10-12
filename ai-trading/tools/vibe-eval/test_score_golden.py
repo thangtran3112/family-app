@@ -1,8 +1,13 @@
 """Offline oracle, provenance and safety scoring for US-stock research."""
 
+import io
 import json
+import sys
+from pathlib import Path
 
-from score_golden import match_fact, policy_issues, score_case
+import pytest
+
+from score_golden import call_judge, judge_payload, match_fact, policy_issues, score_case
 
 REVENUE = ["revenue", "416161000000", "USD", "500000000", "SEC:0000320193-25-000079"]
 RID = "swarm-20261011-120000-abcdef12"
@@ -37,6 +42,7 @@ def test_rolling_single_source_is_unknown():
     result = score_case(case, run, None)
     assert result["numeric_truth"] == "unknown"
     assert result["grounding"]["available"] is False
+    assert result["source_dates"] == ["2026-10-11"]
 
 
 def test_required_tool_source_and_date_are_not_assumed_from_a_number():
@@ -125,3 +131,81 @@ def test_path_shaped_or_malformed_committee_artifact_fails_closed(tmp_path):
     (folder / "run.json").write_text(json.dumps({"id": RID, "status": "completed",
                                                  "preset_name": "investment_committee", "tasks": "forged"}))
     assert "committee_missing" in policy_issues({"policy": "committee_required"}, run, tmp_path)
+
+
+def test_judge_input_is_blind_and_bounded():
+    case = {"prompt": "What is the SEC revenue?", "policy": "analysis_only", "facts": [REVENUE]}
+    run = {"summary": {"model": "gpt-6.1-sol", "effort": "xhigh"},
+           "messages": [{"role": "assistant", "content": "Revenue: $416.161 billion",
+                         "tool_trail": [{"tool": "get_sec_filings", "status": "ok",
+                                         "arguments": {"ticker": "AAPL", "token": "secret"},
+                                         "preview": "private account 123"}]}]}
+    data = judge_payload(case, run, {"facts": [{"label": "revenue", "status": "pass", "source": REVENUE[4]}],
+                                    "hard_issues": []})
+    serialized = json.dumps(data)
+    assert "gpt-6.1-sol" not in serialized and "xhigh" not in serialized
+    assert "secret" not in serialized and "private account" not in serialized
+    assert "SEC:0000320193-25-000079" in serialized
+
+
+def test_invalid_judge_reply_is_not_a_score():
+    def fake_open(request, timeout):
+        assert request.full_url == "https://api.anthropic.com/v1/messages"
+        return io.BytesIO(json.dumps({"model": "claude-opus-5-5",
+                                      "content": [{"type": "text", "text": '{"task_fit":6}'}]}).encode())
+
+    with pytest.raises(ValueError, match="judge schema"):
+        call_judge("claude-opus-5-5", {"prompt": "synthetic"}, "test-key", opener=fake_open)
+
+
+def test_valid_judge_reply_keeps_raw_response_for_scratch_audit():
+    reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 3, "clarity": 5,
+             "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,
+             "evidence_ids": ["fact-1"], "rationale": "Fact matches SEC evidence."}
+    raw = json.dumps(reply)
+
+    def fake_open(request, timeout):
+        return io.BytesIO(json.dumps({"model": "claude-sonnet-5-5", "content": [{"type": "text", "text": raw}]}).encode())
+
+    result = call_judge("claude-sonnet-5-5", {"oracle_facts": [{"id": "fact-1"}]}, "test-key", opener=fake_open)
+    assert result["raw_reply"] == raw
+    assert result["judge_model"] == "claude-sonnet-5-5"
+
+
+def test_report_never_merges_fixed_and_rolling_or_ranks_incomplete(tmp_path):
+    from score_golden import write_report
+    fixed = {"id": "F01", "lane": "fixed", "model": "gpt-6.1-sol", "effort": "xhigh", "status": "completed",
+             "facts": [{"status": "pass"}], "hard_issues": [], "grounding": {"flagged": 0, "cut": 0},
+             "tool_audit": [], "wall_s": 3, "judges": {}, "numeric_truth": "supported"}
+    rolling = {**fixed, "id": "R01", "lane": "rolling", "facts": [], "numeric_truth": "unknown"}
+    path = tmp_path / "report.md"
+    write_report([fixed, rolling], path)
+    text = path.read_text()
+    assert "Fixed leaderboard" in text and "Rolling freshness" in text
+    assert "INCOMPLETE" in text and "1/18" in text
+    assert "R01" in text and "unknown" in text
+
+
+def test_judge_error_blocks_a_complete_ranking(tmp_path):
+    from score_golden import write_report
+    rows = [{"id": f"F{i:02d}", "lane": "fixed", "model": "gpt-5.5", "effort": "xhigh", "status": "completed",
+             "facts": [], "hard_issues": [], "grounding": {"flagged": 0, "cut": 0}, "tool_audit": [], "wall_s": 3,
+             "judges": {"claude-opus-5-5": {"error": "timeout"}, "claude-sonnet-5-5": {"task_fit": 3}}}
+            for i in range(1, 19)]
+    path = tmp_path / "report.md"
+    write_report(rows, path)
+    assert "INCOMPLETE" in path.read_text()
+
+
+def test_empty_cohort_reports_missing_cases_instead_of_crashing(tmp_path, monkeypatch):
+    from score_golden import main
+    out = tmp_path / "report"
+    monkeypatch.setattr(sys, "argv", ["score_golden.py", str(Path(__file__).with_name("golden_cases.json")),
+                                  str(tmp_path / "runs"), "--runs-dir", str(tmp_path / "session-runs"),
+                                  "--swarm-runs-dir", str(tmp_path / "swarm-runs"), "--out", str(out),
+                                  "--expect-model", "gpt-6.1-sol", "--expect-effort", "xhigh"])
+    main()
+    report = json.loads((out / "report.json").read_text())
+    assert len(report["scores"]) == 25
+    assert all(score["status"] == "MISSING" for score in report["scores"])
+    assert "INCOMPLETE" in (out / "report.md").read_text()
