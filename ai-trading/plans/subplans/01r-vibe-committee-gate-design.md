@@ -1,6 +1,6 @@
 # Vibe-Trading US-Stock Committee Gate and Free Consensus: Design
 
-**Date:** 2026-10-12 · **Lane:** open-source Trading Hub · **Status:** written spec amended for owner review; implementation not approved. Sub-project 4 of [01n](01n-vibe-research-quality.md); findings from SP3 [01q](01q-vibe-golden-eval-results.md) drive the safety policy. SP3 landed in dev PR #119.
+**Date:** 2026-10-12 · **Lane:** open-source Trading Hub · **Status:** written spec approved by owner; implementation awaits plan review. Sub-project 4 of [01n](01n-vibe-research-quality.md); findings from SP3 [01q](01q-vibe-golden-eval-results.md) drive the safety policy. SP3 landed in dev PR #119.
 
 ## 1. Intended outcome and boundary
 
