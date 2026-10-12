@@ -1169,6 +1169,70 @@ grep -q 'OLD mirofish-runtime.sh stand-in, marker=case14-prior' "$s14/app/deploy
   || fail "case14: the control helper unit must never be touched before this check runs: $(cat "$s14/systemctl.log" 2>/dev/null)"
 echo "    exit=$status14"
 
+echo "=== Case 15 (RED, packaging-fix fix round 1, real deployed layout): the staged deploy/production/mirofish-runtime.sh is a SYMLINK to an arbitrary sentinel-writing script -- the early library-source guard must reject it (same existence/not-a-symlink/regular-file discipline validate_staged_config_file applies to every other CONFIG_FILES entry) BEFORE sourcing (executing) it, never after -- no sentinel, no secret/control-state/prior-library byte touched ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s15="$(new_scratch case15)"
+cp "$DEPLOY_SH" "$s15/app/deploy.sh"
+seed_control_state "$s15/control-state"
+seed_prior_artifacts "$s15" "case15-prior"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s15/secrets/$name"
+  chmod 0600 "$s15/secrets/$name"
+done
+# An arbitrary script OUTSIDE the staging directory entirely -- standing in
+# for "a compromised staging step points this script at an arbitrary path",
+# validate_staged_config_file's own stated threat. If the early guard ever
+# sources this (executes it, as root in production) before rejecting it,
+# this writes a sentinel file proving the compromise ran.
+mkdir -p "$s15/outside-staging"
+cat >"$s15/outside-staging/evil.sh" <<EOF
+#!/usr/bin/env bash
+echo PWNED >"$s15/outside-staging/sentinel"
+EOF
+chmod 0755 "$s15/outside-staging/evil.sh"
+rm -f "$s15/config-staging/deploy/production/mirofish-runtime.sh"
+ln -s "$s15/outside-staging/evil.sh" "$s15/config-staging/deploy/production/mirofish-runtime.sh"
+status15=0
+(
+  APP_DIR="$s15/app"
+  AI_TRADING_SECRETS_DIR="$s15/secrets"
+  ENV_STAGING_DIR="$s15/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s15/config-staging"
+  AI_TRADING_STATE_DIR="$s15/control-state"
+  AI_TRADING_UNIT_DIR="$s15/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s15/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=dddddddddddddddddddddddddddddddddddddddd
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+  install_fake_docker "$s15"
+  install_fake_systemctl "$s15"
+  bash "$s15/app/deploy.sh" >"$s15/stdout.log" 2>"$s15/stderr.log"
+) || status15=$?
+if [[ "$status15" == 0 ]]; then
+  fail "case15: expected non-zero exit for a symlinked staged mirofish-runtime.sh, got 0: $(cat "$s15/stdout.log" 2>/dev/null)"
+fi
+grep -q 'must be a regular file, not a symlink' "$s15/stderr.log" 2>/dev/null \
+  || fail "case15: expected a clear 'must be a regular file, not a symlink' rejection: $(cat "$s15/stderr.log" 2>/dev/null)"
+[[ -e "$s15/outside-staging/sentinel" ]] \
+  && fail "case15: the symlinked staged library must be REJECTED, never sourced/executed -- the sentinel file proves it ran"
+if [[ -f "$s15/control-state/control.json" ]]; then
+  grep -q '"revision":0' "$s15/control-state/control.json" \
+    || fail "case15: control.json's revision must never advance -- this must fail before acquiring the lifecycle lock"
+else
+  fail "case15: control.json must still exist (install.sh already seeded it before this run)"
+fi
+if [[ -e "$s15/secrets/tradingagents.env" ]]; then
+  grep -q 'OLD_VALUE' "$s15/secrets/tradingagents.env" \
+    || fail "case15: no secret file may be touched before the symlink rejection runs"
+else
+  fail "case15: the pre-seeded secret file must still exist"
+fi
+grep -q 'OLD mirofish-runtime.sh stand-in, marker=case15-prior' "$s15/app/deploy/production/mirofish-runtime.sh" 2>/dev/null \
+  || fail "case15: the genuinely prior deploy/production/mirofish-runtime.sh must stay byte-for-byte untouched"
+[[ -z "$(cat "$s15/systemctl.log" 2>/dev/null)" ]] \
+  || fail "case15: the control helper unit must never be touched before this check runs: $(cat "$s15/systemctl.log" 2>/dev/null)"
+echo "    exit=$status15"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
