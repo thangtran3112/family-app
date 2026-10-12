@@ -7370,6 +7370,8 @@ running yet and Step 4 should be treated as blocked, not failed.
     `docker/postgres/zz-20-desk-roles.sh`)
   - `ai-trading/packages/family-desk/contracts/` (the backend's contract and template tests read its
     fixtures and generated schema; found on the same dry run)
+  - `ai-trading/packages/family-desk/README.md` and `ai-trading/packages/family-desk/THIRD_PARTY_NOTICES.md`
+    (the notices list the adapted code the release ships; found on the release dry run)
   - `ai-trading/deploy/docker-bake.hcl`
   - `ai-trading/deploy/production/docker-compose.yml`
   - `ai-trading/deploy/production/Caddyfile`
@@ -7405,22 +7407,40 @@ running yet and Step 4 should be treated as blocked, not failed.
      present, creates database `ai_trading_desk_db`, and runs `zz-20-desk-roles.sh` against it.
   3. Fetch those two passwords once (`bootstrap.sh --fetch-secrets-to`, or `ssh ... cat
      ${SHARED_PG_DIR}/.env`), then delete the local copy.
-  4. Set Firestore profile `ai-trading/desk` with, at minimum:
-     - `DESK_MIGRATOR_DATABASE_URL` = `postgresql://desk_migrator:<password>@postgres:5432/ai_trading_desk_db`
-     - `DESK_RUNTIME_DATABASE_URL` = `postgresql://desk_runtime:<password>@postgres:5432/ai_trading_desk_db`
+  4. Set the runtime URL in Firestore profile `ai-trading/desk`, and the migrator URL in a separate
+     profile `ai-trading/desk-migrator` that `deploy.sh` never renders. `api` and `scheduler` load all of
+     `desk.env`, so a migrator URL in `ai-trading/desk` would give those containers DDL rights:
+     - `ai-trading/desk` `DESK_RUNTIME_DATABASE_URL` = `postgresql://desk_runtime:<password>@postgres:5432/ai_trading_desk_db`
+     - `ai-trading/desk-migrator` `DESK_MIGRATOR_DATABASE_URL` = `postgresql://desk_migrator:<password>@postgres:5432/ai_trading_desk_db`
 
-     via `python3 common/config/family_config.py set ai-trading/desk DESK_MIGRATOR_DATABASE_URL`
-     and the `DESK_RUNTIME_DATABASE_URL` equivalent — never print or log the value while setting
-     it.
+     Write each with `python3 common/config/family_config.py set <target> <NAME>`, feeding the value on
+     stdin (never as an argument, never printed or logged).
   5. Optionally also set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`/`SLACK_WEBHOOK_URL_OWNER`/
      `SLACK_WEBHOOK_URL_SPOUSE` in the same profile whenever the owner is ready to wire those
      channels in (Decision 7) — `api/app.py`'s `_build_channels` picks them up automatically on
      the next deploy's restart, no code change needed.
-  6. Run the one-off Alembic migration against `DESK_MIGRATOR_DATABASE_URL` before the first
-     `api`/`scheduler` deploy (the compose services connect as `desk_runtime`, which cannot
-     CREATE/DROP): `DATABASE_URL="$DESK_MIGRATOR_DATABASE_URL" uv run alembic upgrade head` from
-     `packages/family-desk/backend/` on a host that can reach the VPS's Postgres (or via an
-     operator one-shot container using the built `ai-trading-desk` image).
+  6. Run the one-off migration as the migrator, before the release merges. The deploy starts `api` and
+     `scheduler`, which connect as `desk_runtime` and cannot CREATE/DROP. The migration cannot read
+     `DESK_MIGRATOR_DATABASE_URL` from the environment: `migrations/env.py` takes `sqlalchemy.url` from
+     `alembic.ini`, a localhost placeholder, and the tests set the URL in code. Postgres listens only on
+     the VPS's `127.0.0.1:5432`, so open a tunnel and point the URL at it. Validated against `postgres:17`
+     on the release tree (`0002 (head)`, 13 tables):
+     ```
+     ssh -N -L 15432:127.0.0.1:5432 -p <ssh-port> <user>@<vps-host>   # terminal 1, keep open
+     cd ai-trading/packages/family-desk/backend && uv sync --locked    # terminal 2, from the repo root
+     CLOUDSDK_ACTIVE_CONFIG_NAME=personal python3 ../../../../common/config/family_config.py run ai-trading/desk-migrator -- uv run python - <<'PY'
+     import os
+     from alembic import command
+     from alembic.config import Config
+     from sqlalchemy.engine import make_url
+     url = make_url(os.environ["DESK_MIGRATOR_DATABASE_URL"]).set(host="127.0.0.1", port=15432)
+     cfg = Config("alembic.ini")
+     cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
+     command.upgrade(cfg, "head")
+     command.current(cfg)
+     PY
+     ```
+     `command.current` must print `0002 (head)`.
 
 **Decision 15 is approved — no backup confirmation step needed.** Approved by the owner,
 2026-10-12: the Desk database rides in the existing combined backup archive (`backup.sh` dumps
