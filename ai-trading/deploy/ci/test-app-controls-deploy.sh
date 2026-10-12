@@ -869,6 +869,107 @@ grep -q 'is-active.*ai-trading-control.service' "$s10/systemctl.log" 2>/dev/null
 grep -q 'fake runuser' "$s10/app/runuser.log" 2>/dev/null || fail "case10: expected control_helper_ready() to actually run during this redeploy's health check"
 echo "    exit=$status10"
 
+echo "=== Case 11 (GREEN, final re-review correctness fix): an EARLY failure BEFORE stage_unit ever runs (stage_configs fails first) leaves a genuinely prior, ACTIVE control helper completely UNTOUCHED -- UNIT_PRIOR_EXISTED is never set this run, so the skip added for Case 9 must NOT fire; the redeploy's real health-check.sh must still verify that untouched helper, never assume a default/unknown prior-unit state means 'no prior unit' ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s11="$(new_scratch case11)"
+cp "$HEALTH_SH" "$s11/config-staging/health-check.sh"
+chmod 0755 "$s11/config-staging/health-check.sh"
+seed_control_state "$s11/control-state" '{"schemaVersion":1,"revision":2,"desired":{"tradingagents":false,"ai-hedge-fund":true,"vibe-trading":true,"mirofish":false},"results":{"tradingagents":null,"ai-hedge-fund":null,"vibe-trading":null,"mirofish":null},"lastChange":null,"operation":null}'
+# A genuinely prior control/* and unit, exactly like Case 2/10 -- but this
+# time stage_unit() must NEVER run at all (the forced failure below is
+# inside stage_configs, strictly before stage_unit in the main flow), so
+# this prior unit stays completely untouched throughout.
+seed_prior_artifacts "$s11" "case11-prior"
+printf '%s\n' cccccccccccccccccccccccccccccccccccccccc >"$s11/app/last-good-tag"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s11/secrets/$name"
+  chmod 0600 "$s11/secrets/$name"
+done
+status11=0
+(
+  APP_DIR="$s11/app"
+  AI_TRADING_SECRETS_DIR="$s11/secrets"
+  ENV_STAGING_DIR="$s11/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s11/config-staging"
+  AI_TRADING_STATE_DIR="$s11/control-state"
+  AI_TRADING_UNIT_DIR="$s11/unit-dir"
+  FAMILY_CONFIG_CREDENTIALS="$s11/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  IMAGE_TAG=1111111111111111111111111111111111111112
+  HEALTH_CHECK_ATTEMPTS=1
+  # Forces stage_configs to fail right after installing Caddyfile --
+  # strictly BEFORE health-check.sh/control/* are installed and long before
+  # stage_unit ever runs, so UNIT_STAGED/UNIT_PRIOR_EXISTED are never set
+  # this run at all (stay at their script-level init, not "0").
+  DEPLOY_SH_CONFIG_FAIL_AFTER=Caddyfile
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG HEALTH_CHECK_ATTEMPTS DEPLOY_SH_CONFIG_FAIL_AFTER
+  # The untouched prior unit is genuinely ACTIVE and ENABLED.
+  install_fake_systemctl "$s11" 0 0
+  # shellcheck disable=SC2329
+  runuser() {
+    echo "fake runuser $*" >>"$APP_DIR/runuser.log"
+    shift 3
+    "$@"
+  }
+  export -f runuser
+  # shellcheck disable=SC2329
+  curl() {
+    echo "fake curl $*" >>"$APP_DIR/curl.log"
+    return 0
+  }
+  export -f curl
+  # shellcheck disable=SC2329
+  docker() {
+    echo "fake docker $*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      compose)
+        case "$*" in
+          *" ps -q "*)
+            echo fakecontainerid
+            return 0
+            ;;
+          *" exec -T web "*) return 0 ;;
+          *) return 0 ;;
+        esac
+        ;;
+      inspect)
+        case "$3" in
+          *State.Status*) echo running ;;
+          *) echo healthy ;;
+        esac
+        return 0
+        ;;
+      ps | images | rmi) return 0 ;;
+    esac
+    command docker "$@"
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() {
+    if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+      printf '0:%s\n' "$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+    else
+      command stat "$@"
+    fi
+  }
+  export -f stat
+  bash "$DEPLOY_SH" >"$s11/stdout.log" 2>"$s11/stderr.log"
+) || status11=$?
+if [[ "$status11" == 0 ]]; then
+  fail "case11: expected non-zero exit for the forced stage_configs failure, got 0: $(cat "$s11/stdout.log" 2>/dev/null)"
+fi
+grep -q 'rollback to .* failed too' "$s11/stderr.log" 2>/dev/null \
+  && fail "case11: the redeploy of the previous tag (untouched, genuinely-active prior helper) must succeed: $(cat "$s11/stderr.log" 2>/dev/null)"
+grep -q 'all services healthy; app controls ready; tunnel connected' "$s11/stdout.log" 2>/dev/null \
+  || fail "case11: expected the redeploy's own real health-check.sh to report success: $(cat "$s11/stdout.log" "$s11/stderr.log" 2>/dev/null)"
+grep -q 'is-active.*ai-trading-control.service' "$s11/systemctl.log" 2>/dev/null \
+  || fail "case11: an untouched (never staged this run) prior helper must still be VERIFIED by control_helper_ready() -- an unknown/default UNIT_PRIOR_EXISTED must never be treated as 'no prior unit': $(cat "$s11/systemctl.log" 2>/dev/null)"
+grep -qx 'fake systemctl enable ai-trading-control.service' "$s11/systemctl.log" 2>/dev/null \
+  && fail "case11: stage_unit must never have run (the forced failure is inside stage_configs, before it) -- the unit must stay completely untouched this run"
+grep -q 'OLD unit stand-in, marker=case11-prior' "$s11/unit-dir/ai-trading-control.service" 2>/dev/null \
+  || fail "case11: the prior unit file content must stay byte-for-byte untouched -- it was never staged this run"
+echo "    exit=$status11"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then

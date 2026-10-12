@@ -105,7 +105,14 @@ UNIT_NAME=ai-trading-control.service
 UNIT_DIR="${AI_TRADING_UNIT_DIR:-/etc/systemd/system}"
 UNIT_INSTALLED_PATH="$UNIT_DIR/$UNIT_NAME"
 UNIT_STAGED_NAME="ai-trading-control.service"
-UNIT_PRIOR_EXISTED=0
+# Empty, never 0, until stage_unit() actually probes $UNIT_INSTALLED_PATH and
+# sets this explicitly -- a trusted KNOWN prior-absence signal, never a
+# default/unknown one. A deploy that fails before stage_unit ever runs (e.g.
+# a stage_configs failure) leaves this empty; rollback()'s own health-check
+# skip below must treat that as "unit state unknown, verify normally," never
+# as "no prior unit," since a genuinely untouched, still-active prior helper
+# may exist on disk in that case.
+UNIT_PRIOR_EXISTED=""
 UNIT_WAS_ACTIVE=0
 UNIT_WAS_ENABLED=0
 UNIT_STAGED=0
@@ -957,12 +964,25 @@ rollback() {
     # otherwise, so without this it loops for the full
     # HEALTH_CHECK_ATTEMPTS x HEALTH_CHECK_DELAY_SECONDS budget and then
     # misreports this correct redeploy as "rollback ... failed too" even
-    # though the three real apps are already restored and running. Only
-    # this one specific case skips the check: UNIT_PRIOR_EXISTED==1 means
-    # restore_or_remove_unit restored and (if it was active) restarted a
-    # genuinely matching prior version, which the health check must keep
-    # verifying exactly as before.
-    if [[ "$UNIT_PRIOR_EXISTED" != 1 ]]; then
+    # though the three real apps are already restored and running.
+    #
+    # final re-review fix: this must key off a TRUSTED KNOWN absence, never
+    # a default/unknown one. UNIT_PRIOR_EXISTED starts EMPTY (not "0") and
+    # is only ever set to the literal string "0" by stage_unit() itself,
+    # right after it has actually probed $UNIT_INSTALLED_PATH and before any
+    # mutation -- so `== 0` here is only ever true when this run's own
+    # stage_unit() ran and genuinely found nothing. A deploy that fails
+    # BEFORE stage_unit ever runs (e.g. a stage_configs failure) leaves it
+    # empty; restore_or_remove_unit() is then a no-op (UNIT_STAGED never got
+    # set either), so whatever helper already existed on disk -- active or
+    # not -- was never touched by this run and must still be verified
+    # normally, exactly like any other rollback. Only a genuinely KNOWN
+    # first activation (UNIT_PRIOR_EXISTED == 1 restored/restarted a
+    # matching prior version; UNIT_PRIOR_EXISTED == 0 means stage_unit
+    # itself just stopped/disabled the only unit that ever existed) decides
+    # this either way -- an empty/unknown value always falls through to the
+    # normal, verifying path.
+    if [[ "$UNIT_PRIOR_EXISTED" == 0 ]]; then
       export HEALTH_CHECK_SKIP_CONTROL=1
     fi
     deploy_tag "$previous" || echo "deploy: rollback to $previous failed too" >&2
