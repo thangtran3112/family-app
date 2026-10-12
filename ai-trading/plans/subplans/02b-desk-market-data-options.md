@@ -69,7 +69,7 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
 
 | Data | Live source | History and backfill | Stored |
 |---|---|---|---|
-| US stocks and ETFs | IBKR, 250 ms, pre/post market | Alpaca free: daily since 2016, hourly 5 years, 1-minute 30 days. Stooq for daily before 2016, marked `fallback`. | `bars_1d`, `bars_1h`, `bars_1m` (1-minute rolling 90 days) |
+| US stocks and ETFs | IBKR, 250 ms, pre/post market | Alpaca free: daily since 2016, hourly 5 years, 1-minute 30 days. No source for daily history before 2016 (Stooq's CSV endpoint is gated behind a JS proof-of-work challenge with no API key offered, confirmed dead 2026-10-11, Phase 2a); IBKR can backfill further back in Phase 2b if the owner wants it. | `bars_1d`, `bars_1h`, `bars_1m` (1-minute rolling 90 days) |
 | Futures | IBKR, 250 ms | IBKR historical hourly and daily | Same tables, plus a front-month roll map |
 | Option chains and greeks | IBKR snapshots at scan or chat time | n/a | Scan results only |
 | IV30 for IV rank | IBKR daily | IBKR one-year IV history (to verify in the spike) | `iv_daily` |
