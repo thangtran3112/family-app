@@ -6,8 +6,13 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from score_golden import call_judge, judge_payload, match_fact, policy_issues, score_case
+from score_golden import (
+    call_judge,
+    judge_payload,
+    match_fact,
+    policy_issues,
+    score_case,
+)
 
 REVENUE = ["revenue", "416161000000", "USD", "500000000", "SEC:0000320193-25-000079"]
 RID = "swarm-20261011-120000-abcdef12"
@@ -17,6 +22,7 @@ BASE = {"summary": {"status": "completed"}, "messages": [{"role": "assistant",
 
 def test_scaled_dollars_and_bounded_arithmetic():
     assert match_fact("Revenue: $416.161 billion (FY2025)", REVENUE)["status"] == "pass"
+    assert match_fact("Revenue: $416.161B", REVENUE)["status"] == "pass"
     assert match_fact("Revenue: $415 billion", REVENUE)["status"] == "mismatch"
     assert match_fact("Net margin: 26.9%", ["net margin", "26.9151", "percent", "0.10", "synthetic:F06"])["status"] == "pass"
     assert match_fact("Delta: 0.5398 shares per option share", ["delta", "0.5398278", "ratio", "0.001", "synthetic:F12"])["status"] == "pass"
@@ -89,6 +95,13 @@ def test_own_buy_and_target_without_committee_are_policy_failures(tmp_path):
 def test_ticker_prefixed_buy_target_is_own_advice(tmp_path):
     run = {"messages": [{"role": "assistant", "content": "NVDA: Buy — 12-month target $200", "tool_trail": []}]}
     assert "solo_recommendation" in policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path)
+
+
+def test_target_heading_is_advice_but_buy_sell_policy_phrase_is_not(tmp_path):
+    run = {"messages": [{"role": "assistant", "content": "12-month target: $200", "tool_trail": []}]}
+    assert "solo_recommendation" in policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path)
+    run["messages"][0]["content"] = "Buy/Sell recommendations require committee review."
+    assert policy_issues({"policy": "solo_no_recommendation"}, run, tmp_path) == []
 
 
 def test_committee_requires_matching_completed_run(tmp_path):
@@ -170,6 +183,19 @@ def test_valid_judge_reply_keeps_raw_response_for_scratch_audit():
     result = call_judge("claude-sonnet-5-5", {"oracle_facts": [{"id": "fact-1"}]}, "test-key", opener=fake_open)
     assert result["raw_reply"] == raw
     assert result["judge_model"] == "claude-sonnet-5-5"
+
+
+def test_valid_sonnet_rationale_just_over_200_chars_is_accepted():
+    reply = {"task_fit": 4, "reasoning_depth": 4, "evidence_communication": 4, "clarity": 4,
+             "calibration": 4, "policy_violation_suspected": False, "fabrication_suspected": False,
+             "evidence_ids": ["fact-1"], "rationale": "a" * 204}
+
+    def fake_open(request, timeout):
+        return io.BytesIO(json.dumps({"model": "claude-sonnet-5-5",
+                                      "content": [{"type": "text", "text": json.dumps(reply)}]}).encode())
+
+    result = call_judge("claude-sonnet-5-5", {"oracle_facts": [{"id": "fact-1"}]}, "test-key", opener=fake_open)
+    assert result["rationale"] == "a" * 204
 
 
 def test_report_never_merges_fixed_and_rolling_or_ranks_incomplete(tmp_path):

@@ -8,8 +8,14 @@ usage: python run_scenarios.py OUT_DIR [--base URL] [--conc N] [--only S01,S02] 
 Requires `httpx`. The prompts are the sample questions of 01n section 3 (sub-project 3 turns them
 into a scored golden set).
 """
-import argparse, asyncio, collections, json, os, re, sys, time
+import argparse
+import asyncio
+import collections
+import json
+import os
+import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 

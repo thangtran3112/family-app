@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from golden_cases import case_set_sha, load_cases
 
 BOOK = Path(__file__).with_name("golden_cases.json")

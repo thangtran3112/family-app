@@ -7,7 +7,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 import run_scenarios
 from run_scenarios import SCENARIOS, runtime_matches, select_scenarios
 
