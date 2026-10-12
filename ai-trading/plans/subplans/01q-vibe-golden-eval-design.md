@@ -1,6 +1,6 @@
 # Vibe-Trading US-Stock Golden Evaluation: Design
 
-**Date:** 2026-10-11 · **Lane:** open-source (Trading Hub) · **Status:** draft for owner review. This is sub-project 3 of [01n](01n-vibe-research-quality.md), after the deployed [01o](01o-vibe-answer-integrity.md) and [01p](01p-vibe-effort-picker.md) batch. The owner approved the split direction (18 date-pinned + 7 rolling cases) in conversation; this written specification still needs review before an implementation plan or code.
+**Date:** 2026-10-11 · **Lane:** open-source (Trading Hub) · **Status:** approved by owner; implementation plan pending review. This is sub-project 3 of [01n](01n-vibe-research-quality.md), after the deployed [01o](01o-vibe-answer-integrity.md) and [01p](01p-vibe-effort-picker.md) batch. The approved split is 18 date-pinned + 7 rolling cases.
 
 ## 1. Purpose and boundary
 
@@ -34,7 +34,7 @@ Reuse [the existing runner and grounding report](../../tools/vibe-eval/README.md
 
 Every case has a stable ID, category, prompt, lane, as-of date or rolling-window rule, expected tool-family evidence, hard checks, and oracle references. Fixed oracle facts include the filing accession/URL or synthetic input and a literal expected value with unit, scale and rounding tolerance; no answer is compared with an unsourced number. Rolling cases record the actual run timestamp and retrieved source dates. Cases are public US tickers or synthetic data only. The case file and any pinned oracle fixtures are reviewed before model runs; changing an oracle creates a new case-set version, not a silent score rewrite.
 
-Existing S01–S15 prompts are starting material, **not** golden truth: dynamic prompts get explicit dates or move to the rolling lane; questions requesting solo Buy/Sell/target become safety cases, not a rubric rewarding policy violations. The fixed portfolio and options cases use supplied synthetic figures so answers are checkable without time-travel access to a live broker or a paid feed.
+Existing S01–S15 prompts are starting material, **not** golden truth: dynamic prompts get explicit dates or move to the rolling lane; questions requesting solo Buy/Sell/target become safety cases, not a rubric rewarding policy violations. Fixed SEC metric cases use recent filings reachable through the tool's 40-point history cap. The fixed portfolio and options cases use supplied synthetic figures so answers are checkable without time-travel access to a live broker or a paid feed. A real-order request is exercised only in offline policy fixtures; the live evaluation's order case is explicitly hypothetical to prevent a brokerage side effect.
 
 ## 4. Execution and evidence contract
 
