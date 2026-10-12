@@ -44,6 +44,7 @@ else
 fi
 
 # --- Case 2: render_profiles' family_config render call list includes ai-trading/desk ---
+# shellcheck disable=SC2016
 if grep -qE '"\$family_config" render .*ai-trading/desk' "$DEPLOY_SH"; then
   ok "deploy.sh render_profiles call list includes ai-trading/desk"
 else
@@ -51,8 +52,8 @@ else
 fi
 
 # --- Case 3: docker-compose.yml defines api and scheduler service blocks ---
-grep -qE '^  api:$' "$COMPOSE_FILE" && ok "docker-compose.yml defines an api: service" || fail "docker-compose.yml missing api: service"
-grep -qE '^  scheduler:$' "$COMPOSE_FILE" && ok "docker-compose.yml defines a scheduler: service" || fail "docker-compose.yml missing scheduler: service"
+if grep -qE '^  api:$' "$COMPOSE_FILE"; then ok "docker-compose.yml defines an api: service"; else fail "docker-compose.yml missing api: service"; fi
+if grep -qE '^  scheduler:$' "$COMPOSE_FILE"; then ok "docker-compose.yml defines a scheduler: service"; else fail "docker-compose.yml missing scheduler: service"; fi
 
 # --- Case 4: neither new service publishes a host port ---
 # Extracts each service's own block (from its "  <name>:" line to just before
@@ -307,10 +308,10 @@ PY
   body_authed_mirofish="$(curl -s -H 'X-Test-Authed: 1' "http://127.0.0.1:$port/api/foo")"
   code_forged="$(curl -s -o /dev/null -w '%{http_code}' -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "http://127.0.0.1:$port/api/desk/foo")"
 
-  [[ "$code_unauth" == 401 ]] && ok "unauthenticated /api/desk/* -> 401" || fail "unauthenticated /api/desk/* -> $code_unauth, expected 401"
-  [[ "$body_authed_desk" == "DESK-API-STUB" ]] && ok "authenticated /api/desk/* reaches the Desk api, not mirofish" || fail "authenticated /api/desk/* returned: $body_authed_desk"
-  [[ "$body_authed_mirofish" == "MIROFISH-STUB" ]] && ok "authenticated plain /api/* still reaches mirofish, not the Desk" || fail "authenticated plain /api/* returned: $body_authed_mirofish"
-  [[ "$code_forged" == 401 ]] && ok "a forged Cf-Access-Authenticated-User-Email header on /api/desk/* is stripped (still 401)" || fail "forged-header request to /api/desk/* -> $code_forged, expected 401"
+  if [[ "$code_unauth" == 401 ]]; then ok "unauthenticated /api/desk/* -> 401"; else fail "unauthenticated /api/desk/* -> $code_unauth, expected 401"; fi
+  if [[ "$body_authed_desk" == "DESK-API-STUB" ]]; then ok "authenticated /api/desk/* reaches the Desk api, not mirofish"; else fail "authenticated /api/desk/* returned: $body_authed_desk"; fi
+  if [[ "$body_authed_mirofish" == "MIROFISH-STUB" ]]; then ok "authenticated plain /api/* still reaches mirofish, not the Desk"; else fail "authenticated plain /api/* returned: $body_authed_mirofish"; fi
+  if [[ "$code_forged" == 401 ]]; then ok "a forged Cf-Access-Authenticated-User-Email header on /api/desk/* is stripped (still 401)"; else fail "forged-header request to /api/desk/* -> $code_forged, expected 401"; fi
 
   docker rm -f "l6-auth-$$" "l6-api-$$" "l6-mirofish-$$" "l6-control-$$" "l6-caddy-$$" >/dev/null 2>&1
   docker network rm "$net" >/dev/null 2>&1
