@@ -98,6 +98,16 @@ is mounted read-only. `PGPASSWORD_FILE` and `GOOGLE_APPLICATION_CREDENTIALS`
 are mounted mode `0400`. See this directory's own `docker-compose.yml`
 for the exact `docker compose run` shape used in production.
 
+## Archive contents and restore behaviour
+
+Each set is one encrypted tar: `manifest.json`, `globals.sql`, `role-settings.sql`, `dumps/<db>.dump`, `receipts.tar`.
+
+- `globals.sql` (`pg_dumpall --globals-only`): roles, role-wide settings, tablespaces. Replayed first; "already exists" conflicts are tolerated.
+- `role-settings.sql`: per-database and database-level settings (`ALTER ROLE ... IN DATABASE ... SET`, `ALTER DATABASE ... SET`) from `pg_db_role_setting`. No `pg_dump` carries these, and `pg_dumpall --globals-only` drops them. Replayed after each set's databases exist. Archives written before this file existed restore with a `WARNING` and must not be used for disaster recovery.
+- `dumps/<db>.dump`: `pg_dump --format=custom`, keeping owners and grants. `pg_restore` replays them, so restored schemas keep their owners and runtime-role grants. `--no-owner --no-acl` had dropped both, leaving the Desk runtime locked out of its own schema (found 2026-10-12).
+
+Restore needs a writable `/tmp` (it uses `mktemp`): run the container with `--tmpfs /tmp` when the root filesystem is read-only. Preflight retries `pg_isready` five times, five seconds apart, and logs each attempt's exit status.
+
 ## Running the tests
 
 ```bash
