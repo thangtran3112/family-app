@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CandlestickChart, LockKeyhole } from "lucide-react";
+import { CandlestickChart, LockKeyhole, Settings } from "lucide-react";
 import { AppsMenu } from "@/components/apps-menu";
 import { AccountMenu } from "@/components/account-menu";
 
@@ -27,6 +27,13 @@ export function Header({ breadcrumb }: { breadcrumb?: string }) {
           <span className="truncate">{breadcrumb ?? "Overview"}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2 xl:hidden">
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+          >
+            <Settings aria-hidden size={20} />
+          </Link>
           <AppsMenu /><AccountMenu />
         </div>
         <div className="hidden items-center gap-2 text-xs text-muted-foreground xl:flex">

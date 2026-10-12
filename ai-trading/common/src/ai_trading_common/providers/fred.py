@@ -1,6 +1,6 @@
 """FRED: vintage-pinned observations and release dates for the macro calendar.
 
-Adapted from TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache
+Modified from TradingAgents `tradingagents/dataflows/vendors/fred.py` (Apache
 License 2.0, upstream commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`; see
 THIRD_PARTY_NOTICES.md). Kept: pinning both `realtime_start` and
 `realtime_end` to the as-of date (ALFRED's vintage mechanism) so a backtest

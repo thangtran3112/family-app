@@ -1,11 +1,32 @@
 #!/usr/bin/env bash
-# Verifies the running ai-trading stack: every service running, health checks
-# passing, and the Cloudflare Tunnel connected. Runs on the VPS as root.
+# Verifies the running ai-trading stack: every selected service running,
+# health checks passing, the app-control helper active and privately
+# reachable as the gateway identity, and the Cloudflare Tunnel connected
+# (always-on, regardless of any app preference). Runs on the VPS as root.
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/family-app/ai-trading}"
 ATTEMPTS="${HEALTH_CHECK_ATTEMPTS:-30}"
 DELAY="${HEALTH_CHECK_DELAY_SECONDS:-2}"
+# Task 5 (app-controls): the SAME control/state.py CLI and persisted state
+# file deploy.sh and the control helper use. AI_TRADING_CONTROL_DIR lets
+# deploy.sh point this script (when it runs a scratch copy of this exact
+# file -- see deploy.sh's deploy_tag()) at ITS OWN run-owned coordinator
+# copy, never $APP_DIR/control, which a same-run rollback may already have
+# reverted or removed; a standalone/production invocation of this script
+# defaults to the normally installed location.
+CONTROL_DIR="${AI_TRADING_CONTROL_DIR:-$APP_DIR/control}"
+CONTROL_STATE_PATH="${AI_TRADING_STATE_PATH:-/var/lib/family-app/ai-trading/control.json}"
+CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
+CONTROL_SOCKET_PATH="${AI_TRADING_CONTROL_SOCKET:-/run/family-app/ai-trading-control/control.sock}"
+CONTROL_SERVICE_NAME="${AI_TRADING_CONTROL_SERVICE:-ai-trading-control.service}"
+CONTROL_GATEWAY_USER="${AI_TRADING_CONTROL_GATEWAY_USER:-ai-trading-gateway}"
+# Test-only: skip control_helper_ready() entirely -- this check needs a real
+# systemd unit and a real gateway-identity user to mean anything, which an
+# offline fake-Compose scenario never has. Never set this in production; a
+# dedicated focused test (test-app-controls-deploy.sh) exercises the real
+# function with faked systemctl/runuser/curl instead.
+SKIP_CONTROL_CHECK="${HEALTH_CHECK_SKIP_CONTROL:-}"
 
 compose() {
   local mirofish_compose=()
@@ -44,14 +65,51 @@ service_ok() {
 }
 
 # cloudflared is distroless, so ask from the web container on the shared network.
+# Always-on and unconditional, regardless of any app preference (task-5-brief:
+# "Health still tunnel-ready always-on").
 tunnel_ready() {
   compose exec -T web node -e "fetch('http://cloudflared:2000/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 }
 
+# selected_services_text: the exact same effective selected-service list
+# deploy.sh's own apply_selected_services/stop_disabled_groups computed for
+# this deploy -- the single shared source of "which services should be up
+# right now," never a second, independently maintained hardcoded list.
+# Deliberately a checked command substitution, never `mapfile <
+# <(selected_services_text)` (task-5-brief: that form hides a failing
+# Python exit status).
+selected_services_text() {
+  local ready=false
+  mirofish_enabled && ready=true
+  python3 "$CONTROL_DIR/state.py" services --mirofish-ready "$ready" \
+    --state "$CONTROL_STATE_PATH" --owner-uid "$CONTROL_OWNER_UID"
+}
+
+# control_helper_ready: readiness means the systemd-managed helper is
+# ACTIVE and privately answers an authenticated GET as the dedicated
+# gateway identity (UID 22001 over SO_PEERCRED) -- never merely "the
+# gateway's own /__healthz responded" (task-5-brief: "not mere
+# gatewayhealth"). `runuser` drops to that identity for the one curl call;
+# this script itself still runs as root throughout.
+control_helper_ready() {
+  systemctl is-active --quiet "$CONTROL_SERVICE_NAME" || return 1
+  runuser -u "$CONTROL_GATEWAY_USER" -- \
+    curl -fsS --max-time 5 --unix-socket "$CONTROL_SOCKET_PATH" \
+    -H "X-Verified-Actor: healthcheck" http://control-helper/apps >/dev/null 2>&1
+}
+
 # --- main flow below this line; test-deploy-firestore.sh sources only the
 # function definitions above it and calls them directly. ---
-SERVICES=(web ta-terminal ta-research ahf-terminal market-data vibe-trading cloudflared gateway auth)
-mirofish_enabled && SERVICES+=(mirofish)
+selected_text="$(selected_services_text)" || {
+  echo "health-check: failed to compute the selected service list" >&2
+  exit 1
+}
+[[ -n "$selected_text" ]] || {
+  echo "health-check: selected service list is empty" >&2
+  exit 1
+}
+SERVICES=()
+mapfile -t SERVICES <<<"$selected_text"
 
 failing=()
 for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
@@ -59,11 +117,17 @@ for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
   for service in "${SERVICES[@]}"; do
     service_ok "$service" || failing+=("$service")
   done
-  if ((${#failing[@]} == 0)) && tunnel_ready; then
-    echo "health-check: all services healthy; tunnel connected"
+  if [[ -n "$SKIP_CONTROL_CHECK" ]]; then
+    control_ok=0
+  else
+    control_ok=1
+    control_helper_ready && control_ok=0
+  fi
+  if ((${#failing[@]} == 0)) && ((control_ok == 0)) && tunnel_ready; then
+    echo "health-check: all services healthy; app controls ready; tunnel connected"
     exit 0
   fi
   sleep "$DELAY"
 done
-echo "health-check: failing services: ${failing[*]:-none}; tunnel connected: $(tunnel_ready && echo yes || echo no)" >&2
+echo "health-check: failing services: ${failing[*]:-none}; app controls ready: $([[ "$control_ok" == 0 ]] && echo yes || echo no); tunnel connected: $(tunnel_ready && echo yes || echo no)" >&2
 exit 1
