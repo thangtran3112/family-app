@@ -18,7 +18,7 @@
 | Bridge contract | 12 passing; image health 200, unauthorized 401, missing-key 503 |
 | Family Desk backend against the additive shared type | 660 passing, 107 skipped; Ruff clean |
 | Family Desk contracts and hub frontend | TypeScript clean; contracts 47/47, hub 109/109 |
-| Fork backend at `6e56e7b` | 17,614 passing, 77 skipped; 24 upstream/library warnings |
+| Fork backend at `f63b09b` | 17,613 passing, 77 skipped; 24 upstream/library warnings (diagnostic-only trace codes after `6e56e7b`) |
 | Fork frontend | TypeScript clean; Vitest 770/770; production build succeeded |
 | Deploy rollback and app controls | 56/56 render/rollback cases, 16/16 app-control shell cases, 13/13 installer cases, 120/120 control unit tests |
 | Full images/Caddy/Clerk | Docker Bake loaded all default images at fork `6e56e7b`; full real-Caddy smoke passed. MiroFish static export built separately |
@@ -36,4 +36,5 @@ The offline golden scorer previously marked R07 `committee_missing` because safe
 
 ## Delivery state
 
-Fork `family-app` is pushed through `6e56e7b` and pinned in the isolated superproject branch; the superproject has not been pushed. Finished-phase `dev` PR, scoped `main` release, VPS deploy, CI and production browser verification have not yet happened. SP5 deploy-safe recovery remains a separate phase.
+Fork `family-app` is pushed through `f63b09b` and pinned in the isolated superproject branch; the superproject has not been pushed. Finished-phase `dev` PR, scoped `main` release, VPS deploy, CI and production browser verification have not yet happened. SP5 deploy-safe recovery remains a separate phase.
+The local read-only strict-SSH VPS disk preflight exited 255 without printing connection details; current free space is unverified locally. The deploy's existing 30 GiB guard remains in force and cannot be waived by this result.
