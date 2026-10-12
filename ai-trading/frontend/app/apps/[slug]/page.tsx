@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { TerminalFrame } from "@/components/terminal-frame";
+import { ExternalLaunch, TerminalFrame } from "@/components/terminal-frame";
 import { appIcons, findApp, hubApps } from "@/lib/apps";
 
 export const dynamicParams = false;
@@ -102,26 +101,7 @@ export default async function AppPage({ params }: Props) {
               <dd className="inline">{app.costNote}</dd>
             </div>
           </dl>
-          <div className="mt-6 text-left">
-            <h2 className="text-sm font-semibold text-foreground">First visit in this browser</h2>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-              {app.firstVisitNote.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          </div>
-          <a
-            href={app.url}
-            target="_blank"
-            rel="noopener"
-            className="mt-6 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[7px] bg-accent px-4 py-3 text-[13px] font-semibold text-on-accent transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
-          >
-            Open {app.name}
-            <ExternalLink aria-hidden size={16} />
-          </a>
-          <p className="mt-6 text-xs text-muted-foreground">
-            {app.name} opens in its own tab because it does not allow embedding in other pages.
-          </p>
+          <ExternalLaunch app={app} />
         </div>
       </div>
     </PageShell>

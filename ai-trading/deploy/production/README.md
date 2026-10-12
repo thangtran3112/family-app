@@ -130,6 +130,93 @@ Both static-upload jobs are fully independent of `build`/`deploy` and of each ot
 
 **Operator caveat**: because both upload jobs and `deploy` now share one GitHub Environment, a required-reviewer protection rule added to `ai-trading-production` applies to all three. There is no way to require approval for a MiroFish/hub static publish without also requiring it for a normal app deploy, short of applying a separate narrower rule keyed off the job name (GitHub Environments do not support that natively).
 
+## App Controls (Settings)
+
+Either approved family user can open `/settings` on the hub and turn one of
+four groups on/off to save VPS RAM. A switch affects both users; the Hub
+itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`) is never
+controllable and stays always-on.
+
+| App ID | Controlled services |
+|---|---|
+| `tradingagents` | `ta-terminal`, `ta-research` |
+| `ai-hedge-fund` | `ahf-terminal` |
+| `vibe-trading` | `vibe-trading` |
+| `mirofish` | `mirofish` |
+
+- **Behavior and shared cancellation:** Settings shows each group's real
+  status (`Running`/`Starting`/`Stopping`/`Stopped`/`Needs setup`/
+  `Unhealthy`/`Error`), never guesses Running or Stopped while unconfirmed,
+  and polls faster (2s) only while a transition is active. Turning a running
+  app off asks for confirmation (Escape/Cancel makes no request and restores
+  focus); turning one on does not. Only one app change may be in flight at a
+  time — every switch disables globally while any app is
+  Starting/Stopping/mutating, so a second request is refused client-side
+  before it is ever sent, and the private helper itself serializes app
+  operations the same way. A stale revision (another tab/user changed it
+  first) returns 409 and refreshes instead of silently overwriting. Retry
+  reconciles the same desired choice; it never queues a duplicate or flips
+  the opposite toggle. Stopping never deletes a volume, image, or calls
+  `compose down` — it only stops that group's containers to free RAM.
+- **Target bootstrap:** `infrastructure/vps/app-controls/install.sh` creates
+  the dedicated `ai-trading-gateway` identity (UID/GID 22001, no Docker group
+  membership), the state directory (`/var/lib/family-app/ai-trading`), and
+  the socket/run directory, refusing a symlinked path, an incompatible
+  existing UID, or rootless/user-namespace-remapped Docker rather than
+  weakening the peer check. It is rootful Linux/systemd only. `install.sh`
+  never writes the control helper's own code/catalog or its systemd unit —
+  that is `deploy.sh`'s job, on every deploy, so the genuinely-prior version
+  of both can be captured and restored on a rollback (see below). A fresh
+  host with no running stack adopts the standard defaults (three apps on,
+  MiroFish off); adopting an existing host's compose project detects any
+  already-running app (including MiroFish) and seeds the preference file
+  from what is actually running, never from the defaults.
+- **Helper unavailable / drift recovery:** if the private control helper is
+  unreachable, Caddy's own generic `no-store` 503 is returned (never the
+  helper's own app-specific body), and Settings reports the same
+  "can't confirm status" guidance it uses for any other unconfirmed read —
+  never a false Running or Stopped. On restart, the helper reconciles any
+  operation that was active when it stopped (crash or deploy) from the
+  persisted state file itself, never resetting to fresh defaults; a
+  genuinely non-converged app after reconciliation is retried, not silently
+  dropped. A deploy that fails after installing new control code, catalog,
+  or systemd unit content restores the prior version byte-for-byte (not the
+  about-to-be-discarded new one) and either restarts it (if the prior unit
+  was active) or, on a genuine first activation with no prior version,
+  stops and disables the just-installed unit — never leaving an
+  orphaned, now-unknown-version helper running. That redeploy's own
+  health check skips verifying the control helper only in this one
+  case (no matching prior version to check against); it still requires
+  every other selected service and the tunnel, and still verifies the
+  helper normally whenever a prior version was restored.
+- **Preference snapshot across a deploy:** before `deploy.sh` touches any
+  secret, config, or unit file, it snapshots the current desired on/off
+  choices (`control/state.py snapshot`) to a private file under
+  `/var/lib/family-app/ai-trading/`. If the deploy fails for any reason, it
+  restores those exact choices (`control/state.py restore`) at a strictly
+  increased revision, regardless of what else did or didn't roll back — a
+  user's saved preference always survives a failed release.
+- **Operator MiroFish flags unchanged:** the deploy-time `activate_mirofish`/
+  `stop_mirofish` workflow dispatch inputs (see "MiroFish activation" above)
+  still decide whether MiroFish's Firestore credentials get rendered/staged
+  at all on that deploy. Settings' own MiroFish switch only ever starts/stops
+  an already-staged MiroFish; it cannot activate MiroFish without an operator
+  having turned it on at deploy time first (`Needs setup` status covers that
+  case) and never regenerates its Firestore-sourced credentials.
+- **Temporary host, no backup:** this VPS is planned to move to a different
+  host; see "Moving to a new host" above. Stopping an app does not back it
+  up or export it anywhere — it only stops containers and keeps their
+  existing volumes on this same disk. Recurring backup/restore is explicit
+  future scope (Release 2+), not part of this feature.
+- **No Docker socket exposure:** the control helper never mounts or proxies
+  the Docker socket into any container (web, gateway, terminal, or
+  research); it is a root-owned host process reached only over a private
+  Unix socket (`/run/family-app/ai-trading-control/control.sock`, group-owned
+  by the Caddy UID/GID 22001), itself peer-UID-checked
+  (`SO_PEERCRED`) before any request is serviced. Only Caddy's
+  `forward_auth`/reverse-proxy ever reaches it; the public `/__control/*`
+  routes still require the same Clerk bearer token as the rest of the hub.
+
 ## Acceptance checklist (Mac and iPad)
 
 1. Clerk login on the hub grants a session cookie for both hostnames; without it both terminal routes and Vibe-Trading return 401 (including the direct origin hostname). Opening Vibe-Trading directly before signing in through the hub returns 401.
