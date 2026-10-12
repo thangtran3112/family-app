@@ -7364,13 +7364,20 @@ running yet and Step 4 should be treated as blocked, not failed.
 - [ ] **Step 1: Confirm the scoped release paths.** This is the **first** `main` release carrying
   Desk code (02c). The release branch (from `origin/main`) carries only:
 
+  - `ai-trading/common/` (the shared package; the Desk image copies it in, so the image cannot
+    build without it; found on the 2026-10-12 release dry run)
   - `ai-trading/packages/family-desk/backend/` (all of it, including
     `docker/postgres/zz-20-desk-roles.sh`)
+  - `ai-trading/packages/family-desk/contracts/` (the backend's contract and template tests read its
+    fixtures and generated schema; found on the same dry run)
+  - `ai-trading/packages/family-desk/README.md` and `ai-trading/packages/family-desk/THIRD_PARTY_NOTICES.md`
+    (the notices list the adapted code the release ships; found on the release dry run)
   - `ai-trading/deploy/docker-bake.hcl`
   - `ai-trading/deploy/production/docker-compose.yml`
   - `ai-trading/deploy/production/Caddyfile`
   - `ai-trading/deploy/production/deploy.sh`
   - `infrastructure/vps/apps/ai-trading-desk.conf`
+  - `ai-trading/deploy/ci/test-l6-desk.sh` (the offline harness)
 
   **Also in this release** (Decision 5, approved 2026-10-12): `ai-trading/control/catalog.json` and
   `ai-trading/control/state.py`, with `ai-trading/control/test_state.py` and the operator sentence in
@@ -7384,38 +7391,31 @@ running yet and Step 4 should be treated as blocked, not failed.
   app's service block, and never touch anything under `expense-tax-management/`. Never merge all of
   `dev` into `main` (would also release unrelated expense-tax-management phases) — AGENTS.md.
 
-- [ ] **Step 2: VPS onboarding (operator, one time, before the first deploy that includes this
-  phase).**
+- [x] **Step 2: VPS onboarding (operator, one time) -- done 2026-10-12, with corrections.**
 
-  1. Confirm `infrastructure/vps/apps/ai-trading-desk.conf`'s `POSTGRES_IMAGE` value
-     (`pgvector/pgvector:pg17`) matches the shared cluster's **actual** current image — re-check
-     against `infrastructure/vps/apps/expense-tax-management.conf`'s live value or
-     `docker inspect` the running `postgres` container on the VPS; if they disagree, the operator
-     updates `ai-trading-desk.conf` to match the live value before the next step, never the other
-     way around.
-  2. Run `infrastructure/vps/bootstrap.sh --app infrastructure/vps/apps/ai-trading-desk.conf`
-     (or the equivalent `--only postgres`-scoped re-run per the VPS README's "Adding a new app"
-     section) against the real VPS. This generates `DESK_MIGRATOR_DB_PASSWORD`/
-     `DESK_RUNTIME_DB_PASSWORD` into `${SHARED_PG_DIR}/.env` (root-only, mode 0600) if not already
-     present, creates database `ai_trading_desk_db`, and runs `zz-20-desk-roles.sh` against it.
-  3. Fetch those two passwords once (`bootstrap.sh --fetch-secrets-to`, or `ssh ... cat
-     ${SHARED_PG_DIR}/.env`), then delete the local copy.
-  4. Set Firestore profile `ai-trading/desk` with, at minimum:
-     - `DESK_MIGRATOR_DATABASE_URL` = `postgresql://desk_migrator:<password>@postgres:5432/ai_trading_desk_db`
-     - `DESK_RUNTIME_DATABASE_URL` = `postgresql://desk_runtime:<password>@postgres:5432/ai_trading_desk_db`
+  The plan below assumed a shared `family-app-postgres` cluster. The VPS has none: its only Postgres is
+  the expense cluster (container `expense-tax-postgres`, compose project `postgres`, directory
+  `/opt/expense-tax-management/postgres`, network `postgres_default`). `bootstrap.sh --only postgres` for
+  this app would rewrite that directory's `docker-compose.yml` and collide with the running container, so it
+  was not run. What was done instead:
 
-     via `python3 common/config/family_config.py set ai-trading/desk DESK_MIGRATOR_DATABASE_URL`
-     and the `DESK_RUNTIME_DATABASE_URL` equivalent — never print or log the value while setting
-     it.
-  5. Optionally also set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`/`SLACK_WEBHOOK_URL_OWNER`/
-     `SLACK_WEBHOOK_URL_SPOUSE` in the same profile whenever the owner is ready to wire those
-     channels in (Decision 7) — `api/app.py`'s `_build_channels` picks them up automatically on
-     the next deploy's restart, no code change needed.
-  6. Run the one-off Alembic migration against `DESK_MIGRATOR_DATABASE_URL` before the first
-     `api`/`scheduler` deploy (the compose services connect as `desk_runtime`, which cannot
-     CREATE/DROP): `DATABASE_URL="$DESK_MIGRATOR_DATABASE_URL" uv run alembic upgrade head` from
-     `packages/family-desk/backend/` on a host that can reach the VPS's Postgres (or via an
-     operator one-shot container using the built `ai-trading-desk` image).
+  1. Live image is `pgvector/pgvector:pg17`, matching `ai-trading-desk.conf`.
+  2. `ai_trading_desk_db` and the two roles were created inside `expense-tax-postgres` with `docker exec`,
+     running `zz-20-desk-roles.sh` (`POSTGRES_USER=postgres`, `POSTGRES_DB=ai_trading_desk_db`). The
+     passwords were passed over stdin. The compose file was not touched.
+  3. Passwords were generated locally and stored only as Firestore URLs (step 4). None was printed.
+  4. Firestore: `ai-trading/desk` `DESK_RUNTIME_DATABASE_URL` and `ai-trading/desk-migrator`
+     `DESK_MIGRATOR_DATABASE_URL`, both `postgresql+psycopg://...@postgres:5432/ai_trading_desk_db`. The
+     explicit `+psycopg` scheme is used. `postgresql://` also resolves to psycopg v3 under the locked
+     SQLAlchemy 2.1.4, but the explicit form does not depend on that default.
+  5. Optional channels (`TELEGRAM_*`, `SLACK_WEBHOOK_URL_*`) are still unset, pending owner keys.
+  6. The migration ran as the migrator over an SSH tunnel (`127.0.0.1:15432` to the VPS's
+     `127.0.0.1:5432`): `0002 (head)`. The runtime role connects with `search_path` `desk, pg_catalog`,
+     reads `desk.users`, and is denied `CREATE`.
+
+  Backups were installed the same day with `bootstrap.sh --only backup` against the expense project's
+  bucket (`infrastructure/gcp/backup/README.md`; PR #126). The first run dumped all six databases,
+  including `ai_trading_desk_db`, and wrote one object to the locked backup bucket.
 
 **Decision 15 is approved — no backup confirmation step needed.** Approved by the owner,
 2026-10-12: the Desk database rides in the existing combined backup archive (`backup.sh` dumps
@@ -7423,7 +7423,7 @@ every cluster database into one archive per host). No separate prefix. No confir
 `ai_trading_desk_db`'s dump is named individually as `dumps/ai_trading_desk_db.dump` inside that
 one shared `family-app-backup.service` archive — nothing further to build or sign off on here.
 
-- [ ] **Step 3: Restore drill (operator, before relying on backups for this data).** Confirm
+- [ ] **Step 3: Restore drill (operator, before relying on backups for this data).** Status 2026-10-12: backups are running (first object written); the drill is still pending. Confirm
   `infrastructure/backup/restore.sh` (or its documented manual procedure) can restore
   `ai_trading_desk_db` specifically out of the shared archive's `manifest.json`, into a scratch
   database, and that `alembic current` on the restored copy reports `0002` — proving the restore
@@ -7432,7 +7432,9 @@ one shared `family-app-backup.service` archive — nothing further to build or s
   already covers the database the moment it exists), but it must happen before the Desk is trusted
   with real strategies/alerts.
 
-- [ ] **Step 4: First live verification.** After the release lands on `main` and `deploy.sh` runs
+- [x] **Step 4: First live verification.** Done 2026-10-12. The first release (7734dc8, run 38281644651) failed its `api` health check, and its rollback also failed because the health check still required `api`/`scheduler`. The hotfix `34f4523` (PR #127: `python -m uvicorn`; run 38284543213) passed. Results: `api` and `scheduler` are healthy with zero restarts. The gateway returns 401 for an unauthenticated `/api/desk/strategies`. `api` `/healthz` returns 200. The scheduler's heartbeat is fresh, touched after each completed `run_due` and commit on a 60 s cadence, with no exceptions. It logs nothing on success, and no watchlists exist yet, so cycles have no market data to fetch. `expense-tax-postgres` and the expense services are healthy and were not restarted. Open items: the rollback gap (health-check scope) and the restore drill (Step 3).
+
+  Procedure as written: after the release lands on `main` and `deploy.sh` runs
   against the real VPS (Decision 5's app-controls registration is approved and ships in this release —
   see the Decision 5 note above; until it is on `main`, `api`/`scheduler` are not started by a real deploy
   at all):

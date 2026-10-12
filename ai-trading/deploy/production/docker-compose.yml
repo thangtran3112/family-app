@@ -250,7 +250,7 @@ services:
   api:
     image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-desk:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
     restart: unless-stopped
-    command: uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000
+    command: python -m uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
     # The only Desk service on `gateway` -- so Caddy can reach it at

@@ -44,6 +44,8 @@ USER app
 WORKDIR /app
 EXPOSE 8000
 # No CMD (brief L6): docker-compose.yml's `command:` selects
-# `uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000` for `api` (the
+# `python -m uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000` for `api` (the
+# Console scripts in /app/.venv/bin keep their build-stage shebang (/src/...), so run
+# tools as `python -m <tool>` here; a bare `uvicorn` exits with "no such file".
 # one served ASGI app; integration fix, PROTO-BRIEF.md) or
 # `python -m ai_trading.jobs.scheduler` for `scheduler` from this one image.
