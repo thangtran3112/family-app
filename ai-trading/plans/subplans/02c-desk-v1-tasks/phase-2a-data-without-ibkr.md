@@ -173,7 +173,7 @@ Four lanes, usable as separate subagent/worktree tasks once their dependency is 
 
 2a.8 is the one task that needs every provider task merged, not just Alpaca: its end-to-end test builds `DataSources.from_env()` with the real `REGISTRY`, and `from_env` requires *every* kind to have a non-empty default chain (2a.1's `REGISTRY`/`DEFAULT_CHAINS` start empty — `from_env` would raise `ValueError` for every kind until all six providers' lines exist). 2a.8 also needs 2a.7's db models for its own bar store and backfill glue. Its `backfill.py` imports only `ai_trading_common.sources`/`errors` (2a.1), not any one provider's module — the registry, not the provider, is 2a.8's real common-side dependency.
 
-Per-task test-count deltas (common baseline 0; backend baseline 525, the count before this phase, with every Phase 1/1b/1c/1d test passing and no DB test existing yet) are given in each task's own Step. Every count was re-run against the finished, 02j-restructured prototype (`ai-trading/temp/p2a-proto/final/`) to confirm it: common's full suite is 177 passed in about 9s; the backend's full suite is 557 passed with a real Postgres (`scripts/test-db.sh`) in about 34s, or 542 passed + 15 skipped without one (`DESK_TEST_DATABASE_URL` unset); both suites are ruff-clean (`ruff check .` and `ruff format --check .`).
+Per-task test-count deltas (common baseline 0; backend baseline 525, the count before this phase, with every Phase 1/1b/1c/1d test passing and no DB test existing yet) are given in each task's own Step. Every count was re-run against the finished, 02j-restructured prototype (`ai-trading/temp/p2a-proto/final/`) to confirm it: common's full suite is 175 passed in about 9s; the backend's full suite is 557 passed with a real Postgres (`scripts/test-db.sh`) in about 34s, or 542 passed + 15 skipped without one (`DESK_TEST_DATABASE_URL` unset); both suites are ruff-clean (`ruff check .` and `ruff format --check .`).
 
 All paths below are relative to `ai-trading/` unless they start with a repository-root path. Commands run in the directory a step names.
 
@@ -194,7 +194,7 @@ All paths below are relative to `ai-trading/` unless they start with a repositor
   - `ai_trading_common.errors.{ProviderError, NotConfigured, Unavailable, SoftBanned, NoData}`
   - `ai_trading_common.quality.Quality` (`Literal["realtime", "delayed-15m", "eod", "fallback", "unavailable"]`)
   - `ai_trading_common.http.{HostThrottle, ThrottledClient}`, with `ThrottledClient.get(url, *, provider, host_key, user_agent, min_interval=0.0, params=None, headers=None, timeout=15.0, ban_prone=False, default_cooldown=60.0, retries=3) -> requests.Response` and `.get_json(url, *, provider, **kwargs) -> Any`
-  - `ai_trading_common.bars.{Bars, Timeframe, BarValidationError, COLUMNS, to_utc, validate, drop_unclosed, is_stale}`
+  - `ai_trading_common.bars.{Bars, Timeframe, BarValidationError, COLUMNS, to_utc, validate, drop_unclosed}`
   - `ai_trading_common.fallback.first_success[T](calls: Sequence[Callable[[], T]]) -> tuple[T, bool]`
   - `ai_trading_common.testing.{FakeClock, FakeResponse, FakeSession, make_client}`
   - `ai_trading_common.types.{Span, Timing, Fact, EarningsAnnouncement, Observation, NewsItem, EarningsEvent, ConsensusSnapshot, EarningsResult, AnalystTargets, facts_as_of, announcements_as_of, news_as_of}`
@@ -353,7 +353,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from ai_trading_common.bars import BarValidationError, drop_unclosed, is_stale, validate
+from ai_trading_common.bars import BarValidationError, drop_unclosed, validate
 
 
 def _ohlcv(closes):
@@ -463,16 +463,6 @@ class TestDropUnclosed:
         frame = daily_frame([date(2026, 1, 2)], [10.0])
         with pytest.raises(BarValidationError):
             drop_unclosed(frame, "1d", pd.Timestamp("2026-01-05"))
-
-
-class TestIsStale:
-    def test_empty_frame_is_not_stale(self):
-        assert is_stale(daily_frame([], []), pd.Timestamp("2026-01-05", tz="UTC"), pd.Timedelta(days=1)) is False
-
-    def test_daily_frame_stale_past_max_age(self):
-        frame = daily_frame([date(2026, 1, 2)], [10.0])
-        assert is_stale(frame, pd.Timestamp("2026-01-20", tz="UTC"), pd.Timedelta(days=10)) is True
-        assert is_stale(frame, pd.Timestamp("2026-01-05", tz="UTC"), pd.Timedelta(days=10)) is False
 ```
 
 - [ ] **Step 8: Run it and watch it fail.**
@@ -486,14 +476,12 @@ Expected: collection error — `ModuleNotFoundError: No module named 'ai_trading
 """Bar hygiene: the shared frame shape, and guards against a repainting or stale bar.
 
 Modified from (no code copied; see THIRD_PARTY_NOTICES.md): TradingAgents
-``dataflows/vendors/yahoo/ohlcv.py``'s ``_assert_ohlcv_not_stale`` and
+``dataflows/vendors/yahoo/ohlcv.py`` and
 ``market.py`` (Apache License 2.0, upstream commit
 ``1394a3f72aa4393e1a98f51b382434c4b4c2d972``). Their rules carry over as rules,
 reworked for this package's frame shape: inclusive ends belong to each
-client's own request range, not here; stale-frame rejection is ``is_stale``
-below, parameterized by a caller-supplied ``max_age`` instead of their fixed
-``MAX_OHLCV_STALE_DAYS``; a bad row is dropped rather than failing the whole
-frame, the same choice their ``_fill_price_gaps``/``_clean_dataframe`` make.
+client's own request range, not here; a bad row is dropped rather than failing the
+whole frame, the same choice their ``_fill_price_gaps``/``_clean_dataframe`` make.
 ``drop_unclosed`` follows ai-hedge-fund ``hedge_fund/data/cached.py``'s rule in
 spirit ("never cache a trading day that has not closed"; pattern reuse, no
 notice needed), generalized to the 1h/1m bar edges the Desk's core needs.
@@ -647,29 +635,12 @@ def drop_unclosed(frame: pd.DataFrame, timeframe: Timeframe, now: pd.Timestamp |
                 close_cap = min(close_cap, session_close)
         keep.append(close_cap <= now_utc)
     return frame[keep]
-
-
-def is_stale(frame: pd.DataFrame, now: pd.Timestamp | datetime, max_age: pd.Timedelta) -> bool:
-    """Whether `frame`'s latest bar is older than `max_age` before `now`.
-
-    An empty frame is not stale: "no data" is the distinct, already-explicit
-    `NoData` state, not a frame that quietly looks current.
-    """
-    if frame.empty:
-        return False
-    now_utc = to_utc(now)
-    last = frame.index[-1]
-    if isinstance(last, date) and not isinstance(last, datetime):
-        last_ts = pd.Timestamp(last, tz="UTC")
-    else:
-        last_ts = pd.Timestamp(last).tz_convert("UTC")
-    return now_utc - last_ts > max_age
 ```
 
 - [ ] **Step 10: Run it and watch it pass.**
 
 Run (in `common/`): `uv run pytest -q tests/test_bars.py`
-Expected: `15 passed`.
+Expected: `13 passed`.
 
 - [ ] **Step 11: Write the failing tests for `http.py`, using the `testing.py` doubles.** First, `common/src/ai_trading_common/testing.py`:
 
@@ -2059,7 +2030,7 @@ Expected: `9 passed`.
 - [ ] **Step 29: Run everything and lint.**
 
 Run (in `common/`): `uv lock && uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `44 passed` (6 errors + 15 bars + 13 http + 10 fallback) `+ 5 types + 9 registry` = `58 passed` total, ruff clean, 0 skipped. (`testing.py` is collected only as a module import, not a test file — it carries no `test_*` functions of its own.)
+Expected: `42 passed` (6 errors + 13 bars + 13 http + 10 fallback) `+ 5 types + 9 registry` = `56 passed` total, ruff clean, 0 skipped. (`testing.py` is collected only as a module import, not a test file — it carries no `test_*` functions of its own.)
 
 - [ ] **Step 30: Write `THIRD_PARTY_NOTICES.md`.**
 
@@ -2108,7 +2079,7 @@ Attribution: TradingAgents (TauricResearch/TradingAgents). Apache License 2.0. T
 
 | Common file | Adapted from | Changes |
 |---|---|---|
-| `src/ai_trading_common/bars.py` (`drop_unclosed`, `is_stale`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py` (`_assert_ohlcv_not_stale`), `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the ideas of inclusive ends (each client's own request range, not this module) and stale-frame rejection (`is_stale`, parameterized by a caller-supplied `max_age` instead of the fixed `MAX_OHLCV_STALE_DAYS`); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
+| `src/ai_trading_common/bars.py` (`drop_unclosed`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py`, `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the idea of inclusive ends (each client's own request range, not this module); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
 
 The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LICENSE`):
 
@@ -2934,7 +2905,7 @@ See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what chan
 - [ ] **Step 10: Run everything and lint.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `74 passed` (58 + 10 + 6), ruff clean, 0 skipped.
+Expected: `72 passed` (56 + 10 + 6), ruff clean, 0 skipped.
 
 - [ ] **Step 11: Commit.**
 
@@ -3955,13 +3926,13 @@ _RECORDERS = {
 - [ ] **Step 9: Add the SEC EDGAR row and the market-data comparison note.** In `THIRD_PARTY_NOTICES.md`, replace:
 
 ```markdown
-| `src/ai_trading_common/bars.py` (`drop_unclosed`, `is_stale`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py` (`_assert_ohlcv_not_stale`), `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the ideas of inclusive ends (each client's own request range, not this module) and stale-frame rejection (`is_stale`, parameterized by a caller-supplied `max_age` instead of the fixed `MAX_OHLCV_STALE_DAYS`); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
+| `src/ai_trading_common/bars.py` (`drop_unclosed`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py`, `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the idea of inclusive ends (each client's own request range, not this module); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
 ```
 
 with:
 
 ```markdown
-| `src/ai_trading_common/bars.py` (`drop_unclosed`, `is_stale`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py` (`_assert_ohlcv_not_stale`), `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the ideas of inclusive ends (each client's own request range, not this module) and stale-frame rejection (`is_stale`, parameterized by a caller-supplied `max_age` instead of the fixed `MAX_OHLCV_STALE_DAYS`); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
+| `src/ai_trading_common/bars.py` (`drop_unclosed`) | `tradingagents/dataflows/vendors/yahoo/ohlcv.py`, `market.py` | No code copied (a different frame shape: the Desk's shared `open/high/low/close/volume` bars, not yfinance's daily `Date`-indexed rows); kept the idea of inclusive ends (each client's own request range, not this module); "partial-bar refresh" became `drop_unclosed`'s close-time guard (never keep a bar whose period has not closed), generalized to 1d/1h/1m bar edges and the XNYS half-day close that ohlcv.py's daily-only rule does not need |
 | `src/ai_trading_common/providers/sec_edgar.py` | `tradingagents/dataflows/vendors/sec_edgar.py` | Kept the CIK-lookup shape, the span classification idea (`_span_index`/`_SPANS`/`_YEAR_TO_DATE`, renamed `_classify_span`/`_SPAN_RANGES`), and the amendment rule ("a period reported more than once takes its latest filing on or before the date"). Changed: returns typed `Fact` rows (now in `ai_trading_common.types`, 02j) instead of a rendered statement string or a flattened label map, so a caller picks its own concepts; the point-in-time cut is a separate pure `facts_as_of(facts, as_of)` function (also in `types.py`) instead of being inlined in the fetch; errors map to this package's `ProviderError` hierarchy instead of `NoMarketDataError`/`VendorUnavailableError`; no on-disk cache (the shared `ThrottledClient` has none either); the 8-K Item 2.02 reader (`item_202_filings`, `_parse_item_202`, `eight_k_as_of`) is new, not present upstream |
 | `src/ai_trading_common/providers/fred.py` | `tradingagents/dataflows/vendors/fred.py` | Kept the ALFRED vintage-pinning idea: both `realtime_start` and `realtime_end` set to the as-of date so a past run sees the value as first published. Changed: returns typed `Observation` rows (now in `ai_trading_common.types`, 02j) instead of a rendered markdown report; dropped the friendly-alias table, the look-back-day window, and the `pytz`/America-Chicago "FRED's own today" clamp (this client's `as_of` always names a historical date the caller chose, never "now"); errors map to this package's `ProviderError` hierarchy instead of raising bare `ValueError`/a vendor-specific `NotConfiguredError`; adds `release_dates` (new, not present upstream) |
 ```
@@ -4405,7 +4376,7 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
 - [ ] **Step 18: Run everything and lint.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `124 passed` (74 + 27 + 8 + 11 + 4), ruff clean, 0 skipped.
+Expected: `122 passed` (72 + 27 + 8 + 11 + 4), ruff clean, 0 skipped.
 
 - [ ] **Step 19: Commit.**
 
@@ -5449,7 +5420,7 @@ _RECORDERS = {
 - [ ] **Step 12: Run everything and lint.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `148 passed` (124 + 15 + 9), ruff clean, 0 skipped.
+Expected: `146 passed` (122 + 15 + 9), ruff clean, 0 skipped.
 
 - [ ] **Step 13: Add the "no notice needed" section.** Append to `THIRD_PARTY_NOTICES.md`:
 
@@ -6381,7 +6352,7 @@ design, written fresh against no upstream reference.
 - [ ] **Step 8: Run everything and lint, confirming the full common suite.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `164 passed` (148 + 16), ruff clean, 0 skipped.
+Expected: `162 passed` (146 + 16), ruff clean, 0 skipped.
 
 - [ ] **Step 9: Commit.**
 
@@ -6680,7 +6651,7 @@ Expected: `6 passed`.
 - [ ] **Step 5: Run everything and lint, confirming the full common suite — this is common's final count for Phase 2a.**
 
 Run (in `common/`): `uv run pytest -q -rs && uv run ruff check . && uv run ruff format --check .`
-Expected: `177 passed` (164 + 7 + 6), ruff clean, 0 skipped.
+Expected: `175 passed` (162 + 7 + 6), ruff clean, 0 skipped.
 
 - [ ] **Step 6: Write `common/README.md`.**
 
