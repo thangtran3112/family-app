@@ -18,6 +18,17 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(engine, expire_on_commit=False)
 
 
+def make_health_check_engine(url: str) -> Engine:
+    """A dedicated engine for the `/healthz` readiness probe (Step 0 integration fix): a 1-second
+    `connect_timeout` bounds how long an unreachable or slow-to-answer database can block the
+    check, independent of the main session_factory's engine (a real request should wait for a
+    real connection, never time out after 1s). `psycopg`'s `connect_timeout` connect arg is a
+    TCP-connect-phase timeout; a `SELECT 1` against an already-open connection returns
+    essentially immediately, so this is the only timeout the probe needs.
+    """
+    return create_engine(url, connect_args={"connect_timeout": 1})
+
+
 @contextmanager
 def session_scope(factory: sessionmaker[Session]) -> Iterator[Session]:
     """Commits on a clean exit, rolls back and re-raises otherwise."""
