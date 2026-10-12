@@ -7281,6 +7281,8 @@ grep -n "working-directory: ai-trading/packages/family-desk/backend" -A 8 .githu
 Expected: the existing `postgres:17` service, `DESK_TEST_DATABASE_URL`/`DESK_REQUIRE_DB=1`, and
 `uv run pytest -q` are unchanged from before this phase.
 
+- [ ] **Step 4b: CI's `Scripts and compose` job needs the Desk env placeholder.** The job creates empty placeholder env files for the upstream apps and the gateway, then runs `docker compose config` on the production file. The `api` and `scheduler` services read `${AI_TRADING_SECRETS_DIR}/desk.env`, so the job fails with "env file .../desk.env not found" unless that placeholder exists. Add `desk` to the placeholder loop in the `scripts` job of `.github/workflows/ai-trading-ci.yml`, so the loop reads `for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway cloudflared auth market-data desk; do : >"$secrets/$name.env"; done`. Verify with the same two `docker compose config --quiet` commands against a placeholder directory. Both must pass. (Found on PR #121's first CI run, 2026-10-12; Step 4 above had checked only the `desk` job.)
+
 - [ ] **Step 5: Run the full suite, with and without Postgres, plus ruff.**
 
 Run (in `packages/family-desk/backend/`):
