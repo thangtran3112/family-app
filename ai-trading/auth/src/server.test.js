@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
+import { verifyToken as realVerifyToken } from "@clerk/backend";
 import { createAuthServer } from "./server.js";
 import { sign } from "./session.js";
 import { CLERK_ISSUER, CLERK_AUDIENCE } from "./clerk.js";
@@ -26,6 +28,55 @@ function fullClaims(overrides = {}) {
     exp: Math.floor(Date.now() / 1000) + 3600,
     ...overrides,
   };
+}
+
+// --- Real-SDK fixture for control-check signature/expiry tests ---
+//
+// Per task-4-reference.md: expiry/signature refusal must be exercised by
+// verifier failure, not an injected fake that ignores expiry. This mints a
+// genuinely RS256-signed JWT with a locally generated keypair and routes the
+// server's `verifyToken` override through the real `@clerk/backend`
+// `verifyToken`, networkless via its `jwtKey` option (a local PEM public key
+// -- no Clerk JWKS endpoint, no Clerk credentials). Same shape as
+// clerk.test.js's own real-SDK fixture.
+function base64url(input) {
+  return Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function mintRs256Jwt(claims, privateKey) {
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify(claims));
+  const signingInput = `${header}.${payload}`;
+  const signature = base64url(cryptoSign("RSA-SHA256", Buffer.from(signingInput), privateKey));
+  return `${signingInput}.${signature}`;
+}
+
+const CONTROL_KEYPAIR = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const CONTROL_PUBLIC_KEY_PEM = CONTROL_KEYPAIR.publicKey.export({ type: "spki", format: "pem" });
+
+function mintControlToken(overrides = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  return mintRs256Jwt(
+    {
+      sub: "user_123",
+      email: "family@tobytran.dev",
+      iss: CLERK_ISSUER,
+      aud: CLERK_AUDIENCE,
+      azp: ALLOWED_ORIGIN,
+      iat: now - 10,
+      nbf: now - 10,
+      exp: now + 3600,
+      ...overrides,
+    },
+    overrides.privateKey || CONTROL_KEYPAIR.privateKey,
+  );
+}
+
+// Delegates to the real SDK with a fixed jwtKey, same as clerk.js's own
+// `verify` call site (secretKey/authorizedParties/audience come from
+// server.js; this only supplies the networkless public key).
+function realVerify(jwtKey = CONTROL_PUBLIC_KEY_PEM) {
+  return (token, options) => realVerifyToken(token, { ...options, jwtKey });
 }
 
 async function withAuthServer(env, run) {
@@ -334,5 +385,196 @@ test("an unknown path is 404", async () => {
   await withAuthServer(ENV, async (port) => {
     const res = await fetch(`http://127.0.0.1:${port}/not-a-route`);
     assert.equal(res.status, 404);
+  });
+});
+
+// --- GET /__auth/control-check (Task 4): fresh bearer only, never a cookie ---
+//
+// Caddy's forward_auth always calls this endpoint with GET and supplies the
+// real browser method via X-Forwarded-Method; this never falls back to the
+// gateway cookie that /__auth/check accepts.
+
+test("control auth never accepts a gateway cookie alone", async () => {
+  await withAuthServer(ENV, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { cookie: validCookie(), "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 401);
+  });
+});
+
+test("control mutation rejects Origin before invoking verification", async () => {
+  let called = false;
+  await withAuthServer({ ...ENV, verifyToken: async () => { called = true; return { data: fullClaims() }; } }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: "Bearer fixture", "x-forwarded-method": "PUT", origin: "https://wrong.example.test" },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(called, false);
+  });
+});
+
+test("valid control token returns its verified subject", async () => {
+  await withAuthServer({ ...ENV, verifyToken: async () => ({ data: fullClaims() }) }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: "Bearer fixture", "x-forwarded-method": "PUT", origin: ALLOWED_ORIGIN },
+    });
+    assert.equal(r.status, 204);
+    assert.equal(r.headers.get("x-verified-actor"), "user_123");
+  });
+});
+
+test("control check on a GET request never checks Origin at all", async () => {
+  await withAuthServer({ ...ENV, verifyToken: async () => ({ data: fullClaims() }) }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 204);
+  });
+});
+
+test("control check is 405 for the actual (Caddy-side) HTTP method other than GET", async () => {
+  await withAuthServer(ENV, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      method: "POST",
+      headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 405);
+  });
+});
+
+test("control check is 405 for an unsupported forwarded method", async () => {
+  await withAuthServer({ ...ENV, verifyToken: async () => ({ data: fullClaims() }) }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: "Bearer fixture", "x-forwarded-method": "DELETE", origin: ALLOWED_ORIGIN },
+    });
+    assert.equal(r.status, 405);
+  });
+});
+
+test("control check is 401 for a missing Authorization header", async () => {
+  await withAuthServer(ENV, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 401);
+  });
+});
+
+test("control check is 401 for a verified user not on the allowlist", async () => {
+  await withAuthServer(
+    { ...ENV, verifyToken: async () => ({ data: fullClaims({ sub: "user_2", email: "stranger@example.com" }) }) },
+    async (port) => {
+      const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+        headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+      });
+      assert.equal(r.status, 401);
+    },
+  );
+});
+
+test("control check is 401 for a wrong issuer", async () => {
+  await withAuthServer(
+    { ...ENV, verifyToken: async () => ({ data: fullClaims({ iss: "https://attacker.example.clerk.accounts.dev" }) }) },
+    async (port) => {
+      const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+        headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+      });
+      assert.equal(r.status, 401);
+    },
+  );
+});
+
+test("control check is 401 for a wrong audience", async () => {
+  await withAuthServer(
+    { ...ENV, verifyToken: async () => ({ data: fullClaims({ aud: "https://some-other-app.example" }) }) },
+    async (port) => {
+      const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+        headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+      });
+      assert.equal(r.status, 401);
+    },
+  );
+});
+
+test("control check is 401 for an azp not in the authorized-party allowlist", async () => {
+  await withAuthServer(
+    { ...ENV, verifyToken: async () => ({ data: fullClaims({ azp: "https://not-allowed.example" }) }) },
+    async (port) => {
+      const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+        headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+      });
+      assert.equal(r.status, 401);
+    },
+  );
+});
+
+test("control check is 401 for an unsafe subject (not the helper's actor-ID shape)", async () => {
+  await withAuthServer(
+    { ...ENV, verifyToken: async () => ({ data: fullClaims({ sub: "user/../../etc" }) }) },
+    async (port) => {
+      const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+        headers: { authorization: "Bearer fixture", "x-forwarded-method": "GET" },
+      });
+      assert.equal(r.status, 401);
+    },
+  );
+});
+
+test("control check never trusts a client-supplied X-Verified-Actor header", async () => {
+  await withAuthServer({ ...ENV, verifyToken: async () => ({ data: fullClaims() }) }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: {
+        authorization: "Bearer fixture",
+        "x-forwarded-method": "GET",
+        "x-verified-actor": "attacker_999",
+      },
+    });
+    assert.equal(r.status, 204);
+    assert.equal(r.headers.get("x-verified-actor"), "user_123");
+  });
+});
+
+// --- Real-SDK signature/expiry refusal (not an injected fake) ---
+
+test("control check rejects a genuinely expired real-SDK-signed token", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const expired = mintControlToken({ iat: now - 7200, nbf: now - 7200, exp: now - 10 });
+  await withAuthServer({ ...ENV, verifyToken: realVerify() }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: `Bearer ${expired}`, "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 401);
+  });
+});
+
+test("control check rejects a token signed with the wrong private key (bad signature)", async () => {
+  const otherKeypair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const forged = mintControlToken({ privateKey: otherKeypair.privateKey });
+  await withAuthServer({ ...ENV, verifyToken: realVerify() }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: `Bearer ${forged}`, "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 401);
+  });
+});
+
+test("control check accepts a genuinely signed, unexpired, allowed real-SDK token", async () => {
+  const token = mintControlToken();
+  await withAuthServer({ ...ENV, verifyToken: realVerify() }, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check`, {
+      headers: { authorization: `Bearer ${token}`, "x-forwarded-method": "GET" },
+    });
+    assert.equal(r.status, 204);
+    assert.equal(r.headers.get("x-verified-actor"), "user_123");
+  });
+});
+
+// --- Unrelated routes are untouched by this new endpoint ---
+
+test("/__auth/control-check is still 404 for a POST to an otherwise-valid-looking path with a wrong method entirely unknown", async () => {
+  await withAuthServer(ENV, async (port) => {
+    const r = await fetch(`http://127.0.0.1:${port}/__auth/control-check/extra`);
+    assert.equal(r.status, 404);
   });
 });
