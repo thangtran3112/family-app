@@ -166,8 +166,9 @@ jq -n --argjson m "$(cat "$manifest")" \
 # Margin here must exceed, not just equal, the clock skew between this host
 # (which stamps r3.pdf's mtime directly) and the Docker Desktop Linux VM
 # (whose clock backup.sh reads for "now"/cutoff) -- observed ~1s drift
-# during this implementation made a 1s sleep an exact tie, not a margin.
-sleep 3
+# during this implementation made a 1s sleep an exact tie, not a margin; Colima's
+# VM ran ~4s ahead of the host, so the margin is 10s.
+sleep 10
 echo r3 > "$WORKDIR/receipts/r3.pdf"
 run_backup -v "$WORKDIR/dump-out-2:/dump-out" \
   -e BACKUP_MANIFEST_ONLY=1 -e BACKUP_DUMP_ONLY_COPY_TO=/dump-out \

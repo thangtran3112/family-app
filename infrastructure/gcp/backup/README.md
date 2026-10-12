@@ -16,8 +16,11 @@ machine with real GCP credentials.
   retention policy, and two lifecycle rules (`daily/` expires at 30 days,
   `monthly/` at 365 days).
 - A **writer** identity (`backup_writer`) with `roles/storage.objectCreator`
-  on this bucket only -- it can create objects; it cannot read, replace,
-  list, or delete them.
+  on this bucket, plus a get-only custom role (`expenseTaxBackupObjectGetter`:
+  bucket metadata, object names, and one object by name). `gcloud storage cp`
+  checks the bucket, the destination prefix, and the destination object before
+  it uploads, so creation alone fails (found on the first production run,
+  2026-10-12). The writer still cannot replace or delete objects.
 - A **freshness-monitor** identity (`backup_freshness_monitor`), entirely
   separate from the writer, authenticated via its own GitHub Actions
   OIDC/WIF provider (reusing the existing `expense-tax-github` pool from
@@ -32,19 +35,38 @@ machine with real GCP credentials.
 ## What this deliberately does NOT provision
 
 - **No writer key.** `google_service_account_key` never appears in this
-  module (enforced by `test-policy.sh`). The writer's private key is
-  created once, by hand, and never touches Terraform state:
+  module (enforced by `test-policy.sh`). The writer's JSON key is created once
+  through the IAM API, outside Terraform state, and stored centrally in
+  Firestore `family-config` profile group `shared/vps-backup`
+  (`BACKUP_WRITER_KEY_JSON`), next to the age identity (`BACKUP_AGE_IDENTITY`)
+  and recipient (`BACKUP_AGE_RECIPIENT`). Key creation needs the project
+  override below. VPS bootstrap streams the key to a root-only, mode-0400 file
+  (`infrastructure/vps/bootstrap.sh --only backup`); it is never re-derived
+  from Terraform.
 
   ```bash
-  gcloud iam service-accounts keys create /tmp/backup-writer-key.json \
-    --iam-account=expense-tax-backup-writer@expense-tax-tobytran-2026.iam.gserviceaccount.com
-  # Transfer the JSON content into the shared-infrastructure Secret Manager
-  # bundle (see ARCHITECTURE.md "Secrets and OAuth Tokens"), then:
-  shred -u /tmp/backup-writer-key.json   # or `rm -P` on macOS
+  curl -s -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    -H 'Content-Type: application/json' -d '{"privateKeyType":"TYPE_GOOGLE_CREDENTIALS_FILE"}' \
+    "https://iam.googleapis.com/v1/projects/-/serviceAccounts/<writer-email>/keys" \
+    | jq -r .privateKeyData | base64 -D \
+    | python3 common/config/family_config.py set shared/vps-backup BACKUP_WRITER_KEY_JSON
   ```
 
-  VPS bootstrap (Task 6) installs that bundle's key as a root-only,
-  mode-0400 file -- it is never re-derived from Terraform.
+## Project override and bootstrap grant (outside Terraform)
+
+The organization enforces `iam.disableServiceAccountKeyCreation`. The module
+adds a project-level exception for this project only
+(`google_org_policy_policy.backup_allow_sa_key_creation`; other projects stay
+enforced). Org policy permissions cannot be bound at project level, so the
+operator grants them once, at the organization, before the first apply:
+
+```bash
+gcloud organizations add-iam-policy-binding <ORG_ID> \
+  --member="user:<operator-email>" --role=roles/orgpolicy.policyAdmin --condition=None
+```
+
+Organization Admin already allows granting that role, so this adds no reach
+beyond what the operator holds.
 
 - **No persistent VPS-side reader key.** Restore does not use a
   long-lived "reader" service account key kept anywhere. Instead, an
@@ -100,6 +122,12 @@ docker run --rm -v "$PWD:/work" -w /work hashicorp/terraform:1.9 init -backend=f
 docker run --rm -v "$PWD:/work" -w /work hashicorp/terraform:1.9 validate
 bash test-policy.sh
 ```
+
+Operator plan and apply (after approval) use the same pinned image with the
+personal gcloud token: `CLOUDSDK_ACTIVE_CONFIG_NAME=personal` and
+`GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)"`, passing the
+four required variables with `-var`. Colima shares only `$HOME` into its VM,
+so keep plan files under `.terraform/` in this directory, not under `$TMPDIR`.
 
 `terraform` is not installed on every contributor machine; the pinned
 `hashicorp/terraform:1.9` image is used instead of a global install, per
