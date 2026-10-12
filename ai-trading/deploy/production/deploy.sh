@@ -69,6 +69,16 @@
 #                             data and containerd's image store share it).
 set -Eeuo pipefail
 
+# Moved above every other definition (originally just above IMAGE_TAG
+# validation) so the packaging-fix library-source guard below -- which runs
+# before anything else in this script, including that validation -- can use
+# it too, with the same fail-closed, no-mutation-yet semantics every other
+# die() call site already relies on.
+die() {
+  echo "deploy: $*" >&2
+  exit 1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_DIR="${APP_DIR:-/opt/family-app/ai-trading}"
@@ -126,13 +136,45 @@ UNIT_BACKUP_PATH=""
 # MiroFish activation (control/runtime.py's Runtime.prepare_mirofish(), used
 # when an operator turns MiroFish on without a full redeploy) shares this
 # exact checked contract instead of a second copy.
-# shellcheck source=SCRIPTDIR/mirofish-runtime.sh
-source "$SCRIPT_DIR/mirofish-runtime.sh"
+#
+# Packaging-fix (deploy-retry-failure-sanitized.log, 2026-10-12): the
+# workflow installs deploy.sh FLAT at $APP_DIR/deploy.sh (never nested), so
+# $SCRIPT_DIR is $APP_DIR itself -- but mirofish-runtime.sh is one of the
+# CONFIG_FILES entries, staged AND installed NESTED at deploy/production/
+# (see CONFIG_FILES below), never colocated with deploy.sh on ANY host,
+# fresh or already-deployed. `source "$SCRIPT_DIR/mirofish-runtime.sh"`
+# therefore always resolved to a path that could not exist in production.
+# Prefer THIS run's own trusted staged incoming copy -- about to be
+# validated/backed-up/atomically installed by stage_configs() below -- over
+# an already-installed $APP_DIR copy, which may be stale and is not
+# necessarily what this run's own code expects. Fall back to the
+# repo-colocated path only when there is no staging directory at all
+# (existing offline/function-level test usage: deploy.sh sourced directly
+# from its own checkout, where mirofish-runtime.sh already sits beside it).
+MIROFISH_LIB_NAME="deploy/production/mirofish-runtime.sh"
+if [[ -n "$APP_CONFIG_STAGING_DIR" ]]; then
+  MIROFISH_LIB_SRC="$APP_CONFIG_STAGING_DIR/$MIROFISH_LIB_NAME"
+  # Fix round 1 (review): this `source` executes the staged file -- as
+  # root, in production -- before validate_staged_config_file() (below)
+  # ever runs its own existence/symlink/regular-file checks on this same
+  # CONFIG_FILES entry, later, inside stage_configs(). Without an
+  # equivalent guard here first, a symlinked staged path would already
+  # have run by the time that later rejection fired. die() is defined
+  # above and safe to call this early: nothing has mutated anything yet.
+  [[ -e "$MIROFISH_LIB_SRC" ]] || die "missing staged $MIROFISH_LIB_SRC; the workflow must stage it first"
+  [[ -L "$MIROFISH_LIB_SRC" || ! -f "$MIROFISH_LIB_SRC" ]] \
+    && die "staged $MIROFISH_LIB_SRC must be a regular file, not a symlink or other path"
+  # shellcheck source=/dev/null
+  source "$MIROFISH_LIB_SRC"
+else
+  # shellcheck source=SCRIPTDIR/mirofish-runtime.sh
+  source "$SCRIPT_DIR/mirofish-runtime.sh"
+fi
 MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
 IMAGES_ENV="$APP_DIR/images.env"
-SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env cloudflared.env)
+SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env desk.env cloudflared.env)
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
@@ -169,11 +211,6 @@ CONFIG_BACKUP_DIR=""
 RENDER_SRC_DIR=""
 # A full commit SHA: the only shape a deployed image tag (and last-good-tag) ever has.
 SHA_RE='^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$'
-
-die() {
-  echo "deploy: $*" >&2
-  exit 1
-}
 
 [[ "${IMAGE_TAG:-}" =~ $SHA_RE ]] || die "IMAGE_TAG must be a full commit SHA"
 
@@ -478,7 +515,7 @@ render_profiles() {
   RENDER_SRC_DIR="$(mktemp -d "$SECRETS_DIR/.render-XXXXXX")"
   trap cleanup_scratch_dirs EXIT
   FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
-    "$family_config" render ai-trading/tradingagents ai-trading/ai-hedge-fund ai-trading/vibe-trading ai-trading/gateway ai-trading/market-data \
+    "$family_config" render ai-trading/tradingagents ai-trading/ai-hedge-fund ai-trading/vibe-trading ai-trading/gateway ai-trading/market-data ai-trading/desk \
       --out-dir "$RENDER_SRC_DIR"
   mv -f "$RENDER_SRC_DIR/gateway.env" "$RENDER_SRC_DIR/auth.env"
   # Caddy injects Vibe's API key after the Clerk check, so browsers never hold
