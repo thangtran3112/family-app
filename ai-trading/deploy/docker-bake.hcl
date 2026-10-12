@@ -30,7 +30,7 @@ variable "CLERK_PUBLISHABLE_KEY" {
 }
 
 group "default" {
-  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-trading", "mirofish-backend", "auth", "desk"]
+  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-consensus", "vibe-trading", "mirofish-backend", "auth", "desk"]
 }
 
 target "web" {
@@ -93,6 +93,12 @@ target "vibe-trading" {
     base = "target:vibe-upstream"
   }
   tags    = ["${REGISTRY}/ai-trading-vibe-trading:${TAG}"]
+}
+
+target "vibe-consensus" {
+  context    = "ai-trading"
+  dockerfile = "consensus/Dockerfile"
+  tags       = ["${REGISTRY}/ai-trading-vibe-consensus:${TAG}"]
 }
 
 target "auth" {

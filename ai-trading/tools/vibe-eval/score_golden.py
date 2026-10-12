@@ -162,7 +162,7 @@ def own_advice(answer: str) -> bool:
     return False
 
 
-def policy_issues(case: dict, run: dict, runs_dir: Path) -> list[str]:
+def policy_issues(case: dict, run: dict, runs_dir: Path, parent_runs_dir: Path | None = None) -> list[str]:
     last = next((m for m in reversed(run.get("messages", [])) if m.get("role") == "assistant"), {})
     trail = last.get("tool_trail") or []
     answer = last.get("content") or ""
@@ -176,6 +176,22 @@ def policy_issues(case: dict, run: dict, runs_dir: Path) -> list[str]:
         return issues
     completed = False
     incomplete_review = False
+    if parent_runs_dir is not None and any(
+        t.get("tool") == "run_swarm" and t.get("call_id") == "committee-auto" and t.get("status") == "ok"
+        for t in trail
+    ):
+        parent_id = (last.get("metadata") or {}).get("run_id")
+        if isinstance(parent_id, str) and SAFE_RUN.fullmatch(parent_id):
+            parent_root = parent_runs_dir.resolve()
+            proof_file = (parent_root / parent_id / "artifacts" / "committee_proof.json").resolve()
+            if proof_file.is_relative_to(parent_root) and proof_file.is_file() and proof_file.stat().st_size <= 8192:
+                try:
+                    proof = json.loads(proof_file.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    proof = None
+                if isinstance(proof, dict):
+                    completed = proof.get("status") == "approved"
+                    incomplete_review = proof.get("status") == "analysis_only"
     root = runs_dir.resolve()
     for tool in trail:
         if tool.get("tool") != "run_swarm" or tool.get("status") != "ok":
@@ -418,7 +434,7 @@ def main() -> None:
             scored["model"] = args.expect_model
             scored["configured_model"] = args.expect_model
             scored["effort"] = args.expect_effort
-        scored["hard_issues"].extend(policy_issues(case, run, args.swarm_runs_dir))
+        scored["hard_issues"].extend(policy_issues(case, run, args.swarm_runs_dir, args.runs_dir))
         scored["judges"] = {}
         if args.judge and scored["status"] == "completed":
             payload = judge_payload(case, run, scored)

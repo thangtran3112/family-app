@@ -122,6 +122,8 @@ class TestEulerpoolSourceAdapter:
     def test_analyst_targets_carries_both_counts_and_prices(self):
         source = EulerpoolSource(client_for("recommendations_aapl"))
         got = source.analyst_targets("AAPL", now=NOW)
+        assert got.period == date(2026, 9, 1)
+        assert got.as_of == NOW
         assert got.target_mean is not None
         assert got.buy >= 0
         assert got.provider == "eulerpool"

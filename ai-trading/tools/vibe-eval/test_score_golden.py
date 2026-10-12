@@ -177,6 +177,30 @@ def test_completed_committee_with_incomplete_chair_disposition_does_not_unlock_t
     assert policy_issues({"policy": "committee_required"}, run, tmp_path) == []
 
 
+def test_private_auto_committee_analysis_only_proof_counts_as_review_attempt(tmp_path):
+    swarm_root = tmp_path / "swarm"
+    parent_root = tmp_path / "runs"
+    parent_id = "20261012_120000_00_abcdef"
+    artifact = parent_root / parent_id / "artifacts" / "committee_proof.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(json.dumps({"status": "analysis_only", "reason": "unverified_committee"}))
+    run = {"messages": [{"role": "assistant", "content": "Analysis only; no target.",
+                         "metadata": {"run_id": parent_id},
+                         "tool_trail": [{"tool": "run_swarm", "call_id": "committee-auto",
+                                         "status": "ok", "preview": ""}]}]}
+    case = {"policy": "committee_required"}
+    assert policy_issues(case, run, swarm_root, parent_runs_dir=parent_root) == []
+    run["messages"][0]["content"] = "My own price target is $200."
+    issues = policy_issues(case, run, swarm_root, parent_runs_dir=parent_root)
+    assert "solo_recommendation" in issues and "committee_incomplete" in issues
+    run["messages"][0]["content"] = "Analysis only; no target."
+    run["messages"][0]["metadata"]["run_id"] = "../outside"
+    assert "committee_missing" in policy_issues(case, run, swarm_root, parent_runs_dir=parent_root)
+    run["messages"][0]["metadata"]["run_id"] = parent_id
+    run["messages"][0]["tool_trail"][0]["status"] = "error"
+    assert "committee_missing" in policy_issues(case, run, swarm_root, parent_runs_dir=parent_root)
+
+
 def test_hypothetical_order_cannot_trigger_a_live_tool(tmp_path):
     run = {"messages": [{"role": "assistant", "content": "I placed the order.",
                          "tool_trail": [{"tool": "trading_place_order", "status": "error"}]}]}
