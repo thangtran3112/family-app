@@ -37,7 +37,7 @@ preflight() {
   PGPASSWORD="$(< "$PGPASSWORD_FILE")"
   export PGPASSWORD
 
-  pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1 \
+  wait_for_postgres "$PGHOST" "$PGPORT" "$PGUSER" \
     || die "PostgreSQL is not reachable at $PGHOST:$PGPORT"
 
   log "preflight ok (host=$BACKUP_HOST_ID bucket=$BACKUP_GCS_URI)"
@@ -68,6 +68,45 @@ dump_globals() {
   [[ -s "$staging/globals.sql" ]] || die "globals.sql dump is empty"
 }
 
+# pg_dumpall --globals-only replays role-wide settings only. Per-database role
+# settings (ALTER ROLE ... IN DATABASE ... SET) and database-level settings
+# (ALTER DATABASE ... SET) live in pg_db_role_setting, which no pg_dump carries,
+# so they are captured here as plain SQL and replayed by restore.sh once the
+# databases exist. Found 2026-10-12: production had six such rows, all lost.
+dump_role_settings() {
+  local staging="$1"
+  psql_admin -X -At -d postgres -o "$staging/role-settings.sql" <<'SQL' || die "role-settings capture failed"
+-- List-valued GUCs are written one literal per element, as pg_dumpall does
+-- (TO 's1', 'pg_catalog'): a single literal with commas would be stored as one
+-- name and silently break the search path. Stored double quotes ("$user") are
+-- unwrapped first so the element keeps its meaning. Elements containing commas
+-- are not supported (none exist in this estate).
+SELECT CASE
+         WHEN x.setrole = 0 AND x.setdatabase = 0 THEN format('ALTER ROLE ALL SET %I TO %s;', x.name, x.vals)
+         WHEN x.setrole = 0 THEN format('ALTER DATABASE %I SET %I TO %s;', x.datname, x.name, x.vals)
+         WHEN x.setdatabase = 0 THEN format('ALTER ROLE %I SET %I TO %s;', x.rolname, x.name, x.vals)
+         ELSE format('ALTER ROLE %I IN DATABASE %I SET %I TO %s;', x.rolname, x.datname, x.name, x.vals)
+       END AS stmt
+FROM (
+  SELECT s.setrole, s.setdatabase, r.rolname, d.datname, kv.name,
+         CASE WHEN kv.name IN ('search_path', 'temp_tablespaces', 'dynamic_library_path',
+                               'local_preload_libraries', 'session_preload_libraries', 'shared_preload_libraries')
+              THEN (SELECT string_agg(quote_literal(CASE WHEN btrim(e) LIKE '"%"'
+                                                       THEN replace(substr(btrim(e), 2, length(btrim(e)) - 2), '""', '"')
+                                                       ELSE btrim(e) END), ', ')
+                    FROM unnest(string_to_array(kv.value, ',')) AS e)
+              ELSE quote_literal(kv.value)
+         END AS vals
+  FROM pg_db_role_setting AS s
+  CROSS JOIN LATERAL unnest(s.setconfig) AS c
+  CROSS JOIN LATERAL (SELECT split_part(c, '=', 1) AS name, substr(c, strpos(c, '=') + 1) AS value) AS kv
+  LEFT JOIN pg_roles AS r ON r.oid = s.setrole
+  LEFT JOIN pg_database AS d ON d.oid = s.setdatabase
+) AS x
+ORDER BY stmt;
+SQL
+}
+
 # Dumps every database in $2 (newline-separated) into $1/dumps/<db>.dump and
 # validates each one with `pg_restore --list` before returning. Aborts the
 # whole run on the first failure so no partial/corrupt dump set is ever
@@ -81,7 +120,7 @@ dump_databases() {
     [[ -n "$db" ]] || continue
     log "dumping database: $db"
     pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
-      --format=custom --no-owner --no-acl \
+      --format=custom \
       --file="$staging/dumps/$db.dump" "$db" \
       || die "pg_dump failed for database: $db"
     pg_restore --list "$staging/dumps/$db.dump" >/dev/null \
@@ -100,6 +139,10 @@ record_database_inventory() {
   items=$(jq -c --arg name globals.sql \
     --arg sha "$(sha256_file "$staging/globals.sql")" \
     --argjson bytes "$(stat -c%s "$staging/globals.sql" 2>/dev/null || stat -f%z "$staging/globals.sql")" \
+    '. + [{name: $name, bytes: $bytes, sha256: $sha}]' <<< "$items")
+  items=$(jq -c --arg name role-settings.sql \
+    --arg sha "$(sha256_file "$staging/role-settings.sql")" \
+    --argjson bytes "$(stat -c%s "$staging/role-settings.sql" 2>/dev/null || stat -f%z "$staging/role-settings.sql")" \
     '. + [{name: $name, bytes: $bytes, sha256: $sha}]' <<< "$items")
   while IFS= read -r db; do
     [[ -n "$db" ]] || continue
@@ -298,7 +341,7 @@ date_part() {
 encrypt_archive() {
   local staging="$1" partial="$2"
   tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
-    -cf - -C "$staging" manifest.json globals.sql dumps receipts.tar \
+    -cf - -C "$staging" manifest.json globals.sql role-settings.sql dumps receipts.tar \
     | age -r "$AGE_RECIPIENT" -o "$partial" \
     || { rm -f "$partial"; die "encryption failed"; }
   [[ -s "$partial" ]] || die "ciphertext partial is empty"
@@ -380,6 +423,7 @@ main() {
   trap 'rm -rf "${staging:-}"; remove_ciphertext_partials' EXIT
 
   dump_globals "$staging"
+  dump_role_settings "$staging"
   local databases
   databases=$(discover_databases)
   dump_databases "$staging" "$databases"

@@ -96,6 +96,24 @@ emit_status() {
 # Single-flight guard: holds an flock on $BACKUP_STATE_DIR/backup.lock for
 # the remaining lifetime of the current shell. Safe to call once near the
 # top of main(); exits nonzero without blocking if another run holds it.
+# One pg_isready can miss a briefly unavailable or busy server, and one miss
+# should not fail a whole backup or restore. Bounded: five attempts, five seconds
+# apart. Each attempt's exit status is logged, so a real outage can be told apart
+# from a transient miss.
+wait_for_postgres() {
+  local host="$1" port="$2" user="$3" attempt rc
+  for attempt in 1 2 3 4 5; do
+    rc=0
+    pg_isready -h "$host" -p "$port" -U "$user" -t 5 >/dev/null 2>&1 || rc=$?
+    if [[ $rc -eq 0 ]]; then
+      return 0
+    fi
+    log "PostgreSQL not ready at $host:$port (pg_isready rc=$rc, attempt $attempt/5)"
+    sleep 5
+  done
+  return 1
+}
+
 acquire_single_flight_lock() {
   local lock_file="$BACKUP_STATE_DIR/backup.lock"
   exec 9>"$lock_file"

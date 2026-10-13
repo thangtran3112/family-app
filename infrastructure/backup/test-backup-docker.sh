@@ -128,6 +128,12 @@ sha_recorded=$(jq -r '.files[] | select(.name == "globals.sql") | .sha256' "$inv
 sha_actual=$(sha256sum "$WORKDIR/dump-out/globals.sql" | awk '{print $1}')
 [[ "$sha_recorded" == "$sha_actual" ]] || fail "globals.sql checksum in manifest does not match actual file"
 
+[[ -f "$WORKDIR/dump-out/role-settings.sql" ]] || fail "role-settings.sql missing"
+sha_rs_recorded=$(jq -r '.files[] | select(.name == "role-settings.sql") | .sha256' "$inventory")
+sha_rs_actual=$(sha256sum "$WORKDIR/dump-out/role-settings.sql" | awk '{print $1}')
+[[ "$sha_rs_recorded" == "$sha_rs_actual" ]] || fail "role-settings.sql checksum in manifest does not match actual file"
+log "PASS: role-settings.sql captured and recorded in the manifest"
+
 log "simulating a mid-dump failure to prove no marker/state is touched"
 echo '{"sentinel":"untouched"}' > "$WORKDIR/state/last-success.json"
 before_sha=$(sha256sum "$WORKDIR/state/last-success.json" | awk '{print $1}')

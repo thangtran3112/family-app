@@ -27,7 +27,7 @@ preflight() {
 
   PGPASSWORD="$(< "$PGPASSWORD_FILE")"
   export PGPASSWORD
-  pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1 \
+  wait_for_postgres "$PGHOST" "$PGPORT" "$PGUSER" \
     || die "destination PostgreSQL is not reachable at $PGHOST:$PGPORT"
 
   # gcloud authenticates from its own credential store, so GOOGLE_APPLICATION_CREDENTIALS
@@ -158,12 +158,29 @@ create_database_if_missing() {
   [[ "$exists" == "1" ]] || psql_dest -c "CREATE DATABASE \"${db}\";"
 }
 
+# Ownership and grants are restored too. --no-owner/--no-acl dropped them, which
+# left the Desk schema owned by postgres with no grants, so desk_runtime could not
+# use its own schema after a restore (found 2026-10-12). The globals replay has
+# already recreated every role the statements name.
 restore_database_dump() {
   local db="$1" dump_file="$2"
   create_database_if_missing "$db"
-  pg_restore --clean --if-exists --no-owner --no-acl \
+  pg_restore --clean --if-exists \
     -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$db" "$dump_file" \
     || die "pg_restore failed for database: $db"
+}
+
+# Replays one set's role-settings.sql once that set's databases exist (ALTER ROLE
+# ... IN DATABASE needs the database). Archives written before role settings were
+# captured have no such file: say so loudly, but still restore them.
+apply_role_settings() {
+  local set_dir="$1"
+  if [[ ! -f "$set_dir/role-settings.sql" ]]; then
+    log "WARNING: $set_dir has no role-settings.sql (archive predates role-settings capture); per-database role settings are NOT restored"
+    return 0
+  fi
+  psql_dest -q -f "$set_dir/role-settings.sql" || die "role-settings replay failed"
+  log "role settings replayed: $(grep -c . "$set_dir/role-settings.sql") statement(s)"
 }
 
 # Extracts one set's receipts.tar into RECEIPT_RESTORE_DIR. Called once for
@@ -195,6 +212,7 @@ main() {
     [[ -n "$db" ]] || continue
     restore_database_dump "$db" "$full_dir/dumps/$db.dump"
   done < <(jq -r '.databases[]' "$full_dir/manifest.json")
+  apply_role_settings "$full_dir"
   restore_receipts_from_set "$full_dir"
 
   # Ruling: "gap-free" is enforced as "strictly increasing and duplicate-free",
@@ -229,6 +247,7 @@ main() {
         [[ -n "$db" ]] || continue
         restore_database_dump "$db" "$delta_dir/dumps/$db.dump"
       done < <(jq -r '.databases[]' "$delta_dir/manifest.json")
+      apply_role_settings "$delta_dir"
       restore_receipts_from_set "$delta_dir"
     done < <(tr ',' '\n' <<< "$RESTORE_DAILY_OBJECT_URIS")
   fi

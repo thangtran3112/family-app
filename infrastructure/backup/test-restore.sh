@@ -60,6 +60,15 @@ for db in "${DATABASES[@]}"; do
     -c "CREATE TABLE seed (id serial primary key, note text); INSERT INTO seed (note) VALUES ('$db-row-1'), ('$db-row-2');" >/dev/null
 done
 
+docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 \
+  -c "CREATE ROLE fbk_app LOGIN;" \
+  -c "ALTER ROLE fbk_app SET work_mem = '64MB';" \
+  -c "ALTER ROLE fbk_app IN DATABASE expense_app SET search_path = fbk_seed, pg_catalog;" \
+  -c "ALTER DATABASE expense_app SET timezone = 'UTC';" >/dev/null
+
+docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -d expense_app \
+  -c "ALTER TABLE seed OWNER TO fbk_app;" -c "GRANT SELECT ON seed TO fbk_app;" >/dev/null
+
 mkdir -p "$WORKDIR/state" "$WORKDIR/ciphertext" "$WORKDIR/src-receipts" "$WORKDIR/dst-receipts" "$WORKDIR/fake-bucket"
 echo -n test-admin-password > "$WORKDIR/pgpass"
 chmod 400 "$WORKDIR/pgpass"
@@ -211,6 +220,19 @@ for db in "${DATABASES[@]}"; do
   [[ "$count" == "2" ]] || fail "database $db has $count seed rows after restore, expected 2"
 done
 log "PASS: all ${#DATABASES[@]} databases restored with correct row counts"
+
+role_settings_fingerprint() {
+  docker exec "$1" psql -U postgres -tAc "SELECT coalesce(string_agg(x, ' | ' ORDER BY x), '') FROM (SELECT coalesce(d.datname, '-') || '/' || coalesce(r.rolname, '-') || '=' || array_to_string(s.setconfig, ',') AS x FROM pg_db_role_setting s LEFT JOIN pg_database d ON d.oid = s.setdatabase LEFT JOIN pg_roles r ON r.oid = s.setrole) q"
+}
+src_rs=$(role_settings_fingerprint "$SRC_PG")
+dst_rs=$(role_settings_fingerprint "$DST_PG")
+[[ -n "$src_rs" ]] || fail "source has no role settings to test with"
+[[ "$src_rs" == "$dst_rs" ]] || fail "role settings differ after restore: source [$src_rs] destination [$dst_rs]"
+log "PASS: role settings restored exactly (per-database and database-level): $dst_rs"
+
+owner_grant=$(docker exec "$DST_PG" psql -U postgres -d expense_app -tAc "SELECT pg_get_userbyid(c.relowner) || ' ' || has_table_privilege('fbk_app', 'seed', 'SELECT')::text FROM pg_class c WHERE c.relname = 'seed'")
+[[ "$owner_grant" == "fbk_app true" ]] || fail "table ownership and grants not restored: got [$owner_grant], expected [fbk_app true]"
+log "PASS: table ownership and grants restored (seed owned by fbk_app, SELECT granted to it)"
 
 log "verifying receipts from BOTH the full set and the daily delta are present with correct bytes"
 [[ -f "$WORKDIR/dst-receipts/full-receipt.pdf" ]] || fail "full-receipt.pdf missing after restore"
