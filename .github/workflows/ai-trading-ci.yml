@@ -153,6 +153,8 @@ jobs:
         run: ai-trading/deploy/ci/test-deploy-firestore.sh
       - name: app-controls deploy/installer test (Task 5)
         run: ai-trading/deploy/ci/test-app-controls-deploy.sh
+      - name: Health-check rollback mode (offline)
+        run: ai-trading/deploy/ci/test-health-rollback.sh
       - name: Control helper tests (Task 5/7)
         # Must run as root on real Linux, matching the private helper's
         # actual production identity (control/state.py's owner_uid
