@@ -1037,6 +1037,10 @@ rollback() {
     if [[ "$UNIT_PRIOR_EXISTED" == 0 ]]; then
       export HEALTH_CHECK_SKIP_CONTROL=1
     fi
+    # The previous tag may predate services this run's catalog protects (the Desk's
+    # api and scheduler; found 2026-10-12). Its own compose then decides what the
+    # health check requires. Set only here: forward deploys keep the strict check.
+    export HEALTH_CHECK_ROLLBACK=1
     deploy_tag "$previous" || echo "deploy: rollback to $previous failed too" >&2
   else
     echo "deploy: failed with status $status; no earlier tag to roll back to" >&2
