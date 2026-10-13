@@ -111,6 +111,26 @@ selected_text="$(selected_services_text)" || {
 SERVICES=()
 mapfile -t SERVICES <<<"$selected_text"
 
+# Rollback redeploy (deploy.sh sets HEALTH_CHECK_ROLLBACK=1): the catalog is this
+# run's, but the previous tag's compose decides what it runs. A service that
+# compose does not define is not required; a service it defines but that is not
+# running still fails. Forward deploys keep the strict check.
+if [[ -n "${HEALTH_CHECK_ROLLBACK:-}" ]]; then
+  defined_text="$(compose config --services)" || {
+    echo "health-check: cannot read the rollback target's services" >&2
+    exit 1
+  }
+  kept=()
+  for service in "${SERVICES[@]}"; do
+    if grep -qxF -- "$service" <<<"$defined_text"; then
+      kept+=("$service")
+    else
+      echo "health-check: rollback target does not run $service; not required" >&2
+    fi
+  done
+  SERVICES=("${kept[@]+"${kept[@]}"}")
+fi
+
 failing=()
 for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
   failing=()
