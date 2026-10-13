@@ -75,6 +75,7 @@ def _targets(provider: str, *, with_prices: bool) -> AnalystTargets:
         provider=provider,
         quality="eod",
         as_of=NOW,
+        period=date(2026, 9, 1),
     )
 
 
@@ -165,6 +166,7 @@ class TestTargetsChain:
         sources = _sources_with(targets=(["e", "f"], [primary, finnhub]))
         got = sources.targets.analyst_targets("AAPL", now=NOW)
         assert got.quality == "fallback"
+        assert got.period == date(2026, 9, 1)
         assert got.provider == "finnhub"
         assert got.target_mean is None
         assert got.buy == 20

@@ -11,6 +11,7 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | `ahf-terminal` | `https://ai-hedge-fund.tobytran.dev/` | ai-hedge-fund in ttyd + tmux; also `/u/ai-hedge-fund/` on the hub |
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
+| `vibe-consensus` | internal only (`vibe` network, port 8000) | Authenticated free Finnhub recommendation counts; missing optional key yields analysis-only without stopping Vibe |
 | `cloudflared` | outbound only | Tunnel connector |
 
 On the host:
@@ -45,6 +46,8 @@ Vibe-Trading uses **direct OpenAI**, never OpenRouter: its Firestore profile set
 The wrapper retains the optional native Anthropic adapter from `deploy/upstream/vibe-trading/requirements-anthropic.lock`, with exact versions and wheel hashes. It leaves upstream's pinned dependencies and source unchanged. The smoke test constructs both adapters offline, checks installed upstream versions, and checks that the API settings match the OpenAI environment without exposing/copying its key. On an upstream bump, regenerate the additions against that base image if compatibility changes. Do not install dependencies by hand on the running VPS.
 
 Rotate a shared provider key with `family_config.py set shared/llm <KEY_NAME>` (value on stdin), then redeploy the apps linked to it. The retired Secret Manager bundle is not used.
+
+Vibe's optional free Finnhub key belongs only in `ai-trading/consensus`, **not** in `ai-trading/market-data` or `ai-trading/vibe-trading`. When the owner supplies it, run `printf '%s' "$NEW_VALUE" | common/config/family_config.py set ai-trading/consensus FINNHUB_API_KEY` from outside the repository, then redeploy. An absent/unavailable profile leaves `vibe-consensus.env` comment-only (no key); the private service stays healthy while recommendation requests return `503 not_configured`. No other app group receives the key.
 
 ## Account and sign-out
 
@@ -141,7 +144,7 @@ itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`) and the Family Desk'
 |---|---|
 | `tradingagents` | `ta-terminal`, `ta-research` |
 | `ai-hedge-fund` | `ahf-terminal` |
-| `vibe-trading` | `vibe-trading` |
+| `vibe-trading` | `vibe-consensus`, `vibe-trading` |
 | `mirofish` | `mirofish` |
 
 - **Behavior and shared cancellation:** Settings shows each group's real

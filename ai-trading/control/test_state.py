@@ -39,7 +39,7 @@ class StateTest(unittest.TestCase):
             {
                 "tradingagents": ("ta-terminal", "ta-research"),
                 "ai-hedge-fund": ("ahf-terminal",),
-                "vibe-trading": ("vibe-trading",),
+                "vibe-trading": ("vibe-consensus", "vibe-trading"),
                 "mirofish": ("mirofish",),
             },
         )
@@ -54,7 +54,7 @@ class StateTest(unittest.TestCase):
         self.assertEqual(catalog["apps"], {
             "tradingagents": ["ta-terminal", "ta-research"],
             "ai-hedge-fund": ["ahf-terminal"],
-            "vibe-trading": ["vibe-trading"],
+            "vibe-trading": ["vibe-consensus", "vibe-trading"],
             "mirofish": ["mirofish"],
         })
         self.assertEqual(
@@ -79,7 +79,7 @@ class StateTest(unittest.TestCase):
         state = initial_state(None)
         self.assertEqual(selected_services(state, False), (
             "web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler",
-            "ta-terminal", "ta-research", "ahf-terminal", "vibe-trading",
+            "ta-terminal", "ta-research", "ahf-terminal", "vibe-consensus", "vibe-trading",
         ))
         state["desired"]["mirofish"] = True
         self.assertNotIn("mirofish", selected_services(state, False))
@@ -387,7 +387,7 @@ class StateTest(unittest.TestCase):
                 self.assertEqual(main(["services", "--mirofish-ready", "false", *args]), 0)
             self.assertEqual(output.getvalue().splitlines(), [
                 "web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler",
-                "ta-terminal", "ta-research", "ahf-terminal", "vibe-trading",
+                "ta-terminal", "ta-research", "ahf-terminal", "vibe-consensus", "vibe-trading",
             ])
 
     def test_cli_inherited_lock_is_not_unlocked(self):
