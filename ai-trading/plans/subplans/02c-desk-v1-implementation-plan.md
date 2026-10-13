@@ -104,14 +104,14 @@
 
 | Phase | Ships | Depends on | Task file | Status |
 |---|---|---|---|---|
-| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Waiting for IBKR to approve the data user |
+| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Blocked: no IBKR account yet |
 | 1. Strategy core | Contracts, backend scaffold, session calendar, first indicators, levels, evaluator, ten templates | none | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done (PR #95) |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance, order sizing | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done (PR #104) |
 | 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | [phase-1c-technicals-and-futures.md](02c-desk-v1-tasks/phase-1c-technicals-and-futures.md) | Done |
 | 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | [phase-1d-research-math.md](02c-desk-v1-tasks/phase-1d-research-math.md) | Done |
 | 2. Data foundation | `ai-trading/common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | `phase-4-web.md` | Planned |
+| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | [phase-4-web.md](02c-desk-v1-tasks/phase-4-web.md) | Plan for owner review |
 | 5. Long-term, covered calls, Desk AI | Imports, Holdings, valuation and consensus cards, the covered-call scan and screens, the daily Desk AI verdict, the AI brief, the track record, the timeline | 1d, 3 (UI after 4) | `phase-5-long-term.md` | Planned |
 | 6. Paper trading | The paper broker and order gate, the fills journal, futures brackets, reconciliation, limits, stats, the Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
 | 6b. Backtests | Backtest runs over stored bars, the results page, "Promote to Paper" | 1d, 2 (UI after 4) | `phase-6b-backtests.md` | Planned |
@@ -129,7 +129,7 @@ Phases 0–2, 1c, and 1d change nothing that is deployed, so they stop at `dev`.
 
 | Wave | Who | What |
 |---|---|---|
-| A | Main session + owner | Phase 0 Tasks 0.5–0.6 whenever IBKR approves the data user (a weekday, 09:30–16:00 ET, with the owner); then the IBKR client (Phase 2b) |
+| A | Main session + owner | Phase 0 Tasks 0.5–0.6 once an IBKR account exists and approves the data user (a weekday, 09:30–16:00 ET, with the owner); then the IBKR client (Phase 2b) |
 | B (now) | Subagents in worktrees | Phases 1c, then 1d: pure code, no data or IBKR needed |
 | C | Main session with subagents per task file | Phase 2a (data without IBKR) → 3 → 4 (the shell can start on fixtures during 2a or 3) → 5, 6, and 6b (UI after 4) → 7 |
 
@@ -156,11 +156,11 @@ These names are fixed for every phase. A task file may add names but must not re
 | Tables | 02 §7, 02a §9, 02b §5, plus `consensus_snapshots`, `earnings_results`, `analyst_targets` (02f); `ai_verdicts`, `ai_calls`, `ai_call_outcomes` (02f, 02h); `backtest_runs`, `backtest_trades` (02h) |
 | Probe tools | `ai-trading/tools/ibkr-probe/` (Phase 0), kept as the manual gateway smoke test |
 
-Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`, and the Desk links to them. A dashboard login stored in a shared group is never linked into an app profile.
+Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`. The Desk links `shared/alpaca` now, and links `shared/ibkr` only once an IBKR account exists (Phase 2b). A dashboard login stored in a shared group is never linked into an app profile.
 
 | Group | Keys |
 |---|---|
-| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, linked to `shared/ibkr` (set); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
+| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, not linked until an IBKR account exists (values stay in `shared/ibkr`; Phase 2b links them); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
 | Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes); **not in Firestore yet** (Task 0.4 Step 4) |
 | Data sources | `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`, linked to `shared/alpaca` (set); `FINNHUB_API_KEY`, `FRED_API_KEY`, `EULERPOOL_API_KEY`, `ALPHA_VANTAGE_API_KEY` (Phase 2) |
 | Alert channels | `TELEGRAM_BOT_TOKEN`, `SLACK_WEBHOOK_URL_OWNER`, `SLACK_WEBHOOK_URL_SPOUSE` |
