@@ -168,6 +168,8 @@ jobs:
           files: |
             ai-trading/deploy/docker-bake.hcl
             ai-trading/deploy/docker-bake.ci.hcl
+          # Cache reads help cold runners; exporting MiroFish's large layers exhausted the 60m job.
+          set: '*.cache-to='
           load: true
       - name: Build MiroFish static frontend
         # Not in the default Bake group (it exports files, not an image) and
@@ -183,6 +185,7 @@ jobs:
           files: |
             ai-trading/deploy/docker-bake.hcl
             ai-trading/deploy/docker-bake.ci.hcl
+          set: '*.cache-to='
           targets: mirofish-frontend
       - name: Smoke tests
         env:
