@@ -97,6 +97,11 @@ export APP_DIR SECRETS_DIR RUNTIME_ENV_DIR
 STATE_DIR="${AI_TRADING_STATE_DIR:-/var/lib/family-app/ai-trading}"
 LOCK_PATH="$STATE_DIR/.control.lock"
 CONTROL_STATE_PATH="$STATE_DIR/control.json"
+VIBE_ADMISSION_MARKER=/run/family-app/ai-trading-control/vibe-admission-paused
+BOOTSTRAP_TIMER=""
+BOOTSTRAP_OVERRIDE=""
+BOOTSTRAP_PREVIOUS_TAG=""
+LEGACY_GATE_ACTIVE=0
 LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
 CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
 CONTROL_SCRATCH_DIR=""
@@ -270,6 +275,13 @@ compose() {
 # matter how the script terminates, so this never depends on which later step
 # fails or whether stage_configs ever ran at all.
 cleanup_scratch_dirs() {
+  if [[ "$LEGACY_GATE_ACTIVE" == 1 ]]; then
+    leave_legacy_barrier || echo "deploy: legacy Vibe gateway could not be restored; inspect the admission barrier before another release" >&2
+  fi
+  if [[ -n "$BOOTSTRAP_TIMER" ]]; then
+    systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  fi
+  [[ -n "$BOOTSTRAP_OVERRIDE" ]] && rm -f "$BOOTSTRAP_OVERRIDE"
   [[ -n "$RENDER_SRC_DIR" ]] && rm -rf "$RENDER_SRC_DIR"
   [[ -n "$CONFIG_BACKUP_DIR" ]] && rm -rf "$CONFIG_BACKUP_DIR"
   # Task 5 (app-controls): this run's own root-only coordinator/state-CLI
@@ -664,6 +676,160 @@ ensure_mirofish_stopped() {
   local remaining
   remaining="$(mirofish_container_ids)" || die "mirofish: failed to verify no mirofish container remains; aborting this deploy -- the previously-deployed tag stays running"
   [[ -z "$remaining" ]] || die "mirofish: a mirofish container is still present after stop/remove; aborting this deploy -- the previously-deployed tag stays running"
+}
+
+# One-time SP5 bootstrap: the old Vibe image cannot pause admission itself.
+# The gateway uses an override mount of the incoming Caddyfile while the old
+# installed file and every app container remain untouched. The marker carries
+# this attempt's timer ID so a killed prior attempt's watchdog cannot remove a
+# newer attempt's marker.
+legacy_marker_owned() {
+  [[ -n "$BOOTSTRAP_TIMER" && -f "$VIBE_ADMISSION_MARKER" && ! -L "$VIBE_ADMISSION_MARKER" ]] || return 1
+  [[ "$(cat "$VIBE_ADMISSION_MARKER" 2>/dev/null)" == "$BOOTSTRAP_TIMER" ]]
+}
+
+enter_legacy_barrier() {
+  local _old_vibe_id="$1" gateway_id mount_source
+  [[ -n "$_old_vibe_id" && "$LEGACY_GATE_ACTIVE" == 0 ]] || return 1
+  [[ -f "$APP_DIR/Caddyfile" && -f "$APP_DIR/docker-compose.yml" ]] || return 1
+  validate_staged_config_file "$APP_CONFIG_STAGING_DIR/Caddyfile" || return 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" && ! -L "$VIBE_ADMISSION_MARKER" ]] || return 1
+  BOOTSTRAP_PREVIOUS_TAG="$(cat "$STATE_FILE" 2>/dev/null)" || return 1
+  [[ "$BOOTSTRAP_PREVIOUS_TAG" =~ $SHA_RE ]] || return 1
+  # The incoming Caddyfile has no secret values; the non-root gateway must be
+  # able to read its bind-mounted inode before the normal config install.
+  chmod 0644 "$APP_CONFIG_STAGING_DIR/Caddyfile" || return 1
+  BOOTSTRAP_OVERRIDE="$(mktemp "$STATE_DIR/vibe-gateway.XXXXXX.yml")" || return 1
+  cat >"$BOOTSTRAP_OVERRIDE" <<YAML
+services:
+  gateway:
+    volumes:
+      - "$APP_CONFIG_STAGING_DIR/Caddyfile:/etc/caddy/Caddyfile:ro"
+YAML
+  BOOTSTRAP_TIMER="ai-trading-vibe-bootstrap-expiry-$(python3 -c 'import secrets; print(secrets.token_hex(4))')" || return 1
+  systemd-run --quiet --unit="$BOOTSTRAP_TIMER" --on-active=90m /usr/bin/python3 -c '
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+try:
+    if path.read_text(encoding="utf-8").strip() == sys.argv[2]:
+        path.unlink()
+except FileNotFoundError:
+    pass
+' "$VIBE_ADMISSION_MARKER" "$BOOTSTRAP_TIMER" >/dev/null 2>&1 || return 1
+  install -m 0644 /dev/null "$VIBE_ADMISSION_MARKER" || return 1
+  LEGACY_GATE_ACTIVE=1
+  printf '%s\n' "$BOOTSTRAP_TIMER" >"$VIBE_ADMISSION_MARKER" || return 1
+  IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose -f "$BOOTSTRAP_OVERRIDE" up -d --no-deps --wait --wait-timeout 300 gateway || return 1
+  gateway_id="$(IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose -f "$BOOTSTRAP_OVERRIDE" ps -q gateway)" || return 1
+  [[ -n "$gateway_id" ]] || return 1
+  mount_source="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$gateway_id" 2>/dev/null)" || return 1
+  [[ "$mount_source" == "$APP_CONFIG_STAGING_DIR/Caddyfile" ]] || return 1
+  legacy_marker_owned
+}
+
+leave_legacy_barrier() {
+  [[ "$LEGACY_GATE_ACTIVE" == 1 ]] || return 0
+  # Do not restore a gateway and unblock writes for another attempt's marker.
+  if [[ -e "$VIBE_ADMISSION_MARKER" || -L "$VIBE_ADMISSION_MARKER" ]]; then
+    legacy_marker_owned || return 1
+  fi
+  IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose up -d --no-deps --wait --wait-timeout 300 gateway || return 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || rm -f "$VIBE_ADMISSION_MARKER"
+  systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  rm -f "$BOOTSTRAP_OVERRIDE"
+  BOOTSTRAP_TIMER=""
+  BOOTSTRAP_OVERRIDE=""
+  LEGACY_GATE_ACTIVE=0
+}
+
+finish_legacy_barrier() {
+  [[ "$LEGACY_GATE_ACTIVE" == 1 ]] || return 0
+  legacy_marker_owned || return 1
+  rm -f "$VIBE_ADMISSION_MARKER"
+  systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  rm -f "$BOOTSTRAP_OVERRIDE"
+  BOOTSTRAP_TIMER=""
+  BOOTSTRAP_OVERRIDE=""
+  LEGACY_GATE_ACTIVE=0
+}
+
+# Counts are deliberately raw: a stale but still running-looking private run
+# delays the release rather than falsely proving an old daemon thread exited.
+# A child process must not construct SessionService, whose startup recovery
+# would mark the actual server's live attempts interrupted.
+legacy_active_counts() {
+  local container_id="$1"
+  docker exec "$container_id" python3 -c '
+import json
+import sys
+from pathlib import Path
+
+try:
+    sessions = Path(sys.argv[1])
+    private = Path(sys.argv[2])
+    if sessions.is_symlink() or not sessions.is_dir() or private.is_symlink():
+        raise ValueError("Invalid run roots")
+    chat = committee = 0
+    for path in sessions.glob("*/attempts/*/attempt.json"):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Invalid attempt file")
+        record = json.loads(path.read_text(encoding="utf-8"))
+        status = record["status"]
+        if status not in {"pending", "running", "waiting_user", "completed", "failed", "cancelled", "interrupted"}:
+            raise ValueError("Invalid attempt status")
+        chat += status in {"pending", "running"}
+    if private.exists():
+        if not private.is_dir():
+            raise ValueError("Invalid private root")
+        for entry in private.iterdir():
+            if entry.is_symlink() or not entry.is_dir():
+                raise ValueError("Invalid private run entry")
+            run_file = entry / "run.json"
+            if run_file.is_symlink() or not run_file.is_file():
+                raise ValueError("Invalid private run file")
+            record = json.loads(run_file.read_text(encoding="utf-8"))
+            status = record["status"]
+            if status not in {"pending", "running", "completed", "failed", "cancelled"}:
+                raise ValueError("Invalid private run status")
+            committee += status in {"pending", "running"}
+    print(chat, committee)
+except Exception:
+    raise SystemExit(2) from None
+' /app/agent/sessions /app/agent/.swarm/runs/.committee 2>/dev/null
+}
+
+vibe_monotonic_seconds() {
+  python3 -c 'import time; print(int(time.monotonic()))'
+}
+
+wait_for_legacy_idle() {
+  local container_id="$1" start deadline now remaining counts confirm
+  start="$(vibe_monotonic_seconds)" || return 1
+  [[ "$start" =~ ^[0-9]+$ ]] || return 1
+  deadline=$((start + 3600))
+  while :; do
+    legacy_marker_owned || return 1
+    counts="$(legacy_active_counts "$container_id")" || return 1
+    [[ "$counts" =~ ^[0-9]+[[:space:]][0-9]+$ ]] || return 1
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    remaining=$((deadline - now))
+    ((remaining > 0)) || return 1
+    if [[ "$counts" == '0 0' ]]; then
+      ((remaining >= 10)) || return 1
+      sleep 10
+      legacy_marker_owned || return 1
+      confirm="$(legacy_active_counts "$container_id")" || return 1
+      [[ "$confirm" =~ ^[0-9]+[[:space:]][0-9]+$ ]] || return 1
+      [[ "$confirm" == '0 0' ]] && return 0
+    fi
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    remaining=$((deadline - now))
+    ((remaining > 0)) || return 1
+    sleep "$((remaining < 10 ? remaining : 10))"
+  done
 }
 
 # prune_old_images: image retention. Every release unpacks to ~17 GB (MiroFish's

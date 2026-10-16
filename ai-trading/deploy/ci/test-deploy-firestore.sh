@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ShellCheck 0.10 cannot see test shims exported to child shells or called
 # through sourced deploy functions; those bodies are reachable at runtime.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 # Offline test for production/deploy.sh's Firestore-render + atomic-staging
 # contract (A9a1): render_profiles() + stage_secrets() + rollback, with a
 # fake family_config.py standing in for the merged shared CLI
@@ -2353,6 +2353,231 @@ EOF
   docker rm -f "${proj53}-mirofish-1" >/dev/null 2>&1 || true
   docker network rm "${proj53}_default" >/dev/null 2>&1 || true
 fi
+
+echo "=== Case 54 (SP5, RED): a legacy gateway barrier is reversible without changing the installed Caddyfile or any app container ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s54="$(new_scratch case54)"
+printf 'old Caddyfile fixture\n' >"$s54/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s54/app/last-good-tag"
+cat >"$s54/app/docker-compose.yml" <<EOF
+services:
+  gateway:
+    image: caddy:2-alpine
+    volumes:
+      - "$s54/app/Caddyfile:/etc/caddy/Caddyfile:ro"
+EOF
+mkdir -p "$s54/run"
+(
+  APP_DIR="$s54/app"
+  AI_TRADING_SECRETS_DIR="$s54/secrets"
+  APP_CONFIG_STAGING_DIR="$s54/config-staging"
+  AI_TRADING_STATE_DIR="$s54/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s54/run/vibe-admission-paused"
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then printf 'old-gateway-id\n'; return; fi
+    printf '%s | tag=%s\n' "$*" "$IMAGE_TAG" >>"$s54/compose.log"
+  }
+  systemd-run() { printf '%s\n' "$*" >>"$s54/timer.log"; }
+  systemctl() { printf '%s\n' "$*" >>"$s54/timer.log"; }
+  docker() {
+    if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; return; fi
+    printf '%s\n' "$*" >>"$s54/docker.log"
+  }
+
+  enter_legacy_barrier old-vibe-container || exit 1
+  [[ -f "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  grep -qF "$APP_CONFIG_STAGING_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" "$BOOTSTRAP_OVERRIDE" || exit 1
+  env docker compose -f "$APP_DIR/docker-compose.yml" -f "$BOOTSTRAP_OVERRIDE" config --format json >"$s54/merged.json" || exit 1
+  python3 - "$s54/merged.json" "$APP_CONFIG_STAGING_DIR/Caddyfile" <<'PY' || exit 1
+import json, os, sys
+volumes = json.load(open(sys.argv[1]))["services"]["gateway"]["volumes"]
+mounted = [os.path.realpath(volume["source"]) for volume in volumes if volume["target"] == "/etc/caddy/Caddyfile"]
+assert mounted == [os.path.realpath(sys.argv[2])], mounted
+PY
+  (( $(wc -l <"$s54/compose.log") == 1 )) || exit 1
+  grep -q 'gateway | tag=' "$s54/compose.log" || exit 1
+  grep -q 'tag=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$s54/compose.log" || exit 1
+  leave_legacy_barrier || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  (( $(wc -l <"$s54/compose.log") == 2 )) || exit 1
+  [[ -f "$s54/timer.log" ]] || exit 1
+) || fail "case54: legacy marker/override must activate and roll back gateway only"
+
+echo "=== Case 55 (SP5, RED): old Vibe file preflight counts chat and private runs; corrupt state fails closed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s55="$(new_scratch case55)"
+mkdir -p "$s55/sessions/s/attempts/a" "$s55/private/r"
+printf '{"status":"running"}\n' >"$s55/sessions/s/attempts/a/attempt.json"
+printf '{"status":"pending"}\n' >"$s55/private/r/run.json"
+(
+  APP_DIR="$s55/app"
+  AI_TRADING_SECRETS_DIR="$s55/secrets"
+  APP_CONFIG_STAGING_DIR="$s55/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  docker() {
+    [[ "$1" == exec ]] || return 1
+    local previous='' script=''
+    shift
+    while (($#)); do
+      if [[ "$previous" == -c ]]; then script="$1"; break; fi
+      previous="$1"
+      shift
+    done
+    [[ -n "$script" ]] || return 1
+    python3 -c "$script" "$s55/sessions" "$s55/private"
+  }
+  counts55="$(legacy_active_counts old-vibe-container)" || exit 1
+  [[ "$counts55" == '1 1' ]] || exit 1
+  printf '{\n' >"$s55/private/r/run.json"
+  if legacy_active_counts old-vibe-container >/dev/null 2>&1; then
+    exit 1
+  fi
+) || fail "case55: malformed old-image state must not be interpreted as idle"
+
+echo "=== Case 56 (SP5, RED): legacy activity past 60 minutes aborts without touching the installed release ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s56="$(new_scratch case56)"
+printf 'old Caddyfile fixture\n' >"$s56/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s56/app/last-good-tag"
+cp "$s56/config-staging/docker-compose.yml" "$s56/app/docker-compose.yml"
+mkdir -p "$s56/run"
+(
+  APP_DIR="$s56/app"
+  AI_TRADING_SECRETS_DIR="$s56/secrets"
+  APP_CONFIG_STAGING_DIR="$s56/config-staging"
+  AI_TRADING_STATE_DIR="$s56/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s56/run/vibe-admission-paused"
+  fake_now=100
+  vibe_monotonic_seconds() { echo "$fake_now"; }
+  sleep() { fake_now=$((fake_now + 900)); }
+  legacy_active_counts() { echo '1 0'; }
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then printf 'old-gateway-id\n'; return; fi
+    printf '%s | tag=%s\n' "$*" "$IMAGE_TAG" >>"$s56/compose.log"
+  }
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  enter_legacy_barrier old-vibe-container || exit 1
+  if wait_for_legacy_idle old-vibe-container; then
+    exit 1
+  fi
+  leave_legacy_barrier || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  (( $(wc -l <"$s56/compose.log") == 2 )) || exit 1
+) || fail "case56: timed-out legacy gate must restore the prior gateway without replacing Vibe"
+
+echo "=== Case 57 (SP5, RED): an old cleanup cannot delete a later attempt's admission marker ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s57="$(new_scratch case57)"
+printf 'old Caddyfile fixture\n' >"$s57/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s57/app/last-good-tag"
+cp "$s57/config-staging/docker-compose.yml" "$s57/app/docker-compose.yml"
+mkdir -p "$s57/run"
+(
+  APP_DIR="$s57/app"
+  AI_TRADING_SECRETS_DIR="$s57/secrets"
+  APP_CONFIG_STAGING_DIR="$s57/config-staging"
+  AI_TRADING_STATE_DIR="$s57/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s57/run/vibe-admission-paused"
+  compose() { if [[ "$*" == *'ps -q gateway'* ]]; then echo old-gateway-id; fi; }
+  timer_args=()
+  systemd-run() { timer_args=("$@"); }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  enter_legacy_barrier old-vibe-container || exit 1
+  printf 'later-attempt\n' >"$VIBE_ADMISSION_MARKER"
+  [[ "${timer_args[4]}" == -c ]] || exit 1
+  python3 -c "${timer_args[5]}" "${timer_args[6]}" "${timer_args[7]}" || exit 1
+  [[ "$(cat "$VIBE_ADMISSION_MARKER")" == 'later-attempt' ]] || exit 1
+  if leave_legacy_barrier; then exit 1; fi
+  [[ "$(cat "$VIBE_ADMISSION_MARKER")" == 'later-attempt' ]] || exit 1
+) || fail "case57: cleanup must refuse to remove someone else's newer marker"
+
+echo "=== Case 58 (SP5, RED): expiry timer failure aborts before a marker or gateway restart ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s58="$(new_scratch case58)"
+printf 'old Caddyfile fixture\n' >"$s58/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s58/app/last-good-tag"
+cp "$s58/config-staging/docker-compose.yml" "$s58/app/docker-compose.yml"
+mkdir -p "$s58/run"
+(
+  APP_DIR="$s58/app"
+  AI_TRADING_SECRETS_DIR="$s58/secrets"
+  APP_CONFIG_STAGING_DIR="$s58/config-staging"
+  AI_TRADING_STATE_DIR="$s58/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s58/run/vibe-admission-paused"
+  systemd-run() { return 1; }
+  compose() { printf '%s\n' "$*" >>"$s58/compose.log"; }
+  if enter_legacy_barrier old-vibe-container; then exit 1; fi
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ ! -e "$s58/compose.log" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+) || fail "case58: unarmed expiry must never leave an admission marker or change the gateway"
+
+echo "=== Case 59 (SP5): unexpected pre-switch exit restores gateway, marker and lifecycle lock ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s59="$(new_scratch case59)"
+printf 'old Caddyfile fixture\n' >"$s59/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s59/app/last-good-tag"
+cp "$s59/config-staging/docker-compose.yml" "$s59/app/docker-compose.yml"
+mkdir -p "$s59/run"
+if (
+  APP_DIR="$s59/app"
+  AI_TRADING_SECRETS_DIR="$s59/secrets"
+  APP_CONFIG_STAGING_DIR="$s59/config-staging"
+  AI_TRADING_STATE_DIR="$s59/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s59/run/vibe-admission-paused"
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then echo old-gateway-id; return; fi
+    printf '%s\n' "$*" >>"$s59/compose.log"
+  }
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  acquire_lifecycle_lock || exit 1
+  enter_legacy_barrier old-vibe-container || exit 1
+  exit 17
+); then
+  fail "case59: deliberately aborted child exited successfully"
+else
+  status59=$?
+  [[ "$status59" == 17 ]] || fail "case59: expected explicit exit 17, got $status59"
+fi
+[[ ! -e "$s59/run/vibe-admission-paused" ]] || fail "case59: EXIT cleanup left marker"
+(( $(wc -l <"$s59/compose.log") == 2 )) || fail "case59: EXIT cleanup did not restore gateway"
+[[ "$(cat "$s59/app/Caddyfile")" == 'old Caddyfile fixture' ]] || fail "case59: EXIT cleanup changed installed Caddyfile"
+python3 - "$s59/control-state/.control.lock" <<'PY' || fail "case59: lifecycle lock remained held"
+import fcntl, sys
+with open(sys.argv[1], "r+") as handle:
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+PY
 
 echo
 cleanup

@@ -722,6 +722,23 @@ with zipfile.ZipFile('$zip_path') as z:
     -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
   expect_status 401 http://127.0.0.1:18080/api/connections "${vibe_host[@]}" \
     -H 'Authorization: Bearer smoke-key'
+  # SP5 bootstrap barrier: new chat POSTs pause, but auth and history/health
+  # remain available. Only the fixture's own marker is created/removed.
+  local chat_url=http://127.0.0.1:18080/sessions/test123/messages marker=/run/family-app/ai-trading-control/vibe-admission-paused
+  expect_status 401 "$chat_url" "${vibe_host[@]}" -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
+  docker exec smoke-control-helper sh -c 'touch /run/family-app/ai-trading-control/vibe-admission-paused && chmod 0644 /run/family-app/ai-trading-control/vibe-admission-paused'
+  expect_status 503 "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
+  local paused_headers
+  paused_headers="$(curl -sS -D - -o /dev/null "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev')"
+  grep -qi '^Retry-After: 30' <<<"$paused_headers" || fail "paused chat lacks Retry-After"
+  grep -qi '^Cache-Control: no-store' <<<"$paused_headers" || fail "paused chat can be cached"
+  expect_status 200 http://127.0.0.1:18080/live "${vibe_host[@]}" --cookie "$cookie"
+  expect_status 404 http://127.0.0.1:18080/internal/deploy/drain "${vibe_host[@]}" --cookie "$cookie"
+  docker exec smoke-control-helper rm -f "$marker"
+  local resumed_status
+  resumed_status="$(curl -sS -o /dev/null -w '%{http_code}' "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev')"
+  [[ "$resumed_status" != 503 ]] || fail "chat admission stayed blocked after marker removal"
+  echo "ok   Vibe legacy admission marker denies only authenticated new chat POSTs"
   docker rm -f smoke-vibe-gateway >/dev/null
 
   docker network rm "$net" >/dev/null 2>&1 || true
