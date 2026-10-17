@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Verifies a freshly built ai-trading/frontend/out/ directory: the required
-# routes exist, and no secret-shaped string made it into the static bundle.
+# Verifies a freshly built static export: required files exist, and no
+# secret-shaped string made it into the bundle. The Desk package has a
+# root-only layout; all other callers are checked as Hub exports.
 # Usage: ai-trading/deploy/ci/check-static-export.sh OUT_DIR
 set -Eeuo pipefail
 
@@ -11,11 +12,25 @@ fail() {
   exit 1
 }
 
-for required in index.html apps/tradingagents.html apps/ai-hedge-fund.html apps/vibe-trading.html apps/mirofish.html 404.html; do
-  [[ -f "$OUT_DIR/$required" ]] || fail "missing $required"
+PACKAGE_JSON="$(dirname "$OUT_DIR")/package.json"
+IS_DESK=false
+if [[ -f "$PACKAGE_JSON" ]] && grep -q '"name": "@ai-trading/desk-web"' "$PACKAGE_JSON"; then
+  IS_DESK=true
+fi
+
+required=(index.html 404.html)
+if [[ "$IS_DESK" == false ]]; then
+  required+=(apps/tradingagents.html apps/ai-hedge-fund.html apps/vibe-trading.html apps/mirofish.html)
+fi
+
+for required_file in "${required[@]}"; do
+  [[ -f "$OUT_DIR/$required_file" ]] || fail "missing $required_file"
 done
 [[ -d "$OUT_DIR/_next/static" ]] || fail "missing _next/static"
-[[ -f "$OUT_DIR/apps/desk.html" ]] && fail "apps/desk.html exists but Family Desk is not live yet"
+
+if [[ "$IS_DESK" == false ]]; then
+  [[ -f "$OUT_DIR/apps/desk.html" ]] && fail "apps/desk.html exists in the Hub export"
+fi
 
 # Forbidden patterns: Clerk/OpenAI/Zep secret key prefixes and literal
 # secret-section key names. Clerk PUBLISHABLE keys (pk_live_/pk_test_) are
