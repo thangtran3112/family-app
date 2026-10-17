@@ -218,13 +218,14 @@ export function createSessionGatedTask(
 
 const HUB_FALLBACK = "/";
 // Exact, family-owned hostnames whose gates send a signed-out visitor to
-// /login with returnTo: MiroFish (its Worker) and the two terminal hostnames
+// /login with returnTo: MiroFish, Family Desk and the two terminal hostnames
 // (their Caddy blocks, 01l). Nothing else matches, including a hostname that
 // merely starts with or contains one of these.
 const ALLOWED_RETURN_TO_HOSTS: ReadonlySet<string> = new Set([
   "mirofish.tobytran.dev",
   "tradingagents.tobytran.dev",
   "ai-hedge-fund.tobytran.dev",
+  "trading.tobytran.dev",
 ]);
 
 // `URL` silently normalizes away an explicit port that matches the

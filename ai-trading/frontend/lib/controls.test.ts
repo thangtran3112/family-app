@@ -770,3 +770,7 @@ test("controller: an armed timer firing while a mutation is pending never issues
   assert.equal(states.at(-1)!.apps[3].status, "Starting");
   assert.equal(clock.pendingDelay(), ACTIVE_POLL_MS, "the mutation's transition reschedule must survive the blocked timer firing");
 });
+test("Desk public shell is launchable without an upstream app-control entry", () => {
+  assert.deepEqual(appLaunchGate(null, "desk"), { kind: "available" });
+  assert.deepEqual(appLaunchGate(null, "desk-other"), { kind: "unknown" });
+});

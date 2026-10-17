@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Publishes a verified hub export as a versioned GCS transaction.
+# Publishes a verified hub (default) or Desk export as a versioned GCS transaction.
 set -uo pipefail
 
-OUT_DIR="${1:?usage: upload-hub-static.sh OUT_DIR BUCKET}"
-BUCKET="${2:?usage: upload-hub-static.sh OUT_DIR BUCKET}"
+OUT_DIR="${1:?usage: upload-hub-static.sh OUT_DIR BUCKET [hub|desk]}"
+BUCKET="${2:?usage: upload-hub-static.sh OUT_DIR BUCKET [hub|desk]}"
+PROFILE="${3:-hub}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 fail() { echo "upload-hub-static: $*" >&2; exit 1; }
@@ -34,6 +35,11 @@ validate_paths() {
   local file rel
   while IFS= read -r -d '' file; do
     rel="${file#"$OUT_DIR"/}"
+    if [[ "$PROFILE" == desk ]]; then
+      validate_desk_path "$rel" || fail "unexpected path in static export: $rel"
+      mime_for "$rel" >/dev/null || fail "unsupported public asset type: $rel"
+      continue
+    fi
     case "$rel" in
       index.html|404.html|_not-found.html|login.html|settings.html|favicon.ico|index.txt|login.txt|settings.txt|_not-found.txt|__next._tree.txt|__next._full.txt|__next._index.txt|__next.__PAGE__.txt|_next/static/*) ;;
       apps/tradingagents.html|apps/ai-hedge-fund.html|apps/vibe-trading.html|apps/mirofish.html|apps/tradingagents.txt|apps/ai-hedge-fund.txt|apps/vibe-trading.txt|apps/mirofish.txt) ;;
@@ -44,6 +50,7 @@ validate_paths() {
       apps/ai-hedge-fund/__next._tree.txt|apps/ai-hedge-fund/__next._full.txt|apps/ai-hedge-fund/__next._index.txt|apps/ai-hedge-fund/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       apps/vibe-trading/__next._tree.txt|apps/vibe-trading/__next._full.txt|apps/vibe-trading/__next._index.txt|apps/vibe-trading/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       apps/mirofish/__next._tree.txt|apps/mirofish/__next._full.txt|apps/mirofish/__next._index.txt|apps/mirofish/__next.apps.\$d\$slug.__PAGE__.txt) ;;
+      apps/desk.html|apps/desk.txt|apps/desk/__next._tree.txt|apps/desk/__next._full.txt|apps/desk/__next._index.txt|apps/desk/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       *) fail "unexpected path in static export: $rel" ;;
     esac
     mime_for "$rel" >/dev/null || fail "unsupported public asset type: $rel"
@@ -53,10 +60,25 @@ validate_paths() {
   fi
 }
 
+validate_desk_path() {
+  local rel="$1" route prefix dotted
+  case "$rel" in
+    index.html|index.txt|404.html|favicon.ico|_next/static/*) return 0 ;;
+  esac
+  for route in '' _not-found strategies strategies/new watchlists technicals futures futures/specs settings more paper holdings ask covered-calls stocks backtests; do
+    prefix="${route:+$route/}"; dotted="${route//\//.}"
+    if [[ -n "$route" && ( "$rel" == "$route.html" || "$rel" == "$route.txt" ) ]]; then return 0; fi
+    case "$rel" in
+      "${prefix}__next._tree.txt"|"${prefix}__next._full.txt"|"${prefix}__next._index.txt"|"${prefix}__next.${dotted:+$dotted.}__PAGE__.txt") return 0 ;;
+    esac
+  done
+  return 1
+}
+
 if find "$OUT_DIR" -type l -print -quit | grep -q .; then
   fail "symlink found in static export"
 fi
-"$SCRIPT_DIR/check-static-export.sh" "$OUT_DIR" || exit $?
+"$SCRIPT_DIR/check-static-export.sh" "$OUT_DIR" "$PROFILE" || exit $?
 validate_paths
 
 mapfile -d '' -t ALL_FILES < <(find "$OUT_DIR" -type f -print0 | sort -z)

@@ -18,10 +18,10 @@ test("category and query intersect; an unmatched query returns no apps", () => {
   assert.deepEqual(filterHubApps(hubApps, "no such application", "all"), []);
 });
 
-test("planned Desk stays searchable but cannot be launched", () => {
+test("Desk stays searchable and launches its own hostname", () => {
   const [desk] = filterHubApps(hubApps, "Family Desk", "all");
-  assert.equal(desk.kind, "planned");
-  assert.equal(getAppLaunch(desk), null);
+  assert.equal(desk.kind, "external");
+  assert.deepEqual(getAppLaunch(desk), { href: "https://trading.tobytran.dev/", label: "Open app", newTab: true });
 });
 
 test("terminal launchers retain the hub routes and do not open a new tab", () => {

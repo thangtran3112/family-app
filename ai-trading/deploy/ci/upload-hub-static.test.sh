@@ -102,6 +102,29 @@ echo 'old immutable hash' >"$D1/_next/static/chunks/old-stays-abc123.js"
 "$TARGET" "$D1" "$BUCKET" >/dev/null || fail "valid export upload failed"
 pass "valid export uploads without gsutil"
 
+# Desk uses the same transaction, but an explicit route profile: no hub-only
+# required files, arbitrary source files, or wildcard Flight paths.
+DESK="$WORKDIR/desk"; mkdir -p "$DESK/_next/static/chunks" "$DESK/strategies/new"
+for route in index 404 strategies strategies/new; do
+  printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
+done
+printf 'chunk\n' >"$DESK/_next/static/chunks/desk.js"
+printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
+"$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
+cmp -s "$(live_file test-desk strategies.html)" "$DESK/strategies.html" || fail "Desk strategies not published"
+pass "Desk profile uploads its own routes with the shared transaction"
+for extra in api/desk/strategies.html private.txt strategies/__next._unknown.txt unknown.html .txt; do
+  mkdir -p "$DESK/$(dirname "$extra")"; printf 'private\n' >"$DESK/$extra"; : >"$CALL_LOG"
+  "$TARGET" "$DESK" test-desk desk >/dev/null 2>&1 && fail "Desk accepted $extra"
+  [[ ! -s "$CALL_LOG" ]] || fail "Desk rejection reached cloud calls"
+  rm "$DESK/$extra"
+done
+pass "Desk profile rejects API, private, unknown route and unknown Flight files before cloud calls"
+: >"$CALL_LOG"
+"$TARGET" "$DESK" test-desk unknown >/dev/null 2>&1 && fail "unknown profile passed"
+[[ ! -s "$CALL_LOG" ]] || fail "unknown profile reached cloud calls"
+pass "unknown export profile fails closed"
+
 # A successful second release deletes stale non-hashed objects but retains old
 # content-hashed files for already-loaded pages and rollback revisions.
 printf 'removed route\n' >"$WORKDIR/removed.html"

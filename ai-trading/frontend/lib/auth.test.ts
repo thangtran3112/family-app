@@ -413,6 +413,18 @@ test("safeReturnTo falls back to the hub when there is no returnTo", () => {
   assert.equal(safeReturnTo(undefined), "/");
   assert.equal(safeReturnTo(""), "/");
 });
+test("Desk returnTo accepts only its exact HTTPS hostname without relaxing URL hardening", () => {
+  const valid = "https://trading.tobytran.dev/strategies?id=12#builder";
+  assert.equal(safeReturnTo(valid), valid);
+  for (const raw of [
+    "http://trading.tobytran.dev/", "//trading.tobytran.dev/",
+    "https://trading.tobytran.dev:443/", "https://trading.tobytran.dev:0443/",
+    "https://trading.tobytran.dev:8443/", "https://user:pass@trading.tobytran.dev/",
+    "https://trading.tobytran.dev.evil.example/", "https://sub.trading.tobytran.dev/",
+    " https://trading.tobytran.dev/", "https:\t//trading.tobytran.dev/",
+    "\u0000https://trading.tobytran.dev/",
+  ]) assert.equal(safeReturnTo(raw), "/", raw);
+});
 test("safeReturnTo allows the public https mirofish.tobytran.dev URL with a path", () => {
   assert.equal(safeReturnTo("https://mirofish.tobytran.dev/graph/123"), "https://mirofish.tobytran.dev/graph/123");
 });
