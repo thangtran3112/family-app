@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from ai_trading.api.app import app
 from ai_trading.api.auth import get_data_sources
 from ai_trading.api.market_data import _weekly_bars, get_market_bars
+from ai_trading.core import indicators
 from ai_trading.core.calendar import previous_session, session
 from ai_trading.core.futures import SPECS
 from ai_trading.db.models import Bar1d, WatchlistItem
@@ -61,9 +62,7 @@ def _year_boundary_frame(end: date) -> pd.DataFrame:
             elif day == date(2025, 1, 3):
                 rows.append({"open": 350.0, "high": 400.0, "low": 4.0, "close": 350.0, "volume": 1.0})
             else:
-                rows.append(
-                    {"open": 100.0, "high": 120.0, "low": 80.0, "close": 100.0 + day.day, "volume": 1.0}
-                )
+                rows.append({"open": 100.0, "high": 120.0, "low": 80.0, "close": 100.0 + day.day, "volume": 1.0})
         day += timedelta(days=1)
     return pd.DataFrame(rows, index=pd.Index(dates))
 
@@ -84,9 +83,7 @@ def _minute_frame(rows: int = 390) -> pd.DataFrame:
 
 
 def _empty_minute_frame() -> pd.DataFrame:
-    return pd.DataFrame(
-        columns=["open", "high", "low", "close", "volume"], index=pd.DatetimeIndex([], tz="UTC")
-    )
+    return pd.DataFrame(columns=["open", "high", "low", "close", "volume"], index=pd.DatetimeIndex([], tz="UTC"))
 
 
 def _recent_full_stock_sessions(count: int = 1):
@@ -122,11 +119,7 @@ def _minute_history(sessions: int = 15) -> pd.DataFrame:
     frames = []
     for trading_session in _recent_full_stock_sessions(sessions):
         index = pd.date_range(trading_session.regular_open, periods=390, freq="min")
-        frames.append(
-            pd.DataFrame(
-                {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index
-            )
-        )
+        frames.append(pd.DataFrame({"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index))
     return pd.concat(frames).sort_index()
 
 
@@ -155,9 +148,7 @@ def _extended_minute_frame() -> pd.DataFrame:
 def _premarket_minute_frame() -> pd.DataFrame:
     day = _full_stock_session()
     index = pd.date_range(day.regular_open - pd.Timedelta(minutes=5), periods=5, freq="min")
-    return pd.DataFrame(
-        {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index
-    )
+    return pd.DataFrame({"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index)
 
 
 def _set_bars(client: TestClient, source: FakeBars) -> None:
@@ -275,9 +266,7 @@ def test_stock_chart_extended_bars_are_separate_and_opt_in(client):
     source = FakeBars(_extended_minute_frame())
     _set_bars(client, source)
     regular = client.get("/api/desk/bars/AAPL?interval=5m&days=2000", headers=auth_headers())
-    extended = client.get(
-        "/api/desk/bars/AAPL?interval=5m&session=extended&days=2000", headers=auth_headers()
-    )
+    extended = client.get("/api/desk/bars/AAPL?interval=5m&session=extended&days=2000", headers=auth_headers())
     assert regular.status_code == extended.status_code == 200
     assert [bar["t"] for bar in regular.json()["bars"]] == [source.frame.index[5].isoformat()]
     assert [bar["t"] for bar in extended.json()["bars"]] == [
@@ -510,13 +499,9 @@ def test_resampling_discards_left_cutoff_bin(interval, minutes):
 def test_resampling_returns_empty_when_every_bin_is_still_forming():
     trading_session = _full_stock_session()
     starts = pd.date_range(trading_session.regular_open + pd.Timedelta(minutes=5), periods=2, freq="min")
-    frame = pd.DataFrame(
-        {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=starts
-    )
+    frame = pd.DataFrame({"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=starts)
     now = trading_session.regular_open + pd.Timedelta(minutes=7)
-    result = get_market_bars(
-        fake_data_sources(FakeBars(frame)), "AAPL", "15m", 1, stock_session="regular", now=now
-    )
+    result = get_market_bars(fake_data_sources(FakeBars(frame)), "AAPL", "15m", 1, stock_session="regular", now=now)
     assert result.frame.empty
     assert result.quality == "unavailable"
 
@@ -581,6 +566,60 @@ def test_technicals_reports_warming_history(client):
     assert body["moving_averages"]["sma_10"]["action"] == "Buy"
     assert body["moving_averages"]["sma_200"]["action"] is None
     assert body["card_back"]["bias_label"] is None
+
+
+def test_technicals_volatility_is_unknown_for_empty_bars_without_changing_card_back(client):
+    frame = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+    _set_bars(client, FakeBars(frame))
+
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1d&days=2000", headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["volatility"] == {"atr14": None, "atr_percent": None, "label": None}
+    assert body["gauges"]["summary"]["label"] == "warming up"
+    assert body["card_back"] == asdict(compute_card_back("AAPL", "1D", frame, "stock"))
+    assert body["card_back"]["atr_pct_label"] == "normal"
+
+
+def test_technicals_volatility_reports_atr_but_not_unwarmed_classification(client):
+    frame = _daily_frame(20)
+    _set_bars(client, FakeBars(frame))
+
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1d&days=2000", headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gauges"]["summary"]["label"] == "warming up"
+    assert body["volatility"]["atr14"] == pytest.approx(indicators.atr(frame, 14).iloc[-1])
+    assert body["volatility"]["atr_percent"] == pytest.approx(indicators.atr_percent(frame).pct.iloc[-1])
+    assert body["volatility"]["label"] is None
+    assert body["card_back"]["atr_pct_label"] == "normal"
+
+
+def test_technicals_volatility_withholds_nonfinite_measurements_and_label(client):
+    frame = _daily_frame(113)
+    frame.iloc[-1, frame.columns.get_loc("high")] = float("inf")
+    _set_bars(client, FakeBars(frame))
+
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1d&days=2000", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()["volatility"] == {"atr14": None, "atr_percent": None, "label": None}
+
+
+def test_technicals_volatility_exposes_full_classification(client):
+    frame = _daily_frame(130)
+    _set_bars(client, FakeBars(frame))
+    expected = indicators.atr_percent(frame)
+
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1d&days=2000", headers=auth_headers())
+
+    assert response.status_code == 200
+    volatility = response.json()["volatility"]
+    assert volatility["atr14"] == pytest.approx(indicators.atr(frame, 14).iloc[-1])
+    assert volatility["atr_percent"] == pytest.approx(expected.pct.iloc[-1])
+    assert volatility["label"] == expected.label.iloc[-1] == "normal"
 
 
 def test_card_back_is_the_engine_output(client):

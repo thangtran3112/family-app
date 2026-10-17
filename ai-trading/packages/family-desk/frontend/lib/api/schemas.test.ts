@@ -38,6 +38,7 @@ const warmingTechnicals = {
   pivots: { classic: { P: 101 }, fibonacci: {}, camarilla: {} },
   rsi: 100,
   macd: { line: null, signal: null, histogram: null },
+  volatility: { atr14: 2, atr_percent: 2, label: null },
   card_back: {
     symbol: "AAPL",
     timeframe: "1D",
@@ -78,6 +79,7 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     pivots: { classic: {}, fibonacci: {}, camarilla: {} },
     rsi: null,
     macd: { line: null, signal: null, histogram: null },
+    volatility: { atr14: null, atr_percent: null, label: null },
     card_back: {
       ...warmingTechnicals.card_back,
       atr_pct_label: "normal",
@@ -145,6 +147,32 @@ test("nested technical schema rejects missing pivot methods and non-finite value
   );
   assert.equal(
     TechnicalsSchema.safeParse({ ...warmingTechnicals, macd: { line: Infinity, signal: null, histogram: null } }).success,
+    false,
+  );
+});
+
+test("technicals volatility accepts measured values or honest unknowns only", () => {
+  for (const label of ["low", "normal", "high", null]) {
+    assert.equal(
+      TechnicalsSchema.safeParse({
+        ...warmingTechnicals,
+        volatility: { atr14: 1.25, atr_percent: 0.5, label },
+      }).success,
+      true,
+    );
+  }
+  assert.equal(
+    TechnicalsSchema.safeParse({
+      ...warmingTechnicals,
+      volatility: { atr14: null, atr_percent: null, label: "warming up" },
+    }).success,
+    false,
+  );
+  assert.equal(
+    TechnicalsSchema.safeParse({
+      ...warmingTechnicals,
+      volatility: { atr14: null, atr_percent: null, label: "normal" },
+    }).success,
     false,
   );
 });

@@ -597,6 +597,7 @@ export interface components {
             rsi: number | null;
             /** Symbol */
             symbol: string;
+            volatility: components["schemas"]["VolatilityOut"];
         };
         /** ValidationError */
         ValidationError: {
@@ -610,6 +611,15 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VolatilityOut */
+        VolatilityOut: {
+            /** Atr14 */
+            atr14: number | null;
+            /** Atr Percent */
+            atr_percent: number | null;
+            /** Label */
+            label: ("low" | "normal" | "high") | null;
         };
         /** VoteCountsOut */
         VoteCountsOut: {
