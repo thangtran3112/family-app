@@ -98,8 +98,8 @@ Backend routes added in Task 3. All but `/healthz` require the verified identity
 | Route | Returns |
 |---|---|
 | `GET /api/desk/me` | `{email}`. 401 without the verified header. |
-| `GET /api/desk/bars/{symbol}` (query: `interval` of `1d`, `1h`, `5m`, or `1m`; `days`) | `{symbol, interval, quality, as_of, bars: [{t, o, h, l, c, v}]}` |
-| `GET /api/desk/technicals/{symbol}` | `{symbol, quality, as_of, gauges, moving_averages, oscillators, pivots, rsi, macd, card_back}` |
+| `GET /api/desk/bars/{symbol}` (query: `interval` of `1w`, `1d`, `4h`, `1h`, `30m`, `15m`, `5m`, or `1m`; bounded `days`) | `{symbol, interval, quality, as_of, bars: [{t, o, h, l, c, v}]}` |
+| `GET /api/desk/technicals/{symbol}` (validated timeframe matching the chart; cards expose `5m`, `15m`, `1h`, `1D`, `1W`, Technicals also `30m` and `4h`) | `{symbol, quality, as_of, gauges, moving_averages, oscillators, pivots, rsi, macd, card_back}`; tables retain known short-period values below the 250-bar gauge warm-up; pivots include Classic, Fibonacci, and Camarilla |
 | `GET /api/desk/futures/specs` | 12 contracts: `{root, mini, micro, multiplier, tick_size, session, roll_dates, approx_margin, margin_as_of}` |
 | `GET /api/desk/status` | `{gateway, data_sources, streaming_slots: {used, max}, backups, reconciliation}` |
 | `GET /api/desk/watchlists/{id}/items` | `[{symbol, asset_type, backfill}]`, where `backfill` is `ready` or `pending` |
@@ -175,6 +175,7 @@ Produces: `deskFetch`, `DeskApiError`, `hubLoginUrl`, the shell components, and 
 - `me` returns `{email}` from the verified header. No header gives 401. There is no default user.
 - `bars` reads through `DataSources` (Phase 2a). The response carries the provider's quality label unchanged, so `fallback` stays `fallback`. No bars gives `quality: "unavailable"` and an empty list. A bar is never fabricated. A bad `interval` gives 422.
 - `technicals` runs the pure functions in `ai_trading.core` over the bars: `indicators` (Phase 1), and `bias` and `pivots` (Phase 1c). `card_back` is the return value of `ai_trading.engine.cardback.compute_card_back`, unchanged.
+- Stock technicals use regular-session closed bars; futures retain the full CME session. Bound source lookback before provider work, not only the response row count. Sanitize all nonfinite numerical fields, including every pivot method, to null.
 - `futures/specs` gives the 12 contracts from `ai_trading.core.futures` (Phase 1c). `approx_margin` and `margin_as_of` come from the source named in `02g` §2 (D16 shows approximate margins with their source and date). With no source, both are `null`. Never guess.
 - `status`: `gateway` is `"not_configured"` until Phase 2b, and it never reports `up`. `streaming_slots.used` is 0 while there are no IBKR subscriptions, and `max` is 70 (`02a` §7). Browser SSE connections are not broker subscriptions and must not be counted as slots. `backups` and `reconciliation` are `null` until a feed exists.
 - `watchlists/{id}/items` is owner-scoped and returns 404 for other owners, as Phase 3 does. `backfill` is `ready` when the symbol has daily bars, and `pending` otherwise. It is derived, with no new column.
@@ -218,12 +219,14 @@ Consumes: `DataSources` (2a), `ai_trading.core.*` (1, 1c), and `compute_card_bac
 ## Task 5: Today
 
 **Files**
+- Repair `backend/src/ai_trading/api/quotes.py` and its existing SSE tests before UI integration: use the persisted bar store, actual bar timestamps/quality, and bounded polling rather than a remote provider request per browser every 0.25 seconds. Execution found the old five-minute request window cannot reliably supply delayed-15m data, and its `as_of=now` hides age. The 4 Hz requirement is an upper fan-out limit, not a required provider polling frequency. Keep the public route and verified-identity boundary unchanged.
 - Replace `app/page.tsx`.
 - Create `components/today/Watchlist.tsx` (rows: symbol, price, change, label, today's signal count), `components/today/PriceChart.tsx`, `components/today/SignalFeed.tsx` (`GET /api/desk/signals?limit=50`), `components/today/AlertsPanel.tsx` (`GET /api/desk/alerts`, with mark-read), `components/today/DeskRead.tsx` (a fixture until Phase 5), and `components/Labeled.tsx`.
 - Create `lib/stream.ts` and `lib/stream.test.ts`.
 - Create `lib/indicators.ts` as a copy of the submodule's `frontend/src/lib/indicators.ts` at the commit the superproject pins, with its header kept. Record the source path and commit in `ai-trading/packages/family-desk/THIRD_PARTY_NOTICES.md`. Create `lib/indicators.test.ts`.
 
 **Behaviour**
+- Quote reads never trigger remote data-provider work per browser tick. The scheduler's stored bars are the source until the IBKR stream exists; an older available bar retains its own timestamp, and missing/nonfinite data produces no invented price. SSE heartbeats keep slow-changing delayed data streams open.
 - `Labeled` renders a value with its label. A `null` value renders as "not available", never as 0.
 - `PriceChart` loads `GET /api/desk/bars/{symbol}`, and its overlays come from `lib/indicators.ts`. The chart header shows the quality and the as-of time.
 - The paper position overlay (entry, stop, target) is a Phase 6 fixture. It is drawn dashed and labelled as a fixture.
@@ -231,6 +234,7 @@ Consumes: `DataSources` (2a), `ai_trading.core.*` (1, 1c), and `compute_card_bac
 
 **Steps**
 - [ ] **Step 1: Write the failing tests.** `stream.test.ts`: two subscribers open one `EventSource`; the last unsubscribe closes it; an error reconnects with backoff of 1 s, 2 s, and 4 s, capped at 30 s; unmounting closes the stream. `indicators.test.ts`: golden SMA and RSI values on a fixed series, so a corrupted copy fails.
+- [ ] **Quote-source regression gate:** first demonstrate the old polling/timestamp defect, then verify stored-bar reads, actual as-of/quality, missing/nonfinite handling, authenticated routing, cancellation, and bounded polling with the full DB-enabled backend suite.
 - [ ] **Step 2: Run them.** They fail.
 - [ ] **Step 3: Implement.** Copy `indicators.ts` first, then the components.
 - [ ] **Step 4: Run the tests.** They pass.
@@ -321,6 +325,8 @@ Produces: `describeSpec`. Consumes: `StrategySpecV1Schema` and the Phase 3 strat
 ## Task 9: Technicals, futures specs, futures swing
 
 **Files**
+- Task 9 supplies the shared chart foundation ahead of Today Part B: the pinned MIT `lib/indicators.ts` copy/tests/attribution, `lightweight-charts` dependency, and a concrete reusable market chart. Today reuses these rather than adding a second copy or competing package changes.
+- Extend the existing Technicals read model and generated/runtime contracts with nullable non-voting ATR14/ATR-percent/classification, computed from the already-fetched frame. The legacy pure card back defaults its ATR label to `normal` on insufficient history; preserve that payload compatibility but never display the fallback as a measurement. Empty/short/nonfinite classification is unknown, not normal.
 - Create `app/technicals/page.tsx`, `components/technicals/Gauges.tsx`, `components/technicals/RsiMacdChart.tsx` (`lightweight-charts`), and `components/technicals/IndicatorTables.tsx` (oscillators, moving averages, pivots).
 - Create `app/futures/page.tsx` (pair chips, bias gauges, and weekly levels; positions, roll warnings, and the weekend card are Phase 6 fixtures) and `app/futures/specs/page.tsx` (D16: the specs table, mini and micro equivalence, the roll timeline, and session hours).
 - Create `lib/futures/specs.ts` and `lib/futures/specs.test.ts`.
@@ -345,11 +351,13 @@ Produces: `describeSpec`. Consumes: `StrategySpecV1Schema` and the Phase 3 strat
 ## Task 10: Settings and More
 
 **Files**
+- Wire and validate owned notification preferences in `backend/src/ai_trading/api/settings.py` and `backend/src/ai_trading/notify/dispatch.py`, with focused API/dispatch tests. Execution verified that Phase 3 stores arbitrary settings and reads quiet hours, but ignores channel preferences; a saved checkbox must not be a no-op.
 - Create `app/settings/page.tsx`, `components/settings/Channels.tsx` (Telegram and Slack toggles; quiet hours `start` and `end`), `components/settings/SourcesStatus.tsx` (from `GET /api/desk/status`: gateway state, and data sources with their labels), and `components/settings/Fixtures.tsx`.
 - Create `lib/settings/schema.ts` and `lib/settings/schema.test.ts`.
 - Create `app/more/page.tsx`: the off-switch fixture row first, then links to Watchlists, Holdings, and Settings (M6).
 
 **Behaviour**
+- Legacy absent channel preferences preserve existing delivery behavior. Explicitly disabled external channels remain pending until re-enabled, as quiet/unconfigured deliveries do; the inbox remains visible. Invalid owned quiet-hour/channel fields are rejected before persistence while unknown keys survive. Malformed legacy preferences fail closed for that user's outbound delivery without crashing the whole batch. Risk/system alerts still bypass quiet hours but respect explicit channel choices.
 - It loads with `GET /api/desk/settings` and saves with `PUT /api/desk/settings`. The save sends the whole object, so the screen merges its keys into the loaded object and keys it does not own survive.
 - Quiet hours use `HH:MM` in 24-hour time. The notify module reads `settings.quiet_hours` with `start` and `end`.
 - Fixtures: the off switch, the daily cap, and the paper guard checks (Phase 6), and the Ask budget (Phase 7). Backups and reconciliation show "no feed yet" while `status.backups` and `status.reconciliation` are `null`.
