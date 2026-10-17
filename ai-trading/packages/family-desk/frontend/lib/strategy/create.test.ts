@@ -47,6 +47,21 @@ test("creates a draft strategy and a version bound to the normalized watchlist n
   }]);
 });
 
+test("creates a single-symbol universe when user explicitly selects symbol context", async () => {
+  let savedSpec: unknown;
+  const created = await submitStrategyCreation(
+    { kind: "ready" },
+    { template, name: "ES setup", universe: { symbols: ["/ES"] } },
+    {
+      createStrategy: async (name) => ({ id: 44, name }),
+      createVersion: async (_id, body) => { savedSpec = body.spec; },
+    },
+  );
+
+  assert.deepEqual(created, { kind: "created", strategyId: 44 });
+  assert.deepEqual((savedSpec as typeof template.spec).watch.universe, { symbols: ["/ES"] });
+});
+
 test("rejects invalid name or missing watchlist before creating anything", async () => {
   let calls = 0;
   const api = {

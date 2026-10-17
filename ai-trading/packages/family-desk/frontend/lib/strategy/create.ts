@@ -43,21 +43,27 @@ export function strategyCreationRecovery(state: StrategyCreationState): { href: 
 export function prepareTemplateSpec(
   template: StrategyTemplate,
   name: string,
-  watchlistName: string,
+  watchlistName?: string,
+  universe?: StrategySpecV1["watch"]["universe"],
 ): StrategySpecV1 {
   const normalizedName = name.trim();
-  const normalizedWatchlist = watchlistName.trim();
   if (!normalizedName || normalizedName.length > 80) {
     throw new Error("Strategy name must contain 1–80 characters.");
   }
-  if (!normalizedWatchlist || normalizedWatchlist.length > 80) {
-    throw new Error("Choose a watchlist with a name of 1–80 characters.");
+
+  let selectedUniverse = universe;
+  if (!selectedUniverse || "watchlist" in selectedUniverse) {
+    const normalizedWatchlist = (selectedUniverse?.watchlist ?? watchlistName ?? "").trim();
+    if (!normalizedWatchlist || normalizedWatchlist.length > 80) {
+      throw new Error("Choose a watchlist with a name of 1–80 characters.");
+    }
+    selectedUniverse = { watchlist: normalizedWatchlist };
   }
 
   const result = StrategySpecV1Schema.safeParse({
     ...template.spec,
     name: normalizedName,
-    watch: { ...template.spec.watch, universe: { watchlist: normalizedWatchlist } },
+    watch: { ...template.spec.watch, universe: selectedUniverse },
   });
   if (!result.success) {
     throw new Error(`Template does not match StrategySpecV1: ${result.error.issues.map((issue) => issue.message).join("; ")}`);
@@ -78,14 +84,19 @@ function errorMessage(error: unknown): string {
 
 export async function submitStrategyCreation(
   state: StrategyCreationState,
-  input: { template: StrategyTemplate; name: string; watchlistName: string },
+  input: {
+    template: StrategyTemplate;
+    name: string;
+    watchlistName?: string;
+    universe?: StrategySpecV1["watch"]["universe"];
+  },
   api: StrategyCreationApi,
 ): Promise<StrategyCreationState> {
   if (!canSubmitStrategyCreation(state)) return state;
 
   let spec: StrategySpecV1;
   try {
-    spec = prepareTemplateSpec(input.template, input.name, input.watchlistName);
+    spec = prepareTemplateSpec(input.template, input.name, input.watchlistName, input.universe);
   } catch (error) {
     return { kind: "preflight-error", message: errorMessage(error) };
   }

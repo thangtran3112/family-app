@@ -155,6 +155,9 @@ export function TodayWatchlist({
           )}
         </>
       )}
+      <footer>
+        <a className={styles.primaryLink} href="/watchlists">Manage watchlists</a>
+      </footer>
     </section>
   );
 }
