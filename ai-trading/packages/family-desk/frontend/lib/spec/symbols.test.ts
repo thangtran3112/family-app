@@ -27,3 +27,28 @@ test("invalid symbol drafts remain schema-invalid and cannot be saved", () => {
     assert.equal(StrategySpecV1Schema.safeParse(spec).success, false, draft);
   }
 });
+
+test("symbols formatter preserves Backspace edits through separator removal and clear", () => {
+  const roundTrip = (draft: string) => symbolsToDraft(symbolsFromDraft(draft));
+  let draft = roundTrip("SPY,QQQ");
+  assert.equal(draft, "SPY,QQQ");
+  for (const expected of ["SPY,QQ", "SPY,Q", "SPY,"]) {
+    draft = roundTrip(draft.slice(0, -1));
+    assert.equal(draft, expected);
+  }
+  draft = roundTrip(draft.slice(0, -1));
+  assert.equal(draft, "SPY");
+
+  assert.equal(roundTrip(roundTrip("SPY,").slice(0, -1)), "SPY");
+  assert.equal(roundTrip(""), "");
+  draft = roundTrip("SPY");
+  assert.equal(draft, "SPY");
+  assert.equal(StrategySpecV1Schema.safeParse({
+    ...STRATEGY_TEMPLATES[0]!.spec,
+    watch: { ...STRATEGY_TEMPLATES[0]!.spec.watch, universe: { symbols: symbolsFromDraft("SPY,") } },
+  }).success, false);
+  assert.equal(StrategySpecV1Schema.safeParse({
+    ...STRATEGY_TEMPLATES[0]!.spec,
+    watch: { ...STRATEGY_TEMPLATES[0]!.spec.watch, universe: { symbols: symbolsFromDraft(draft) } },
+  }).success, true);
+});

@@ -3,5 +3,5 @@ export function symbolsFromDraft(draft: string): string[] {
 }
 
 export function symbolsToDraft(symbols: readonly string[]): string {
-  return symbols.join(", ");
+  return symbols.join(",");
 }
