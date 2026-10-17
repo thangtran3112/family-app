@@ -6,6 +6,7 @@ import { Labeled } from "../Labeled.tsx";
 import type { Quote } from "../../lib/stream.ts";
 import { openQuoteStream } from "../../lib/stream.ts";
 import { BarsSchema } from "../../lib/api/schemas.ts";
+import { firstChartSelection } from "../../lib/today-chart.ts";
 import {
   countSignalsToday,
   dailyChange,
@@ -34,7 +35,12 @@ function assetType(value: string): AssetType | null {
   return value === "stock" || value === "future" ? value : null;
 }
 
-export function TodayWatchlist() {
+export type TodaySelection = { symbol: string; asset_type: AssetType };
+
+export function TodayWatchlist({
+  selected,
+  onSelect,
+}: Readonly<{ selected: TodaySelection | null; onSelect: (selection: TodaySelection | null) => void }>) {
   const [watchlists, setWatchlists] = useState<OwnedWatchlist[] | null>(null);
   const [watchlistError, setWatchlistError] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -48,6 +54,8 @@ export function TodayWatchlist() {
         if (!active) return;
         setWatchlists(items);
         setSelectedId((current) => items.some((item) => item.id === current) ? current : items[0]?.id ?? null);
+        const firstSelection = firstChartSelection(items[0]?.items ?? []);
+        if (firstSelection) onSelect(firstSelection);
       })
       .catch(() => {
         if (active) setWatchlistError(true);
@@ -55,7 +63,7 @@ export function TodayWatchlist() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [onSelect]);
 
   useEffect(() => {
     let active = true;
@@ -73,7 +81,7 @@ export function TodayWatchlist() {
     };
   }, []);
 
-  const selected = watchlists?.find((item) => item.id === selectedId) ?? watchlists?.[0];
+  const activeWatchlist = watchlists?.find((item) => item.id === selectedId) ?? watchlists?.[0];
   const today = newYorkDate(new Date().toISOString()) ?? "";
 
   return (
@@ -83,7 +91,7 @@ export function TodayWatchlist() {
           <p className={styles.eyebrow}>OWNED SYMBOLS</p>
           <h2 id="today-watchlist-title">Watchlists</h2>
         </div>
-        {selected && <span className={styles.muted}>{selected.items.length} symbols</span>}
+        {activeWatchlist && <span className={styles.muted}>{activeWatchlist.items.length} symbols</span>}
       </header>
       {watchlistError ? (
         <p className={styles.error} role="alert">Watchlists could not be loaded. Try again later.</p>
@@ -97,10 +105,13 @@ export function TodayWatchlist() {
             <div className={styles.watchlistTabs} aria-label="Choose watchlist">
               {watchlists.map((watchlist) => (
                 <button
-                  aria-pressed={watchlist.id === selected?.id}
-                  className={watchlist.id === selected?.id ? styles.activeTab : styles.tab}
+                  aria-pressed={watchlist.id === activeWatchlist?.id}
+                  className={watchlist.id === activeWatchlist?.id ? styles.activeTab : styles.tab}
                   key={watchlist.id}
-                  onClick={() => setSelectedId(watchlist.id)}
+                  onClick={() => {
+                    setSelectedId(watchlist.id);
+                    onSelect(firstChartSelection(watchlist.items));
+                  }}
                   type="button"
                 >
                   {watchlist.name}
@@ -108,7 +119,7 @@ export function TodayWatchlist() {
               ))}
             </div>
           )}
-          {!selected || selected.items.length === 0 ? (
+          {!activeWatchlist || activeWatchlist.items.length === 0 ? (
             <p className={styles.empty}>No symbols in this watchlist.</p>
           ) : (
             <div className={styles.tableScroller}>
@@ -122,10 +133,12 @@ export function TodayWatchlist() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selected.items.map((item) => (
+                  {activeWatchlist.items.map((item) => (
                     <WatchlistRow
                       item={item}
                       key={`${item.asset_type}:${item.symbol}`}
+                      selected={selected?.symbol === item.symbol && selected.asset_type === item.asset_type}
+                      onSelect={onSelect}
                       signals={signalResult?.signals ?? null}
                       signalsComplete={signalResult?.complete === true}
                       signalsError={signalsError}
@@ -148,12 +161,16 @@ export function TodayWatchlist() {
 
 function WatchlistRow({
   item,
+  selected,
+  onSelect,
   signals,
   signalsComplete,
   signalsError,
   today,
 }: Readonly<{
   item: WatchlistItem;
+  selected: boolean;
+  onSelect: (selection: TodaySelection | null) => void;
   signals: TodaySignal[] | null;
   signalsComplete: boolean;
   signalsError: boolean;
@@ -203,7 +220,17 @@ function WatchlistRow({
   return (
     <tr>
       <th scope="row" className={styles.symbolCell}>
-        <span>{item.symbol}</span>
+        {kind ? (
+          <button
+            aria-label={`Show chart for ${item.symbol}`}
+            aria-pressed={selected}
+            className={selected ? styles.symbolSelected : styles.symbolButton}
+            onClick={() => onSelect({ symbol: item.symbol, asset_type: kind })}
+            type="button"
+          >
+            {item.symbol}
+          </button>
+        ) : <span>{item.symbol}</span>}
         <span className={styles.symbolMeta}>
           {kind ? kind : "unsupported asset"}{item.backfill === "pending" ? " · backfilling" : ""}
         </span>

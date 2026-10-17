@@ -1,10 +1,16 @@
-import { TodayWatchlist } from "./Watchlist.tsx";
+"use client";
+
+import { useState } from "react";
+import { TodayWatchlist, type TodaySelection } from "./Watchlist.tsx";
 import { AlertsPanel } from "./AlertsPanel.tsx";
 import { DeskRead } from "./DeskRead.tsx";
+import { PriceChart } from "./PriceChart.tsx";
 import { SignalFeed } from "./SignalFeed.tsx";
 import styles from "./today.module.css";
 
 export function TodayDashboard() {
+  const [selected, setSelected] = useState<TodaySelection | null>(null);
+
   return (
     <main className={styles.dashboard}>
       <header className={styles.dashboardHeading}>
@@ -14,10 +20,17 @@ export function TodayDashboard() {
         </div>
         <a className={styles.primaryLink} href="/strategies/new">New strategy</a>
       </header>
-      <div className={styles.dashboardGrid}>
-        <TodayWatchlist />
-        <SignalFeed />
+      <div className={`${styles.dashboardGrid} ${selected ? styles.dashboardGridWithChart : styles.dashboardGridWithoutChart}`}>
+        <TodayWatchlist selected={selected} onSelect={setSelected} />
+        {selected && (
+          <PriceChart
+            key={`${selected.asset_type}:${selected.symbol}`}
+            symbol={selected.symbol}
+            assetType={selected.asset_type}
+          />
+        )}
         <aside className={styles.rail} aria-label="Desk updates">
+          <SignalFeed />
           <AlertsPanel />
           <DeskRead />
         </aside>

@@ -64,9 +64,16 @@
 
 .dashboardGrid {
   display: grid;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(280px, 340px);
   align-items: start;
   gap: 16px;
+}
+
+.dashboardGridWithChart {
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(280px, 340px);
+}
+
+.dashboardGridWithoutChart {
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
 }
 
 .rail {
@@ -191,6 +198,27 @@
 
 .symbolCell > span:first-child { display: block; }
 
+.symbolButton,
+.symbolSelected {
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.symbolSelected { color: var(--color-amber); }
+
+.symbolButton:focus-visible,
+.symbolSelected:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
 .symbolMeta,
 .asOf {
   display: block;
@@ -312,8 +340,80 @@
 
 .secondaryButton:disabled { cursor: wait; opacity: 0.65; }
 
+.priceChart {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.chartHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chartHeading h2 {
+  margin: 2px 0 0;
+  font-size: var(--text-row);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-row);
+}
+
+.chartHeading .labeled { min-width: 90px; }
+
+.chartToolbar {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.interval,
+.activeInterval {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.activeInterval {
+  background: var(--color-raised);
+  color: var(--color-text);
+}
+
+.interval:focus-visible,
+.activeInterval:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+.chartLoading,
+.chartError {
+  margin: 0;
+  padding: 28px 16px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.chartError { color: var(--color-down); }
+
 @media (max-width: 1180px) {
-  .dashboardGrid { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }
+  .dashboardGridWithChart { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }
+  .dashboardGridWithoutChart { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }
   .rail { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -321,7 +421,8 @@
   .dashboard { gap: 16px; padding-top: 20px; }
   .dashboardHeading { align-items: center; }
   .dashboardHeading h1 { font-size: 30px; line-height: 38px; }
-  .dashboardGrid { grid-template-columns: minmax(0, 1fr); }
+  .dashboardGridWithChart,
+  .dashboardGridWithoutChart { grid-template-columns: minmax(0, 1fr); }
   .rail { grid-column: auto; grid-template-columns: minmax(0, 1fr); }
   .panel { padding: 14px; }
   .watchlistTable th:nth-child(2) { width: 70px; }
