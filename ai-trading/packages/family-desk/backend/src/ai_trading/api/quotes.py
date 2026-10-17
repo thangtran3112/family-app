@@ -24,7 +24,7 @@ _SYMBOL = re.compile(r"/?[A-Za-z0-9][A-Za-z0-9.-]{0,14}\Z")
 
 
 def _latest_quote(symbol: str, session_factory: sessionmaker[Session]) -> dict[str, float | str] | None:
-    """Return latest closed 1m bar from Postgres; never call a provider from an SSE connection."""
+    """Return a supported Alpaca stock bar; never call a provider from an SSE connection."""
     as_of = datetime.now(UTC)
     closed_through = as_of - timedelta(minutes=1)
     with session_scope(session_factory) as session:
@@ -35,6 +35,8 @@ def _latest_quote(symbol: str, session_factory: sessionmaker[Session]) -> dict[s
             .limit(1)
         ).scalar_one_or_none()
         if bar is None or not math.isfinite(bar.close):
+            return None
+        if symbol.startswith("/") or bar.source != "alpaca":
             return None
         return {
             "symbol": symbol,

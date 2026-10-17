@@ -5,6 +5,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
 from ai_trading.api.app import app
@@ -13,7 +14,7 @@ from ai_trading.api.quotes import POLL_INTERVAL_SECONDS, _latest_quote, quote_ev
 from ai_trading.db.models import Bar1m
 
 
-def _store_bar(session, *, symbol="AAPL", bar_start=None, close=101.0):
+def _store_bar(session, *, symbol="AAPL", bar_start=None, close=101.0, source="alpaca"):
     bar_start = bar_start or datetime.now(UTC).replace(second=0, microsecond=0) - timedelta(minutes=16)
     session.add(
         Bar1m(
@@ -24,7 +25,7 @@ def _store_bar(session, *, symbol="AAPL", bar_start=None, close=101.0):
             low=close,
             close=close,
             volume=1_000.0,
-            source="alpaca",
+            source=source,
         )
     )
     session.commit()
@@ -46,6 +47,26 @@ def test_latest_quote_uses_persisted_timestamp_for_delayed_data(db_session):
         "quality": "delayed-15m",
         "as_of": bar_start.isoformat(),
     }
+
+
+@pytest.mark.parametrize("source", ["unknown-provider", "fallback"])
+def test_latest_quote_suppresses_unsupported_stored_provenance(db_session, source):
+    _store_bar(db_session, source=source)
+
+    assert _latest_quote("AAPL", _factory(db_session)) is None
+
+
+def test_latest_quote_does_not_fall_back_to_older_alpaca_row(db_session):
+    earlier = _store_bar(db_session, source="alpaca")
+    _store_bar(db_session, bar_start=earlier + timedelta(minutes=1), source="unknown-provider")
+
+    assert _latest_quote("AAPL", _factory(db_session)) is None
+
+
+def test_latest_quote_suppresses_persisted_slash_prefixed_future(db_session):
+    _store_bar(db_session, symbol="/ES", source="alpaca")
+
+    assert _latest_quote("/ES", _factory(db_session)) is None
 
 
 def test_quote_events_caps_store_polling_at_sixty_seconds(db_session):
