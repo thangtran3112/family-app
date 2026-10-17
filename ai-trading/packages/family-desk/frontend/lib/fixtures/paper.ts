@@ -16,3 +16,9 @@ export const paperStrategies = [
   { name: "ORB breakout 15m", trades: "12", winRate: "58%", average: "+0.42R", pnl: "+$412", drawdown: "−$260", status: "Sample · Paper" },
   { name: "Covered-call income", trades: "4", winRate: "100%", average: "—", pnl: "+$318", drawdown: "—", status: "Sample · Paper" },
 ];
+
+export const paperFillJournal = [
+  { time: "10:08:41", action: "BUY", order: "50 NVDA @ $189.31", strategy: "ORB breakout 15m", version: "v3", signalId: "SAMPLE-SIG-001", signal: "Closed 15-minute bar broke the opening range", note: "Sample fill · no broker connection" },
+  { time: "09:58:02", action: "STOP", order: "40 SOFI @ $18.92", strategy: "Gap fade", version: "v2", signalId: "SAMPLE-SIG-002", signal: "Sample stop threshold crossed", note: "Sample stopped trade · no broker connection" },
+  { time: "06:02:17", action: "SELL", order: "1 MCL Dec @ $61.64", strategy: "Overnight range break", version: "v1", signalId: "SAMPLE-SIG-003", signal: "Closed bar broke overnight low", note: "Sample fill · no broker connection" },
+];

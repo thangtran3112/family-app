@@ -321,6 +321,234 @@
   font: inherit;
 }
 
+.chartDataList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chartDataList li {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-raised, #1c1c1f);
+  color: var(--color-muted, #9b9ba1);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.comparisonPlot {
+  position: relative;
+  height: 48px;
+  margin: 8px 4px 0;
+}
+
+.comparisonTrack {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-raised, #1c1c1f);
+}
+
+.comparisonMarker {
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 38px;
+  background: var(--color-text, #f2f2f4);
+}
+
+.comparisonMarker::after {
+  position: absolute;
+  top: 35px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: inherit;
+  content: "";
+}
+
+.comparisonMarker.aiTarget { width: 3px; background: var(--color-ai, #a78bfa); }
+.comparisonMarker.analystMean { background: var(--color-muted, #9b9ba1); }
+
+.distribution {
+  display: grid;
+  gap: 10px;
+}
+
+.distributionRow {
+  display: grid;
+  grid-template-columns: minmax(84px, 120px) minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.distributionTrack {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-raised, #1c1c1f);
+}
+
+.distributionFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-up, #30d158);
+}
+
+.zeroChart {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.yearlyChart { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+
+.zeroChartColumn {
+  display: grid;
+  grid-template-rows: 18px 120px 18px;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+}
+
+.zeroChartValue,
+.zeroChartLabel {
+  color: var(--color-muted, #9b9ba1);
+  font-size: 10px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.zeroChartPlot {
+  position: relative;
+  min-width: 0;
+}
+
+.zeroBaseline {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--color-muted, #9b9ba1);
+}
+
+.zeroBar {
+  position: absolute;
+  left: 50%;
+  width: min(22px, 70%);
+  min-height: 1px;
+  border-radius: 4px 4px 0 0;
+  background: var(--color-up, #30d158);
+  transform: translateX(-50%);
+}
+
+.zeroBar.negativeBar {
+  border-radius: 0 0 4px 4px;
+  background: var(--color-down, #ff453a);
+}
+
+.lineChart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.lineChartGrid {
+  stroke: var(--color-hairline, #2c2c30);
+  stroke-width: 0.5;
+}
+
+.lineChartStrategy {
+  fill: none;
+  stroke: var(--color-up, #30d158);
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineChartBenchmark {
+  fill: none;
+  stroke: var(--color-muted, #9b9ba1);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineChartDrawdown {
+  fill: none;
+  stroke: var(--color-down, #ff453a);
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.fixtureTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.fixtureTable caption {
+  padding-bottom: 8px;
+  color: var(--color-muted, #9b9ba1);
+  text-align: left;
+}
+
+.fixtureTable th,
+.fixtureTable td {
+  padding: 9px 8px;
+  border-top: 1px solid var(--color-hairline, #2c2c30);
+  vertical-align: top;
+}
+
+.fixtureTable th {
+  color: var(--color-muted, #9b9ba1);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.alertRail {
+  display: grid;
+  gap: 0;
+}
+
+.alertItem {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-hairline, #2c2c30);
+}
+
+.alertItem:first-child { border-top: 0; }
+
+.voteRow {
+  display: grid;
+  grid-template-columns: minmax(82px, 110px) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-hairline, #2c2c30);
+}
+
+.yearReturnLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-muted, #9b9ba1);
+  font-size: 12px;
+}
+
 @media (max-width: 900px) {
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--color-hairline, #2c2c30); }
@@ -339,6 +567,12 @@
   .cards4 { grid-template-columns: minmax(0, 1fr); }
   .definitionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .timeline li { grid-template-columns: 1fr; gap: 4px; }
+  .zeroChart { gap: 4px; }
+  .yearlyChart { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .zeroChartColumn { grid-template-rows: 18px 96px 18px; }
+  .voteRow { grid-template-columns: 1fr auto; }
+  .voteRow > :last-child { grid-column: 1 / -1; }
+  .fixtureTable th, .fixtureTable td { padding-inline: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

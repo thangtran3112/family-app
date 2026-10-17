@@ -1,13 +1,13 @@
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
-import { coveredCallCandidates, coveredCallOverview, monthlyPremiums, rollCandidates, shortCallRisks } from "../../lib/fixtures/covered-calls.ts";
+import { assignmentHistory, coveredCallCandidates, coveredCallOverview, coveredCallPayoff, monthlyPremiums, rollCandidates, shortCallRisks, weeklyDigest } from "../../lib/fixtures/covered-calls.ts";
 
 export default function CoveredCallsPage() {
   return (
     <FixtureScreen phase={5} title="Covered calls">
       <div className={styles.content}>
         <nav className={styles.navPills} aria-label="Covered-call views">
-          <a href="#scan" aria-current="location">Daily scan</a>
+          <a href="#scan">Daily scan</a>
           <a href="#short-calls">Open short calls</a>
           <a href="#income">Income history</a>
         </nav>
@@ -29,16 +29,19 @@ export default function CoveredCallsPage() {
             {coveredCallCandidates.map((candidate) => (
               <article className={`${styles.panel} ${styles.panelStack}`} key={candidate.symbol}>
                 <div className={styles.panelHeading}>
-                  <div><h3>{candidate.symbol}</h3><p className={styles.muted}>{candidate.account} · {candidate.shares}</p></div>
+                  <div><h3>{candidate.symbol}</h3><p className={styles.muted}>{candidate.account} · {candidate.shares}{candidate.rank ? ` · rank #${candidate.rank}` : ""}</p></div>
                   <span className={`${styles.pill} ${candidate.status === "Opportunity" ? styles.positive : candidate.status === "Desk AI: Sell" ? styles.negative : styles.amber}`}>{candidate.status}</span>
                 </div>
                 <span className={styles.fixtureTag}>SAMPLE CANDIDATE</span>
                 <dl className={styles.definitionGrid}>
+                  <div><dt>Sample score</dt><dd>{candidate.score}</dd></div>
                   <div><dt>Contract</dt><dd>{candidate.strike}</dd></div>
                   <div><dt>Expiry</dt><dd>{candidate.expiry}</dd></div>
                   <div><dt>Delta</dt><dd>{candidate.delta}</dd></div>
                   <div><dt>Sample bid / ask</dt><dd>{candidate.bidAsk}</dd></div>
                   <div><dt>Yield</dt><dd>{candidate.yield}</dd></div>
+                  <div><dt>Breakeven</dt><dd>{candidate.breakeven}</dd></div>
+                  <div><dt>Upside cap</dt><dd>{candidate.cap}</dd></div>
                   <div><dt>Review flags</dt><dd>{candidate.flags}</dd></div>
                 </dl>
               </article>
@@ -89,6 +92,38 @@ export default function CoveredCallsPage() {
           </section>
         </section>
 
+        <section className={styles.section} aria-labelledby="payoff-title">
+          <div className={styles.panelHeading}>
+            <div><h2 id="payoff-title">Payoff &amp; breakeven</h2><p className={styles.muted}>{coveredCallPayoff.underlying} · {coveredCallPayoff.contract}</p></div>
+            <span className={styles.fixtureTag}>SYNTHETIC EXPIRY SCENARIOS</span>
+          </div>
+          <div className={`${styles.panel} ${styles.panelStack}`}>
+            <div className={styles.spread}><strong>Breakeven {coveredCallPayoff.breakeven}</strong><strong>Upside capped at {coveredCallPayoff.cap}</strong></div>
+            <div className={styles.cards2}>
+              {coveredCallPayoff.scenarios.map((scenario) => (
+                <article className={styles.record} key={scenario.underlyingAtExpiry}>
+                  <span className={styles.detail}>Sample underlying at expiry</span><strong>{scenario.underlyingAtExpiry}</strong>
+                  <span>Covered-call P&amp;L: {scenario.coveredCallPnl}</span>
+                </article>
+              ))}
+            </div>
+            <p className={styles.footnote}>Illustrative payoff only; excludes fees, taxes, early exercise, and changing volatility.</p>
+          </div>
+        </section>
+
+        <div className={styles.cards2}>
+          <section className={`${styles.panel} ${styles.panelStack}`} aria-labelledby="assignment-title">
+            <div className={styles.panelHeading}><h2 id="assignment-title">Assignment history</h2><span className={styles.fixtureTag}>SAMPLE EVENTS</span></div>
+            {assignmentHistory.map((item) => <article className={styles.record} key={`${item.symbol}-${item.detail}`}><strong>{item.symbol}</strong><p className={styles.bodyText}>{item.detail}</p></article>)}
+          </section>
+          <section className={`${styles.panel} ${styles.panelStack}`} aria-labelledby="digest-title">
+            <div className={styles.panelHeading}><h2 id="digest-title">{weeklyDigest.title}</h2><span className={styles.fixtureTag}>PREVIEW ONLY</span></div>
+            <p className={styles.bodyText}>{weeklyDigest.summary}</p>
+            {weeklyDigest.calls.map((call) => <div className={styles.spread} key={call.symbol}><strong>{call.symbol} · {call.contract}</strong><span className={call.state === "At risk" ? styles.negative : styles.muted}>{call.state}</span></div>)}
+            <p className={styles.footnote}>No digest is scheduled or sent by this fixture.</p>
+          </section>
+        </div>
+
         <section className={styles.section} id="income" aria-labelledby="income-title">
           <div className={styles.panelHeading}>
             <div><h2 id="income-title">Monthly premium · sample year</h2><p className={styles.muted}>Illustrative monthly totals, not account history</p></div>
@@ -99,11 +134,12 @@ export default function CoveredCallsPage() {
               {monthlyPremiums.map((item) => (
                 <div className={styles.barItem} key={item.month}>
                   <span>{item.value}</span>
-                  <span className={styles.bar} style={{ height: `${Math.max(24, Number.parseInt(item.value.replace(/[^0-9]/g, ""), 10) / 10)}%` }} />
+                  <span className={styles.bar} style={{ height: `${Math.max(8, (Number.parseInt(item.value.replace(/[^0-9]/g, ""), 10) / 1210) * 100)}%` }} />
                   <span>{item.month}</span>
                 </div>
               ))}
             </div>
+            <ul className={styles.chartDataList}>{monthlyPremiums.map((item) => <li key={item.month}>{item.month}: {item.value} sample premium</li>)}</ul>
           </div>
         </section>
       </div>

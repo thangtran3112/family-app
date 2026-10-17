@@ -1,6 +1,6 @@
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
-import { paperPositions, paperStrategies, paperSummary } from "../../lib/fixtures/paper.ts";
+import { paperFillJournal, paperPositions, paperStrategies, paperSummary } from "../../lib/fixtures/paper.ts";
 
 export default function PaperPage() {
   return (
@@ -52,6 +52,26 @@ export default function PaperPage() {
                   <div><dt>Target</dt><dd>{position.target}</dd></div>
                   <div><dt>Sample open P&amp;L</dt><dd className={styles.positive}>{position.pnl}</dd></div>
                 </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.section} aria-labelledby="fill-journal-title">
+          <div className={styles.panelHeading}>
+            <div><h2 id="fill-journal-title">Fill journal</h2><p className={styles.muted}>Every sample fill points back to its immutable strategy version and signal.</p></div>
+            <span className={styles.fixtureTag}>PROVENANCE EXAMPLES</span>
+          </div>
+          <div className={styles.panel}>
+            {paperFillJournal.map((fill) => (
+              <article className={styles.record} key={fill.signalId}>
+                <div className={styles.spread}><span className={styles.recordSubtitle}>{fill.time} · {fill.action}</span><span className={styles.fixtureTag}>SAMPLE JOURNAL</span></div>
+                <strong>{fill.order}</strong>
+                <dl className={styles.definitionGrid}>
+                  <div><dt>Strategy</dt><dd>{fill.strategy} · {fill.version}</dd></div>
+                  <div><dt>Signal provenance</dt><dd>{fill.signalId} · {fill.signal}</dd></div>
+                </dl>
+                <p className={styles.detail}>{fill.note}</p>
               </article>
             ))}
           </div>
