@@ -27,14 +27,26 @@ export function createDeskApiClient(
   let redirected = false;
 
   return async function deskFetch<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
-    if (!path.startsWith("/api/desk/")) {
+    if (!path.startsWith("/api/desk/") || path.includes("\\")) {
+      throw new DeskApiError("malformed");
+    }
+
+    let origin: string;
+    let target: URL;
+    try {
+      origin = new URL(getLocation().href).origin;
+      target = new URL(path, origin);
+    } catch {
+      throw new DeskApiError("malformed");
+    }
+    if (target.origin !== origin || !target.pathname.startsWith("/api/desk/")) {
       throw new DeskApiError("malformed");
     }
 
     const headers = new Headers(init?.headers);
     headers.delete("Cf-Access-Authenticated-User-Email");
 
-    const response = await fetchImplementation(path, {
+    const response = await fetchImplementation(target, {
       ...init,
       headers,
       credentials: "include",
@@ -52,7 +64,7 @@ export function createDeskApiClient(
     if (!response.ok) throw new DeskApiError("http", response.status);
 
     try {
-      return schema.parse(await response.json());
+      return schema.parse(response.status === 204 ? undefined : await response.json());
     } catch {
       throw new DeskApiError("malformed", response.status);
     }

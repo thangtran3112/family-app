@@ -105,7 +105,7 @@ jobs:
       - run: git diff --exit-code -- lib/api
       - run: pnpm build
       - run: pnpm test:export
-      - run: ../../../deploy/ci/check-static-export.sh out
+      - run: ../../../deploy/ci/check-static-export.sh out desk
 
   desk:
     name: Desk contracts and backend

@@ -33,7 +33,10 @@ test("a 401 redirects once to hub login and throws unauthenticated", async () =>
 });
 
 test("a successful response that fails its schema throws malformed", async () => {
-  const client = createDeskApiClient(async () => Response.json({ value: Number.NaN }), () => ({ href: "" }));
+  const client = createDeskApiClient(
+    async () => Response.json({ value: Number.NaN }),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
 
   await assert.rejects(client("/api/desk/test", responseSchema), (error: unknown) => {
     assert.ok(error instanceof DeskApiError);
@@ -43,7 +46,10 @@ test("a successful response that fails its schema throws malformed", async () =>
 });
 
 test("a server error throws an HTTP error with status and without its body", async () => {
-  const client = createDeskApiClient(async () => new Response("secret body", { status: 503 }), () => ({ href: "" }));
+  const client = createDeskApiClient(
+    async () => new Response("secret body", { status: 503 }),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
 
   await assert.rejects(client("/api/desk/test", responseSchema), (error: unknown) => {
     assert.ok(error instanceof DeskApiError);
@@ -69,8 +75,74 @@ test("requests are same-origin, include credentials, skip caching, and send no i
   assert.deepEqual(await client("/api/desk/test", responseSchema, {
     headers: { "Cf-Access-Authenticated-User-Email": "forged-identity" },
   }), { value: 7 });
-  assert.equal(requestUrl, "/api/desk/test");
+  assert.ok(requestUrl instanceof URL);
+  assert.equal(requestUrl.origin, "https://trading.tobytran.dev");
+  assert.equal(requestUrl.pathname, "/api/desk/test");
   assert.equal(requestInit?.credentials, "include");
   assert.equal(requestInit?.cache, "no-store");
   assert.equal(new Headers(requestInit?.headers).has("Cf-Access-Authenticated-User-Email"), false);
+});
+
+test("rejects API paths that escape the normalized Desk prefix before fetching", async () => {
+  let fetchCalls = 0;
+  const client = createDeskApiClient(
+    async () => {
+      fetchCalls += 1;
+      return Response.json({ value: 1 });
+    },
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  for (const path of [
+    "/api/desk/../auth/logout",
+    "/api/desk/%2e%2e/%2e%2e/auth/logout",
+    "/api/desk/\\..\\auth/logout",
+    "https://attacker.invalid/api/desk/test",
+    "//attacker.invalid/api/desk/test",
+  ]) {
+    await assert.rejects(client(path, responseSchema), (error: unknown) => {
+      assert.ok(error instanceof DeskApiError);
+      assert.equal(error.kind, "malformed");
+      return true;
+    });
+  }
+
+  assert.equal(fetchCalls, 0);
+});
+
+test("a 204 response validates undefined against the caller schema", async () => {
+  const client = createDeskApiClient(
+    async () => new Response(null, { status: 204 }),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  assert.equal(await client("/api/desk/watchlists/1/items/AAPL", z.void()), undefined);
+});
+
+test("a 204 response with an incompatible schema remains malformed", async () => {
+  const client = createDeskApiClient(
+    async () => new Response(null, { status: 204 }),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  await assert.rejects(client("/api/desk/watchlists/1/items/AAPL", z.string()), (error: unknown) => {
+    assert.ok(error instanceof DeskApiError);
+    assert.equal(error.kind, "malformed");
+    assert.equal(error.status, 204);
+    return true;
+  });
+});
+
+test("a 200 response with invalid JSON remains malformed", async () => {
+  const client = createDeskApiClient(
+    async () => new Response("{", { status: 200 }),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  await assert.rejects(client("/api/desk/test", responseSchema), (error: unknown) => {
+    assert.ok(error instanceof DeskApiError);
+    assert.equal(error.kind, "malformed");
+    assert.equal(error.status, 200);
+    return true;
+  });
 });
