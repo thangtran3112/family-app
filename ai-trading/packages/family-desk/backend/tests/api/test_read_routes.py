@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import pytest
@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 from ai_trading.api.auth import get_data_sources
+from ai_trading.core.calendar import previous_session, session
 from ai_trading.core.futures import SPECS
 from ai_trading.db.models import Bar1d, WatchlistItem
 from ai_trading.engine.cardback import compute_card_back
@@ -42,6 +43,90 @@ def _daily_frame(rows: int = 1, *, end: str = "2024-12-31") -> pd.DataFrame:
             "volume": [1000.0] * rows,
         },
         index=pd.Index(index),
+    )
+
+
+def _minute_frame(rows: int = 390) -> pd.DataFrame:
+    index = pd.date_range(_full_stock_session().regular_open, periods=rows, freq="min")
+    values = [100.0 + i / 100 for i in range(rows)]
+    return pd.DataFrame(
+        {
+            "open": values,
+            "high": [value + 1 for value in values],
+            "low": [value - 1 for value in values],
+            "close": values,
+            "volume": [1.0] * rows,
+        },
+        index=index,
+    )
+
+
+def _empty_minute_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=["open", "high", "low", "close", "volume"], index=pd.DatetimeIndex([], tz="UTC")
+    )
+
+
+def _recent_full_stock_sessions(count: int = 1):
+    day = date.today()
+    found = []
+    while len(found) < count:
+        day = previous_session("stock", day)
+        result = session("stock", day)
+        if result.regular_close - result.regular_open == pd.Timedelta(hours=6, minutes=30):
+            found.append(result)
+    return list(reversed(found))
+
+
+def _full_stock_session():
+    return _recent_full_stock_sessions()[0]
+
+
+def _most_recent_complete_week_session():
+    cursor = date.today() + timedelta(days=1)
+    now = pd.Timestamp.now(tz="UTC")
+    while True:
+        day = previous_session("stock", cursor)
+        cursor = day
+        found = session("stock", day)
+        week_has_later_session = any(
+            session("stock", day + timedelta(days=offset)) is not None for offset in range(1, 7 - day.weekday())
+        )
+        if found.regular_close <= now and not week_has_later_session:
+            return found
+
+
+def _minute_history(sessions: int = 15) -> pd.DataFrame:
+    frames = []
+    for trading_session in _recent_full_stock_sessions(sessions):
+        index = pd.date_range(trading_session.regular_open, periods=390, freq="min")
+        frames.append(
+            pd.DataFrame(
+                {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index
+            )
+        )
+    return pd.concat(frames).sort_index()
+
+
+def _extended_minute_frame() -> pd.DataFrame:
+    day = _full_stock_session()
+    index = pd.DatetimeIndex(
+        [
+            *pd.date_range(day.regular_open - pd.Timedelta(minutes=5), periods=5, freq="min"),
+            *pd.date_range(day.regular_open, periods=5, freq="min"),
+            *pd.date_range(day.regular_close, periods=5, freq="min"),
+        ]
+    )
+    values = [float(i + 10) for i in range(len(index))]
+    return pd.DataFrame(
+        {
+            "open": values,
+            "high": [value + 1 for value in values],
+            "low": [value - 1 for value in values],
+            "close": values,
+            "volume": [1.0] * len(values),
+        },
+        index=index,
     )
 
 
@@ -123,7 +208,7 @@ def test_bars_rejects_invalid_interval_and_day_bounds(client, query):
 
 
 def test_bars_5m_resamples_provider_minute_bars(client):
-    starts = pd.date_range("2024-12-30 14:30", periods=5, freq="min", tz="UTC")
+    starts = pd.date_range(_full_stock_session().regular_open, periods=5, freq="min")
     frame = pd.DataFrame(
         {
             "open": [10, 11, 12, 13, 14],
@@ -141,8 +226,166 @@ def test_bars_5m_resamples_provider_minute_bars(client):
     assert source.calls[0][1] == "1m"
     assert response.json()["interval"] == "5m"
     assert response.json()["bars"] == [
-        {"t": "2024-12-30T14:30:00+00:00", "o": 10.0, "h": 15.0, "l": 9.0, "c": 14.5, "v": 15.0}
+        {"t": starts[0].isoformat(), "o": 10.0, "h": 15.0, "l": 9.0, "c": 14.5, "v": 15.0}
     ]
+
+
+@pytest.mark.parametrize(("interval", "expected_rows"), [("15m", 26), ("30m", 13), ("4h", 2)])
+def test_bars_aggregates_complete_new_intraday_intervals(client, interval, expected_rows):
+    source = FakeBars(_minute_frame())
+    _set_bars(client, source)
+    response = client.get(f"/api/desk/bars/AAPL?interval={interval}&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert source.calls[0][1] == "1m"
+    assert len(response.json()["bars"]) == expected_rows
+    assert response.json()["bars"][0]["t"] == source.frame.index[0].isoformat()
+
+
+def test_stock_chart_extended_bars_are_separate_and_opt_in(client):
+    source = FakeBars(_extended_minute_frame())
+    _set_bars(client, source)
+    regular = client.get("/api/desk/bars/AAPL?interval=5m&days=2000", headers=auth_headers())
+    extended = client.get(
+        "/api/desk/bars/AAPL?interval=5m&session=extended&days=2000", headers=auth_headers()
+    )
+    assert regular.status_code == extended.status_code == 200
+    assert [bar["t"] for bar in regular.json()["bars"]] == [source.frame.index[5].isoformat()]
+    assert [bar["t"] for bar in extended.json()["bars"]] == [
+        source.frame.index[0].isoformat(),
+        source.frame.index[10].isoformat(),
+    ]
+
+
+def test_stock_technicals_exclude_extended_hours(client):
+    source = FakeBars(_extended_minute_frame())
+    _set_bars(client, source)
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1m&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["as_of"] == source.frame.index[9].isoformat()
+
+
+def test_futures_technicals_keep_overnight_cme_bars(client):
+    cme_day = previous_session("future", date.today())
+    starts = pd.date_range(session("future", cme_day).extended_open + pd.Timedelta(minutes=30), periods=3, freq="min")
+    frame = pd.DataFrame(
+        {"open": [10.0] * 3, "high": [11.0] * 3, "low": [9.0] * 3, "close": [10.0] * 3, "volume": [1.0] * 3},
+        index=starts,
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/technicals/%2FES?timeframe=1m&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["as_of"] == starts[-1].isoformat()
+
+
+def test_technicals_exposes_three_pivot_methods_from_prior_session(client):
+    current = _full_stock_session()
+    prior = session("stock", previous_session("stock", current.day))
+    index = pd.DatetimeIndex([prior.regular_open, current.regular_open])
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 110.0],
+            "high": [105.0, 116.0],
+            "low": [95.0, 109.0],
+            "close": [100.0, 110.0],
+            "volume": [10.0, 20.0],
+        },
+        index=index,
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1m&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    pivots = response.json()["pivots"]
+    assert pivots["classic"]["P"] == 100.0
+    assert pivots["classic"]["R1"] == 105.0
+    assert pivots["fibonacci"]["R1"] == pytest.approx(103.82)
+    assert pivots["camarilla"]["R1"] == pytest.approx(100 + 10 * 1.1 / 12)
+
+
+def test_daily_technicals_pivots_use_prior_completed_week(client):
+    index = pd.Index([date(2024, 12, day) for day in (23, 24, 26, 27, 30)])
+    frame = pd.DataFrame(
+        {
+            "open": [100, 101, 102, 103, 115],
+            "high": [101, 102, 103, 104, 120],
+            "low": [99, 98, 97, 96, 110],
+            "close": [100, 101, 102, 103, 115],
+            "volume": [1] * 5,
+        },
+        index=index,
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1d&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["pivots"]["classic"]["P"] == 101.0
+
+
+def test_weekly_technicals_pivots_use_prior_completed_month(client):
+    dates = [date(2024, 11, day) for day in (25, 26, 27, 29)] + [date(2024, 12, day) for day in (2, 3, 4, 5, 6)]
+    frame = pd.DataFrame(
+        {
+            "open": [100.0] * 9,
+            "high": [101.0, 110.0, 105.0, 115.0, 121.0, 122.0, 123.0, 124.0, 125.0],
+            "low": [99.0, 90.0, 95.0, 85.0, 119.0, 118.0, 117.0, 116.0, 115.0],
+            "close": [100.0, 108.0, 103.0, 110.0, 120.0, 121.0, 122.0, 123.0, 124.0],
+            "volume": [1.0] * 9,
+        },
+        index=pd.Index(dates),
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1w&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["pivots"]["classic"]["P"] == pytest.approx(310 / 3)
+
+
+def test_technicals_serializes_nonfinite_pivots_as_null(client):
+    current = _full_stock_session()
+    prior = session("stock", previous_session("stock", current.day))
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 110.0],
+            "high": [float("inf"), 116.0],
+            "low": [90.0, 109.0],
+            "close": [100.0, 110.0],
+            "volume": [10.0, 20.0],
+        },
+        index=pd.DatetimeIndex([prior.regular_open, current.regular_open]),
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1m&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    for method in response.json()["pivots"].values():
+        assert method and all(value is None for value in method.values())
+
+
+@pytest.mark.parametrize(
+    ("timeframe", "card_timeframe", "source_timeframe"),
+    [("15m", "15m", "1m"), ("30m", "30m", "1m"), ("4h", "4h", "1m"), ("1w", "1W", "1d")],
+)
+def test_technicals_support_approved_timeframes_and_normalize_card_names(
+    client, timeframe, card_timeframe, source_timeframe
+):
+    frame = _daily_frame(40) if timeframe == "1w" else _minute_frame()
+    source = FakeBars(frame)
+    _set_bars(client, source)
+    response = client.get(f"/api/desk/technicals/AAPL?timeframe={timeframe}&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["card_back"]["timeframe"] == card_timeframe
+    assert source.calls[0][1] == source_timeframe
+    if timeframe == "1w":
+        assert response.json()["as_of"] == "2024-12-23"
+
+
+def test_weekly_bars_do_not_emit_a_partial_first_week(client):
+    latest = _most_recent_complete_week_session()
+    frame = pd.DataFrame(
+        {"open": [10.0], "high": [11.0], "low": [9.0], "close": [10.0], "volume": [1.0]},
+        index=pd.Index([latest.day]),
+    )
+    _set_bars(client, FakeBars(frame))
+    response = client.get("/api/desk/bars/AAPL?interval=1w&days=14", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["bars"] == []
+    assert response.json()["quality"] == "unavailable"
 
 
 def test_bars_preserve_nonfinite_values_as_null(client):
@@ -161,15 +404,29 @@ def test_bars_does_not_turn_provider_errors_into_empty_data(client):
 
 
 def test_bars_caps_returned_rows(client):
-    now = pd.Timestamp.now(tz="UTC").floor("min")
-    index = pd.date_range(end=now - pd.Timedelta(minutes=1), periods=6000, freq="min")
-    frame = pd.DataFrame(
-        {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index
-    )
+    frame = _minute_history()
     _set_bars(client, FakeBars(frame))
     response = client.get("/api/desk/bars/AAPL?interval=1m", headers=auth_headers())
     assert response.status_code == 200
     assert len(response.json()["bars"]) == 5000
+
+
+@pytest.mark.parametrize(
+    ("path", "max_days", "source_interval"),
+    [
+        ("/api/desk/technicals/AAPL?timeframe=5m", 30, "1m"),
+        ("/api/desk/bars/AAPL?interval=5m&days=3650", 30, "1m"),
+        ("/api/desk/technicals/AAPL?timeframe=4h&days=3650", 220, "1m"),
+    ],
+)
+def test_intraday_source_lookback_is_capped_before_provider_call(client, path, max_days, source_interval):
+    source = FakeBars(_empty_minute_frame())
+    _set_bars(client, source)
+    response = client.get(path, headers=auth_headers())
+    assert response.status_code == 200
+    _, requested_interval, start, end, _ = source.calls[0]
+    assert requested_interval == source_interval
+    assert (end - start).days <= max_days
 
 
 def test_technicals_reports_warming_history(client):
@@ -182,6 +439,14 @@ def test_technicals_reports_warming_history(client):
     assert body["gauges"]["summary"]["label"] == "warming up"
     assert body["gauges"]["summary"]["counts"] is None
     assert body["rsi"] == 100.0
+    assert body["oscillators"]["rsi"] == {"values": {"value": 100.0}, "action": "Neutral"}
+    assert body["oscillators"]["momentum"]["values"]["value"] == pytest.approx(1.1)
+    assert body["oscillators"]["momentum"]["action"] == "Buy"
+    assert body["oscillators"]["stoch_rsi"]["values"]["k"] is None
+    assert body["oscillators"]["stoch_rsi"]["action"] is None
+    assert body["moving_averages"]["sma_10"]["values"]["value"] == pytest.approx(101.89)
+    assert body["moving_averages"]["sma_10"]["action"] == "Buy"
+    assert body["moving_averages"]["sma_200"]["action"] is None
     assert body["card_back"]["bias_label"] is None
 
 
@@ -200,11 +465,7 @@ def test_card_back_is_the_engine_output(client):
 
 
 def test_technicals_supports_one_minute_card_back(client):
-    starts = pd.date_range("2024-12-30 14:30", periods=3, freq="min", tz="UTC")
-    frame = pd.DataFrame(
-        {"open": [10, 11, 12], "high": [11, 12, 13], "low": [9, 10, 11], "close": [10, 11, 12], "volume": [1, 2, 3]},
-        index=starts,
-    )
+    frame = _minute_frame(3)
     _set_bars(client, FakeBars(frame))
     response = client.get("/api/desk/technicals/AAPL?timeframe=1m&days=2000", headers=auth_headers())
     assert response.status_code == 200

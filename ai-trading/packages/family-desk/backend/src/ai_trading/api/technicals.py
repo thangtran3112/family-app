@@ -1,3 +1,4 @@
+from math import isnan
 from typing import Literal
 
 import pandas as pd
@@ -8,13 +9,22 @@ from pydantic import BaseModel, FiniteFloat
 
 from ai_trading.api.auth import get_current_user, get_data_sources
 from ai_trading.api.market_data import bar_as_of, finite_or_none, get_market_bars
-from ai_trading.core import bias, indicators
-from ai_trading.engine.cardback import CardBack, compute_card_back
+from ai_trading.core import bias, indicators, pivots
+from ai_trading.engine.cardback import _PIVOT_PERIOD, CardBack, _daily_hlc, _next_trading_day, compute_card_back
 
 router = APIRouter(prefix="/api/desk/technicals", tags=["market data"], dependencies=[Depends(get_current_user)])
 
-Timeframe = Literal["1d", "1h", "5m", "1m"]
-_CARD_TIMEFRAME = {"1d": "1D", "1h": "1h", "5m": "5m", "1m": "1m"}
+Timeframe = Literal["1d", "1w", "1h", "5m", "15m", "30m", "4h", "1m"]
+_CARD_TIMEFRAME = {
+    "1d": "1D",
+    "1w": "1W",
+    "1h": "1h",
+    "5m": "5m",
+    "15m": "15m",
+    "30m": "30m",
+    "4h": "4h",
+    "1m": "1m",
+}
 GaugeLabel = Literal["Strong Sell", "Sell", "Neutral", "Buy", "Strong Buy", "warming up"]
 
 
@@ -47,6 +57,12 @@ class MacdOut(BaseModel):
     histogram: FiniteFloat | None
 
 
+class PivotMethodsOut(BaseModel):
+    classic: dict[str, FiniteFloat | None]
+    fibonacci: dict[str, FiniteFloat | None]
+    camarilla: dict[str, FiniteFloat | None]
+
+
 class CardBackOut(BaseModel):
     symbol: str
     timeframe: str
@@ -65,7 +81,7 @@ class TechnicalsOut(BaseModel):
     gauges: GaugesOut
     moving_averages: dict[str, VoteOut]
     oscillators: dict[str, VoteOut]
-    pivots: dict[str, FiniteFloat | None]
+    pivots: PivotMethodsOut
     rsi: FiniteFloat | None
     macd: MacdOut
     card_back: CardBackOut
@@ -101,6 +117,36 @@ def _card_back(value: CardBack) -> CardBackOut:
     )
 
 
+def _pivot_methods(frame: pd.DataFrame, timeframe: Timeframe, asset: str) -> PivotMethodsOut:
+    core_timeframe = _CARD_TIMEFRAME[timeframe]
+    daily = _daily_hlc(frame, core_timeframe, asset)
+    reference = (
+        _next_trading_day(asset, daily.index.max())
+        if not daily.empty and core_timeframe in ("1D", "1W")
+        else daily.index.max() if not daily.empty else None
+    )
+    if reference is None:
+        return PivotMethodsOut(classic={}, fibonacci={}, camarilla={})
+    else:
+        high_series, low_series, close_series = pivots.prior_period_hlc(
+            daily, pd.Index([reference]), asset, _PIVOT_PERIOD[core_timeframe]
+        )
+        high, low, close = float(high_series.iloc[0]), float(low_series.iloc[0]), float(close_series.iloc[0])
+        if any(isnan(value) for value in (high, low, close)):
+            return PivotMethodsOut(classic={}, fibonacci={}, camarilla={})
+    methods = {
+        "classic": pivots.classic_pivots,
+        "fibonacci": pivots.fibonacci_pivots,
+        "camarilla": pivots.camarilla_pivots,
+    }
+    return PivotMethodsOut(
+        **{
+            name: {level: finite_or_none(value) for level, value in method(high, low, close).items()}
+            for name, method in methods.items()
+        }
+    )
+
+
 @router.get("/{symbol:path}", response_model=TechnicalsOut)
 def technicals(
     symbol: str,
@@ -108,8 +154,10 @@ def technicals(
     days: int = Query(default=365, ge=1, le=3650),
     data_sources: DataSources = Depends(get_data_sources),
 ) -> TechnicalsOut:
-    frame, quality = get_market_bars(data_sources, symbol, timeframe, days)
     asset = "future" if symbol.startswith("/") else "stock"
+    frame, quality = get_market_bars(
+        data_sources, symbol, timeframe, days, stock_session="regular" if asset == "stock" else None
+    )
     back = compute_card_back(symbol, _CARD_TIMEFRAME[timeframe], frame, asset)
     result = bias.bias(frame)
     close = frame["close"] if "close" in frame else pd.Series(dtype=float)
@@ -121,8 +169,9 @@ def technicals(
             oscillators=_gauge("warming up", None, None),
             moving_averages=_gauge("warming up", None, None),
         )
-        oscillator_votes: dict[str, VoteOut] = {}
-        moving_average_votes: dict[str, VoteOut] = {}
+        oscillators, moving_averages = bias.votes(frame)
+        oscillator_votes = _votes(oscillators)
+        moving_average_votes = _votes(moving_averages)
     else:
         gauges = GaugesOut(
             summary=_gauge(result.summary_label, result.summary_score, None),
@@ -139,7 +188,7 @@ def technicals(
         gauges=gauges,
         moving_averages=moving_average_votes,
         oscillators=oscillator_votes,
-        pivots=back.pivots,
+        pivots=_pivot_methods(frame, timeframe, asset),
         rsi=finite_or_none(rsi.iloc[-1]) if len(rsi) else None,
         macd=MacdOut(
             line=finite_or_none(macd.line.iloc[-1]) if len(macd.line) else None,

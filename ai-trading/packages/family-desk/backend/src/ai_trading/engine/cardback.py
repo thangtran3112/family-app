@@ -25,7 +25,9 @@ _PIVOT_PERIOD: dict[str, pivots.Period] = {
     "1m": "session",
     "5m": "session",
     "15m": "session",
+    "30m": "session",
     "1h": "session",
+    "4h": "session",
     "1D": "week",
     "1W": "month",
 }
