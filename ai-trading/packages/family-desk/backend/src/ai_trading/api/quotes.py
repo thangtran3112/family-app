@@ -1,67 +1,78 @@
-"""SSE quotes (PROTO-BRIEF.md §4 L4): at most ~4 updates per second per connection (02a §7).
-
-`quote_events` is the testable core: a plain async generator taking an injectable `sleep` so a
-test can prove the send cadence never exceeds `MIN_INTERVAL_SECONDS` without a real 0.25s wait,
-and an injectable `is_disconnected` so a test can prove the stream stops on disconnect without a
-real socket. `stream_quotes` is the thin FastAPI/sse-starlette wiring around it.
-"""
+"""SSE quotes from the persisted closed-bar store; provider refresh belongs to the scheduler."""
 
 import asyncio
 import json
+import math
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 
-import pandas as pd
-from ai_trading_common.errors import ProviderError
-from ai_trading_common.registry import DataSources
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
 from sse_starlette.sse import EventSourceResponse
 
-from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources
+from ai_trading.api.auth import AuthedUser, get_current_user_for_stream
+from ai_trading.db.engine import session_scope
+from ai_trading.db.models import Bar1m
+from ai_trading.engine.degraded import quality_for
 
 router = APIRouter(prefix="/api/desk/quotes", tags=["quotes"])
 
-#: 02a §7: "SSE fan-out to browsers (at most about 4 updates per second)".
-MIN_INTERVAL_SECONDS = 0.25
+POLL_INTERVAL_SECONDS = 60.0
+_SYMBOL = re.compile(r"/?[A-Za-z0-9][A-Za-z0-9.-]{0,14}\Z")
 
 
-async def _latest_quote(symbol: str, data_sources: DataSources) -> dict[str, float | str] | None:
-    """One best-effort quote read; `None` when the provider has nothing right now (a `ProviderError`
-    -- unconfigured, unavailable, or genuinely no data -- is never surfaced to the stream as an
-    error, since a quiet tick is routine, not a failure)."""
-    now = pd.Timestamp.now(tz="UTC")
-    try:
-        bars = data_sources.bars.bars(symbol, "1m", now - pd.Timedelta(minutes=5), now, now=now)
-    except ProviderError:
-        return None
-    if bars.frame.empty:
-        return None
-    last = bars.frame.iloc[-1]
-    return {"symbol": symbol, "close": float(last["close"]), "quality": bars.quality, "as_of": now.isoformat()}
+def _latest_quote(symbol: str, session_factory: sessionmaker[Session]) -> dict[str, float | str] | None:
+    """Return latest closed 1m bar from Postgres; never call a provider from an SSE connection."""
+    as_of = datetime.now(UTC)
+    closed_through = as_of - timedelta(minutes=1)
+    with session_scope(session_factory) as session:
+        bar = session.execute(
+            select(Bar1m)
+            .where(Bar1m.symbol == symbol, Bar1m.bar_start <= closed_through)
+            .order_by(Bar1m.bar_start.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if bar is None or not math.isfinite(bar.close):
+            return None
+        return {
+            "symbol": symbol,
+            "close": float(bar.close),
+            "quality": quality_for("stock", "bar_close_1m"),
+            "as_of": bar.bar_start.isoformat(),
+        }
 
 
 async def quote_events(
     symbol: str,
-    data_sources: DataSources,
+    session_factory: sessionmaker[Session],
     is_disconnected: Callable[[], Awaitable[bool]],
     *,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> AsyncIterator[dict[str, str]]:
-    """Yields one SSE event per tick, stopping once `is_disconnected()` is True. The
-    `MIN_INTERVAL_SECONDS` sleep is unconditional -- not "whatever's left after the read" -- so the
-    cap is mechanically enforced even when the read is effectively instant (a fake `DataSources` in
-    tests; in Phase 3 the real value only actually changes every 15 minutes anyway, Alpaca's delay)."""
+    """Send the initial stored quote and later changes, stopping on disconnect.
+
+    Each poll gets and closes its own DB session in a worker thread. EventSourceResponse supplies
+    its normal SSE ping heartbeat between the bounded 60-second store polls.
+    """
+    last_quote: dict[str, float | str] | None = None
     while not await is_disconnected():
-        quote = await _latest_quote(symbol, data_sources)
-        if quote is not None:
+        quote = await asyncio.to_thread(_latest_quote, symbol, session_factory)
+        if quote is not None and quote != last_quote:
+            last_quote = quote
             yield {"event": "quote", "data": json.dumps(quote)}
-        await sleep(MIN_INTERVAL_SECONDS)
+        await sleep(POLL_INTERVAL_SECONDS)
 
 
-@router.get("/{symbol}")
+@router.get("/{symbol:path}")
 async def stream_quotes(
     symbol: str,
     request: Request,
-    user: AuthedUser = Depends(get_current_user),
-    data_sources: DataSources = Depends(get_data_sources),
+    user: AuthedUser = Depends(get_current_user_for_stream),
 ) -> EventSourceResponse:
-    return EventSourceResponse(quote_events(symbol, data_sources, request.is_disconnected))
+    if not _SYMBOL.fullmatch(symbol):
+        raise HTTPException(status_code=422, detail="invalid symbol")
+    return EventSourceResponse(
+        quote_events(symbol, request.app.state.session_factory, request.is_disconnected)
+    )
