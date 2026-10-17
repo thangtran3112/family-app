@@ -1,7 +1,7 @@
 # Public data-free Desk export. Separate bucket/identity from upstream apps.
 resource "google_storage_bucket" "desk_static" {
   project                     = var.project_id
-  name                        = "tobytran-ai-trading-desk"
+  name                        = "${var.project_id}-ai-trading-desk"
   location                    = "US"
   uniform_bucket_level_access = true
   force_destroy               = false
@@ -39,7 +39,7 @@ resource "google_storage_bucket_iam_member" "desk_static_uploader_write" {
 
 output "desk_bucket_name" {
   value       = google_storage_bucket.desk_static.name
-  description = "Desk static bucket; set DESK_STATIC_BUCKET in the deploy workflow and desk_static_bucket_name in Cloudflare to this value."
+  description = "Desk shell bucket, derived identically from the configured GCP project in Terraform, the upload workflow and the Worker. No repository bucket variable."
 }
 
 output "desk_static_uploader_email" {

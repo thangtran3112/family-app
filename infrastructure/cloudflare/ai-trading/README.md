@@ -28,14 +28,15 @@ release/API deployment before these operator steps. Never apply an unreviewed
 plan. The Desk has **no Clerk bundle or publishable-key build variable**.
 
 1. Review/apply the full GCP root first: `desk-bucket.tf` provisions the public,
-   versioned `tobytran-ai-trading-desk` shell bucket and a bucket-only WIF uploader.
-   Set the deploy workflow's repository variable `DESK_STATIC_BUCKET` from
-   `desk_bucket_name` using the existing repository-variable provisioning process.
-   No secret/provider credential belongs in that variable.
+   versioned `tobytran-portfolio-ai-trading-desk` shell bucket and a bucket-only
+   WIF uploader. Bucket naming is `<GCP project>-ai-trading-desk` everywhere:
+   GCP `project_id`, workflow `GCP_PROJECT_ID`, and this root's `gcp_project_id`
+   already default to the same configured project. No repository bucket setting,
+   state read, new permission or additional credential is required.
 2. Review/apply this full Cloudflare root with `desk_cutover_enabled=false`.
    It creates `ai-trading-desk-router` and its `STATIC_BUCKET` and `ORIGIN_HOSTNAME`
    bindings, but **no Desk route**. Existing DNS and all interim ingress remain.
-   `desk_static_bucket_name` must match GCP's output. `hub_origin_hostname`
+   The derived `STATIC_BUCKET` must match GCP's `desk_bucket_name` output. `hub_origin_hostname`
    remains the shared Caddy origin, including the existing `/api/desk/*` gate.
 3. From the completed release on `main`, dispatch `ai-trading-deploy.yml` with
    **only** `upload_desk_static=true`. This builds

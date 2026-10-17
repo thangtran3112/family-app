@@ -4,10 +4,10 @@ variable "desk_cutover_enabled" {
   description = "Owner-reviewed cutover: enable the Desk Worker route and remove only the interim hub_hostname tunnel ingress in the same apply. Upload the release export first."
 }
 
-variable "desk_static_bucket_name" {
+variable "gcp_project_id" {
   type        = string
-  default     = "tobytran-ai-trading-desk"
-  description = "GCS desk_bucket_name output from infrastructure/gcp/ai-trading."
+  default     = "tobytran-portfolio"
+  description = "Same GCP project as the GCP root's project_id and deploy workflow's GCP_PROJECT_ID; Desk bucket is derived as <project>-ai-trading-desk."
 }
 
 # Provision the script before cutover; no public route until explicitly enabled.
@@ -19,7 +19,7 @@ resource "cloudflare_workers_script" "desk_router" {
   compatibility_date = "2026-10-16" # fetch(cache: no-store) enabled
 
   bindings = [
-    { type = "plain_text", name = "STATIC_BUCKET", text = var.desk_static_bucket_name },
+    { type = "plain_text", name = "STATIC_BUCKET", text = "${var.gcp_project_id}-ai-trading-desk" },
     { type = "plain_text", name = "ORIGIN_HOSTNAME", text = var.hub_origin_hostname },
   ]
 }

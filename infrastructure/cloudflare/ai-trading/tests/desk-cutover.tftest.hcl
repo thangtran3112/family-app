@@ -9,12 +9,28 @@ run "provision_before_cutover" {
   command = plan
 
   assert {
+    condition     = one([for binding in cloudflare_workers_script.desk_router.bindings : binding.text if binding.name == "STATIC_BUCKET"]) == "tobytran-portfolio-ai-trading-desk"
+    error_message = "Worker bucket must match project-derived GCP and workflow naming."
+  }
+
+  assert {
     condition     = length(cloudflare_workers_route.desk_static) == 0
     error_message = "Default provisioning must not bind the Desk hostname."
   }
   assert {
     condition     = length([for rule in cloudflare_zero_trust_tunnel_cloudflared_config.ai_trading.config.ingress : rule if rule.hostname == "trading.tobytran.dev"]) == 4
     error_message = "Keep all four interim ingress entries until cutover."
+  }
+}
+
+run "configured_project_bucket" {
+  command = plan
+  variables {
+    gcp_project_id = "offline-project"
+  }
+  assert {
+    condition     = one([for binding in cloudflare_workers_script.desk_router.bindings : binding.text if binding.name == "STATIC_BUCKET"]) == "offline-project-ai-trading-desk"
+    error_message = "Worker must derive its Desk bucket from configured GCP project."
   }
 }
 

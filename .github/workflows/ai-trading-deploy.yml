@@ -435,6 +435,8 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      # link:../contracts does not install the linked package's Zod dependency.
+      - run: pnpm --dir ../contracts install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - name: Build Desk static export from release commit
         run: pnpm build
@@ -450,12 +452,11 @@ jobs:
           cleanup_credentials: true
       - uses: google-github-actions/setup-gcloud@v2
       - name: Upload Desk static build to GCS
-        env:
-          DESK_STATIC_BUCKET: ${{ vars.DESK_STATIC_BUCKET }}
         run: |
           set -euo pipefail
-          : "${DESK_STATIC_BUCKET:?DESK_STATIC_BUCKET is not set; refusing to upload}"
-          ../../../deploy/ci/upload-hub-static.sh out "$DESK_STATIC_BUCKET" desk
+          : "${GCP_PROJECT_ID:?GCP_PROJECT_ID is not set; refusing to upload}"
+          # Same project-derived name as desk-bucket.tf and the Worker binding.
+          ../../../deploy/ci/upload-hub-static.sh out "${GCP_PROJECT_ID}-ai-trading-desk" desk
 
   # MiroFish static staging upload (Task 7). Fully additive and independent
   # of `build`/`deploy` above: a repository *variable* existing is NOT

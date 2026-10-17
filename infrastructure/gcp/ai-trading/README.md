@@ -39,12 +39,21 @@ bucket-scoped; the existing deploy WIF provider still requires the exact deploy
 workflow on `main` and environment `ai-trading-production`. No extra Secret
 Manager/Firestore permissions or credentials are granted to this uploader.
 
-After owner plan review and full-root apply, `desk_bucket_name` configures
-Cloudflare's `desk_static_bucket_name` and the deploy workflow's repository
-variable `DESK_STATIC_BUCKET`. `desk_static_uploader_email` matches the workflow's
+Bucket name is `${project_id}-ai-trading-desk` (default
+`tobytran-portfolio-ai-trading-desk`). The deploy workflow derives exactly this
+from existing `GCP_PROJECT_ID`; Cloudflare derives its Worker binding from
+`gcp_project_id` with the same project default. Keep those project settings
+aligned if changing project. No new repository variable, state fetch or permission
+is required. `desk_bucket_name` exposes the resulting name for plan review.
+`desk_static_uploader_email` matches the workflow's
 `GCP_DESK_UPLOAD_SERVICE_ACCOUNT`. The upload job uses existing
 `GCP_WORKLOAD_IDENTITY_PROVIDER` with `id-token: write`, not the broader deploy
 identity. No Desk Clerk key or new secret variable is needed.
+
+The upload job installs contracts with its frozen lockfile before installing
+the frontend: `link:../contracts` does not install the linked target's Zod.
+Offline wiring check: `node --test infrastructure/gcp/ai-trading/desk-upload.test.mjs`
+from repository root; Terraform's mocked tests also exercise project-derived naming.
 
 Provision before uploading, and upload the completed release export before
 enabling Cloudflare's default-false `desk_cutover_enabled`. See the Cloudflare
