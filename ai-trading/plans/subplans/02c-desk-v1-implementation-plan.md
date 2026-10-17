@@ -129,7 +129,7 @@ Phases 0–2, 1c, and 1d change nothing that is deployed, so they stop at `dev`.
 
 | Wave | Who | What |
 |---|---|---|
-| A | Main session + owner | Phase 0 Tasks 0.5–0.6 once an IBKR account exists and approves the data user (a weekday, 09:30–16:00 ET, with the owner); then the IBKR client (Phase 2b) |
+| A | Main session + owner | Phase 0 Tasks 0.5–0.6 once the IBKR data user is available (a weekday, 09:30–16:00 ET, with the owner); then the IBKR client (Phase 2b) |
 | B (now) | Subagents in worktrees | Phases 1c, then 1d: pure code, no data or IBKR needed |
 | C | Main session with subagents per task file | Phase 2a (data without IBKR) → 3 → 4 (the shell can start on fixtures during 2a or 3) → 5, 6, and 6b (UI after 4) → 7 |
 
@@ -156,11 +156,11 @@ These names are fixed for every phase. A task file may add names but must not re
 | Tables | 02 §7, 02a §9, 02b §5, plus `consensus_snapshots`, `earnings_results`, `analyst_targets` (02f); `ai_verdicts`, `ai_calls`, `ai_call_outcomes` (02f, 02h); `backtest_runs`, `backtest_trades` (02h) |
 | Probe tools | `ai-trading/tools/ibkr-probe/` (Phase 0), kept as the manual gateway smoke test |
 
-Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`. The Desk links `shared/alpaca` now, and links `shared/ibkr` only once an IBKR account exists (Phase 2b). A dashboard login stored in a shared group is never linked into an app profile.
+Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`. The Desk links `shared/alpaca` now, and links `shared/ibkr` only once the IBKR data user is available (Phase 2b). A dashboard login stored in a shared group is never linked into an app profile.
 
 | Group | Keys |
 |---|---|
-| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, not linked until an IBKR account exists (values stay in `shared/ibkr`; Phase 2b links them); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
+| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, not linked until the IBKR data user is available (values stay in `shared/ibkr`; Phase 2b links them); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
 | Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes); **not in Firestore yet** (Task 0.4 Step 4) |
 | Data sources | `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`, linked to `shared/alpaca` (set); `FINNHUB_API_KEY`, `FRED_API_KEY`, `EULERPOOL_API_KEY`, `ALPHA_VANTAGE_API_KEY` (Phase 2) |
 | Alert channels | `TELEGRAM_BOT_TOKEN`, `SLACK_WEBHOOK_URL_OWNER`, `SLACK_WEBHOOK_URL_SPOUSE` |

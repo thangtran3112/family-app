@@ -124,7 +124,7 @@ Phase 3 routes used unchanged:
 - Create `app/layout.tsx` and `app/page.tsx` (a placeholder), and `lib/labels.ts` with `lib/labels.test.ts`.
 - Modify `.github/workflows/ai-trading-ci.yml`: add a `Desk web app` job.
 
-Link `@ai-trading/contracts` with `"file:../contracts"` in `package.json`. Do not change the contracts package or its lockfile.
+Link `@ai-trading/contracts` with `"link:../contracts"` in `package.json`. Install the contracts package's dependencies with `pnpm --dir ../contracts install --frozen-lockfile` before the frontend install (also in CI). Do not change the contracts package or its lockfile. Execution correction: `file:` hardlinks its TypeScript export under `node_modules`, which native Node type stripping refuses; a real package import test must cover this integration.
 
 **Steps**
 - [ ] **Step 1: Write the failing export test.** Copy `export-layout.test.mjs` and point it at `out/`. It asserts that `out/index.html` and `out/_next/` exist. Run it: it fails, because nothing is built yet.
