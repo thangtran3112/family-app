@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import "./globals.css";
+import { Shell } from "@/components/shell/Shell";
 
 export const metadata: Metadata = {
   title: "Family Desk",
@@ -8,7 +10,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Shell>{children}</Shell>
+      </body>
     </html>
   );
 }
