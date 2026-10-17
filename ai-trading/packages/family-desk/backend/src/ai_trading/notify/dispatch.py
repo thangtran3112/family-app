@@ -23,7 +23,7 @@ RETRY_DELAYS_SECONDS: tuple[float, ...] = (1.0, 5.0, 15.0)  # 02 §11: "retried 
 
 _DEFAULT_QUIET_HOURS = {"start": "22:00", "end": "07:00"}
 _CHANNELS = {"inbox", "telegram", "slack"}
-_HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+_HHMM = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
 
 
 @dataclass(frozen=True)
@@ -103,14 +103,15 @@ def dispatch_pending(
             outcomes.append(DeliveryOutcome(delivery.id, "skipped_preferences"))
             continue
 
-        quiet_window = _quiet_hours_window(user)
-        if quiet_window is None:
-            outcomes.append(DeliveryOutcome(delivery.id, "skipped_preferences"))
-            continue
-        start, end = quiet_window
-        if in_quiet_hours(now, start=start, end=end, severity=alert.severity):
-            outcomes.append(DeliveryOutcome(delivery.id, "skipped_quiet_hours"))
-            continue
+        if alert.severity not in {"risk", "system"}:
+            quiet_window = _quiet_hours_window(user)
+            if quiet_window is None:
+                outcomes.append(DeliveryOutcome(delivery.id, "skipped_preferences"))
+                continue
+            start, end = quiet_window
+            if in_quiet_hours(now, start=start, end=end, severity=alert.severity):
+                outcomes.append(DeliveryOutcome(delivery.id, "skipped_quiet_hours"))
+                continue
 
         last_error: ChannelError | None = None
         for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):

@@ -60,3 +60,26 @@ def test_put_settings_accepts_explicit_empty_channels_and_preserves_unknown_keys
 
     assert response.status_code == 200
     assert response.json() == body
+
+
+def test_put_settings_rejects_unicode_digits_without_overwriting_unknown_metadata(client):
+    original = {
+        "settings": {
+            "channels": ["inbox"],
+            "quiet_hours": {"start": "22:00", "end": "07:00", "future": {"keep": True}},
+            "future_setting": {"keep": True},
+        }
+    }
+    valid = client.put("/api/desk/settings", json=original, headers=auth_headers(OWNER_EMAIL))
+    assert valid.status_code == 200
+
+    invalid = {
+        "settings": {
+            **original["settings"],
+            "quiet_hours": {**original["settings"]["quiet_hours"], "start": "0\u0661:0\u0660"},
+        }
+    }
+    response = client.put("/api/desk/settings", json=invalid, headers=auth_headers(OWNER_EMAIL))
+
+    assert response.status_code == 422
+    assert client.get("/api/desk/settings", headers=auth_headers(OWNER_EMAIL)).json() == original

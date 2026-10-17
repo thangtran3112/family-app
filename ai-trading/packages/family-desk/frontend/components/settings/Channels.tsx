@@ -66,6 +66,7 @@ export function Channels({
               type="time"
               step={60}
               required
+              disabled={disabled}
               aria-describedby={validationError ? "quiet-hours-validation-error" : "quiet-hours-help"}
               value={quietHours.start}
               onChange={(event) => onQuietHoursChange("start", event.currentTarget.value)}
@@ -78,6 +79,7 @@ export function Channels({
               type="time"
               step={60}
               required
+              disabled={disabled}
               aria-describedby={validationError ? "quiet-hours-validation-error" : "quiet-hours-help"}
               value={quietHours.end}
               onChange={(event) => onQuietHoursChange("end", event.currentTarget.value)}

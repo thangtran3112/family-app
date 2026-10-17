@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pytest
 import requests
 
 from ai_trading.db.models import Alert, Delivery, User
@@ -179,6 +180,76 @@ def test_malformed_legacy_channel_preferences_fail_closed_for_external_only(db_s
     assert inbox.status == "sent"
     assert telegram.status == "pending"
     assert telegram.attempted_at is None
+
+
+@pytest.mark.parametrize("severity", ["risk", "system"])
+def test_urgent_alerts_bypass_malformed_legacy_quiet_hours(db_session, severity):
+    user = _make_user(db_session, settings={
+        "channels": ["telegram"],
+        "quiet_hours": {"start": "25:00", "end": "07:00"},
+    })
+    alert = _make_alert(db_session, user, severity=severity)
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert outcomes == [DeliveryOutcome(delivery.id, "sent")]
+    assert channel.calls == 1
+    assert delivery.status == "sent"
+    assert delivery.attempted_at == _NOW
+
+
+@pytest.mark.parametrize("severity", ["risk", "system"])
+def test_urgent_alerts_still_respect_explicit_channel_opt_out(db_session, severity):
+    user = _make_user(db_session, settings={
+        "channels": [],
+        "quiet_hours": {"start": "25:00", "end": "07:00"},
+    })
+    alert = _make_alert(db_session, user, severity=severity)
+    inbox = _make_delivery(db_session, alert, channel="inbox")
+    telegram = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        telegram.id: "skipped_preferences",
+    }
+    assert channel.calls == 0
+    assert inbox.status == "sent"
+    assert telegram.status == "pending"
+    assert telegram.attempted_at is None
+
+
+def test_unicode_legacy_quiet_hours_do_not_block_another_users_delivery(db_session):
+    malformed_user = _make_user(db_session, settings={
+        "quiet_hours": {"start": "0\u0661:0\u0660", "end": "07:00"},
+    })
+    malformed_alert = _make_alert(db_session, malformed_user)
+    inbox = _make_delivery(db_session, malformed_alert, channel="inbox")
+    deferred = _make_delivery(db_session, malformed_alert, channel="telegram")
+
+    normal_user = User(email="unicode-test-other", settings={})
+    db_session.add(normal_user)
+    db_session.flush()
+    normal_alert = _make_alert(db_session, normal_user)
+    normal_delivery = _make_delivery(db_session, normal_alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        deferred.id: "skipped_preferences",
+        normal_delivery.id: "sent",
+    }
+    assert channel.calls == 1
+    assert inbox.status == "sent"
+    assert deferred.status == "pending"
+    assert deferred.attempted_at is None
+    assert normal_delivery.status == "sent"
 
 
 def test_dispatch_pending_retries_then_succeeds(db_session):

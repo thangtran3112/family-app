@@ -16,7 +16,7 @@ from ai_trading.db.models import User
 router = APIRouter(prefix="/api/desk/settings", tags=["settings"])
 
 _CHANNELS = {"inbox", "telegram", "slack"}
-_HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+_HHMM = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
 
 
 class SettingsBody(BaseModel):
