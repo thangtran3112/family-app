@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TemplateCard } from "@/components/strategies/TemplateCard";
 import { deskFetch } from "@/lib/api/client";
 import { StrategyOutSchema, StrategyVersionOutSchema, WatchlistsResponseSchema } from "@/lib/api/schemas";
 import { describeSpec } from "@/lib/spec/describe";
-import { createStrategyFromTemplate, StrategyVersionCreateError } from "@/lib/strategy/create";
+import {
+  canSubmitStrategyCreation,
+  selectStrategyTemplate,
+  strategyCreationRecovery,
+  submitStrategyCreation,
+  type StrategyCreationState,
+} from "@/lib/strategy/create";
 import { STRATEGY_TEMPLATES } from "@/lib/templates";
 import type { StrategyTemplate } from "@/lib/templates";
 import styles from "@/components/strategies/strategies.module.css";
@@ -22,13 +28,13 @@ export default function NewStrategyPage() {
   const [watchlistId, setWatchlistId] = useState("");
   const [loadingWatchlists, setLoadingWatchlists] = useState(true);
   const [watchlistError, setWatchlistError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createdId, setCreatedId] = useState<number | null>(null);
-  const [createError, setCreateError] = useState("");
+  const [creationState, setCreationState] = useState<StrategyCreationState>({ kind: "ready" });
+  const submissionLock = useRef(false);
 
   const selectedTemplate = STRATEGY_TEMPLATES.find(({ slug }) => slug === selectedSlug)
     ?? STRATEGY_TEMPLATES[0];
   const selectedWatchlist = watchlists.find(({ id }) => String(id) === watchlistId);
+  const recoveryLink = strategyCreationRecovery(creationState);
 
   const loadWatchlists = useCallback(() => deskFetch("/api/desk/watchlists", WatchlistsResponseSchema), []);
 
@@ -60,18 +66,20 @@ export default function NewStrategyPage() {
   }, [loadWatchlists]);
 
   function selectTemplate(template: StrategyTemplate) {
+    if (submissionLock.current) return;
     setSelectedSlug(template.slug);
     setName(template.spec.name);
-    setCreateError("");
+    setCreationState((state) => selectStrategyTemplate(state));
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedTemplate || !selectedWatchlist || creating || createdId !== null) return;
-    setCreating(true);
-    setCreateError("");
+    if (!selectedTemplate || !selectedWatchlist || submissionLock.current || !canSubmitStrategyCreation(creationState)) return;
+    submissionLock.current = true;
+    setCreationState({ kind: "submitting" });
     try {
-      const strategy = await createStrategyFromTemplate(
+      const result = await submitStrategyCreation(
+        creationState,
         { template: selectedTemplate, name, watchlistName: selectedWatchlist.name },
         {
           createStrategy: (strategyName) => deskFetch("/api/desk/strategies", StrategyOutSchema, {
@@ -90,12 +98,10 @@ export default function NewStrategyPage() {
           ),
         },
       );
-      router.push(`/strategies?id=${strategy.id}`);
-    } catch (cause) {
-      if (cause instanceof StrategyVersionCreateError) setCreatedId(cause.strategyId);
-      setCreateError(cause instanceof Error ? cause.message : "Could not create strategy.");
+      setCreationState(result);
+      if (result.kind === "created") router.push(`/strategies?id=${result.strategyId}`);
     } finally {
-      setCreating(false);
+      submissionLock.current = false;
     }
   }
 
@@ -116,6 +122,7 @@ export default function NewStrategyPage() {
               key={template.slug}
               onSelect={() => selectTemplate(template)}
               selected={template.slug === selectedTemplate?.slug}
+              disabled={creationState.kind === "submitting"}
               template={template}
             />
           ))}
@@ -180,18 +187,31 @@ export default function NewStrategyPage() {
 
             <button
               className={styles.submitButton}
-              disabled={loadingWatchlists || watchlists.length === 0 || !selectedWatchlist || !name.trim() || name.trim().length > 80 || creating || createdId !== null}
+              disabled={loadingWatchlists || watchlists.length === 0 || !selectedWatchlist || !name.trim() || name.trim().length > 80 || !canSubmitStrategyCreation(creationState)}
               type="submit"
             >
-              {creating ? "Creating draft…" : "Use this template"}
+              {creationState.kind === "submitting" ? "Creating draft…" : "Use this template"}
             </button>
-            {createError && (
+            {(creationState.kind === "preflight-error" || creationState.kind === "rejected") && (
               <div className={styles.error} role="alert">
-                <span>{createError}</span>
-                {createdId !== null && <Link href={`/strategies?id=${createdId}`}>Open strategy {createdId} to add its version</Link>}
+                <span>{creationState.message}</span>
               </div>
             )}
-            {createdId === null && <p className={styles.formNote}>Creates draft v1 that you own. It sends nothing until its stage changes.</p>}
+            {creationState.kind === "version-failed" && recoveryLink && (
+              <div className={styles.error} role="alert">
+                <span>{creationState.message}</span>
+                <Link href={recoveryLink.href}>{recoveryLink.label}</Link>
+              </div>
+            )}
+            {creationState.kind === "outcome-unknown" && recoveryLink && (
+              <div className={styles.error} role="alert">
+                <span>{creationState.message}</span>
+                <Link href={recoveryLink.href}>{recoveryLink.label}</Link>
+              </div>
+            )}
+            {creationState.kind !== "version-failed" && creationState.kind !== "outcome-unknown" && (
+              <p className={styles.formNote}>Creates draft v1 that you own. It sends nothing until its stage changes.</p>
+            )}
           </form>
         )}
       </div>

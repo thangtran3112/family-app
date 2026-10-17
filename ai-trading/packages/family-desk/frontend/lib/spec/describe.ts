@@ -35,10 +35,12 @@ function describeOperand(operand: Operand): string {
 
 function describeCondition(condition: Condition): string {
   if ("all" in condition) {
-    const parts = condition.all.map(describeCondition);
-    return parts.join(condition.all.some((item) => "any" in item) ? ", and " : " and ");
+    return condition.all.map((item) => {
+      const description = describeCondition(item);
+      return "all" in item || "any" in item ? `(${description})` : description;
+    }).join(" and ");
   }
-  if ("any" in condition) return condition.any.map(describeCondition).join(" or ");
+  if ("any" in condition) return `either ${condition.any.map(describeCondition).join(" or ")}`;
   if ("not" in condition) return `not (${describeCondition(condition.not)})`;
   if (condition.op === "time_between") return `time is between ${condition.start} and ${condition.end}`;
 

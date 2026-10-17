@@ -262,6 +262,11 @@
   background: var(--color-panel);
 }
 
+.templateCard:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .templateSelected {
   border-left-color: var(--color-amber);
   background: var(--color-panel);
