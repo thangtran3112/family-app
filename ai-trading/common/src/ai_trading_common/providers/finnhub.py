@@ -264,6 +264,7 @@ class FinnhubSource:
             provider=PROVIDER_NAME,
             quality="eod",
             as_of=now,
+            period=latest.period,
         )
 
 

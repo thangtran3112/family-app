@@ -40,6 +40,11 @@ target "vibe-trading" {
   cache-to   = ["type=gha,scope=ai-trading-vibe-wrapper,mode=max"]
 }
 
+target "vibe-consensus" {
+  cache-from = ["type=gha,scope=ai-trading-vibe-consensus"]
+  cache-to   = ["type=gha,scope=ai-trading-vibe-consensus,mode=max"]
+}
+
 target "auth" {
   cache-from = ["type=gha,scope=ai-trading-auth"]
   cache-to   = ["type=gha,scope=ai-trading-auth,mode=max"]

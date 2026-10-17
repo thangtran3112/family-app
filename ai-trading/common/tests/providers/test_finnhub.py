@@ -145,6 +145,8 @@ class TestFinnhubSourceAdapter:
     def test_analyst_targets_has_counts_but_no_prices(self):
         source = FinnhubSource(client_for("stock_recommendation_aapl"))
         got = source.analyst_targets("AAPL", now=pd.Timestamp("2026-10-11T00:00:00Z"))
+        assert got.period == date(2026, 9, 1)
+        assert got.as_of == pd.Timestamp("2026-10-11T00:00:00Z")
         assert got.target_mean is None
         assert got.target_high is None
         assert got.buy >= 0

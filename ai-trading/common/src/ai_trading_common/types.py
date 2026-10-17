@@ -137,7 +137,7 @@ class EarningsResult:
 
 @dataclass(frozen=True)
 class AnalystTargets:
-    """Rating counts and the low/mean/high price target."""
+    """Rating counts, optional targets, and the source recommendation period."""
 
     symbol: str
     target_mean: float | None
@@ -152,6 +152,7 @@ class AnalystTargets:
     provider: str
     quality: Quality
     as_of: pd.Timestamp
+    period: date | None = None
 
 
 def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:

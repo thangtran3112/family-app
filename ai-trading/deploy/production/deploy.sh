@@ -174,7 +174,7 @@ MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
 IMAGES_ENV="$APP_DIR/images.env"
-SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env desk.env cloudflared.env)
+SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env desk.env cloudflared.env)
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
@@ -524,6 +524,21 @@ render_profiles() {
   vibe_key="$(sed -n 's/^API_AUTH_KEY=//p' "$RENDER_SRC_DIR/vibe-trading.env")"
   [[ -n "$vibe_key" ]] || die "ai-trading/vibe-trading has no API_AUTH_KEY; the gateway could not authenticate to Vibe-Trading"
   (umask 077 && printf 'VIBE_API_AUTH_KEY=%s\n' "$vibe_key" >"$RENDER_SRC_DIR/vibe-gateway.env")
+  # Optional free corroboration key gets its own profile: market-data.env is
+  # consumed by an unrelated app and must never receive Finnhub credentials.
+  local finnhub_key=''
+  if FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
+       "$family_config" render ai-trading/consensus --out-dir "$RENDER_SRC_DIR" >/dev/null 2>&1; then
+    finnhub_key="$(sed -n 's/^FINNHUB_API_KEY=//p' "$RENDER_SRC_DIR/consensus.env")"
+  fi
+  [[ "$finnhub_key" =~ ^[A-Za-z0-9_-]{8,128}$ ]] || finnhub_key=''
+  (umask 077 && {
+    if [[ -n "$finnhub_key" ]]; then
+      printf 'FINNHUB_API_KEY=%s\n' "$finnhub_key"
+    else
+      printf '# Finnhub key not configured\n'
+    fi
+  } >"$RENDER_SRC_DIR/vibe-consensus.env")
 }
 
 # secret_source_dir NAME: the directory holding one SECRET_FILES entry before
@@ -1022,6 +1037,10 @@ rollback() {
     if [[ "$UNIT_PRIOR_EXISTED" == 0 ]]; then
       export HEALTH_CHECK_SKIP_CONTROL=1
     fi
+    # The previous tag may predate services this run's catalog protects (the Desk's
+    # api and scheduler; found 2026-10-12). Its own compose then decides what the
+    # health check requires. Set only here: forward deploys keep the strict check.
+    export HEALTH_CHECK_ROLLBACK=1
     deploy_tag "$previous" || echo "deploy: rollback to $previous failed too" >&2
   else
     echo "deploy: failed with status $status; no earlier tag to roll back to" >&2
