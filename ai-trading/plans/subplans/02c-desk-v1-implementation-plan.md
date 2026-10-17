@@ -104,14 +104,14 @@
 
 | Phase | Ships | Depends on | Task file | Status |
 |---|---|---|---|---|
-| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Blocked: no IBKR account yet |
+| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Blocked: waiting for the IBKR data user (owner confirmed 2026-10-16) |
 | 1. Strategy core | Contracts, backend scaffold, session calendar, first indicators, levels, evaluator, ten templates | none | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done (PR #95) |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance, order sizing | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done (PR #104) |
 | 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | [phase-1c-technicals-and-futures.md](02c-desk-v1-tasks/phase-1c-technicals-and-futures.md) | Done |
 | 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | [phase-1d-research-math.md](02c-desk-v1-tasks/phase-1d-research-math.md) | Done |
 | 2. Data foundation | `ai-trading/common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
 | 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | [phase-4-web.md](02c-desk-v1-tasks/phase-4-web.md) | Plan for owner review |
+| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | [phase-4-web.md](02c-desk-v1-tasks/phase-4-web.md) | Defaults approved 2026-10-16; in progress without IBKR |
 | 5. Long-term, covered calls, Desk AI | Imports, Holdings, valuation and consensus cards, the covered-call scan and screens, the daily Desk AI verdict, the AI brief, the track record, the timeline | 1d, 3 (UI after 4) | `phase-5-long-term.md` | Planned |
 | 6. Paper trading | The paper broker and order gate, the fills journal, futures brackets, reconciliation, limits, stats, the Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
 | 6b. Backtests | Backtest runs over stored bars, the results page, "Promote to Paper" | 1d, 2 (UI after 4) | `phase-6b-backtests.md` | Planned |

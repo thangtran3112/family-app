@@ -2,7 +2,7 @@
 
 Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints, Review Focus, and Shared Interfaces first. Builds on [Phase 3](phase-3-runtime-and-alerts.md), which is live in production: the Desk API runs, and Caddy already routes `/api/desk/*` behind the Clerk gate.
 
-**Status: plan for owner review. No code yet.** Answer the owner decisions below before Task 1 starts. Paths are from the repository root.
+**Status: defaults approved 2026-10-16; implementation in progress.** All eight defaults below are approved. IBKR remains blocked while waiting for the data user; this phase requires no broker login. Paths are from the repository root.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Subagents work in a `.worktrees/` worktree on their own `feature/*` branch; the main session merges that branch into `feature/toby` (root `AGENTS.md`).
 
@@ -22,7 +22,7 @@ Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.
 
 ## Owner decisions
 
-Answer these before Task 1. The tasks assume the defaults.
+All eight defaults approved by the owner on 2026-10-16.
 
 | # | Question | Default | Alternative |
 |---|---|---|---|
@@ -176,7 +176,7 @@ Produces: `deskFetch`, `DeskApiError`, `hubLoginUrl`, the shell components, and 
 - `bars` reads through `DataSources` (Phase 2a). The response carries the provider's quality label unchanged, so `fallback` stays `fallback`. No bars gives `quality: "unavailable"` and an empty list. A bar is never fabricated. A bad `interval` gives 422.
 - `technicals` runs the pure functions in `ai_trading.core` over the bars: `indicators` (Phase 1), and `bias` and `pivots` (Phase 1c). `card_back` is the return value of `ai_trading.engine.cardback.compute_card_back`, unchanged.
 - `futures/specs` gives the 12 contracts from `ai_trading.core.futures` (Phase 1c). `approx_margin` and `margin_as_of` come from the source named in `02g` §2 (D16 shows approximate margins with their source and date). With no source, both are `null`. Never guess.
-- `status`: `gateway` is `"not_configured"` until Phase 2b, and it never reports `up`. `streaming_slots.used` counts the quote streams open in this process, and `max` is 70 (`02a` §7). `backups` and `reconciliation` are `null` until a feed exists.
+- `status`: `gateway` is `"not_configured"` until Phase 2b, and it never reports `up`. `streaming_slots.used` is 0 while there are no IBKR subscriptions, and `max` is 70 (`02a` §7). Browser SSE connections are not broker subscriptions and must not be counted as slots. `backups` and `reconciliation` are `null` until a feed exists.
 - `watchlists/{id}/items` is owner-scoped and returns 404 for other owners, as Phase 3 does. `backfill` is `ready` when the symbol has daily bars, and `pending` otherwise. It is derived, with no new column.
 
 **Steps**
@@ -246,17 +246,17 @@ Consumes: `GET /api/desk/quotes/{symbol}` (SSE), `bars`, `signals`, and `alerts`
 
 **Files**
 - Create `app/strategies/page.tsx` (the list; the detail view is Task 7), `components/strategies/StrategyList.tsx` (columns: name, stage, current version, and a 30-day paper P&L column that is a Phase 6 fixture), `components/strategies/TemplateCard.tsx`, and `app/strategies/new/page.tsx`.
-- Create `lib/templates.ts`, which imports the ten JSON files in `ai-trading/packages/family-desk/contracts/templates/`, and `lib/spec/describe.ts` with its test.
+- Create `lib/templates.ts`, which imports the eleven JSON files currently in `ai-trading/packages/family-desk/contracts/templates/`, and `lib/spec/describe.ts` with its test. The approved design said ten; the shipped contracts include the technical-bias template too. Include every shipped template rather than hiding one to match an outdated count.
 
 **Behaviour**
-- Ten cards, one per template, each showing `describeSpec(template)`.
+- Eleven cards, one per shipped template, each showing `describeSpec(template)`.
 - A watchlist picker, fed by `GET /api/desk/watchlists`.
 - A stage choice. Only `draft` is enabled in this phase. "Alert + paper" is shown disabled, as "available in Phase 6".
 - "Use this template" runs `POST /api/desk/strategies` with `{name}`, then `POST /api/desk/strategies/{id}/versions` with `{spec, change_note: "from template <slug>"}`, then opens `/strategies?id={id}`.
 - Phase 3 has no delete route. If the version call fails, the strategy exists with no version. The list marks such strategies "no version" and offers "Add version", so no orphan goes unnoticed.
 
 **Steps**
-- [ ] **Step 1: Write the failing tests.** `templates.test.ts`: all ten templates parse with `StrategySpecV1Schema` from `@ai-trading/contracts`, and there are exactly ten. `describe.test.ts`: golden sentences for `vwap-reclaim` and `gap-and-go`, and no empty result.
+- [ ] **Step 1: Write the failing tests.** `templates.test.ts`: every shipped template parses with `StrategySpecV1Schema` from `@ai-trading/contracts`, and the manifest matches the eleven JSON files on disk. `describe.test.ts`: golden sentences for `vwap-reclaim` and `gap-and-go`, and no empty result.
 - [ ] **Step 2: Run them.** They fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the tests.** They pass.
@@ -283,7 +283,7 @@ Produces: `describeSpec`. Consumes: `StrategySpecV1Schema` and the Phase 3 strat
 - `stageOptions(4)` returns `draft` and `alert_only` enabled, `paper` disabled as "Phase 6", and `Live` as the text "Not in v1" with no control. A stage change calls `PUT /api/desk/strategies/{id}/stage` with `{stage, confirm: true}`, and only after the confirm dialog.
 
 **Steps**
-- [ ] **Step 1: Write the failing tests.** `form.test.ts`: `formToSpec(specToForm(s))` deep-equals `s` for all ten templates, and an invalid form reports error paths that name the block. `stage.test.ts`: the options never include `live_confirm` or `live_auto`, and `paper` is disabled below Phase 6. A source test asserts that no file under `lib/api/` or `app/` contains `/orders`.
+- [ ] **Step 1: Write the failing tests.** `form.test.ts`: `formToSpec(specToForm(s))` deep-equals `s` for every shipped template, and an invalid form reports error paths that name the block. `stage.test.ts`: the options never include `live_confirm` or `live_auto`, and `paper` is disabled below Phase 6. A source test asserts that no file under `lib/api/` or `app/` contains `/orders`.
 - [ ] **Step 2: Run them.** They fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the tests.** They pass.
