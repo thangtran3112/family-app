@@ -9,10 +9,12 @@ import {
 import {
   formToSpec,
   groupSpecErrors,
+  switchToWatchlist,
   type SpecBlock,
   type SpecBlockErrors,
   type StrategySpecForm,
 } from "@/lib/spec/form";
+import { symbolsFromDraft, symbolsToDraft } from "@/lib/spec/symbols";
 import type { WatchlistsResponseSchema } from "@/lib/api/schemas";
 import styles from "./builder.module.css";
 
@@ -189,18 +191,20 @@ function NumberField({
 }
 
 function SelectField({
-  label, value, options, onChange, disabled,
+  label, value, options, onChange, disabled, placeholder,
 }: {
   label: string;
   value: string;
   options: readonly string[];
   onChange: (value: string) => void;
   disabled: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className={styles.field}>
       <span>{label}</span>
       <select disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} value={value}>
+        {placeholder && value === "" && <option value="">{placeholder}</option>}
         {options.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
       </select>
     </label>
@@ -442,12 +446,26 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
         <div className={styles.blockHeading}><h3 id="watch-heading">Watch</h3><span>Schema v{form.schemaVersion}</span></div>
         <div className={styles.fields}>
           <label className={styles.field}><span>Strategy name</span><input disabled={readOnly} maxLength={80} onChange={(event) => onChange({ ...form, name: event.currentTarget.value })} value={form.name} /></label>
-          <SelectField label="Universe type" value={isWatchlist ? "watchlist" : "symbols"} options={["watchlist", "symbols"]} disabled={readOnly} onChange={(kind) => updateWatch({ universe: kind === "watchlist" ? { watchlist: "" } : { symbols: ["SPY"] } })} />
+          <SelectField
+            label="Universe type"
+            value={isWatchlist ? "watchlist" : "symbols"}
+            options={["watchlist", "symbols"]}
+            disabled={readOnly}
+            onChange={(kind) => {
+              if (kind === "watchlist") onChange(switchToWatchlist(form, watchlists.map(({ name }) => name)));
+              else updateWatch({ universe: { symbols: ["SPY"] } });
+            }}
+          />
           {isWatchlist
-            ? watchlistNames.length
-              ? <SelectField label="Watchlist" value={currentWatchlist} options={watchlistNames} onChange={(watchlist) => updateWatch({ universe: { watchlist } })} disabled={readOnly} />
-              : <label className={styles.field}><span>Watchlist name</span><input disabled={readOnly} maxLength={80} onChange={(event) => updateWatch({ universe: { watchlist: event.currentTarget.value } })} value={currentWatchlist} /></label>
-            : <label className={styles.field}><span>Symbols (comma-separated)</span><input disabled={readOnly} onChange={(event) => updateWatch({ universe: { symbols: event.currentTarget.value.split(",").map((symbol) => symbol.trim()).filter(Boolean) } })} value={Array.isArray(universe.symbols) ? universe.symbols.join(", ") : ""} /></label>}
+            ? <SelectField
+                label="Watchlist"
+                value={currentWatchlist}
+                options={watchlistNames}
+                onChange={(watchlist) => updateWatch({ universe: { watchlist } })}
+                disabled={readOnly || watchlistNames.length === 0}
+                placeholder={watchlists.length ? "Choose a watchlist" : "No watchlists available"}
+              />
+            : <label className={styles.field}><span>Symbols (comma-separated)</span><input disabled={readOnly} onChange={(event) => updateWatch({ universe: { symbols: symbolsFromDraft(event.currentTarget.value) } })} value={Array.isArray(universe.symbols) ? symbolsToDraft(universe.symbols) : ""} /></label>}
           <SelectField label="Session" value={form.watch.session} options={["regular", "extended"]} disabled={readOnly} onChange={(session) => updateWatch({ session: session as StrategySpecForm["watch"]["session"] })} />
           <SelectField label="Run on" value={form.watch.runOn} options={["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]} disabled={readOnly} onChange={(runOn) => updateWatch({ runOn: runOn as StrategySpecForm["watch"]["runOn"] })} />
         </div>

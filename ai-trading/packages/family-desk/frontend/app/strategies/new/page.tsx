@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TemplateCard } from "@/components/strategies/TemplateCard";
 import { deskFetch } from "@/lib/api/client";
@@ -14,6 +13,7 @@ import {
   submitStrategyCreation,
   type StrategyCreationState,
 } from "@/lib/strategy/create";
+import { navigateToStrategyBuilder } from "@/lib/strategy/navigation";
 import { STRATEGY_TEMPLATES } from "@/lib/templates";
 import type { StrategyTemplate } from "@/lib/templates";
 import styles from "@/components/strategies/strategies.module.css";
@@ -21,7 +21,6 @@ import styles from "@/components/strategies/strategies.module.css";
 type Watchlist = ReturnType<typeof WatchlistsResponseSchema.parse>[number];
 
 export default function NewStrategyPage() {
-  const router = useRouter();
   const [selectedSlug, setSelectedSlug] = useState(STRATEGY_TEMPLATES[0]?.slug ?? "");
   const [name, setName] = useState(STRATEGY_TEMPLATES[0]?.spec.name ?? "");
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
@@ -99,7 +98,7 @@ export default function NewStrategyPage() {
         },
       );
       setCreationState(result);
-      if (result.kind === "created") router.push(`/strategies?id=${result.strategyId}`);
+      if (result.kind === "created") navigateToStrategyBuilder(result.strategyId);
     } finally {
       submissionLock.current = false;
     }
@@ -200,13 +199,13 @@ export default function NewStrategyPage() {
             {creationState.kind === "version-failed" && recoveryLink && (
               <div className={styles.error} role="alert">
                 <span>{creationState.message}</span>
-                <Link href={recoveryLink.href}>{recoveryLink.label}</Link>
+                <a href={recoveryLink.href}>{recoveryLink.label}</a>
               </div>
             )}
             {creationState.kind === "outcome-unknown" && recoveryLink && (
               <div className={styles.error} role="alert">
                 <span>{creationState.message}</span>
-                <Link href={recoveryLink.href}>{recoveryLink.label}</Link>
+                <a href={recoveryLink.href}>{recoveryLink.label}</a>
               </div>
             )}
             {creationState.kind !== "version-failed" && creationState.kind !== "outcome-unknown" && (

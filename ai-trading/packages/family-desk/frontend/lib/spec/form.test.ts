@@ -90,3 +90,38 @@ test("invalid non-finite values, times, and limits are grouped under their form 
   assert.ok(errors.Limits?.some(({ path }) => path === "limits.flatBy"));
   assert.ok(errors.Limits?.some(({ path }) => path === "limits.maxTradesPerDay"));
 });
+
+test("fractional integer fields surface precise Zod paths in every affected block", () => {
+  const form = specToForm(STRATEGY_TEMPLATES[0]!.spec);
+  form.limits = { maxTradesPerDay: 1.5 };
+  form.when = {
+    op: "gte",
+    left: { series: "rsi", length: 14.5 },
+    right: { value: 50 },
+  };
+  form.then.paperOrder = {
+    side: "buy",
+    size: { shares: 1.5 },
+    stop: { atrMultiple: 2 },
+    target: { r: 2 },
+  };
+
+  const result = StrategySpecV1Schema.safeParse(formToSpec(form));
+  assert.equal(result.success, false);
+  if (result.success) return;
+  const errors = groupSpecErrors(result.error);
+  assert.ok(errors.Limits?.some(({ path }) => path === "limits.maxTradesPerDay"));
+  assert.ok(errors.When?.some(({ path }) => path === "when.left.length"));
+  assert.ok(errors.Then?.some(({ path }) => path === "then.paperOrder.size.shares"));
+  assert.equal(errors.Then?.some(({ path }) => path === "then.paperOrder.size.contracts"), false);
+  assert.ok(Object.values(errors).some((items) => items?.length));
+});
+
+test("an invalid form always has a block-level error fallback", () => {
+  const form = specToForm(STRATEGY_TEMPLATES[0]!.spec);
+  form.name = undefined as unknown as string;
+  const result = StrategySpecV1Schema.safeParse(formToSpec(form));
+  assert.equal(result.success, false);
+  if (result.success) return;
+  assert.ok(groupSpecErrors(result.error).Watch?.length);
+});
