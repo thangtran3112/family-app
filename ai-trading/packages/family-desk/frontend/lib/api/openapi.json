@@ -1058,6 +1058,8 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 80,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           }
@@ -1080,6 +1082,8 @@
             "type": "string"
           },
           "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
             "title": "Symbol",
             "type": "string"
           }
