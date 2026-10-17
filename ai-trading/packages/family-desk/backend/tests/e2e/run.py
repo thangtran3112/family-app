@@ -42,11 +42,7 @@ def main() -> int:
         import subprocess
 
         subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
-        return int(
-            pytest.main(
-                ["-q", "--override-ini=python_files=http_check.py", str(Path(__file__).with_name("http_check.py"))]
-            )
-        )
+        return int(pytest.main(["-q", str(Path(__file__).with_name("http_check.py"))]))
     finally:
         if created:
             with admin_engine.connect() as connection:
