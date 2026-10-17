@@ -59,6 +59,366 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "BarOut": {
+        "properties": {
+          "c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "C"
+          },
+          "h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H"
+          },
+          "l": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L"
+          },
+          "o": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "O"
+          },
+          "t": {
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v"
+        ],
+        "title": "BarOut",
+        "type": "object"
+      },
+      "BarsOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/BarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "interval": {
+            "enum": [
+              "1d",
+              "1w",
+              "1h",
+              "5m",
+              "15m",
+              "30m",
+              "4h",
+              "1m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "realtime",
+              "delayed-15m",
+              "eod",
+              "fallback",
+              "unavailable"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "interval",
+          "quality",
+          "as_of",
+          "bars"
+        ],
+        "title": "BarsOut",
+        "type": "object"
+      },
+      "CardBackOut": {
+        "properties": {
+          "atr_pct_label": {
+            "title": "Atr Pct Label",
+            "type": "string"
+          },
+          "bias_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bias Label"
+          },
+          "bias_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bias Score"
+          },
+          "moving_averages": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Moving Averages",
+            "type": "object"
+          },
+          "oscillators": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Oscillators",
+            "type": "object"
+          },
+          "pivots": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Pivots",
+            "type": "object"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "timeframe",
+          "bias_label",
+          "bias_score",
+          "oscillators",
+          "moving_averages",
+          "atr_pct_label",
+          "pivots"
+        ],
+        "title": "CardBackOut",
+        "type": "object"
+      },
+      "FuturesSpecOut": {
+        "properties": {
+          "approx_margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approx Margin"
+          },
+          "margin_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin As Of"
+          },
+          "micro": {
+            "title": "Micro",
+            "type": "string"
+          },
+          "mini": {
+            "title": "Mini",
+            "type": "string"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          },
+          "roll_dates": {
+            "items": {
+              "format": "date",
+              "type": "string"
+            },
+            "title": "Roll Dates",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionOut"
+          },
+          "tick_size": {
+            "title": "Tick Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "root",
+          "mini",
+          "micro",
+          "multiplier",
+          "tick_size",
+          "session",
+          "roll_dates",
+          "approx_margin",
+          "margin_as_of"
+        ],
+        "title": "FuturesSpecOut",
+        "type": "object"
+      },
+      "GaugeOut": {
+        "properties": {
+          "counts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoteCountsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "required": [
+          "label",
+          "score",
+          "counts"
+        ],
+        "title": "GaugeOut",
+        "type": "object"
+      },
+      "GaugesOut": {
+        "properties": {
+          "moving_averages": {
+            "$ref": "#/components/schemas/GaugeOut"
+          },
+          "oscillators": {
+            "$ref": "#/components/schemas/GaugeOut"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/GaugeOut"
+          }
+        },
+        "required": [
+          "summary",
+          "oscillators",
+          "moving_averages"
+        ],
+        "title": "GaugesOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -70,6 +430,134 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MacdOut": {
+        "properties": {
+          "histogram": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Histogram"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "signal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal"
+          }
+        },
+        "required": [
+          "line",
+          "signal",
+          "histogram"
+        ],
+        "title": "MacdOut",
+        "type": "object"
+      },
+      "MeOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "PivotMethodsOut": {
+        "properties": {
+          "camarilla": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Camarilla",
+            "type": "object"
+          },
+          "classic": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Classic",
+            "type": "object"
+          },
+          "fibonacci": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Fibonacci",
+            "type": "object"
+          }
+        },
+        "required": [
+          "classic",
+          "fibonacci",
+          "camarilla"
+        ],
+        "title": "PivotMethodsOut",
+        "type": "object"
+      },
+      "SessionOut": {
+        "properties": {
+          "close_time": {
+            "title": "Close Time",
+            "type": "string"
+          },
+          "open_time": {
+            "title": "Open Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "open_time",
+          "close_time"
+        ],
+        "title": "SessionOut",
         "type": "object"
       },
       "SettingsBody": {
@@ -148,6 +636,40 @@
           "stage"
         ],
         "title": "StageUpdate",
+        "type": "object"
+      },
+      "StatusOut": {
+        "properties": {
+          "backups": {
+            "title": "Backups",
+            "type": "null"
+          },
+          "data_sources": {
+            "const": "unknown",
+            "title": "Data Sources",
+            "type": "string"
+          },
+          "gateway": {
+            "const": "not_configured",
+            "title": "Gateway",
+            "type": "string"
+          },
+          "reconciliation": {
+            "title": "Reconciliation",
+            "type": "null"
+          },
+          "streaming_slots": {
+            "$ref": "#/components/schemas/StreamingSlotsOut"
+          }
+        },
+        "required": [
+          "gateway",
+          "data_sources",
+          "streaming_slots",
+          "backups",
+          "reconciliation"
+        ],
+        "title": "StatusOut",
         "type": "object"
       },
       "StrategyCreate": {
@@ -269,6 +791,105 @@
         "title": "StrategyVersionOut",
         "type": "object"
       },
+      "StreamingSlotsOut": {
+        "properties": {
+          "max": {
+            "title": "Max",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used",
+          "max"
+        ],
+        "title": "StreamingSlotsOut",
+        "type": "object"
+      },
+      "TechnicalsOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "card_back": {
+            "$ref": "#/components/schemas/CardBackOut"
+          },
+          "gauges": {
+            "$ref": "#/components/schemas/GaugesOut"
+          },
+          "macd": {
+            "$ref": "#/components/schemas/MacdOut"
+          },
+          "moving_averages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/VoteOut"
+            },
+            "title": "Moving Averages",
+            "type": "object"
+          },
+          "oscillators": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/VoteOut"
+            },
+            "title": "Oscillators",
+            "type": "object"
+          },
+          "pivots": {
+            "$ref": "#/components/schemas/PivotMethodsOut"
+          },
+          "quality": {
+            "enum": [
+              "realtime",
+              "delayed-15m",
+              "eod",
+              "fallback",
+              "unavailable"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "rsi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "quality",
+          "as_of",
+          "gauges",
+          "moving_averages",
+          "oscillators",
+          "pivots",
+          "rsi",
+          "macd",
+          "card_back"
+        ],
+        "title": "TechnicalsOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -307,6 +928,69 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VoteCountsOut": {
+        "properties": {
+          "buy": {
+            "title": "Buy",
+            "type": "integer"
+          },
+          "neutral": {
+            "title": "Neutral",
+            "type": "integer"
+          },
+          "sell": {
+            "title": "Sell",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sell",
+          "neutral",
+          "buy"
+        ],
+        "title": "VoteCountsOut",
+        "type": "object"
+      },
+      "VoteOut": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Sell",
+                  "Neutral",
+                  "Buy"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "values",
+          "action"
+        ],
+        "title": "VoteOut",
         "type": "object"
       },
       "WatchlistCreate": {
@@ -375,6 +1059,33 @@
           "asset_type"
         ],
         "title": "WatchlistItemOut",
+        "type": "object"
+      },
+      "WatchlistItemReadOut": {
+        "properties": {
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "backfill": {
+            "enum": [
+              "ready",
+              "pending"
+            ],
+            "title": "Backfill",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "asset_type",
+          "backfill"
+        ],
+        "title": "WatchlistItemReadOut",
         "type": "object"
       },
       "WatchlistOut": {
@@ -500,6 +1211,140 @@
         "summary": "Mark Read",
         "tags": [
           "alerts"
+        ]
+      }
+    },
+    "/api/desk/bars/{symbol}": {
+      "get": {
+        "operationId": "bars_api_desk_bars__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "default": "1d",
+              "enum": [
+                "1d",
+                "1w",
+                "1h",
+                "5m",
+                "15m",
+                "30m",
+                "4h",
+                "1m"
+              ],
+              "title": "Interval",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "default": "regular",
+              "enum": [
+                "regular",
+                "extended"
+              ],
+              "title": "Session",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bars",
+        "tags": [
+          "market data"
+        ]
+      }
+    },
+    "/api/desk/futures/specs": {
+      "get": {
+        "operationId": "futures_specs_api_desk_futures_specs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FuturesSpecOut"
+                  },
+                  "title": "Response Futures Specs Api Desk Futures Specs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Futures Specs",
+        "tags": [
+          "futures"
+        ]
+      }
+    },
+    "/api/desk/me": {
+      "get": {
+        "operationId": "me_api_desk_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "identity"
         ]
       }
     },
@@ -693,6 +1538,27 @@
         "summary": "List Signals",
         "tags": [
           "signals"
+        ]
+      }
+    },
+    "/api/desk/status": {
+      "get": {
+        "operationId": "status_api_desk_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "status"
         ]
       }
     },
@@ -908,6 +1774,80 @@
         ]
       }
     },
+    "/api/desk/technicals/{symbol}": {
+      "get": {
+        "operationId": "technicals_api_desk_technicals__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "1d",
+              "enum": [
+                "1d",
+                "1w",
+                "1h",
+                "5m",
+                "15m",
+                "30m",
+                "4h",
+                "1m"
+              ],
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 365,
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicalsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Technicals",
+        "tags": [
+          "market data"
+        ]
+      }
+    },
     "/api/desk/watchlists": {
       "get": {
         "operationId": "list_watchlists_api_desk_watchlists_get",
@@ -973,6 +1913,50 @@
       }
     },
     "/api/desk/watchlists/{watchlist_id}/items": {
+      "get": {
+        "operationId": "list_watchlist_items_api_desk_watchlists__watchlist_id__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WatchlistItemReadOut"
+                  },
+                  "title": "Response List Watchlist Items Api Desk Watchlists  Watchlist Id  Items Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Watchlist Items",
+        "tags": [
+          "watchlists"
+        ]
+      },
       "post": {
         "operationId": "add_watchlist_item_api_desk_watchlists__watchlist_id__items_post",
         "parameters": [

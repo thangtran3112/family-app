@@ -38,6 +38,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/bars/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bars */
+        get: operations["bars_api_desk_bars__symbol__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/futures/specs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Futures Specs */
+        get: operations["futures_specs_api_desk_futures_specs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["me_api_desk_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/quotes/{symbol}": {
         parameters: {
             query?: never;
@@ -82,6 +133,23 @@ export interface paths {
         };
         /** List Signals */
         get: operations["list_signals_api_desk_signals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_desk_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -143,6 +211,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/technicals/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Technicals */
+        get: operations["technicals_api_desk_technicals__symbol__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/watchlists": {
         parameters: {
             query?: never;
@@ -168,7 +253,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Watchlist Items */
+        get: operations["list_watchlist_items_api_desk_watchlists__watchlist_id__items_get"];
         put?: never;
         /** Add Watchlist Item */
         post: operations["add_watchlist_item_api_desk_watchlists__watchlist_id__items_post"];
@@ -240,10 +326,142 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** BarOut */
+        BarOut: {
+            /** C */
+            c: number | null;
+            /** H */
+            h: number | null;
+            /** L */
+            l: number | null;
+            /** O */
+            o: number | null;
+            /** T */
+            t: string;
+            /** V */
+            v: number | null;
+        };
+        /** BarsOut */
+        BarsOut: {
+            /** As Of */
+            as_of: string | null;
+            /** Bars */
+            bars: components["schemas"]["BarOut"][];
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "1d" | "1w" | "1h" | "5m" | "15m" | "30m" | "4h" | "1m";
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            /** Symbol */
+            symbol: string;
+        };
+        /** CardBackOut */
+        CardBackOut: {
+            /** Atr Pct Label */
+            atr_pct_label: string;
+            /** Bias Label */
+            bias_label: string | null;
+            /** Bias Score */
+            bias_score: number | null;
+            /** Moving Averages */
+            moving_averages: {
+                [key: string]: number | null;
+            };
+            /** Oscillators */
+            oscillators: {
+                [key: string]: number | null;
+            };
+            /** Pivots */
+            pivots: {
+                [key: string]: number | null;
+            };
+            /** Symbol */
+            symbol: string;
+            /** Timeframe */
+            timeframe: string;
+        };
+        /** FuturesSpecOut */
+        FuturesSpecOut: {
+            /** Approx Margin */
+            approx_margin: number | null;
+            /** Margin As Of */
+            margin_as_of: string | null;
+            /** Micro */
+            micro: string;
+            /** Mini */
+            mini: string;
+            /** Multiplier */
+            multiplier: number;
+            /** Roll Dates */
+            roll_dates: string[];
+            /** Root */
+            root: string;
+            session: components["schemas"]["SessionOut"];
+            /** Tick Size */
+            tick_size: number;
+        };
+        /** GaugeOut */
+        GaugeOut: {
+            counts: components["schemas"]["VoteCountsOut"] | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+            /** Score */
+            score: number | null;
+        };
+        /** GaugesOut */
+        GaugesOut: {
+            moving_averages: components["schemas"]["GaugeOut"];
+            oscillators: components["schemas"]["GaugeOut"];
+            summary: components["schemas"]["GaugeOut"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** MacdOut */
+        MacdOut: {
+            /** Histogram */
+            histogram: number | null;
+            /** Line */
+            line: number | null;
+            /** Signal */
+            signal: number | null;
+        };
+        /** MeOut */
+        MeOut: {
+            /** Email */
+            email: string;
+        };
+        /** PivotMethodsOut */
+        PivotMethodsOut: {
+            /** Camarilla */
+            camarilla: {
+                [key: string]: number | null;
+            };
+            /** Classic */
+            classic: {
+                [key: string]: number | null;
+            };
+            /** Fibonacci */
+            fibonacci: {
+                [key: string]: number | null;
+            };
+        };
+        /** SessionOut */
+        SessionOut: {
+            /** Close Time */
+            close_time: string;
+            /** Open Time */
+            open_time: string;
         };
         /** SettingsBody */
         SettingsBody: {
@@ -287,6 +505,24 @@ export interface components {
             /** Stage */
             stage: string;
         };
+        /** StatusOut */
+        StatusOut: {
+            /** Backups */
+            backups: null;
+            /**
+             * Data Sources
+             * @constant
+             */
+            data_sources: "unknown";
+            /**
+             * Gateway
+             * @constant
+             */
+            gateway: "not_configured";
+            /** Reconciliation */
+            reconciliation: null;
+            streaming_slots: components["schemas"]["StreamingSlotsOut"];
+        };
         /** StrategyCreate */
         StrategyCreate: {
             /** Name */
@@ -329,6 +565,39 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** StreamingSlotsOut */
+        StreamingSlotsOut: {
+            /** Max */
+            max: number;
+            /** Used */
+            used: number;
+        };
+        /** TechnicalsOut */
+        TechnicalsOut: {
+            /** As Of */
+            as_of: string | null;
+            card_back: components["schemas"]["CardBackOut"];
+            gauges: components["schemas"]["GaugesOut"];
+            macd: components["schemas"]["MacdOut"];
+            /** Moving Averages */
+            moving_averages: {
+                [key: string]: components["schemas"]["VoteOut"];
+            };
+            /** Oscillators */
+            oscillators: {
+                [key: string]: components["schemas"]["VoteOut"];
+            };
+            pivots: components["schemas"]["PivotMethodsOut"];
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            /** Rsi */
+            rsi: number | null;
+            /** Symbol */
+            symbol: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -341,6 +610,24 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VoteCountsOut */
+        VoteCountsOut: {
+            /** Buy */
+            buy: number;
+            /** Neutral */
+            neutral: number;
+            /** Sell */
+            sell: number;
+        };
+        /** VoteOut */
+        VoteOut: {
+            /** Action */
+            action: ("Sell" | "Neutral" | "Buy") | null;
+            /** Values */
+            values: {
+                [key: string]: number | null;
+            };
         };
         /** WatchlistCreate */
         WatchlistCreate: {
@@ -370,6 +657,18 @@ export interface components {
             symbol: string;
             /** Watchlist Id */
             watchlist_id: number;
+        };
+        /** WatchlistItemReadOut */
+        WatchlistItemReadOut: {
+            /** Asset Type */
+            asset_type: string;
+            /**
+             * Backfill
+             * @enum {string}
+             */
+            backfill: "ready" | "pending";
+            /** Symbol */
+            symbol: string;
         };
         /** WatchlistOut */
         WatchlistOut: {
@@ -447,6 +746,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bars_api_desk_bars__symbol__get: {
+        parameters: {
+            query?: {
+                interval?: "1d" | "1w" | "1h" | "5m" | "15m" | "30m" | "4h" | "1m";
+                days?: number;
+                session?: "regular" | "extended";
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BarsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    futures_specs_api_desk_futures_specs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FuturesSpecOut"][];
+                };
+            };
+        };
+    };
+    me_api_desk_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
                 };
             };
         };
@@ -565,6 +939,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_desk_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusOut"];
                 };
             };
         };
@@ -723,6 +1117,40 @@ export interface operations {
             };
         };
     };
+    technicals_api_desk_technicals__symbol__get: {
+        parameters: {
+            query?: {
+                timeframe?: "1d" | "1w" | "1h" | "5m" | "15m" | "30m" | "4h" | "1m";
+                days?: number;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicalsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_watchlists_api_desk_watchlists_get: {
         parameters: {
             query?: never;
@@ -763,6 +1191,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchlistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_watchlist_items_api_desk_watchlists__watchlist_id__items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistItemReadOut"][];
                 };
             };
             /** @description Validation Error */
