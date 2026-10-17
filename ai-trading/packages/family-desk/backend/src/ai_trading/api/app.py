@@ -26,7 +26,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai_trading.api import alerts, quotes, settings, signals, strategies, watchlists
+from ai_trading.api import (
+    alerts,
+    bars,
+    futures,
+    me,
+    quotes,
+    settings,
+    signals,
+    status,
+    strategies,
+    technicals,
+    watchlists,
+)
 from ai_trading.db.engine import make_engine, make_health_check_engine, make_session_factory, session_scope
 from ai_trading.engine.tick import tick
 from ai_trading.notify.channel import Channel
@@ -116,7 +128,19 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="ai-trading-desk", lifespan=_lifespan)
 
-for _router_module in (watchlists, strategies, signals, alerts, settings, quotes):
+for _router_module in (
+    watchlists,
+    strategies,
+    signals,
+    alerts,
+    settings,
+    quotes,
+    me,
+    bars,
+    technicals,
+    futures,
+    status,
+):
     app.include_router(_router_module.router)
 
 
