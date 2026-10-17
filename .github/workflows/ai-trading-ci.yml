@@ -167,6 +167,59 @@ jobs:
           uv run ruff format --check .
           uv run pytest -q
 
+  desk-e2e-services:
+    name: Desk E2E services (Part A)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: desk
+          POSTGRES_PASSWORD: desk
+          POSTGRES_DB: postgres
+        ports:
+          - 55438:5432
+        options: >-
+          --health-cmd "pg_isready -U desk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            ai-trading/packages/family-desk/backend/uv.lock
+            ai-trading/common/uv.lock
+      - name: Install linked contracts dependencies
+        working-directory: ai-trading/packages/family-desk/frontend
+        run: pnpm --dir ../contracts install --frozen-lockfile
+      - name: Build Desk static export
+        working-directory: ai-trading/packages/family-desk/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Run isolated real-HTTP and proxy E2E (no browser yet)
+        working-directory: ai-trading/packages/family-desk/backend
+        env:
+          DESK_E2E_ADMIN_DATABASE_URL: postgresql+psycopg://desk:desk@127.0.0.1:55438/postgres
+        run: |
+          uv sync --locked
+          uv run python tests/e2e/run.py
+
   scripts:
     name: Scripts and compose
     runs-on: ubuntu-latest
