@@ -400,6 +400,7 @@
 }
 
 .distributionFill {
+  display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--color-up, #30d158);
