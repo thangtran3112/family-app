@@ -13,7 +13,7 @@
     "test:export": "node --test export-layout.test.mjs"
   },
   "dependencies": {
-    "@ai-trading/contracts": "file:../contracts",
+    "@ai-trading/contracts": "link:../contracts",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"

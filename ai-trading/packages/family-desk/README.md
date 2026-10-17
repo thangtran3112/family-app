@@ -15,4 +15,12 @@ cd contracts && pnpm install && pnpm typecheck && pnpm test
 cd backend && uv sync && uv run ruff check . && uv run pytest -q
 ```
 
+For frontend development, install the linked contracts dependencies first, then the frontend:
+
+```bash
+cd frontend
+pnpm --dir ../contracts install --frozen-lockfile
+pnpm install --frozen-lockfile
+```
+
 After changing the schema, run `pnpm generate:json-schema` in `contracts/`, then `scripts/generate-contracts.sh` in `backend/`. The tests fail until both generated files are current.

@@ -83,7 +83,11 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+          cache-dependency-path: |
+            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - name: Install linked contracts dependencies
+        run: pnpm --dir ../contracts install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
