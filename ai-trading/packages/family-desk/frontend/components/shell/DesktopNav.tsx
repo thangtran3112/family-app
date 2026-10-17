@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 const tabs = [
   ["Today", "/"],
   ["Strategies", "/strategies"],
@@ -15,9 +13,9 @@ export function DesktopNav({ pathname }: { pathname: string }) {
       {tabs.map(([label, href]) => {
         const active = href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
         return (
-          <Link key={href} href={href} aria-current={active ? "page" : undefined}>
+          <a key={href} href={href} aria-current={active ? "page" : undefined}>
             {label}
-          </Link>
+          </a>
         );
       })}
     </nav>

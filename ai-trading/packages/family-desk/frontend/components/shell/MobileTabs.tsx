@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 const tabs = [
   ["Today", "/", "M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"],
   ["Strategies", "/strategies", "M3 12h4l3-8 4 16 3-8h4"],
@@ -19,7 +17,7 @@ export function MobileTabs({ pathname }: { pathname: string }) {
             : pathname === href || pathname.startsWith(`${href}/`);
 
         return (
-          <Link key={href} href={href} aria-current={active ? "page" : undefined}>
+          <a key={href} href={href} aria-current={active ? "page" : undefined}>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
               {label === "More" ? (
                 <>
@@ -32,7 +30,7 @@ export function MobileTabs({ pathname }: { pathname: string }) {
               )}
             </svg>
             <span>{label}</span>
-          </Link>
+          </a>
         );
       })}
     </nav>

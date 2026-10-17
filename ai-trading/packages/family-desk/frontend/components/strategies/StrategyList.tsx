@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { deskFetch } from "@/lib/api/client";
 import {
@@ -64,7 +63,7 @@ export function StrategyList() {
           <p className={styles.eyebrow}>YOUR DESK</p>
           <h1 className={styles.pageTitle}>Strategies</h1>
         </div>
-        <Link className={styles.primaryLink} href="/strategies/new">New strategy</Link>
+        <a className={styles.primaryLink} href="/strategies/new">New strategy</a>
       </div>
 
       {loading && <p aria-live="polite" className={styles.feedback}>Loading strategies…</p>}
@@ -78,7 +77,7 @@ export function StrategyList() {
         <div className={styles.emptyState}>
           <h2>No strategies yet</h2>
           <p>Start with a template. New strategies are saved as drafts.</p>
-          <Link className={styles.primaryLink} href="/strategies/new">Browse templates</Link>
+          <a className={styles.primaryLink} href="/strategies/new">Browse templates</a>
         </div>
       )}
       {!loading && !error && rows.length > 0 && (
@@ -96,9 +95,9 @@ export function StrategyList() {
               {rows.map(({ strategy, currentVersion }) => (
                 <tr key={strategy.id}>
                   <td data-label="Name">
-                    <Link className={styles.strategyName} href={`/strategies?id=${strategy.id}`}>
+                    <a className={styles.strategyName} href={`/strategies?id=${strategy.id}`}>
                       {strategy.name}
-                    </Link>
+                    </a>
                   </td>
                   <td data-label="Stage">
                     <span className={`${styles.stageBadge} ${styles[`stage_${strategy.stage}`] ?? ""}`}>
@@ -108,7 +107,7 @@ export function StrategyList() {
                   <td data-label="Current version">
                     {currentVersion
                       ? `v${currentVersion.version}`
-                      : <span className={styles.noVersion}>No version <Link href={`/strategies?id=${strategy.id}`}>Add version</Link></span>}
+                      : <span className={styles.noVersion}>No version <a href={`/strategies?id=${strategy.id}`}>Add version</a></span>}
                   </td>
                   <td data-label="30-day paper P&amp;L">
                     <span className={styles.fixtureValue}>Phase 6 fixture</span>
