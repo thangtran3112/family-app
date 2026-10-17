@@ -4,15 +4,18 @@ import { createDeskApiClient } from "./api/client.ts";
 import {
   countSignalsToday,
   dailyChange,
+  derivedChangeQuality,
   formatAsOf,
   formatChange,
   formatPrice,
+  labeledValueText,
   loadDailyBars,
   loadOwnedWatchlists,
   loadTodaySignals,
   marketDataPath,
   marketSymbol,
   markAlertRead,
+  newYorkDayStartUtc,
   newYorkDate,
   previousDailyClose,
   quoteAsOfCaption,
@@ -31,6 +34,13 @@ test("New York date keeps date-only values and assigns UTC timestamps to the NY 
   assert.equal(newYorkDate("2026-10-17T04:01:00Z"), "2026-10-17");
   assert.equal(newYorkDate("not-a-date"), null);
   assert.equal(newYorkDate("2026-02-30"), null);
+});
+
+test("New York midnight UTC boundary follows DST without fixed offsets", () => {
+  assert.equal(newYorkDayStartUtc("2026-10-16"), "2026-10-16T04:00:00.000Z");
+  assert.equal(newYorkDayStartUtc("2026-03-08"), "2026-03-08T05:00:00.000Z");
+  assert.equal(newYorkDayStartUtc("2026-11-01"), "2026-11-01T04:00:00.000Z");
+  assert.equal(newYorkDayStartUtc("2026-02-30"), null);
 });
 
 test("previous close uses the previous daily bar before quote's New York date", () => {
@@ -61,6 +71,25 @@ test("real zero stays visible while absent and non-finite prices stay unavailabl
   assert.equal(formatChange(null), "not available");
 });
 
+test("shared Labeled value handling preserves zero and suppresses non-finite numbers", () => {
+  assert.equal(labeledValueText(0), "0");
+  assert.equal(labeledValueText("0.00"), "0.00");
+  assert.equal(labeledValueText(null), "not available");
+  assert.equal(labeledValueText(Number.NaN), "not available");
+  assert.equal(labeledValueText(Number.POSITIVE_INFINITY), "not available");
+});
+
+test("daily change quality shows quote and baseline provenance or unavailable", () => {
+  assert.deepEqual(
+    derivedChangeQuality({ amount: 1, percent: 1 }, "delayed-15m", "eod"),
+    { quality: "delayed-15m", baselineQuality: "eod" },
+  );
+  assert.deepEqual(
+    derivedChangeQuality(null, "delayed-15m", "eod"),
+    { quality: "unavailable" },
+  );
+});
+
 test("as-of display preserves date-only bars, converts timestamps to ET, and labels stale quotes", () => {
   assert.equal(formatAsOf("2026-10-16"), "Oct 16, 2026");
   assert.equal(formatAsOf("2026-10-17T02:10:00Z"), "Oct 16, 2026, 10:10 PM ET");
@@ -80,8 +109,18 @@ test("today's signal counts use the signal's New York date", () => {
     { symbol: "/CL", created_at: "2026-10-17T03:00:00Z" },
   ];
 
-  assert.equal(countSignalsToday(signals, "AAPL", "2026-10-16"), 1);
-  assert.equal(countSignalsToday(signals, "CL", "2026-10-16"), 1);
+  assert.equal(countSignalsToday(signals, { symbol: "AAPL", asset_type: "stock" }, "2026-10-16"), 1);
+  assert.equal(countSignalsToday(signals, { symbol: "CL", asset_type: "future" }, "2026-10-16"), 1);
+});
+
+test("stock CL and future CL counts stay on their asset-aware symbols", () => {
+  const signals = [
+    { symbol: "CL", created_at: "2026-10-17T03:00:00Z" },
+    { symbol: "/CL", created_at: "2026-10-17T03:00:00Z" },
+  ];
+
+  assert.equal(countSignalsToday(signals, { symbol: "CL", asset_type: "stock" }, "2026-10-16"), 1);
+  assert.equal(countSignalsToday(signals, { symbol: "CL", asset_type: "future" }, "2026-10-16"), 1);
 });
 
 test("empty owned watchlists stay empty instead of receiving demo rows", async () => {
@@ -129,6 +168,7 @@ test("owned watchlist items and future daily bars use the real read routes", asy
 
 test("watchlist signal counts can read every page of owned signals", async () => {
   const offsets: string[] = [];
+  const sinceValues: (string | null)[] = [];
   const firstPage = Array.from({ length: 200 }, (_, index) => ({
     id: index + 1,
     strategy_version_id: 10,
@@ -143,15 +183,138 @@ test("watchlist signal counts can read every page of owned signals", async () =>
     async (input) => {
       const url = new URL(String(input));
       offsets.push(url.searchParams.get("offset") ?? "0");
+      sinceValues.push(url.searchParams.get("since"));
       return Response.json(url.searchParams.get("offset") === "200" ? secondPage : firstPage);
     },
     () => ({ href: "https://trading.tobytran.dev/" }),
   );
 
-  const signals = await loadTodaySignals(fetcher);
+  const result = await loadTodaySignals(fetcher, { now: Date.parse("2026-10-17T02:00:00Z") });
 
-  assert.equal(signals.length, 203);
+  assert.equal(result.signals.length, 203);
+  assert.equal(result.complete, true);
   assert.deepEqual(offsets, ["0", "200"]);
+  assert.deepEqual(sinceValues, ["2026-10-16T04:00:00.000Z", "2026-10-16T04:00:00.000Z"]);
+});
+
+test("empty today's signal window is a complete zero, not partial or unavailable", async () => {
+  const fetcher = createDeskApiClient(
+    async () => Response.json([]),
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  const result = await loadTodaySignals(fetcher, { now: Date.parse("2026-10-17T02:00:00Z") });
+
+  assert.deepEqual(result, { signals: [], complete: true });
+});
+
+test("shifting page boundaries deduplicate repeated signal ids and mark total partial", async () => {
+  const firstPage = Array.from({ length: 200 }, (_, index) => ({
+    id: index + 1,
+    strategy_version_id: 10,
+    symbol: "AAPL",
+    bar_time: "2026-10-16T14:00:00Z",
+    evidence: {},
+    data_quality: "delayed-15m",
+    created_at: "2026-10-16T14:00:00Z",
+  }));
+  const shiftedPage = [firstPage[199], { ...firstPage[0], id: 201 }, { ...firstPage[0], id: 202 }];
+  let calls = 0;
+  const fetcher = createDeskApiClient(
+    async () => {
+      calls += 1;
+      return Response.json(calls === 1 ? firstPage : shiftedPage);
+    },
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  const result = await loadTodaySignals(fetcher, { now: Date.parse("2026-10-17T02:00:00Z") });
+
+  assert.equal(result.signals.length, 202);
+  assert.equal(new Set(result.signals.map((signal) => signal.id)).size, 202);
+  assert.equal(result.complete, false);
+  assert.equal(calls, 2);
+});
+
+test("repeated full pages stop as a partial result instead of looping", async () => {
+  const page = Array.from({ length: 200 }, (_, index) => ({
+    id: index + 1,
+    strategy_version_id: 10,
+    symbol: "AAPL",
+    bar_time: "2026-10-16T14:00:00Z",
+    evidence: {},
+    data_quality: "delayed-15m",
+    created_at: "2026-10-16T14:00:00Z",
+  }));
+  let calls = 0;
+  const fetcher = createDeskApiClient(
+    async () => {
+      calls += 1;
+      return Response.json(page);
+    },
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  const result = await loadTodaySignals(fetcher, { now: Date.parse("2026-10-17T02:00:00Z") });
+
+  assert.equal(result.signals.length, 200);
+  assert.equal(result.complete, false);
+  assert.equal(calls, 2);
+});
+
+test("five full pages exhaust request cap and return partial rather than exact count", async () => {
+  let calls = 0;
+  const fetcher = createDeskApiClient(
+    async () => {
+      const start = calls++ * 200;
+      return Response.json(Array.from({ length: 200 }, (_, index) => ({
+        id: start + index + 1,
+        strategy_version_id: 10,
+        symbol: "AAPL",
+        bar_time: "2026-10-16T14:00:00Z",
+        evidence: {},
+        data_quality: "delayed-15m",
+        created_at: "2026-10-16T14:00:00Z",
+      })));
+    },
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  const result = await loadTodaySignals(fetcher, { now: Date.parse("2026-10-17T02:00:00Z") });
+
+  assert.equal(result.signals.length, 1_000);
+  assert.equal(result.complete, false);
+  assert.equal(calls, 5);
+});
+
+test("aborting after a signal page prevents the next page request", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const fetcher = createDeskApiClient(
+    async (_input, init) => {
+      calls += 1;
+      assert.equal(init?.signal, controller.signal);
+      controller.abort();
+      return Response.json(Array.from({ length: 200 }, (_, index) => ({
+        id: index + 1,
+        strategy_version_id: 10,
+        symbol: "AAPL",
+        bar_time: "2026-10-16T14:00:00Z",
+        evidence: {},
+        data_quality: "delayed-15m",
+        created_at: "2026-10-16T14:00:00Z",
+      })));
+    },
+    () => ({ href: "https://trading.tobytran.dev/" }),
+  );
+
+  const result = await loadTodaySignals(fetcher, {
+    now: Date.parse("2026-10-17T02:00:00Z"),
+    signal: controller.signal,
+  });
+
+  assert.equal(result.complete, false);
+  assert.equal(calls, 1);
 });
 
 test("mark-read sends the authenticated Desk API POST and validates returned alert", async () => {

@@ -9,6 +9,7 @@ import { BarsSchema } from "../../lib/api/schemas.ts";
 import {
   countSignalsToday,
   dailyChange,
+  derivedChangeQuality,
   formatChange,
   formatPrice,
   loadDailyBars,
@@ -20,6 +21,7 @@ import {
   quoteAsOfCaption,
   type AssetType,
   type TodaySignal,
+  type TodaySignalsResult,
 } from "../../lib/today.ts";
 import type { Quality } from "../../lib/labels.ts";
 import styles from "./today.module.css";
@@ -36,7 +38,7 @@ export function TodayWatchlist() {
   const [watchlists, setWatchlists] = useState<OwnedWatchlist[] | null>(null);
   const [watchlistError, setWatchlistError] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [signals, setSignals] = useState<TodaySignal[] | null>(null);
+  const [signalResult, setSignalResult] = useState<TodaySignalsResult | null>(null);
   const [signalsError, setSignalsError] = useState(false);
 
   useEffect(() => {
@@ -57,15 +59,17 @@ export function TodayWatchlist() {
 
   useEffect(() => {
     let active = true;
-    loadTodaySignals()
-      .then((items) => {
-        if (active) setSignals(items);
+    const controller = new AbortController();
+    loadTodaySignals(undefined, { signal: controller.signal })
+      .then((result) => {
+        if (active) setSignalResult(result);
       })
       .catch(() => {
         if (active) setSignalsError(true);
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, []);
 
@@ -122,7 +126,8 @@ export function TodayWatchlist() {
                     <WatchlistRow
                       item={item}
                       key={`${item.asset_type}:${item.symbol}`}
-                      signals={signals}
+                      signals={signalResult?.signals ?? null}
+                      signalsComplete={signalResult?.complete === true}
                       signalsError={signalsError}
                       today={today}
                     />
@@ -132,6 +137,9 @@ export function TodayWatchlist() {
             </div>
           )}
           {signalsError && <p className={styles.muted} role="status">Today&apos;s signal counts are unavailable.</p>}
+          {signalResult && !signalResult.complete && !signalsError && (
+            <p className={styles.muted} role="status">Today&apos;s signal totals are incomplete; exact counts are hidden.</p>
+          )}
         </>
       )}
     </section>
@@ -141,9 +149,16 @@ export function TodayWatchlist() {
 function WatchlistRow({
   item,
   signals,
+  signalsComplete,
   signalsError,
   today,
-}: Readonly<{ item: WatchlistItem; signals: TodaySignal[] | null; signalsError: boolean; today: string }>) {
+}: Readonly<{
+  item: WatchlistItem;
+  signals: TodaySignal[] | null;
+  signalsComplete: boolean;
+  signalsError: boolean;
+  today: string;
+}>) {
   const kind = assetType(item.asset_type);
   const apiSymbol = kind ? marketSymbol(item.symbol, kind) : item.symbol;
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -175,11 +190,15 @@ function WatchlistRow({
 
   const previousClose = quote ? previousDailyClose(dailyBars?.bars ?? [], quote.as_of) : null;
   const change = quote ? dailyChange(quote.close, previousClose) : null;
-  const signalCount = signalsError || signals === null || !today || !kind
+  const changeProvenance = derivedChangeQuality(
+    change,
+    quote?.quality ?? null,
+    dailyBars?.quality ?? null,
+  );
+  const signalCount = signalsError || signals === null || !signalsComplete || !today || !kind
     ? null
-    : countSignalsToday(signals, item.symbol, today);
+    : countSignalsToday(signals, { symbol: item.symbol, asset_type: kind }, today);
   const priceQuality: Quality = quote?.quality ?? "unavailable";
-  const changeQuality: Quality = dailyBars?.quality ?? "unavailable";
 
   return (
     <tr>
@@ -194,7 +213,14 @@ function WatchlistRow({
         {quote && <span className={styles.asOf}>{quoteAsOfCaption(quote.as_of, quote.quality)}</span>}
         {streamError && !quote && <span className={styles.symbolMeta}>Stream unavailable</span>}
       </td>
-      <td><Labeled label="Daily change" value={formatChange(change)} quality={changeQuality} /></td>
+      <td>
+        <Labeled
+          label="Daily change"
+          value={formatChange(change)}
+          quality={changeProvenance.quality}
+          baselineQuality={changeProvenance.baselineQuality}
+        />
+      </td>
       <td><span className={styles.signalCount}>{signalCount ?? "not available"}</span></td>
     </tr>
   );
