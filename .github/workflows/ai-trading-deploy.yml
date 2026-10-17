@@ -59,6 +59,13 @@ on:
           only an operator deliberately setting this true runs that job.
         type: boolean
         default: false
+      upload_desk_static:
+        description: >-
+          Build the Family Desk release export and upload its public shell to
+          its dedicated bucket. No Clerk key, images, VPS deploy or hostname
+          cutover. Run from main after the owner-reviewed bucket/IAM apply.
+        type: boolean
+        default: false
 
 concurrency:
   group: ai-trading-production-deploy
@@ -79,6 +86,7 @@ env:
   # roles/storage.objectAdmin on the hub static bucket only -- never GCP_DEPLOY_SERVICE_ACCOUNT's
   # broader access. Bound to the same existing deploy Workload Identity pool/provider above.
   GCP_HUB_UPLOAD_SERVICE_ACCOUNT: ai-trading-hub-upload@tobytran-portfolio.iam.gserviceaccount.com
+  GCP_DESK_UPLOAD_SERVICE_ACCOUNT: ai-trading-desk-upload@tobytran-portfolio.iam.gserviceaccount.com
 
 jobs:
   # F1: runs on every push to main, or a manual dispatch with deploy_app=true.
@@ -396,6 +404,58 @@ jobs:
             exit 1
           fi
           ../deploy/ci/upload-hub-static.sh out "$bucket"
+
+  # Desk has no Clerk bundle/key. Like the hub, upload is an explicit
+  # main-only dispatch (also enforced by WIF) and never applies Terraform.
+  desk-static-upload:
+    name: Upload Desk static release (operator-gated)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.upload_desk_static == true
+    environment: ai-trading-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            ai-trading/packages/family-desk/frontend
+            ai-trading/packages/family-desk/contracts
+            ai-trading/deploy/ci
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build Desk static export from release commit
+        run: pnpm build
+      - name: Check Desk export
+        run: ../../../deploy/ci/check-static-export.sh out desk
+      - name: Authenticate to Google Cloud (Desk static uploader)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_DESK_UPLOAD_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          cleanup_credentials: true
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Upload Desk static build to GCS
+        env:
+          DESK_STATIC_BUCKET: ${{ vars.DESK_STATIC_BUCKET }}
+        run: |
+          set -euo pipefail
+          : "${DESK_STATIC_BUCKET:?DESK_STATIC_BUCKET is not set; refusing to upload}"
+          ../../../deploy/ci/upload-hub-static.sh out "$DESK_STATIC_BUCKET" desk
 
   # MiroFish static staging upload (Task 7). Fully additive and independent
   # of `build`/`deploy` above: a repository *variable* existing is NOT

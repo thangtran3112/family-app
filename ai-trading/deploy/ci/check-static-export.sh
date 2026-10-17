@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# Verifies a freshly built ai-trading/frontend/out/ directory: the required
+# Verifies a freshly built hub or Desk export directory: the required
 # routes exist, and no secret-shaped string made it into the static bundle.
-# Usage: ai-trading/deploy/ci/check-static-export.sh OUT_DIR
+# Usage: ai-trading/deploy/ci/check-static-export.sh OUT_DIR [hub|desk]
 set -Eeuo pipefail
 
 OUT_DIR="${1:?usage: check-static-export.sh OUT_DIR}"
+PROFILE="${2:-hub}"
 
 fail() {
   echo "check-static-export: $*" >&2
   exit 1
 }
 
-for required in index.html apps/tradingagents.html apps/ai-hedge-fund.html apps/vibe-trading.html apps/mirofish.html 404.html; do
+case "$PROFILE" in
+  hub) REQUIRED=(index.html apps/tradingagents.html apps/ai-hedge-fund.html apps/vibe-trading.html apps/mirofish.html 404.html) ;;
+  desk) REQUIRED=(index.html strategies.html 404.html) ;;
+  *) fail "unknown export profile: $PROFILE" ;;
+esac
+for required in "${REQUIRED[@]}"; do
   [[ -f "$OUT_DIR/$required" ]] || fail "missing $required"
 done
 [[ -d "$OUT_DIR/_next/static" ]] || fail "missing _next/static"
-[[ -f "$OUT_DIR/apps/desk.html" ]] && fail "apps/desk.html exists but Family Desk is not live yet"
 
 # Forbidden patterns: Clerk/OpenAI/Zep secret key prefixes and literal
 # secret-section key names. Clerk PUBLISHABLE keys (pk_live_/pk_test_) are

@@ -31,6 +31,25 @@ Each provider's `attribute_condition` requires the exact repository
 
 ## Apply order
 
+### Desk static shell (Phase 4)
+
+`desk-bucket.tf` adds a separate, versioned public-read shell bucket (no user
+data) and `ai-trading-desk-upload`. Its `roles/storage.objectAdmin` grant is
+bucket-scoped; the existing deploy WIF provider still requires the exact deploy
+workflow on `main` and environment `ai-trading-production`. No extra Secret
+Manager/Firestore permissions or credentials are granted to this uploader.
+
+After owner plan review and full-root apply, `desk_bucket_name` configures
+Cloudflare's `desk_static_bucket_name` and the deploy workflow's repository
+variable `DESK_STATIC_BUCKET`. `desk_static_uploader_email` matches the workflow's
+`GCP_DESK_UPLOAD_SERVICE_ACCOUNT`. The upload job uses existing
+`GCP_WORKLOAD_IDENTITY_PROVIDER` with `id-token: write`, not the broader deploy
+identity. No Desk Clerk key or new secret variable is needed.
+
+Provision before uploading, and upload the completed release export before
+enabling Cloudflare's default-false `desk_cutover_enabled`. See the Cloudflare
+root README for the two-stage owner-gated procedure and rollback.
+
 This is the first root applied (see the plan's Task 12): the Cloudflare
 roots and the deploy/infra workflows depend on the identities it creates
 (not the Secret Manager secret — current code reads Firestore `family-config`
