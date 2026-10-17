@@ -152,6 +152,14 @@ def _extended_minute_frame() -> pd.DataFrame:
     )
 
 
+def _premarket_minute_frame() -> pd.DataFrame:
+    day = _full_stock_session()
+    index = pd.date_range(day.regular_open - pd.Timedelta(minutes=5), periods=5, freq="min")
+    return pd.DataFrame(
+        {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=index
+    )
+
+
 def _set_bars(client: TestClient, source: FakeBars) -> None:
     app.dependency_overrides[get_data_sources] = lambda: fake_data_sources(source)
 
@@ -284,6 +292,24 @@ def test_stock_technicals_exclude_extended_hours(client):
     response = client.get("/api/desk/technicals/AAPL?timeframe=1m&days=2000", headers=auth_headers())
     assert response.status_code == 200
     assert response.json()["as_of"] == source.frame.index[9].isoformat()
+
+
+@pytest.mark.parametrize("route", ["bars", "technicals"])
+def test_regular_stock_route_returns_empty_when_premarket_is_all_that_survives(client, route):
+    _set_bars(client, FakeBars(_premarket_minute_frame()))
+    path = (
+        "/api/desk/bars/AAPL?interval=15m&days=2000"
+        if route == "bars"
+        else "/api/desk/technicals/AAPL?timeframe=15m&days=2000"
+    )
+    response = client.get(path, headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["quality"] == "unavailable"
+    if route == "bars":
+        assert response.json()["bars"] == []
+    else:
+        assert response.json()["as_of"] is None
+        assert response.json()["gauges"]["summary"]["label"] == "warming up"
 
 
 def test_futures_technicals_keep_overnight_cme_bars(client):
@@ -479,6 +505,20 @@ def test_resampling_discards_left_cutoff_bin(interval, minutes):
     assert result.iloc[0]["high"] == expected_rows["high"].max()
     assert result.iloc[0]["low"] == expected_rows["low"].min()
     assert result.iloc[0]["volume"] == expected_rows["volume"].sum()
+
+
+def test_resampling_returns_empty_when_every_bin_is_still_forming():
+    trading_session = _full_stock_session()
+    starts = pd.date_range(trading_session.regular_open + pd.Timedelta(minutes=5), periods=2, freq="min")
+    frame = pd.DataFrame(
+        {"open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1.0}, index=starts
+    )
+    now = trading_session.regular_open + pd.Timedelta(minutes=7)
+    result = get_market_bars(
+        fake_data_sources(FakeBars(frame)), "AAPL", "15m", 1, stock_session="regular", now=now
+    )
+    assert result.frame.empty
+    assert result.quality == "unavailable"
 
 
 def test_bars_preserve_nonfinite_values_as_null(client):

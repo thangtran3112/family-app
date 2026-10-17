@@ -135,7 +135,8 @@ def get_market_bars(
         if interval in _RESAMPLE_MINUTES:
             frame = _resample(annotated, asset, _RESAMPLE_MINUTES[interval], now)
             # The bounded source window may start inside its first phase-aligned bin.
-            frame = frame.loc[frame.index >= start]
+            if not frame.empty:
+                frame = frame.loc[frame.index >= start]
         else:
             frame = annotated.loc[:, OHLCV]
     frame = frame.tail(MAX_BARS)
