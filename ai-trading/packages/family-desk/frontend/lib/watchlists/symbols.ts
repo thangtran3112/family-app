@@ -8,3 +8,16 @@ export function canonicalWatchlistSymbol(value: string, assetType: AssetType): s
   }
   return symbol;
 }
+
+export function marketSymbolForItem(symbol: string, assetType: string): string | null {
+  if (assetType !== "stock" && assetType !== "future") return null;
+  try {
+    return canonicalWatchlistSymbol(symbol, assetType);
+  } catch {
+    return null;
+  }
+}
+
+export function watchlistItemDeletePath(watchlistId: number, storedSymbol: string): string {
+  return `/api/desk/watchlists/${watchlistId}/items/${encodeURIComponent(storedSymbol)}`;
+}

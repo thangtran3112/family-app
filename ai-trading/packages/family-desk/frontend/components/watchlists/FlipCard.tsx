@@ -9,21 +9,18 @@ import { qualityLabel } from "@/lib/labels";
 import { openQuoteStream, type Quote } from "@/lib/stream.ts";
 import { cardBackValue } from "@/lib/watchlists/cardBack";
 import { strategyContextHref } from "@/lib/watchlists/context";
+import { marketSymbolForItem } from "@/lib/watchlists/symbols";
+import {
+  selectCardTimeframe,
+  technicalsTimeframe,
+  WATCHLIST_CARD_TIMEFRAMES,
+  type WatchlistCardTimeframe,
+} from "@/lib/watchlists/timeframes";
 import styles from "./watchlists.module.css";
 
 type Item = ReturnType<typeof WatchlistItemsSchema.parse>[number];
 type Bars = ReturnType<typeof BarsSchema.parse>;
 type Technicals = ReturnType<typeof TechnicalsSchema.parse>;
-type Timeframe = "5m" | "15m" | "1h" | "1D" | "1W";
-
-const timeframes: Timeframe[] = ["5m", "15m", "1h", "1D", "1W"];
-const timeframeApi: Record<Timeframe, string> = {
-  "5m": "5m",
-  "15m": "15m",
-  "1h": "1h",
-  "1D": "1d",
-  "1W": "1w",
-};
 
 export function FlipCard({
   item,
@@ -40,42 +37,43 @@ export function FlipCard({
   onRemove: () => void;
   removing: boolean;
 }) {
-  const [timeframe, setTimeframe] = useState<Timeframe>("15m");
+  const [timeframe, setTimeframe] = useState<WatchlistCardTimeframe>("15m");
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [data, setData] = useState<{ symbol: string; timeframe: Timeframe; bars: Bars; technicals: Technicals } | null>(null);
+  const [data, setData] = useState<{ symbol: string; timeframe: WatchlistCardTimeframe; bars: Bars; technicals: Technicals } | null>(null);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [retryRevision, setRetryRevision] = useState(0);
-  const requestKey = `${item.symbol}:${timeframe}`;
-  const dataIsCurrent = data?.symbol === item.symbol && data.timeframe === timeframe;
+  const marketSymbol = marketSymbolForItem(item.symbol, item.asset_type);
+  const requestKey = `${marketSymbol ?? item.symbol}:${timeframe}`;
+  const dataIsCurrent = data?.symbol === marketSymbol && data.timeframe === timeframe;
   const bars = dataIsCurrent ? data.bars : null;
   const technicals = dataIsCurrent ? data.technicals : null;
-  const loading = active && !dataIsCurrent && failedKey !== requestKey;
+  const loading = active && marketSymbol !== null && !dataIsCurrent && failedKey !== requestKey;
   const error = failedKey === requestKey;
 
   useEffect(() => {
-    if (!active) return;
-    return openQuoteStream(item.symbol, setQuote);
-  }, [active, item.symbol]);
+    if (!active || !marketSymbol) return;
+    return openQuoteStream(marketSymbol, setQuote);
+  }, [active, marketSymbol]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !marketSymbol) return;
     let current = true;
-    void loadTechnicalData(item.symbol, timeframeApi[timeframe], {
+    void loadTechnicalData(marketSymbol, technicalsTimeframe(timeframe), {
       bars: (path) => deskFetch(path, BarsSchema),
       technicals: (path) => deskFetch(path, TechnicalsSchema),
     }).then(({ bars: nextBars, technicals: nextTechnicals }) => {
       if (!current) return;
-      setData({ symbol: item.symbol, timeframe, bars: nextBars, technicals: nextTechnicals });
+      setData({ symbol: marketSymbol, timeframe, bars: nextBars, technicals: nextTechnicals });
       setFailedKey(null);
     }).catch(() => {
       if (current) setFailedKey(requestKey);
     });
     return () => { current = false; };
-  }, [active, item.symbol, timeframe, retryRevision, requestKey]);
+  }, [active, marketSymbol, timeframe, retryRevision, requestKey]);
 
-  function setTimeframeAndClear(next: Timeframe) {
+  function setTimeframeAndClear(next: string) {
     setFailedKey(null);
-    setTimeframe(next);
+    setTimeframe(selectCardTimeframe(timeframe, next));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -96,25 +94,40 @@ export function FlipCard({
     : technicals.quality === "unavailable"
     ? "Unavailable"
     : technicals.gauges.summary.label;
-  const query = new URLSearchParams({ symbol: item.symbol, timeframe: timeframeApi[timeframe] });
-  const strategyHref = strategyContextHref(item.symbol, timeframeApi[timeframe], "summary");
+  const query = marketSymbol
+    ? new URLSearchParams({ symbol: marketSymbol, timeframe: technicalsTimeframe(timeframe) })
+    : null;
+  const strategyHref = marketSymbol
+    ? strategyContextHref(marketSymbol, technicalsTimeframe(timeframe), "summary")
+    : null;
 
   return (
-    <article className={styles.flipCard} onKeyDown={handleKeyDown} tabIndex={0} aria-label={`${item.symbol} technicals flip card`}>
+    <article className={styles.flipCard} onKeyDown={handleKeyDown} tabIndex={0} aria-label={`${marketSymbol ?? item.symbol} technicals flip card`}>
       <div className={styles.cardHeading}>
         <div>
-          <strong className={styles.symbol}>{item.symbol}</strong>
-          <span className={styles.assetType}>{item.asset_type === "future" ? "Future" : "Stock"}</span>
+          <strong className={styles.symbol}>{marketSymbol ?? item.symbol}</strong>
+          <span className={styles.assetType}>{marketSymbol ? (item.asset_type === "future" ? "Future" : "Stock") : "Unsupported asset"}</span>
           {item.backfill === "pending" && <span className={styles.pending}>Backfilling history</span>}
         </div>
         <button
-          aria-label={flipped ? `Show ${item.symbol} price front` : `Show ${item.symbol} technical back`}
+          aria-label={flipped ? `Show ${marketSymbol ?? item.symbol} price front` : `Show ${marketSymbol ?? item.symbol} technical back`}
           className={styles.flipButton}
           onClick={onFlip}
           type="button"
         >
           Flip
         </button>
+      </div>
+
+      <div className={styles.timeframes} role="group" aria-label={`${marketSymbol ?? item.symbol} card timeframe`}>
+        {WATCHLIST_CARD_TIMEFRAMES.map((option) => (
+          <button
+            aria-pressed={timeframe === option}
+            key={option}
+            onClick={() => setTimeframeAndClear(option)}
+            type="button"
+          >{option}</button>
+        ))}
       </div>
 
       <div className={`${styles.cardFace} ${flipped ? styles.cardFaceHidden : ""}`} aria-hidden={flipped} inert={flipped}>
@@ -128,27 +141,18 @@ export function FlipCard({
         <p className={styles.sourceLine}>
           {qualityLabel(priceQuality)} · {priceAsOf ? `as of ${priceAsOf}` : "as of unavailable"}
         </p>
-        <div className={styles.timeframes} aria-label={`${item.symbol} card timeframe`}>
-          {timeframes.map((option) => (
-            <button
-              aria-pressed={timeframe === option}
-              key={option}
-              onClick={() => setTimeframeAndClear(option)}
-              type="button"
-            >{option}</button>
-          ))}
-        </div>
         {error && <div className={styles.error} role="alert">Could not load actual bars and technicals. <button className={styles.textButton} onClick={() => { setFailedKey(null); setRetryRevision((value) => value + 1); }} type="button">Retry</button></div>}
         {loading && <p className={styles.feedback} role="status">Loading {timeframe} data…</p>}
+        {!marketSymbol && <p className={styles.feedback}>No market request sent: unsupported stored asset type.</p>}
         <div className={styles.frontActions}>
-          <a href={`/technicals?${query.toString()}`}>Full technicals</a>
+          {query && <a href={`/technicals?${query.toString()}`}>Full technicals</a>}
           <button className={styles.primaryButton} onClick={onFlip} type="button">View card back</button>
         </div>
       </div>
 
       <div className={`${styles.cardFace} ${!flipped ? styles.cardFaceHidden : ""}`} aria-hidden={!flipped} inert={!flipped}>
         {technicals ? <>
-          <p className={styles.sourceLine}>Backend technicals · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</p>
+          <p className={styles.sourceLine}>Backend technicals · {timeframe} · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</p>
           <BiasGauge
             asOf={technicals.as_of}
             gauge={technicals.gauges.summary}
@@ -186,11 +190,11 @@ export function FlipCard({
             ))}</dl>
             {!Object.keys(technicals.card_back.pivots).length && <p>Not available</p>}
           </section>
-        </> : <p className={styles.feedback}>{loading ? "Loading actual backend values…" : "Backend technicals not available."}</p>}
+        </> : <p className={styles.feedback}>{!marketSymbol ? "No market request sent: unsupported stored asset type." : loading ? "Loading actual backend values…" : "Backend technicals not available."}</p>}
         <p className={styles.pending}>Make strategy opens a reviewable draft setup; it does not save or activate it.</p>
         <div className={styles.frontActions}>
-          <a href={`/technicals?${query.toString()}`}>Full technicals</a>
-          <a className={styles.primaryLink} href={strategyHref}>Make strategy</a>
+          {query && <a href={`/technicals?${query.toString()}`}>Full technicals</a>}
+          {strategyHref && <a className={styles.primaryLink} href={strategyHref}>Make strategy</a>}
         </div>
         <button className={styles.removeButton} disabled={removing} onClick={onRemove} type="button">
           {removing ? "Removing…" : `Remove ${item.symbol}`}

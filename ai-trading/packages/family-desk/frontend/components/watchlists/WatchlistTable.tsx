@@ -5,6 +5,7 @@ import type { Quote } from "@/lib/stream.ts";
 import { openQuoteStream } from "@/lib/stream.ts";
 import { qualityLabel } from "@/lib/labels";
 import { cardBackValue } from "@/lib/watchlists/cardBack";
+import { marketSymbolForItem } from "@/lib/watchlists/symbols";
 import type { WatchlistItemsSchema } from "@/lib/api/schemas";
 import styles from "./watchlists.module.css";
 
@@ -28,16 +29,20 @@ function WatchlistRow({
   onRemove: (symbol: string) => void;
 }) {
   const [quote, setQuote] = useState<Quote | null>(null);
+  const marketSymbol = marketSymbolForItem(item.symbol, item.asset_type);
+  const signalIdentityKnown = marketSymbol !== null
+    && !(item.asset_type === "future" && !item.symbol.trim().startsWith("/"));
 
   useEffect(() => {
-    return openQuoteStream(item.symbol, setQuote);
-  }, [item.symbol]);
+    if (!marketSymbol) return;
+    return openQuoteStream(marketSymbol, setQuote);
+  }, [marketSymbol]);
 
   return (
     <tr>
       <th scope="row">
-        <span className={styles.symbol}>{item.symbol}</span>
-        <span className={styles.assetType}>{item.asset_type === "future" ? "Future" : "Stock"}</span>
+        <span className={styles.symbol}>{marketSymbol ?? item.symbol}</span>
+        <span className={styles.assetType}>{marketSymbol ? (item.asset_type === "future" ? "Future" : "Stock") : "Unsupported asset"}</span>
         {item.backfill === "pending" && <span className={styles.pending}>Backfilling history</span>}
       </th>
       <td data-label="Latest price">
@@ -48,11 +53,11 @@ function WatchlistRow({
         <time className={styles.asOf} dateTime={quote?.as_of}>{quote ? `As of ${quote.as_of}` : "As of unavailable"}</time>
       </td>
       <td data-label="Signals today">
-        <strong>{signalsLoading ? "Loading…" : signalsError ? "not available" : signalCount ?? 0}</strong>
+        <strong>{!signalIdentityKnown || signalsError ? "not available" : signalsLoading ? "Loading…" : signalCount ?? 0}</strong>
       </td>
       <td data-label="Actions">
         <button
-          aria-label={`Remove ${item.symbol} from ${listName}`}
+          aria-label={`Remove ${marketSymbol ?? item.symbol} from ${listName}`}
           className={styles.removeButton}
           disabled={removing}
           onClick={() => onRemove(item.symbol)}
@@ -87,18 +92,23 @@ export function WatchlistTable({
       <table className={styles.watchlistTable}>
         <thead><tr><th scope="col">Symbol</th><th scope="col">Latest price</th><th scope="col">Source quality</th><th scope="col">Signals today</th><th scope="col"><span className={styles.visuallyHidden}>Actions</span></th></tr></thead>
         <tbody>
-          {items.map((item) => (
-            <WatchlistRow
-              item={item}
-              key={item.symbol}
-              listName={listName}
-              onRemove={onRemove}
-              removing={removingSymbols.has(item.symbol)}
-              signalCount={signalCounts[item.symbol]}
-              signalsError={signalsError}
-              signalsLoading={signalsLoading}
-            />
-          ))}
+          {items.map((item) => {
+            const marketSymbol = marketSymbolForItem(item.symbol, item.asset_type);
+            const signalIdentityKnown = marketSymbol !== null
+              && !(item.asset_type === "future" && !item.symbol.trim().startsWith("/"));
+            return (
+              <WatchlistRow
+                item={item}
+                key={`${item.asset_type}:${item.symbol}`}
+                listName={listName}
+                onRemove={onRemove}
+                removing={removingSymbols.has(item.symbol)}
+                signalCount={signalIdentityKnown && marketSymbol ? signalCounts[marketSymbol] : undefined}
+                signalsError={signalsError}
+                signalsLoading={signalsLoading}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -18,6 +18,7 @@ import {
   SignalsResponseSchema,
 } from "@/lib/api/schemas";
 import { signalCountsBySymbol, signalsSinceEtStart } from "@/lib/watchlists/signals";
+import { watchlistItemDeletePath } from "@/lib/watchlists/symbols";
 import styles from "@/components/watchlists/watchlists.module.css";
 
 type Watchlist = ReturnType<typeof WatchlistsResponseSchema.parse>[number];
@@ -201,8 +202,7 @@ export default function WatchlistsPage() {
     if (selectedId === null) return;
     setRemovingSymbols((current) => new Set(current).add(symbol));
     try {
-      const pathSymbol = encodeURIComponent(symbol);
-      await deskFetch(`/api/desk/watchlists/${selectedId}/items/${pathSymbol}`, z.undefined(), { method: "DELETE" });
+      await deskFetch(watchlistItemDeletePath(selectedId, symbol), z.undefined(), { method: "DELETE" });
       setItemsRevision((value) => value + 1);
       setItemsLoading(true);
       setItemsError("");
@@ -342,7 +342,7 @@ export default function WatchlistsPage() {
                       active={view === "cards"}
                       flipped={flippedSymbols.has(item.symbol)}
                       item={item}
-                      key={item.symbol}
+                      key={`${item.asset_type}:${item.symbol}`}
                       onFlip={() => flipOne(item.symbol)}
                       onRemove={() => removeSymbol(item.symbol)}
                       removing={removingSymbols.has(item.symbol)}
