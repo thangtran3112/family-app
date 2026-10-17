@@ -7,6 +7,7 @@ import { BiasGauge } from "@/components/technicals/Gauges";
 import { BarsSchema, FuturesSpecsSchema, TechnicalsSchema } from "@/lib/api/schemas";
 import { deskFetch } from "@/lib/api/client";
 import { qualityLabel } from "@/lib/labels";
+import { loadFuturesSnapshot, snapshotForContract, type FuturesSnapshot } from "@/lib/futures/load";
 import { sizeMicroFirst } from "@/lib/futures/specs";
 import styles from "./futures.module.css";
 
@@ -36,16 +37,12 @@ function classicLevels(technicals: Technicals | null): MarketChartLevel[] {
   }));
 }
 
-const emptyBars = (symbol: string): Bars => ({ symbol, interval: "1d", quality: "unavailable", as_of: null, bars: [] });
-
 export function FuturesSwingScreen() {
   const [specs, setSpecs] = useState<FuturesSpec[] | null>(null);
   const [specError, setSpecError] = useState("");
   const [selectedRoot, setSelectedRoot] = useState("ES");
   const [selectedContract, setSelectedContract] = useState("MES");
-  const [bars, setBars] = useState<Bars | null>(null);
-  const [daily, setDaily] = useState<Technicals | null>(null);
-  const [fourHour, setFourHour] = useState<Technicals | null>(null);
+  const [snapshot, setSnapshot] = useState<FuturesSnapshot<Bars, Technicals> | null>(null);
   const [marketError, setMarketError] = useState("");
   const [marketLoading, setMarketLoading] = useState(true);
   const [risk, setRisk] = useState("");
@@ -72,29 +69,24 @@ export function FuturesSwingScreen() {
   const pair = pairs.find(({ mini }) => mini.root === selectedRoot) ?? pairs[0];
   const activeSpec = specs?.find(({ root }) => root === selectedContract) ?? null;
   const microSpec = pair?.micro ?? null;
+  const symbol = `/${selectedContract}`;
+  const currentSnapshot = snapshotForContract(snapshot, symbol);
+  const bars = currentSnapshot?.bars ?? null;
+  const daily = currentSnapshot?.daily ?? null;
+  const fourHour = currentSnapshot?.fourHour ?? null;
 
   useEffect(() => {
     if (!specs || !activeSpec) return;
     let active = true;
-    const symbol = `/${activeSpec.root}`;
-    const encodedSymbol = encodeURIComponent(symbol);
-    const barsQuery = new URLSearchParams({ interval: "1d", days: "3650" });
-    const dailyQuery = new URLSearchParams({ timeframe: "1d", days: "3650" });
-    const fourHourQuery = new URLSearchParams({ timeframe: "4h", days: "3650" });
-    void Promise.all([
-      deskFetch(`/api/desk/bars/${encodedSymbol}?${barsQuery.toString()}`, BarsSchema),
-      deskFetch(`/api/desk/technicals/${encodedSymbol}?${dailyQuery.toString()}`, TechnicalsSchema),
-      deskFetch(`/api/desk/technicals/${encodedSymbol}?${fourHourQuery.toString()}`, TechnicalsSchema),
-    ]).then(([barData, dailyData, fourHourData]) => {
+    void loadFuturesSnapshot(activeSpec.root,
+      (path) => deskFetch(path, BarsSchema),
+      (path) => deskFetch(path, TechnicalsSchema),
+    ).then((result) => {
       if (!active) return;
-      setBars(barData);
-      setDaily(dailyData);
-      setFourHour(fourHourData);
+      setSnapshot(result);
     }).catch(() => {
       if (active) {
-        setBars(emptyBars(symbol));
-        setDaily(null);
-        setFourHour(null);
+        setSnapshot(null);
         setMarketError("Futures market data is unavailable for this contract.");
       }
     }).finally(() => { if (active) setMarketLoading(false); });
@@ -105,6 +97,9 @@ export function FuturesSwingScreen() {
     if (next.mini.root === selectedRoot && selectedContract === next.micro.root) return;
     setMarketLoading(true);
     setMarketError("");
+    setRisk("");
+    setEntry("");
+    setStop("");
     setSelectedRoot(next.mini.root);
     setSelectedContract(next.micro.root);
   }
@@ -113,6 +108,9 @@ export function FuturesSwingScreen() {
     if (contract.root === selectedContract) return;
     setMarketLoading(true);
     setMarketError("");
+    setRisk("");
+    setEntry("");
+    setStop("");
     setSelectedContract(contract.root);
   }
 
@@ -161,12 +159,12 @@ export function FuturesSwingScreen() {
 
       <section className={styles.marketSection} aria-label="Futures chart and bias">
         <div className={styles.marketHeader}>
-          <div><h2>/{selectedContract} · daily chart</h2><p>{marketLoading ? "Loading backend data…" : bars ? `${qualityLabel(bars.quality)} · ${bars.as_of ?? "as of unavailable"}` : "Market data unavailable"}</p></div>
+          <div><h2>{symbol} · daily chart</h2><p>{marketLoading ? "Loading backend data…" : bars ? `${qualityLabel(bars.quality)} · ${bars.as_of ?? "as of unavailable"}` : "Market data unavailable"}</p></div>
           <span className={styles.connectionBadge}>no broker connected yet</span>
         </div>
         {marketError && <p className={styles.error} role="status">{marketError}</p>}
         <MarketChart
-          symbol={`/${selectedContract}`}
+          symbol={symbol}
           interval="1d"
           bars={bars?.bars ?? []}
           quality={bars?.quality ?? "unavailable"}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chartTime, candlestickData, lineData } from "./chart-data.ts";
+import { chartTime, candlestickData, currentValue, lineData } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -8,6 +8,11 @@ test("date-only chart times stay business days without an ET date shift", () => 
 
 test("timestamp chart times use whole UTC seconds", () => {
   assert.equal(chartTime("2026-10-16T13:30:00Z"), Math.floor(Date.parse("2026-10-16T13:30:00Z") / 1000));
+});
+
+test("current chart values do not walk backward across trailing whitespace and preserve zero", () => {
+  assert.equal(currentValue([12, null]), null);
+  assert.equal(currentValue([12, 0]), 0);
 });
 
 test("bar and line points are sorted, unique, and use whitespace for missing values", () => {

@@ -2,27 +2,23 @@
 
 import { useMemo } from "react";
 import { BarsSchema, TechnicalsSchema } from "@/lib/api/schemas";
-import { calcEMA, calcMACD, calcRSI } from "@/lib/indicators";
+import { calcEMAWithGaps, calcMACDWithGaps, calcRSIWithGaps } from "@/lib/indicators-with-gaps";
 import { MarketChart } from "@/components/charts/MarketChart";
 
 type Bars = ReturnType<typeof BarsSchema.parse>;
 type Technicals = ReturnType<typeof TechnicalsSchema.parse>;
 
-function finiteValues(values: Array<number | null>): Array<number | null> {
-  return values.map((value) => value !== null && Number.isFinite(value) ? value : null);
-}
-
 export function RsiMacdChart({ bars, technicals, interval }: { bars: Bars; technicals: Technicals; interval: string }) {
   const indicators = useMemo(() => {
-    const close = bars.bars.map(({ c }) => c ?? Number.NaN);
-    const macd = calcMACD(close);
+    const close = bars.bars.map(({ c }) => c);
+    const macd = calcMACDWithGaps(close);
     return {
-      ema20: finiteValues(calcEMA(close, 20)),
-      ema50: finiteValues(calcEMA(close, 50)),
-      rsi: finiteValues(calcRSI(close, 14)),
-      macdLine: finiteValues(macd.dif),
-      macdSignal: finiteValues(macd.signal),
-      macdHistogram: finiteValues(macd.histogram),
+      ema20: calcEMAWithGaps(close, 20),
+      ema50: calcEMAWithGaps(close, 50),
+      rsi: calcRSIWithGaps(close, 14),
+      macdLine: macd.dif,
+      macdSignal: macd.signal,
+      macdHistogram: macd.histogram,
     };
   }, [bars.bars]);
   const levels = Object.entries(technicals.pivots.classic).map(([label, price]) => ({

@@ -10,6 +10,23 @@ export type MicroSize = {
   reason: string | null;
 };
 
+export type RollEvent = { date: string; roots: string[] };
+
+export function rollEvents(specs: Array<{ root: string; roll_dates: string[] }>): RollEvent[] {
+  const rootsByDate = new Map<string, Set<string>>();
+  for (const { root, roll_dates } of specs) {
+    for (const date of roll_dates) {
+      const roots = rootsByDate.get(date) ?? new Set<string>();
+      roots.add(root);
+      rootsByDate.set(date, roots);
+    }
+  }
+  return [...rootsByDate].sort(([left], [right]) => left.localeCompare(right)).map(([date, roots]) => ({
+    date,
+    roots: [...roots].sort(),
+  }));
+}
+
 export function sizeMicroFirst(
   riskUsd: number,
   entry: number,

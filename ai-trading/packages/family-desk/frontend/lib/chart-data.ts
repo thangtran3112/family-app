@@ -19,6 +19,11 @@ export function chartTime(value: string): Time {
   return seconds as UTCTimestamp;
 }
 
+export function currentValue(values: Array<number | null>): number | null {
+  const value = values.at(-1);
+  return value !== undefined && value !== null && Number.isFinite(value) ? value : null;
+}
+
 function timeKey(time: Time): number {
   if (typeof time === "number") return time;
   if (typeof time === "string") return Math.floor(Date.parse(time) / 1000);

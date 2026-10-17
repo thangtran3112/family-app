@@ -11,7 +11,7 @@ import type {
   WhitespaceData,
 } from "lightweight-charts";
 import { qualityLabel } from "@/lib/labels";
-import { candlestickData, lineData, type ChartBar } from "@/lib/chart-data";
+import { candlestickData, currentValue, lineData, type ChartBar } from "@/lib/chart-data";
 import styles from "./MarketChart.module.css";
 
 export type MarketChartOverlay = {
@@ -76,14 +76,6 @@ function formatValue(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value)
     ? "unavailable"
     : value.toLocaleString("en-US", { maximumFractionDigits: 4 });
-}
-
-function latest(values: Array<number | null>): number | null {
-  for (let index = values.length - 1; index >= 0; index--) {
-    const value = values[index];
-    if (value !== null && value !== undefined && Number.isFinite(value)) return value;
-  }
-  return null;
 }
 
 function histogramData(
@@ -291,10 +283,10 @@ export function MarketChart({
       <div className={styles.currentValues} aria-label="Latest chart values">
         <span>Last close <strong>{formatValue(lastBar?.c)}</strong></span>
         {overlays.map((overlay) => (
-          <span key={overlay.id}>{overlay.label} <strong>{formatValue(latest(overlay.values))}</strong></span>
+          <span key={overlay.id}>{overlay.label} <strong>{formatValue(currentValue(overlay.values))}</strong></span>
         ))}
         {panes.flatMap((pane) => pane.series.map((series) => (
-          <span key={`${pane.id}:${series.id}`}>{series.label} <strong>{formatValue(latest(series.values))}</strong></span>
+          <span key={`${pane.id}:${series.id}`}>{series.label} <strong>{formatValue(currentValue(series.values))}</strong></span>
         )))}
       </div>
       <details className={styles.dataTable}>

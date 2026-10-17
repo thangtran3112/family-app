@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FuturesSpecsSchema } from "@/lib/api/schemas";
 import { deskFetch } from "@/lib/api/client";
-import { marginText } from "@/lib/futures/specs";
+import { marginText, rollEvents } from "@/lib/futures/specs";
 import styles from "./futures.module.css";
 
 type FuturesSpec = ReturnType<typeof FuturesSpecsSchema.parse>[number];
@@ -52,7 +52,7 @@ export function FuturesSpecsScreen() {
     setReload((value) => value + 1);
   }
   const pairs = useMemo(() => pairsFromSpecs(specs ?? []), [specs]);
-  const nextRolls = useMemo(() => pairs.flatMap(({ mini, micro }) => mini.roll_dates.map((date) => ({ label: `${mini.root}/${micro.root}`, date }))).sort((left, right) => left.date.localeCompare(right.date)).slice(0, 12), [pairs]);
+  const nextRolls = useMemo(() => rollEvents(specs ?? []), [specs]);
   const sessions = useMemo(() => [...new Map((specs ?? []).map(({ session }) => [`${session.open_time}-${session.close_time}`, session])).values()], [specs]);
 
   return (
@@ -102,7 +102,7 @@ export function FuturesSpecsScreen() {
         <section className={styles.specSection}>
           <h2>Upcoming roll dates · returned by API</h2>
           <ol className={styles.rollTimeline}>
-            {nextRolls.map(({ label, date }) => <li key={`${label}-${date}`}><time dateTime={date}>{date}</time><span>{label} roll</span></li>)}
+            {nextRolls.map(({ roots, date }) => <li key={`${date}-${roots.join("-")}`}><time dateTime={date}>{date}</time><span>{roots.join(" / ")} roll</span></li>)}
             {nextRolls.length === 0 && <li><span>Roll dates unavailable.</span></li>}
           </ol>
         </section>

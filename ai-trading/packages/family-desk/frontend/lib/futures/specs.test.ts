@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { marginText, sizeMicroFirst } from "./specs.ts";
+import { marginText, rollEvents, sizeMicroFirst } from "./specs.ts";
 
 test("margin text never presents missing margin as an estimate", () => {
   assert.equal(marginText(null, null), "not available");
@@ -35,4 +35,21 @@ test("micro sizing rejects invalid risk, stop distance, and contract multipliers
     assert.equal(result.contracts, null);
     assert.ok(result.reason);
   }
+});
+
+test("roll events keep each root schedule and combine roots only on exact shared dates", () => {
+  assert.deepEqual(rollEvents([
+    { root: "CL", roll_dates: ["2026-10-20"] },
+    { root: "MCL", roll_dates: ["2026-10-19"] },
+    { root: "GC", roll_dates: ["2026-11-30"] },
+    { root: "MGC", roll_dates: ["2026-11-27"] },
+    { root: "ES", roll_dates: ["2026-12-14"] },
+    { root: "MES", roll_dates: ["2026-12-14"] },
+  ]), [
+    { date: "2026-10-19", roots: ["MCL"] },
+    { date: "2026-10-20", roots: ["CL"] },
+    { date: "2026-11-27", roots: ["MGC"] },
+    { date: "2026-11-30", roots: ["GC"] },
+    { date: "2026-12-14", roots: ["ES", "MES"] },
+  ]);
 });

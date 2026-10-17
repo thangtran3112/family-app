@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { deskFetch } from "@/lib/api/client";
 import { BarsSchema, TechnicalsSchema } from "@/lib/api/schemas";
 import { qualityLabel } from "@/lib/labels";
+import { loadTechnicalData, shouldStartTechnicalLoad } from "@/lib/technicals/load";
 import { Gauges } from "./Gauges";
 import { IndicatorTables } from "./IndicatorTables";
 import { RsiMacdChart } from "./RsiMacdChart";
@@ -46,20 +47,16 @@ function TechnicalsContent({ symbol, timeframe }: { symbol: string; timeframe: T
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    const encodedSymbol = encodeURIComponent(symbol);
-    const queryTimeframe = apiTimeframe[timeframe];
-    const barsQuery = new URLSearchParams({ interval: queryTimeframe, days: "3650", session: "regular" });
-    const technicalsQuery = new URLSearchParams({ timeframe: queryTimeframe, days: "3650" });
-    return Promise.all([
-      deskFetch(`/api/desk/bars/${encodedSymbol}?${barsQuery.toString()}`, BarsSchema),
-      deskFetch(`/api/desk/technicals/${encodedSymbol}?${technicalsQuery.toString()}`, TechnicalsSchema),
-    ]);
+  const load = useCallback(() => {
+    return loadTechnicalData(symbol, apiTimeframe[timeframe], {
+      bars: (path) => deskFetch(path, BarsSchema),
+      technicals: (path) => deskFetch(path, TechnicalsSchema),
+    });
   }, [symbol, timeframe]);
 
   useEffect(() => {
     let active = true;
-    void load().then(([barResponse, technicalsResponse]) => {
+    void load().then(({ bars: barResponse, technicals: technicalsResponse }) => {
       if (!active) return;
       setBars(barResponse);
       setTechnicals(technicalsResponse);
@@ -75,6 +72,7 @@ function TechnicalsContent({ symbol, timeframe }: { symbol: string; timeframe: T
     event.preventDefault();
     const next = normalizeSymbol(symbolInput.current?.value ?? "");
     if (!next) return;
+    if (!shouldStartTechnicalLoad({ symbol, timeframe }, { symbol: next, timeframe })) return;
     setLoading(true);
     setError("");
     const params = new URLSearchParams({ symbol: next, timeframe: apiTimeframe[timeframe] });
@@ -82,6 +80,7 @@ function TechnicalsContent({ symbol, timeframe }: { symbol: string; timeframe: T
   }
 
   function selectTimeframe(next: Timeframe) {
+    if (!shouldStartTechnicalLoad({ symbol, timeframe }, { symbol, timeframe: next })) return;
     setLoading(true);
     setError("");
     const params = new URLSearchParams({ symbol, timeframe: apiTimeframe[next] });
@@ -91,7 +90,7 @@ function TechnicalsContent({ symbol, timeframe }: { symbol: string; timeframe: T
   function retry() {
     setLoading(true);
     setError("");
-    void load().then(([barResponse, technicalsResponse]) => {
+    void load().then(({ bars: barResponse, technicals: technicalsResponse }) => {
       setBars(barResponse);
       setTechnicals(technicalsResponse);
     }).catch(() => setError(`Could not load technicals for ${symbol}. Check symbol and data availability, then retry.`)).finally(() => setLoading(false));
