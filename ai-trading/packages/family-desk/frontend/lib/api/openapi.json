@@ -873,6 +873,9 @@
           "symbol": {
             "title": "Symbol",
             "type": "string"
+          },
+          "volatility": {
+            "$ref": "#/components/schemas/VolatilityOut"
           }
         },
         "required": [
@@ -885,6 +888,7 @@
           "pivots",
           "rsi",
           "macd",
+          "volatility",
           "card_back"
         ],
         "title": "TechnicalsOut",
@@ -928,6 +932,55 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VolatilityOut": {
+        "properties": {
+          "atr14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr14"
+          },
+          "atr_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Percent"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "normal",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "atr14",
+          "atr_percent",
+          "label"
+        ],
+        "title": "VolatilityOut",
         "type": "object"
       },
       "VoteCountsOut": {

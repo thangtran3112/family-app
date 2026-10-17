@@ -26,6 +26,7 @@ _CARD_TIMEFRAME = {
     "1m": "1m",
 }
 GaugeLabel = Literal["Strong Sell", "Sell", "Neutral", "Buy", "Strong Buy", "warming up"]
+VolatilityLabel = Literal["low", "normal", "high"]
 
 
 class VoteCountsOut(BaseModel):
@@ -57,6 +58,12 @@ class MacdOut(BaseModel):
     histogram: FiniteFloat | None
 
 
+class VolatilityOut(BaseModel):
+    atr14: FiniteFloat | None
+    atr_percent: FiniteFloat | None
+    label: VolatilityLabel | None
+
+
 class PivotMethodsOut(BaseModel):
     classic: dict[str, FiniteFloat | None]
     fibonacci: dict[str, FiniteFloat | None]
@@ -84,6 +91,7 @@ class TechnicalsOut(BaseModel):
     pivots: PivotMethodsOut
     rsi: FiniteFloat | None
     macd: MacdOut
+    volatility: VolatilityOut
     card_back: CardBackOut
 
 
@@ -102,6 +110,17 @@ def _votes(values: dict[str, bias.Vote]) -> dict[str, VoteOut]:
         name: VoteOut(values={key: finite_or_none(value) for key, value in vote.values.items()}, action=vote.action)
         for name, vote in values.items()
     }
+
+
+def _volatility(frame: pd.DataFrame) -> VolatilityOut:
+    if frame.empty or any(finite_or_none(frame[column].iloc[-1]) is None for column in ("high", "low", "close")):
+        return VolatilityOut(atr14=None, atr_percent=None, label=None)
+    atr_values = indicators.atr(frame, 14)
+    atr_percent = indicators.atr_percent(frame)
+    atr14 = finite_or_none(atr_values.iloc[-1]) if len(atr_values) else None
+    percent = finite_or_none(atr_percent.pct.iloc[-1]) if len(atr_percent.pct) else None
+    label = atr_percent.label.iloc[-1] if atr14 is not None and percent is not None else None
+    return VolatilityOut(atr14=atr14, atr_percent=percent, label=label)
 
 
 def _card_back(value: CardBack) -> CardBackOut:
@@ -159,9 +178,7 @@ def technicals(
         data_sources, symbol, timeframe, days, stock_session="regular" if asset == "stock" else None
     )
     frame, quality = market.frame, market.quality
-    back = compute_card_back(
-        symbol, _CARD_TIMEFRAME[timeframe], frame, asset, daily_bars=market.daily_bars
-    )
+    back = compute_card_back(symbol, _CARD_TIMEFRAME[timeframe], frame, asset, daily_bars=market.daily_bars)
     result = bias.bias(frame)
     close = frame["close"] if "close" in frame else pd.Series(dtype=float)
     rsi = indicators.rsi(close, 14)
@@ -198,5 +215,6 @@ def technicals(
             signal=finite_or_none(macd.signal.iloc[-1]) if len(macd.signal) else None,
             histogram=finite_or_none(macd.histogram.iloc[-1]) if len(macd.histogram) else None,
         ),
+        volatility=_volatility(frame),
         card_back=_card_back(back),
     )

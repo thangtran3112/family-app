@@ -56,6 +56,12 @@ const MacdSchema = z.object({
   histogram: finiteNumber.nullable(),
 }) satisfies z.ZodType<components["schemas"]["MacdOut"]>;
 
+const VolatilitySchema = z.object({
+  atr14: finiteNumber.nullable(),
+  atr_percent: finiteNumber.nullable(),
+  label: z.enum(["low", "normal", "high"]).nullable(),
+}).refine((value) => value.label === null || (value.atr14 !== null && value.atr_percent !== null));
+
 const numericMap = z.record(z.string(), finiteNumber.nullable());
 
 const PivotMethodsSchema = z.object({
@@ -85,6 +91,7 @@ export const TechnicalsSchema = z.object({
   pivots: PivotMethodsSchema,
   rsi: finiteNumber.nullable(),
   macd: MacdSchema,
+  volatility: VolatilitySchema,
   card_back: CardBackSchema,
 }) satisfies z.ZodType<components["schemas"]["TechnicalsOut"]>;
 
