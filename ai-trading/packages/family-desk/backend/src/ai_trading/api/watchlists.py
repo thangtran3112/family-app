@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
-from ai_trading.db.models import Watchlist, WatchlistItem
+from ai_trading.db.models import Bar1d, Watchlist, WatchlistItem
 from ai_trading.jobs.backfill_watchlist import backfill_on_join
 
 router = APIRouter(prefix="/api/desk/watchlists", tags=["watchlists"])
@@ -38,6 +38,12 @@ class WatchlistItemOut(BaseModel):
     asset_type: str
 
 
+class WatchlistItemReadOut(BaseModel):
+    symbol: str
+    asset_type: str
+    backfill: Literal["ready", "pending"]
+
+
 def _owned_watchlist(session: Session, watchlist_id: int, user: AuthedUser) -> Watchlist:
     row = session.get(Watchlist, watchlist_id)
     if row is None or row.user_id != user.id:
@@ -52,6 +58,34 @@ def list_watchlists(
 ) -> list[WatchlistOut]:
     rows = session.execute(select(Watchlist).where(Watchlist.user_id == user.id).order_by(Watchlist.id)).scalars()
     return [WatchlistOut(id=row.id, name=row.name, horizon=row.horizon) for row in rows]
+
+
+@router.get("/{watchlist_id}/items", response_model=list[WatchlistItemReadOut])
+def list_watchlist_items(
+    watchlist_id: int,
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[WatchlistItemReadOut]:
+    _owned_watchlist(session, watchlist_id, user)
+    items = session.execute(
+        select(WatchlistItem)
+        .where(WatchlistItem.watchlist_id == watchlist_id)
+        .order_by(WatchlistItem.symbol)
+    ).scalars().all()
+    symbols = [item.symbol for item in items]
+    available = (
+        set(session.execute(select(Bar1d.symbol).where(Bar1d.symbol.in_(symbols)).distinct()).scalars())
+        if symbols
+        else set()
+    )
+    return [
+        WatchlistItemReadOut(
+            symbol=item.symbol,
+            asset_type=item.asset_type,
+            backfill="ready" if item.symbol in available else "pending",
+        )
+        for item in items
+    ]
 
 
 @router.post("", status_code=201, response_model=WatchlistOut)

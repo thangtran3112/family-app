@@ -22,6 +22,7 @@ Timeframe = str  # "5m" | "15m" | "1h" | "1D" | "1W"
 #: 02f section 3: intraday timeframes' pivots come from the prior session, "1D"'s from the prior
 #: week, "1W"'s from the prior month.
 _PIVOT_PERIOD: dict[str, pivots.Period] = {
+    "1m": "session",
     "5m": "session",
     "15m": "session",
     "1h": "session",
