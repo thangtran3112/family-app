@@ -10,6 +10,8 @@ _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 def e2e_url(value: str) -> URL:
     url = make_url(value)
+    if url.query:
+        raise ValueError("E2E database URL must not include query parameters")
     if url.drivername != "postgresql+psycopg" or url.host not in _LOOPBACK or not url.database:
         raise ValueError("E2E database must use psycopg and a loopback host")
     if not _DB_NAME.fullmatch(url.database):
@@ -19,6 +21,8 @@ def e2e_url(value: str) -> URL:
 
 def admin_url(value: str) -> URL:
     url = make_url(value)
+    if url.query:
+        raise ValueError("E2E admin URL must not include query parameters")
     if url.drivername != "postgresql+psycopg" or url.host not in _LOOPBACK or url.database != "postgres":
         raise ValueError("E2E admin URL must use psycopg, loopback, and the postgres maintenance database")
     return url

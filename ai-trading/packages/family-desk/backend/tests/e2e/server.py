@@ -65,11 +65,13 @@ async def _e2e_lifespan(application: FastAPI):
     factory = sessionmaker(engine, expire_on_commit=False, class_=E2ESession)
     missing = object()
     previous = {
-        name: getattr(application.state, name, missing) for name in ("session_factory", "health_engine", "data_sources")
+        name: getattr(application.state, name, missing)
+        for name in ("session_factory", "health_engine", "data_sources", "e2e_engine")
     }
     application.state.session_factory = factory
     application.state.health_engine = health_engine
     application.state.data_sources = data_sources(factory)
+    application.state.e2e_engine = engine
     try:
         yield
     finally:

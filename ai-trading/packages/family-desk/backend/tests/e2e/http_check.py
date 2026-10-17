@@ -1,3 +1,5 @@
+"""Explicit-runner-only real HTTP integration; no database provisioning in ordinary pytest."""
+
 import json
 import os
 import socket
@@ -109,6 +111,7 @@ def test_real_api_proxy_database_engine_and_sse_lifecycle(real_servers):
         assert "static 404" not in missing.text
 
         STREAM_CLOSED.clear()
+        before_stream_closed = SESSION_LIFECYCLE.closed
         with client.stream(
             "GET", f"{proxy_origin}/api/desk/quotes/NVDA", headers={"cookie": "desk_e2e_session=1"}
         ) as stream:
@@ -119,8 +122,16 @@ def test_real_api_proxy_database_engine_and_sse_lifecycle(real_servers):
             assert quote["symbol"] == "NVDA"
             assert quote["quality"] == "delayed-15m"
             assert quote["as_of"] == "2026-10-15T19:58:00+00:00"
+            assert not STREAM_CLOSED.is_set()
+            assert SESSION_LIFECYCLE.wait_for_closed(before_stream_closed + 2, timeout=3), (
+                "stream auth and first quote-poll sessions must close before disconnect"
+            )
+            assert SESSION_LIFECYCLE.active == 0
+            assert app.state.e2e_engine.pool.checkedout() == 0
+            assert not STREAM_CLOSED.is_set(), "stream must remain open during lifecycle assertions"
         assert STREAM_CLOSED.wait(3), "closing HTTP stream did not cancel quote generator"
         assert SESSION_LIFECYCLE.active == 0
+        assert app.state.e2e_engine.pool.checkedout() == 0
 
         empty_alerts = client.get(f"{proxy_origin}/api/desk/alerts", headers=session)
         assert empty_alerts.status_code == 200
