@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 import { MarketChart } from "../charts/MarketChart.tsx";
 import { Labeled } from "../Labeled.tsx";
+import { PositionFixture } from "./PositionFixture.tsx";
 import { BarsSchema } from "../../lib/api/schemas.ts";
 import { deskFetch } from "../../lib/api/client.ts";
 import type { Quote } from "../../lib/stream.ts";
@@ -75,6 +76,7 @@ export function PriceChart({ symbol, assetType }: Readonly<{ symbol: string; ass
         ))}
       </div>
       <ChartBody key={`${apiSymbol}:${interval}`} selection={{ symbol, asset_type: assetType, interval }} />
+      <PositionFixture />
     </section>
   );
 }

@@ -5,8 +5,16 @@ export const paperSummary = [
   { label: "Orders today", value: "4 of 12", detail: "illustrative family cap" },
 ];
 
+export const todayPositionFixture = {
+  symbol: "NVDA",
+  strategy: "ORB breakout 15m · v3",
+  entry: "$189.31",
+  stop: "$188.10",
+  target: "$196.00",
+} as const;
+
 export const paperPositions = [
-  { symbol: "NVDA", strategy: "ORB breakout 15m · v3", side: "Long 50", entry: "$189.31", last: "$191.73", stop: "$188.10", target: "$196.00", pnl: "+$26.50" },
+  { ...todayPositionFixture, side: "Long 50", last: "$191.73", pnl: "+$26.50" },
   { symbol: "MCL Dec", strategy: "Overnight range break · v1", side: "Short 1", entry: "$61.64", last: "$61.02", stop: "$61.95", target: "$59.80", pnl: "+$22.00" },
   { symbol: "AAPL Nov 21 260C", strategy: "Covered-call income · v5", side: "Short 2", entry: "$3.10", last: "$2.85", stop: "—", target: "$1.55", pnl: "+$50.00" },
 ];
