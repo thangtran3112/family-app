@@ -4,6 +4,7 @@ with no entry in `channels` is left exactly as it is ("pending"), never crashed 
 dropped, until the owner sets its keys and `api/main.py` wires it in.
 """
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,17 +22,46 @@ from ai_trading.notify.redact import redact
 RETRY_DELAYS_SECONDS: tuple[float, ...] = (1.0, 5.0, 15.0)  # 02 §11: "retried three times"
 
 _DEFAULT_QUIET_HOURS = {"start": "22:00", "end": "07:00"}
+_CHANNELS = {"inbox", "telegram", "slack"}
+_HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 
 
 @dataclass(frozen=True)
 class DeliveryOutcome:
     delivery_id: int
-    status: str  # "sent" | "failed" | "skipped_quiet_hours"
+    status: str  # "sent" | "failed" | "skipped_quiet_hours" | "skipped_preferences"
 
 
-def _quiet_hours_window(user: User) -> tuple[_time, _time]:
-    quiet = user.settings.get("quiet_hours") or _DEFAULT_QUIET_HOURS
-    return _time.fromisoformat(quiet.get("start", "22:00")), _time.fromisoformat(quiet.get("end", "07:00"))
+def _channel_preference_allows(user: User, channel: str) -> bool:
+    settings = user.settings
+    if not isinstance(settings, dict):
+        return False
+    if "channels" not in settings:
+        return True  # Legacy users retain the previous allow-all behavior.
+
+    preferences = settings["channels"]
+    return (
+        isinstance(preferences, list)
+        and all(isinstance(value, str) and value in _CHANNELS for value in preferences)
+        and channel in preferences
+    )
+
+
+def _quiet_hours_window(user: User) -> tuple[_time, _time] | None:
+    settings = user.settings
+    if not isinstance(settings, dict):
+        return None
+    quiet = settings.get("quiet_hours")
+    if quiet is None or quiet == {}:
+        quiet = _DEFAULT_QUIET_HOURS
+    if not isinstance(quiet, dict):
+        return None
+
+    start = quiet.get("start", _DEFAULT_QUIET_HOURS["start"])
+    end = quiet.get("end", _DEFAULT_QUIET_HOURS["end"])
+    if not isinstance(start, str) or not _HHMM.fullmatch(start) or not isinstance(end, str) or not _HHMM.fullmatch(end):
+        return None
+    return _time.fromisoformat(start), _time.fromisoformat(end)
 
 
 def dispatch_pending(
@@ -69,7 +99,15 @@ def dispatch_pending(
         if channel is None:
             continue  # not wired yet (D-a); row stays "pending" untouched
 
-        start, end = _quiet_hours_window(user)
+        if not _channel_preference_allows(user, delivery.channel):
+            outcomes.append(DeliveryOutcome(delivery.id, "skipped_preferences"))
+            continue
+
+        quiet_window = _quiet_hours_window(user)
+        if quiet_window is None:
+            outcomes.append(DeliveryOutcome(delivery.id, "skipped_preferences"))
+            continue
+        start, end = quiet_window
         if in_quiet_hours(now, start=start, end=end, severity=alert.severity):
             outcomes.append(DeliveryOutcome(delivery.id, "skipped_quiet_hours"))
             continue
