@@ -1,6 +1,7 @@
 """Shared bounded, closed-bar reads for the Desk's read-only market-data routes."""
 
 import re
+from dataclasses import dataclass
 from datetime import date, timedelta
 from math import isfinite
 from typing import Literal
@@ -39,6 +40,13 @@ _MAX_SOURCE_DAYS = {
 }
 MAX_BARS = 5000
 OHLCV = ("open", "high", "low", "close", "volume")
+
+
+@dataclass(frozen=True)
+class MarketBars:
+    frame: pd.DataFrame
+    quality: Quality
+    daily_bars: pd.DataFrame | None = None
 
 
 def validate_symbol(symbol: str) -> str:
@@ -85,17 +93,19 @@ def get_market_bars(
     days: int,
     *,
     stock_session: Literal["regular", "extended"] | None = None,
-) -> tuple[pd.DataFrame, Quality]:
+    now: pd.Timestamp | None = None,
+) -> MarketBars:
     """Fetch bounded closed bars. Provider `NoData` is empty/unavailable; provider failures stay 503s."""
     symbol = validate_symbol(symbol)
-    now = pd.Timestamp.now(tz="UTC")
+    now = now if now is not None else pd.Timestamp.now(tz="UTC")
     start = now - pd.Timedelta(days=min(days, _MAX_SOURCE_DAYS[interval]))
     source_interval = _SOURCE_INTERVAL[interval]
     asset: Asset = "future" if symbol.startswith("/") else "stock"
     try:
         bars = data_sources.bars.bars(symbol, source_interval, start, now, now=now)
     except NoData:
-        return pd.DataFrame(columns=OHLCV), "unavailable"
+        empty = pd.DataFrame(columns=OHLCV)
+        return MarketBars(empty, "unavailable", empty if interval == "1w" else None)
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail="market data provider unavailable") from exc
 
@@ -114,6 +124,7 @@ def get_market_bars(
             closed.append(False)
     frame = frame.loc[closed]
 
+    daily_bars = frame if interval == "1w" else None
     if interval == "1w" and not frame.empty:
         frame = _weekly_bars(frame, asset)
     elif source_interval != "1d" and not frame.empty:
@@ -121,13 +132,15 @@ def get_market_bars(
         if asset == "stock" and stock_session is not None:
             is_regular = annotated["phase"] == "regular"
             annotated = annotated[is_regular if stock_session == "regular" else ~is_regular]
-        frame = (
-            _resample(annotated, asset, _RESAMPLE_MINUTES[interval], now)
-            if interval in _RESAMPLE_MINUTES
-            else annotated.loc[:, OHLCV]
-        )
+        if interval in _RESAMPLE_MINUTES:
+            frame = _resample(annotated, asset, _RESAMPLE_MINUTES[interval], now)
+            # The bounded source window may start inside its first phase-aligned bin.
+            frame = frame.loc[frame.index >= start]
+        else:
+            frame = annotated.loc[:, OHLCV]
     frame = frame.tail(MAX_BARS)
-    return frame, bars.quality if not frame.empty else "unavailable"
+    quality = bars.quality if not frame.empty else "unavailable"
+    return MarketBars(frame, quality, daily_bars)
 
 
 def bar_as_of(point: date | pd.Timestamp) -> str:

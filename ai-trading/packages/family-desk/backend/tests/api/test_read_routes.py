@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 from ai_trading.api.auth import get_data_sources
+from ai_trading.api.market_data import _weekly_bars, get_market_bars
 from ai_trading.core.calendar import previous_session, session
 from ai_trading.core.futures import SPECS
 from ai_trading.db.models import Bar1d, WatchlistItem
@@ -44,6 +45,27 @@ def _daily_frame(rows: int = 1, *, end: str = "2024-12-31") -> pd.DataFrame:
         },
         index=pd.Index(index),
     )
+
+
+def _year_boundary_frame(end: date) -> pd.DataFrame:
+    dates = []
+    rows = []
+    day = date(2024, 12, 2)
+    while day <= end:
+        if session("stock", day) is not None:
+            dates.append(day)
+            if day.month == 12:
+                rows.append({"open": 100.0, "high": 110.0, "low": 60.0, "close": 100.0, "volume": 1.0})
+            elif day == date(2025, 1, 2):
+                rows.append({"open": 250.0, "high": 300.0, "low": 5.0, "close": 250.0, "volume": 1.0})
+            elif day == date(2025, 1, 3):
+                rows.append({"open": 350.0, "high": 400.0, "low": 4.0, "close": 350.0, "volume": 1.0})
+            else:
+                rows.append(
+                    {"open": 100.0, "high": 120.0, "low": 80.0, "close": 100.0 + day.day, "volume": 1.0}
+                )
+        day += timedelta(days=1)
+    return pd.DataFrame(rows, index=pd.Index(dates))
 
 
 def _minute_frame(rows: int = 390) -> pd.DataFrame:
@@ -337,6 +359,50 @@ def test_weekly_technicals_pivots_use_prior_completed_month(client):
     assert response.json()["pivots"]["classic"]["P"] == pytest.approx(310 / 3)
 
 
+def test_weekly_pivots_use_january_after_jan_27_to_31_week(client):
+    daily = _year_boundary_frame(date(2025, 1, 31))
+    source = FakeBars(daily)
+    _set_bars(client, source)
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1w&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert len(source.calls) == 1
+    body = response.json()
+    january_pivot = (400 + 4 + 131) / 3
+    assert body["pivots"]["classic"]["P"] == pytest.approx(january_pivot)
+    assert body["pivots"]["classic"]["R1"] == pytest.approx(2 * january_pivot - 4)
+    assert body["pivots"]["fibonacci"]["P"] == pytest.approx(january_pivot)
+    assert body["pivots"]["fibonacci"]["R1"] == pytest.approx(january_pivot + 0.382 * 396)
+    assert body["pivots"]["camarilla"]["P"] == pytest.approx(january_pivot)
+    assert body["pivots"]["camarilla"]["R1"] == pytest.approx(131 + 396 * 1.1 / 12)
+    assert body["card_back"]["pivots"]["P"] == pytest.approx(january_pivot)
+    assert body["card_back"]["pivots"]["R1"] == pytest.approx(2 * january_pivot - 4)
+    weekly = _weekly_bars(daily, "stock")
+    card_back = compute_card_back("AAPL", "1W", weekly, "stock", daily_bars=daily)
+    assert body["card_back"] == asdict(card_back)
+    assert weekly.index[-1] == date(2025, 1, 27)
+
+
+def test_cross_month_week_does_not_mix_january_prices_into_december_pivots(client):
+    daily = _year_boundary_frame(date(2025, 1, 10))
+    source = FakeBars(daily)
+    _set_bars(client, source)
+    response = client.get("/api/desk/technicals/AAPL?timeframe=1w&days=2000", headers=auth_headers())
+    assert response.status_code == 200
+    assert len(source.calls) == 1
+    body = response.json()
+    december_pivot = (110 + 60 + 100) / 3
+    assert body["pivots"]["classic"]["P"] == pytest.approx(december_pivot)
+    assert body["pivots"]["classic"]["R1"] == pytest.approx(2 * december_pivot - 60)
+    assert body["pivots"]["fibonacci"]["P"] == pytest.approx(december_pivot)
+    assert body["pivots"]["fibonacci"]["R1"] == pytest.approx(december_pivot + 0.382 * 50)
+    assert body["pivots"]["camarilla"]["P"] == pytest.approx(december_pivot)
+    assert body["pivots"]["camarilla"]["R1"] == pytest.approx(100 + 50 * 1.1 / 12)
+    assert body["card_back"]["pivots"]["P"] == pytest.approx(december_pivot)
+    assert body["card_back"]["pivots"]["R1"] == pytest.approx(2 * december_pivot - 60)
+    assert body["card_back"]["timeframe"] == "1W"
+    assert _weekly_bars(daily, "stock").index[-1] == date(2025, 1, 6)
+
+
 def test_technicals_serializes_nonfinite_pivots_as_null(client):
     current = _full_stock_session()
     prior = session("stock", previous_session("stock", current.day))
@@ -386,6 +452,33 @@ def test_weekly_bars_do_not_emit_a_partial_first_week(client):
     assert response.status_code == 200
     assert response.json()["bars"] == []
     assert response.json()["quality"] == "unavailable"
+
+
+@pytest.mark.parametrize(("interval", "minutes"), [("15m", 15), ("30m", 30), ("4h", 240)])
+def test_resampling_discards_left_cutoff_bin(interval, minutes):
+    trading_session = _full_stock_session()
+    frame = _minute_frame()
+    cutoff = trading_session.regular_open + pd.Timedelta(minutes=2)
+    now = cutoff + pd.Timedelta(days=1)
+    source = FakeBars(frame)
+    market = get_market_bars(
+        fake_data_sources(source),
+        "AAPL",
+        interval,
+        1,
+        stock_session="regular",
+        now=now,
+    )
+    result = market.frame
+    expected_start = trading_session.regular_open + pd.Timedelta(minutes=minutes)
+    expected_end = min(expected_start + pd.Timedelta(minutes=minutes), trading_session.regular_close)
+    expected_rows = frame.loc[(frame.index >= expected_start) & (frame.index < expected_end)]
+    assert market.quality == "eod"
+    assert result.index[0] == expected_start
+    assert result.iloc[0]["open"] == expected_rows["open"].iloc[0]
+    assert result.iloc[0]["high"] == expected_rows["high"].max()
+    assert result.iloc[0]["low"] == expected_rows["low"].min()
+    assert result.iloc[0]["volume"] == expected_rows["volume"].sum()
 
 
 def test_bars_preserve_nonfinite_values_as_null(client):

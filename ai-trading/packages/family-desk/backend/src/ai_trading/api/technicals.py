@@ -10,7 +10,7 @@ from pydantic import BaseModel, FiniteFloat
 from ai_trading.api.auth import get_current_user, get_data_sources
 from ai_trading.api.market_data import bar_as_of, finite_or_none, get_market_bars
 from ai_trading.core import bias, indicators, pivots
-from ai_trading.engine.cardback import _PIVOT_PERIOD, CardBack, _daily_hlc, _next_trading_day, compute_card_back
+from ai_trading.engine.cardback import _PIVOT_PERIOD, CardBack, compute_card_back, pivot_inputs
 
 router = APIRouter(prefix="/api/desk/technicals", tags=["market data"], dependencies=[Depends(get_current_user)])
 
@@ -117,23 +117,23 @@ def _card_back(value: CardBack) -> CardBackOut:
     )
 
 
-def _pivot_methods(frame: pd.DataFrame, timeframe: Timeframe, asset: str) -> PivotMethodsOut:
+def _pivot_methods(
+    frame: pd.DataFrame,
+    timeframe: Timeframe,
+    asset: str,
+    *,
+    daily_bars: pd.DataFrame | None = None,
+) -> PivotMethodsOut:
     core_timeframe = _CARD_TIMEFRAME[timeframe]
-    daily = _daily_hlc(frame, core_timeframe, asset)
-    reference = (
-        _next_trading_day(asset, daily.index.max())
-        if not daily.empty and core_timeframe in ("1D", "1W")
-        else daily.index.max() if not daily.empty else None
-    )
+    daily, reference = pivot_inputs(frame, core_timeframe, asset, daily_bars=daily_bars)
     if reference is None:
         return PivotMethodsOut(classic={}, fibonacci={}, camarilla={})
-    else:
-        high_series, low_series, close_series = pivots.prior_period_hlc(
-            daily, pd.Index([reference]), asset, _PIVOT_PERIOD[core_timeframe]
-        )
-        high, low, close = float(high_series.iloc[0]), float(low_series.iloc[0]), float(close_series.iloc[0])
-        if any(isnan(value) for value in (high, low, close)):
-            return PivotMethodsOut(classic={}, fibonacci={}, camarilla={})
+    high_series, low_series, close_series = pivots.prior_period_hlc(
+        daily, pd.Index([reference]), asset, _PIVOT_PERIOD[core_timeframe]
+    )
+    high, low, close = float(high_series.iloc[0]), float(low_series.iloc[0]), float(close_series.iloc[0])
+    if any(isnan(value) for value in (high, low, close)):
+        return PivotMethodsOut(classic={}, fibonacci={}, camarilla={})
     methods = {
         "classic": pivots.classic_pivots,
         "fibonacci": pivots.fibonacci_pivots,
@@ -155,10 +155,13 @@ def technicals(
     data_sources: DataSources = Depends(get_data_sources),
 ) -> TechnicalsOut:
     asset = "future" if symbol.startswith("/") else "stock"
-    frame, quality = get_market_bars(
+    market = get_market_bars(
         data_sources, symbol, timeframe, days, stock_session="regular" if asset == "stock" else None
     )
-    back = compute_card_back(symbol, _CARD_TIMEFRAME[timeframe], frame, asset)
+    frame, quality = market.frame, market.quality
+    back = compute_card_back(
+        symbol, _CARD_TIMEFRAME[timeframe], frame, asset, daily_bars=market.daily_bars
+    )
     result = bias.bias(frame)
     close = frame["close"] if "close" in frame else pd.Series(dtype=float)
     rsi = indicators.rsi(close, 14)
@@ -188,7 +191,7 @@ def technicals(
         gauges=gauges,
         moving_averages=moving_average_votes,
         oscillators=oscillator_votes,
-        pivots=_pivot_methods(frame, timeframe, asset),
+        pivots=_pivot_methods(frame, timeframe, asset, daily_bars=market.daily_bars),
         rsi=finite_or_none(rsi.iloc[-1]) if len(rsi) else None,
         macd=MacdOut(
             line=finite_or_none(macd.line.iloc[-1]) if len(macd.line) else None,

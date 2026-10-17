@@ -50,12 +50,20 @@ class CardBack:
     pivots: dict[str, float]  # classic pivots from the prior completed period; {} until known
 
 
-def compute_card_back(symbol: str, timeframe: Timeframe, bars: pd.DataFrame, asset: Asset) -> CardBack:
+def compute_card_back(
+    symbol: str,
+    timeframe: Timeframe,
+    bars: pd.DataFrame,
+    asset: Asset,
+    *,
+    daily_bars: pd.DataFrame | None = None,
+) -> CardBack:
     """`bars` is closed-bar OHLCV at `timeframe`'s own granularity (already read from bars_1h/
     bars_1d via `ai_trading.data.bars` by the caller), oldest first, matching every
     `ai_trading.core` convention. `bias_label`/`bias_score` are the Desk Technical Bias's single
     "summary" score (02f section 3's one bias gauge on the watchlist card back; the Technicals
-    page shows the oscillator and moving-average gauges separately, a Phase 4 UI concern)."""
+    page shows the oscillator and moving-average gauges separately, a Phase 4 UI concern). For an
+    API 1W card, `daily_bars` supplies exact prior-month pivots while `bars` remains weekly."""
     result = bias.bias(bars)
     if result == "warming up":
         bias_label: str | None = None
@@ -80,7 +88,7 @@ def compute_card_back(symbol: str, timeframe: Timeframe, bars: pd.DataFrame, ass
         oscillators=oscillators,
         moving_averages=moving_averages,
         atr_pct_label=atr_pct_label,
-        pivots=_pivots_for(bars, timeframe, asset),
+        pivots=_pivots_for(bars, timeframe, asset, daily_bars=daily_bars),
     )
 
 
@@ -102,9 +110,9 @@ def _daily_hlc(bars: pd.DataFrame, timeframe: Timeframe, asset: Asset) -> pd.Dat
     """A date-indexed high/low/close frame `pivots.prior_period_hlc` can read: `bars` themselves
     for "1D"/"1W" (already date-indexed, one row per day or week -- `evaluate()`'s own convention
     is regular-session-only daily bars, so these are assumed regular-session too), or one row per
-    trading day's regular session aggregated from intraday bars otherwise. A "1W" bar back
-    approximates its prior month from its own weekly rows -- there is no finer-grained daily frame
-    in scope for a pure, single-frame function (see REPORT-L2.md)."""
+    trading day's regular session aggregated from intraday bars otherwise. A direct "1W" call with
+    no separate daily frame approximates its prior month from weekly rows; the API supplies its
+    retained daily frame to `pivot_inputs` for exact month boundaries."""
     if len(bars) == 0:
         return pd.DataFrame(columns=["high", "low", "close"])
     if timeframe in ("1D", "1W"):
@@ -126,17 +134,41 @@ def _next_trading_day(asset: Asset, day: date) -> date:
     return candidate
 
 
-def _pivots_for(bars: pd.DataFrame, timeframe: Timeframe, asset: Asset) -> dict[str, float]:
+def pivot_inputs(
+    bars: pd.DataFrame,
+    timeframe: Timeframe,
+    asset: Asset,
+    *,
+    daily_bars: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, date | None]:
+    """Daily HLC source/reference for a pivot; supplied daily rows make weekly pivots month-exact."""
+    if timeframe == "1W" and daily_bars is not None and not bars.empty:
+        week_start = bars.index.max()
+        week_days = [day for day in daily_bars.index if day - timedelta(days=day.weekday()) == week_start]
+        if week_days:
+            week_end = max(week_days)
+            return daily_bars.loc[:week_end], _next_trading_day(asset, week_end)
+
     daily = _daily_hlc(bars, timeframe, asset)
     if daily.empty:
-        return {}
+        return daily, None
     last_day = daily.index.max()
-    # Daily/weekly bars are closed-bar only, so the most recent row is the last *completed*
-    # period, not "today" -- the day pivots are actually shown for (and whose prior
-    # week/month they need) is the next trading day after it. Intraday bars include today's own
-    # still-forming session, so `last_day` itself is already the right reference there; computing
-    # a next trading day from it would just return tomorrow and shift the lookup a day late.
+    # Daily/weekly inputs are completed periods, so pivots are shown for next trading day. Intraday
+    # inputs already include the current session and use its own date as reference.
     reference = _next_trading_day(asset, last_day) if timeframe in ("1D", "1W") else last_day
+    return daily, reference
+
+
+def _pivots_for(
+    bars: pd.DataFrame,
+    timeframe: Timeframe,
+    asset: Asset,
+    *,
+    daily_bars: pd.DataFrame | None = None,
+) -> dict[str, float]:
+    daily, reference = pivot_inputs(bars, timeframe, asset, daily_bars=daily_bars)
+    if daily.empty or reference is None:
+        return {}
     high, low, close = pivots.prior_period_hlc(daily, pd.Index([reference]), asset, _PIVOT_PERIOD[timeframe])
     h, lo, c = float(high.iloc[0]), float(low.iloc[0]), float(close.iloc[0])
     if math.isnan(h) or math.isnan(lo) or math.isnan(c):

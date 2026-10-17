@@ -40,7 +40,8 @@ def bars(
     session: Literal["regular", "extended"] = "regular",
     data_sources: DataSources = Depends(get_data_sources),
 ) -> BarsOut:
-    frame, quality = get_market_bars(data_sources, symbol, interval, days, stock_session=session)
+    market = get_market_bars(data_sources, symbol, interval, days, stock_session=session)
+    frame, quality = market.frame, market.quality
     rows = [
         BarOut(
             t=bar_as_of(point),
