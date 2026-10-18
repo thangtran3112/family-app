@@ -1,4 +1,4 @@
-import { createAppApiClient, type DuplicateResolutionAction, type MailboxCandidateClassification, type MailboxIngestionBucketV1, type Scope, type SuggestionResolveRequest } from "@expense-tax/contracts";
+import { createAppApiClient, type DuplicateResolutionAction, type Expense, type MailboxCandidateClassification, type MailboxIngestionBucketV1, type Scope, type SuggestionResolveRequest } from "@expense-tax/contracts";
 import type { OfficeSession } from "./session";
 import { getAppAuthorization, type ClerkGetToken } from "./clerk";
 
@@ -200,7 +200,7 @@ export async function fetchExpenseDetail(
   getToken: ClerkGetToken,
   organizationId: string | null | undefined,
   client?: AppApiClient,
-) {
+): Promise<Expense> {
   const api = client ?? createAppApiClient(session.apiBaseUrl);
   const headers = await getAppAuthorization(getToken, organizationId);
   let result;
@@ -220,7 +220,7 @@ export async function fetchExpenseDetail(
     if (status === 401 || status === 403) throw new EnrichmentReviewError("Office authorization required", status);
     throw new EnrichmentReviewError("Expense detail unavailable");
   }
-  return result.data;
+  return { ...result.data, taxAmount: result.data.taxAmount };
 }
 
 // ------------------------------------------------------------------ //
