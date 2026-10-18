@@ -34,7 +34,17 @@ const item = {
 
 describe("OCR review endpoint contracts", () => {
   it("requires the needs_input list status", () => {
-    expect(CaptureOcrReviewStatusQuerySchema.parse({ status: "needs_input" })).toEqual({ status: "needs_input" });
+    expect(CaptureOcrReviewStatusQuerySchema.parse({ status: "needs_input" })).toEqual({
+      status: "needs_input",
+      limit: 50,
+    });
+    expect(CaptureOcrReviewStatusQuerySchema.parse({ status: "needs_input", limit: "100" })).toEqual({
+      status: "needs_input",
+      limit: 100,
+    });
+    expect(
+      CaptureOcrReviewStatusQuerySchema.safeParse({ status: "needs_input", limit: "101" }).success,
+    ).toBe(false);
     expect(CaptureOcrReviewStatusQuerySchema.safeParse({ status: "complete" }).success).toBe(false);
   });
 
@@ -44,7 +54,10 @@ describe("OCR review endpoint contracts", () => {
   });
 
   it("parses review lists and signed preview details", () => {
-    expect(CaptureOcrReviewListV1Schema.parse({ items: [item] })).toEqual({ items: [item] });
+    expect(CaptureOcrReviewListV1Schema.parse({ items: [item], nextCursor: null })).toEqual({
+      items: [item],
+      nextCursor: null,
+    });
     expect(CaptureOcrReviewDetailV1Schema.parse({
       ...item,
       previewUrl: "/api/v1/file-content/signed",

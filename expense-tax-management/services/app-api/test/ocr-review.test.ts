@@ -90,7 +90,7 @@ describe("OCR review routes", () => {
 
   function createTestApp() {
     const ocrReviewDomain: OcrReviewDomain = {
-      listReviews: vi.fn(async () => ({ items: [review] })),
+      listReviews: vi.fn(async () => ({ items: [review], nextCursor: null })),
       getReview: vi.fn(async () => ({
         ...review,
         previewUrl: "https://storage.test/signed-preview",
@@ -143,12 +143,35 @@ describe("OCR review routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ items: [review] });
+    expect(response.json()).toEqual({ items: [review], nextCursor: null });
     expect(ocrReviewDomain.listReviews).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: USER_ID,
       tenantId: TENANT_ID,
       scope,
+      limit: 50,
     }));
+  });
+
+  it("accepts list cursors and limits up to 100, and rejects larger limits", async () => {
+    const { app, ocrReviewDomain } = createTestApp();
+    const base = `/api/v1/tenants/${TENANT_ID}/personal-profiles/${PROFILE_ID}/ocr-reviews`;
+    const accepted = await app.inject({
+      method: "GET",
+      url: `${base}?status=needs_input&limit=100&cursor=opaque-cursor`,
+      headers: { authorization: "Bearer tenant-token" },
+    });
+    const rejected = await app.inject({
+      method: "GET",
+      url: `${base}?status=needs_input&limit=101`,
+      headers: { authorization: "Bearer tenant-token" },
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(ocrReviewDomain.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 100,
+      cursor: "opaque-cursor",
+    }));
+    expect(rejected.statusCode).toBe(400);
   });
 
   it("returns a scoped review with a signed preview URL", async () => {
@@ -366,6 +389,13 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
           VALUES ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'Personal');
         INSERT INTO app.personal_memberships (personal_profile_id, tenant_id, user_id, role, status)
           VALUES ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', '66666666-6666-4666-8666-666666666666', 'owner', 'active');
+        INSERT INTO app.business_industries (code, name, status)
+          VALUES ('ocr-review', 'OCR Review', 'active')
+          ON CONFLICT (code) DO NOTHING;
+        INSERT INTO app.businesses (id, tenant_id, name, industry_code, timezone, base_currency, status)
+          VALUES ('33333333-3333-4333-8333-333333333334', '11111111-1111-4111-8111-111111111111', 'OCR Review', 'ocr-review', 'UTC', 'USD', 'active');
+        INSERT INTO app.business_memberships (business_id, tenant_id, user_id, role, status)
+          VALUES ('33333333-3333-4333-8333-333333333334', '11111111-1111-4111-8111-111111111111', '66666666-6666-4666-8666-666666666666', 'owner', 'active');
 
         INSERT INTO app.expenses (
           id, tenant_id, created_by_user_id, personal_profile_id, merchant, amount, tax_amount,
@@ -401,6 +431,40 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
           ('44444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'OcrReceiptWorkflow', 'job-review-1', 'expense-tax-processing', 1, 'default', 'run-review-1', 'SUCCEEDED', 'expense', '66666666-6666-4666-8666-666666666666', '55555555-5555-4555-8555-555555555555', '{"modeKey":"ocr_mode_balanced","reviewPolicy":"capture_required_fields_v1"}', 'capture-ocr-review-v1', '{"schemaVersion":1,"outcome":"needs_input","fields":{"merchant":"Acme","total":"42.50","currency":"USD","incurredOn":null,"taxAmount":"0.00"},"issues":["date_missing","tax_zero_requires_confirmation"]}', 4, now(), now()),
           ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'OcrReceiptWorkflow', 'job-review-2', 'expense-tax-processing', 1, 'default', 'run-review-2', 'SUCCEEDED', 'expense', '66666666-6666-4666-8666-666666666666', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '{"modeKey":"ocr_mode_balanced","reviewPolicy":"capture_required_fields_v1"}', 'capture-ocr-review-v1', '{"schemaVersion":1,"outcome":"needs_input","fields":{"merchant":null,"total":"20.00","currency":"USD","incurredOn":"2026-10-18","taxAmount":null},"issues":["merchant_missing","tax_missing"]}', 4, now(), now()),
           ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'OcrReceiptWorkflow', 'job-review-3', 'expense-tax-processing', 1, 'default', 'run-review-3', 'SUCCEEDED', 'expense', '66666666-6666-4666-8666-666666666666', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '{"modeKey":"ocr_mode_balanced","reviewPolicy":"capture_required_fields_v1"}', 'capture-ocr-review-v1', '{"schemaVersion":1,"outcome":"needs_input","fields":{"merchant":"Rollback","total":"30.00","currency":"USD","incurredOn":"2026-10-18","taxAmount":"3.00"},"issues":["tax_missing"]}', 4, now(), now());
+
+        INSERT INTO app.expense_files (
+          id, tenant_id, personal_profile_id, original_filename, content_type, size_bytes,
+          sha256_hex, storage_key, thumbnail_status, status
+        )
+        SELECT
+          ('10000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+          '11111111-1111-4111-8111-111111111111',
+          '22222222-2222-4222-8222-222222222222',
+          'page-' || i || '.png', 'image/png', 10, repeat('d', 64),
+          'page-key-' || i, 'skipped', 'READY'
+        FROM generate_series(1, 101) AS series(i);
+
+        INSERT INTO app.processing_jobs (
+          id, tenant_id, personal_profile_id, workflow_type, workflow_id, task_queue,
+          dispatch_generation, dispatch_namespace, run_id, status, target_aggregate_type,
+          requested_by_user_id, source_file_id, input_params, allowed_result_schema_version,
+          result, version, dispatched_at, completed_at, created_at, updated_at
+        )
+        SELECT
+          ('20000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+          '11111111-1111-4111-8111-111111111111',
+          '22222222-2222-4222-8222-222222222222',
+          'OcrReceiptWorkflow', 'job-page-' || i, 'expense-tax-processing', 1, 'default',
+          'run-page-' || i, 'SUCCEEDED', 'expense',
+          '66666666-6666-4666-8666-666666666666',
+          ('10000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+          '{"modeKey":"ocr_mode_balanced","reviewPolicy":"capture_required_fields_v1"}',
+          'capture-ocr-review-v1',
+          '{"schemaVersion":1,"outcome":"needs_input","fields":{"merchant":"Paged","total":"1.00","currency":"USD","incurredOn":null,"taxAmount":null},"issues":["date_missing","tax_missing"]}',
+          1, now(), now(),
+          timestamptz '2026-10-18 00:00:00+00' + ((i / 5) * interval '1 second'),
+          timestamptz '2026-10-18 00:00:00+00' + ((i / 5) * interval '1 second')
+        FROM generate_series(1, 101) AS series(i);
       `);
 
       dockerPsql(postgresContainerId, databaseName, `
@@ -435,6 +499,27 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
         };
         const listBefore = await domain.listReviews({ ...base, status: "needs_input" });
         const detail = await domain.getReview({ ...base, jobId: "44444444-4444-4444-8444-444444444444" });
+        const pagedIds = [];
+        let cursor;
+        do {
+          const page = await domain.listReviews({ ...base, status: "needs_input", limit: 37, ...(cursor ? { cursor } : {}) });
+          pagedIds.push(...page.items.map((item) => item.jobId));
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor);
+        let malformedCursorCode = null;
+        try {
+          await domain.listReviews({ ...base, status: "needs_input", cursor: "not-a-cursor" });
+        } catch (error) { malformedCursorCode = error.code; }
+        let crossScopeCursorCode = null;
+        try {
+          const firstPage = await domain.listReviews({ ...base, status: "needs_input", limit: 1 });
+          await domain.listReviews({
+            ...base,
+            scope: { kind: "business", businessId: "33333333-3333-4333-8333-333333333334" },
+            status: "needs_input",
+            cursor: firstPage.nextCursor,
+          });
+        } catch (error) { crossScopeCursorCode = error.code; }
         let outsiderCode = null;
         try {
           await domain.listReviews({ ...base, actorUserId: "77777777-7777-4777-8777-777777777777", status: "needs_input" });
@@ -563,6 +648,12 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
         const rollbackExpenseCount = await database.selectFrom("app.expenses").select((eb) => eb.fn.countAll().as("count")).where("merchant", "=", "Rollback").executeTakeFirstOrThrow();
         console.log(JSON.stringify({
           listCount: listBefore.items.length,
+          listNextCursor: listBefore.nextCursor,
+          pagedCount: pagedIds.length,
+          pagedUniqueCount: new Set(pagedIds).size,
+          pagedIds,
+          malformedCursorCode,
+          crossScopeCursorCode,
           detailPreview: detail.previewUrl,
           outsiderCode,
           crossBusinessCode,
@@ -590,7 +681,11 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
       `);
       const result = JSON.parse(output) as Record<string, unknown>;
       expect(result).toMatchObject({
-        listCount: 3,
+        listCount: 50,
+        pagedCount: 104,
+        pagedUniqueCount: 104,
+        malformedCursorCode: "VALIDATION_ERROR",
+        crossScopeCursorCode: "VALIDATION_ERROR",
         detailPreview: "https://storage.test/preview",
         outsiderCode: "NOT_FOUND",
         crossBusinessCode: "NOT_FOUND",
@@ -610,6 +705,16 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
         rollbackFileExpenseId: null,
         rollbackExpenseCount: 0,
       });
+      expect(result.listNextCursor).toEqual(expect.any(String));
+      expect(result.pagedIds).toEqual([
+        "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "44444444-4444-4444-8444-444444444444",
+        ...Array.from({ length: 101 }, (_, offset) => {
+          const value = String(101 - offset).padStart(12, "0");
+          return `20000000-0000-4000-8000-${value}`;
+        }),
+      ]);
       expect(result.replayExpenseId).toBe((result.first as { expenseId: string }).expenseId);
       expect(result.concurrent).toEqual(expect.arrayContaining(["fulfilled", "CONFLICT"]));
       expect(result.expense).toMatchObject({ amount: "42.50", tax_amount: "5.53" });

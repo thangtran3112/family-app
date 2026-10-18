@@ -8,6 +8,7 @@ import {
   type CaptureOcrReviewListV1,
 } from "@expense-tax/contracts";
 import { sql, type Kysely, type Selectable } from "kysely";
+import { z } from "zod";
 
 import type { AppDatabase } from "../database/types.js";
 import { DomainError } from "../errors.js";
@@ -31,6 +32,8 @@ interface ScopedReviewInput {
 
 export interface ListOcrReviewsInput extends ScopedReviewInput {
   readonly status: "needs_input";
+  readonly limit?: number;
+  readonly cursor?: string;
 }
 
 export interface GetOcrReviewInput extends ScopedReviewInput {
@@ -52,6 +55,48 @@ export interface OcrReviewDomain {
 }
 
 type ReviewJobRow = Selectable<AppDatabase["app.processing_jobs"]>;
+
+const ReviewCursorSchema = z.strictObject({
+  version: z.literal(1),
+  tenantId: z.uuid(),
+  scope: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("personal"), profileId: z.uuid() }),
+    z.strictObject({ kind: z.literal("business"), businessId: z.uuid() }),
+  ]),
+  updatedAt: z.iso.datetime(),
+  id: z.uuid(),
+});
+
+type ReviewCursor = z.infer<typeof ReviewCursorSchema>;
+
+function encodeCursor(input: ScopedReviewInput, row: ReviewJobRow): string {
+  return Buffer.from(JSON.stringify({
+    version: 1,
+    tenantId: input.tenantId,
+    scope: input.scope,
+    updatedAt: row.updated_at.toISOString(),
+    id: row.id,
+  }), "utf8").toString("base64url");
+}
+
+function decodeCursor(value: string, input: ScopedReviewInput): ReviewCursor {
+  try {
+    const cursor = ReviewCursorSchema.parse(
+      JSON.parse(Buffer.from(value, "base64url").toString("utf8")),
+    );
+    const sameScope =
+      cursor.scope.kind === "personal" && input.scope.kind === "personal"
+        ? cursor.scope.profileId === input.scope.profileId
+        : cursor.scope.kind === "business" && input.scope.kind === "business"
+          ? cursor.scope.businessId === input.scope.businessId
+          : false;
+    if (cursor.tenantId !== input.tenantId || !sameScope) throw DomainError.validation();
+    return cursor;
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    throw DomainError.validation();
+  }
+}
 
 function scopedReviewQuery(database: Kysely<AppDatabase>, input: ScopedReviewInput) {
   let query = database
@@ -93,12 +138,29 @@ export function createOcrReviewDomain(
   return {
     async listReviews(input) {
       await requireScopeRole(database, input);
-      const rows = await scopedReviewQuery(database, input)
+      const limit = input.limit ?? 50;
+      let query = scopedReviewQuery(database, input)
         .orderBy("updated_at", "desc")
         .orderBy("id", "desc")
-        .limit(100)
-        .execute();
-      return { items: rows.map(toReviewItem) };
+        .limit(limit + 1);
+      if (input.cursor !== undefined) {
+        const cursor = decodeCursor(input.cursor, input);
+        const updatedAt = new Date(cursor.updatedAt);
+        query = query.where((eb) => eb.or([
+          eb("updated_at", "<", updatedAt),
+          eb.and([
+            eb("updated_at", "=", updatedAt),
+            eb("id", "<", cursor.id),
+          ]),
+        ]));
+      }
+      const rows = await query.execute();
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      return {
+        items: page.map(toReviewItem),
+        nextCursor: hasMore ? encodeCursor(input, page[page.length - 1]!) : null,
+      };
     },
 
     async getReview(input) {

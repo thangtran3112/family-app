@@ -26,6 +26,8 @@ export const BusinessOcrReviewJobParamsSchema = BusinessOcrReviewCollectionParam
 
 export const CaptureOcrReviewStatusQuerySchema = z.strictObject({
   status: z.literal("needs_input"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().trim().min(1).optional(),
 });
 
 export const CaptureOcrReviewItemV1Schema = z.strictObject({
@@ -48,6 +50,7 @@ export type CaptureOcrReviewDetailV1 = z.infer<typeof CaptureOcrReviewDetailV1Sc
 
 export const CaptureOcrReviewListV1Schema = z.strictObject({
   items: z.array(CaptureOcrReviewItemV1Schema),
+  nextCursor: z.string().nullable(),
 });
 export type CaptureOcrReviewListV1 = z.infer<typeof CaptureOcrReviewListV1Schema>;
 

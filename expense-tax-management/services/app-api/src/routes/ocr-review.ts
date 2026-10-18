@@ -85,6 +85,8 @@ export async function registerOcrReviewRoutes(
         tenantId: params.tenantId,
         scope: scopeFromParams(params),
         status: request.query.status,
+        limit: request.query.limit,
+        ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
       });
     });
 

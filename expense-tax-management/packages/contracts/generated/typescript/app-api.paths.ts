@@ -9176,6 +9176,8 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    cursor?: string;
+                    limit?: number;
                     status: "needs_input";
                 };
                 header?: never;
@@ -9215,6 +9217,7 @@ export interface paths {
                                 /** Format: date-time */
                                 updatedAt: string;
                             }[];
+                            nextCursor: string | null;
                         };
                     };
                 };
@@ -18254,6 +18257,8 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    cursor?: string;
+                    limit?: number;
                     status: "needs_input";
                 };
                 header?: never;
@@ -18293,6 +18298,7 @@ export interface paths {
                                 /** Format: date-time */
                                 updatedAt: string;
                             }[];
+                            nextCursor: string | null;
                         };
                     };
                 };
