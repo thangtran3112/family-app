@@ -227,6 +227,24 @@ export async function requireScopeRole(
       });
 }
 
+export async function lockScopedReadyUnboundFile(
+  transaction: Transaction<AppDatabase>,
+  input: { readonly tenantId: string; readonly scope: FileScope; readonly fileId: string },
+): Promise<FileRow> {
+  let query = transaction
+    .selectFrom("app.expense_files")
+    .selectAll()
+    .where("id", "=", input.fileId)
+    .where("tenant_id", "=", input.tenantId);
+  query = input.scope.kind === "personal"
+    ? query.where("personal_profile_id", "=", input.scope.profileId).where("business_id", "is", null)
+    : query.where("business_id", "=", input.scope.businessId).where("personal_profile_id", "is", null);
+  const row = await query.forUpdate().executeTakeFirst();
+  if (!row || row.status === "DELETED") throw DomainError.notFound();
+  if (row.status !== "READY" || row.expense_id !== null) throw DomainError.conflict();
+  return row;
+}
+
 function canWrite(role: "owner" | "editor" | "viewer"): boolean {
   return role === "owner" || role === "editor";
 }
