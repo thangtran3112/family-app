@@ -1,0 +1,1756 @@
+diff --git a/DIVERGENCE.md b/DIVERGENCE.md
+index 4d994dd7..d8f0b694 100644
+--- a/DIVERGENCE.md
++++ b/DIVERGENCE.md
+@@ -44,6 +44,11 @@ and the compatibility function makes no network request. A safe replacement
+ reader requires a separate design. Per-message reasoning effort is the
+ other change in this batch; each difference has a row below.
+ 
++SP5 long-run protection keeps routine deploys from cutting off chat research.
++The server now pauses new attempts under an expiring deploy lease while
++existing attempts and detached private committees finish. Restart history
++retains only safe tool progress and the original prompt for explicit retry.
++
+ ## Changes
+ 
+ `agent/backtest/` differs only in Yahoo's read-only split-event check (SP4).
+@@ -67,6 +72,11 @@ the published tool/skill catalogs.
+ | `src/tools/stock_profile_tool.py`, `tests/test_stock_profile_tool.py` | Preserve Yahoo `price.regularMarketTime` as the compact listing's `quote_timestamp`; leave its current price and analyst trend fields unchanged. | Retrieval time is not market quote time; only the provider's timestamp can date a share-price input to own valuation math. |
+ | `src/agent/committee_gate.py`, `src/agent/loop.py`, `src/agent/grounding/ledger.py`, `src/session/service.py`, `tests/test_committee_gate_stream.py`, `tests/test_grounding_release.py`, `tests/test_session_tool_trail.py`, `tests/test_session_restart_recovery.py` | One per-turn policy buffers US-stock answer text and reasoning tails, including implicit analyst/earnings questions without a ticker, starts at most one host-controlled committee for own intent (distinct from attributed analyst queries in English/Chinese); “buy-and-hold” as a backtest benchmark does not request an own Buy/Hold verdict. It independently classifies free prose and accepts the exact SHA-256 of the already-grounded release. Both clean releases (including a removed figures declaration, recorded without a spurious revalidated flag) and deliberate `(unverified※)` flags now have a release hash; only changed text is revalidated before resorting to at most two rewrites. The independently checked typed approval is appended afterward. When an attempted automatic committee either lacked corroboration or approved a checked verdict, two observed false model claims that its runner was unavailable are replaced with the corresponding true host status without dropping the rest of the checked analysis. Model-supplied decision tags/JSON cannot masquerade as neutral prose. A metadata-only release-check verdict and bounded, literal check-stage codes are persisted in the trace; no hidden text is logged. First-person own advice is blocked even when the same sentence also mentions attributed analyst data. The same sanitizer runs before AgentLoop callbacks and direct SwarmTool callbacks in SessionService, before checkpoint/SSE/tool trail; late manual swarm events remain sanitized after parent release. Sanitized swarm stages map to existing `tool_progress` UI with a synthetic committee tool call, never an exposed raw run ID. The parent stall watchdog respects the finite SwarmTool wait budget, then resumes with fresh activity; heartbeats still do not mask other stalled tools. Stop returns promptly while a running committee worker may finish privately; SP5 owns durable recovery. Explicit non-US resolutions regain the prior stream behavior. | No unreviewed own verdict or target reaches a browser, CLI/MCP result, saved reply or reconnect checkpoint; safe, grounded analysis is not needlessly discarded by a generative rewrite. |
+ | `src/tools/swarm_tool.py`, `src/agent/committee_gate.py`, `tests/test_swarm_route_contracts.py` | Server-owned automatic committees write beneath the separate `.committee` subtree using a per-execution context flag; concurrent manually launched swarms keep the ordinary public REST/MCP store. The gate verifies private run artifacts. | An authenticated `/swarm/runs/{id}` or `/swarm/runs/{id}/events` request must not bypass chat quarantine by returning an unreviewed chair report, even when both kinds of run overlap. |
++| `src/session/service.py`, `src/api/deploy_routes.py`, `src/api/sessions_routes.py`, `api_server.py`, `tests/test_session_service_lifecycle.py`, `tests/test_deploy_drain_routes.py` | SP5: a loopback-only, existing-key-authenticated deploy route starts/renews/ends a ten-minute lease; `SessionService` atomically refuses new sends before persistence while reporting active chat count. Wrong/expired leases and remote callers cannot change admission. Private child work is counted separately below. | Routine deploys must not sever active multi-minute chat work; an abandoned deploy cannot strand the app in drain mode. |
++| `src/tools/swarm_tool.py`, `src/agent/committee_gate.py`, `src/session/service.py`, `tests/test_private_committee_drain.py` | SP5 counts a pending private committee launch before its daemon thread starts and every persisted private pending/running run after the launcher exits. The count is added to the deploy status; manual/public swarms are excluded, invalid private state fails closed, and no private ID/report is returned. | A committee may outlive its parent chat or start after the parent stops waiting; a chat-only drain would cut it short. |
++| `src/swarm/store.py`, `tests/test_swarm_store_atomic_write.py` | A malformed persisted run now raises `ValueError` after retry instead of attempting to reconstruct Pydantic's `ValidationError` with the wrong signature and raising `TypeError`; I/O remains `OSError`. | The drain route must catch invalid private state, release its lease and return a generic 503 rather than stranding admission. |
++| `src/session/checkpoint.py`, `src/session/store.py`, `src/session/service.py`, `tests/test_session_restart_recovery.py` | SP5 checkpoints at most 100 tool name/status/timing entries after the committee sanitizer, never call IDs, arguments, previews or private reports. Startup recovery stores that bounded trail, the attempt's exact prompt and `progress_complete=false` on a terminal Interrupted reply; a committed terminal answer remains unchanged. Nonfinite tool timing is normalized rather than crashing the callback. | A restart must show what is known without making an incomplete/unsafe draft look Done or claiming that retry is side-effect-free. |
++| `tests/test_reasoning_effort_swarm_threading.py` | Its registry-wiring assertion pins discovery to the real `SwarmTool` within that test; full-suite order can otherwise add unrelated fake `BaseTool` subclasses named `run_swarm` before first discovery. | Keep the per-run effort test about production SwarmTool construction rather than global test-class lifetime. |
+ | `src/agent/committee_gate.py`, `tests/test_committee_gate_stream.py` | Final-answer scanner treats “buy-and-hold SPY benchmark” as a benchmark, not an own Hold instruction; standalone “Buy-and-hold SPY,” “Hold SPY now” and “Buy-and-hold SPY now” remain unsafe. | A backtest must not lose grounded results merely because its comparison benchmark sounds like a trading command, without permitting an imperative own recommendation. |
+ | `src/agent/trace.py`, `src/agent/grounding/ledger.py` | Quarantined US-stock traces redact text before sidecar offload and persist only check hashes/codes; live in-memory evidence still backs the server's proof. | Hidden drafts must not survive in trace or grounding artifacts and become downloadable later. |
+ | `backtest/loaders/yahoo_client.py`, `tests/test_yahoo_client.py` | Read split events from a bounded Yahoo chart span with venue/currency/time coverage; return unavailable on a malformed or incomplete chart and suppress own target math for intervening splits. | Avoid comparing pre-split filed EPS with a post-split quote or assuming missing event history proves no split. |
+@@ -116,6 +126,7 @@ the published tool/skill catalogs.
+ | `lib/__tests__/api.test.ts`, `components/chat/__tests__/ModelRuntimeBar.test.tsx`, new `ReasoningEffortSelect.test.tsx`, `pages/__tests__/AgentGroundingStatus.test.tsx`, `AgentBackgroundStreamCompletion.test.tsx` | Body-shape, model-specific options, stale-option, fallback, streaming, accessible control and existing Agent mock coverage. | Prevent accidental stale or unvalidated selection after a model switch. |
+ | `pages/Agent.tsx`, new `pages/__tests__/AgentReasoningEffortChoice.test.tsx` | Per-chat pending choice keyed by session id, seeded once from the last assistant metadata; an unsent choice survives switching chats. All three `sendMessage` sites pass it, the picker disables while streaming and shows the pending/default level rather than a previous reply's stale runtime level. | The next message uses the chat's choice; prior messages and other chats keep their own levels. |
+ | `lib/api.ts`, `pages/Agent.tsx`, `lib/__tests__/api.test.ts`, `pages/__tests__/AgentReasoningEffortChoice.test.tsx` | Type `getGoal` as nullable and treat JSON null as no goal; a real 404 now surfaces as an error. Tests pin nullable response and unknown-session error. | Align the chat with the nullable optional-goal API without hiding a missing session. |
++| `stores/agent.ts`, `pages/Agent.tsx`, `components/chat/ActivityLine.tsx`, `components/chat/MessageBubble.tsx`, nine `i18n/locales/*.json`, `pages/__tests__/AgentInterruptedRetry.test.tsx`, `components/chat/__tests__/ActivityLine.test.tsx`, `components/chat/__tests__/MessageBubble.test.tsx` | SP5: an interrupted history row has an amber, screen-reader-readable status and warns that completed actions may repeat. Retry exists only with the backend's run-linked exact prompt, requires native confirmation, sends a new attempt in the same session, and ignores current composer attachments/goal/swarm mode. A synchronous guard prevents double sends; 409/503 preserve the interrupted row for later retry. | A restart must not be called Done or silently replayed; a retry must not mutate the original prompt or hide uncertainty when progress history is incomplete. |
+ 
+ ### Left in place on purpose (dead, not reachable)
+ 
+@@ -176,7 +187,24 @@ propose moving the pin to the fork's stale `main` and drop every change above.
+  11. US-stock chat text and reasoning tails wait for the policy release, while
+      safe progress can stream; no raw committee event, trace sidecar or
+      checkpoint may expose a draft. An incomplete, stale or unavailable source
+-     yields analysis-only, never an own Buy/Sell/target.
++      yields analysis-only, never an own Buy/Sell/target.
++  12. A deploy pauses new chat attempts before storing a user message; only a
++      loopback client with the configured API key can hold/renew/release that
++      pause, and its lease expires when the deploy disappears. Existing runs
++      are counted and continue; do not use a persisted attempt-file poll as a
++      substitute for the in-process admission lock.
++  13. A private automatic committee counts from before its launch thread
++      starts until its persisted run reaches a terminal state, even when the
++      parent chat already ended. Corrupt private run data blocks a deploy;
++      public/manual swarms do not count and private IDs never leave the gate.
++  14. On an unexpected restart, an interrupted reply keeps only already-safe
++      response text, bounded tool names/outcomes, and the exact prior prompt;
++      it is marked incomplete. No raw committee report or unreviewed target
++      can be reconstructed from the checkpoint.
++  15. Interruption is amber, not Done, after reload. The warning appears even
++      if no prompt survived; with a prompt, only a confirmed same-session
++      retry sends its exact text under current model/effort, never the mutable
++      composer state or an automatic replay.
+ 
+ ## Reapplying after a sync
+ 
+@@ -186,8 +214,11 @@ git fetch upstream
+ git merge upstream/main            # on branch family-app; never force-push
+ ```
+ 
+-Expect conflicts in `Settings.tsx`, `Agent.tsx`, `settings_routes.py`,
+-`sessions_routes.py`, `service.py`, `llm.py`, `chat.py`, `swarm/runtime.py`,
++Expect conflicts in `Settings.tsx`, `Agent.tsx`, `ActivityLine.tsx`,
++`MessageBubble.tsx`, `stores/agent.ts`, `settings_routes.py`,
++`sessions_routes.py`, `deploy_routes.py`, `api_server.py`, `service.py`, `swarm_tool.py`,
++`committee_gate.py`, `checkpoint.py`, `session/store.py`, `llm.py`, `chat.py`,
++`swarm/runtime.py`, `swarm/store.py`,
+ `swarm/worker.py`, `api.ts`, locale JSON files, the grounding package
+ (`release.py`, `policies.py`, `evidence.py`, `figures.py`), `loop.py`,
+ `context.py`, `web_reader_tool.py`, `web_search_tool.py`, `mcp_server.py`,
+diff --git a/agent/api_server.py b/agent/api_server.py
+index 89ed4508..c5b54499 100644
+--- a/agent/api_server.py
++++ b/agent/api_server.py
+@@ -193,6 +193,9 @@ register_attribution_routes(app)
+ from src.api.sessions_routes import register_sessions_routes  # noqa: E402
+ register_sessions_routes(app)
+ 
++from src.api.deploy_routes import register_deploy_routes  # noqa: E402
++register_deploy_routes(app)
++
+ from src.api.sessions_routes import (  # noqa: F401, E402
+     _goal_store,
+     _live_action_frame_from_tool_result,
+diff --git a/agent/src/agent/committee_gate.py b/agent/src/agent/committee_gate.py
+index 341b41db..494549e4 100644
+--- a/agent/src/agent/committee_gate.py
++++ b/agent/src/agent/committee_gate.py
+@@ -525,7 +525,11 @@ class CommitteeGate:
+                   "preset_name": "investment_committee",
+                   "variables": {"target": symbol, "market": "US", "parent_run_id": Path(run_dir).name,
+                                 "consensus_context": context}}
+-        from src.tools.swarm_tool import execute_private_committee, private_committee_runs_root
++        from src.tools.swarm_tool import (
++            execute_private_committee,
++            mark_private_launch,
++            private_committee_runs_root,
++        )
+ 
+         try:
+             if should_cancel is None:
+@@ -533,6 +537,7 @@ class CommitteeGate:
+             else:
+                 finished = threading.Event()
+                 reply: dict[str, Any] = {}
++                finish_launch = mark_private_launch()
+ 
+                 def run_swarm() -> None:
+                     try:
+@@ -540,9 +545,14 @@ class CommitteeGate:
+                     except Exception:  # noqa: BLE001 - report failure to parent, never log a provider body
+                         reply["error"] = True
+                     finally:
++                        finish_launch()
+                         finished.set()
+ 
+-                threading.Thread(target=run_swarm, name="committee-wait", daemon=True).start()
++                try:
++                    threading.Thread(target=run_swarm, name="committee-wait", daemon=True).start()
++                except Exception:
++                    finish_launch()
++                    raise
+                 while not finished.wait(0.1):
+                     if should_cancel():
+                         self._suppress_swarm_events = True
+diff --git a/agent/src/api/deploy_routes.py b/agent/src/api/deploy_routes.py
+new file mode 100644
+index 00000000..fe542f31
+--- /dev/null
++++ b/agent/src/api/deploy_routes.py
+@@ -0,0 +1,69 @@
++"""Loopback-only Vibe chat drain control for the ai-trading deploy driver."""
++
++from __future__ import annotations
++
++import ipaddress
++import sys
++
++from fastapi import Depends, FastAPI, Header, HTTPException, Request
++
++
++def register_deploy_routes(app: FastAPI) -> None:
++    host = sys.modules.get("api_server") or sys.modules.get("agent.api_server")
++    if host is None:
++        raise RuntimeError("Import api_server before registering deploy routes")
++    require_auth = host.require_auth
++
++    def local_service(request: Request):
++        try:
++            loopback = ipaddress.ip_address(request.client.host).is_loopback
++        except (AttributeError, ValueError):
++            loopback = False
++        if not loopback:
++            raise HTTPException(status_code=403, detail="Local deploy control only")
++        service = host._get_session_service()
++        if service is None:
++            raise HTTPException(status_code=501, detail="Session runtime not enabled")
++        return service
++
++    @app.post("/internal/deploy/drain", dependencies=[Depends(require_auth)])
++    async def begin_deploy_drain(request: Request):
++        service = local_service(request)
++        try:
++            lease = service.start_deploy_drain()
++        except ValueError as exc:
++            raise HTTPException(status_code=409, detail="Deploy drain already active") from exc
++        try:
++            counts = service.deploy_drain_status(lease)
++        except (OSError, ValueError) as exc:
++            service.end_deploy_drain(lease)
++            raise HTTPException(status_code=503, detail="Deploy state unavailable") from exc
++        return {"lease": lease, **counts}
++
++    @app.get("/internal/deploy/drain", dependencies=[Depends(require_auth)])
++    async def deploy_drain_status(request: Request, lease: str = Header(alias="X-Deploy-Lease")):
++        service = local_service(request)
++        try:
++            return service.deploy_drain_status(lease)
++        except ValueError as exc:
++            raise HTTPException(status_code=409, detail="Deploy lease invalid") from exc
++        except OSError as exc:
++            raise HTTPException(status_code=503, detail="Deploy state unavailable") from exc
++
++    @app.post("/internal/deploy/drain/renew", dependencies=[Depends(require_auth)])
++    async def renew_deploy_drain(request: Request, lease: str = Header(alias="X-Deploy-Lease")):
++        service = local_service(request)
++        try:
++            service.renew_deploy_drain(lease)
++        except ValueError as exc:
++            raise HTTPException(status_code=409, detail="Deploy lease invalid") from exc
++        return {"status": "renewed"}
++
++    @app.delete("/internal/deploy/drain", dependencies=[Depends(require_auth)])
++    async def end_deploy_drain(request: Request, lease: str = Header(alias="X-Deploy-Lease")):
++        service = local_service(request)
++        try:
++            service.end_deploy_drain(lease)
++        except ValueError as exc:
++            raise HTTPException(status_code=409, detail="Deploy lease invalid") from exc
++        return {"status": "released"}
+diff --git a/agent/src/api/sessions_routes.py b/agent/src/api/sessions_routes.py
+index bb236fdc..133001c9 100644
+--- a/agent/src/api/sessions_routes.py
++++ b/agent/src/api/sessions_routes.py
+@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
+ 
+ from src.api.settings_routes import validate_message_reasoning_effort
+ from src.session.events import SSEEvent
+-from src.session.service import SessionBusyError
++from src.session.service import ServiceDrainingError, SessionBusyError
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -772,6 +772,8 @@ def register_sessions_routes(app: FastAPI) -> None:
+                 reasoning_effort=reasoning_effort or None,
+             )
+             return result
++        except ServiceDrainingError as exc:
++            raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "30"}) from exc
+         except SessionBusyError as exc:
+             # Must precede ValueError-style handling and stay distinct from 404:
+             # the session exists, it is simply already running.
+diff --git a/agent/src/session/checkpoint.py b/agent/src/session/checkpoint.py
+index 6c4e704b..bf55ad2c 100644
+--- a/agent/src/session/checkpoint.py
++++ b/agent/src/session/checkpoint.py
+@@ -1,7 +1,8 @@
+-"""Durable checkpoints for an assistant response that is still streaming."""
++"""Durable checkpoints for streamed assistant text and sanitized tool progress."""
+ 
+ from __future__ import annotations
+ 
++import math
+ import threading
+ import time
+ from typing import Any, Dict
+@@ -11,7 +12,7 @@ from src.session.store import SessionStore
+ 
+ 
+ class ResponseCheckpoint:
+-    """Persist a bounded-frequency snapshot of streamed assistant text.
++    """Persist safe tool progress and a bounded-frequency response snapshot.
+ 
+     The first text chunk is written immediately. Later chunks are coalesced to
+     avoid an fsync for every provider token, and :meth:`flush` captures the
+@@ -39,6 +40,7 @@ class ResponseCheckpoint:
+         self._text = ""
+         self._dirty = False
+         self._last_flush = 0.0
++        self._safe_progress: list[tuple[str | None, dict[str, Any]]] = []
+         self._lock = threading.Lock()
+ 
+     def handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
+@@ -48,6 +50,31 @@ class ResponseCheckpoint:
+             event_type: Agent event name.
+             data: Event payload.
+         """
++        if event_type in {"tool_call", "tool_result"}:
++            tool = data.get("tool")
++            if not isinstance(tool, str) or not tool:
++                return
++            elapsed = data.get("elapsed_ms")
++            elapsed_ms = 0
++            if type(elapsed) is int and 0 <= elapsed < 2**53:
++                elapsed_ms = elapsed
++            elif type(elapsed) is float and math.isfinite(elapsed) and 0 <= elapsed < 2**53:
++                elapsed_ms = int(elapsed)
++            safe = {
++                "tool": tool,
++                "status": "running" if event_type == "tool_call" else (
++                    "ok" if data.get("status") == "ok" else "error"),
++                "elapsed_ms": elapsed_ms,
++                "timestamp": int(time.time() * 1000),
++            }
++            call_id = data.get("call_id") if isinstance(data.get("call_id"), str) else None
++            with self._lock:
++                self._record_safe_progress(call_id, safe)
++                self._store.save_progress_tools(
++                    self._session_id, self._attempt_id,
++                    [entry for _, entry in self._safe_progress],
++                )
++            return
+         if event_type not in {"text_delta", "stream_reset"}:
+             return
+ 
+@@ -73,6 +100,19 @@ class ResponseCheckpoint:
+             ):
+                 self._flush_locked(now)
+ 
++    def _record_safe_progress(self, call_id: str | None, safe: dict[str, Any]) -> None:
++        """Pair tool results in memory; never persist their call IDs."""
++        if safe["status"] != "running" and call_id:
++            for index in range(len(self._safe_progress) - 1, -1, -1):
++                if self._safe_progress[index][0] == call_id:
++                    self._safe_progress[index] = (call_id, safe)
++                    break
++            else:
++                self._safe_progress.append((call_id, safe))
++        else:
++            self._safe_progress.append((call_id, safe))
++        self._safe_progress = self._safe_progress[-100:]
++
+     def flush(self) -> None:
+         """Persist any text accumulated since the last snapshot."""
+         with self._lock:
+diff --git a/agent/src/session/service.py b/agent/src/session/service.py
+index 0948bd66..b611e7ee 100644
+--- a/agent/src/session/service.py
++++ b/agent/src/session/service.py
+@@ -7,7 +7,9 @@ from __future__ import annotations
+ 
+ import asyncio
+ import concurrent.futures
++import hmac
+ import logging
++import secrets
+ import threading
+ import time
+ from datetime import datetime
+@@ -53,6 +55,10 @@ class SessionBusyError(RuntimeError):
+     """
+ 
+ 
++class ServiceDrainingError(RuntimeError):
++    """A deploy has paused new chat attempts without stopping active work."""
++
++
+ class SessionService:
+     """Session lifecycle service.
+ 
+@@ -95,6 +101,8 @@ class SessionService:
+         self._user_cancel_requests: set[str] = set()
+         self._inflight: set[str] = set()
+         self._inflight_lock = threading.Lock()
++        self._drain_token: Optional[str] = None
++        self._drain_deadline = 0.0
+         self._search_index = get_shared_index()
+         self._recover_interrupted_attempts()
+ 
+@@ -127,7 +135,10 @@ class SessionService:
+                         "status": AttemptStatus.INTERRUPTED.value,
+                         "partial": has_partial,
+                         "recovery_reason": "service_restart",
++                        "retry_prompt": attempt.prompt,
++                        "progress_complete": False,
+                     },
++                    tool_trail=self.store.get_progress_tools(attempt.session_id, attempt.attempt_id),
+                 )
+                 self.store.append_message(reply)
+                 self._search_index.index_message(
+@@ -152,6 +163,7 @@ class SessionService:
+                     )
+             self.store.update_attempt(attempt)
+             self.store.delete_partial_response(attempt.session_id, attempt.attempt_id)
++            self.store.delete_progress_tools(attempt.session_id, attempt.attempt_id)
+ 
+     @staticmethod
+     def _format_interrupted_message(partial: Optional[str]) -> str:
+@@ -176,6 +188,50 @@ class SessionService:
+             "actions before retrying the request."
+         )
+ 
++    def _active_drain_locked(self) -> Optional[str]:
++        """Return current lease while holding _inflight_lock; expire dead deploys."""
++        if self._drain_token and time.monotonic() >= self._drain_deadline:
++            self._drain_token = None
++            self._drain_deadline = 0.0
++        return self._drain_token
++
++    def _require_drain_locked(self, token: str) -> None:
++        active = self._active_drain_locked()
++        if not active or not hmac.compare_digest(active, token):
++            raise ValueError("Unknown or expired deploy lease")
++
++    def start_deploy_drain(self) -> str:
++        """Atomically close chat admission and issue a ten-minute lease."""
++        with self._inflight_lock:
++            if self._active_drain_locked():
++                raise ValueError("Deploy drain is already active")
++            self._drain_token = secrets.token_urlsafe(24)
++            self._drain_deadline = time.monotonic() + 600
++            return self._drain_token
++
++    def renew_deploy_drain(self, token: str) -> None:
++        """Extend only the current holder's lease."""
++        with self._inflight_lock:
++            self._require_drain_locked(token)
++            self._drain_deadline = time.monotonic() + 600
++
++    def deploy_drain_status(self, token: str) -> dict[str, int]:
++        """Report counts only, never session IDs or unfinished content."""
++        with self._inflight_lock:
++            self._require_drain_locked(token)
++            active_chat = len(self._inflight)
++        from src.tools.swarm_tool import active_private_committee_work
++
++        return {"active_chat": active_chat,
++                "active_private_committees": active_private_committee_work()}
++
++    def end_deploy_drain(self, token: str) -> None:
++        """Reopen chat admission for the lease holder."""
++        with self._inflight_lock:
++            self._require_drain_locked(token)
++            self._drain_token = None
++            self._drain_deadline = 0.0
++
+     def _reserve_session(self, session_id: str) -> None:
+         """Claim a session for one in-flight run.
+ 
+@@ -186,6 +242,8 @@ class SessionService:
+             SessionBusyError: If the session is already claimed.
+         """
+         with self._inflight_lock:
++            if self._active_drain_locked():
++                raise ServiceDrainingError("Research is paused for deployment; retry shortly")
+             if session_id in self._inflight:
+                 raise SessionBusyError(
+                     f"Session {session_id} already has a run in progress"
+@@ -436,6 +494,7 @@ class SessionService:
+             # process interrupted between the two writes.
+             self.store.update_attempt(attempt)
+             self.store.delete_partial_response(session.session_id, attempt.attempt_id)
++            self.store.delete_progress_tools(session.session_id, attempt.attempt_id)
+             self._search_index.index_message(session.session_id, "assistant", reply.content)
+             self.event_bus.emit(
+                 session.session_id,
+diff --git a/agent/src/session/store.py b/agent/src/session/store.py
+index 12f5f626..cf10a777 100644
+--- a/agent/src/session/store.py
++++ b/agent/src/session/store.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import json
+ import logging
+ import os
++import re
+ import tempfile
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional
+@@ -58,6 +59,9 @@ class SessionStore:
+     def _partial_response_file(self, session_id: str, attempt_id: str) -> Path:
+         return self._attempt_dir(session_id, attempt_id) / "partial_response.json"
+ 
++    def _progress_tools_file(self, session_id: str, attempt_id: str) -> Path:
++        return self._attempt_dir(session_id, attempt_id) / "progress_tools.json"
++
+     # ---- Session CRUD ----
+ 
+     def create_session(self, session: Session) -> Session:
+@@ -330,6 +334,47 @@ class SessionStore:
+         """
+         self._partial_response_file(session_id, attempt_id).unlink(missing_ok=True)
+ 
++    @staticmethod
++    def _safe_progress_tools(entries: Any) -> list[dict[str, Any]]:
++        """Keep bounded tool names/outcomes only, even for malformed disk data."""
++        if not isinstance(entries, list):
++            return []
++        safe = []
++        for entry in entries[-100:]:
++            if not isinstance(entry, dict):
++                continue
++            tool = entry.get("tool")
++            status = entry.get("status")
++            if (not isinstance(tool, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", tool)
++                    or status not in {"running", "ok", "error"}):
++                continue
++            elapsed = entry.get("elapsed_ms")
++            timestamp = entry.get("timestamp")
++            safe.append({
++                "tool": tool,
++                "status": status,
++                "elapsed_ms": elapsed if type(elapsed) is int and elapsed >= 0 else 0,
++                "timestamp": timestamp if type(timestamp) is int and timestamp >= 0 else 0,
++            })
++        return safe
++
++    def save_progress_tools(self, session_id: str, attempt_id: str, entries: list[dict]) -> None:
++        """Atomically checkpoint only display-safe tool progress."""
++        self._write_json(self._progress_tools_file(session_id, attempt_id),
++                         {"tools": self._safe_progress_tools(entries)})
++
++    def get_progress_tools(self, session_id: str, attempt_id: str) -> list[dict]:
++        """Read a safe progress snapshot; missing/corrupt data is incomplete."""
++        try:
++            data = self._read_json(self._progress_tools_file(session_id, attempt_id))
++        except OSError:
++            return []
++        return self._safe_progress_tools(data.get("tools")) if isinstance(data, dict) else []
++
++    def delete_progress_tools(self, session_id: str, attempt_id: str) -> None:
++        """Remove a checkpoint after a terminal reply is durable."""
++        self._progress_tools_file(session_id, attempt_id).unlink(missing_ok=True)
++
+     # ---- IO Helpers ----
+ 
+     @staticmethod
+diff --git a/agent/src/swarm/store.py b/agent/src/swarm/store.py
+index 8289e64c..e9ee7505 100644
+--- a/agent/src/swarm/store.py
++++ b/agent/src/swarm/store.py
+@@ -201,7 +201,8 @@ class SwarmStore:
+                 if attempt < len(_REPLACE_BACKOFF):
+                     time.sleep(_REPLACE_BACKOFF[attempt])
+         assert last is not None  # loop body sets `last` or returns
+-        raise type(last)(redact_internal_paths(str(last))) from None
++        error_type = OSError if isinstance(last, OSError) else ValueError
++        raise error_type(redact_internal_paths(str(last))) from None
+ 
+     def update_run(self, run: SwarmRun) -> None:
+         """Atomically update run state.
+diff --git a/agent/src/tools/swarm_tool.py b/agent/src/tools/swarm_tool.py
+index c5927d02..5d349b9a 100644
+--- a/agent/src/tools/swarm_tool.py
++++ b/agent/src/tools/swarm_tool.py
+@@ -9,9 +9,10 @@ from __future__ import annotations
+ import json
+ import logging
+ import re
++import threading
+ import time
+ from contextvars import ContextVar
+-from typing import Any
++from typing import Any, Callable
+ 
+ from src.agent.tools import BaseTool
+ from src.tools.swarm_variables import build_variables as _build_variables
+@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
+ # Server-owned auto committees are never listed or retrieved through the
+ # ordinary swarm REST/MCP store. Model-supplied tool parameters cannot set it.
+ _private_committee = ContextVar("private_committee", default=False)
++_private_launch_lock = threading.Lock()
++_private_launches = 0
+ 
+ 
+ def private_committee_runs_root():
+@@ -30,6 +33,54 @@ def private_committee_runs_root():
+     return swarm_runs_root() / ".committee"
+ 
+ 
++def mark_private_launch() -> Callable[[], None]:
++    """Count a committee thread before it can create its durable run."""
++    global _private_launches
++    with _private_launch_lock:
++        _private_launches += 1
++    released = False
++
++    def finish() -> None:
++        nonlocal released
++        global _private_launches
++        with _private_launch_lock:
++            if released:
++                return
++            released = True
++            _private_launches -= 1
++
++    return finish
++
++
++def active_private_committee_work() -> int:
++    """Count every private pending/running run and any launch not yet durable.
++
++    A stale running status blocks deploy rather than guessing a silent worker
++    has exited. Only the private subtree is examined; public swarms are not
++    part of the Vibe chat drain contract.
++    """
++    from src.swarm.models import RunStatus
++    from src.swarm.store import SwarmStore
++
++    root = private_committee_runs_root()
++    active = 0
++    if root.exists() or root.is_symlink():
++        if root.is_symlink() or not root.is_dir():
++            raise OSError("Invalid private committee store")
++        store = SwarmStore(root)
++        # ponytail: scan all private runs per deploy poll; index active IDs only if history makes this slow.
++        for entry in root.iterdir():
++            if entry.is_symlink() or not entry.is_dir():
++                raise OSError("Invalid private committee run entry")
++            run = store.load_run(entry.name)
++            if run is None:
++                raise OSError("Unreadable private committee run")
++            if run.status in {RunStatus.pending, RunStatus.running}:
++                active += 1
++    with _private_launch_lock:
++        return _private_launches + active
++
++
+ def execute_private_committee(registry: Any, params: dict[str, Any]) -> str:
+     token = _private_committee.set(True)
+     try:
+diff --git a/agent/tests/test_deploy_drain_routes.py b/agent/tests/test_deploy_drain_routes.py
+new file mode 100644
+index 00000000..fbc3b435
+--- /dev/null
++++ b/agent/tests/test_deploy_drain_routes.py
+@@ -0,0 +1,85 @@
++"""Local deploy control rejects browser and remote peers before state mutation."""
++
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++from fastapi.testclient import TestClient
++
++import api_server
++from src.session.events import EventBus
++from src.session.service import SessionService
++from src.session.store import SessionStore
++
++
++@pytest.fixture
++def service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SessionService:
++    index = SimpleNamespace(index_session=lambda *args: None, index_message=lambda *args: None)
++    monkeypatch.setattr("src.session.service.get_shared_index", lambda: index)
++    instance = SessionService(SessionStore(tmp_path / "sessions"), EventBus(), tmp_path / "runs")
++    monkeypatch.setattr(api_server, "_get_session_service", lambda: instance)
++    monkeypatch.setenv("API_AUTH_KEY", "fake-deploy-key")
++    monkeypatch.setattr(api_server, "_API_KEY", "fake-deploy-key", raising=False)
++    return instance
++
++
++def test_local_authenticated_drain_returns_counts_without_run_details(service):
++    client = TestClient(api_server.app, client=("127.0.0.1", 50000))
++    headers = {"Authorization": "Bearer fake-deploy-key"}
++    started = client.post("/internal/deploy/drain", headers=headers)
++    assert started.status_code == 200
++    lease = started.json()["lease"]
++    assert set(started.json()) == {"lease", "active_chat", "active_private_committees"}
++    assert started.json()["active_chat"] == 0
++    authorized = {**headers, "X-Deploy-Lease": lease}
++    assert client.get("/internal/deploy/drain", headers=authorized).json()["active_chat"] == 0
++    assert client.post("/internal/deploy/drain/renew", headers=authorized).status_code == 200
++    assert client.delete("/internal/deploy/drain", headers=authorized).status_code == 200
++
++
++def test_remote_peer_with_valid_key_and_spoofed_forwarded_ip_cannot_drain(service):
++    remote = TestClient(api_server.app, client=("203.0.113.9", 50000))
++    response = remote.post("/internal/deploy/drain", headers={
++        "Authorization": "Bearer fake-deploy-key", "X-Forwarded-For": "127.0.0.1",
++    })
++    assert response.status_code == 403
++    lease = service.start_deploy_drain()
++    service.end_deploy_drain(lease)
++
++
++def test_configured_key_is_required_even_on_loopback(service):
++    client = TestClient(api_server.app, client=("127.0.0.1", 50000))
++    assert client.post("/internal/deploy/drain").status_code == 401
++    assert client.post("/internal/deploy/drain", headers={
++        "Authorization": "Bearer wrong-key",
++    }).status_code == 401
++
++
++def test_bad_lease_or_query_token_cannot_read_or_release_drain(service):
++    client = TestClient(api_server.app, client=("127.0.0.1", 50000))
++    headers = {"Authorization": "Bearer fake-deploy-key"}
++    lease = client.post("/internal/deploy/drain", headers=headers).json()["lease"]
++    assert client.get("/internal/deploy/drain?lease=" + lease, headers=headers).status_code != 200
++    assert client.delete("/internal/deploy/drain", headers={
++        **headers, "X-Deploy-Lease": "wrong-holder",
++    }).status_code in {403, 409}
++    assert client.get("/internal/deploy/drain", headers={
++        **headers, "X-Deploy-Lease": lease,
++    }).status_code == 200
++
++
++def test_failed_initial_status_releases_its_lease(service, monkeypatch):
++    client = TestClient(api_server.app, client=("127.0.0.1", 50000))
++    original = service.deploy_drain_status
++
++    def broken_status(_lease):
++        raise OSError("private store unreadable")
++
++    monkeypatch.setattr(service, "deploy_drain_status", broken_status)
++    response = client.post("/internal/deploy/drain", headers={
++        "Authorization": "Bearer fake-deploy-key",
++    })
++    assert response.status_code == 503
++    monkeypatch.setattr(service, "deploy_drain_status", original)
++    lease = service.start_deploy_drain()
++    service.end_deploy_drain(lease)
+diff --git a/agent/tests/test_private_committee_drain.py b/agent/tests/test_private_committee_drain.py
+new file mode 100644
+index 00000000..ab951bf1
+--- /dev/null
++++ b/agent/tests/test_private_committee_drain.py
+@@ -0,0 +1,144 @@
++"""Deploy idle means no chat, pending private launch, or detached private run."""
++
++from __future__ import annotations
++
++import threading
++import time
++from datetime import datetime, timezone
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++from src.agent.committee_gate import CommitteeGate
++from src.session.events import EventBus
++from src.session.service import SessionService
++from src.session.store import SessionStore
++from src.swarm.models import RunStatus, SwarmRun
++from src.swarm.store import SwarmStore
++from src.tools import swarm_tool
++
++
++@pytest.fixture
++def private_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
++    root = tmp_path / ".committee"
++    monkeypatch.setattr(swarm_tool, "private_committee_runs_root", lambda: root)
++    return root
++
++
++def test_pending_private_launch_blocks_idle(private_root: Path) -> None:
++    finish = swarm_tool.mark_private_launch()
++    try:
++        assert swarm_tool.active_private_committee_work() == 1
++    finally:
++        finish()
++        finish()  # Cleanup must not make the counter negative.
++    assert swarm_tool.active_private_committee_work() == 0
++
++
++def test_persisted_private_run_stays_active_after_launcher_returns(private_root: Path) -> None:
++    store = SwarmStore(private_root)
++    run = SwarmRun(
++        id="run-1", preset_name="investment_committee",
++        created_at=datetime.now(timezone.utc).isoformat(),
++    )
++    finish = swarm_tool.mark_private_launch()
++    store.create_run(run)
++    assert swarm_tool.active_private_committee_work() == 2
++    finish()
++    assert swarm_tool.active_private_committee_work() == 1
++    run.status = RunStatus.running
++    store.update_run(run)
++    assert swarm_tool.active_private_committee_work() == 1
++    run.status = RunStatus.completed
++    store.update_run(run)
++    assert swarm_tool.active_private_committee_work() == 0
++
++
++def test_public_swarm_is_outside_private_deploy_scope(private_root: Path) -> None:
++    store = SwarmStore(private_root.parent / "public")
++    store.create_run(SwarmRun(
++        id="manual-run", preset_name="risk_committee",
++        created_at=datetime.now(timezone.utc).isoformat(),
++    ))
++    assert swarm_tool.active_private_committee_work() == 0
++
++
++def test_corrupt_private_run_refuses_idle(private_root: Path) -> None:
++    broken = private_root / "damaged" / "run.json"
++    broken.parent.mkdir(parents=True)
++    broken.write_text("{", encoding="utf-8")
++    with pytest.raises((OSError, ValueError)):
++        swarm_tool.active_private_committee_work()
++
++
++def test_running_run_beyond_first_fifty_still_blocks_deploy(private_root: Path) -> None:
++    store = SwarmStore(private_root)
++    for number in range(51):
++        store.create_run(SwarmRun(
++            id=f"older-{number}", preset_name="investment_committee",
++            status=RunStatus.completed,
++            created_at=datetime.now(timezone.utc).isoformat(),
++        ))
++    store.create_run(SwarmRun(
++        id="active-after-fifty", preset_name="investment_committee",
++        created_at=datetime.now(timezone.utc).isoformat(),
++    ))
++    assert swarm_tool.active_private_committee_work() == 1
++
++
++def test_session_release_before_private_persistence_does_not_report_idle(
++    private_root: Path, monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    index = SimpleNamespace(index_session=lambda *a: None, index_message=lambda *a: None)
++    monkeypatch.setattr("src.session.service.get_shared_index", lambda: index)
++    service = SessionService(SessionStore(private_root.parent / "sessions"), EventBus(), private_root.parent / "runs")
++    session = service.create_session("handoff")
++    service._reserve_session(session.session_id)
++    lease = service.start_deploy_drain()
++    assert service.deploy_drain_status(lease)["active_chat"] == 1
++    finish = swarm_tool.mark_private_launch()
++    service._release_session(session.session_id)
++    try:
++        assert service.deploy_drain_status(lease)["active_private_committees"] == 1
++    finally:
++        finish()
++        service.end_deploy_drain(lease)
++
++
++def test_real_committee_launcher_remains_counted_after_parent_cancels(
++    private_root: Path, monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    started = threading.Event()
++    release = threading.Event()
++
++    class Registry:
++        def get(self, _name):
++            return None
++
++        def execute(self, name, _params):
++            assert name == "run_swarm"
++            started.set()
++            assert release.wait(5)
++            return '{"status":"failed"}'
++
++    gate = CommitteeGate(
++        "Should I buy AAPL.US?", None,
++        bridge_fetcher=lambda *_: {"status": "unavailable", "reason": "not_configured"},
++    )
++    parent_dir = private_root.parent / "parent-run"
++    ledger = SimpleNamespace(run_dir=str(parent_dir))
++    try:
++        gate.orchestrate(
++            Registry(), "Should I buy AAPL.US?", "AAPL.US", ledger, parent_dir,
++            now=datetime.now(timezone.utc), should_cancel=started.is_set,
++        )
++        assert started.is_set()
++        assert swarm_tool.active_private_committee_work() == 1
++    finally:
++        release.set()
++    for _ in range(100):
++        if swarm_tool.active_private_committee_work() == 0:
++            break
++        time.sleep(0.01)
++    assert swarm_tool.active_private_committee_work() == 0
+diff --git a/agent/tests/test_reasoning_effort_swarm_threading.py b/agent/tests/test_reasoning_effort_swarm_threading.py
+index 672e069d..f35f7adf 100644
+--- a/agent/tests/test_reasoning_effort_swarm_threading.py
++++ b/agent/tests/test_reasoning_effort_swarm_threading.py
+@@ -71,11 +71,15 @@ def test_execute_run_passes_the_override_to_every_worker(monkeypatch: pytest.Mon
+     assert persisted.status.value == "completed"
+ 
+ 
+-def test_chat_registry_installs_swarm_tool_with_this_run_effort() -> None:
+-    from src.tools import build_registry
+-
+-    tool = build_registry(reasoning_effort="xhigh").get("run_swarm")
+-    assert tool is not None
++def test_chat_registry_installs_swarm_tool_with_this_run_effort(monkeypatch: pytest.MonkeyPatch) -> None:
++    import src.tools as tools_module
++    from src.tools.swarm_tool import SwarmTool
++
++    # Other tests define BaseTool subclasses named run_swarm. Discovery is
++    # process-global; isolate this test to the real class whose wiring it checks.
++    monkeypatch.setattr(tools_module, "_SUBCLASSES_CACHE", [SwarmTool])
++    tool = tools_module.build_registry(reasoning_effort="xhigh").get("run_swarm")
++    assert isinstance(tool, SwarmTool)
+     assert tool.reasoning_effort == "xhigh"
+ 
+ 
+diff --git a/agent/tests/test_session_restart_recovery.py b/agent/tests/test_session_restart_recovery.py
+index cfb4d846..910fdcbb 100644
+--- a/agent/tests/test_session_restart_recovery.py
++++ b/agent/tests/test_session_restart_recovery.py
+@@ -86,6 +86,8 @@ def test_service_restart_recovers_partial_reply_once(
+         "status": "interrupted",
+         "partial": True,
+         "recovery_reason": "service_restart",
++        "retry_prompt": "analyze",
++        "progress_complete": False,
+     }
+     assert store.get_partial_response(session.session_id, attempt.attempt_id) is None
+ 
+@@ -118,6 +120,121 @@ def test_service_restart_recovers_pending_attempt_without_partial(
+     assert reply.metadata["partial"] is False
+ 
+ 
++def test_restart_recovers_only_gated_tool_names_status_and_timing(tmp_path, monkeypatch):
++    store = SessionStore(tmp_path / "sessions")
++    session = Session(title="private research")
++    store.create_session(session)
++    attempt = Attempt(session_id=session.session_id, prompt="Should I buy AAPL.US?")
++    attempt.mark_running()
++    store.create_attempt(attempt)
++    checkpoint = ResponseCheckpoint(store, attempt)
++    gate = CommitteeGate(attempt.prompt, None)
++    events = (
++        ("tool_call", {"tool": "web_search", "call_id": "call-1", "arguments": {"query": "SECRET_ARGS"}}),
++        ("tool_result", {"tool": "web_search", "call_id": "call-1", "status": "ok",
++                         "elapsed_ms": 12, "preview": "SECRET_PREVIEW", "run_id": "PRIVATE_RUN_ID"}),
++        ("text_delta", {"delta": "My own target is $200"}),
++    )
++    with monkeypatch.context() as clock:
++        clock.setattr("src.session.checkpoint.time.time", lambda: 1.0)
++        for kind, payload in events:
++            safe = gate.sanitize_event(kind, payload)
++            if safe is not None:
++                checkpoint.handle_event(kind, safe)
++    checkpoint.flush()
++
++    expected = [{"tool": "web_search", "status": "ok", "elapsed_ms": 12, "timestamp": 1000}]
++    assert store.get_progress_tools(session.session_id, attempt.attempt_id) == expected
++    progress_file = tmp_path / "sessions" / session.session_id / "attempts" / attempt.attempt_id / "progress_tools.json"
++    persisted = progress_file.read_text(encoding="utf-8")
++    assert not any(raw in persisted for raw in ("call-1", "SECRET_ARGS", "SECRET_PREVIEW", "PRIVATE_RUN_ID"))
++
++    _service(store, tmp_path / "runs", monkeypatch)
++    recovered = store.get_message_for_attempt(session.session_id, attempt.attempt_id)
++    assert recovered is not None
++    assert recovered.metadata["status"] == "interrupted"
++    assert recovered.metadata["retry_prompt"] == attempt.prompt
++    assert recovered.metadata["progress_complete"] is False
++    assert recovered.tool_trail == expected
++    assert "My own target is $200" not in recovered.content
++    assert store.get_progress_tools(session.session_id, attempt.attempt_id) == []
++
++
++def test_corrupt_tool_progress_does_not_fake_a_complete_action_list(tmp_path, monkeypatch):
++    store = SessionStore(tmp_path / "sessions")
++    session = Session(title="corrupt progress")
++    store.create_session(session)
++    attempt = Attempt(session_id=session.session_id, prompt="Investigate NVDA.US")
++    attempt.mark_running()
++    store.create_attempt(attempt)
++    progress_file = tmp_path / "sessions" / session.session_id / "attempts" / attempt.attempt_id / "progress_tools.json"
++    progress_file.write_text("{", encoding="utf-8")
++
++    _service(store, tmp_path / "runs", monkeypatch)
++    recovered = store.get_message_for_attempt(session.session_id, attempt.attempt_id)
++    assert recovered is not None
++    assert recovered.tool_trail == []
++    assert recovered.metadata["progress_complete"] is False
++    assert recovered.metadata["retry_prompt"] == attempt.prompt
++
++
++def test_non_us_tool_callback_still_persists_no_arguments_or_preview(tmp_path, monkeypatch):
++    store = SessionStore(tmp_path / "sessions")
++    session = Session(title="general research")
++    store.create_session(session)
++    attempt = Attempt(session_id=session.session_id, prompt="Summarize the weather")
++    store.create_attempt(attempt)
++    checkpoint = ResponseCheckpoint(store, attempt)
++    with monkeypatch.context() as clock:
++        clock.setattr("src.session.checkpoint.time.time", lambda: 2.0)
++        checkpoint.handle_event("tool_call", {"tool": "web_search", "call_id": "private-call",
++                                               "arguments": {"query": "SECRET_ARGS"}})
++        checkpoint.handle_event("tool_result", {"tool": "web_search", "call_id": "private-call",
++                                                 "status": "ok", "preview": "SECRET_PREVIEW", "elapsed_ms": 15})
++    assert store.get_progress_tools(session.session_id, attempt.attempt_id) == [
++        {"tool": "web_search", "status": "ok", "elapsed_ms": 15, "timestamp": 2000},
++    ]
++    persisted = (tmp_path / "sessions" / session.session_id / "attempts" / attempt.attempt_id
++                 / "progress_tools.json").read_text(encoding="utf-8")
++    assert "SECRET_ARGS" not in persisted and "SECRET_PREVIEW" not in persisted
++    assert "private-call" not in persisted
++
++
++@pytest.mark.parametrize("elapsed", [float("nan"), float("inf")])
++def test_nonfinite_tool_timing_cannot_break_response_checkpoint(tmp_path, elapsed):
++    store = SessionStore(tmp_path / "sessions")
++    session = Session(title="bad tool timing")
++    store.create_session(session)
++    attempt = Attempt(session_id=session.session_id, prompt="Summarize")
++    store.create_attempt(attempt)
++    checkpoint = ResponseCheckpoint(store, attempt)
++
++    checkpoint.handle_event("tool_result", {"tool": "web_search", "status": "ok", "elapsed_ms": elapsed})
++    assert store.get_progress_tools(session.session_id, attempt.attempt_id)[0]["elapsed_ms"] == 0
++
++
++def test_recovery_keeps_committed_terminal_reply_and_cleans_progress(tmp_path, monkeypatch):
++    store = SessionStore(tmp_path / "sessions")
++    session = Session(title="committed")
++    store.create_session(session)
++    attempt = Attempt(session_id=session.session_id, prompt="finished research")
++    attempt.mark_running()
++    store.create_attempt(attempt)
++    store.save_progress_tools(session.session_id, attempt.attempt_id, [
++        {"tool": "web_search", "status": "ok", "elapsed_ms": 12, "timestamp": 1000},
++    ])
++    original = Message(session_id=session.session_id, role="assistant", content="Complete answer",
++                       linked_attempt_id=attempt.attempt_id, metadata={"status": "completed"})
++    store.append_message(original)
++
++    _service(store, tmp_path / "runs", monkeypatch)
++    recovered = store.get_message_for_attempt(session.session_id, attempt.attempt_id)
++    assert recovered is not None and recovered.content == "Complete answer"
++    assert recovered.metadata == {"status": "completed"}
++    assert len(store.get_messages(session.session_id)) == 1
++    assert store.get_progress_tools(session.session_id, attempt.attempt_id) == []
++
++
+ def test_hidden_us_stock_draft_does_not_rehydrate_after_restart(tmp_path, monkeypatch):
+     store = SessionStore(tmp_path / "sessions")
+     session = Session(title="quarantined")
+diff --git a/agent/tests/test_session_service_lifecycle.py b/agent/tests/test_session_service_lifecycle.py
+index 9d01ff09..2b7a6c5c 100644
+--- a/agent/tests/test_session_service_lifecycle.py
++++ b/agent/tests/test_session_service_lifecycle.py
+@@ -86,6 +86,74 @@ def test_second_send_is_refused_while_the_first_run_is_in_flight(tmp_path, monke
+     asyncio.run(scenario())
+ 
+ 
++def test_drain_rejects_new_send_without_persisting(tmp_path, monkeypatch):
++    """Pausing admission must not create a ghost user message or attempt."""
++
++    async def scenario():
++        service = _service(tmp_path, monkeypatch)
++        session = service.create_session(title="drain")
++        lease = service.start_deploy_drain()
++        with pytest.raises(RuntimeError, match="paused for deployment"):
++            await service.send_message(session.session_id, "new research")
++        assert service.store.get_messages(session.session_id) == []
++        assert service.store.list_attempts() == []
++        service.end_deploy_drain(lease)
++
++    asyncio.run(scenario())
++
++
++def test_drain_counts_already_admitted_work_until_its_reply_is_saved(tmp_path, monkeypatch):
++    """An in-flight attempt remains protected after new sends are paused."""
++
++    async def scenario():
++        service = _service(tmp_path, monkeypatch)
++        session = service.create_session(title="running")
++        gate = asyncio.Event()
++        _stub_agent(service, monkeypatch, {"status": "success", "content": "done"}, gate=gate)
++        await service.send_message(session.session_id, "research")
++        lease = service.start_deploy_drain()
++        assert service.deploy_drain_status(lease) == {
++            "active_chat": 1, "active_private_committees": 0,
++        }
++        gate.set()
++        for _ in range(100):
++            await asyncio.sleep(0.01)
++            if service.deploy_drain_status(lease)["active_chat"] == 0:
++                break
++        assert service.deploy_drain_status(lease)["active_chat"] == 0
++        assert service.store.get_messages(session.session_id)[-1].content == "done"
++        service.end_deploy_drain(lease)
++
++    asyncio.run(scenario())
++
++
++def test_drain_lease_rejects_other_holder_and_expires(tmp_path, monkeypatch):
++    """Only holder controls admission; a dead deploy cannot pause forever."""
++    service = _service(tmp_path, monkeypatch)
++    now = [100.0]
++    with monkeypatch.context() as clock_patch:
++        clock_patch.setattr("src.session.service.time.monotonic", lambda: now[0])
++        lease = service.start_deploy_drain()
++        with pytest.raises(ValueError):
++            service.renew_deploy_drain("wrong-holder")
++        with pytest.raises(ValueError):
++            service.end_deploy_drain("wrong-holder")
++        now[0] += 601
++        replacement = service.start_deploy_drain()
++        assert replacement != lease
++        service.end_deploy_drain(replacement)
++
++
++def test_new_process_does_not_inherit_prior_drain(tmp_path, monkeypatch):
++    """Process-local admission state resets when Vibe starts again."""
++    service = _service(tmp_path, monkeypatch)
++    service.start_deploy_drain()
++    replacement = _service(tmp_path, monkeypatch)
++    lease = replacement.start_deploy_drain()
++    assert replacement.deploy_drain_status(lease)["active_chat"] == 0
++    replacement.end_deploy_drain(lease)
++
++
+ def test_claim_is_released_after_the_run_finishes(tmp_path, monkeypatch):
+     """A sequential second send succeeds once the first run reaches a terminal state."""
+ 
+diff --git a/agent/tests/test_swarm_store_atomic_write.py b/agent/tests/test_swarm_store_atomic_write.py
+index 34c3b4e3..d828b865 100644
+--- a/agent/tests/test_swarm_store_atomic_write.py
++++ b/agent/tests/test_swarm_store_atomic_write.py
+@@ -125,6 +125,16 @@ def test_load_run_missing_is_fast_none(tmp_path, monkeypatch):
+     assert store.load_run("does-not-exist") is None
+ 
+ 
++def test_load_run_corrupt_json_raises_value_error(tmp_path):
++    """A bad persisted run is invalid data, not an uncaught constructor error."""
++    run_dir = tmp_path / "damaged"
++    run_dir.mkdir()
++    (run_dir / "run.json").write_text("{", encoding="utf-8")
++
++    with pytest.raises(ValueError):
++        SwarmStore(base_dir=tmp_path).load_run("damaged")
++
++
+ def test_concurrent_stores_writing_same_run_do_not_crash_or_clobber(tmp_path):
+     """mcp_server._get_swarm_store() builds a fresh SwarmStore per tool call,
+     so two pollers of the same run each hold their own _write_lock. A shared
+diff --git a/frontend/src/components/chat/ActivityLine.tsx b/frontend/src/components/chat/ActivityLine.tsx
+index 128fc0d1..f8e4bacd 100644
+--- a/frontend/src/components/chat/ActivityLine.tsx
++++ b/frontend/src/components/chat/ActivityLine.tsx
+@@ -52,7 +52,7 @@ function StateIcon({ state }: { state: AgentActivity["state"] }): JSX.Element {
+   if (state === "stopped") {
+     return <Octagon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />;
+   }
+-  if (state === "timeout") {
++  if (state === "timeout" || state === "interrupted") {
+     return <Clock3 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />;
+   }
+   return <XCircle className="h-3.5 w-3.5 text-danger" aria-hidden="true" />;
+@@ -126,6 +126,9 @@ export const ActivityLine = memo(function ActivityLine({
+     if (activity.state === "failed") {
+       return `${t("agent.activity.failed" as never)} · ${stepsLabel} · ${elapsed}`;
+     }
++    if (activity.state === "interrupted") {
++      return `${t("agent.activity.interrupted" as never)} · ${stepsLabel} · ${elapsed}`;
++    }
+     if (activity.state === "done") {
+       return `${t("agent.activity.done" as never)} · ${stepsLabel} · ${elapsed}`;
+     }
+@@ -137,10 +140,11 @@ export const ActivityLine = memo(function ActivityLine({
+     <div
+       role="status"
+       aria-live="polite"
+-      aria-atomic="false"
++      aria-atomic={activity.state === "interrupted"}
+       className={cn(
+         "overflow-hidden rounded-lg border border-border/40 bg-muted/5",
+         isActive && "border-primary/20 bg-primary/[0.025]",
++        activity.state === "interrupted" && "border-amber-500/30 bg-amber-500/5",
+       )}
+     >
+       <button
+diff --git a/frontend/src/components/chat/MessageBubble.tsx b/frontend/src/components/chat/MessageBubble.tsx
+index a4a1777d..90c992fd 100644
+--- a/frontend/src/components/chat/MessageBubble.tsx
++++ b/frontend/src/components/chat/MessageBubble.tsx
+@@ -191,6 +191,7 @@ function getRetryHint(content: string): string {
+ interface Props {
+   msg: StoredAgentMessage;
+   onRetry?: (msg: AgentMessage) => void;
++  onRetryInterrupted?: (prompt: string) => void;
+ }
+ 
+ function formatElapsed(elapsedMs: number): string {
+@@ -201,7 +202,7 @@ function formatElapsed(elapsedMs: number): string {
+   return `${minutes}m ${Math.round(seconds % 60)}s`;
+ }
+ 
+-export const MessageBubble = memo(function MessageBubble({ msg, onRetry }: Props) {
++export const MessageBubble = memo(function MessageBubble({ msg, onRetry, onRetryInterrupted }: Props) {
+   if (msg.type === "user") {
+     const meta = msg.meta;
+     const attachments = meta?.attachments
+@@ -243,6 +244,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onRetry }: Props
+   }
+ 
+   if (msg.type === "answer") {
++    const retryPrompt = msg.meta?.retryPrompt;
+     return (
+       <div className="flex gap-3 group relative">
+         <AgentAvatar />
+@@ -257,6 +259,24 @@ export const MessageBubble = memo(function MessageBubble({ msg, onRetry }: Props
+               </span>
+             </div>
+           )}
++          {msg.meta?.interrupted && (
++            <div className="mt-2 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-foreground">
++              <p>{i18n.t("agent.interruptedActionsUnknown" as never)}</p>
++              {retryPrompt && onRetryInterrupted && (
++                <button
++                  type="button"
++                  onClick={() => {
++                    if (window.confirm(i18n.t("agent.retryInterruptedWarning" as never))) {
++                      onRetryInterrupted(retryPrompt);
++                    }
++                  }}
++                  className="inline-flex min-h-11 items-center rounded-lg border border-amber-500/40 px-3 text-sm font-medium text-foreground transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
++                >
++                  {i18n.t("agent.retryInterrupted" as never)}
++                </button>
++              )}
++            </div>
++          )}
+         </div>
+       </div>
+     );
+diff --git a/frontend/src/components/chat/__tests__/ActivityLine.test.tsx b/frontend/src/components/chat/__tests__/ActivityLine.test.tsx
+index 1ff803ad..d6a2d0de 100644
+--- a/frontend/src/components/chat/__tests__/ActivityLine.test.tsx
++++ b/frontend/src/components/chat/__tests__/ActivityLine.test.tsx
+@@ -13,6 +13,7 @@ vi.mock("react-i18next", () => ({
+         "agent.activity.verbs.validatingNumbers": "Double-checking the numbers",
+         "agent.activity.done": "Done",
+         "agent.activity.failed": "Failed",
++        "agent.activity.interrupted": "Interrupted",
+         "agent.activity.stopped": "Stopped by you",
+         "agent.activity.continue": "Continue",
+         "agent.activity.reattach": "Re-attach",
+@@ -139,6 +140,14 @@ describe("ActivityLine", () => {
+     expect(onReattach).toHaveBeenCalledOnce();
+   });
+ 
++  it("marks a recovered attempt amber and never announces it as Done", () => {
++    render(<ActivityLine activity={makeActivity({ state: "interrupted", endedAt: 8000 })} />);
++    const status = screen.getByRole("status");
++    expect(status).toHaveTextContent("Interrupted · 1 steps · 3s");
++    expect(status).not.toHaveTextContent("Done");
++    expect(status).toHaveClass("border-amber-500/30");
++  });
++
+   it("uses one elapsed format for seconds and minutes", () => {
+     expect(formatActivityElapsed(59_999)).toBe("59s");
+     expect(formatActivityElapsed(65_000)).toBe("1m 5s");
+diff --git a/frontend/src/components/chat/__tests__/MessageBubble.test.tsx b/frontend/src/components/chat/__tests__/MessageBubble.test.tsx
+index 19498ae5..36b60c2d 100644
+--- a/frontend/src/components/chat/__tests__/MessageBubble.test.tsx
++++ b/frontend/src/components/chat/__tests__/MessageBubble.test.tsx
+@@ -138,6 +138,32 @@ describe("MessageBubble", () => {
+       expect(screen.queryByText(/token/i)).not.toBeInTheDocument();
+     });
+ 
++    it("warns on an interrupted answer even without a retryable prompt", () => {
++      render(<MessageBubble msg={makeMsg({ meta: { interrupted: true, progressComplete: false } })} />);
++      expect(screen.getByText(/some actions may have completed/i)).toBeInTheDocument();
++      expect(screen.queryByRole("button", { name: /retry research/i })).not.toBeInTheDocument();
++    });
++
++    it("asks for confirmation before retrying the exact saved prompt", async () => {
++      const onRetryInterrupted = vi.fn();
++      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
++      render(<MessageBubble
++        msg={makeMsg({ meta: { interrupted: true, retryPrompt: "Should I buy NVDA.US? No orders." } })}
++        onRetryInterrupted={onRetryInterrupted}
++      />);
++      const button = screen.getByRole("button", { name: /retry research/i });
++      expect(button).toHaveClass("min-h-11");
++      await userEvent.setup().click(button);
++      expect(confirm).toHaveBeenCalledOnce();
++      expect(onRetryInterrupted).not.toHaveBeenCalled();
++
++      confirm.mockReturnValue(true);
++      await userEvent.setup().click(button);
++      expect(onRetryInterrupted).toHaveBeenCalledTimes(1);
++      expect(onRetryInterrupted).toHaveBeenCalledWith("Should I buy NVDA.US? No orders.");
++      confirm.mockRestore();
++    });
++
+   });
+ 
+   describe("error messages", () => {
+diff --git a/frontend/src/i18n/locales/ar.json b/frontend/src/i18n/locales/ar.json
+index 3f5c9fd5..ba0404e5 100644
+--- a/frontend/src/i18n/locales/ar.json
++++ b/frontend/src/i18n/locales/ar.json
+@@ -1218,6 +1218,7 @@
+       "stopped": "أوقفته أنت",
+       "timeout": "توقف الانتظار بعد {{elapsed}} — ربما لا يزال التشغيل في مراحله النهائية",
+       "failed": "فشل",
++      "interrupted": "انقطع التنفيذ",
+       "steps": "{{count}} خطوات",
+       "continue": "متابعة",
+       "reattach": "إعادة الاتصال",
+@@ -1226,7 +1227,10 @@
+     "resumeConnector": "استئناف الموصل",
+     "resumeConnectorTitle": "مسح مفتاح الإيقاف واستئناف نشاط الموصل",
+     "connectorResumed": "تم استئناف الموصل",
+-    "failedToResumeConnector": "فشل استئناف الموصل."
++    "failedToResumeConnector": "فشل استئناف الموصل.",
++    "retryInterrupted": "إعادة البحث",
++    "retryInterruptedWarning": "قد تؤدي إعادة المحاولة إلى تكرار إجراءات اكتملت. راجع الخطوات أعلاه أولاً. هل تريد إعادة الطلب؟",
++    "interruptedActionsUnknown": "قد تكون بعض الإجراءات قد اكتملت. قد لا تعرض الخطوات جميع ما حدث؛ راجعها قبل إعادة المحاولة."
+   },
+   "runDetail": {
+     "title": "تفاصيل التشغيل",
+diff --git a/frontend/src/i18n/locales/de.json b/frontend/src/i18n/locales/de.json
+index 2eb39de2..0d48c219 100644
+--- a/frontend/src/i18n/locales/de.json
++++ b/frontend/src/i18n/locales/de.json
+@@ -1223,6 +1223,7 @@
+       "stopped": "Von Ihnen gestoppt",
+       "timeout": "Warten nach {{elapsed}} abgebrochen — der Durchlauf kann noch abschließen",
+       "failed": "Fehlgeschlagen",
++      "interrupted": "Unterbrochen",
+       "steps": "{{count}} Schritte",
+       "continue": "Fortsetzen",
+       "reattach": "Erneut verbinden",
+@@ -1231,7 +1232,10 @@
+     "resumeConnector": "Connector fortsetzen",
+     "resumeConnectorTitle": "Kill-Switch löschen und Connector-Aktivität wieder aktivieren",
+     "connectorResumed": "Connector fortgesetzt",
+-    "failedToResumeConnector": "Connector konnte nicht fortgesetzt werden."
++    "failedToResumeConnector": "Connector konnte nicht fortgesetzt werden.",
++    "retryInterrupted": "Recherche erneut starten",
++    "retryInterruptedWarning": "Ein erneuter Versuch kann abgeschlossene Aktionen wiederholen. Prüfen Sie zuerst die obigen Schritte. Anfrage erneut senden?",
++    "interruptedActionsUnknown": "Einige Aktionen wurden möglicherweise bereits abgeschlossen. Die angezeigten Schritte können unvollständig sein; prüfen Sie sie vor einem erneuten Versuch."
+   },
+   "runDetail": {
+     "title": "Durchlauf-Details",
+diff --git a/frontend/src/i18n/locales/en.json b/frontend/src/i18n/locales/en.json
+index 80f0e9bc..4da8dff0 100644
+--- a/frontend/src/i18n/locales/en.json
++++ b/frontend/src/i18n/locales/en.json
+@@ -1223,6 +1223,7 @@
+       "stopped": "Stopped by you",
+       "timeout": "Stopped waiting after {{elapsed}} — the run may still be finishing",
+       "failed": "Failed",
++      "interrupted": "Interrupted",
+       "steps": "{{count}} steps",
+       "continue": "Continue",
+       "reattach": "Re-attach",
+@@ -1231,7 +1232,10 @@
+     "resumeConnector": "Resume connector",
+     "resumeConnectorTitle": "Clear the kill switch and re-enable connector activity",
+     "connectorResumed": "Connector resumed",
+-    "failedToResumeConnector": "Failed to resume connector."
++    "failedToResumeConnector": "Failed to resume connector.",
++    "retryInterrupted": "Retry research",
++    "retryInterruptedWarning": "Retrying may repeat completed actions. Review the steps above first. Retry this request?",
++    "interruptedActionsUnknown": "Some actions may have completed. The steps shown may be incomplete; review them before retrying."
+   },
+   "runDetail": {
+     "title": "Run Detail",
+diff --git a/frontend/src/i18n/locales/es.json b/frontend/src/i18n/locales/es.json
+index 98519160..f3f10198 100644
+--- a/frontend/src/i18n/locales/es.json
++++ b/frontend/src/i18n/locales/es.json
+@@ -1223,6 +1223,7 @@
+       "stopped": "Detenido por ti",
+       "timeout": "Se dejó de esperar después de {{elapsed}} — la ejecución puede seguir terminando",
+       "failed": "Falló",
++      "interrupted": "Interrumpido",
+       "steps": "{{count}} pasos",
+       "continue": "Continuar",
+       "reattach": "Reconectar",
+@@ -1231,7 +1232,10 @@
+     "resumeConnector": "Reanudar conector",
+     "resumeConnectorTitle": "Desactivar el interruptor de emergencia y reanudar la actividad del conector",
+     "connectorResumed": "Conector reanudado",
+-    "failedToResumeConnector": "Error al reanudar el conector."
++    "failedToResumeConnector": "Error al reanudar el conector.",
++    "retryInterrupted": "Reintentar investigación",
++    "retryInterruptedWarning": "Reintentar puede repetir acciones ya realizadas. Revisa primero los pasos anteriores. ¿Reintentar esta solicitud?",
++    "interruptedActionsUnknown": "Es posible que algunas acciones ya hayan terminado. Los pasos mostrados pueden estar incompletos; revísalos antes de reintentar."
+   },
+   "runDetail": {
+     "title": "Detalle de ejecución",
+diff --git a/frontend/src/i18n/locales/id.json b/frontend/src/i18n/locales/id.json
+index 0baa6104..6b4c0e15 100644
+--- a/frontend/src/i18n/locales/id.json
++++ b/frontend/src/i18n/locales/id.json
+@@ -1223,6 +1223,7 @@
+       "stopped": "Dihentikan oleh Anda",
+       "timeout": "Berhenti menunggu setelah {{elapsed}} — run mungkin masih dalam proses penyelesaian",
+       "failed": "Gagal",
++      "interrupted": "Terhenti",
+       "steps": "{{count}} langkah",
+       "continue": "Lanjutkan",
+       "reattach": "Lampirkan kembali",
+@@ -1231,7 +1232,10 @@
+     "resumeConnector": "Lanjutkan connector",
+     "resumeConnectorTitle": "Nonaktifkan penghentian darurat dan aktifkan kembali aktivitas connector",
+     "connectorResumed": "Connector dilanjutkan",
+-    "failedToResumeConnector": "Gagal melanjutkan connector."
++    "failedToResumeConnector": "Gagal melanjutkan connector.",
++    "retryInterrupted": "Ulangi riset",
++    "retryInterruptedWarning": "Mencoba lagi dapat mengulangi tindakan yang sudah selesai. Tinjau langkah di atas terlebih dahulu. Coba lagi permintaan ini?",
++    "interruptedActionsUnknown": "Beberapa tindakan mungkin sudah selesai. Langkah yang ditampilkan mungkin tidak lengkap; tinjau sebelum mencoba lagi."
+   },
+   "runDetail": {
+     "title": "Detail Run",
+diff --git a/frontend/src/i18n/locales/ja.json b/frontend/src/i18n/locales/ja.json
+index 8f10bc51..d48f60fc 100644
+--- a/frontend/src/i18n/locales/ja.json
++++ b/frontend/src/i18n/locales/ja.json
+@@ -1218,6 +1218,7 @@
+       "stopped": "あなたが停止しました",
+       "timeout": "{{elapsed}} 経過したため待機を停止しました — 実行はまだ完了処理中の可能性があります",
+       "failed": "失敗",
++      "interrupted": "中断",
+       "steps": "{{count}} ステップ",
+       "continue": "続行",
+       "reattach": "再接続",
+@@ -1226,7 +1227,10 @@
+     "resumeConnector": "コネクタを再開",
+     "resumeConnectorTitle": "キルスイッチを解除してコネクタ活動を再開",
+     "connectorResumed": "コネクタを再開しました",
+-    "failedToResumeConnector": "コネクタの再開に失敗しました。"
++    "failedToResumeConnector": "コネクタの再開に失敗しました。",
++    "retryInterrupted": "調査を再試行",
++    "retryInterruptedWarning": "再試行すると完了済みの操作が繰り返される可能性があります。上の手順を確認してから再試行しますか？",
++    "interruptedActionsUnknown": "一部の操作は完了している可能性があります。表示された手順は不完全な場合があるため、再試行前に確認してください。"
+   },
+   "runDetail": {
+     "title": "実行詳細",
+diff --git a/frontend/src/i18n/locales/ko.json b/frontend/src/i18n/locales/ko.json
+index 4bd8f3ee..3bd2180e 100644
+--- a/frontend/src/i18n/locales/ko.json
++++ b/frontend/src/i18n/locales/ko.json
+@@ -1218,6 +1218,7 @@
+       "stopped": "사용자가 중지함",
+       "timeout": "{{elapsed}} 후 대기를 중단했습니다 — 실행은 아직 마무리 중일 수 있습니다",
+       "failed": "실패",
++      "interrupted": "중단됨",
+       "steps": "{{count}}단계",
+       "continue": "계속",
+       "reattach": "다시 연결",
+@@ -1226,7 +1227,10 @@
+     "resumeConnector": "커넥터 재개",
+     "resumeConnectorTitle": "킬 스위치를 해제하고 커넥터 활동을 재개",
+     "connectorResumed": "커넥터가 재개되었습니다",
+-    "failedToResumeConnector": "커넥터 재개에 실패했습니다."
++    "failedToResumeConnector": "커넥터 재개에 실패했습니다.",
++    "retryInterrupted": "조사 다시 시도",
++    "retryInterruptedWarning": "다시 시도하면 완료된 작업이 반복될 수 있습니다. 위 단계를 확인한 후 요청을 다시 시도하시겠습니까?",
++    "interruptedActionsUnknown": "일부 작업은 이미 완료되었을 수 있습니다. 표시된 단계가 불완전할 수 있으니 다시 시도하기 전에 확인하세요."
+   },
+   "runDetail": {
+     "title": "실행 상세",
+diff --git a/frontend/src/i18n/locales/pt-BR.json b/frontend/src/i18n/locales/pt-BR.json
+index fe7f32f1..f1388aff 100644
+--- a/frontend/src/i18n/locales/pt-BR.json
++++ b/frontend/src/i18n/locales/pt-BR.json
+@@ -1223,6 +1223,7 @@
+       "stopped": "Parado por você",
+       "timeout": "Parou de esperar após {{elapsed}} — a execução ainda pode estar terminando",
+       "failed": "Falha",
++      "interrupted": "Interrompido",
+       "steps": "Etapas {{count}}",
+       "continue": "Continuar",
+       "reattach": "Anexe novamente",
+@@ -1231,7 +1232,10 @@
+     "resumeConnector": "Retomar conector",
+     "resumeConnectorTitle": "Limpe o kill switch e reative a atividade do conector",
+     "connectorResumed": "Conector retomado",
+-    "failedToResumeConnector": "Falha ao retomar o conector."
++    "failedToResumeConnector": "Falha ao retomar o conector.",
++    "retryInterrupted": "Refazer pesquisa",
++    "retryInterruptedWarning": "Tentar novamente pode repetir ações concluídas. Revise primeiro as etapas acima. Reenviar esta solicitação?",
++    "interruptedActionsUnknown": "Algumas ações podem ter sido concluídas. As etapas exibidas podem estar incompletas; revise-as antes de tentar novamente."
+   },
+   "runDetail": {
+     "title": "Detalhes da execução",
+diff --git a/frontend/src/i18n/locales/zh-CN.json b/frontend/src/i18n/locales/zh-CN.json
+index 7b86c3af..a48b95c8 100644
+--- a/frontend/src/i18n/locales/zh-CN.json
++++ b/frontend/src/i18n/locales/zh-CN.json
+@@ -1218,6 +1218,7 @@
+       "stopped": "已由你停止",
+       "timeout": "等待 {{elapsed}} 后已停止——运行可能仍在后台完成",
+       "failed": "失败",
++      "interrupted": "已中断",
+       "steps": "{{count}} 个步骤",
+       "continue": "继续",
+       "reattach": "重新连接",
+@@ -1226,7 +1227,10 @@
+     "resumeConnector": "恢复连接器",
+     "resumeConnectorTitle": "清除熔断开关并恢复连接器活动",
+     "connectorResumed": "连接器已恢复",
+-    "failedToResumeConnector": "恢复连接器失败。"
++    "failedToResumeConnector": "恢复连接器失败。",
++    "retryInterrupted": "重试研究",
++    "retryInterruptedWarning": "重试可能重复已完成的操作。请先检查上方步骤。要重试此请求吗？",
++    "interruptedActionsUnknown": "部分操作可能已经完成。显示的步骤可能不完整；重试前请先检查。"
+   },
+   "runDetail": {
+     "title": "运行详情",
+diff --git a/frontend/src/pages/Agent.tsx b/frontend/src/pages/Agent.tsx
+index a217b85b..7b2dfccc 100644
+--- a/frontend/src/pages/Agent.tsx
++++ b/frontend/src/pages/Agent.tsx
+@@ -224,6 +224,7 @@ export function Agent() {
+   const [searchParams, setSearchParams] = useSearchParams();
+   const listRef = useRef<HTMLDivElement>(null);
+   const composerRef = useRef<ComposerHandle>(null);
++  const retryPendingRef = useRef(false);
+   const liveRuntimeRef = useRef<LiveRuntimePanelHandle>(null);
+   const goalOpenRequestRef = useRef(0);
+   const sseSessionRef = useRef<string | null>(null);
+@@ -534,6 +535,13 @@ export function Agent() {
+       let latestRuntimeIdentity: RuntimeIdentity | null = null;
+       for (const m of msgs) {
+         const meta = m.metadata as Record<string, unknown> | undefined;
++        const interrupted = m.role === "assistant" && meta?.status === "interrupted";
++        const interruptedMeta: AgentMessageMeta | undefined = interrupted ? {
++          interrupted: true,
++          retryPrompt: typeof meta?.retry_prompt === "string" && meta.retry_prompt.trim()
++            ? meta.retry_prompt : undefined,
++          progressComplete: meta?.progress_complete === true,
++        } : undefined;
+         const runId = meta?.run_id as string | undefined;
+         const metrics = meta?.metrics as Record<string, number> | undefined;
+         const elapsedMs = typeof meta?.elapsed_ms === "number" ? meta.elapsed_ms : undefined;
+@@ -570,11 +578,8 @@ export function Agent() {
+               fallbackTimestamp: ts,
+               idPrefix: `${m.message_id}_`,
+               attemptId: m.linked_attempt_id || `${m.message_id}_attempt`,
+-              state: meta?.status === "failed"
+-                ? "failed"
+-                : meta?.status === "cancelled"
+-                  ? "stopped"
+-                  : "done",
++              state: interrupted ? "interrupted" : meta?.status === "failed"
++                ? "failed" : meta?.status === "cancelled" ? "stopped" : "done",
+               startedAt: attemptStartedAt,
+               endedAt: ts,
+             })
+@@ -596,7 +601,8 @@ export function Agent() {
+         } else if (runId) {
+           // Show text answer first (if non-empty), then chart card
+           if (m.content && m.content !== "Strategy execution completed.") {
+-            agentMsgs.push({ id: m.message_id + "_ans", type: "answer", content: m.content, elapsed_ms: elapsedMs, timestamp: assistantTs });
++            agentMsgs.push({ id: m.message_id + "_ans", type: "answer", content: m.content,
++              elapsed_ms: elapsedMs, meta: interruptedMeta, timestamp: assistantTs });
+           }
+           if (metrics && Object.keys(metrics).length > 0) {
+             agentMsgs.push({ id: m.message_id, type: "run_complete", content: "", runId, metrics, timestamp: assistantTs + 1 });
+@@ -630,7 +636,8 @@ export function Agent() {
+             }
+           }
+         } else {
+-          agentMsgs.push({ id: m.message_id, type: "answer", content: m.content, elapsed_ms: elapsedMs, timestamp: assistantTs });
++          agentMsgs.push({ id: m.message_id, type: "answer", content: m.content,
++            elapsed_ms: elapsedMs, meta: interruptedMeta, timestamp: assistantTs });
+         }
+       }
+       if (genRef.current !== gen) return;
+@@ -1435,18 +1442,19 @@ export function Agent() {
+   const runPrompt = useCallback(async (
+     prompt: string,
+     attachments: ComposerAttachment[] = [],
++    exact = false,
+   ) => {
+-    if ((!prompt.trim() && attachments.length === 0) || status === "streaming") return;
+-    const finalPrompt = buildChatPrompt(prompt, attachments, Boolean(swarmPreset));
+-    const limit = goalComposerActive ? MAX_GOAL_CHARS : MAX_MESSAGE_CHARS;
+-    if (promptExceedsLimit(goalComposerActive ? prompt : finalPrompt, limit)) {
++    if ((!prompt.trim() && attachments.length === 0) || status === "streaming" || act().status === "streaming") return;
++    const finalPrompt = exact ? prompt : buildChatPrompt(prompt, attachments, Boolean(swarmPreset));
++    const limit = goalComposerActive && !exact ? MAX_GOAL_CHARS : MAX_MESSAGE_CHARS;
++    if (promptExceedsLimit(goalComposerActive && !exact ? prompt : finalPrompt, limit)) {
+       toast.error(t('agent.messageTooLong', { limit: limit.toLocaleString() }));
+       composerRef.current?.fill(prompt);
+       return;
+     }
+     clearStreamingView();
+ 
+-    if (goalComposerActive) {
++    if (goalComposerActive && !exact) {
+       try {
+         const sid = await ensureGoalSession(prompt);
+         const snapshot = await api.createGoal(sid, { objective: prompt });
+@@ -1485,7 +1493,7 @@ export function Agent() {
+     const messageMeta: AgentMessageMeta = { ...displayPrompt.meta };
+ 
+     // Swarm mode: let agent auto-select the right preset
+-    if (swarmPreset) {
++    if (swarmPreset && !exact) {
+       messageMeta.swarmMode = true;
+       setSwarmPreset(null);
+     }
+@@ -1530,7 +1538,10 @@ export function Agent() {
+       archiveActivity("failed");
+       act().setStatus("error");
+       const message = isAuthRequiredError(error) ? AUTH_REQUIRED_MESSAGE
+-        : error instanceof ApiError && ['message_too_long', 'network_error', 'request_timeout'].includes(error.code || '') ? error.message : t('agent.failedToSend');
++        : error instanceof ApiError && (
++          ['message_too_long', 'network_error', 'request_timeout'].includes(error.code || '')
++          || error.status === 409 || error.status === 503
++        ) ? error.message : t('agent.failedToSend');
+       toast.error(message);
+       act().addMessage({ id: "", type: "error", content: message, timestamp: Date.now() });
+     }
+@@ -1553,6 +1564,12 @@ export function Agent() {
+     composerRef.current?.submit(prompt);
+   }, []);
+ 
++  const handleRetryInterrupted = useCallback((retryPrompt: string) => {
++    if (!sessionId || act().sessionId !== sessionId || act().status === "streaming" || retryPendingRef.current) return;
++    retryPendingRef.current = true;
++    void runPrompt(retryPrompt, [], true).finally(() => { retryPendingRef.current = false; });
++  }, [runPrompt, sessionId]);
++
+   const handleCancel = useCallback(async () => {
+     if (!sessionId) {
+       flushPendingStreamUpdate();
+@@ -1936,7 +1953,12 @@ export function Agent() {
+                 data-msg-idx={g.msgIdx}
+                 className={shouldAnimate ? "msg-enter" : undefined}
+               >
+-                <MessageBubble msg={g.msg} onRetry={g.msg.type === "error" ? handleRetry : undefined} />
++                <MessageBubble
++                  msg={g.msg}
++                  onRetry={g.msg.type === "error" ? handleRetry : undefined}
++                  onRetryInterrupted={g.msg.meta?.interrupted && status !== "streaming"
++                    ? handleRetryInterrupted : undefined}
++                />
+               </div>
+             );
+           })}
+diff --git a/frontend/src/pages/__tests__/AgentInterruptedRetry.test.tsx b/frontend/src/pages/__tests__/AgentInterruptedRetry.test.tsx
+new file mode 100644
+index 00000000..be7d5b3e
+--- /dev/null
++++ b/frontend/src/pages/__tests__/AgentInterruptedRetry.test.tsx
+@@ -0,0 +1,128 @@
++import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
++import { createMemoryRouter, RouterProvider } from "react-router";
++import i18n from "@/i18n";
++import { ApiError } from "@/lib/api";
++import { useAgentStore } from "@/stores/agent";
++import { Agent } from "../Agent";
++
++const prompt = "Should I buy NVDA.US? No orders.";
++const savedHistory = [
++  { message_id: "user-1", session_id: "session-one", role: "user", content: prompt,
++    created_at: "2026-10-16T10:00:00Z" },
++  { message_id: "assistant-1", session_id: "session-one", role: "assistant",
++    content: "Vibe Trading restarted before this response finished.",
++    linked_attempt_id: "attempt-one", created_at: "2026-10-16T10:01:00Z",
++    metadata: { status: "interrupted", retry_prompt: prompt, progress_complete: false },
++    tool_trail: [{ tool: "web_search", status: "ok", elapsed_ms: 12, timestamp: 1_791_801_010_000 }],
++  },
++];
++
++const apiMock = vi.hoisted(() => ({
++  getGoal: vi.fn(),
++  getLLMSettings: vi.fn(),
++  getRun: vi.fn(),
++  getSessionMessages: vi.fn(),
++  listReasoningEfforts: vi.fn(),
++  sendMessage: vi.fn(),
++  sseUrl: vi.fn((sid: string) => `/sessions/${sid}/events`),
++}));
++const sseMock = vi.hoisted(() => ({
++  connect: vi.fn(), disconnect: vi.fn(), onStatusChange: vi.fn(),
++}));
++
++vi.mock("@/lib/api", async () => {
++  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
++  return { ...actual, api: apiMock };
++});
++vi.mock("@/hooks/useSSE", () => ({ useSSE: () => sseMock }));
++
++function renderSession() {
++  const router = createMemoryRouter(
++    [{ path: "/", element: <Agent /> }, { path: "/other", element: <div>other</div> }],
++    { initialEntries: ["/?session=session-one"] },
++  );
++  render(<RouterProvider router={router} />);
++  return router;
++}
++
++describe("interrupted Vibe chat retry", () => {
++  beforeEach(async () => {
++    await i18n.changeLanguage("en");
++    useAgentStore.getState().reset();
++    vi.clearAllMocks();
++    apiMock.getGoal.mockResolvedValue(null);
++    apiMock.getSessionMessages.mockResolvedValue(savedHistory);
++    apiMock.getLLMSettings.mockResolvedValue({
++      provider: "openai", model_name: "gpt-6.1-sol", base_url: "https://api.openai.com/v1",
++      api_key_configured: true, api_key_required: true, timeout_seconds: 120,
++      max_retries: 2, reasoning_effort: "xhigh", sse_timeout_seconds: 90, providers: [],
++    });
++    apiMock.listReasoningEfforts.mockResolvedValue({
++      provider: "openai", model_name: "gpt-6.1-sol",
++      efforts: ["low", "medium", "high", "xhigh"], source: "provider",
++    });
++    apiMock.sendMessage.mockResolvedValue({ message_id: "retry-user", attempt_id: "retry-attempt" });
++    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
++  });
++
++  afterEach(() => vi.restoreAllMocks());
++
++  it("hydrates amber interruption and does not auto-resend on navigation/reconnect", async () => {
++    const router = renderSession();
++    await waitFor(() => expect(screen.getByText(/Interrupted · 1 steps/)).toBeInTheDocument());
++    expect(screen.queryByText(/Done · 1 steps/)).not.toBeInTheDocument();
++    expect(screen.getByText(/some actions may have completed/i)).toBeInTheDocument();
++    expect(screen.queryByText(/PRIVATE_RUN_ID|SECRET_PREVIEW/)).not.toBeInTheDocument();
++    await act(async () => { await router.navigate("/other"); });
++    await act(async () => { await router.navigate("/?session=session-one"); });
++    await waitFor(() => expect(screen.getByText(/Interrupted · 1 steps/)).toBeInTheDocument());
++    expect(apiMock.sendMessage).not.toHaveBeenCalled();
++  });
++
++  it("never guesses a retry prompt when the backend omitted it", async () => {
++    apiMock.getSessionMessages.mockResolvedValue([
++      savedHistory[0],
++      { ...savedHistory[1], metadata: { status: "interrupted", progress_complete: false } },
++    ]);
++    renderSession();
++    await waitFor(() => expect(screen.getByText(/Interrupted · 1 steps/)).toBeInTheDocument());
++    expect(screen.getByText(/some actions may have completed/i)).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /retry research/i })).not.toBeInTheDocument();
++  });
++
++  it("declined confirmation sends nothing", async () => {
++    vi.spyOn(window, "confirm").mockReturnValue(false);
++    renderSession();
++    const retry = await screen.findByRole("button", { name: /retry research/i });
++    fireEvent.click(retry);
++    expect(apiMock.sendMessage).not.toHaveBeenCalled();
++  });
++
++  it("retries the exact original prompt once even when goal mode is selected", async () => {
++    vi.spyOn(window, "confirm").mockReturnValue(true);
++    renderSession();
++    const retry = await screen.findByRole("button", { name: /retry research/i });
++    fireEvent.click(screen.getByTitle("More options"));
++    fireEvent.click(screen.getByRole("menuitem", { name: "Research Goal" }));
++    let finishSend!: (value: unknown) => void;
++    apiMock.sendMessage.mockImplementation(() => new Promise((resolve) => { finishSend = resolve; }));
++
++    fireEvent.click(retry);
++    fireEvent.click(retry);
++    await waitFor(() => expect(apiMock.sendMessage).toHaveBeenCalledTimes(1));
++    expect(apiMock.sendMessage).toHaveBeenCalledWith("session-one", prompt, { reasoningEffort: undefined });
++    expect(screen.getByText(/some actions may have completed/i)).toBeInTheDocument();
++    await act(async () => { finishSend({ message_id: "retry-user", attempt_id: "retry-attempt" }); });
++  });
++
++  it.each([409, 503])("retains the interrupted row and permits retry after HTTP %i", async (status) => {
++    vi.spyOn(window, "confirm").mockReturnValue(true);
++    apiMock.sendMessage.mockRejectedValueOnce(new ApiError("try later", status));
++    renderSession();
++    fireEvent.click(await screen.findByRole("button", { name: /retry research/i }));
++    await waitFor(() => expect(apiMock.sendMessage).toHaveBeenCalledTimes(1));
++    await waitFor(() => expect(screen.getByText(/some actions may have completed/i)).toBeInTheDocument());
++    fireEvent.click(screen.getByRole("button", { name: /retry research/i }));
++    await waitFor(() => expect(apiMock.sendMessage).toHaveBeenCalledTimes(2));
++  });
++});
+diff --git a/frontend/src/stores/agent.ts b/frontend/src/stores/agent.ts
+index 5bafd86c..64f37aba 100644
+--- a/frontend/src/stores/agent.ts
++++ b/frontend/src/stores/agent.ts
+@@ -9,6 +9,7 @@ export type ActivityState =
+   | "responding"
+   | "stopped"
+   | "timeout"
++  | "interrupted"
+   | "failed"
+   | "done";
+ 
+@@ -49,6 +50,9 @@ export interface AgentMessageMeta {
+   swarmMode?: boolean;
+   goalMode?: boolean;
+   requestText?: string;
++  interrupted?: boolean;
++  retryPrompt?: string;
++  progressComplete?: boolean;
+   activity?: AgentActivity;
+   partialAttemptId?: string;
+ }
