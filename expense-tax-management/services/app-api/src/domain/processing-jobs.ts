@@ -4,7 +4,9 @@ import {
   MAILBOX_MATERIALIZE_WORKFLOW_TYPE,
   MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE,
   MAILBOX_OCR_ZERO_AMOUNT_MESSAGE,
+  CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+  CaptureOcrResultV1Schema,
   JobReferenceV1Schema,
   OcrExtractionResultV1Schema,
   type JobReferenceV1,
@@ -22,7 +24,7 @@ import type { TemporalWorkflowStarter } from "../temporal/client.js";
 import { DomainError } from "../errors.js";
 import { recordAuditEvent } from "./audit.js";
 import { readDispatchRoutingForShare } from "./dispatch-routing.js";
-import { applyMailboxOcrExtraction, applyOcrExtraction } from "./ocr.js";
+import { applyCaptureOcrResult, applyMailboxOcrExtraction, applyOcrExtraction } from "./ocr.js";
 import {
   executeIdempotentMutation,
   hashNormalizedRequest,
@@ -652,26 +654,32 @@ export function createProcessingJobsDomain(
             let appliedExpenseId: string | null = null;
             if (
               input.request.status === "SUCCEEDED" &&
-              input.request.resultSchemaVersion ===
-                OCR_EXTRACTION_RESULT_SCHEMA_VERSION &&
               job.target_aggregate_type === "expense"
             ) {
-              const extraction = OcrExtractionResultV1Schema.safeParse(
-                input.request.result,
-              );
-              if (!extraction.success) throw DomainError.validation();
-              appliedExpenseId =
-                job.workflow_type === MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE
-                  ? await applyMailboxOcrExtraction(transaction, {
-                      job,
-                      extraction: extraction.data,
-                      requestId: input.requestId,
-                    })
-                  : await applyOcrExtraction(transaction, {
-                      job,
-                      extraction: extraction.data,
-                      requestId: input.requestId,
-                    });
+              if (input.request.resultSchemaVersion === OCR_EXTRACTION_RESULT_SCHEMA_VERSION) {
+                const extraction = OcrExtractionResultV1Schema.safeParse(input.request.result);
+                if (!extraction.success) throw DomainError.validation();
+                appliedExpenseId =
+                  job.workflow_type === MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE
+                    ? await applyMailboxOcrExtraction(transaction, {
+                        job,
+                        extraction: extraction.data,
+                        requestId: input.requestId,
+                      })
+                    : await applyOcrExtraction(transaction, {
+                        job,
+                        extraction: extraction.data,
+                        requestId: input.requestId,
+                      });
+              } else if (input.request.resultSchemaVersion === CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION) {
+                const result = CaptureOcrResultV1Schema.safeParse(input.request.result);
+                if (!result.success) throw DomainError.validation();
+                appliedExpenseId = await applyCaptureOcrResult(transaction, {
+                  job,
+                  result: result.data,
+                  requestId: input.requestId,
+                });
+              }
             }
             // Mailbox job failure (materialize or per-attachment OCR): the
             // candidate never advances past 'queued' on its own otherwise.
