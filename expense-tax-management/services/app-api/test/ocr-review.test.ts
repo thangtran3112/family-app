@@ -552,6 +552,13 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
         const sourceCount = await database.selectFrom("app.expense_sources").select((eb) => eb.fn.countAll().as("count")).where("expense_id", "=", first.body.expenseId).executeTakeFirstOrThrow();
         const duplicateCount = await database.selectFrom("app.expense_duplicate_matches").select((eb) => eb.fn.countAll().as("count")).where("candidate_expense_id", "=", first.body.expenseId).executeTakeFirstOrThrow();
         const enrichmentCount = await database.selectFrom("app.processing_jobs").select((eb) => eb.fn.countAll().as("count")).where("workflow_type", "=", "ExpenseEnrichmentWorkflow").where("target_aggregate_id", "=", first.body.expenseId).executeTakeFirstOrThrow();
+        const enrichmentOutboxCount = await database
+          .selectFrom("app.processing_job_dispatch_outbox as outbox")
+          .innerJoin("app.processing_jobs as enrichment", "enrichment.id", "outbox.processing_job_id")
+          .select((eb) => eb.fn.countAll().as("count"))
+          .where("enrichment.workflow_type", "=", "ExpenseEnrichmentWorkflow")
+          .where("enrichment.target_aggregate_id", "=", first.body.expenseId)
+          .executeTakeFirstOrThrow();
         const rollbackFile = await database.selectFrom("app.expense_files").select("expense_id").where("id", "=", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb").executeTakeFirstOrThrow();
         const rollbackExpenseCount = await database.selectFrom("app.expenses").select((eb) => eb.fn.countAll().as("count")).where("merchant", "=", "Rollback").executeTakeFirstOrThrow();
         console.log(JSON.stringify({
@@ -575,6 +582,7 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
           sourceCount: Number(sourceCount.count),
           duplicateCount: Number(duplicateCount.count),
           enrichmentCount: Number(enrichmentCount.count),
+          enrichmentOutboxCount: Number(enrichmentOutboxCount.count),
           rollbackFileExpenseId: rollbackFile.expense_id,
           rollbackExpenseCount: Number(rollbackExpenseCount.count),
         }));
@@ -610,6 +618,7 @@ describe.skipIf(!integrationRequested)("OCR review real PostgreSQL", () => {
       expect(result.sourceCount).toBe(1);
       expect(result.duplicateCount).toBeGreaterThan(0);
       expect(result.enrichmentCount).toBe(1);
+      expect(result.enrichmentOutboxCount).toBe(1);
     } finally {
       dockerPsql(postgresContainerId, "postgres", `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE);`);
     }
