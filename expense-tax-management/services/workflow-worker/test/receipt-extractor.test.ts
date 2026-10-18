@@ -64,6 +64,24 @@ describe("evaluateReceiptObservation", () => {
     });
   });
 
+  it("routes tax above the total to Capture review", () => {
+    expect(evaluateReceiptObservation(
+      { ...observation, total: "10.00", taxAmount: "10.01" },
+      "capture_required_fields_v1",
+    )).toEqual({
+      schemaVersion: 1,
+      outcome: "needs_input",
+      fields: {
+        merchant: "M",
+        total: "10.00",
+        currency: "USD",
+        incurredOn: "2026-01-01",
+        taxAmount: "10.01",
+      },
+      issues: ["tax_exceeds_total"],
+    });
+  });
+
   it("keeps the default zero-total behavior unchanged", () => {
     expect(() => evaluateReceiptObservation({ ...observation, total: "0.00" }))
       .toThrowError(expect.objectContaining({ type: "OcrZeroAmount", nonRetryable: true }));

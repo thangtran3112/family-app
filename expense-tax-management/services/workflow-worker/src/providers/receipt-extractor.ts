@@ -73,7 +73,11 @@ export function evaluateReceiptObservation(
       ...(fields.incurredOn === null ? ["date_missing" as const] : []),
       ...(fields.taxAmount === null
         ? ["tax_missing" as const]
-        : fields.taxAmount === "0.00" ? ["tax_zero_requires_confirmation" as const] : []),
+        : fields.taxAmount === "0.00"
+          ? ["tax_zero_requires_confirmation" as const]
+          : fields.total !== null && Number(fields.total) > 0 && Number(fields.taxAmount) > Number(fields.total)
+            ? ["tax_exceeds_total" as const]
+            : []),
     ];
     return CaptureOcrResultV1Schema.parse(
       issues.length === 0

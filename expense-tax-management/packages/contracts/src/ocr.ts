@@ -27,6 +27,7 @@ export const CaptureOcrIssueCodeSchema = z.enum([
   "date_missing",
   "tax_missing",
   "tax_zero_requires_confirmation",
+  "tax_exceeds_total",
 ]);
 export type CaptureOcrIssueCode = z.infer<typeof CaptureOcrIssueCodeSchema>;
 
