@@ -115,8 +115,8 @@ describe.skipIf(!requested)("domain/memberships.ts — getOwnPersonalProfile (li
        GRANT USAGE ON SCHEMA app TO expense_app_runtime;`,
       databaseName,
     );
-    const migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
-    const runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/${databaseName}`;
+    const migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/${databaseName}`;
+    const runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/${databaseName}`;
     await runMigrations(migrationDatabaseUrl);
     adminSql(
       `GRANT USAGE ON SCHEMA app TO expense_app_runtime;

@@ -88,9 +88,9 @@ export async function createEphemeralVaultDatabase(runKey: string): Promise<Vaul
   // before commit, the host/port are overridable via env vars so a local
   // verification run can set MAILBOX_TEST_PG_HOST/MAILBOX_TEST_PG_PORT
   // without ever touching tracked source. CI and the documented default
-  // (127.0.0.1:5433) are unaffected.
+  // (127.0.0.1:15434) are unaffected.
   const host = process.env.MAILBOX_TEST_PG_HOST ?? "127.0.0.1";
-  const port = process.env.MAILBOX_TEST_PG_PORT ?? "5433";
+  const port = process.env.MAILBOX_TEST_PG_PORT ?? "15434";
   const databaseUrl = `postgresql://postgres:postgrespassword@${host}:${port}/${databaseName}`;
   await runMigrations(databaseUrl);
   const database = createVaultDatabase(databaseUrl);
