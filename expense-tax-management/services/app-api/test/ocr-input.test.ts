@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AppDatabase } from "../src/database/types.js";
 import { applyCaptureOcrResult, createOcrJobsDomain } from "../src/domain/ocr.js";
+import { createProcessingJobsDomain } from "../src/domain/processing-jobs.js";
 
 const JOB_ID = "11111111-1111-4111-8111-111111111111";
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
@@ -83,9 +84,49 @@ function compiledInsertRow(query: CompiledQuery): Record<string, unknown> {
   return Object.fromEntries(columns.map((column, index) => [column, query.parameters[index]]));
 }
 
+function compiledUpdateValues(query: CompiledQuery): Record<string, unknown> {
+  const assignments = query.sql.match(/ set (.+?) where /)?.[1]?.split(",");
+  if (!assignments) throw new Error(`Unexpected update query: ${query.sql}`);
+  return Object.fromEntries(assignments.map((assignment, index) => {
+    const column = assignment.split("=")[0]?.trim().replaceAll('"', "");
+    if (!column) throw new Error(`Unexpected update assignment: ${assignment}`);
+    return [column, query.parameters[index]];
+  }));
+}
+
 function databaseForCompleteCapture(insertedExpenses: Record<string, unknown>[]): Kysely<AppDatabase> {
+  const now = new Date("2026-10-18T00:00:00.000Z");
+  let job = {
+    id: JOB_ID,
+    tenant_id: TENANT_ID,
+    personal_profile_id: PROFILE_ID,
+    business_id: null,
+    workflow_type: "OcrReceiptWorkflow",
+    workflow_id: `job-${JOB_ID}`,
+    task_queue: "expense-tax-processing",
+    dispatch_generation: 2,
+    dispatch_namespace: "expense-tax",
+    run_id: "run-1",
+    status: "RUNNING",
+    target_aggregate_type: "expense",
+    target_aggregate_id: null,
+    expected_aggregate_version: null,
+    requested_by_user_id: USER_ID,
+    source_file_id: FILE_ID,
+    input_params: { modeKey: "ocr_mode_fast", reviewPolicy: "capture_required_fields_v1" },
+    allowed_result_schema_version: "capture-ocr-review-v1",
+    result: null,
+    error_message: null,
+    version: 3,
+    created_at: now,
+    updated_at: now,
+    dispatched_at: now,
+    completed_at: null,
+  };
   const connection: DatabaseConnection = {
     async executeQuery<R>(query: CompiledQuery): Promise<QueryResult<R>> {
+      if (query.sql.includes('from "app"."idempotency_records"')) return { rows: [] };
+      if (query.sql.includes('from "app"."processing_jobs"')) return { rows: [job] as R[] };
       if (query.sql.includes('from "app"."expense_files"')) {
         return {
           rows: [{
@@ -111,6 +152,10 @@ function databaseForCompleteCapture(insertedExpenses: Record<string, unknown>[])
       }
       if (query.sql.startsWith('insert into "app"."processing_jobs"')) {
         return { rows: [compiledInsertRow(query)] as R[] };
+      }
+      if (query.sql.startsWith('update "app"."processing_jobs"')) {
+        job = { ...job, ...compiledUpdateValues(query) };
+        return { rows: [job] as R[] };
       }
       return { rows: [] };
     },
@@ -199,19 +244,21 @@ describe("OcrJobsDomain.getOcrInput", () => {
   it("persists a complete Capture total and tax amount as a new expense", async () => {
     const insertedExpenses: Record<string, unknown>[] = [];
     const database = databaseForCompleteCapture(insertedExpenses);
-    const job = {
-      id: JOB_ID,
-      tenant_id: TENANT_ID,
-      personal_profile_id: PROFILE_ID,
-      business_id: null,
-      requested_by_user_id: USER_ID,
-      source_file_id: FILE_ID,
-      workflow_type: "OcrReceiptWorkflow",
-    };
+    const domain = createProcessingJobsDomain(database, {
+      start: async () => ({ runId: "unused" }),
+      close: async () => undefined,
+    });
 
-    const expenseId = await database.transaction().execute((transaction) =>
-      applyCaptureOcrResult(transaction, {
-        job,
+    const result = await domain.submitResult({
+      jobId: JOB_ID,
+      actorServicePrincipal: "workflow-worker",
+      requestId: "request-2",
+      request: {
+        schemaVersion: 1,
+        status: "SUCCEEDED",
+        idempotencyKey: "capture-complete-1",
+        expectedJobVersion: 3,
+        resultSchemaVersion: "capture-ocr-review-v1",
         result: {
           schemaVersion: 1,
           outcome: "complete",
@@ -223,13 +270,12 @@ describe("OcrJobsDomain.getOcrInput", () => {
             taxAmount: "5.53",
           },
         },
-        requestId: "request-2",
-      }),
-    );
+      },
+    });
 
+    expect(result.body.status).toBe("SUCCEEDED");
     expect(insertedExpenses).toHaveLength(1);
     expect(insertedExpenses[0]).toMatchObject({
-      id: expenseId,
       merchant: "Acme",
       amount: "42.50",
       tax_amount: "5.53",
