@@ -79,13 +79,17 @@ export async function syncQueueStatuses(
   const reviewJobIds = new Set(reviews.map((review) => review.jobId));
   for (const item of items) {
     if ((item.status !== "processing" && item.status !== "needs_input") || !item.fileId || !item.jobId) continue;
-    const job = await fetchOcrJob(session, item.fileId, item.jobId, getToken, organizationId);
-    if (job.status === "FAILED") {
-      await updateQueue({ ...item, status: "failed", error: job.errorMessage ?? "OCR failed" });
-    } else if (job.status === "SUCCEEDED" && reviewJobIds.has(item.jobId)) {
-      await updateQueue({ ...item, status: "needs_input", progress: 100, error: null });
-    } else if (job.status === "SUCCEEDED" && job.targetAggregateId) {
-      await updateQueue({ ...item, status: "saved", progress: 100, error: null });
+    try {
+      const job = await fetchOcrJob(session, item.fileId, item.jobId, getToken, organizationId);
+      if (job.status === "FAILED") {
+        await updateQueue({ ...item, status: "failed", error: job.errorMessage ?? "OCR failed" });
+      } else if (job.status === "SUCCEEDED" && reviewJobIds.has(item.jobId)) {
+        await updateQueue({ ...item, status: "needs_input", progress: 100, error: null });
+      } else if (job.status === "SUCCEEDED" && job.targetAggregateId) {
+        await updateQueue({ ...item, status: "saved", progress: 100, error: null });
+      }
+    } catch {
+      // A stale local link must not hide other local or cross-device reviews.
     }
   }
   return reviews;

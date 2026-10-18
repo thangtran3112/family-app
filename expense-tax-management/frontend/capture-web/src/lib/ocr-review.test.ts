@@ -60,6 +60,14 @@ describe("OCR review validation", () => {
       noTax: false,
     });
   });
+
+  it.each(["2026-02-31", "2025-02-29", "2026-04-31"])("rejects impossible date %s", (incurredOn) => {
+    expect(validateOcrReview({ ...valid, incurredOn }).incurredOn).toBeTruthy();
+  });
+
+  it.each(["2024-02-29", "2026-04-30"])("accepts exact calendar date %s", (incurredOn) => {
+    expect(validateOcrReview({ ...valid, incurredOn }).incurredOn).toBeUndefined();
+  });
 });
 
 describe("review removal", () => {

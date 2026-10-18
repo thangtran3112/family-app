@@ -92,9 +92,13 @@ export function OcrReviewForm({ review, onComplete, onReload, onRemove }: OcrRev
       await onComplete(buildCompletionRequest(values, jobVersion));
     } catch (error) {
       if (error instanceof CaptureApiError && (error.status === 409 || error.status === 412)) {
-        const latest = await onReload();
-        setJobVersion(latest.jobVersion);
-        setMessage("This review changed on another device. Server state reloaded; your typed values are preserved.");
+        try {
+          const latest = await onReload();
+          setJobVersion(latest.jobVersion);
+          setMessage("This review changed on another device. Server state reloaded; your typed values are preserved.");
+        } catch {
+          setMessage("This review is no longer available on the server. Your typed values are preserved for manual reconciliation.");
+        }
       } else {
         setMessage(error instanceof Error ? error.message : "Could not save review");
       }

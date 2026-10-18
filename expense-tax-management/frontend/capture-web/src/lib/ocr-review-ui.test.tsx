@@ -106,4 +106,21 @@ describe("OCR review form", () => {
     expect(merchant.value).toBe("Typed reconciliation");
     expect(view.textContent).toContain("changed on another device");
   });
+
+  it("keeps typed edits and reports reconciliation when conflict reload is unavailable", async () => {
+    const onComplete = vi.fn().mockRejectedValue(new CaptureApiError("conflict", 409));
+    const onReload = vi.fn().mockRejectedValue(new Error("gone"));
+    const view = await renderForm({ onComplete, onReload });
+    const merchant = view.querySelector<HTMLInputElement>("[name=merchant]")!;
+    await act(async () => change(merchant, "Keep this edit"));
+
+    await act(async () => {
+      view.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(onReload).toHaveBeenCalled();
+    expect(merchant.value).toBe("Keep this edit");
+    expect(view.textContent).toContain("no longer available on the server");
+    expect(view.querySelector<HTMLButtonElement>("button[type=submit]")?.disabled).toBe(false);
+  });
 });

@@ -158,6 +158,26 @@ describe("syncQueueStatuses", () => {
 
     expect((await listQueue())[0]).toMatchObject({ status: "saved", progress: 100 });
   });
+
+  it("continues after one stale job and returns remote reviews", async () => {
+    const stale = await processingItem();
+    const secondBase = await enqueue(new File(["x"], "second.jpg", { type: "image/jpeg" }), "ocr_mode_balanced");
+    const second = { ...secondBase, status: "processing" as const, fileId: "file-2", jobId: "job-2" };
+    await updateQueue(second);
+    const remoteReview = { jobId: "remote-job" } as never;
+    vi.mocked(fetchOcrReviews).mockResolvedValue([remoteReview]);
+    vi.mocked(fetchOcrJob)
+      .mockRejectedValueOnce(new Error("stale job"))
+      .mockResolvedValueOnce({ status: "SUCCEEDED", targetAggregateId: "expense-2" } as never);
+
+    const reviews = await syncQueueStatuses(session, [stale, second], getToken, "org_1");
+
+    expect(reviews).toEqual([remoteReview]);
+    const items = await listQueue();
+    expect(items.find((item) => item.id === stale.id)).toMatchObject({ status: "processing" });
+    expect(items.find((item) => item.id === second.id)).toMatchObject({ status: "saved", progress: 100 });
+    expect(fetchOcrJob).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("processQueuedItems", () => {
