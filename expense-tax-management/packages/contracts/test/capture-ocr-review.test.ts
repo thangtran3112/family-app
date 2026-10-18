@@ -129,6 +129,7 @@ describe("Capture OCR review contracts", () => {
       "date_missing",
       "tax_missing",
       "tax_zero_requires_confirmation",
+      "tax_exceeds_total",
     ] as const;
 
     expect(CaptureOcrIssueCodeSchema.options).toEqual(issueCodes);

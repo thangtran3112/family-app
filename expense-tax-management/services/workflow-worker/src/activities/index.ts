@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 
-import { ExpenseEnrichmentInputResponseV1Schema, OcrExtractionResultV1Schema, type JobReferenceV1, type OcrExtractionResultV1 } from "@expense-tax/contracts";
+import {
+  CaptureOcrResultV1Schema,
+  ExpenseEnrichmentInputResponseV1Schema,
+  OcrExtractionResultV1Schema,
+  type CaptureOcrResultV1,
+  type JobReferenceV1,
+  type OcrExtractionResultV1,
+} from "@expense-tax/contracts";
 import { ApplicationFailure } from "@temporalio/activity";
 
 import { AppApiClientError, type AppApiClient } from "../clients/app-api.js";
@@ -16,6 +23,25 @@ function permanentClientFailure(error: unknown): boolean {
     error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
 }
 
+function transientAppApiFailure(error: unknown): boolean {
+  return error instanceof AppApiClientError && (
+    error.code === "unavailable" ||
+    error.code === "timeout" ||
+    (error.status !== undefined && error.status >= 500)
+  );
+}
+
+async function retryTransientAppApi<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!transientAppApiFailure(error) || attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+    }
+  }
+}
+
 async function downloadAndVerifyReceipt(
   appApi: AppApiClient,
   input: { fileId: string; expectedSha256: string | null },
@@ -29,9 +55,9 @@ async function downloadAndVerifyReceipt(
 }
 
 async function runExtraction(
-  extract: () => OcrExtractionResultV1 | Promise<OcrExtractionResultV1>,
+  extract: () => unknown | Promise<unknown>,
 ): Promise<OcrExtractionResultV1> {
-  let extracted: OcrExtractionResultV1;
+  let extracted: unknown;
   try {
     extracted = await extract();
   } catch (error) {
@@ -40,6 +66,23 @@ async function runExtraction(
   }
   try {
     return OcrExtractionResultV1Schema.parse(extracted);
+  } catch {
+    throw ApplicationFailure.nonRetryable("OCR extraction result invalid", "OcrExtractionMalformed");
+  }
+}
+
+async function runCaptureExtraction(
+  extract: () => unknown | Promise<unknown>,
+): Promise<CaptureOcrResultV1> {
+  let extracted: unknown;
+  try {
+    extracted = await extract();
+  } catch (error) {
+    if (error instanceof ApplicationFailure) throw error;
+    throw ApplicationFailure.retryable("OCR extraction failed", "OcrExtractionTransient");
+  }
+  try {
+    return CaptureOcrResultV1Schema.parse(extracted);
   } catch {
     throw ApplicationFailure.nonRetryable("OCR extraction result invalid", "OcrExtractionMalformed");
   }
@@ -131,12 +174,40 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
       fileId: string;
       expectedSha256: string | null;
       route?: { providerKind: string; providerModelId: string };
+      reviewPolicy?: "capture_required_fields_v1";
+      jobReference?: JobReferenceV1;
+      expectedJobVersion?: number;
+      reservationId?: string;
     }) {
       if (input.route === undefined) {
         throw ApplicationFailure.nonRetryable("OCR route missing", "OcrRouteMissing");
       }
       const route = input.route;
       const data = await downloadAndVerifyReceipt(appApi, input);
+      if (input.reviewPolicy === "capture_required_fields_v1") {
+        const result = await runCaptureExtraction(() => extractReceipt(data, route, input.reviewPolicy));
+        if (result.outcome === "needs_input") {
+          if (
+            input.jobReference === undefined ||
+            input.expectedJobVersion === undefined ||
+            input.reservationId === undefined
+          ) {
+            throw ApplicationFailure.nonRetryable("Capture OCR job context missing", "OcrJobContextMissing");
+          }
+          const jobId = input.jobReference.jobId;
+          const request = {
+            schemaVersion: 1 as const,
+            status: "SUCCEEDED" as const,
+            idempotencyKey: `${jobId}:ocr:review:needs-input`,
+            expectedJobVersion: input.expectedJobVersion,
+            resultSchemaVersion: "capture-ocr-review-v1",
+            result,
+          };
+          const job = await retryTransientAppApi(() => appApi.submitResult(jobId, request));
+          return { outcome: "needs_input" as const, jobVersion: job.version };
+        }
+        return result;
+      }
       return runExtraction(() => extractReceipt(data, route));
     },
     async ocr_record_accepted(input: { reservationId: string }): Promise<void> {
@@ -158,6 +229,22 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
         expectedJobVersion: input.expectedJobVersion,
         resultSchemaVersion: "ocr-extraction-v1",
         result: input.extraction,
+      });
+      return job.version;
+    },
+    async ocr_submit_capture_complete(input: {
+      jobReference: JobReferenceV1;
+      expectedJobVersion: number;
+      result: Extract<CaptureOcrResultV1, { outcome: "complete" }>;
+    }) {
+      const jobId = input.jobReference.jobId;
+      const job = await appApi.submitResult(jobId, {
+        schemaVersion: 1,
+        status: "SUCCEEDED",
+        idempotencyKey: `${jobId}:ocr:review:complete`,
+        expectedJobVersion: input.expectedJobVersion,
+        resultSchemaVersion: "capture-ocr-review-v1",
+        result: input.result,
       });
       return job.version;
     },
@@ -192,14 +279,45 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
         throw error;
       }
     },
-    async ocr_submit_failed(input: { jobReference: JobReferenceV1; expectedJobVersion: number; error: string; message: string }) {
+    async ocr_record_capture_deduplication(input: {
+      jobReference: JobReferenceV1;
+      sourceFileId: string;
+      expectedJobVersion: number;
+      result: Extract<CaptureOcrResultV1, { outcome: "complete" }>;
+    }) {
+      const jobId = input.jobReference.jobId;
+      try {
+        return await appApi.recordDeduplicationEvidence(jobId, {
+          schemaVersion: 1,
+          jobId,
+          sourceFileId: input.sourceFileId,
+          merchant: input.result.fields.merchant,
+          amount: input.result.fields.total,
+          currency: input.result.fields.currency,
+          incurredOn: input.result.fields.incurredOn,
+          expectedJobVersion: input.expectedJobVersion,
+          idempotencyKey: `${jobId}:ocr:dedup:v1`,
+        });
+      } catch (error) {
+        if (permanentClientFailure(error)) {
+          throw ApplicationFailure.nonRetryable(
+            "Deduplication callback rejected",
+            "DeduplicationCallbackNonRetryable",
+          );
+        }
+        throw error;
+      }
+    },
+    async ocr_submit_failed(input: { jobReference: JobReferenceV1; expectedJobVersion: number; error: string; message: string; reviewPolicy?: "capture_required_fields_v1" }) {
       const jobId = input.jobReference.jobId;
       const job = await appApi.submitResult(jobId, {
         schemaVersion: 1,
         status: "FAILED",
         idempotencyKey: `${jobId}:ocr:result:failed`,
         expectedJobVersion: input.expectedJobVersion,
-        resultSchemaVersion: "ocr-extraction-v1",
+        resultSchemaVersion: input.reviewPolicy === "capture_required_fields_v1"
+          ? "capture-ocr-review-v1"
+          : "ocr-extraction-v1",
         result: { error: input.error },
       });
       return job.version;

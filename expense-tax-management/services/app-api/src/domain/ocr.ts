@@ -1,9 +1,13 @@
 import {
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   MAILBOX_OCR_RECEIPT_WORKFLOW_TYPE,
+  CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
   OCR_RECEIPT_WORKFLOW_TYPE,
+  CaptureOcrReviewPolicySchema,
   OcrModeKeySchema,
+  type CaptureOcrReviewPolicy,
+  type CaptureOcrResultV1,
   type OcrExtractionResultV1,
   type OcrJobInputV1,
   type OcrModeKey,
@@ -50,6 +54,7 @@ export interface CreateOcrJobCommand {
   readonly scope: FileScope;
   readonly fileId: string;
   readonly modeKey: OcrModeKey;
+  readonly reviewPolicy?: CaptureOcrReviewPolicy;
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly workflowType?:
@@ -92,7 +97,12 @@ export async function applyOcrExtraction(
   transaction: Transaction<AppDatabase>,
   input: {
     readonly job: OcrJobBinding;
-    readonly extraction: OcrExtractionResultV1;
+    readonly extraction: Pick<
+      OcrExtractionResultV1,
+      "merchant" | "amount" | "currency" | "incurredOn"
+    > & Pick<Partial<OcrExtractionResultV1>, "notes"> & {
+      readonly taxAmount?: string | null;
+    };
     readonly requestId: string;
   },
 ): Promise<string> {
@@ -137,6 +147,7 @@ export async function applyOcrExtraction(
       merchant: extraction.merchant,
       description: extraction.notes ?? null,
       amount: extraction.amount,
+      taxAmount: extraction.taxAmount ?? null,
       currency: extraction.currency,
       incurredOn: extraction.incurredOn,
     },
@@ -177,6 +188,28 @@ export async function applyOcrExtraction(
   });
 
   return expense.id;
+}
+
+export async function applyCaptureOcrResult(
+  transaction: Transaction<AppDatabase>,
+  input: {
+    readonly job: OcrJobBinding;
+    readonly result: CaptureOcrResultV1;
+    readonly requestId: string;
+  },
+): Promise<string | null> {
+  if (input.result.outcome === "needs_input") return null;
+  return applyOcrExtraction(transaction, {
+    job: input.job,
+    extraction: {
+      merchant: input.result.fields.merchant,
+      amount: input.result.fields.total,
+      currency: input.result.fields.currency,
+      incurredOn: input.result.fields.incurredOn,
+      taxAmount: input.result.fields.taxAmount,
+    },
+    requestId: input.requestId,
+  });
 }
 
 /**
@@ -284,6 +317,7 @@ export function createOcrJobsDomain(
           scope: input.scope,
           fileId: input.fileId,
           modeKey: input.modeKey,
+          ...(input.reviewPolicy === undefined ? {} : { reviewPolicy: input.reviewPolicy }),
         }),
         statusCode: 201,
         parseBody: (value) => value as ProcessingJob,
@@ -295,11 +329,17 @@ export function createOcrJobsDomain(
                 ? { personalProfileId: input.scope.profileId }
                 : { businessId: input.scope.businessId },
             workflowType: input.workflowType ?? OCR_RECEIPT_WORKFLOW_TYPE,
-            allowedResultSchemaVersion: OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+            allowedResultSchemaVersion: input.reviewPolicy === "capture_required_fields_v1"
+              ? CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION
+              : OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
             targetAggregateType: "expense",
             requestedByUserId: input.actorUserId,
             sourceFileId: input.fileId,
-            inputParams: { modeKey: input.modeKey, ...input.extraInputParams },
+            inputParams: {
+              modeKey: input.modeKey,
+              ...input.extraInputParams,
+              ...(input.reviewPolicy === undefined ? {} : { reviewPolicy: input.reviewPolicy }),
+            },
             actorUserId: input.actorUserId,
             requestId: input.requestId,
           }),
@@ -360,6 +400,11 @@ export function createOcrJobsDomain(
           (job.input_params as Record<string, unknown> | null)?.modeKey,
         );
         if (!modeKey.success) throw DomainError.validation();
+        const rawReviewPolicy = (job.input_params as Record<string, unknown> | null)?.reviewPolicy;
+        const reviewPolicy = rawReviewPolicy === undefined
+          ? undefined
+          : CaptureOcrReviewPolicySchema.safeParse(rawReviewPolicy);
+        if (reviewPolicy !== undefined && !reviewPolicy.success) throw DomainError.validation();
         const file = await transaction
           .selectFrom("app.expense_files")
           .selectAll()
@@ -381,6 +426,7 @@ export function createOcrJobsDomain(
           modeKey: modeKey.data,
           expectedSha256: file.sha256_hex,
           tenantId: job.tenant_id,
+          ...(reviewPolicy === undefined ? {} : { reviewPolicy: reviewPolicy.data }),
         };
       });
     },
