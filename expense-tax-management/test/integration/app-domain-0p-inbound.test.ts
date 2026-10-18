@@ -89,7 +89,7 @@ describe.skipIf(!integrationEnabled)("Phase 0P forwarded receipt intake", () => 
     runtimePassword = config.services.postgres?.environment?.APP_RUNTIME_DB_PASSWORD ?? "";
     if (!postgresContainerId || !runtimePassword) throw new Error("0P prerequisites missing");
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/expense_tax_db`,
     );
     storageRoot = await mkdtemp(path.join(tmpdir(), `expense-tax-0p-${runKey}-`));
   });

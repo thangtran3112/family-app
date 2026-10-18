@@ -247,9 +247,9 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       GRANT USAGE ON SCHEMA app TO expense_app_runtime;
     `, databaseName);
     const migrationDatabaseUrl =
-      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/${databaseName}`;
     const runtimeDatabaseUrl =
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/${databaseName}`;
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/${databaseName}`;
     await runMigrations(migrationDatabaseUrl);
     adminSql(`
       GRANT USAGE ON SCHEMA app TO expense_app_runtime;
@@ -429,7 +429,7 @@ describe.skipIf(!integrationEnabled)("Phase 3C auto-tagging enrichment PostgreSQ
       // After down()+up(), the suite DB is restored to its original state so subsequent
       // tests continue normally.
       const migrationUrl =
-        `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+        `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/${databaseName}`;
 
       const migratorDb = createMigratorDatabase(migrationUrl);
 
