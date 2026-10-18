@@ -85,6 +85,8 @@ import {
 } from "./domain/mailbox-ingestion.js";
 import { registerOcrRoutes } from "./routes/ocr.js";
 import { createOcrJobsDomain, type OcrJobsDomain } from "./domain/ocr.js";
+import { registerOcrReviewRoutes } from "./routes/ocr-review.js";
+import { createOcrReviewDomain, type OcrReviewDomain } from "./domain/ocr-review.js";
 import {
   createInboundEmailDomain,
   type InboundEmailDomain,
@@ -218,6 +220,7 @@ export interface BuildAppOptions {
   readonly filesDomain?: FilesDomain;
   readonly exportsDomain?: ExportsDomain;
   readonly ocrJobsDomain?: OcrJobsDomain;
+  readonly ocrReviewDomain?: OcrReviewDomain;
   readonly inboundEmailDomain?: InboundEmailDomain;
   readonly verificationNotifier?: VerificationNotifier;
   readonly malwareScanner?: MalwareScanner;
@@ -687,6 +690,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     ...(options.config.clerk?.appServiceSubject
       ? { workerServiceSubject: options.config.clerk.appServiceSubject }
       : {}),
+  });
+  const ocrReviewDomain = options.ocrReviewDomain ?? createOcrReviewDomain(database, { filesDomain });
+  app.register(registerOcrReviewRoutes, {
+    identityResolver: identityDomain,
+    ocrReviewDomain,
   });
   const inboundEmailDomain =
     options.inboundEmailDomain ??

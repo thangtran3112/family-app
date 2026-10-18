@@ -26,6 +26,10 @@ services:
       - default
 
   postgres:
+    # Port 5433 belongs to cloud-sql-proxy on this laptop; keep Expense
+    # PostgreSQL on a distinct loopback-only host port.
+    ports: !override
+      - "127.0.0.1:15434:5432"
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_MIGRATOR_DB_PASSWORD: ${APP_MIGRATOR_DB_PASSWORD:?APP_MIGRATOR_DB_PASSWORD is required}

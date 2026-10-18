@@ -31,6 +31,7 @@ export {
   OCR_RECEIPT_WORKFLOW_TYPE,
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   OCR_EXTRACTION_RESULT_SCHEMA_VERSION,
+  CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION,
   EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
   EXPENSE_ENRICHMENT_RESULT_SCHEMA_VERSION,
   MAILBOX_SCAN_WORKFLOW_TYPE,
@@ -142,6 +143,7 @@ export * from "./exports.js";
 export * from "./inbound-email.js";
 export * from "./files.js";
 export * from "./ocr.js";
+export * from "./ocr-review.js";
 export * from "./duplicate-matches.js";
 export * from "./enrichment.js";
 export * from "./mailbox.js";

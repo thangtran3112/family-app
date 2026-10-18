@@ -1,4 +1,6 @@
-import { uploadQueuedReceipt } from "./api";
+import type { CaptureOcrReviewItemV1 } from "@expense-tax/contracts";
+
+import { fetchOcrJob, fetchOcrReviews, uploadQueuedReceipt } from "./api";
 import { getQueueItem, updateQueue, type QueueItem } from "./queue";
 import type { CaptureSession } from "./session";
 import type { ClerkGetToken } from "./clerk";
@@ -65,4 +67,30 @@ export async function processQueuedItems(
   for (const item of items.filter((candidate) => candidate.status === "queued")) {
     await processQueueItem(session, item, getToken, organizationId);
   }
+}
+
+export async function syncQueueStatuses(
+  session: CaptureSession,
+  items: readonly QueueItem[],
+  getToken: ClerkGetToken,
+  organizationId: string | null | undefined,
+): Promise<CaptureOcrReviewItemV1[]> {
+  const reviews = await fetchOcrReviews(session, getToken, organizationId);
+  const reviewJobIds = new Set(reviews.map((review) => review.jobId));
+  for (const item of items) {
+    if ((item.status !== "processing" && item.status !== "needs_input") || !item.fileId || !item.jobId) continue;
+    try {
+      const job = await fetchOcrJob(session, item.fileId, item.jobId, getToken, organizationId);
+      if (job.status === "FAILED") {
+        await updateQueue({ ...item, status: "failed", error: job.errorMessage ?? "OCR failed" });
+      } else if (job.status === "SUCCEEDED" && reviewJobIds.has(item.jobId)) {
+        await updateQueue({ ...item, status: "needs_input", progress: 100, error: null });
+      } else if (job.status === "SUCCEEDED" && job.targetAggregateId) {
+        await updateQueue({ ...item, status: "saved", progress: 100, error: null });
+      }
+    } catch {
+      // A stale local link must not hide other local or cross-device reviews.
+    }
+  }
+  return reviews;
 }
