@@ -36,6 +36,11 @@ type NullableDate = ColumnType<
   Date | string | null
 >;
 type MoneyAmount = ColumnType<string, string | number, string>;
+type NullableMoneyAmount = ColumnType<
+  string | null,
+  string | number | null | undefined,
+  string | null
+>;
 
 export interface UserTable {
   readonly id: string;
@@ -237,6 +242,7 @@ export interface ExpenseTable {
   merchant: string;
   description: NullableText;
   amount: MoneyAmount;
+  tax_amount: NullableMoneyAmount;
   currency: string;
   incurred_on: NullableDate;
   readonly tax_year: Generated<number>;
