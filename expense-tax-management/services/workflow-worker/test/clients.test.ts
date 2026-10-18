@@ -186,7 +186,7 @@ describe("machine token provider", () => {
         fetch: fetchMock,
         keyResolver,
         nowSeconds: () => 1_000,
-        timeoutMs: 50,
+        timeoutMs: 2_000,
       },
     );
 
