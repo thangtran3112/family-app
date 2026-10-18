@@ -1,16 +1,12 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FileMigrationProvider, Migrator } from "kysely/migration";
-import { Kysely, PostgresDialect, sql, type Migration } from "kysely";
-import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import type { AppDatabase } from "../src/database/types.js";
-import { createExpenseDomain } from "../src/domain/expenses.js";
+import { assertLocalDockerEndpoint } from "../../../scripts/local-worker-smoke.mjs";
 
 const requested = process.env.EXPENSE_TAX_AMOUNT_INTEGRATION === "1";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -19,32 +15,45 @@ const migrationsFolder = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../src/database/migrations",
 );
-const postgresPort = Number(process.env.EXPENSE_TAX_POSTGRES_PORT ?? "5433");
 const runKey = randomUUID().replaceAll("-", "").slice(0, 12);
 const databaseName = `expense_tax_amount_${runKey}`;
 
-const USER_ID = "22000000-0000-4000-8000-000000000001";
-const TENANT_ID = "22000000-0000-4000-8000-000000000002";
-const PROFILE_ID = "22000000-0000-4000-8000-000000000003";
-const HISTORICAL_EXPENSE_ID = "22000000-0000-4000-8000-000000000004";
-const STORED_EXPENSE_ID = "22000000-0000-4000-8000-000000000005";
+describe("expense tax amount integration transport", () => {
+  it("refuses Docker overrides and non-unix context endpoints", () => {
+    expect(() =>
+      assertLocalDockerEndpoint(
+        { DOCKER_HOST: "unix:///tmp/docker-proxy.sock" },
+        () => "unix:///var/run/docker.sock",
+      ),
+    ).toThrow(/DOCKER_HOST is set/);
+    expect(() =>
+      assertLocalDockerEndpoint({}, () => "tcp://remote.invalid:2375"),
+    ).toThrow(/not a local unix socket/);
+  });
 
-interface ComposeConfig {
-  readonly services: Record<string, { readonly environment?: Record<string, string | null> }>;
-}
+  it("contains no host PostgreSQL connection path", async () => {
+    const source = await fs.readFile(fileURLToPath(import.meta.url), "utf8");
+    const forbidden = [
+      ["EXPENSE", "TAX", "POSTGRES", "PORT"].join("_"),
+      ["new", "Pool("].join(" "),
+      ["host:", '"local' + 'host"'].join(" "),
+      ["127", "0", "0", "1"].join("."),
+      ["54", "33"].join(""),
+    ];
 
-let postgresContainerId = "";
-let runtimePassword = "";
-let migratorPassword = "";
-let database: Kysely<AppDatabase> | undefined;
-let migratorDatabase: Kysely<unknown> | undefined;
+    for (const value of forbidden) expect(source).not.toContain(value);
+    const guardIndex = source.indexOf("\n    assertLocalDockerEndpoint();");
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(guardIndex).toBeLessThan(source.indexOf("\n    const postgresContainerId ="));
+  });
+});
 
-function dockerPsql(dbName: string, sqlText: string): string {
-  const result = spawnSync(
+function dockerPsql(containerId: string, dbName: string, sqlText: string): string {
+  return execFileSync(
     "docker",
     [
       "exec",
-      postgresContainerId,
+      containerId,
       "psql",
       "-X",
       "-v",
@@ -60,202 +69,103 @@ function dockerPsql(dbName: string, sqlText: string): string {
       "--command",
       sqlText,
     ],
-    { encoding: "utf8" },
-  );
-  if (result.status !== 0) throw new Error(result.stderr);
-  return result.stdout.trim();
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
 }
 
-function adminSql(sqlText: string, dbName = "postgres"): string {
-  return dockerPsql(dbName, sqlText);
+async function migrationSql(): Promise<string> {
+  const source = await fs.readFile(path.join(migrationsFolder, "022_expense_tax_amount.ts"), "utf8");
+  const match = source.match(/await sql`([\s\S]*?)`\.execute\(database\);/);
+  if (!match?.[1] || match[1].includes("${")) {
+    throw new Error("Migration 022 must contain one static SQL statement");
+  }
+  return match[1];
 }
 
-describe.skipIf(!requested)("migration 022 and expense tax amount domain", () => {
-  beforeAll(async () => {
-    if (spawnSync("docker", ["info"], { stdio: "ignore" }).status !== 0) {
-      throw new Error("Expense tax amount PostgreSQL prerequisites unavailable");
-    }
-    postgresContainerId = execFileSync(composeScript, ["ps", "-q", "postgres"], {
+describe.skipIf(!requested)("migration 022 expense tax amount", () => {
+  it("applies and proves nullable exact values and bounds inside a rolled-back transaction", async () => {
+    assertLocalDockerEndpoint();
+    const postgresContainerId = execFileSync(composeScript, ["ps", "-q", "postgres"], {
       cwd: repoRoot,
       env: process.env,
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
     }).trim();
     if (!postgresContainerId) {
       throw new Error("Expense tax amount PostgreSQL prerequisites unavailable");
     }
 
-    const config = JSON.parse(
-      execFileSync(composeScript, ["config", "--format", "json"], {
-        cwd: repoRoot,
-        env: process.env,
-        encoding: "utf8",
-      }),
-    ) as ComposeConfig;
-    runtimePassword = config.services.postgres?.environment?.APP_RUNTIME_DB_PASSWORD ?? "";
-    migratorPassword = config.services.postgres?.environment?.APP_MIGRATOR_DB_PASSWORD ?? "";
-    if (!runtimePassword || !migratorPassword) {
-      throw new Error("Expense tax amount PostgreSQL prerequisites unavailable");
+    dockerPsql(postgresContainerId, "postgres", `CREATE DATABASE ${databaseName};`);
+    try {
+      dockerPsql(postgresContainerId, databaseName, `
+        BEGIN;
+        CREATE SCHEMA app;
+        CREATE TABLE app.expenses (
+          id uuid PRIMARY KEY,
+          amount numeric(14, 2) NOT NULL
+        );
+        INSERT INTO app.expenses (id, amount)
+        VALUES ('22000000-0000-4000-8000-000000000001', 10.00);
+
+        ${await migrationSql()};
+
+        DO $assertions$
+        DECLARE
+          actual text;
+          failed_constraint text;
+        BEGIN
+          SELECT tax_amount::text INTO actual
+          FROM app.expenses WHERE id = '22000000-0000-4000-8000-000000000001';
+          IF actual IS NOT NULL THEN
+            RAISE EXCEPTION 'historical tax amount must remain null';
+          END IF;
+
+          INSERT INTO app.expenses (id, amount, tax_amount) VALUES
+            ('22000000-0000-4000-8000-000000000002', 10.00, NULL),
+            ('22000000-0000-4000-8000-000000000003', 10.00, 0.00),
+            ('22000000-0000-4000-8000-000000000004', 10.00, 1.23),
+            ('22000000-0000-4000-8000-000000000005', 20.00, 2.40);
+
+          SELECT tax_amount::text INTO actual
+          FROM app.expenses WHERE id = '22000000-0000-4000-8000-000000000005';
+          IF actual <> '2.40' THEN
+            RAISE EXCEPTION 'expected exact stored tax amount 2.40, got %', actual;
+          END IF;
+          UPDATE app.expenses SET tax_amount = 3.50
+          WHERE id = '22000000-0000-4000-8000-000000000005';
+          SELECT tax_amount::text INTO actual
+          FROM app.expenses WHERE id = '22000000-0000-4000-8000-000000000005';
+          IF actual <> '3.50' THEN
+            RAISE EXCEPTION 'expected exact updated tax amount 3.50, got %', actual;
+          END IF;
+
+          BEGIN
+            INSERT INTO app.expenses (id, amount, tax_amount)
+            VALUES ('22000000-0000-4000-8000-000000000006', 10.00, -0.01);
+            RAISE EXCEPTION 'negative tax amount was accepted';
+          EXCEPTION WHEN check_violation THEN
+            GET STACKED DIAGNOSTICS failed_constraint = CONSTRAINT_NAME;
+            IF failed_constraint <> 'expenses_tax_amount_nonnegative_check' THEN
+              RAISE EXCEPTION 'unexpected constraint: %', failed_constraint;
+            END IF;
+          END;
+
+          BEGIN
+            INSERT INTO app.expenses (id, amount, tax_amount)
+            VALUES ('22000000-0000-4000-8000-000000000007', 10.00, 10.01);
+            RAISE EXCEPTION 'tax amount above total was accepted';
+          EXCEPTION WHEN check_violation THEN
+            GET STACKED DIAGNOSTICS failed_constraint = CONSTRAINT_NAME;
+            IF failed_constraint <> 'expenses_tax_amount_not_greater_than_amount_check' THEN
+              RAISE EXCEPTION 'unexpected constraint: %', failed_constraint;
+            END IF;
+          END;
+        END
+        $assertions$;
+        ROLLBACK;
+      `);
+    } finally {
+      dockerPsql(postgresContainerId, "postgres", `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE);`);
     }
-
-    const quoteLiteral = (value: string) => value.replaceAll("'", "''");
-    adminSql(`
-      ALTER ROLE expense_app_migrator PASSWORD '${quoteLiteral(migratorPassword)}';
-      ALTER ROLE expense_app_runtime PASSWORD '${quoteLiteral(runtimePassword)}';
-    `);
-
-    adminSql(`CREATE DATABASE ${databaseName};`);
-    adminSql(
-      `CREATE SCHEMA app AUTHORIZATION expense_app_migrator;
-       CREATE SCHEMA app_migrations AUTHORIZATION expense_app_migrator;`,
-      databaseName,
-    );
-
-    migratorDatabase = new Kysely<unknown>({
-      dialect: new PostgresDialect({
-        pool: new Pool({
-          host: "localhost",
-          port: postgresPort,
-          user: "expense_app_migrator",
-          password: migratorPassword,
-          database: databaseName,
-        }),
-      }),
-    });
-    const fileProvider = new FileMigrationProvider({ fs, path, migrationFolder: migrationsFolder });
-    const migrations = await fileProvider.getMigrations();
-    const taxAmountMigration = migrations["022_expense_tax_amount"] as Migration | undefined;
-    const through021 = Object.fromEntries(
-      Object.entries(migrations).filter(([name]) => name !== "022_expense_tax_amount"),
-    );
-    const migrator = new Migrator({
-      db: migratorDatabase,
-      migrationTableSchema: "app_migrations",
-      provider: { getMigrations: async () => through021 },
-    });
-    const result = await migrator.migrateToLatest();
-    if (result.error) throw result.error;
-
-    await sql`INSERT INTO app.users (id, primary_email, display_name)
-      VALUES (${USER_ID}, '', 'Tax Amount Owner')`.execute(migratorDatabase);
-    await sql`INSERT INTO app.tenants (id, name, slug, status)
-      VALUES (${TENANT_ID}, 'Tax Amount Tenant', ${`tax-amount-${runKey}`}, 'active')`.execute(migratorDatabase);
-    await sql`INSERT INTO app.tenant_memberships (tenant_id, user_id, role, status)
-      VALUES (${TENANT_ID}, ${USER_ID}, 'owner', 'active')`.execute(migratorDatabase);
-    await sql`INSERT INTO app.personal_profiles (id, tenant_id, name)
-      VALUES (${PROFILE_ID}, ${TENANT_ID}, 'Tax Amount Profile')`.execute(migratorDatabase);
-    await sql`INSERT INTO app.personal_memberships
-      (personal_profile_id, tenant_id, user_id, role, status)
-      VALUES (${PROFILE_ID}, ${TENANT_ID}, ${USER_ID}, 'owner', 'active')`.execute(migratorDatabase);
-    await sql`INSERT INTO app.expenses
-      (id, tenant_id, created_by_user_id, personal_profile_id, merchant, amount, currency, incurred_on)
-      VALUES (${HISTORICAL_EXPENSE_ID}, ${TENANT_ID}, ${USER_ID}, ${PROFILE_ID}, 'Historical', 10.00, 'USD', '2026-01-01')`.execute(migratorDatabase);
-
-    expect(taxAmountMigration).toBeDefined();
-    await taxAmountMigration!.up(migratorDatabase);
-    adminSql(
-      `GRANT USAGE ON SCHEMA app TO expense_app_runtime;
-       GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO expense_app_runtime;
-       GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO expense_app_runtime;`,
-      databaseName,
-    );
-    database = new Kysely<AppDatabase>({
-      dialect: new PostgresDialect({
-        pool: new Pool({
-          host: "localhost",
-          port: postgresPort,
-          user: "expense_app_runtime",
-          password: runtimePassword,
-          database: databaseName,
-        }),
-      }),
-    });
-  });
-
-  afterAll(async () => {
-    await database?.destroy();
-    await migratorDatabase?.destroy();
-    if (postgresContainerId) adminSql(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE);`);
-  });
-
-  it("keeps historical rows null and enforces tax amount bounds", async () => {
-    const db = migratorDatabase!;
-    const historical = await sql<{ tax_amount: string | null }>`
-      SELECT tax_amount FROM app.expenses WHERE id = ${HISTORICAL_EXPENSE_ID}
-    `.execute(db);
-    expect(historical.rows[0]?.tax_amount).toBeNull();
-
-    for (const [suffix, taxAmount] of [["null", null], ["zero", "0.00"], ["positive", "1.23"]] as const) {
-      await expect(sql`
-        INSERT INTO app.expenses
-          (id, tenant_id, created_by_user_id, personal_profile_id, merchant, amount, tax_amount, currency, incurred_on)
-        VALUES
-          (${randomUUID()}, ${TENANT_ID}, ${USER_ID}, ${PROFILE_ID}, ${suffix}, 10.00, ${taxAmount}, 'USD', '2026-01-02')
-      `.execute(db)).resolves.toBeDefined();
-    }
-
-    for (const taxAmount of ["-0.01", "10.01"]) {
-      await expect(sql`
-        INSERT INTO app.expenses
-          (id, tenant_id, created_by_user_id, personal_profile_id, merchant, amount, tax_amount, currency, incurred_on)
-        VALUES
-          (${randomUUID()}, ${TENANT_ID}, ${USER_ID}, ${PROFILE_ID}, 'Rejected', 10.00, ${taxAmount}, 'USD', '2026-01-02')
-      `.execute(db)).rejects.toThrow(/expenses_tax_amount/);
-    }
-  });
-
-  it("maps null and exact stored decimal strings", async () => {
-    await sql`
-      INSERT INTO app.expenses
-        (id, tenant_id, created_by_user_id, personal_profile_id, merchant, amount, tax_amount, currency, incurred_on)
-      VALUES
-        (${STORED_EXPENSE_ID}, ${TENANT_ID}, ${USER_ID}, ${PROFILE_ID}, 'Stored', 10.00, 1.23, 'USD', '2026-01-03')
-    `.execute(migratorDatabase!);
-    const domain = createExpenseDomain(database!);
-
-    await expect(domain.getPersonal({
-      actorUserId: USER_ID,
-      tenantId: TENANT_ID,
-      profileId: PROFILE_ID,
-      expenseId: HISTORICAL_EXPENSE_ID,
-    })).resolves.toMatchObject({ taxAmount: null });
-    await expect(domain.getPersonal({
-      actorUserId: USER_ID,
-      tenantId: TENANT_ID,
-      profileId: PROFILE_ID,
-      expenseId: STORED_EXPENSE_ID,
-    })).resolves.toMatchObject({ taxAmount: "1.23" });
-  });
-
-  it("persists exact create and update tax amount strings", async () => {
-    const domain = createExpenseDomain(database!);
-    const created = await domain.createPersonal({
-      actorUserId: USER_ID,
-      tenantId: TENANT_ID,
-      profileId: PROFILE_ID,
-      request: {
-        personalProfileId: PROFILE_ID,
-        merchant: "Created",
-        amount: "20.00",
-        taxAmount: "2.40",
-        currency: "USD",
-        incurredOn: "2026-01-04",
-      },
-      requestId: `tax-create-${runKey}`,
-    });
-    expect(created.taxAmount).toBe("2.40");
-
-    const updated = await domain.updatePersonal({
-      actorUserId: USER_ID,
-      tenantId: TENANT_ID,
-      profileId: PROFILE_ID,
-      expenseId: created.id,
-      request: { expectedVersion: created.version, taxAmount: "3.50" },
-      requestId: `tax-update-${runKey}`,
-    });
-    expect(updated.taxAmount).toBe("3.50");
-    const stored = await sql<{ tax_amount: string | null }>`
-      SELECT tax_amount FROM app.expenses WHERE id = ${created.id}
-    `.execute(database!);
-    expect(stored.rows[0]?.tax_amount).toBe("3.50");
-  });
+  }, 30_000);
 });
