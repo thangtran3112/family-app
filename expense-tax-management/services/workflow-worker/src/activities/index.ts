@@ -196,7 +196,7 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
           }
           const jobId = input.jobReference.jobId;
           const request = {
-            schemaVersion: 1,
+            schemaVersion: 1 as const,
             status: "SUCCEEDED" as const,
             idempotencyKey: `${jobId}:ocr:review:needs-input`,
             expectedJobVersion: input.expectedJobVersion,
