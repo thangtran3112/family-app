@@ -23,6 +23,25 @@ function permanentClientFailure(error: unknown): boolean {
     error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
 }
 
+function transientAppApiFailure(error: unknown): boolean {
+  return error instanceof AppApiClientError && (
+    error.code === "unavailable" ||
+    error.code === "timeout" ||
+    (error.status !== undefined && error.status >= 500)
+  );
+}
+
+async function retryTransientAppApi<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!transientAppApiFailure(error) || attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+    }
+  }
+}
+
 async function downloadAndVerifyReceipt(
   appApi: AppApiClient,
   input: { fileId: string; expectedSha256: string | null },
@@ -176,15 +195,15 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
             throw ApplicationFailure.nonRetryable("Capture OCR job context missing", "OcrJobContextMissing");
           }
           const jobId = input.jobReference.jobId;
-          const job = await appApi.submitResult(jobId, {
+          const request = {
             schemaVersion: 1,
-            status: "SUCCEEDED",
+            status: "SUCCEEDED" as const,
             idempotencyKey: `${jobId}:ocr:review:needs-input`,
             expectedJobVersion: input.expectedJobVersion,
             resultSchemaVersion: "capture-ocr-review-v1",
             result,
-          });
-          await foundry.recordOutcome(input.reservationId, 1, { outcome: "accepted" });
+          };
+          const job = await retryTransientAppApi(() => appApi.submitResult(jobId, request));
           return { outcome: "needs_input" as const, jobVersion: job.version };
         }
         return result;

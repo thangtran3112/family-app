@@ -162,7 +162,15 @@ export async function runOcr(jobReference: JobReferenceV1): Promise<void> {
         })
       : await quick.ocr_run_extraction({ data: data as Uint8Array });
     if (input.reviewPolicy === "capture_required_fields_v1") {
-      if ("outcome" in extraction && extraction.outcome === "needs_input") return;
+      if ("outcome" in extraction && extraction.outcome === "needs_input") {
+        try {
+          await http.ocr_record_accepted({ reservationId });
+        } catch (error) {
+          if (isCancellation(error)) throw error;
+          // The App result is already durable. Foundry recording is best-effort here.
+        }
+        return;
+      }
       if (!("outcome" in extraction) || extraction.outcome !== "complete") {
         throw new Error("Capture OCR result missing outcome");
       }

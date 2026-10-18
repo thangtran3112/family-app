@@ -475,6 +475,65 @@ it("keeps Capture needs-input receipt bytes and partial fields out of workflow h
   }
 }, 60_000);
 
+it("records acceptance once after Capture needs-input submission and ignores a recording failure", async () => {
+  const calls: string[] = [];
+  const workflowId = `capture-needs-input-outcome-${JOB_ID}`;
+  const jobReference = {
+    schemaVersion: 1,
+    jobId: JOB_ID,
+    workflowType: "OcrReceiptWorkflow",
+    workflowId,
+  };
+  const env = await TestWorkflowEnvironment.createTimeSkipping();
+  try {
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace,
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: {
+        async mark_running() { return 3; },
+        async ocr_get_input() {
+          return {
+            schemaVersion: 1,
+            fileId: JOB_ID,
+            modeKey: "ocr_mode_balanced",
+            tenantId: JOB_ID,
+            expectedSha256: null,
+            reviewPolicy: "capture_required_fields_v1",
+          };
+        },
+        async ocr_verify_receipt() { /* no-op */ },
+        async ocr_resolve_route() {
+          return { aiModelId: JOB_ID, providerKind: "fake", providerModelId: "fake-ocr-v1" };
+        },
+        async ocr_reserve() { return { blocked: false, reservationId: JOB_ID }; },
+        async ocr_mark_call_started() { return 1; },
+        async ocr_extract_receipt() {
+          calls.push("extract");
+          return { outcome: "needs_input", jobVersion: 4 };
+        },
+        async ocr_record_accepted() {
+          calls.push("accepted");
+          throw ApplicationFailure.nonRetryable("recording failed", "FoundryRecordFailed");
+        },
+        async ocr_release() { calls.push("release"); },
+        async ocr_mark_failed() { calls.push("failed"); return 5; },
+      },
+    });
+
+    await worker.runUntil(() => env.client.workflow.execute("OcrReceiptWorkflow", {
+      workflowId,
+      taskQueue: TASK_QUEUE,
+      args: [jobReference],
+    }));
+
+    expect(calls).toEqual(["extract", "accepted"]);
+  } finally {
+    await env.teardown();
+  }
+}, 60_000);
+
 it("never calls the legacy download/extraction activities on a fresh OCR run", async () => {
   const calls: string[] = [];
   const workflowId = `no-legacy-ocr-${JOB_ID}`;
