@@ -7,7 +7,7 @@ import { brokerConfigFromEnv } from "../src/config.js";
 function validEnv(): Record<string, string> {
   const key1 = randomBytes(32).toString("base64");
   return {
-    MAILBOX_BROKER_DATABASE_URL: "postgresql://runtime@127.0.0.1:5433/mailbox_vault",
+    MAILBOX_BROKER_DATABASE_URL: "postgresql://runtime@127.0.0.1:15434/mailbox_vault",
     MAILBOX_SERVICE_TOKEN_ISSUER: "https://clerk.test",
     MAILBOX_SERVICE_TOKEN_AUDIENCE: "mch_mailboxServiceAudience",
     MAILBOX_SERVICE_JWKS_URL: "https://clerk.test/.well-known/jwks.json",
