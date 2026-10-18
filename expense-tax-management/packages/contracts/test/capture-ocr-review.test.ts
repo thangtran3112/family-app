@@ -110,7 +110,7 @@ describe("Capture OCR review contracts", () => {
         outcome: "complete",
         fields: { ...completeFields, taxAmount: "0.00" },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       CaptureOcrResultV1Schema.safeParse({
         schemaVersion: 1,

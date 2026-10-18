@@ -53,7 +53,7 @@ const CaptureOcrCompleteFieldsV1Schema = z
     total: DecimalMoneySchema,
     currency: CurrencySchema,
     incurredOn: DateOnlySchema,
-    taxAmount: DecimalMoneySchema,
+    taxAmount: NonNegativeMoneySchema,
   })
   .refine(
     (value) =>
