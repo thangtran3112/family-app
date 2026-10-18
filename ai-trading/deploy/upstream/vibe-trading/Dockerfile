@@ -8,7 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /src
 COPY --from=upstream . /src
 COPY family-baseline.patch family-sp5.patch /tmp/
-RUN for patch in /tmp/family-baseline.patch /tmp/family-sp5.patch; do \
+# actions/checkout uses a .git *file* for submodules. Docker's upstream
+# .dockerignore excludes .git/ directories but not that gitfile; inside the
+# build stage it points outside /src and breaks git apply. Drop only this
+# copied metadata, never the upstream checkout or either patch.
+RUN if [ -f /src/.git ]; then rm -f /src/.git; fi \
+    && for patch in /tmp/family-baseline.patch /tmp/family-sp5.patch; do \
       git apply --binary --exclude='agent/tests/**' \
         --include='agent/**' --include='frontend/**' \
         --include='requirements-lock.txt' --include='requirements-channels-lock.txt' \
