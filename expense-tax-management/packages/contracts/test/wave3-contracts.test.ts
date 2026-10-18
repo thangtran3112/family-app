@@ -85,6 +85,7 @@ describe("Phase 0J Wave 3 contracts", () => {
         merchant: "Supplier",
         description: null,
         amount: "12.50",
+        taxAmount: null,
         currency: "USD",
         incurredOn: "2025-03-01",
         taxYear: 2025,
