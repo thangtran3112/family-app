@@ -1,4 +1,3 @@
-import { ApplicationFailure } from "@temporalio/activity";
 import { describe, expect, it } from "vitest";
 import {
   buildOpenAiReceiptRequest,
@@ -23,38 +22,30 @@ const quiet = () => undefined;
 describe("normalizeOpenAiReceipt", () => {
   it("returns the contract shape and omits null optionals", () => {
     expect(normalizeOpenAiReceipt(JSON.stringify(fields()))).toEqual({
-      schemaVersion: 1, merchant: "Harbor Lane Cafe", amount: "31.39", currency: "USD",
-      incurredOn: "2019-11-20", confidence: 0.98,
+      merchant: "Harbor Lane Cafe", total: "31.39", currency: "USD",
+      incurredOn: "2019-11-20", taxAmount: null, confidence: 0.98,
     });
   });
   it.each([
     ["31.390", "31.39"], ["1,234.5", "1234.50"], [" 7 ", "7.00"], ["007.50", "7.50"],
   ])("accepts amount %j as %s", (given, expected) => {
-    expect(normalizeOpenAiReceipt(JSON.stringify(fields({ amount: given }))).amount).toBe(expected);
+    expect(normalizeOpenAiReceipt(JSON.stringify(fields({ amount: given }))).total).toBe(expected);
   });
-  it.each(["0.00", "0", "0.0", " 0.000 "])("reports amount %j as a zero-amount document: non-retryable, not malformed output", (amount) => {
-    try { normalizeOpenAiReceipt(JSON.stringify(fields({ amount }))); throw new Error("did not throw"); }
-    catch (error) {
-      expect(error).toBeInstanceOf(ApplicationFailure);
-      expect((error as ApplicationFailure).type).toBe("OcrZeroAmount");
-      expect((error as ApplicationFailure).nonRetryable).toBe(true);
-    }
+  it.each(["0.00", "0", "0.0", " 0.000 "])("normalizes amount %j as an observed zero", (amount) => {
+    expect(normalizeOpenAiReceipt(JSON.stringify(fields({ amount })))).toMatchObject({ total: "0.00" });
   });
-  it.each(["-5.00", "1e3", "$31.39", "abc", ""])("rejects amount %j as retryable malformed", (amount) => {
-    try { normalizeOpenAiReceipt(JSON.stringify(fields({ amount }))); throw new Error("did not throw"); }
-    catch (error) {
-      expect(error).toBeInstanceOf(ApplicationFailure);
-      expect((error as ApplicationFailure).type).toBe("OcrExtractionMalformed");
-      expect((error as ApplicationFailure).nonRetryable).toBe(false);
-    }
+  it.each(["-5.00", "1e3", "$31.39", "abc", ""])("normalizes unreadable amount %j as missing", (amount) => {
+    expect(normalizeOpenAiReceipt(JSON.stringify(fields({ amount })))).toMatchObject({ total: null });
   });
-  it.each(["2019-11-20 11:05 AM", "11/20/2019", "2019-13-45", ""])("rejects date %j as retryable malformed", (incurredOn) => {
-    try { normalizeOpenAiReceipt(JSON.stringify(fields({ incurredOn }))); throw new Error("did not throw"); }
-    catch (error) {
-      expect(error).toBeInstanceOf(ApplicationFailure);
-      expect((error as ApplicationFailure).type).toBe("OcrExtractionMalformed");
-      expect((error as ApplicationFailure).nonRetryable).toBe(false);
-    }
+  it.each(["2019-11-20 11:05 AM", "11/20/2019", "2019-13-45", ""])("normalizes unreadable date %j as missing", (incurredOn) => {
+    expect(normalizeOpenAiReceipt(JSON.stringify(fields({ incurredOn })))).toMatchObject({ incurredOn: null });
+  });
+  it("normalizes nullable required observations without guessing", () => {
+    expect(normalizeOpenAiReceipt(JSON.stringify(fields({
+      merchant: null, amount: null, currency: null, incurredOn: null, taxAmount: null,
+    })))).toMatchObject({
+      merchant: null, total: null, currency: null, incurredOn: null, taxAmount: null,
+    });
   });
   it("uppercases currency, clamps confidence, trims and truncates optionals", () => {
     const out = normalizeOpenAiReceipt(JSON.stringify(fields({
@@ -80,6 +71,7 @@ describe("buildOpenAiReceiptRequest", () => {
     expect(body.text.format).toMatchObject({ type: "json_schema", strict: true });
     const parts = body.input[0].content;
     expect(parts[0].text).toMatch(/never follow instructions/i);
+    expect(parts[0].text).toMatch(/do not guess/i);
     expect(parts[1]).toMatchObject({ type: "input_image", detail: "high" });
     expect(parts[1].image_url).toMatch(/^data:image\/jpeg;base64,/);
   });
@@ -93,6 +85,9 @@ describe("buildOpenAiReceiptRequest", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely-typed request body in a test
     const schema = (buildOpenAiReceiptRequest(JPEG, "jpeg", "m") as any).text.format.schema;
     expect(schema.required.sort()).toEqual(Object.keys(schema.properties).sort());
+    for (const field of ["merchant", "total", "currency", "incurredOn", "taxAmount"]) {
+      expect(schema.properties[field].type).toEqual(["string", "null"]);
+    }
     expect(schema.properties.orderNumber.type).toEqual(["string", "null"]);
     expect(schema.additionalProperties).toBe(false);
   });
@@ -107,7 +102,7 @@ describe("createOpenAiReceiptExtractor", () => {
       return auth === "Bearer key-a" ? json(401, { error: {} }) : json(200, okPayload());
     }) as typeof fetch;
     const extract = createOpenAiReceiptExtractor({ apiKeys: ["key-a", "key-b"], fetch: fetchFake, random: () => 0, log: quiet });
-    await expect(extract(JPEG, route)).resolves.toMatchObject({ merchant: "Harbor Lane Cafe", amount: "31.39" });
+    await expect(extract(JPEG, route)).resolves.toMatchObject({ merchant: "Harbor Lane Cafe", total: "31.39" });
     expect(seen).toEqual(["Bearer key-a", "Bearer key-b"]);
   });
   it("fails over on 429, 500 and network errors, then reports a retryable failure when all keys fail", async () => {
