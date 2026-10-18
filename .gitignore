@@ -221,8 +221,6 @@ __marimo__/
 node_modules/
 .next/
 out/
-build/
-dist/
 .pnpm-store/
 
 # PWA / Serwist
@@ -233,7 +231,6 @@ public/workbox-*.js.map
 public/swe-worker-*.js
 
 # Environment variables
-.env
 .env*.local
 !.env.example
 

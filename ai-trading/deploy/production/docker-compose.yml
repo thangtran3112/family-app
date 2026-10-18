@@ -253,10 +253,9 @@ services:
     command: python -m uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
-    # The only Desk service on `gateway` -- so Caddy can reach it at
-    # api:8000 (Caddyfile's /api/desk/* route) -- plus `database` to reach
-    # the shared Postgres cluster at its `postgres` hostname.
-    networks: [database, gateway]
+    # Keep the image and service buildable for Phase 4, but off Caddy's
+    # gateway network while Desk is dark. Database readiness still works.
+    networks: [database]
     mem_limit: 512m
     pids_limit: 256
     security_opt: ["no-new-privileges:true"]

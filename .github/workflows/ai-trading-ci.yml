@@ -66,6 +66,47 @@ jobs:
       - name: Upload-hub-static mock-gcloud test
         run: ../deploy/ci/upload-hub-static.test.sh
 
+  desk-web:
+    name: Desk web app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            ai-trading/packages/family-desk/backend/uv.lock
+            ai-trading/common/uv.lock
+      - name: Install linked contracts dependencies
+        run: pnpm --dir ../contracts install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - name: Install backend dependencies for OpenAPI generation
+        working-directory: ai-trading/packages/family-desk/backend
+        run: uv sync --locked
+      - run: pnpm gen:api
+      - run: git diff --exit-code -- lib/api
+      - run: pnpm build
+      - run: pnpm test:export
+      - run: ../../../deploy/ci/check-static-export.sh out desk
+
   desk:
     name: Desk contracts and backend
     runs-on: ubuntu-latest

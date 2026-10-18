@@ -28,7 +28,7 @@ test("exported overview contains the approved shell without bypassing the auth l
   await assert.rejects(access(new URL("./out/apps/desk.html", import.meta.url)), { code: "ENOENT" });
 });
 
-test("exported navigation preserves hub details and excludes the unlaunchable Desk", async () => {
+test("exported navigation preserves Release 1 apps and keeps Desk dark", async () => {
   const data = pageData(await page("index.html"));
   for (const slug of ["tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish"]) {
     assert.ok(data.includes(`"href":"/apps/${slug}"`));

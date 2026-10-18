@@ -12,7 +12,7 @@ variable "zone_name" {
 
 variable "hub_hostname" {
   type        = string
-  description = "Interim hub hostname, tunneled to web:3000 and the Caddy gateway until Desk Phase 4 takes it (01l)."
+  description = "Desk hostname: interim tunnel ingress until desk_cutover_enabled; retained for its existing DNS record and the Desk Worker route."
   default     = "trading.tobytran.dev"
 }
 

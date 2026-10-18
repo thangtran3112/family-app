@@ -1,0 +1,439 @@
+.page {
+  width: min(100%, var(--container-desk));
+  margin-inline: auto;
+  padding: 24px clamp(16px, 3vw, 32px) 48px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-title);
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+}
+
+.subtitle {
+  margin: 5px 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.symbolForm {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 180px) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.symbolForm label {
+  align-self: center;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.symbolForm input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font: inherit;
+  padding: 9px 12px;
+}
+
+.symbolForm button,
+.error button {
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-text);
+  color: var(--color-on-pill);
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  padding: 8px 16px;
+}
+
+.symbolForm :focus-visible,
+.timeframes button:focus-visible,
+.error button:focus-visible,
+.methodNote summary:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 3px;
+}
+
+.instrumentLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding-block: 12px;
+  border-block: 1px solid var(--color-hairline);
+}
+
+.instrumentLine strong {
+  font-size: 22px;
+  font-weight: var(--weight-bold);
+}
+
+.instrumentLine span {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.timeframes {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-block: 10px;
+}
+
+.timeframes button {
+  min-width: 52px;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  padding: 8px 12px;
+}
+
+.timeframes button[aria-pressed="true"] {
+  background: var(--color-raised);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.feedback {
+  color: var(--color-muted);
+}
+
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-down) 60%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.methodNote {
+  margin-top: 24px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 14px;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.methodNote summary {
+  min-height: 44px;
+  padding-block: 10px;
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+
+.methodNote p {
+  max-width: 900px;
+  margin: 4px 0 0;
+  line-height: 1.6;
+}
+
+.gauges {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  border-block: 1px solid var(--color-hairline);
+  padding-block: 18px;
+}
+
+.gaugeCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.gaugeSvg {
+  width: min(100%, 180px);
+  height: auto;
+  margin-top: 8px;
+}
+
+.gaugeLabel {
+  font-size: var(--text-row);
+  font-weight: var(--weight-bold);
+}
+
+.gaugeScore {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.toneSell,
+.actionSell {
+  color: var(--color-down);
+}
+
+.toneNeutral,
+.unknown {
+  color: var(--color-muted);
+}
+
+.toneBuy,
+.actionBuy {
+  color: var(--color-up);
+}
+
+.actionNeutral {
+  color: var(--color-muted);
+}
+
+.voteCounts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.voteCounts strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.asOf {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.tables {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 20px;
+}
+
+.tableBlock,
+.volatilityBlock {
+  min-width: 0;
+  border-bottom: 1px solid var(--color-hairline);
+  padding-bottom: 18px;
+}
+
+.blockHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.blockHeader h2 {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.quality {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  text-align: right;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.indicatorTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.indicatorTable th,
+.indicatorTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  vertical-align: middle;
+}
+
+.indicatorTable thead th {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.indicatorTable tbody th {
+  min-width: 220px;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+}
+
+.indicatorTable td {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.valuePair {
+  display: inline-block;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.strategyLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--color-amber);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.strategyLink:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 3px;
+}
+
+.emptyCell {
+  color: var(--color-muted) !important;
+}
+
+.volatilityValues {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.volatilityValues div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  padding: 10px 12px;
+}
+
+.volatilityValues dt {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.volatilityValues dd {
+  margin: 0;
+  font-size: var(--text-row);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.pivotGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.pivotList {
+  display: flex;
+  flex-direction: column;
+}
+
+.pivotRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  padding: 9px 2px;
+}
+
+.pivotRow span {
+  color: var(--color-muted);
+}
+
+.pivotRow strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gauges {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gaugeCard:nth-child(2) {
+    grid-row: 1;
+    grid-column: 1 / -1;
+  }
+
+  .pivotGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .symbolForm {
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .gauges {
+    grid-template-columns: 1fr;
+  }
+
+  .gaugeCard:nth-child(2) {
+    grid-row: auto;
+  }
+
+  .volatilityValues {
+    grid-template-columns: 1fr;
+  }
+
+  .blockHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

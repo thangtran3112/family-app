@@ -13,6 +13,7 @@ Source: https://github.com/HKUDS/Vibe-Trading (pinned as `ai-trading/packages/vi
 | `backend/src/ai_trading/core/indicators.py` (`adx`) | `agent/src/skills/technical-basic/example_signal_engine.py` (`compute_adx`), commit `d402c2d` | This module's Wilder seeding rule (mean of the first `length` valid values, via `_wilder`) instead of an EWM-only smoothing with no explicit seed |
 | `backend/src/ai_trading/core/indicators.py` (`ichimoku`, helper `donchian_mid`) | `agent/src/skills/ichimoku/example_signal_engine.py` (`_donchian_mid`), commit `d402c2d` | No forward displacement (so a value never reflects an unclosed future bar); conversion/base/span_a/span_b values only, no TK-cross signal |
 | `backend/src/ai_trading/core/futures.py` (`SPECS`, `MONTH_CODES`, `_extract_product`) | `agent/backtest/engines/global_futures.py` (`_MULTIPLIER`, `_extract_product`) | Only the Desk's 12 contracts (no margins, price limits, commissions, or backtest engine); dollars-per-tick, listed months, and session hours added |
+| `frontend/lib/indicators.ts` | `frontend/src/lib/indicators.ts`, commit `8be01c8fe25f25c2e699ea8d2ab0b322f58c8c9e` | Copied unchanged for chart overlays and oscillator panes; MIT license is beside the copy at `frontend/lib/indicators.LICENSE` |
 
 ```text
 MIT License
@@ -37,6 +38,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## TradingView Lightweight Charts
+
+`frontend/package.json` pins `lightweight-charts` 5.2.0 from https://github.com/tradingview/lightweight-charts (Apache License 2.0, Copyright 2023 TradingView, Inc.). The complete license is included at `frontend/lib/lightweight-charts.LICENSE`. Rendered charts include a visible “Charts by TradingView” attribution link.
 
 ## TradingAgents
 
@@ -286,4 +291,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-

@@ -56,10 +56,25 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
     is never distinguishable from a legitimate one at this layer -- that trust boundary is Caddy's
     forward_auth, proven by the existing production integration test; this function only trusts
     whatever header name reaches it, by design."""
+    email = _verified_email(request)
+    return _user_for_email(email, session)
+
+
+def get_current_user_for_stream(request: Request) -> AuthedUser:
+    """Resolve the same gateway identity with a short-lived session before an SSE response starts."""
+    email = _verified_email(request)
+    with session_scope(request.app.state.session_factory) as session:
+        return _user_for_email(email, session)
+
+
+def _verified_email(request: Request) -> str:
     email = request.headers.get(IDENTITY_HEADER)
     if not email:
         raise HTTPException(status_code=401, detail="missing verified identity header")
+    return email
 
+
+def _user_for_email(email: str, session: Session) -> AuthedUser:
     user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if user is None:
         user = User(email=email, settings={})
