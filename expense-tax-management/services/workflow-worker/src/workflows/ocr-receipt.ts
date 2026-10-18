@@ -1,4 +1,9 @@
-import type { JobReferenceV1, OcrExtractionResultV1, OcrJobInputV1 } from "@expense-tax/contracts";
+import type {
+  CaptureOcrResultV1,
+  JobReferenceV1,
+  OcrExtractionResultV1,
+  OcrJobInputV1,
+} from "@expense-tax/contracts";
 import { isCancellation, patched, proxyActivities } from "@temporalio/workflow";
 
 import { requireJobReference } from "./job-reference.js";
@@ -11,7 +16,7 @@ interface OcrActivities {
   ocr_verify_receipt(input: { fileId: string; expectedSha256: string | null }): Promise<void>;
   ocr_resolve_route(input: { modeKey: OcrJobInputV1["modeKey"] }): Promise<{ aiModelId: string; providerKind: string; providerModelId: string }>;
   ocr_reserve(input: { jobReference: JobReferenceV1; tenantId: string; aiModelId: string }): Promise<{ blocked: boolean; reservationId: string | null }>;
-  ocr_submit_failed(input: { jobReference: JobReferenceV1; expectedJobVersion: number; error: string; message: string }): Promise<number>;
+  ocr_submit_failed(input: { jobReference: JobReferenceV1; expectedJobVersion: number; error: string; message: string; reviewPolicy?: "capture_required_fields_v1" }): Promise<number>;
   ocr_mark_call_started(input: { reservationId: string }): Promise<number>;
   /** @deprecated kept only so histories started before "ocr-receipt-bytes-in-activity" still replay. */
   ocr_run_extraction(input: { data: Uint8Array }): Promise<OcrExtractionResultV1>;
@@ -19,10 +24,20 @@ interface OcrActivities {
     fileId: string;
     expectedSha256: string | null;
     route: { providerKind: string; providerModelId: string };
-  }): Promise<OcrExtractionResultV1>;
+    reviewPolicy?: "capture_required_fields_v1";
+    jobReference?: JobReferenceV1;
+    expectedJobVersion?: number;
+    reservationId?: string;
+  }): Promise<
+    | OcrExtractionResultV1
+    | Extract<CaptureOcrResultV1, { outcome: "complete" }>
+    | { outcome: "needs_input"; jobVersion: number }
+  >;
   ocr_record_accepted(input: { reservationId: string }): Promise<void>;
   ocr_submit_extraction(input: { jobReference: JobReferenceV1; expectedJobVersion: number; extraction: OcrExtractionResultV1 }): Promise<number>;
+  ocr_submit_capture_complete(input: { jobReference: JobReferenceV1; expectedJobVersion: number; result: Extract<CaptureOcrResultV1, { outcome: "complete" }> }): Promise<number>;
   ocr_record_deduplication(input: { jobReference: JobReferenceV1; sourceFileId: string; expectedJobVersion: number; extraction: OcrExtractionResultV1 }): Promise<unknown>;
+  ocr_record_capture_deduplication(input: { jobReference: JobReferenceV1; sourceFileId: string; expectedJobVersion: number; result: Extract<CaptureOcrResultV1, { outcome: "complete" }> }): Promise<unknown>;
   ocr_release(input: { reservationId: string }): Promise<void>;
   ocr_mark_failed(input: { jobReference: JobReferenceV1; expectedJobVersion: number; message: string }): Promise<number>;
 }
@@ -116,6 +131,7 @@ export async function runOcr(jobReference: JobReferenceV1): Promise<void> {
       expectedJobVersion: version,
       error: "QUOTA_BLOCKED",
       message: "QUOTA_BLOCKED: monthly RECEIPT_OCR allowance exhausted for this tenant",
+      ...(input.reviewPolicy === undefined ? {} : { reviewPolicy: input.reviewPolicy }),
     });
     return;
   }
@@ -125,7 +141,10 @@ export async function runOcr(jobReference: JobReferenceV1): Promise<void> {
   }
   const reservationId = reservation.reservationId;
 
-  let extraction: OcrExtractionResultV1;
+  let extraction:
+    | OcrExtractionResultV1
+    | Extract<CaptureOcrResultV1, { outcome: "complete" }>
+    | { outcome: "needs_input"; jobVersion: number };
   let resultVersion: number;
   try {
     await http.ocr_mark_call_started({ reservationId });
@@ -134,10 +153,38 @@ export async function runOcr(jobReference: JobReferenceV1): Promise<void> {
           fileId: input.fileId,
           expectedSha256: input.expectedSha256,
           route: { providerKind: route.providerKind, providerModelId: route.providerModelId },
+          ...(input.reviewPolicy === undefined ? {} : {
+            reviewPolicy: input.reviewPolicy,
+            jobReference,
+            expectedJobVersion: version,
+            reservationId,
+          }),
         })
       : await quick.ocr_run_extraction({ data: data as Uint8Array });
-    await http.ocr_record_accepted({ reservationId });
-    resultVersion = await http.ocr_submit_extraction({ jobReference, expectedJobVersion: version, extraction });
+    if (input.reviewPolicy === "capture_required_fields_v1") {
+      if ("outcome" in extraction && extraction.outcome === "needs_input") {
+        try {
+          await http.ocr_record_accepted({ reservationId });
+        } catch (error) {
+          if (isCancellation(error)) throw error;
+          // The App result is already durable. Foundry recording is best-effort here.
+        }
+        return;
+      }
+      if (!("outcome" in extraction) || extraction.outcome !== "complete") {
+        throw new Error("Capture OCR result missing outcome");
+      }
+      await http.ocr_record_accepted({ reservationId });
+      resultVersion = await http.ocr_submit_capture_complete({
+        jobReference,
+        expectedJobVersion: version,
+        result: extraction,
+      });
+    } else {
+      if ("outcome" in extraction) throw new Error("Unexpected OCR review result");
+      await http.ocr_record_accepted({ reservationId });
+      resultVersion = await http.ocr_submit_extraction({ jobReference, expectedJobVersion: version, extraction });
+    }
     version = resultVersion;
   } catch (error) {
     if (isCancellation(error)) throw error;
@@ -152,7 +199,18 @@ export async function runOcr(jobReference: JobReferenceV1): Promise<void> {
   }
 
   // The App job already succeeded. A failing deduplication callback must not mark it failed.
-  await http.ocr_record_deduplication({ jobReference, sourceFileId: input.fileId, expectedJobVersion: resultVersion, extraction });
+  if (input.reviewPolicy === "capture_required_fields_v1") {
+    if (!("outcome" in extraction) || extraction.outcome !== "complete") return;
+    await http.ocr_record_capture_deduplication({
+      jobReference,
+      sourceFileId: input.fileId,
+      expectedJobVersion: resultVersion,
+      result: extraction,
+    });
+  } else {
+    if ("outcome" in extraction) return;
+    await http.ocr_record_deduplication({ jobReference, sourceFileId: input.fileId, expectedJobVersion: resultVersion, extraction });
+  }
 }
 
 export async function OcrReceiptWorkflow(jobReference: JobReferenceV1): Promise<void> {
