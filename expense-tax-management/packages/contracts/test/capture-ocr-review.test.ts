@@ -7,6 +7,7 @@ import {
   CaptureOcrReviewPolicySchema,
   CaptureOcrTaxInputV1Schema,
   CreateOcrJobRequestSchema,
+  ExpenseSchema,
   OcrJobInputV1Schema,
 } from "../src/index.js";
 
@@ -21,7 +22,49 @@ const completeFields = {
   taxAmount: "1.23",
 } as const;
 
+const expenseResponse = {
+  id: "33333333-3333-4333-8333-333333333333",
+  tenantId: TENANT_ID,
+  createdByUserId: "44444444-4444-4444-8444-444444444444",
+  personalProfileId: FILE_ID,
+  businessId: null,
+  projectId: null,
+  spendingCategoryId: null,
+  merchant: "Market",
+  description: null,
+  amount: "12.34",
+  currency: "USD",
+  incurredOn: "2026-10-17",
+  taxYear: 2026,
+  source: "ocr",
+  mailboxProvenance: null,
+  status: "ready",
+  version: 1,
+  createdAt: "2026-10-17T00:00:00.000Z",
+  updatedAt: "2026-10-17T00:00:00.000Z",
+} as const;
+
 describe("Capture OCR review contracts", () => {
+  it("parses an expense response without tax amount", () => {
+    expect(ExpenseSchema.parse(expenseResponse)).toMatchObject(expenseResponse);
+  });
+
+  it("parses an expense response with null tax amount", () => {
+    expect(ExpenseSchema.parse({ ...expenseResponse, taxAmount: null }).taxAmount).toBeNull();
+  });
+
+  it("parses an expense response with a decimal tax amount", () => {
+    expect(ExpenseSchema.parse({ ...expenseResponse, taxAmount: "5.53" }).taxAmount).toBe(
+      "5.53",
+    );
+  });
+
+  it("rejects invalid expense response tax amounts", () => {
+    for (const taxAmount of ["-1", "1.001"]) {
+      expect(ExpenseSchema.safeParse({ ...expenseResponse, taxAmount }).success).toBe(false);
+    }
+  });
+
   it("parses complete and incomplete OCR review results", () => {
     expect(
       CaptureOcrResultV1Schema.parse({

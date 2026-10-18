@@ -2873,7 +2873,7 @@ export interface paths {
                                     id: string;
                                     name: string;
                                 }[];
-                                taxAmount: string | null;
+                                taxAmount?: string | null;
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -3047,7 +3047,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3217,7 +3217,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3512,7 +3512,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -12490,7 +12490,7 @@ export interface paths {
                                     id: string;
                                     name: string;
                                 }[];
-                                taxAmount: string | null;
+                                taxAmount?: string | null;
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -12664,7 +12664,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -12834,7 +12834,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -13129,7 +13129,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
-                            taxAmount: string | null;
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;

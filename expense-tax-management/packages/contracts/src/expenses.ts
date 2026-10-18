@@ -108,7 +108,7 @@ export const ExpenseSchema = z.strictObject({
   merchant: z.string().min(1).max(200),
   description: z.string().max(2_000).nullable(),
   amount: DecimalMoneySchema,
-  taxAmount: NonNegativeMoneySchema.nullable(),
+  taxAmount: NonNegativeMoneySchema.nullish(),
   currency: CurrencySchema,
   incurredOn: DateOnlySchema,
   taxYear: z.number().int().min(1_900).max(9_999),
