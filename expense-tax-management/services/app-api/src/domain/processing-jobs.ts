@@ -215,7 +215,7 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-async function requireJobForUpdate(
+export async function requireJobForUpdate(
   transaction: Transaction<AppDatabase>,
   jobId: string,
 ): Promise<ProcessingJobRow> {
