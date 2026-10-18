@@ -18,21 +18,27 @@ import {
 import { describe, expect, it } from "vitest";
 
 import type { AppDatabase } from "../src/database/types.js";
-import { createOcrJobsDomain } from "../src/domain/ocr.js";
+import { applyCaptureOcrResult, createOcrJobsDomain } from "../src/domain/ocr.js";
 
 const JOB_ID = "11111111-1111-4111-8111-111111111111";
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
 const FILE_ID = "44444444-4444-4444-8444-444444444444";
 const SHA256 = "a".repeat(64);
 
-function databaseWithJob(workflowType: string): Kysely<AppDatabase> {
+function databaseWithJob(
+  workflowType: string,
+  reviewPolicy?: "capture_required_fields_v1",
+): Kysely<AppDatabase> {
   const job = {
     id: JOB_ID,
     tenant_id: TENANT_ID,
     workflow_type: workflowType,
     status: "RUNNING",
     source_file_id: FILE_ID,
-    input_params: { modeKey: "ocr_mode_fast" },
+    input_params: {
+      modeKey: "ocr_mode_fast",
+      ...(reviewPolicy === undefined ? {} : { reviewPolicy }),
+    },
   };
   const file = { id: FILE_ID, sha256_hex: SHA256 };
   const connection: DatabaseConnection = {
@@ -67,8 +73,11 @@ function databaseWithJob(workflowType: string): Kysely<AppDatabase> {
   });
 }
 
-function getOcrInput(workflowType: string) {
-  const domain = createOcrJobsDomain(databaseWithJob(workflowType), {} as never);
+function getOcrInput(
+  workflowType: string,
+  reviewPolicy?: "capture_required_fields_v1",
+) {
+  const domain = createOcrJobsDomain(databaseWithJob(workflowType, reviewPolicy), {} as never);
   return domain.getOcrInput({ jobId: JOB_ID, actorServicePrincipal: "ai-worker", requestId: "request-1" });
 }
 
@@ -88,5 +97,38 @@ describe("OcrJobsDomain.getOcrInput", () => {
 
   it("still answers not found for a job of any other workflow type", async () => {
     await expect(getOcrInput("MailboxMaterializeWorkflow")).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("round-trips the persisted Capture review policy", async () => {
+    await expect(getOcrInput("OcrReceiptWorkflow", "capture_required_fields_v1")).resolves.toEqual({
+      schemaVersion: 1,
+      fileId: FILE_ID,
+      modeKey: "ocr_mode_fast",
+      expectedSha256: SHA256,
+      tenantId: TENANT_ID,
+      reviewPolicy: "capture_required_fields_v1",
+    });
+  });
+
+  it("does not touch expense persistence for a Capture needs-input result", async () => {
+    const transaction = new Proxy({}, {
+      get() { throw new Error("database must not be touched"); },
+    });
+    await expect(applyCaptureOcrResult(transaction as never, {
+      job: {} as never,
+      result: {
+        schemaVersion: 1,
+        outcome: "needs_input",
+        fields: {
+          merchant: "Acme",
+          total: "10.00",
+          currency: "USD",
+          incurredOn: null,
+          taxAmount: "0.00",
+        },
+        issues: ["date_missing", "tax_zero_requires_confirmation"],
+      },
+      requestId: "request-1",
+    })).resolves.toBeNull();
   });
 });

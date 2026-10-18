@@ -180,6 +180,27 @@ describe("App API OCR routes", () => {
     );
   });
 
+  it("passes the Capture review policy into OCR job creation", async () => {
+    const { app, ocrJobsDomain } = createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: `${collection}/ocr-jobs`,
+      headers: {
+        authorization: "Bearer tenant-token",
+        "idempotency-key": "ocr-capture-1",
+      },
+      payload: {
+        modeKey: "ocr_mode_balanced",
+        reviewPolicy: "capture_required_fields_v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(ocrJobsDomain.createOcrJob).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewPolicy: "capture_required_fields_v1" }),
+    );
+  });
+
   it("rejects an unknown mode key before touching the domain", async () => {
     const { app, ocrJobsDomain } = createTestApp();
     const response = await app.inject({

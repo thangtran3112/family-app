@@ -141,6 +141,52 @@ it("ocr_extract_receipt passes the downloaded bytes and route to the injected ex
   expect(extractReceipt).toHaveBeenCalledWith(data, ROUTE);
 });
 
+it("submits Capture needs-input fields inside the activity and returns only opaque workflow output", async () => {
+  const data = new Uint8Array([1, 2, 3]);
+  const downloadFile = vi.fn().mockResolvedValue(data);
+  const submitResult = vi.fn().mockResolvedValue({ version: 4 });
+  const recordOutcome = vi.fn().mockResolvedValue({ id: JOB_ID });
+  const partial = {
+    schemaVersion: 1 as const,
+    outcome: "needs_input" as const,
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "0.00",
+    },
+    issues: ["tax_zero_requires_confirmation" as const],
+  };
+  const extractReceipt = vi.fn().mockResolvedValue(partial);
+  const activities = createActivities({
+    appApi: { downloadFile, submitResult } as unknown as AppApiClient,
+    foundry: { recordOutcome } as unknown as FoundryClient,
+    extractReceipt,
+  });
+  const ocrJob = { ...jobReference, workflowType: "OcrReceiptWorkflow" as const };
+
+  await expect(activities.ocr_extract_receipt({
+    fileId: JOB_ID,
+    expectedSha256: null,
+    route: ROUTE,
+    reviewPolicy: "capture_required_fields_v1",
+    jobReference: ocrJob,
+    expectedJobVersion: 3,
+    reservationId: JOB_ID,
+  })).resolves.toEqual({ outcome: "needs_input", jobVersion: 4 });
+  expect(extractReceipt).toHaveBeenCalledWith(data, ROUTE, "capture_required_fields_v1");
+  expect(recordOutcome).toHaveBeenCalledWith(JOB_ID, 1, { outcome: "accepted" });
+  expect(submitResult).toHaveBeenCalledWith(JOB_ID, {
+    schemaVersion: 1,
+    status: "SUCCEEDED",
+    idempotencyKey: `${JOB_ID}:ocr:review:needs-input`,
+    expectedJobVersion: 3,
+    resultSchemaVersion: "capture-ocr-review-v1",
+    result: partial,
+  });
+});
+
 it("rethrows an ApplicationFailure from the extractor unchanged, not rewrapped", async () => {
   const downloadFile = vi.fn().mockResolvedValue(new Uint8Array([1]));
   const extractReceipt = vi.fn().mockRejectedValue(

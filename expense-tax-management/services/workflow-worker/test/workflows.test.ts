@@ -368,6 +368,108 @@ it("finishes OCR before recording deduplication with the returned job version", 
     // "bytes stay in the activity" path, so these never run.
     expect(calls.map(([name]) => name)).not.toContain("ocr_download_receipt");
     expect(calls.map(([name]) => name)).not.toContain("ocr_run_extraction");
+    const history = await env.client.workflow.getHandle(jobReference.workflowId).fetchHistory();
+    await expect(Worker.runReplayHistory({ workflowsPath }, history, jobReference.workflowId))
+      .resolves.toBeUndefined();
+  } finally {
+    await env.teardown();
+  }
+}, 60_000);
+
+it("submits a complete Capture result before deduplication", async () => {
+  const calls: Array<[string, unknown]> = [];
+  const workflowId = `capture-complete-${JOB_ID}`;
+  const jobReference = { schemaVersion: 1, jobId: JOB_ID, workflowType: "OcrReceiptWorkflow", workflowId };
+  const result = {
+    schemaVersion: 1,
+    outcome: "complete",
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "1.00",
+    },
+  };
+  const activities = Object.fromEntries([
+    ["mark_running", 3],
+    ["ocr_get_input", { fileId: JOB_ID, expectedSha256: null, modeKey: "ocr_mode_balanced", tenantId: JOB_ID, schemaVersion: 1, reviewPolicy: "capture_required_fields_v1" }],
+    ["ocr_verify_receipt", undefined],
+    ["ocr_resolve_route", { aiModelId: JOB_ID, providerKind: "openai", providerModelId: "gpt-5.4-mini" }],
+    ["ocr_reserve", { blocked: false, reservationId: JOB_ID }],
+    ["ocr_mark_call_started", 1],
+    ["ocr_extract_receipt", result],
+    ["ocr_record_accepted", undefined],
+    ["ocr_submit_capture_complete", 4],
+    ["ocr_record_capture_deduplication", { decision: "no_match", matchIds: [] }],
+  ].map(([name, value]) => [name, async (input: unknown) => { calls.push([name as string, input]); return value; }]));
+  const env = await TestWorkflowEnvironment.createTimeSkipping();
+  try {
+    const worker = await Worker.create({
+      connection: env.nativeConnection, namespace: env.namespace,
+      taskQueue: TASK_QUEUE, workflowsPath, activities,
+    });
+    await worker.runUntil(() => env.client.workflow.execute("OcrReceiptWorkflow", {
+      workflowId, taskQueue: TASK_QUEUE, args: [jobReference],
+    }));
+    expect(calls.map(([name]) => name)).toEqual([
+      "mark_running", "ocr_get_input", "ocr_verify_receipt", "ocr_resolve_route",
+      "ocr_reserve", "ocr_mark_call_started", "ocr_extract_receipt", "ocr_record_accepted",
+      "ocr_submit_capture_complete", "ocr_record_capture_deduplication",
+    ]);
+    expect(calls[6]?.[1]).toMatchObject({
+      reviewPolicy: "capture_required_fields_v1",
+      expectedJobVersion: 3,
+    });
+    expect(calls[8]?.[1]).toMatchObject({ result });
+    expect(calls[9]?.[1]).toMatchObject({ expectedJobVersion: 4, result });
+  } finally {
+    await env.teardown();
+  }
+}, 60_000);
+
+it("keeps Capture needs-input receipt bytes and partial fields out of workflow history", async () => {
+  const fileId = "44444444-4444-4444-8444-444444444444";
+  const partialMerchant = "partial-merchant-must-not-enter-history";
+  const submitted: unknown[] = [];
+  const appApi = {
+    async updateStatus() { return { version: 3 }; },
+    async getOcrInput() {
+      return { schemaVersion: 1, fileId, modeKey: "ocr_mode_balanced", tenantId: JOB_ID, expectedSha256: null, reviewPolicy: "capture_required_fields_v1" };
+    },
+    async downloadFile() { return new Uint8Array([9, 8, 7, 6]); },
+    async submitResult(_jobId: string, request: unknown) { submitted.push(request); return { version: 4 }; },
+  } as unknown as AppApiClient;
+  const foundry = {
+    async getEffectiveRoute() { return { aiModelId: JOB_ID, providerKind: "fake", providerModelId: "fake-ocr-v1" }; },
+    async reserve() { return { id: JOB_ID }; },
+    async markCallStarted() { return { id: JOB_ID }; },
+    async recordOutcome() { return { id: JOB_ID }; },
+  } as unknown as FoundryClient;
+  const extractReceipt = vi.fn().mockResolvedValue({
+    schemaVersion: 1,
+    outcome: "needs_input",
+    fields: { merchant: partialMerchant, total: "10.00", currency: "USD", incurredOn: null, taxAmount: "0.00" },
+    issues: ["date_missing", "tax_zero_requires_confirmation"],
+  });
+  const env = await TestWorkflowEnvironment.createTimeSkipping();
+  const workflowId = `capture-needs-input-${JOB_ID}`;
+  try {
+    const worker = await Worker.create({
+      connection: env.nativeConnection, namespace: env.namespace,
+      taskQueue: TASK_QUEUE, workflowsPath,
+      activities: createActivities({ appApi, foundry, extractReceipt }),
+    });
+    await worker.runUntil(() => env.client.workflow.execute("OcrReceiptWorkflow", {
+      workflowId, taskQueue: TASK_QUEUE,
+      args: [{ schemaVersion: 1, jobId: JOB_ID, workflowType: "OcrReceiptWorkflow", workflowId }],
+    }));
+    expect(submitted).toHaveLength(1);
+    const history = JSON.stringify(await env.client.workflow.getHandle(workflowId).fetchHistory());
+    expect(history).not.toContain(partialMerchant);
+    expect(history).not.toContain('"taxAmount"');
+    expect(history).not.toContain('"incurredOn"');
+    expect(history).not.toContain('"0":9');
   } finally {
     await env.teardown();
   }
