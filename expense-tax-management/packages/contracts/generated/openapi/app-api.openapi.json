@@ -7105,6 +7105,17 @@
                             },
                             "type": "array"
                           },
+                          "taxAmount": {
+                            "anyOf": [
+                              {
+                                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "taxYear": {
                             "maximum": 9999,
                             "minimum": 1900,
@@ -7695,6 +7706,17 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "taxYear": {
                       "maximum": 9999,
@@ -8469,6 +8491,17 @@
                       },
                       "type": "array"
                     },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -9039,6 +9072,17 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "taxYear": {
                       "maximum": 9999,
@@ -17270,6 +17314,12 @@
                       "ocr_mode_fast",
                       "ocr_mode_balanced",
                       "ocr_mode_accurate"
+                    ],
+                    "type": "string"
+                  },
+                  "reviewPolicy": {
+                    "enum": [
+                      "capture_required_fields_v1"
                     ],
                     "type": "string"
                   }
@@ -33856,6 +33906,17 @@
                             },
                             "type": "array"
                           },
+                          "taxAmount": {
+                            "anyOf": [
+                              {
+                                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "taxYear": {
                             "maximum": 9999,
                             "minimum": 1900,
@@ -34446,6 +34507,17 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "taxYear": {
                       "maximum": 9999,
@@ -35220,6 +35292,17 @@
                       },
                       "type": "array"
                     },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "taxYear": {
                       "maximum": 9999,
                       "minimum": 1900,
@@ -35790,6 +35873,17 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "taxAmount": {
+                      "anyOf": [
+                        {
+                          "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "taxYear": {
                       "maximum": 9999,
@@ -41009,6 +41103,12 @@
                       "ocr_mode_fast",
                       "ocr_mode_balanced",
                       "ocr_mode_accurate"
+                    ],
+                    "type": "string"
+                  },
+                  "reviewPolicy": {
+                    "enum": [
+                      "capture_required_fields_v1"
                     ],
                     "type": "string"
                   }
@@ -56114,6 +56214,12 @@
                         "ocr_mode_fast",
                         "ocr_mode_balanced",
                         "ocr_mode_accurate"
+                      ],
+                      "type": "string"
+                    },
+                    "reviewPolicy": {
+                      "enum": [
+                        "capture_required_fields_v1"
                       ],
                       "type": "string"
                     },
