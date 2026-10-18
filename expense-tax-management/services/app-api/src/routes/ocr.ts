@@ -111,6 +111,7 @@ export async function registerOcrRoutes(
           scope: scopeFromParams(params),
           fileId: params.fileId,
           modeKey: request.body.modeKey,
+          ...(request.body.reviewPolicy === undefined ? {} : { reviewPolicy: request.body.reviewPolicy }),
           idempotencyKey: request.headers["idempotency-key"],
           requestId: request.id,
         });

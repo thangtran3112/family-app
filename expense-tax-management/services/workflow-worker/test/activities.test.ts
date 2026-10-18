@@ -141,6 +141,132 @@ it("ocr_extract_receipt passes the downloaded bytes and route to the injected ex
   expect(extractReceipt).toHaveBeenCalledWith(data, ROUTE);
 });
 
+it("submits Capture needs-input fields inside the activity and returns only opaque workflow output", async () => {
+  const data = new Uint8Array([1, 2, 3]);
+  const downloadFile = vi.fn().mockResolvedValue(data);
+  const submitResult = vi.fn().mockResolvedValue({ version: 4 });
+  const recordOutcome = vi.fn().mockResolvedValue({ id: JOB_ID });
+  const partial = {
+    schemaVersion: 1 as const,
+    outcome: "needs_input" as const,
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "0.00",
+    },
+    issues: ["tax_zero_requires_confirmation" as const],
+  };
+  const extractReceipt = vi.fn().mockResolvedValue(partial);
+  const activities = createActivities({
+    appApi: { downloadFile, submitResult } as unknown as AppApiClient,
+    foundry: { recordOutcome } as unknown as FoundryClient,
+    extractReceipt,
+  });
+  const ocrJob = { ...jobReference, workflowType: "OcrReceiptWorkflow" as const };
+
+  await expect(activities.ocr_extract_receipt({
+    fileId: JOB_ID,
+    expectedSha256: null,
+    route: ROUTE,
+    reviewPolicy: "capture_required_fields_v1",
+    jobReference: ocrJob,
+    expectedJobVersion: 3,
+    reservationId: JOB_ID,
+  })).resolves.toEqual({ outcome: "needs_input", jobVersion: 4 });
+  expect(extractReceipt).toHaveBeenCalledWith(data, ROUTE, "capture_required_fields_v1");
+  expect(recordOutcome).not.toHaveBeenCalled();
+  expect(submitResult).toHaveBeenCalledWith(JOB_ID, {
+    schemaVersion: 1,
+    status: "SUCCEEDED",
+    idempotencyKey: `${JOB_ID}:ocr:review:needs-input`,
+    expectedJobVersion: 3,
+    resultSchemaVersion: "capture-ocr-review-v1",
+    result: partial,
+  });
+});
+
+it("retries only a transient Capture result submission with the same request", async () => {
+  const data = new Uint8Array([1, 2, 3]);
+  const downloadFile = vi.fn().mockResolvedValue(data);
+  const submitResult = vi.fn()
+    .mockRejectedValueOnce(new AppApiClientError("unavailable", 503))
+    .mockResolvedValueOnce({ version: 4 });
+  const recordOutcome = vi.fn();
+  const partial = {
+    schemaVersion: 1 as const,
+    outcome: "needs_input" as const,
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "0.00",
+    },
+    issues: ["tax_zero_requires_confirmation" as const],
+  };
+  const extractReceipt = vi.fn().mockResolvedValue(partial);
+  const activities = createActivities({
+    appApi: { downloadFile, submitResult } as unknown as AppApiClient,
+    foundry: { recordOutcome } as unknown as FoundryClient,
+    extractReceipt,
+  });
+  const input = {
+    fileId: JOB_ID,
+    expectedSha256: null,
+    route: ROUTE,
+    reviewPolicy: "capture_required_fields_v1" as const,
+    jobReference: { ...jobReference, workflowType: "OcrReceiptWorkflow" as const },
+    expectedJobVersion: 3,
+    reservationId: JOB_ID,
+  };
+
+  await expect(activities.ocr_extract_receipt(input)).resolves.toEqual({
+    outcome: "needs_input",
+    jobVersion: 4,
+  });
+  expect(downloadFile).toHaveBeenCalledTimes(1);
+  expect(extractReceipt).toHaveBeenCalledTimes(1);
+  expect(submitResult).toHaveBeenCalledTimes(2);
+  expect(submitResult.mock.calls[0]?.[1]).toBe(submitResult.mock.calls[1]?.[1]);
+  expect(recordOutcome).not.toHaveBeenCalled();
+});
+
+it("does not retry a non-transient Capture result submission", async () => {
+  const downloadFile = vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
+  const submitResult = vi.fn().mockRejectedValue(new AppApiClientError("conflict", 409));
+  const extractReceipt = vi.fn().mockResolvedValue({
+    schemaVersion: 1,
+    outcome: "needs_input",
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "0.00",
+    },
+    issues: ["tax_zero_requires_confirmation"],
+  });
+  const activities = createActivities({
+    appApi: { downloadFile, submitResult } as unknown as AppApiClient,
+    foundry: {} as FoundryClient,
+    extractReceipt,
+  });
+
+  await expect(activities.ocr_extract_receipt({
+    fileId: JOB_ID,
+    expectedSha256: null,
+    route: ROUTE,
+    reviewPolicy: "capture_required_fields_v1",
+    jobReference: { ...jobReference, workflowType: "OcrReceiptWorkflow" },
+    expectedJobVersion: 3,
+    reservationId: JOB_ID,
+  })).rejects.toMatchObject({ code: "conflict", status: 409 });
+  expect(extractReceipt).toHaveBeenCalledTimes(1);
+  expect(submitResult).toHaveBeenCalledTimes(1);
+});
+
 it("rethrows an ApplicationFailure from the extractor unchanged, not rewrapped", async () => {
   const downloadFile = vi.fn().mockResolvedValue(new Uint8Array([1]));
   const extractReceipt = vi.fn().mockRejectedValue(
