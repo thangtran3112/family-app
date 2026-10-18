@@ -168,16 +168,16 @@ os.execvp(sys.executable, [sys.executable, "/usr/local/bin/start-vibe.py", sys.e
 ' || fail "Vibe did not overwrite a stale persisted .env (old provider/keys/endpoint) while preserving unrelated settings"
   echo "ok   Vibe overwrites a stale persisted .env without wiping its unrelated settings"
   # Retain native Anthropic compatibility. Construct its actual adapter
-  # with a fake key and no network; liveness alone misses absent extras.
+  # with a fake key and no network; compare against the materialized family
+  # lock in this image, not the unpatched upstream submodule lock.
   docker run --rm --network none --entrypoint python \
-    -v "$PWD/ai-trading/packages/vibe-trading/requirements-lock.txt:/expected-base-requirements.txt:ro" \
     -e ANTHROPIC_API_KEY=sk-ant-smoke-dummy -e LANGCHAIN_PROVIDER=anthropic \
     -e LANGCHAIN_MODEL_NAME=claude-sonnet-5-5 "$(image vibe-trading)" -c '
 import importlib.metadata as metadata
 import re
 from pathlib import Path
-# Optional provider installation must not upgrade upstream hash-locked packages.
-for line in Path("/expected-base-requirements.txt").read_text().splitlines():
+# Optional provider installation must not upgrade family hash-locked packages.
+for line in Path("/app/requirements-lock.txt").read_text().splitlines():
     pin = re.match(r"^([A-Za-z0-9_.-]+)==([^ ;\\]+)", line)
     if not pin:
         continue
