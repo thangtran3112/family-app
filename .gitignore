@@ -260,6 +260,7 @@ public/swe-worker-*.js
 # Local agent planning and code graph state
 /docs/superpowers/
 .codegraph/
+/ai-trading/.playwright-mcp/
 # Keep executable policy input and active implementation documents versioned while ignoring scratch data.
 !/docs/
 !/docs/superpowers/
