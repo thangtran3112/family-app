@@ -1,6 +1,6 @@
 # 01s — Vibe long-run protection
 
-**Date:** 2026-10-15 · **Status:** design for owner review · **Lane:** Trading Hub / Vibe fork. Follows [01n](01n-vibe-research-quality.md) §4 and [01r](01r-vibe-committee-gate-design.md); does not change the Family Desk.
+**Date:** 2026-10-15 · **Status:** approved; implementation in progress · **Lane:** Trading Hub / Vibe fork. Follows [01n](01n-vibe-research-quality.md) §4 and [01r](01r-vibe-committee-gate-design.md); does not change the Family Desk.
 
 ## Intent and acceptance
 
@@ -22,6 +22,8 @@ Add a small deployment-drain control to the running Vibe process, rather than po
 ### Deploy ordering and failure
 
 Under the existing ai-trading lifecycle lock, identify the currently running Vibe container and current desired app-group state. Skip the wait when there is no running Vibe service or the group is intentionally disabled. For a running, selected Vibe, enter drain before modifying persisted choices, active secret/config files, or Vibe/other app containers. Poll counts to zero with a monotonic 60-minute ceiling, renewing the lease through any staging/pull delay until the current container is replaced. On timeout, release drain and fail this deploy with the previous release active. On any pre-switch failure or rollback, release drain on the still-running old container; if that fails, fail loudly with recovery instructions instead of claiming a clean abort. Success starts the new Vibe process undrained and preserves MiroFish `keep` and other groups' saved choices.
+
+After idle, hold the existing Caddy admission marker across replacement, health checks and the saved-tag commit on **both** legacy and drain-capable releases. A new Vibe process starts undrained, so its ingress must not admit another chat until that commit is healthy; a failed health check rolls back while the marker remains. A pre-switch failure restores active files without redeploying Vibe (and restores only a previously running MiroFish if an operator stop already touched that group). Once the tag is committed, marker cleanup failure reports **applied but gated** and never rolls back over a new process that may accept research; the marker owner is not overwritten or blindly deleted.
 
 **First rollout:** the currently deployed Vibe image lacks this control endpoint. Never treat a missing endpoint as zero active work. The same scoped phase's first replacement needs a temporary ingress barrier that rejects new chat POSTs **before** the active-attempt/private-committee preflight, leaves existing research running, and remains in force until replacement or abort. Caddy has `admin off`: activate the rule with a gateway-only Compose override mounting the staged Caddyfile under the lifecycle lock, not a hot reload or early replacement of the installed file; failure/timeout recreates the previous gateway from the unchanged installed Caddyfile. A quiet-window file poll *without* that barrier is insufficient. If the barrier cannot be enforced or the preflight is uncertain, hold the release; do not silently downgrade. Later releases use the runtime drain path. A Vibe-disabled installation needs no old-process barrier. This bootstrap exception is not permission to bypass the 60-minute policy.
 

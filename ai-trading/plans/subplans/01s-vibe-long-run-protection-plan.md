@@ -4,7 +4,7 @@
 
 **Goal:** Keep Vibe chat and automatic committee research alive through routine deploys; show honest interruption and explicit retry after an unavoidable restart.
 
-**Architecture:** The running Vibe process atomically pauses new chat admission and reports admitted chat plus private-committee activity through a loopback-only leased control endpoint. The existing deploy driver waits at most 60 minutes before replacing Vibe, or releases the lease and aborts with the old release running. Restart recovery persists redacted progress and the original prompt so the existing chat UI can show amber Interrupted and offer an explicit, confirmed re-send.
+**Architecture:** The running Vibe process atomically pauses new chat admission and reports admitted chat plus private-committee activity through a loopback-only leased control endpoint. The existing deploy driver waits at most 60 minutes before replacing Vibe, then keeps Caddy's admission marker through health and commit so the new process cannot accept research before rollback risk ends. Restart recovery persists redacted progress and the original prompt so the existing chat UI can show amber Interrupted and offer an explicit, confirmed re-send.
 
 **Tech Stack:** Python 3.12, FastAPI, file-backed SessionStore/SwarmStore, React/TypeScript/Vitest, Caddy 2, Bash/Docker Compose.
 
@@ -346,6 +346,8 @@ fi
   Use the existing fake-Docker/state scratch harness and a fake monotonic clock; never wait an actual hour in CI.
 - [ ] **Step 2: Run RED.** `ai-trading/deploy/ci/test-deploy-firestore.sh`; expect new case failures at drain ordering.
 - [ ] **Step 3: Wire runtime drain after lifecycle lock and before active mutations.** Gate only when persisted desired Vibe is on **and** the current Vibe container is running. `POST` to start, keep the returned token only in a shell variable, poll every 10 seconds against monotonic 3600-second deadline, renew its 600-second lease each iteration and immediately before `compose up`; recheck both counts plus the exact container ID at the switch. `docker exec` command arguments contain Python source and fixed endpoint only, never the API key or token. A transport/auth/JSON failure aborts, not zero. Use `trap` cleanup to release the old-process lease on any pre-switch exit and rollback. New process starts undrained. Existing image pull, disk guard, selected-service handling and health check remain the same; if pulls/staging take long, renew/check before switch rather than trusting an old idle response.
+
+  Execution ruling: retain Caddy's owner-tagged marker on routine releases too, from post-idle through health and last-good-tag commit. Otherwise a newly started Vibe process could accept a chat and then be restarted by rollback. After commit, a failed marker finalization is **applied but gated**: report failure without reverting the committed tag or deleting a foreign marker. Test the pre-switch no-redeploy branch and post-switch marker lifetime with the offline process-level cases before any release.
 
 ```bash
 start_reply="$(vibe_drain_request "$vibe_container_id" start)" || die "Vibe drain unavailable"

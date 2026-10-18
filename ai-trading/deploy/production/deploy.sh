@@ -68,6 +68,8 @@
 #                             (default /var/lib/docker; on this single-disk VPS Docker's
 #                             data and containerd's image store share it).
 set -Eeuo pipefail
+# Provider credentials and the ephemeral drain lease must never enter xtrace.
+set +x
 
 # Moved above every other definition (originally just above IMAGE_TAG
 # validation) so the packaging-fix library-source guard below -- which runs
@@ -98,10 +100,22 @@ STATE_DIR="${AI_TRADING_STATE_DIR:-/var/lib/family-app/ai-trading}"
 LOCK_PATH="$STATE_DIR/.control.lock"
 CONTROL_STATE_PATH="$STATE_DIR/control.json"
 VIBE_ADMISSION_MARKER=/run/family-app/ai-trading-control/vibe-admission-paused
+if [[ "${DEPLOY_SH_SKIP_CHOWN:-}" == 1 && -n "${AI_TRADING_VIBE_ADMISSION_MARKER:-}" ]]; then
+  # Test-only: a process-level fake deploy must never write the host's /run.
+  VIBE_ADMISSION_MARKER="$AI_TRADING_VIBE_ADMISSION_MARKER"
+fi
 BOOTSTRAP_TIMER=""
 BOOTSTRAP_OVERRIDE=""
 BOOTSTRAP_PREVIOUS_TAG=""
 LEGACY_GATE_ACTIVE=0
+BOOTSTRAP_STARTED=0
+ADMISSION_MARKER_ACTIVE=0
+VIBE_GATE_MODE=none
+VIBE_GATE_CONTAINER_ID=""
+VIBE_DRAIN_LEASE=""
+FORWARD_SWITCH_STARTED=0
+MIROFISH_WAS_RUNNING=0
+DEPLOY_COMMITTED=0
 LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
 CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
 CONTROL_SCRATCH_DIR=""
@@ -218,6 +232,7 @@ RENDER_SRC_DIR=""
 SHA_RE='^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$'
 
 [[ "${IMAGE_TAG:-}" =~ $SHA_RE ]] || die "IMAGE_TAG must be a full commit SHA"
+TARGET_IMAGE_TAG="$IMAGE_TAG"
 
 # validate_staged_file FILE: blank lines, # comments, or KEY=value with a
 # non-empty value; never a NUL or CR byte anywhere in the file.
@@ -275,8 +290,17 @@ compose() {
 # matter how the script terminates, so this never depends on which later step
 # fails or whether stage_configs ever ran at all.
 cleanup_scratch_dirs() {
+  if [[ "$VIBE_GATE_MODE" == runtime && -n "$VIBE_DRAIN_LEASE" ]]; then
+    release_vibe_drain || echo "deploy: failed to reopen Vibe chat admission; its lease expires automatically" >&2
+  fi
   if [[ "$LEGACY_GATE_ACTIVE" == 1 ]]; then
-    leave_legacy_barrier || echo "deploy: legacy Vibe gateway could not be restored; inspect the admission barrier before another release" >&2
+    if [[ "$DEPLOY_COMMITTED" == 1 ]]; then
+      finish_legacy_barrier || echo "deploy: applied Vibe gateway admission barrier needs operator inspection" >&2
+    else
+      leave_legacy_barrier || echo "deploy: legacy Vibe gateway could not be restored; inspect the admission barrier before another release" >&2
+    fi
+  elif [[ "$ADMISSION_MARKER_ACTIVE" == 1 ]]; then
+    clear_vibe_admission_marker || echo "deploy: Vibe admission marker could not be removed; inspect the gate before another release" >&2
   fi
   if [[ -n "$BOOTSTRAP_TIMER" ]]; then
     systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
@@ -483,6 +507,7 @@ apply_selected_services() {
   [[ -n "$selected_text" ]] || die "control: selected service list is empty"
   local selected=()
   mapfile -t selected <<<"$selected_text"
+  [[ "$IMAGE_TAG" != "$TARGET_IMAGE_TAG" ]] || FORWARD_SWITCH_STARTED=1
   compose up -d --no-deps --wait --wait-timeout 300 "${selected[@]}"
 }
 
@@ -688,6 +713,39 @@ legacy_marker_owned() {
   [[ "$(cat "$VIBE_ADMISSION_MARKER" 2>/dev/null)" == "$BOOTSTRAP_TIMER" ]]
 }
 
+arm_vibe_admission_marker() {
+  [[ "$ADMISSION_MARKER_ACTIVE" == 0 && ! -e "$VIBE_ADMISSION_MARKER" && ! -L "$VIBE_ADMISSION_MARKER" ]] || return 1
+  BOOTSTRAP_TIMER="ai-trading-vibe-bootstrap-expiry-$(python3 -c 'import secrets; print(secrets.token_hex(4))')" || return 1
+  BOOTSTRAP_STARTED="$(vibe_monotonic_seconds)" || return 1
+  [[ "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
+  systemd-run --quiet --unit="$BOOTSTRAP_TIMER" --on-active=90m /usr/bin/python3 -c '
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+try:
+    if path.read_text(encoding="utf-8").strip() == sys.argv[2]:
+        path.unlink()
+except FileNotFoundError:
+    pass
+' "$VIBE_ADMISSION_MARKER" "$BOOTSTRAP_TIMER" >/dev/null 2>&1 || return 1
+  install -m 0644 /dev/null "$VIBE_ADMISSION_MARKER" || return 1
+  ADMISSION_MARKER_ACTIVE=1
+  printf '%s\n' "$BOOTSTRAP_TIMER" >"$VIBE_ADMISSION_MARKER" || return 1
+  legacy_marker_owned
+}
+
+clear_vibe_admission_marker() {
+  [[ "$ADMISSION_MARKER_ACTIVE" == 1 ]] || return 0
+  if [[ -e "$VIBE_ADMISSION_MARKER" || -L "$VIBE_ADMISSION_MARKER" ]]; then
+    legacy_marker_owned || return 1
+    rm -f "$VIBE_ADMISSION_MARKER" || return 1
+  fi
+  systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  ADMISSION_MARKER_ACTIVE=0
+  BOOTSTRAP_TIMER=""
+  BOOTSTRAP_STARTED=0
+}
+
 enter_legacy_barrier() {
   local _old_vibe_id="$1" gateway_id mount_source
   [[ -n "$_old_vibe_id" && "$LEGACY_GATE_ACTIVE" == 0 ]] || return 1
@@ -706,20 +764,8 @@ services:
     volumes:
       - "$APP_CONFIG_STAGING_DIR/Caddyfile:/etc/caddy/Caddyfile:ro"
 YAML
-  BOOTSTRAP_TIMER="ai-trading-vibe-bootstrap-expiry-$(python3 -c 'import secrets; print(secrets.token_hex(4))')" || return 1
-  systemd-run --quiet --unit="$BOOTSTRAP_TIMER" --on-active=90m /usr/bin/python3 -c '
-from pathlib import Path
-import sys
-path = Path(sys.argv[1])
-try:
-    if path.read_text(encoding="utf-8").strip() == sys.argv[2]:
-        path.unlink()
-except FileNotFoundError:
-    pass
-' "$VIBE_ADMISSION_MARKER" "$BOOTSTRAP_TIMER" >/dev/null 2>&1 || return 1
-  install -m 0644 /dev/null "$VIBE_ADMISSION_MARKER" || return 1
+  arm_vibe_admission_marker || return 1
   LEGACY_GATE_ACTIVE=1
-  printf '%s\n' "$BOOTSTRAP_TIMER" >"$VIBE_ADMISSION_MARKER" || return 1
   IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose -f "$BOOTSTRAP_OVERRIDE" up -d --no-deps --wait --wait-timeout 300 gateway || return 1
   gateway_id="$(IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose -f "$BOOTSTRAP_OVERRIDE" ps -q gateway)" || return 1
   [[ -n "$gateway_id" ]] || return 1
@@ -735,10 +781,8 @@ leave_legacy_barrier() {
     legacy_marker_owned || return 1
   fi
   IMAGE_TAG="$BOOTSTRAP_PREVIOUS_TAG" compose up -d --no-deps --wait --wait-timeout 300 gateway || return 1
-  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || rm -f "$VIBE_ADMISSION_MARKER"
-  systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  clear_vibe_admission_marker || return 1
   rm -f "$BOOTSTRAP_OVERRIDE"
-  BOOTSTRAP_TIMER=""
   BOOTSTRAP_OVERRIDE=""
   LEGACY_GATE_ACTIVE=0
 }
@@ -746,10 +790,8 @@ leave_legacy_barrier() {
 finish_legacy_barrier() {
   [[ "$LEGACY_GATE_ACTIVE" == 1 ]] || return 0
   legacy_marker_owned || return 1
-  rm -f "$VIBE_ADMISSION_MARKER"
-  systemctl stop "$BOOTSTRAP_TIMER.timer" >/dev/null 2>&1 || true
+  clear_vibe_admission_marker || return 1
   rm -f "$BOOTSTRAP_OVERRIDE"
-  BOOTSTRAP_TIMER=""
   BOOTSTRAP_OVERRIDE=""
   LEGACY_GATE_ACTIVE=0
 }
@@ -762,13 +804,17 @@ legacy_active_counts() {
   local container_id="$1"
   docker exec "$container_id" python3 -c '
 import json
-import sys
+import os
 from pathlib import Path
 
 try:
-    sessions = Path(sys.argv[1])
-    private = Path(sys.argv[2])
-    if sessions.is_symlink() or not sessions.is_dir() or private.is_symlink():
+    home_override = os.environ.get("VIBE_TRADING_HOME", "").strip()
+    if home_override.startswith(("//", "\\\\")):
+        raise ValueError("Invalid Vibe runtime root")
+    root = Path(home_override).expanduser() if home_override else Path.home() / ".vibe-trading"
+    sessions = root / "sessions"
+    private = root / "swarm" / "runs" / ".committee"
+    if root.is_symlink() or sessions.is_symlink() or not sessions.is_dir() or private.is_symlink():
         raise ValueError("Invalid run roots")
     chat = committee = 0
     for path in sessions.glob("*/attempts/*/attempt.json"):
@@ -796,7 +842,7 @@ try:
     print(chat, committee)
 except Exception:
     raise SystemExit(2) from None
-' /app/agent/sessions /app/agent/.swarm/runs/.committee 2>/dev/null
+' 2>/dev/null
 }
 
 vibe_monotonic_seconds() {
@@ -830,6 +876,223 @@ wait_for_legacy_idle() {
     ((remaining > 0)) || return 1
     sleep "$((remaining < 10 ? remaining : 10))"
   done
+}
+
+vibe_drain_counts() {
+  python3 -c '
+import json
+import sys
+try:
+    payload = json.load(sys.stdin)
+    chat = payload["active_chat"]
+    private = payload["active_private_committees"]
+    if type(chat) is not int or type(private) is not int or min(chat, private) < 0:
+        raise ValueError("Invalid drain counts")
+    print(chat, private)
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1) from None
+' 2>/dev/null
+}
+
+wait_for_vibe_idle() {
+  local container_id="$1" lease="$2" started deadline now remaining reply counts
+  started="$(vibe_monotonic_seconds)" || return 1
+  [[ "$started" =~ ^[0-9]+$ ]] || return 1
+  deadline=$((started + 3600))
+  while :; do
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    ((now <= deadline)) || return 1
+    reply="$(vibe_drain_request "$container_id" status "$lease")" || return 1
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    ((now <= deadline)) || return 1
+    counts="$(vibe_drain_counts <<<"$reply")" || return 1
+    vibe_drain_request "$container_id" renew "$lease" >/dev/null || return 1
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    ((now <= deadline)) || return 1
+    [[ "$counts" == '0 0' ]] && return 0
+    now="$(vibe_monotonic_seconds)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    remaining=$((deadline - now))
+    ((remaining > 0)) || return 1
+    sleep "$((remaining < 10 ? remaining : 10))"
+  done
+}
+
+read_desired_vibe() {
+  python3 -c '
+import json
+import sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        enabled = json.load(handle)["desired"]["vibe-trading"]
+    if type(enabled) is not bool:
+        raise ValueError("Invalid Vibe preference")
+    print("true" if enabled else "false")
+except (OSError, KeyError, TypeError, ValueError):
+    raise SystemExit(1) from None
+' "$CONTROL_SNAPSHOT_PATH" 2>/dev/null
+}
+
+vibe_container_ids() {
+  docker ps -q \
+    --filter "label=com.docker.compose.project=${DEPLOY_SH_COMPOSE_PROJECT:-ai-trading}" \
+    --filter 'label=com.docker.compose.service=vibe-trading' \
+    --filter 'status=running'
+}
+
+mirofish_running_ids() {
+  docker ps -q \
+    --filter "label=com.docker.compose.project=${DEPLOY_SH_COMPOSE_PROJECT:-ai-trading}" \
+    --filter 'label=com.docker.compose.service=mirofish' \
+    --filter 'status=running'
+}
+
+# Key lookup happens inside the existing Vibe container; the lease travels on
+# stdin, not in Docker argv, a query string, CI logs, or an inherited proxy.
+vibe_drain_request() {
+  local container_id="$1" action="$2" lease="${3:-}"
+  printf '%s' "$lease" | docker exec -i "$container_id" python -c '
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+action = sys.argv[1]
+method, suffix = {
+    "probe": ("GET", ""), "start": ("POST", ""),
+    "status": ("GET", ""), "renew": ("POST", "/renew"),
+    "release": ("DELETE", ""),
+}[action]
+headers = {"Authorization": "Bearer " + os.environ["API_AUTH_KEY"]}
+lease = sys.stdin.read()
+if action == "probe":
+    headers["X-Deploy-Lease"] = "probe"
+elif lease:
+    headers["X-Deploy-Lease"] = lease
+request = urllib.request.Request(
+    "http://127.0.0.1:8899/internal/deploy/drain" + suffix,
+    headers=headers, method=method,
+)
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+try:
+    with opener.open(request, timeout=8) as response:
+        print(response.read().decode("utf-8"))
+except urllib.error.HTTPError as exc:
+    if action == "probe" and exc.code in (404, 409):
+        print(json.dumps({"http_status": exc.code}))
+    else:
+        raise SystemExit(1) from None
+except Exception:
+    raise SystemExit(1) from None
+' "$action" 2>/dev/null
+}
+
+begin_vibe_release_gate() {
+  local desired container_id probe_code probe_reply start_reply lease
+  VIBE_GATE_MODE=none
+  desired="$(read_desired_vibe)" || return 1
+  [[ "$desired" == true || "$desired" == false ]] || return 1
+  [[ "$desired" == true ]] || return 0
+  container_id="$(vibe_container_ids)" || return 1
+  [[ -n "$container_id" ]] || return 0
+  [[ "$container_id" != *$'\n'* ]] || return 1
+  VIBE_GATE_CONTAINER_ID="$container_id"
+  probe_reply="$(vibe_drain_request "$container_id" probe)" || return 1
+  probe_code="$(python3 -c '
+import json, sys
+try:
+    value = json.load(sys.stdin)["http_status"]
+    if type(value) is not int: raise ValueError("Invalid probe")
+    print(value)
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1) from None
+' <<<"$probe_reply" 2>/dev/null)" || return 1
+  case "$probe_code" in
+    404)
+      enter_legacy_barrier "$container_id" || return 1
+      VIBE_GATE_MODE=legacy
+      wait_for_legacy_idle "$container_id"
+      ;;
+    409)
+      start_reply="$(vibe_drain_request "$container_id" start)" || return 1
+      lease="$(python3 -c '
+import json, re, sys
+try:
+    value = json.load(sys.stdin)["lease"]
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", value):
+        raise ValueError("Invalid lease")
+    print(value)
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1) from None
+' <<<"$start_reply" 2>/dev/null)" || return 1
+      VIBE_DRAIN_LEASE="$lease"
+      VIBE_GATE_MODE=runtime
+      wait_for_vibe_idle "$container_id" "$lease" || return 1
+      arm_vibe_admission_marker
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+verify_vibe_gate_before_switch() {
+  local current reply counts now
+  [[ "$VIBE_GATE_MODE" == none ]] && return 0
+  current="$(vibe_container_ids)" || return 1
+  [[ -n "$current" && "$current" == "$VIBE_GATE_CONTAINER_ID" ]] || return 1
+  case "$VIBE_GATE_MODE" in
+    runtime)
+      legacy_marker_owned || return 1
+      now="$(vibe_monotonic_seconds)" || return 1
+      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
+      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
+      vibe_drain_request "$current" renew "$VIBE_DRAIN_LEASE" >/dev/null || return 1
+      reply="$(vibe_drain_request "$current" status "$VIBE_DRAIN_LEASE")" || return 1
+      counts="$(vibe_drain_counts <<<"$reply")" || return 1
+      [[ "$counts" == '0 0' ]]
+      ;;
+    legacy)
+      legacy_marker_owned || return 1
+      now="$(vibe_monotonic_seconds)" || return 1
+      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
+      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
+      counts="$(legacy_active_counts "$current")" || return 1
+      [[ "$counts" == '0 0' ]]
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+release_vibe_drain() {
+  [[ "$VIBE_GATE_MODE" == runtime && -n "$VIBE_DRAIN_LEASE" ]] || return 0
+  local current
+  current="$(vibe_container_ids)" || return 1
+  if [[ "$current" == "$VIBE_GATE_CONTAINER_ID" ]]; then
+    vibe_drain_request "$current" release "$VIBE_DRAIN_LEASE" >/dev/null || return 1
+  fi
+  VIBE_DRAIN_LEASE=""
+  VIBE_GATE_MODE=none
+}
+
+finalize_vibe_gate_after_commit() {
+  case "$VIBE_GATE_MODE" in
+    runtime)
+      release_vibe_drain || return 1
+      legacy_marker_owned || return 1
+      clear_vibe_admission_marker
+      ;;
+    legacy)
+      finish_legacy_barrier || return 1
+      VIBE_GATE_MODE=none
+      ;;
+    none)
+      [[ "$ADMISSION_MARKER_ACTIVE" == 0 ]]
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 # prune_old_images: image retention. Every release unpacks to ~17 GB (MiroFish's
@@ -878,8 +1141,17 @@ require_free_space() {
   ((free_kb >= 10#$MIN_FREE_GB * 1024 * 1024)) || die "only $((free_kb / 1024 / 1024)) GiB free on $DOCKER_DATA_DIR after pruning old ai-trading images; need $MIN_FREE_GB GiB to pull this release -- free space and re-run (the running release is untouched)"
 }
 
-deploy_tag() {
+write_images_env_tag() {
   local tag="$1" tmp
+  [[ "$tag" =~ $SHA_RE ]] || return 1
+  tmp="$(mktemp "$APP_DIR/images.env.XXXXXX")" || return 1
+  printf 'AI_TRADING_REGISTRY=%s\nAI_TRADING_IMAGE_TAG=%s\nAI_TRADING_SECRETS_DIR=%s\n' "$REGISTRY" "$tag" "$SECRETS_DIR" >"$tmp" || return 1
+  chmod 0644 "$tmp" || return 1
+  mv -f "$tmp" "$IMAGES_ENV"
+}
+
+deploy_tag() {
+  local tag="$1"
   # Self-sufficient regardless of caller context: the normal main flow
   # always calls prepare_control_scratch before deploy_tag ever runs, but
   # rollback()'s own `deploy_tag "$previous"` redeploy is also directly
@@ -898,11 +1170,13 @@ deploy_tag() {
   # deploy_tag call -- the normal one and a rollback's -- actually deploy the
   # tag it was asked to deploy.
   IMAGE_TAG="$tag"
-  tmp="$(mktemp "$APP_DIR/images.env.XXXXXX")"
-  printf 'AI_TRADING_REGISTRY=%s\nAI_TRADING_IMAGE_TAG=%s\nAI_TRADING_SECRETS_DIR=%s\n' "$REGISTRY" "$tag" "$SECRETS_DIR" >"$tmp"
-  chmod 0644 "$tmp"
-  mv -f "$tmp" "$IMAGES_ENV"
+  write_images_env_tag "$tag" || return 1
   compose pull
+  if [[ "$tag" == "$TARGET_IMAGE_TAG" ]]; then
+    # Rollback's previous tag has no live forward lease to recheck. Selection
+    # sets the switch flag only just before Compose first mutates services.
+    verify_vibe_gate_before_switch || return 1
+  fi
   # Task 5 (app-controls): explicit, catalog-driven selection -- never a
   # blanket `up` (which would silently revive an intentionally disabled
   # group) and never `--remove-orphans` (this phase defines no removed
@@ -929,6 +1203,14 @@ deploy_tag() {
   AI_TRADING_CONTROL_DIR="$CONTROL_SCRATCH_DIR/control" \
   AI_TRADING_STATE_PATH="$CONTROL_STATE_PATH" \
     "$CONTROL_SCRATCH_DIR/health-check.sh"
+}
+
+restore_previous_mirofish_only() {
+  local previous="$1" running
+  [[ "$MIROFISH_WAS_RUNNING" == 1 ]] || return 0
+  running="$(mirofish_running_ids)" || return 1
+  [[ -n "$running" ]] && return 0
+  COMPOSE_PROFILES=mirofish IMAGE_TAG="$previous" compose up -d --no-deps --wait --wait-timeout 300 mirofish
 }
 
 # restore_or_remove_secrets: used by rollback to undo a partially- or fully-
@@ -1171,6 +1453,16 @@ rollback() {
   restore_preferences_on_rollback
   if [[ -f "$STATE_FILE" ]]; then
     previous="$(cat "$STATE_FILE")"
+  fi
+  if [[ "$VIBE_GATE_MODE" != none && "$FORWARD_SWITCH_STARTED" == 0 ]]; then
+    if [[ "$previous" =~ $SHA_RE ]]; then
+      write_images_env_tag "$previous" || echo "deploy: failed to restore previous image tag file after pre-switch abort" >&2
+      restore_previous_mirofish_only "$previous" || echo "deploy: prior MiroFish could not be restored without touching Vibe" >&2
+      echo "deploy: failed before Vibe container switch; previous Vibe process was not restarted" >&2
+    else
+      echo "deploy: pre-switch failure with no trusted previous tag; app containers were not restarted" >&2
+    fi
+    exit "$status"
   fi
   if [[ -n "$previous" && "$previous" != "$IMAGE_TAG" ]]; then
     echo "deploy: failed with status $status; rolling back to $previous" >&2
@@ -1461,12 +1753,19 @@ done
 acquire_lifecycle_lock
 prepare_control_scratch
 snapshot_preferences
-map_mirofish_dispatch_to_state
-# Make room, then prove the pull fits, before Firestore, any container, or any
-# secret file is touched (a failed pull on a full disk also breaks rollback).
+prior_mirofish="$(mirofish_running_ids)" || die "could not inspect prior MiroFish container state"
+[[ "$prior_mirofish" != *$'\n'* ]] || die "more than one prior MiroFish container is running"
+[[ -z "$prior_mirofish" ]] || MIROFISH_WAS_RUNNING=1
+# Scratch-only disk/Firestore preflight precedes the admission pause, so a
+# missing profile or insufficient disk never blocks new family research.
 prune_old_images
 require_free_space
 render_profiles
+# No persisted preference, active secret/config file or app container changes
+# until protected Vibe research is idle. A failure here fires the EXIT cleanup
+# that releases the old process's lease (the rollback trap is not armed yet).
+begin_vibe_release_gate || die "Vibe research could not be drained safely; the running release remains unchanged"
+map_mirofish_dispatch_to_state
 # Opt-in only; a failed/absent MiroFish activation must not fail this
 # deploy of the other three apps, and must run before stage_secrets touches
 # any existing secret file or deploy_tag starts a single container. Driven
@@ -1502,4 +1801,12 @@ install -d -m 0755 "$APP_DIR"
 deploy_tag "$IMAGE_TAG"
 printf '%s\n' "$IMAGE_TAG" >"$STATE_FILE.tmp"
 mv -f "$STATE_FILE.tmp" "$STATE_FILE"
+DEPLOY_COMMITTED=1
+# At this point the new release is real. A marker cleanup failure must be
+# reported as applied-but-gated, never rolled back over a newly accepted run.
+trap - ERR
+if ! finalize_vibe_gate_after_commit; then
+  echo "deploy: release applied but Vibe admission marker could not be cleared; inspect the gate, do not assume rollback" >&2
+  exit 1
+fi
 echo "deploy: ai-trading is running $IMAGE_TAG"
