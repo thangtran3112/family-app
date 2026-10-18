@@ -180,9 +180,7 @@ def test_encoded_future_delete_404s_for_non_owner(client):
         headers=auth_headers(),
     )
 
-    removed = client.delete(
-        f"/api/desk/watchlists/{watchlist_id}/items/%2FES", headers=auth_headers(OTHER_EMAIL)
-    )
+    removed = client.delete(f"/api/desk/watchlists/{watchlist_id}/items/%2FES", headers=auth_headers(OTHER_EMAIL))
 
     assert removed.status_code == 404
 
@@ -212,6 +210,7 @@ def test_plain_stock_ticker_and_prefixed_future_root_remain_distinct(client, mon
     assert stock.status_code == 201
     assert future.status_code == 201
     assert calls == [("CL", "stock"), ("/CL", "future")]
-    assert {row["symbol"]: row["asset_type"] for row in client.get(
-        f"/api/desk/watchlists/{watchlist_id}/items", headers=auth_headers()
-    ).json()} == {"CL": "stock", "/CL": "future"}
+    assert {
+        row["symbol"]: row["asset_type"]
+        for row in client.get(f"/api/desk/watchlists/{watchlist_id}/items", headers=auth_headers()).json()
+    } == {"CL": "stock", "/CL": "future"}

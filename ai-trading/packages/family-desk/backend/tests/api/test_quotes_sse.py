@@ -77,10 +77,7 @@ def test_quote_events_caps_store_polling_at_sixty_seconds(db_session):
 
     async def run():
         return [
-            event
-            async for event in quote_events(
-                "AAPL", _factory(db_session), _disconnect_after(5), sleep=fake_sleep
-            )
+            event async for event in quote_events("AAPL", _factory(db_session), _disconnect_after(5), sleep=fake_sleep)
         ]
 
     assert asyncio.run(run()) == []
@@ -94,10 +91,7 @@ def test_quote_events_stops_as_soon_as_the_client_disconnects(db_session):
 
     async def run():
         return [
-            event
-            async for event in quote_events(
-                "AAPL", _factory(db_session), already_disconnected, sleep=_no_sleep
-            )
+            event async for event in quote_events("AAPL", _factory(db_session), already_disconnected, sleep=_no_sleep)
         ]
 
     assert asyncio.run(run()) == []
@@ -112,22 +106,14 @@ def test_quote_events_sends_one_changed_stored_quote_and_skips_unknown_symbols(d
 
     async def run():
         events = [
-            event
-            async for event in quote_events(
-                "AAPL", _factory(db_session), _disconnect_after(3), sleep=fake_sleep
-            )
+            event async for event in quote_events("AAPL", _factory(db_session), _disconnect_after(3), sleep=fake_sleep)
         ]
         unknown = [
             event
-            async for event in quote_events(
-                "UNKNOWN", _factory(db_session), _disconnect_after(1), sleep=fake_sleep
-            )
+            async for event in quote_events("UNKNOWN", _factory(db_session), _disconnect_after(1), sleep=fake_sleep)
         ]
         future = [
-            event
-            async for event in quote_events(
-                "/ES", _factory(db_session), _disconnect_after(1), sleep=fake_sleep
-            )
+            event async for event in quote_events("/ES", _factory(db_session), _disconnect_after(1), sleep=fake_sleep)
         ]
         return events, unknown, future
 

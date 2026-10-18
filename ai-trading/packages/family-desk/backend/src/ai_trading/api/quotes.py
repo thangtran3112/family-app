@@ -75,6 +75,4 @@ async def stream_quotes(
 ) -> EventSourceResponse:
     if not _SYMBOL.fullmatch(symbol):
         raise HTTPException(status_code=422, detail="invalid symbol")
-    return EventSourceResponse(
-        quote_events(symbol, request.app.state.session_factory, request.is_disconnected)
-    )
+    return EventSourceResponse(quote_events(symbol, request.app.state.session_factory, request.is_disconnected))

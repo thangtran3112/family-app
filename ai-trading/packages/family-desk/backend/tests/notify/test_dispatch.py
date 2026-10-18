@@ -184,10 +184,13 @@ def test_malformed_legacy_channel_preferences_fail_closed_for_external_only(db_s
 
 @pytest.mark.parametrize("severity", ["risk", "system"])
 def test_urgent_alerts_bypass_malformed_legacy_quiet_hours(db_session, severity):
-    user = _make_user(db_session, settings={
-        "channels": ["telegram"],
-        "quiet_hours": {"start": "25:00", "end": "07:00"},
-    })
+    user = _make_user(
+        db_session,
+        settings={
+            "channels": ["telegram"],
+            "quiet_hours": {"start": "25:00", "end": "07:00"},
+        },
+    )
     alert = _make_alert(db_session, user, severity=severity)
     delivery = _make_delivery(db_session, alert, channel="telegram")
     channel = _FakeChannel()
@@ -202,10 +205,13 @@ def test_urgent_alerts_bypass_malformed_legacy_quiet_hours(db_session, severity)
 
 @pytest.mark.parametrize("severity", ["risk", "system"])
 def test_urgent_alerts_still_respect_explicit_channel_opt_out(db_session, severity):
-    user = _make_user(db_session, settings={
-        "channels": [],
-        "quiet_hours": {"start": "25:00", "end": "07:00"},
-    })
+    user = _make_user(
+        db_session,
+        settings={
+            "channels": [],
+            "quiet_hours": {"start": "25:00", "end": "07:00"},
+        },
+    )
     alert = _make_alert(db_session, user, severity=severity)
     inbox = _make_delivery(db_session, alert, channel="inbox")
     telegram = _make_delivery(db_session, alert, channel="telegram")
@@ -224,9 +230,12 @@ def test_urgent_alerts_still_respect_explicit_channel_opt_out(db_session, severi
 
 
 def test_unicode_legacy_quiet_hours_do_not_block_another_users_delivery(db_session):
-    malformed_user = _make_user(db_session, settings={
-        "quiet_hours": {"start": "0\u0661:0\u0660", "end": "07:00"},
-    })
+    malformed_user = _make_user(
+        db_session,
+        settings={
+            "quiet_hours": {"start": "0\u0661:0\u0660", "end": "07:00"},
+        },
+    )
     malformed_alert = _make_alert(db_session, malformed_user)
     inbox = _make_delivery(db_session, malformed_alert, channel="inbox")
     deferred = _make_delivery(db_session, malformed_alert, channel="telegram")

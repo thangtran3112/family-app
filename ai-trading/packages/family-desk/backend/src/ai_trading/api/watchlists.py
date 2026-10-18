@@ -55,9 +55,7 @@ class WatchlistItemReadOut(BaseModel):
     backfill: Literal["ready", "pending"]
 
 
-def _owned_watchlist(
-    session: Session, watchlist_id: int, user: AuthedUser, *, lock: bool = False
-) -> Watchlist:
+def _owned_watchlist(session: Session, watchlist_id: int, user: AuthedUser, *, lock: bool = False) -> Watchlist:
     query = select(Watchlist).where(Watchlist.id == watchlist_id)
     if lock:
         query = query.with_for_update()
@@ -83,11 +81,13 @@ def list_watchlist_items(
     session: Session = Depends(get_session),
 ) -> list[WatchlistItemReadOut]:
     _owned_watchlist(session, watchlist_id, user)
-    items = session.execute(
-        select(WatchlistItem)
-        .where(WatchlistItem.watchlist_id == watchlist_id)
-        .order_by(WatchlistItem.symbol)
-    ).scalars().all()
+    items = (
+        session.execute(
+            select(WatchlistItem).where(WatchlistItem.watchlist_id == watchlist_id).order_by(WatchlistItem.symbol)
+        )
+        .scalars()
+        .all()
+    )
     symbols = [item.symbol for item in items]
     available = (
         set(session.execute(select(Bar1d.symbol).where(Bar1d.symbol.in_(symbols)).distinct()).scalars())
