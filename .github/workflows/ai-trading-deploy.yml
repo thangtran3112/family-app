@@ -98,6 +98,8 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
+      - name: Verify Vibe family overlay before any image build
+        run: bash ai-trading/deploy/ci/test-vibe-overlay.sh
       # F1 fix round 1: fail closed BEFORE any image is built or pushed in
       # this job -- including the smoke build below, which never ships but
       # runs in the same job as the real push. A nonempty fake pk_test_ or a

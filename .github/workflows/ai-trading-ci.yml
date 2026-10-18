@@ -215,6 +215,8 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
+      - name: Verify Vibe family overlay
+        run: bash ai-trading/deploy/ci/test-vibe-overlay.sh
       - uses: docker/setup-buildx-action@v3
       - name: Build images
         uses: docker/bake-action@v7

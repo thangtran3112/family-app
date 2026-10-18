@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ShellCheck 0.10 cannot see test shims exported to child shells or called
 # through sourced deploy functions; those bodies are reachable at runtime.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 # Offline test for production/deploy.sh's Firestore-render + atomic-staging
 # contract (A9a1): render_profiles() + stage_secrets() + rollback, with a
 # fake family_config.py standing in for the merged shared CLI
@@ -1233,7 +1233,8 @@ status27=0
 
   # Fake docker: deploy.sh/health-check.sh only ever shell out to `docker
   # compose ...` plus mirofish_container_ids' real-evidence `docker ps
-  # -aq --filter`; no real Docker daemon is contacted anywhere in this
+  # -aq --filter`; the Vibe preflight's different service label reports no
+  # Vibe container. No real Docker daemon is contacted anywhere in this
   # case. Logs every compose subcommand (pull/up/rm) so this case can
   # assert the best-effort stop_remove_mirofish_container call actually
   # ran; the ps query always reports an owned container so that call
@@ -1246,7 +1247,7 @@ status27=0
     case "${1:-}" in
       compose) return 0 ;;
       ps)
-        echo fake-mirofish-container-id
+        [[ "$*" == *'label=com.docker.compose.service=mirofish'* ]] && echo fake-mirofish-container-id
         return 0
         ;;
       # prune_old_images must never reach a real daemon (or its images).
@@ -1421,7 +1422,8 @@ status30=0
   export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
 
   # Fake docker: every call is logged; mirofish_container_ids' real-evidence
-  # `ps -aq --filter` query always reports an owned container, and
+  # `ps -aq --filter` query reports an owned MiroFish container only; the
+  # separate Vibe service-label query must report no Vibe container. The
   # 'rm -s -f mirofish' (the stop/remove call ensure_mirofish_stopped makes
   # through compose(), since this scratch app dir has an active
   # docker-compose.yml) always fails, simulating a genuine Docker/daemon
@@ -1440,7 +1442,7 @@ status30=0
         esac
         ;;
       ps)
-        echo fake-mirofish-container-id
+        [[ "$*" == *'label=com.docker.compose.service=mirofish'* ]] && echo fake-mirofish-container-id
         return 0
         ;;
       # prune_old_images must never reach a real daemon (or its images).
@@ -2353,6 +2355,859 @@ EOF
   docker rm -f "${proj53}-mirofish-1" >/dev/null 2>&1 || true
   docker network rm "${proj53}_default" >/dev/null 2>&1 || true
 fi
+
+echo "=== Case 54 (SP5, RED): a legacy gateway barrier is reversible without changing the installed Caddyfile or any app container ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s54="$(new_scratch case54)"
+printf 'old Caddyfile fixture\n' >"$s54/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s54/app/last-good-tag"
+cat >"$s54/app/docker-compose.yml" <<EOF
+services:
+  gateway:
+    image: caddy:2-alpine
+    volumes:
+      - "$s54/app/Caddyfile:/etc/caddy/Caddyfile:ro"
+EOF
+mkdir -p "$s54/run"
+(
+  APP_DIR="$s54/app"
+  AI_TRADING_SECRETS_DIR="$s54/secrets"
+  APP_CONFIG_STAGING_DIR="$s54/config-staging"
+  AI_TRADING_STATE_DIR="$s54/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s54/run/vibe-admission-paused"
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then printf 'old-gateway-id\n'; return; fi
+    printf '%s | tag=%s\n' "$*" "$IMAGE_TAG" >>"$s54/compose.log"
+  }
+  systemd-run() { printf '%s\n' "$*" >>"$s54/timer.log"; }
+  systemctl() { printf '%s\n' "$*" >>"$s54/timer.log"; }
+  docker() {
+    if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; return; fi
+    printf '%s\n' "$*" >>"$s54/docker.log"
+  }
+
+  enter_legacy_barrier old-vibe-container || exit 1
+  [[ -f "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  grep -qF "$APP_CONFIG_STAGING_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" "$BOOTSTRAP_OVERRIDE" || exit 1
+  env docker compose -f "$APP_DIR/docker-compose.yml" -f "$BOOTSTRAP_OVERRIDE" config --format json >"$s54/merged.json" || exit 1
+  python3 - "$s54/merged.json" "$APP_CONFIG_STAGING_DIR/Caddyfile" <<'PY' || exit 1
+import json, os, sys
+volumes = json.load(open(sys.argv[1]))["services"]["gateway"]["volumes"]
+mounted = [os.path.realpath(volume["source"]) for volume in volumes if volume["target"] == "/etc/caddy/Caddyfile"]
+assert mounted == [os.path.realpath(sys.argv[2])], mounted
+PY
+  (( $(wc -l <"$s54/compose.log") == 1 )) || exit 1
+  grep -q 'gateway | tag=' "$s54/compose.log" || exit 1
+  grep -q 'tag=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$s54/compose.log" || exit 1
+  leave_legacy_barrier || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  (( $(wc -l <"$s54/compose.log") == 2 )) || exit 1
+  [[ -f "$s54/timer.log" ]] || exit 1
+) || fail "case54: legacy marker/override must activate and roll back gateway only"
+
+echo "=== Case 55 (SP5, RED): old Vibe file preflight counts chat and private runs; corrupt state fails closed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s55="$(new_scratch case55)"
+# Old Vibe gets these paths from VIBE_TRADING_HOME (or its user home), not
+# from the unrelated /app/agent/sessions and /app/agent/.swarm/runs mounts.
+mkdir -p "$s55/runtime/sessions/s/attempts/a" "$s55/runtime/swarm/runs/.committee/r"
+printf '{"status":"running"}\n' >"$s55/runtime/sessions/s/attempts/a/attempt.json"
+printf '{"status":"pending"}\n' >"$s55/runtime/swarm/runs/.committee/r/run.json"
+(
+  APP_DIR="$s55/app"
+  AI_TRADING_SECRETS_DIR="$s55/secrets"
+  APP_CONFIG_STAGING_DIR="$s55/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  docker() {
+    [[ "$1" == exec ]] || return 1
+    local previous='' script=''
+    shift
+    while (($#)); do
+      if [[ "$previous" == -c ]]; then script="$1"; break; fi
+      previous="$1"
+      shift
+    done
+    [[ -n "$script" ]] || return 1
+    VIBE_TRADING_HOME="$s55/runtime" python3 -c "$script"
+  }
+  counts55="$(legacy_active_counts old-vibe-container)" || exit 1
+  [[ "$counts55" == '1 1' ]] || exit 1
+  printf '{\n' >"$s55/runtime/swarm/runs/.committee/r/run.json"
+  if legacy_active_counts old-vibe-container >/dev/null 2>&1; then
+    exit 1
+  fi
+) || fail "case55: malformed old-image state must not be interpreted as idle"
+
+echo "=== Case 56 (SP5, RED): legacy activity past 60 minutes aborts without touching the installed release ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s56="$(new_scratch case56)"
+printf 'old Caddyfile fixture\n' >"$s56/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s56/app/last-good-tag"
+cp "$s56/config-staging/docker-compose.yml" "$s56/app/docker-compose.yml"
+mkdir -p "$s56/run"
+(
+  APP_DIR="$s56/app"
+  AI_TRADING_SECRETS_DIR="$s56/secrets"
+  APP_CONFIG_STAGING_DIR="$s56/config-staging"
+  AI_TRADING_STATE_DIR="$s56/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s56/run/vibe-admission-paused"
+  fake_now=100
+  vibe_monotonic_seconds() { echo "$fake_now"; }
+  sleep() { fake_now=$((fake_now + 900)); }
+  legacy_active_counts() { echo '1 0'; }
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then printf 'old-gateway-id\n'; return; fi
+    printf '%s | tag=%s\n' "$*" "$IMAGE_TAG" >>"$s56/compose.log"
+  }
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  enter_legacy_barrier old-vibe-container || exit 1
+  if wait_for_legacy_idle old-vibe-container; then
+    exit 1
+  fi
+  leave_legacy_barrier || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+  (( $(wc -l <"$s56/compose.log") == 2 )) || exit 1
+) || fail "case56: timed-out legacy gate must restore the prior gateway without replacing Vibe"
+
+echo "=== Case 57 (SP5, RED): an old cleanup cannot delete a later attempt's admission marker ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s57="$(new_scratch case57)"
+printf 'old Caddyfile fixture\n' >"$s57/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s57/app/last-good-tag"
+cp "$s57/config-staging/docker-compose.yml" "$s57/app/docker-compose.yml"
+mkdir -p "$s57/run"
+(
+  APP_DIR="$s57/app"
+  AI_TRADING_SECRETS_DIR="$s57/secrets"
+  APP_CONFIG_STAGING_DIR="$s57/config-staging"
+  AI_TRADING_STATE_DIR="$s57/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s57/run/vibe-admission-paused"
+  compose() { if [[ "$*" == *'ps -q gateway'* ]]; then echo old-gateway-id; fi; }
+  timer_args=()
+  systemd-run() { timer_args=("$@"); }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  enter_legacy_barrier old-vibe-container || exit 1
+  printf 'later-attempt\n' >"$VIBE_ADMISSION_MARKER"
+  [[ "${timer_args[4]}" == -c ]] || exit 1
+  python3 -c "${timer_args[5]}" "${timer_args[6]}" "${timer_args[7]}" || exit 1
+  [[ "$(cat "$VIBE_ADMISSION_MARKER")" == 'later-attempt' ]] || exit 1
+  if leave_legacy_barrier; then exit 1; fi
+  [[ "$(cat "$VIBE_ADMISSION_MARKER")" == 'later-attempt' ]] || exit 1
+) || fail "case57: cleanup must refuse to remove someone else's newer marker"
+
+echo "=== Case 58 (SP5, RED): expiry timer failure aborts before a marker or gateway restart ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s58="$(new_scratch case58)"
+printf 'old Caddyfile fixture\n' >"$s58/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s58/app/last-good-tag"
+cp "$s58/config-staging/docker-compose.yml" "$s58/app/docker-compose.yml"
+mkdir -p "$s58/run"
+(
+  APP_DIR="$s58/app"
+  AI_TRADING_SECRETS_DIR="$s58/secrets"
+  APP_CONFIG_STAGING_DIR="$s58/config-staging"
+  AI_TRADING_STATE_DIR="$s58/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s58/run/vibe-admission-paused"
+  systemd-run() { return 1; }
+  compose() { printf '%s\n' "$*" >>"$s58/compose.log"; }
+  if enter_legacy_barrier old-vibe-container; then exit 1; fi
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  [[ ! -e "$s58/compose.log" ]] || exit 1
+  [[ "$(cat "$APP_DIR/Caddyfile")" == 'old Caddyfile fixture' ]] || exit 1
+) || fail "case58: unarmed expiry must never leave an admission marker or change the gateway"
+
+echo "=== Case 59 (SP5): unexpected pre-switch exit restores gateway, marker and lifecycle lock ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s59="$(new_scratch case59)"
+printf 'old Caddyfile fixture\n' >"$s59/app/Caddyfile"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s59/app/last-good-tag"
+cp "$s59/config-staging/docker-compose.yml" "$s59/app/docker-compose.yml"
+mkdir -p "$s59/run"
+if (
+  APP_DIR="$s59/app"
+  AI_TRADING_SECRETS_DIR="$s59/secrets"
+  APP_CONFIG_STAGING_DIR="$s59/config-staging"
+  AI_TRADING_STATE_DIR="$s59/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s59/run/vibe-admission-paused"
+  compose() {
+    if [[ "$*" == *'ps -q gateway'* ]]; then echo old-gateway-id; return; fi
+    printf '%s\n' "$*" >>"$s59/compose.log"
+  }
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  docker() { if [[ "$1" == inspect ]]; then printf '%s\n' "$APP_CONFIG_STAGING_DIR/Caddyfile"; fi; }
+  acquire_lifecycle_lock || exit 1
+  enter_legacy_barrier old-vibe-container || exit 1
+  exit 17
+); then
+  fail "case59: deliberately aborted child exited successfully"
+else
+  status59=$?
+  [[ "$status59" == 17 ]] || fail "case59: expected explicit exit 17, got $status59"
+fi
+[[ ! -e "$s59/run/vibe-admission-paused" ]] || fail "case59: EXIT cleanup left marker"
+(( $(wc -l <"$s59/compose.log") == 2 )) || fail "case59: EXIT cleanup did not restore gateway"
+[[ "$(cat "$s59/app/Caddyfile")" == 'old Caddyfile fixture' ]] || fail "case59: EXIT cleanup changed installed Caddyfile"
+python3 - "$s59/control-state/.control.lock" <<'PY' || fail "case59: lifecycle lock remained held"
+import fcntl, sys
+with open(sys.argv[1], "r+") as handle:
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+PY
+
+echo "=== Case 60 (SP5, RED): routine drain waits for chat and detached committee, renewing its lease ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s60="$(new_scratch case60)"
+printf '0\n' >"$s60/checks"
+printf '0\n' >"$s60/renews"
+(
+  APP_DIR="$s60/app"
+  AI_TRADING_SECRETS_DIR="$s60/secrets"
+  APP_CONFIG_STAGING_DIR="$s60/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  fake_now=100
+  vibe_monotonic_seconds() { echo "$fake_now"; }
+  sleep() { fake_now=$((fake_now + 10)); }
+  vibe_drain_request() {
+    case "$2" in
+      status)
+        local checks
+        checks="$(cat "$s60/checks")"
+        echo "$((checks + 1))" >"$s60/checks"
+        case "$checks" in
+          0) printf '{"active_chat":1,"active_private_committees":0}\n' ;;
+          1) printf '{"active_chat":0,"active_private_committees":1}\n' ;;
+          *) printf '{"active_chat":0,"active_private_committees":0}\n' ;;
+        esac
+        ;;
+      renew)
+        local renews
+        renews="$(cat "$s60/renews")"
+        echo "$((renews + 1))" >"$s60/renews"
+        printf '{"status":"renewed"}\n'
+        ;;
+      *) return 1 ;;
+    esac
+  }
+  wait_for_vibe_idle old-vibe-container fake-lease || exit 1
+  [[ "$(cat "$s60/checks")" == 3 ]] || exit 1
+  [[ "$(cat "$s60/renews")" == 3 ]] || exit 1
+) || fail "case60: a detached committee cannot be mistaken for idle and the lease must renew"
+
+echo "=== Case 61 (SP5, RED): private research at 60 minutes times out before active state changes ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s61="$(new_scratch case61)"
+printf 'old Caddyfile fixture\n' >"$s61/app/Caddyfile"
+printf 'OLD_VALUE=old-vibe\n' >"$s61/secrets/vibe-trading.env"
+chmod 0600 "$s61/secrets/vibe-trading.env"
+snapshot61="$(shasum -a 256 "$s61/app/Caddyfile" "$s61/secrets/vibe-trading.env" "$s61/control-state/control.json")"
+(
+  APP_DIR="$s61/app"
+  AI_TRADING_SECRETS_DIR="$s61/secrets"
+  APP_CONFIG_STAGING_DIR="$s61/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  fake_now=100
+  vibe_monotonic_seconds() { echo "$fake_now"; }
+  sleep() { fake_now=$((fake_now + 900)); }
+  vibe_drain_request() {
+    case "$2" in
+      status) printf '{"active_chat":0,"active_private_committees":1}\n' ;;
+      renew) printf '{"status":"renewed"}\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  declare -F wait_for_vibe_idle >/dev/null || exit 1
+  if wait_for_vibe_idle old-vibe-container fake-lease; then exit 1; fi
+) || fail "case61: active private committee must time out at the bounded deadline"
+[[ "$(shasum -a 256 "$s61/app/Caddyfile" "$s61/secrets/vibe-trading.env" "$s61/control-state/control.json")" == "$snapshot61" ]] || fail "case61: timeout changed installed state"
+[[ ! -d "$s61/secrets/.previous" ]] || fail "case61: timeout staged live secret files"
+
+echo "=== Case 62 (SP5, RED): a slow final status response cannot turn an expired 60-minute wait into success ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s62="$(new_scratch case62)"
+printf '100\n' >"$s62/clock"
+(
+  APP_DIR="$s62/app"
+  AI_TRADING_SECRETS_DIR="$s62/secrets"
+  APP_CONFIG_STAGING_DIR="$s62/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  vibe_monotonic_seconds() { cat "$s62/clock"; }
+  vibe_drain_request() {
+    case "$2" in
+      status)
+        printf '3701\n' >"$s62/clock"
+        printf '{"active_chat":0,"active_private_committees":0}\n'
+        ;;
+      renew) printf '{"status":"renewed"}\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  declare -F wait_for_vibe_idle >/dev/null || exit 1
+  if wait_for_vibe_idle old-vibe-container fake-lease; then exit 1; fi
+) || fail "case62: status after the deadline must not authorize a container replacement"
+
+echo "=== Case 63 (SP5, RED): container-local drain client keeps the lease and API key out of Docker arguments ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s63="$(new_scratch case63)"
+(
+  APP_DIR="$s63/app"
+  AI_TRADING_SECRETS_DIR="$s63/secrets"
+  APP_CONFIG_STAGING_DIR="$s63/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  docker() {
+    printf '%s\n' "$*" >>"$s63/docker-args.log"
+    [[ "$1" == exec && "$2" == -i && "$3" == old-vibe-container ]] || return 1
+    local action="${*: -1}" stdin_lease
+    stdin_lease="$(cat)"
+    printf '%s:%s\n' "$action" "$stdin_lease" >>"$s63/stdin.log"
+    case "$action" in
+      probe) printf '{"http_status":409}\n' ;;
+      start) printf '{"lease":"fake-private-lease-abcdef1234567890","active_chat":0,"active_private_committees":0}\n' ;;
+      status) printf '{"active_chat":0,"active_private_committees":0}\n' ;;
+      renew) printf '{"status":"renewed"}\n' ;;
+      release) printf '{"status":"released"}\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  declare -F vibe_drain_request >/dev/null || exit 1
+  probe63="$(vibe_drain_request old-vibe-container probe)" || { echo 'case63: probe request failed' >&2; exit 1; }
+  [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["http_status"])' <<<"$probe63")" == 409 ]] || { echo 'case63: probe status mismatch' >&2; exit 1; }
+  start63="$(vibe_drain_request old-vibe-container start)" || { echo 'case63: start request failed' >&2; exit 1; }
+  [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lease"])' <<<"$start63")" == fake-private-lease-abcdef1234567890 ]] || { echo 'case63: lease response mismatch' >&2; exit 1; }
+  vibe_drain_request old-vibe-container status fake-private-lease-abcdef1234567890 >/dev/null || { echo 'case63: status request failed' >&2; exit 1; }
+  vibe_drain_request old-vibe-container renew fake-private-lease-abcdef1234567890 >/dev/null || { echo 'case63: renew request failed' >&2; exit 1; }
+  vibe_drain_request old-vibe-container release fake-private-lease-abcdef1234567890 >/dev/null || { echo 'case63: release request failed' >&2; exit 1; }
+  grep -q '^status:fake-private-lease-abcdef1234567890$' "$s63/stdin.log" || { echo 'case63: lease was not received on stdin' >&2; exit 1; }
+  if grep -qF 'fake-private-lease-abcdef1234567890' "$s63/docker-args.log"; then
+    echo 'case63: lease entered Docker arguments' >&2
+    exit 1
+  fi
+  if grep -qF 'fake-api-key' "$s63/docker-args.log"; then
+    echo 'case63: API key entered Docker arguments' >&2
+    exit 1
+  fi
+  true
+) || fail "case63: drain client must use the existing key inside Vibe and pass the lease by stdin only"
+
+echo "=== Case 64 (SP5, RED): saved off choices skip drain, running new Vibe probes and guards the same container ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s64="$(new_scratch case64)"
+mkdir -p "$s64/run"
+(
+  APP_DIR="$s64/app"
+  AI_TRADING_SECRETS_DIR="$s64/secrets"
+  APP_CONFIG_STAGING_DIR="$s64/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s64/run/vibe-admission-paused"
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  FAKE_DESIRED=false
+  FAKE_VIBE_ID=old-vibe-container
+  read_desired_vibe() { echo "$FAKE_DESIRED"; }
+  vibe_container_ids() { [[ -z "$FAKE_VIBE_ID" ]] || echo "$FAKE_VIBE_ID"; }
+  vibe_drain_request() {
+    printf '%s\n' "$2" >>"$s64/actions.log"
+    case "$2" in
+      probe) printf '{"http_status":409}\n' ;;
+      start) printf '{"lease":"fake-private-lease-abcdef1234567890"}\n' ;;
+      status) if [[ "${FAKE_STATUS_INVALID:-}" == 1 ]]; then printf 'not-json\n'; else printf '{"active_chat":0,"active_private_committees":0}\n'; fi ;;
+      renew) printf '{"status":"renewed"}\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  declare -F begin_vibe_release_gate >/dev/null || exit 1
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == none && ! -e "$s64/actions.log" ]] || exit 1
+  FAKE_DESIRED=true
+  FAKE_VIBE_ID=''
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == none && ! -e "$s64/actions.log" ]] || exit 1
+  FAKE_VIBE_ID=old-vibe-container
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == runtime && "$VIBE_GATE_CONTAINER_ID" == old-vibe-container ]] || exit 1
+  [[ "$VIBE_DRAIN_LEASE" == fake-private-lease-abcdef1234567890 ]] || exit 1
+  verify_vibe_gate_before_switch || exit 1
+  FAKE_VIBE_ID=replaced-vibe-container
+  if verify_vibe_gate_before_switch; then exit 1; fi
+  FAKE_VIBE_ID=old-vibe-container
+  FAKE_STATUS_INVALID=1
+  if verify_vibe_gate_before_switch; then exit 1; fi
+  FAKE_STATUS_INVALID=0
+  # Read by verify_vibe_gate_before_switch() in the sourced library.
+  # shellcheck disable=SC2034
+  BOOTSTRAP_STARTED=100
+  vibe_monotonic_seconds() { echo 4100; }
+  if verify_vibe_gate_before_switch; then exit 1; fi
+  clear_vibe_admission_marker || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" ]] || exit 1
+) || fail "case64: only selected running Vibe drains, and a stale container/status never authorizes switch"
+
+echo "=== Case 65 (SP5, RED): only an authenticated 404 selects legacy; auth, transport and malformed probe fail closed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s65="$(new_scratch case65)"
+(
+  APP_DIR="$s65/app"
+  AI_TRADING_SECRETS_DIR="$s65/secrets"
+  APP_CONFIG_STAGING_DIR="$s65/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  read_desired_vibe() { echo true; }
+  vibe_container_ids() { echo old-vibe-container; }
+  enter_legacy_barrier() { echo called >>"$s65/legacy.log"; return 0; }
+  wait_for_legacy_idle() { return 0; }
+  vibe_drain_request() { [[ "${FAKE_PROBE_ERROR:-}" != 1 ]] || return 1; printf '%s\n' "$FAKE_PROBE_REPLY"; }
+  declare -F begin_vibe_release_gate >/dev/null || exit 1
+  for FAKE_PROBE_REPLY in '{"http_status":401}' '{"http_status":403}' '{"http_status":503}' '{"invalid":true}' ; do
+    if begin_vibe_release_gate; then exit 1; fi
+    [[ ! -e "$s65/legacy.log" ]] || exit 1
+  done
+  FAKE_PROBE_ERROR=1
+  if begin_vibe_release_gate; then exit 1; fi
+  [[ ! -e "$s65/legacy.log" ]] || exit 1
+  FAKE_PROBE_ERROR=0
+  FAKE_PROBE_REPLY='{"http_status":404}'
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == legacy ]] || exit 1
+  [[ "$(cat "$s65/legacy.log")" == called ]] || exit 1
+) || fail "case65: 401/403/503/malformed/transport failures must never be treated as a legacy image"
+
+echo "=== Case 66 (SP5, RED): process-level drain failure aborts before preferences, secrets or containers change ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s66="$(new_scratch case66)"
+mkdir -p "$s66/run"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s66/ci-staging/cloudflared.env"
+printf 'old Caddyfile fixture\n' >"$s66/app/Caddyfile"
+cp "$s66/config-staging/docker-compose.yml" "$s66/app/docker-compose.yml"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s66/app/last-good-tag"
+printf 'OLD_VALUE=old-vibe\n' >"$s66/secrets/vibe-trading.env"
+chmod 0600 "$s66/secrets/vibe-trading.env"
+snapshot66="$(shasum -a 256 "$s66/control-state/control.json" "$s66/secrets/vibe-trading.env" "$s66/app/Caddyfile" "$s66/app/last-good-tag")"
+status66=0
+(
+  APP_DIR="$s66/app"
+  AI_TRADING_SECRETS_DIR="$s66/secrets"
+  ENV_STAGING_DIR="$s66/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s66/config-staging"
+  AI_TRADING_STATE_DIR="$s66/control-state"
+  AI_TRADING_UNIT_DIR="$s66/unit-dir"
+  AI_TRADING_RUNTIME_ENV_DIR="$s66/runtime"
+  AI_TRADING_DOCKER_DATA_DIR="$s66/app"
+  AI_TRADING_MIN_FREE_GB=0
+  FAMILY_CONFIG_CREDENTIALS="$s66/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  AI_TRADING_VIBE_ADMISSION_MARKER="$s66/run/vibe-admission-paused"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  MIROFISH_ACTIVATE=1
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_DOCKER_DATA_DIR AI_TRADING_MIN_FREE_GB FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN AI_TRADING_VIBE_ADMISSION_MARKER IMAGE_TAG MIROFISH_ACTIVATE
+  # shellcheck disable=SC2329
+  docker() {
+    printf 'fake docker %s\n' "$*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      ps)
+        [[ "$*" == *'label=com.docker.compose.service=vibe-trading'* ]] && echo old-vibe-container
+        return 0
+        ;;
+      images | rmi | compose) return 0 ;;
+      exec)
+        printf '%s\n' "${*: -1}" >>"$APP_DIR/drain-actions.log"
+        [[ "${*: -1}" == probe ]] && { printf '{"http_status":409}\n'; return 0; }
+        [[ "${*: -1}" == start ]] && { printf '{"lease":"fake-private-lease-abcdef1234567890"}\n'; return 0; }
+        [[ "${*: -1}" == status ]] && { printf 'not-json\n'; return 0; }
+        [[ "${*: -1}" == release ]] && { printf '{"status":"released"}\n'; return 0; }
+        return 1
+        ;;
+    esac
+    return 1
+  }
+  export -f docker
+  # Any mistaken legacy classification fails before its marker; never run
+  # real systemd or write to /run from this process-level offline case.
+  systemd-run() { return 1; }
+  export -f systemd-run
+  install_fake_systemctl "$s66"
+  bash "$DEPLOY_SH" >"$s66/stdout.log" 2>"$s66/stderr.log"
+) || status66=$?
+[[ "$status66" != 0 ]] || fail "case66: expected the malformed status to abort deployment"
+[[ "$(shasum -a 256 "$s66/control-state/control.json" "$s66/secrets/vibe-trading.env" "$s66/app/Caddyfile" "$s66/app/last-good-tag")" == "$snapshot66" ]] || fail "case66: drain failure changed installed state"
+grep -qx release "$s66/app/drain-actions.log" || fail "case66: the old Vibe lease was not released on abort"
+grep -qE 'fake docker compose .* up -d' "$s66/app/docker.log" && fail "case66: drain failure replaced an app container"
+[[ ! -d "$s66/secrets/.previous" ]] || fail "case66: drain failure staged active secrets"
+
+echo "=== Case 67 (SP5, RED): forward Compose refuses lease loss before up; rollback tag skips this old-process gate ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s67="$(new_scratch case67)"
+(
+  APP_DIR="$s67/app"
+  AI_TRADING_SECRETS_DIR="$s67/secrets"
+  APP_CONFIG_STAGING_DIR="$s67/config-staging"
+  AI_TRADING_STATE_DIR="$s67/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_GATE_MODE=runtime
+  VIBE_GATE_CONTAINER_ID=old-vibe-container
+  VIBE_DRAIN_LEASE=fake-private-lease-abcdef1234567890
+  compose() { printf '%s\n' "$*" >>"$s67/compose.log"; }
+  verify_vibe_gate_before_switch() { echo verify >>"$s67/checks.log"; return 1; }
+  apply_selected_services() {
+    if [[ "$IMAGE_TAG" == "$TARGET_IMAGE_TAG" ]]; then
+      [[ "$FORWARD_SWITCH_STARTED" == 0 ]] || return 1
+      FORWARD_SWITCH_STARTED=1
+    fi
+    echo app-up >>"$s67/checks.log"
+  }
+  stop_disabled_groups() { return 0; }
+  if deploy_tag "$IMAGE_TAG"; then exit 1; fi
+  [[ "$(cat "$s67/checks.log")" == verify ]] || exit 1
+  [[ "$(cat "$s67/compose.log")" == *pull* ]] || exit 1
+  deploy_tag aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa || exit 1
+  [[ "$(grep -c '^verify$' "$s67/checks.log")" == 1 ]] || exit 1
+  [[ "$(grep -c '^app-up$' "$s67/checks.log")" == 1 ]] || exit 1
+  verify_vibe_gate_before_switch() { echo verify >>"$s67/checks.log"; return 0; }
+  deploy_tag "$TARGET_IMAGE_TAG" || exit 1
+  [[ "$FORWARD_SWITCH_STARTED" == 1 ]] || exit 1
+  [[ "$(grep -c '^app-up$' "$s67/checks.log")" == 2 ]] || exit 1
+) || fail "case67: forward deploy must gate before up; rollback must not require the dead forward lease"
+
+echo "=== Case 68 (SP5, RED): lease loss after staging restores old files without restarting Vibe ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s68="$(new_scratch case68)"
+mkdir -p "$s68/run"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s68/ci-staging/cloudflared.env"
+printf 'old Caddyfile fixture\n' >"$s68/app/Caddyfile"
+cp "$s68/config-staging/docker-compose.yml" "$s68/app/docker-compose.yml"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s68/app/last-good-tag"
+printf 'AI_TRADING_REGISTRY=ghcr.io/thangtran3112/family-app\nAI_TRADING_IMAGE_TAG=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nAI_TRADING_SECRETS_DIR=%s\n' "$s68/secrets" >"$s68/app/images.env"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env desk.env cloudflared.env; do
+  printf 'OLD_VALUE=old-%s\n' "$name" >"$s68/secrets/$name"
+  chmod 0600 "$s68/secrets/$name"
+done
+snapshot68="$(shasum -a 256 "$s68/secrets/vibe-trading.env" "$s68/secrets/auth.env" "$s68/app/Caddyfile" "$s68/app/images.env" "$s68/app/last-good-tag")"
+desired68="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["desired"])' "$s68/control-state/control.json")"
+printf '0\n' >"$s68/app/status-checks"
+status68=0
+(
+  APP_DIR="$s68/app"
+  AI_TRADING_SECRETS_DIR="$s68/secrets"
+  ENV_STAGING_DIR="$s68/ci-staging"
+  APP_CONFIG_STAGING_DIR="$s68/config-staging"
+  AI_TRADING_STATE_DIR="$s68/control-state"
+  AI_TRADING_UNIT_DIR="$s68/unit-dir"
+  AI_TRADING_RUNTIME_ENV_DIR="$s68/runtime"
+  AI_TRADING_DOCKER_DATA_DIR="$s68/app"
+  AI_TRADING_MIN_FREE_GB=0
+  FAMILY_CONFIG_CREDENTIALS="$s68/fake-reader-key.json"
+  DEPLOY_SH_SKIP_CHOWN=1
+  AI_TRADING_VIBE_ADMISSION_MARKER="$s68/run/vibe-admission-paused"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_DOCKER_DATA_DIR AI_TRADING_MIN_FREE_GB FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN AI_TRADING_VIBE_ADMISSION_MARKER IMAGE_TAG
+  # shellcheck disable=SC2329
+  docker() {
+    printf 'fake docker %s\n' "$*" >>"$APP_DIR/docker.log"
+    case "${1:-}" in
+      ps)
+        [[ "$*" == *'label=com.docker.compose.service=vibe-trading'* ]] && echo old-vibe-container
+        return 0
+        ;;
+      images | rmi | compose) return 0 ;;
+      exec)
+        local action="${*: -1}"
+        printf '%s\n' "$action" >>"$APP_DIR/drain-actions.log"
+        case "$action" in
+          probe) printf '{"http_status":409}\n' ;;
+          start) printf '{"lease":"fake-private-lease-abcdef1234567890"}\n' ;;
+          status)
+            local n
+            n="$(cat "$APP_DIR/status-checks")"
+            printf '%s\n' "$((n + 1))" >"$APP_DIR/status-checks"
+            if [[ "$n" == 0 ]]; then printf '{"active_chat":0,"active_private_committees":0}\n'; else printf 'not-json\n'; fi
+            ;;
+          renew) printf '{"status":"renewed"}\n' ;;
+          release) printf '{"status":"released"}\n' ;;
+          *) return 1 ;;
+        esac
+        return 0
+        ;;
+    esac
+    return 1
+  }
+  export -f docker
+  # shellcheck disable=SC2329
+  stat() { fake_stat "$@"; }
+  export -f stat fake_stat
+  systemd-run() { return 0; }
+  export -f systemd-run
+  install_fake_systemctl "$s68"
+  bash "$DEPLOY_SH" >"$s68/stdout.log" 2>"$s68/stderr.log"
+) || status68=$?
+[[ "$status68" != 0 ]] || fail "case68: expected the second status to abort before Compose up"
+actions68="$(tr '\n' ',' <"$s68/app/drain-actions.log" 2>/dev/null || true)"
+ps_calls68="$(grep -c '^fake docker ps ' "$s68/app/docker.log" 2>/dev/null || true)"
+[[ "$(cat "$s68/app/status-checks")" == 2 ]] || fail "case68: expected one idle status and one pre-switch recheck; got $(cat "$s68/app/status-checks") (exit $status68, ps=$ps_calls68, actions=$actions68): $(grep '^deploy:' "$s68/stderr.log" | tail -n 3)"
+[[ "$(shasum -a 256 "$s68/secrets/vibe-trading.env" "$s68/secrets/auth.env" "$s68/app/Caddyfile" "$s68/app/images.env" "$s68/app/last-good-tag")" == "$snapshot68" ]] || fail "case68: pre-switch rollback did not restore old active files"
+[[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["desired"])' "$s68/control-state/control.json")" == "$desired68" ]] || fail "case68: old app choices changed"
+grep -q 'fake docker compose .* up -d' "$s68/app/docker.log" && fail "case68: pre-switch rollback restarted Vibe despite no container switch"
+grep -qx release "$s68/app/drain-actions.log" || fail "case68: pre-switch abort did not release the old Vibe lease"
+[[ ! -e "$s68/run/vibe-admission-paused" ]] || fail "case68: pre-switch abort left admission paused"
+
+echo "=== Case 69 (SP5, RED): pre-switch rollback restores only a prior running MiroFish, never restarts Vibe ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s69="$(new_scratch case69)"
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$s69/app/last-good-tag"
+printf 'AI_TRADING_REGISTRY=ghcr.io/thangtran3112/family-app\nAI_TRADING_IMAGE_TAG=0000000000000000000000000000000000000000\nAI_TRADING_SECRETS_DIR=%s\n' "$s69/secrets" >"$s69/app/images.env"
+printf 'old Caddyfile fixture\n' >"$s69/app/Caddyfile"
+cp "$s69/config-staging/docker-compose.yml" "$s69/app/docker-compose.yml"
+cp "$s69/config-staging/docker-compose.mirofish.yml" "$s69/app/docker-compose.mirofish.yml"
+python3 - "$s69/control-state/control.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    state = json.load(handle)
+state["desired"]["mirofish"] = True
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(state, handle)
+PY
+chmod 0600 "$s69/control-state/control.json"
+status69=0
+(
+  APP_DIR="$s69/app"
+  AI_TRADING_SECRETS_DIR="$s69/secrets"
+  APP_CONFIG_STAGING_DIR="$s69/config-staging"
+  AI_TRADING_STATE_DIR="$s69/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  # shellcheck disable=SC2030
+  VIBE_GATE_MODE=runtime
+  VIBE_GATE_CONTAINER_ID=old-vibe-container
+  VIBE_DRAIN_LEASE=fake-private-lease-abcdef1234567890
+  # Read by rollback() in the sourced deploy library.
+  # shellcheck disable=SC2034
+  FORWARD_SWITCH_STARTED=0
+  # shellcheck disable=SC2034
+  MIROFISH_WAS_RUNNING=1
+  ENV_STAGING_DIR=''
+  # Read by restore_preferences_on_rollback() in the sourced library.
+  # shellcheck disable=SC2034
+  CONTROL_SNAPSHOT_PATH=''
+  compose() {
+    printf '%s\n' "$*" >>"$s69/compose.log"
+    [[ "$*" == *'up -d'*mirofish* ]] && touch "$s69/mirofish-running"
+    return 0
+  }
+  apply_selected_services() { echo 'up vibe-trading' >>"$s69/compose.log"; }
+  stop_disabled_groups() { return 0; }
+  mirofish_running_ids() { [[ -f "$s69/mirofish-running" ]] && echo existing-id; return 0; }
+  rollback 1
+) || status69=$?
+[[ "$status69" == 1 ]] || fail "case69: rollback should preserve the original failure status"
+[[ -f "$s69/mirofish-running" ]] || fail "case69: previous MiroFish group was not restored"
+grep -q 'up vibe-trading' "$s69/compose.log" && fail "case69: pre-switch rollback restarted Vibe"
+[[ "$(grep -c 'up -d.*mirofish' "$s69/compose.log")" == 1 ]] || fail "case69: only MiroFish may be recreated"
+grep -q 'AI_TRADING_IMAGE_TAG=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$s69/app/images.env" || fail "case69: images.env did not return to the old tag"
+
+echo "=== Case 70 (SP5, RED): routine drain holds the Caddy marker through switch without restarting gateway ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s70="$(new_scratch case70)"
+printf 'old Caddyfile fixture\n' >"$s70/app/Caddyfile"
+mkdir -p "$s70/run"
+(
+  APP_DIR="$s70/app"
+  AI_TRADING_SECRETS_DIR="$s70/secrets"
+  APP_CONFIG_STAGING_DIR="$s70/config-staging"
+  AI_TRADING_STATE_DIR="$s70/control-state"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s70/run/vibe-admission-paused"
+  read_desired_vibe() { echo true; }
+  vibe_container_ids() { echo old-vibe-container; }
+  vibe_drain_request() {
+    case "$2" in
+      probe) printf '{"http_status":409}\n' ;;
+      start) printf '{"lease":"fake-private-lease-abcdef1234567890"}\n' ;;
+      status) printf '{"active_chat":0,"active_private_committees":0}\n' ;;
+      renew) printf '{"status":"renewed"}\n' ;;
+      release) printf '{"status":"released"}\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  compose() { echo unexpected-gateway-restart >>"$s70/compose.log"; return 1; }
+  systemd-run() { printf '%s\n' "$*" >>"$s70/timer.log"; }
+  systemctl() { return 0; }
+  begin_vibe_release_gate || exit 1
+  # shellcheck disable=SC2031
+  [[ "$VIBE_GATE_MODE" == runtime && "$LEGACY_GATE_ACTIVE" == 0 ]] || exit 1
+  [[ -f "$VIBE_ADMISSION_MARKER" ]] || exit 1
+  legacy_marker_owned || exit 1
+  verify_vibe_gate_before_switch || exit 1
+  clear_vibe_admission_marker || exit 1
+  [[ ! -e "$VIBE_ADMISSION_MARKER" && ! -e "$s70/compose.log" ]] || exit 1
+) || fail "case70: routine cutover must block only new chats at Caddy until release commit"
+
+# Process-level coverage of the handoff after the old lease is idle. Caddy's
+# real marker behavior is proved by smoke-test.sh; these fakes pin its lifetime
+# through Compose health, commit and rollback without touching the host /run.
+run_runtime_marker_scenario() {
+  local base="$1" fail_health="$2"
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$base/ci-staging/cloudflared.env"
+  printf 'old Caddyfile fixture\n' >"$base/app/Caddyfile"
+  cp "$base/config-staging/docker-compose.yml" "$base/app/docker-compose.yml"
+  printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$base/app/last-good-tag"
+  printf 'old-vibe-container\n' >"$base/app/running-container-id"
+  mkdir -p "$base/run"
+  if [[ "$fail_health" == 1 ]]; then
+    printf '#!/usr/bin/env bash\nexit 1\n' >"$base/config-staging/health-check.sh"
+    chmod 0755 "$base/config-staging/health-check.sh"
+  fi
+  (
+    APP_DIR="$base/app"
+    AI_TRADING_SECRETS_DIR="$base/secrets"
+    ENV_STAGING_DIR="$base/ci-staging"
+    APP_CONFIG_STAGING_DIR="$base/config-staging"
+    AI_TRADING_STATE_DIR="$base/control-state"
+    AI_TRADING_UNIT_DIR="$base/unit-dir"
+    AI_TRADING_RUNTIME_ENV_DIR="$base/runtime"
+    AI_TRADING_DOCKER_DATA_DIR="$base/app"
+    AI_TRADING_MIN_FREE_GB=0
+    FAMILY_CONFIG_CREDENTIALS="$base/fake-reader-key.json"
+    DEPLOY_SH_SKIP_CHOWN=1
+    AI_TRADING_VIBE_ADMISSION_MARKER="$base/run/vibe-admission-paused"
+    FAKE_STEAL_MARKER="$fail_health"
+    IMAGE_TAG=0000000000000000000000000000000000000000
+    MIROFISH_ACTIVATE=keep
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR AI_TRADING_RUNTIME_ENV_DIR AI_TRADING_DOCKER_DATA_DIR AI_TRADING_MIN_FREE_GB FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN AI_TRADING_VIBE_ADMISSION_MARKER FAKE_STEAL_MARKER IMAGE_TAG MIROFISH_ACTIVATE
+    # shellcheck disable=SC2329
+    docker() {
+      printf 'fake docker %s\n' "$*" >>"$APP_DIR/docker.log"
+      case "${1:-}" in
+        ps)
+          [[ "$*" == *'label=com.docker.compose.service=vibe-trading'* ]] && cat "$APP_DIR/running-container-id"
+          return 0
+          ;;
+        images | rmi) return 0 ;;
+        exec)
+          case "${*: -1}" in
+            probe) printf '{"http_status":409}\n' ;;
+            start) printf '{"lease":"fake-private-lease-abcdef1234567890"}\n' ;;
+            status) printf '{"active_chat":0,"active_private_committees":0}\n' ;;
+            renew) printf '{"status":"renewed"}\n' ;;
+            release) printf '{"status":"released"}\n' ;;
+            *) return 1 ;;
+          esac
+          return 0
+          ;;
+        compose)
+          if [[ "$*" == *' up -d '* ]]; then
+            if [[ -f "$AI_TRADING_VIBE_ADMISSION_MARKER" ]]; then
+              echo held >>"$APP_DIR/marker-observed.log"
+            else
+              echo missing >>"$APP_DIR/marker-observed.log"
+            fi
+            local count=0
+            [[ -f "$APP_DIR/up-count" ]] && count="$(cat "$APP_DIR/up-count")"
+            printf '%s\n' "$((count + 1))" >"$APP_DIR/up-count"
+            if [[ "$count" == 0 ]]; then
+              printf 'new-vibe-container\n' >"$APP_DIR/running-container-id"
+              [[ "$FAKE_STEAL_MARKER" == 2 ]] && printf 'later-attempt\n' >"$AI_TRADING_VIBE_ADMISSION_MARKER"
+            else
+              printf 'old-vibe-container\n' >"$APP_DIR/running-container-id"
+            fi
+          fi
+          return 0
+          ;;
+      esac
+      return 1
+    }
+    export -f docker fake_stat
+    # shellcheck disable=SC2329
+    stat() { fake_stat "$@"; }
+    export -f stat
+    systemd-run() { return 0; }
+    export -f systemd-run
+    install_fake_systemctl "$base"
+    bash "$DEPLOY_SH" >"$base/stdout.log" 2>"$base/stderr.log"
+  )
+}
+
+echo "=== Case 71 (SP5): healthy forward release holds admission through Compose and commits before reopening ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s71="$(new_scratch case71)"
+status71=0
+run_runtime_marker_scenario "$s71" 0 || status71=$?
+[[ "$status71" == 0 ]] || fail "case71: healthy fake release failed: $(grep '^deploy:' "$s71/stderr.log" | tail -n 2)"
+[[ "$(cat "$s71/app/marker-observed.log" 2>/dev/null)" == held ]] || fail "case71: new Vibe was exposed before admission barrier"
+[[ ! -e "$s71/run/vibe-admission-paused" ]] || fail "case71: successful release left new chats paused"
+[[ "$(cat "$s71/app/last-good-tag")" == 0000000000000000000000000000000000000000 ]] || fail "case71: release tag did not commit"
+
+echo "=== Case 72 (SP5): failed health check keeps admission paused through old-tag rollback ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s72="$(new_scratch case72)"
+status72=0
+run_runtime_marker_scenario "$s72" 1 || status72=$?
+[[ "$status72" != 0 ]] || fail "case72: expected health failure to trigger rollback"
+[[ "$(cat "$s72/app/marker-observed.log" 2>/dev/null)" == $'held\nheld' ]] || fail "case72: marker disappeared before rollback finished"
+[[ ! -e "$s72/run/vibe-admission-paused" ]] || fail "case72: rollback left old chat admission paused"
+[[ "$(cat "$s72/app/last-good-tag")" == aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]] || fail "case72: rollback changed last-good-tag"
+
+echo "=== Case 73 (SP5, RED): lost marker after release commit reports applied-but-gated, never a false success or rollback ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s73="$(new_scratch case73)"
+status73=0
+run_runtime_marker_scenario "$s73" 2 || status73=$?
+[[ "$status73" != 0 ]] || fail "case73: marker loss after commit must not report deploy success"
+[[ "$(cat "$s73/app/last-good-tag")" == 0000000000000000000000000000000000000000 ]] || fail "case73: committed release must remain applied"
+[[ "$(cat "$s73/run/vibe-admission-paused" 2>/dev/null)" == later-attempt ]] || fail "case73: cleanup removed another attempt's marker"
+[[ "$(cat "$s73/app/up-count")" == 1 ]] || fail "case73: post-commit marker cleanup must not restart Vibe"
+grep -q 'release applied but Vibe admission marker could not be cleared' "$s73/stderr.log" || fail "case73: operator did not get an applied-but-gated diagnosis"
 
 echo
 cleanup
