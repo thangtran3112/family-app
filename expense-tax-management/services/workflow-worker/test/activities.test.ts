@@ -187,6 +187,51 @@ it("submits Capture needs-input fields inside the activity and returns only opaq
   });
 });
 
+it("does not record the accepted outcome before a retryable Capture result submission succeeds", async () => {
+  const data = new Uint8Array([1, 2, 3]);
+  const downloadFile = vi.fn().mockResolvedValue(data);
+  const submitResult = vi.fn()
+    .mockRejectedValueOnce(new Error("temporary App API failure"))
+    .mockResolvedValueOnce({ version: 4 });
+  const recordOutcome = vi.fn().mockResolvedValue({ id: JOB_ID });
+  const partial = {
+    schemaVersion: 1 as const,
+    outcome: "needs_input" as const,
+    fields: {
+      merchant: "Acme",
+      total: "10.00",
+      currency: "USD",
+      incurredOn: "2026-09-09",
+      taxAmount: "0.00",
+    },
+    issues: ["tax_zero_requires_confirmation" as const],
+  };
+  const activities = createActivities({
+    appApi: { downloadFile, submitResult } as unknown as AppApiClient,
+    foundry: { recordOutcome } as unknown as FoundryClient,
+    extractReceipt: vi.fn().mockResolvedValue(partial),
+  });
+  const input = {
+    fileId: JOB_ID,
+    expectedSha256: null,
+    route: ROUTE,
+    reviewPolicy: "capture_required_fields_v1" as const,
+    jobReference: { ...jobReference, workflowType: "OcrReceiptWorkflow" as const },
+    expectedJobVersion: 3,
+    reservationId: JOB_ID,
+  };
+
+  await expect(activities.ocr_extract_receipt(input)).rejects.toThrow("temporary App API failure");
+  expect(recordOutcome).not.toHaveBeenCalled();
+
+  await expect(activities.ocr_extract_receipt(input)).resolves.toEqual({
+    outcome: "needs_input",
+    jobVersion: 4,
+  });
+  expect(submitResult).toHaveBeenCalledTimes(2);
+  expect(recordOutcome).toHaveBeenCalledTimes(1);
+});
+
 it("rethrows an ApplicationFailure from the extractor unchanged, not rewrapped", async () => {
   const downloadFile = vi.fn().mockResolvedValue(new Uint8Array([1]));
   const extractReceipt = vi.fn().mockRejectedValue(

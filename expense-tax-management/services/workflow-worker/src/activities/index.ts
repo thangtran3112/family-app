@@ -175,7 +175,6 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
           ) {
             throw ApplicationFailure.nonRetryable("Capture OCR job context missing", "OcrJobContextMissing");
           }
-          await foundry.recordOutcome(input.reservationId, 1, { outcome: "accepted" });
           const jobId = input.jobReference.jobId;
           const job = await appApi.submitResult(jobId, {
             schemaVersion: 1,
@@ -185,6 +184,7 @@ export function createActivities({ appApi, foundry, extractReceipt }: ActivityDe
             resultSchemaVersion: "capture-ocr-review-v1",
             result,
           });
+          await foundry.recordOutcome(input.reservationId, 1, { outcome: "accepted" });
           return { outcome: "needs_input" as const, jobVersion: job.version };
         }
         return result;
