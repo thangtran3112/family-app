@@ -16,6 +16,7 @@ import {
   getEnrichmentReviewState,
 } from "@/lib/api";
 import { MAILBOX_DUPLICATES_HREF } from "@/lib/mailbox";
+import { projectExpenseTaxDisplay } from "@/lib/page-data";
 import { readOfficeSession } from "@/lib/session";
 
 type Suggestion = {
@@ -38,6 +39,7 @@ type ExpenseDetail = {
   merchant: string;
   incurredOn: string;
   amount: string;
+  taxAmount: string | null;
   currency: string;
   status: string;
   version: number;
@@ -355,6 +357,7 @@ export default function ExpenseDetail() {
   }
 
   const pendingSuggestions = (suggestions ?? []).filter((s) => s.status === "pending" && !resolvedIds.has(s.id));
+  const taxDisplay = expense ? projectExpenseTaxDisplay(expense.taxAmount, expense.currency) : null;
 
   return (
     <>
@@ -368,6 +371,7 @@ export default function ExpenseDetail() {
             <div className="evidence-item"><dt>Date</dt><dd>{expense.incurredOn}</dd></div>
             <div className="evidence-item"><dt>Merchant</dt><dd>{expense.merchant}</dd></div>
             <div className="evidence-item"><dt>Amount</dt><dd>{expense.amount} {expense.currency}</dd></div>
+            <div className="evidence-item" data-tax-state={taxDisplay?.kind}><dt className="sr-only">Tax</dt><dd>{taxDisplay?.label}</dd></div>
             <div className="evidence-item"><dt>Status</dt><dd><Status tone={expense.status === "ready" ? "ok" : "warn"}>{expense.status}</Status></dd></div>
           </dl>
           {expense.tags && expense.tags.length > 0 && (
