@@ -2873,6 +2873,7 @@ export interface paths {
                                     id: string;
                                     name: string;
                                 }[];
+                                taxAmount?: string | null;
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -3046,6 +3047,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3215,6 +3217,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -3509,6 +3512,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -6412,6 +6416,8 @@ export interface paths {
                     "application/json": {
                         /** @enum {string} */
                         modeKey: "ocr_mode_fast" | "ocr_mode_balanced" | "ocr_mode_accurate";
+                        /** @enum {string} */
+                        reviewPolicy?: "capture_required_fields_v1";
                     };
                 };
             };
@@ -12484,6 +12490,7 @@ export interface paths {
                                     id: string;
                                     name: string;
                                 }[];
+                                taxAmount?: string | null;
                                 taxYear: number;
                                 /** Format: uuid */
                                 tenantId: string;
@@ -12657,6 +12664,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -12826,6 +12834,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -13120,6 +13129,7 @@ export interface paths {
                                 id: string;
                                 name: string;
                             }[];
+                            taxAmount?: string | null;
                             taxYear: number;
                             /** Format: uuid */
                             tenantId: string;
@@ -14974,6 +14984,8 @@ export interface paths {
                     "application/json": {
                         /** @enum {string} */
                         modeKey: "ocr_mode_fast" | "ocr_mode_balanced" | "ocr_mode_accurate";
+                        /** @enum {string} */
+                        reviewPolicy?: "capture_required_fields_v1";
                     };
                 };
             };
@@ -21026,6 +21038,8 @@ export interface paths {
                             fileId: string;
                             /** @enum {string} */
                             modeKey: "ocr_mode_fast" | "ocr_mode_balanced" | "ocr_mode_accurate";
+                            /** @enum {string} */
+                            reviewPolicy?: "capture_required_fields_v1";
                             /** @enum {number} */
                             schemaVersion: 1;
                             /** Format: uuid */
