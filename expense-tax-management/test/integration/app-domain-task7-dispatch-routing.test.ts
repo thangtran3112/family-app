@@ -153,10 +153,10 @@ describe.skipIf(!integrationEnabled)("Task 7 Stage A dispatch routing fence", ()
       throw new Error("Task 7 Stage A PostgreSQL prerequisites are missing");
     }
     runtimeDatabase = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
     );
     migratorDatabase = createAppDatabase(
-      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/expense_tax_db`,
+      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/expense_tax_db`,
     );
     resetRoutingToGenerationOne();
   });

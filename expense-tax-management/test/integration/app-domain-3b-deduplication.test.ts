@@ -199,8 +199,8 @@ describe.skipIf(!integrationEnabled)("Phase 3B duplicate resolution PostgreSQL i
       CREATE SCHEMA app_migrations AUTHORIZATION expense_app_migrator;
       GRANT USAGE ON SCHEMA app TO expense_app_runtime;
     `, databaseName);
-    migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/${databaseName}`;
-    runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/${databaseName}`;
+    migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+    runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/${databaseName}`;
     await runMigrations(migrationDatabaseUrl);
     adminSql(`
       GRANT USAGE ON SCHEMA app TO expense_app_runtime;

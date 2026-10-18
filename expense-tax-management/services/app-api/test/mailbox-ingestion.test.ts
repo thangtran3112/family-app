@@ -1,7 +1,7 @@
 /**
  * Phase 3D-C Task 3 — domain/mailbox-ingestion.ts + domain/files.ts's
  * writeMailboxAttachment (real-PostgreSQL coverage, gated on
- * PHASE_3D_C_T3_INTEGRATION=1, same ephemeral-database/port-15434 pattern
+ * PHASE_3D_C_T3_INTEGRATION=1, same ephemeral-database/port-5433 pattern
  * as mailbox-candidates.test.ts). storage/bounded-stream.ts's own former
  * unit tests moved to test/storage.test.ts's
  * writeObjectStream/moveObject coverage (fix round 2: the in-memory
@@ -462,8 +462,8 @@ describe.skipIf(!requested)(
          GRANT USAGE ON SCHEMA app TO expense_app_runtime;`,
         databaseName,
       );
-      const migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/${databaseName}`;
-      const runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/${databaseName}`;
+      const migrationDatabaseUrl = `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/${databaseName}`;
+      const runtimeDatabaseUrl = `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/${databaseName}`;
       await runMigrations(migrationDatabaseUrl);
       adminSql(
         `GRANT USAGE ON SCHEMA app TO expense_app_runtime;
