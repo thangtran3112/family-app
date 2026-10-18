@@ -21,6 +21,7 @@ for required in "${REQUIRED[@]}"; do
   [[ -f "$OUT_DIR/$required" ]] || fail "missing $required"
 done
 [[ -d "$OUT_DIR/_next/static" ]] || fail "missing _next/static"
+[[ "$PROFILE" == hub && -f "$OUT_DIR/apps/desk.html" ]] && fail "apps/desk.html exists but Family Desk is not live yet"
 
 # Forbidden patterns: Clerk/OpenAI/Zep secret key prefixes and literal
 # secret-section key names. Clerk PUBLISHABLE keys (pk_live_/pk_test_) are

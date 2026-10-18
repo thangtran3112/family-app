@@ -50,7 +50,6 @@ validate_paths() {
       apps/ai-hedge-fund/__next._tree.txt|apps/ai-hedge-fund/__next._full.txt|apps/ai-hedge-fund/__next._index.txt|apps/ai-hedge-fund/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       apps/vibe-trading/__next._tree.txt|apps/vibe-trading/__next._full.txt|apps/vibe-trading/__next._index.txt|apps/vibe-trading/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       apps/mirofish/__next._tree.txt|apps/mirofish/__next._full.txt|apps/mirofish/__next._index.txt|apps/mirofish/__next.apps.\$d\$slug.__PAGE__.txt) ;;
-      apps/desk.html|apps/desk.txt|apps/desk/__next._tree.txt|apps/desk/__next._full.txt|apps/desk/__next._index.txt|apps/desk/__next.apps.\$d\$slug.__PAGE__.txt) ;;
       *) fail "unexpected path in static export: $rel" ;;
     esac
     mime_for "$rel" >/dev/null || fail "unsupported public asset type: $rel"

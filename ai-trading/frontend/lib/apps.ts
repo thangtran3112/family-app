@@ -1,22 +1,20 @@
 import type { LucideIcon } from "lucide-react";
-import { Fish, LineChart, MessagesSquare, Monitor, Network } from "lucide-react";
+import { Fish, LineChart, MessagesSquare, Network } from "lucide-react";
 
 export const hubCategories = [
   { id: "research", label: "Research" },
   { id: "funds", label: "Backtesting" },
   { id: "simulation", label: "Simulation" },
-  { id: "desk", label: "Family Desk" },
 ] as const;
 
 export type CategoryId = (typeof hubCategories)[number]["id"];
 
-export type AppIconKey = "tradingAgents" | "hedgeFund" | "vibeTrading" | "familyDesk" | "mirofish";
+export type AppIconKey = "tradingAgents" | "hedgeFund" | "vibeTrading" | "mirofish";
 
 export const appIcons: Record<AppIconKey, LucideIcon> = {
   tradingAgents: Network,
   hedgeFund: LineChart,
   vibeTrading: MessagesSquare,
-  familyDesk: Monitor,
   mirofish: Fish,
 };
 
@@ -130,23 +128,6 @@ export const hubApps: readonly HubApp[] = [
     goodFor: "Trying the original MiroFish simulator — not stock, futures, or broker analysis.",
     costNote: "Zep Cloud free tier plus LLM usage billed to the family provider keys, both kept server-side.",
     firstVisitNote: ["Nothing to set up: your hub sign-in also signs you in to MiroFish."],
-  },
-  {
-    slug: "desk",
-    kind: "external",
-    status: "live",
-    url: "https://trading.tobytran.dev/",
-    name: "Family Desk",
-    subtitle: "Our own workspace",
-    category: "desk",
-    tags: ["Strategies", "Watchlists", "Alerts"],
-    icon: "familyDesk",
-    device: "touch",
-    summary: "Our strategy-first workspace for alerts and labelled market data. Deferred tools are marked as fixtures.",
-    launchNote: "Separate from these research tools",
-    goodFor: "Building alert-only strategies and following watchlists. No live orders or broker connection.",
-    costNote: "Free market data; IBKR pending. Paper trading is not enabled.",
-    firstVisitNote: ["Your hub sign-in also unlocks the Desk API. The public shell contains no account data."],
   },
 ];
 

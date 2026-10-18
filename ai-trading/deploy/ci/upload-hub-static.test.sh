@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$SCRIPT_DIR/upload-hub-static.sh"
+STATIC_CHECK="$SCRIPT_DIR/check-static-export.sh"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -124,6 +125,23 @@ pass "Desk profile rejects API, private, unknown route and unknown Flight files 
 "$TARGET" "$DESK" test-desk unknown >/dev/null 2>&1 && fail "unknown profile passed"
 [[ ! -s "$CALL_LOG" ]] || fail "unknown profile reached cloud calls"
 pass "unknown export profile fails closed"
+
+# The Hub verifier itself owns this release gate. Test it directly so removing
+# the uploader allowlist entry cannot accidentally become the only protection.
+HUB_WITH_DESK="$WORKDIR/hub-with-desk"; fixture "$HUB_WITH_DESK" dark
+printf '<html>Desk must stay dark</html>\n' >"$HUB_WITH_DESK/apps/desk.html"
+out="$("$STATIC_CHECK" "$HUB_WITH_DESK" hub 2>&1)" && fail "hub static verifier accepted apps/desk.html"
+[[ "$out" == *"apps/desk.html exists but Family Desk is not live yet"* ]] || fail "wrong Hub Desk guard error: $out"
+pass "Hub static verifier rejects apps/desk.html with the Release 1 gate message"
+
+for desk_path in apps/desk.html apps/desk.txt apps/desk/__next._tree.txt apps/desk/__next._full.txt apps/desk/__next._index.txt "apps/desk/__next.apps.\$d\$slug.__PAGE__.txt"; do
+  : >"$CALL_LOG"; HUB_DESK_PATH="$WORKDIR/hub-desk-path"; rm -rf "$HUB_DESK_PATH"; fixture "$HUB_DESK_PATH" dark
+  mkdir -p "$HUB_DESK_PATH/$(dirname "$desk_path")"
+  printf 'Desk must stay dark until Phase 4\n' >"$HUB_DESK_PATH/$desk_path"
+  "$TARGET" "$HUB_DESK_PATH" "$BUCKET" >/dev/null 2>&1 && fail "$desk_path passed the Hub uploader"
+  [[ ! -s "$CALL_LOG" ]] || fail "$desk_path reached cloud calls"
+done
+pass "Hub uploader rejects every Desk HTML, text and Flight artifact before cloud calls"
 
 # A successful second release deletes stale non-hashed objects but retains old
 # content-hashed files for already-loaded pages and rollback revisions.

@@ -203,9 +203,6 @@ export async function changeApp(
 export type LaunchGate = { kind: "unknown" } | { kind: "available" } | { kind: "blocked"; status: Exclude<AppStatus, "Running"> };
 
 export function appLaunchGate(state: ControlsState | null, id: string): LaunchGate {
-  // Desk is a public static shell, not a controllable upstream app group.
-  // Its own API checks the session; this permits navigation, not API access.
-  if (id === "desk") return { kind: "available" };
   const entry = state?.apps.find((app) => app.id === id);
   // "unknown" (no snapshot yet, this id is missing, or a refresh failed --
   // callers pass `error ? null : state`) never claims Running *or* Stopped;

@@ -25,14 +25,15 @@ test("exported overview contains the approved shell without bypassing the auth l
   assert.ok(data.includes('"aria-label":"Workspace"'));
   assert.ok(data.includes('"href":"#main-content"'));
   assert.ok(data.includes('"id":"main-content"'));
-  await access(new URL("./out/apps/desk.html", import.meta.url));
+  await assert.rejects(access(new URL("./out/apps/desk.html", import.meta.url)), { code: "ENOENT" });
 });
 
-test("exported navigation preserves hub details and adds the Desk", async () => {
+test("exported navigation preserves Release 1 apps and keeps Desk dark", async () => {
   const data = pageData(await page("index.html"));
-  for (const slug of ["tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish", "desk"]) {
+  for (const slug of ["tradingagents", "ai-hedge-fund", "vibe-trading", "mirofish"]) {
     assert.ok(data.includes(`"href":"/apps/${slug}"`));
   }
+  assert.ok(!data.includes('"href":"/apps/desk"'));
 });
 
 test("terminal detail exports actual terminal destinations, not illustrative Paper content", async () => {
@@ -82,6 +83,4 @@ test("exported external-app launch destinations are real configuration props, no
     const data = pageData(await page(`apps/${slug}.html`));
     assert.ok(data.includes(`"url":"https://${slug}.tobytran.dev"`));
   }
-  const desk = pageData(await page("apps/desk.html"));
-  assert.ok(desk.includes('"url":"https://trading.tobytran.dev/"'));
 });

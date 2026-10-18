@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterHubApps, getAppLaunch, hubApps } from "./apps.ts";
+import { filterHubApps, findApp, getAppLaunch, hubApps, hubCategories } from "./apps.ts";
 
 test("launcher search is case-insensitive and trims whitespace", () => {
   assert.deepEqual(filterHubApps(hubApps, "  vIbE  ", "all").map((app) => app.slug), ["vibe-trading"]);
@@ -18,10 +18,10 @@ test("category and query intersect; an unmatched query returns no apps", () => {
   assert.deepEqual(filterHubApps(hubApps, "no such application", "all"), []);
 });
 
-test("Desk stays searchable and launches its own hostname", () => {
-  const [desk] = filterHubApps(hubApps, "Family Desk", "all");
-  assert.equal(desk.kind, "external");
-  assert.deepEqual(getAppLaunch(desk), { href: "https://trading.tobytran.dev/", label: "Open app", newTab: true });
+test("Family Desk stays absent from the Release 1 Hub", () => {
+  assert.equal(findApp("desk"), undefined);
+  assert.deepEqual(filterHubApps(hubApps, "Family Desk", "all"), []);
+  assert.equal(hubCategories.map((category) => String(category.id)).includes("desk"), false);
 });
 
 test("terminal launchers retain the hub routes and do not open a new tab", () => {

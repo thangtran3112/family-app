@@ -100,10 +100,10 @@ if grep -A2 '^  database:$' "$COMPOSE_FILE" | grep -q 'external: true' \
 else
   fail "top-level 'database' network is not external postgres_default"
 fi
-if service_block api | grep -qE 'networks: \[database, gateway\]'; then
-  ok "api: joins [database, gateway]"
+if service_block api | grep -qE 'networks: \[database\]'; then
+  ok "api: joins [database] only and stays off Caddy's gateway network"
 else
-  fail "api: does not join exactly [database, gateway]"
+  fail "api: does not join [database] only"
 fi
 if service_block scheduler | grep -qE 'networks: \[database\]'; then
   ok "scheduler: joins [database] only"
@@ -142,27 +142,20 @@ else
   ok "health-check.sh does not reference desk-postgres"
 fi
 
-# --- Case 9: Caddyfile -- /api/desk/* is declared before the plain /api/*
-# handle (first-match-wins; a bare /api/* would otherwise swallow it), is
-# itself ungated (Decision 5, HELD: api/scheduler are not yet a toggleable
-# app-controls entry, so this route carries no `import availability_gate`
-# the way /api/* -> mirofish does), and trading.tobytran.dev gets no new
-# live site block (D-b: not public yet). ---
-desk_line="$(grep -n 'handle /api/desk/\*' "$CADDYFILE" | head -1 | cut -d: -f1 || true)"
+# --- Case 9: Caddy rejects both Desk API path shapes before the plain /api/*
+# MiroFish handle can swallow them, without auth or upstream access. ---
+desk_line="$(grep -n '@desk_api path /api/desk /api/desk/\*' "$CADDYFILE" | head -1 | cut -d: -f1 || true)"
 api_line="$(grep -n 'handle /api/\*' "$CADDYFILE" | head -1 | cut -d: -f1 || true)"
 if [[ -n "$desk_line" && -n "$api_line" && "$desk_line" -lt "$api_line" ]]; then
-  ok "Caddyfile: handle /api/desk/* (line $desk_line) precedes handle /api/* (line $api_line)"
+  ok "Caddyfile: dark Desk API rejection precedes handle /api/*"
 else
-  fail "Caddyfile: /api/desk/* is not declared before the plain /api/* handle (desk=$desk_line api=$api_line)"
+  fail "Caddyfile: dark Desk API rejection is missing or follows /api/* (desk=$desk_line api=$api_line)"
 fi
-# Extract just the /api/desk/* handle block (from its "handle" line to the
-# matching closing "\t}" at the same one-tab indent) and confirm it carries
-# no availability_gate import of its own.
-desk_block="$(awk '/handle \/api\/desk\/\* \{/{f=1} f{print; if (/^\t\}$/) exit}' "$CADDYFILE")"
-if printf '%s\n' "$desk_block" | grep -q 'import availability_gate'; then
-  fail "Caddyfile: handle /api/desk/* unexpectedly imports availability_gate (Decision 5 is HELD -- api/scheduler have no toggle yet)"
+desk_block="$(awk '/handle @desk_api \{/{f=1} f{print; if (/^\t\}$/) exit}' "$CADDYFILE")"
+if grep -q 'respond 404' <<<"$desk_block" && ! grep -qE 'forward_auth|reverse_proxy|availability_gate' <<<"$desk_block"; then
+  ok "Caddyfile: Desk API returns 404 without auth or upstream access"
 else
-  ok "Caddyfile: handle /api/desk/* carries no availability_gate import"
+  fail "Caddyfile: Desk API is not a fixed dark 404 block: $desk_block"
 fi
 
 # --- Case 10 (real Docker, skipped if unavailable): docker compose config
@@ -172,7 +165,7 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "SKIP - docker compose not available in this environment (Case 10)"
 else
   fake_secrets="$(mktemp -d)"
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env auth.env market-data.env desk.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env desk.env cloudflared.env; do
     printf 'FAKE_VALUE=fake-not-real-%s\n' "$name" >"$fake_secrets/$name"
   done
   if AI_TRADING_IMAGE_TAG=0000000000000000000000000000000000000000 \
@@ -199,12 +192,8 @@ else
 fi
 
 # --- Case 12 (real Docker + real Caddy + stub upstreams, skipped if
-# unavailable): proves the routing itself, not just the syntax -- an
-# unauthenticated /api/desk/* 401s, an authenticated one reaches the Desk
-# api stub (never mirofish), an authenticated plain /api/* still reaches
-# mirofish (never the Desk), and a forged identity header is stripped
-# before forward_auth (same discipline as this Caddyfile's other routes,
-# proven the same real-Caddy way per its own header comment).
+# unavailable): proves the routing itself. Desk is always 404, while an
+# authenticated plain /api/* still reaches MiroFish.
 #
 # The real Caddyfile now wraps /api/* (and every other toggleable app route)
 # in `import availability_gate <id>`, which calls a control helper over a
@@ -302,16 +291,18 @@ PY
     caddy:2-alpine >/dev/null 2>&1
   sleep 3
 
-  local code_unauth body_authed_desk body_authed_mirofish code_forged
+  local code_bare code_unauth code_authed body_authed_mirofish code_forged
+  code_bare="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/desk")"
   code_unauth="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/desk/foo")"
-  body_authed_desk="$(curl -s -H 'X-Test-Authed: 1' "http://127.0.0.1:$port/api/desk/foo")"
+  code_authed="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Test-Authed: 1' "http://127.0.0.1:$port/api/desk/foo")"
   body_authed_mirofish="$(curl -s -H 'X-Test-Authed: 1' "http://127.0.0.1:$port/api/foo")"
   code_forged="$(curl -s -o /dev/null -w '%{http_code}' -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' "http://127.0.0.1:$port/api/desk/foo")"
 
-  if [[ "$code_unauth" == 401 ]]; then ok "unauthenticated /api/desk/* -> 401"; else fail "unauthenticated /api/desk/* -> $code_unauth, expected 401"; fi
-  if [[ "$body_authed_desk" == "DESK-API-STUB" ]]; then ok "authenticated /api/desk/* reaches the Desk api, not mirofish"; else fail "authenticated /api/desk/* returned: $body_authed_desk"; fi
+  if [[ "$code_bare" == 404 ]]; then ok "bare /api/desk stays dark (404)"; else fail "bare /api/desk -> $code_bare, expected 404"; fi
+  if [[ "$code_unauth" == 404 ]]; then ok "unauthenticated /api/desk/* stays dark (404)"; else fail "unauthenticated /api/desk/* -> $code_unauth, expected 404"; fi
+  if [[ "$code_authed" == 404 ]]; then ok "authenticated /api/desk/* stays dark (404)"; else fail "authenticated /api/desk/* -> $code_authed, expected 404"; fi
   if [[ "$body_authed_mirofish" == "MIROFISH-STUB" ]]; then ok "authenticated plain /api/* still reaches mirofish, not the Desk"; else fail "authenticated plain /api/* returned: $body_authed_mirofish"; fi
-  if [[ "$code_forged" == 401 ]]; then ok "a forged Cf-Access-Authenticated-User-Email header on /api/desk/* is stripped (still 401)"; else fail "forged-header request to /api/desk/* -> $code_forged, expected 401"; fi
+  if [[ "$code_forged" == 404 ]]; then ok "forged identity cannot expose /api/desk/* (404)"; else fail "forged-header request to /api/desk/* -> $code_forged, expected 404"; fi
 
   docker rm -f "l6-auth-$$" "l6-api-$$" "l6-mirofish-$$" "l6-control-$$" "l6-caddy-$$" >/dev/null 2>&1
   docker network rm "$net" >/dev/null 2>&1
