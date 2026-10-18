@@ -6,9 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enqueue, listQueue, updateQueue } from "./queue";
 import type { CaptureSession } from "./session";
 
-vi.mock("./api", () => ({ uploadQueuedReceipt: vi.fn() }));
-import { uploadQueuedReceipt } from "./api";
-import { processQueueItem, processQueuedItems } from "./upload-processor";
+vi.mock("./api", () => ({
+  fetchOcrJob: vi.fn(),
+  fetchOcrReviews: vi.fn(),
+  uploadQueuedReceipt: vi.fn(),
+}));
+import { fetchOcrJob, fetchOcrReviews, uploadQueuedReceipt } from "./api";
+import { processQueueItem, processQueuedItems, syncQueueStatuses } from "./upload-processor";
 
 const session: CaptureSession = {
   apiBaseUrl: "http://app.test",
@@ -20,6 +24,8 @@ const getToken = vi.fn().mockResolvedValue("tok");
 describe("processQueueItem", () => {
   beforeEach(async () => {
     vi.mocked(uploadQueuedReceipt).mockReset();
+    vi.mocked(fetchOcrJob).mockReset();
+    vi.mocked(fetchOcrReviews).mockReset();
     for (const item of await listQueue()) {
       await import("./queue").then((m) => m.removeQueue(item.id));
     }
@@ -94,6 +100,63 @@ describe("processQueueItem", () => {
     expect(uploadQueuedReceipt).toHaveBeenCalledTimes(1);
     const [updated] = await listQueue();
     expect(updated).toMatchObject({ status: "processing", fileId: "file-1" });
+  });
+});
+
+describe("syncQueueStatuses", () => {
+  beforeEach(async () => {
+    vi.mocked(fetchOcrJob).mockReset();
+    vi.mocked(fetchOcrReviews).mockReset().mockResolvedValue([]);
+    for (const item of await listQueue()) {
+      await import("./queue").then((m) => m.removeQueue(item.id));
+    }
+  });
+
+  async function processingItem() {
+    const item = await enqueue(new File(["x"], "status.jpg", { type: "image/jpeg" }), "ocr_mode_balanced");
+    const processing = { ...item, status: "processing" as const, fileId: "file-1", jobId: "job-1" };
+    await updateQueue(processing);
+    return processing;
+  }
+
+  it("marks a complete job saved without opening review", async () => {
+    const item = await processingItem();
+    vi.mocked(fetchOcrJob).mockResolvedValue({ status: "SUCCEEDED", targetAggregateId: "expense-1" } as never);
+
+    const reviews = await syncQueueStatuses(session, [item], getToken, "org_1");
+
+    expect(reviews).toEqual([]);
+    expect((await listQueue())[0]).toMatchObject({ status: "saved", progress: 100 });
+  });
+
+  it("marks an incomplete job needs input", async () => {
+    const item = await processingItem();
+    vi.mocked(fetchOcrJob).mockResolvedValue({ status: "SUCCEEDED", targetAggregateId: null } as never);
+    vi.mocked(fetchOcrReviews).mockResolvedValue([{ jobId: "job-1" } as never]);
+
+    await syncQueueStatuses(session, [item], getToken, "org_1");
+
+    expect((await listQueue())[0]).toMatchObject({ status: "needs_input", progress: 100 });
+  });
+
+  it("marks a terminal job failed", async () => {
+    const item = await processingItem();
+    vi.mocked(fetchOcrJob).mockResolvedValue({ status: "FAILED", errorMessage: "OCR failed" } as never);
+
+    await syncQueueStatuses(session, [item], getToken, "org_1");
+
+    expect((await listQueue())[0]).toMatchObject({ status: "failed", error: "OCR failed" });
+  });
+
+  it("marks a needs-input item saved after completion on another device", async () => {
+    const item = await processingItem();
+    const needsInput = { ...item, status: "needs_input" as const };
+    await updateQueue(needsInput);
+    vi.mocked(fetchOcrJob).mockResolvedValue({ status: "SUCCEEDED", targetAggregateId: "expense-1" } as never);
+
+    await syncQueueStatuses(session, [needsInput], getToken, "org_1");
+
+    expect((await listQueue())[0]).toMatchObject({ status: "saved", progress: 100 });
   });
 });
 
