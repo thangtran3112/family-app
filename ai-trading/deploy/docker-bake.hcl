@@ -83,14 +83,10 @@ target "market-data" {
   tags    = ["${REGISTRY}/ai-trading-market-data:${TAG}"]
 }
 
-target "vibe-upstream" {
-  context = "ai-trading/packages/vibe-trading"
-}
-
 target "vibe-trading" {
   context = "ai-trading/deploy/upstream/vibe-trading"
   contexts = {
-    base = "target:vibe-upstream"
+    upstream = "ai-trading/packages/vibe-trading"
   }
   tags    = ["${REGISTRY}/ai-trading-vibe-trading:${TAG}"]
 }

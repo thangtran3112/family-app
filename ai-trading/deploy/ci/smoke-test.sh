@@ -168,16 +168,16 @@ os.execvp(sys.executable, [sys.executable, "/usr/local/bin/start-vibe.py", sys.e
 ' || fail "Vibe did not overwrite a stale persisted .env (old provider/keys/endpoint) while preserving unrelated settings"
   echo "ok   Vibe overwrites a stale persisted .env without wiping its unrelated settings"
   # Retain native Anthropic compatibility. Construct its actual adapter
-  # with a fake key and no network; liveness alone misses absent extras.
+  # with a fake key and no network; compare against the materialized family
+  # lock in this image, not the unpatched upstream submodule lock.
   docker run --rm --network none --entrypoint python \
-    -v "$PWD/ai-trading/packages/vibe-trading/requirements-lock.txt:/expected-base-requirements.txt:ro" \
     -e ANTHROPIC_API_KEY=sk-ant-smoke-dummy -e LANGCHAIN_PROVIDER=anthropic \
     -e LANGCHAIN_MODEL_NAME=claude-sonnet-5-5 "$(image vibe-trading)" -c '
 import importlib.metadata as metadata
 import re
 from pathlib import Path
-# Optional provider installation must not upgrade upstream hash-locked packages.
-for line in Path("/expected-base-requirements.txt").read_text().splitlines():
+# Optional provider installation must not upgrade family hash-locked packages.
+for line in Path("/app/requirements-lock.txt").read_text().splitlines():
     pin = re.match(r"^([A-Za-z0-9_.-]+)==([^ ;\\]+)", line)
     if not pin:
         continue
@@ -227,6 +227,45 @@ assert "sk-smoke-openai-dummy" not in path.read_text(), "Provider key was copied
     -H "Authorization: Bearer smoke-key" -H "X-Forwarded-Proto: https"
   # ... and a wrong key is refused.
   expect_status 401 "$url" "${site[@]}" -H "Authorization: Bearer wrong-key" -H "X-Forwarded-Proto: https"
+  # SP5 control is loopback-only even with the correct shared key. The smoke
+  # container is disposable; this uses dummy credentials and makes no LLM call.
+  expect_status 403 http://127.0.0.1:18899/internal/deploy/drain \
+    -X POST -H 'Authorization: Bearer smoke-key'
+  docker exec smoke-vibe python -c '
+import json, os, urllib.error, urllib.request
+
+base = "http://127.0.0.1:8899"
+auth = {"Authorization": "Bearer " + os.environ["API_AUTH_KEY"]}
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def call(path, method="GET", headers=None, data=None):
+    request_headers = {**auth, **(headers or {})}
+    if data is not None:
+        request_headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(base + path, data=data, method=method,
+                                 headers=request_headers)
+    with opener.open(req, timeout=8) as response:
+        return json.load(response)
+
+lease = call("/internal/deploy/drain", "POST", data=b"")["lease"]
+assert isinstance(lease, str) and len(lease) > 16
+held = {"X-Deploy-Lease": lease}
+try:
+    assert call("/internal/deploy/drain", headers=held) == {
+        "active_chat": 0, "active_private_committees": 0,
+    }
+    session_id = call("/sessions", "POST", data=b"{\"title\":\"smoke\"}")["session_id"]
+    try:
+        call("/sessions/" + session_id + "/messages", "POST",
+             data=b"{\"content\":\"dummy research only\"}")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 503
+    else:
+        raise AssertionError("drain accepted a new chat attempt")
+    assert call("/sessions/" + session_id + "/messages") == []
+finally:
+    assert call("/internal/deploy/drain", "DELETE", headers=held)["status"] == "released"
+' || fail "Vibe deploy drain did not reject new chat before persistence or release its lease"
+  echo "ok   Vibe localhost-only deploy drain rejects new chat before persistence"
 }
 
 # smoke_mirofish_backend: dummy, non-secret keys only, no real Zep/LLM call.
@@ -722,6 +761,23 @@ with zipfile.ZipFile('$zip_path') as z:
     -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
   expect_status 401 http://127.0.0.1:18080/api/connections "${vibe_host[@]}" \
     -H 'Authorization: Bearer smoke-key'
+  # SP5 bootstrap barrier: new chat POSTs pause, but auth and history/health
+  # remain available. Only the fixture's own marker is created/removed.
+  local chat_url=http://127.0.0.1:18080/sessions/test123/messages marker=/run/family-app/ai-trading-control/vibe-admission-paused
+  expect_status 401 "$chat_url" "${vibe_host[@]}" -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
+  docker exec smoke-control-helper sh -c 'touch /run/family-app/ai-trading-control/vibe-admission-paused && chmod 0644 /run/family-app/ai-trading-control/vibe-admission-paused'
+  expect_status 503 "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev'
+  local paused_headers
+  paused_headers="$(curl -sS -D - -o /dev/null "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev')"
+  grep -qi '^Retry-After: 30' <<<"$paused_headers" || fail "paused chat lacks Retry-After"
+  grep -qi '^Cache-Control: no-store' <<<"$paused_headers" || fail "paused chat can be cached"
+  expect_status 200 http://127.0.0.1:18080/live "${vibe_host[@]}" --cookie "$cookie"
+  expect_status 404 http://127.0.0.1:18080/internal/deploy/drain "${vibe_host[@]}" --cookie "$cookie"
+  docker exec smoke-control-helper rm -f "$marker"
+  local resumed_status
+  resumed_status="$(curl -sS -o /dev/null -w '%{http_code}' "$chat_url" "${vibe_host[@]}" --cookie "$cookie" -X POST -H 'Origin: https://vibe-trading.tobytran.dev')"
+  [[ "$resumed_status" != 503 ]] || fail "chat admission stayed blocked after marker removal"
+  echo "ok   Vibe legacy admission marker denies only authenticated new chat POSTs"
   docker rm -f smoke-vibe-gateway >/dev/null
 
   docker network rm "$net" >/dev/null 2>&1 || true

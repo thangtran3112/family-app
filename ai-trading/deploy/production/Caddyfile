@@ -57,6 +57,15 @@
 # host-specific HTTP site before the catch-all routes so /api/* also reaches
 # Vibe rather than the separate MiroFish backend.
 http://vibe-trading.tobytran.dev:8080 {
+	@private_deploy path /internal/deploy/*
+	@vibe_paused {
+		method POST
+		path_regexp ^/sessions/[^/]+/messages$
+		file {
+			root /run/family-app/ai-trading-control
+			try_files vibe-admission-paused
+		}
+	}
 	route {
 		request_header -Cf-Access-Authenticated-User-Email
 		forward_auth auth:8181 {
@@ -64,6 +73,10 @@ http://vibe-trading.tobytran.dev:8080 {
 			copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 		}
 		import availability_gate vibe-trading
+		respond @private_deploy 404
+		header @vibe_paused Retry-After "30"
+		header @vibe_paused Cache-Control "no-store"
+		respond @vibe_paused `{"error":"research_paused","message":"Research is paused for deployment; retry shortly."}` 503
 		reverse_proxy vibe-trading:8899 {
 			# TLS ends at Cloudflare; Vibe's same-site API check needs https.
 			header_up X-Forwarded-Proto https
@@ -275,15 +288,11 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 		respond 200
 	}
 
-	handle /api/desk/* {
-		route {
-			request_header -Cf-Access-Authenticated-User-Email
-			forward_auth auth:8181 {
-				uri /__auth/check
-				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
-			}
-			reverse_proxy api:8000
-		}
+	# Family Desk remains dark until its separate Phase 4 release. Match these
+	# paths before MiroFish's generic /api/* handler and never contact an upstream.
+	@desk_api path /api/desk /api/desk/*
+	handle @desk_api {
+		respond 404
 	}
 
 	# MiroFish (01i): same `route { }` wrapper as the /u/* blocks above, for
