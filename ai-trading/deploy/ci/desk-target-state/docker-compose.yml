@@ -5,7 +5,7 @@ services:
       POSTGRES_DB: desk_target
       POSTGRES_PASSWORD: disposable
       POSTGRES_USER: desk_target
-    volumes: ["${DESK_TARGET_PGDATA:?DESK_TARGET_PGDATA is required}:/var/lib/postgresql/data"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U desk_target -d desk_target"]
       interval: 1s
@@ -68,3 +68,7 @@ services:
 
 volumes:
   api-sock:
+  pgdata:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
