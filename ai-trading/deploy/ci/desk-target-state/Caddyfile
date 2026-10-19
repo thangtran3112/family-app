@@ -24,7 +24,7 @@
 				uri /__auth/check
 				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
 			}
-			reverse_proxy api:8000
+			reverse_proxy unix//run/desk/api.sock
 		}
 	}
 

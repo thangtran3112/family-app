@@ -6,7 +6,7 @@ test("missing cookie and forged identity are rejected; app redirects once to hub
   const direct = await context.request.get("http://127.0.0.1:18045/api/desk/strategies");
   expect(direct.status()).toBe(401);
   const forged = await context.request.get("http://127.0.0.1:18045/api/desk/strategies", {
-    headers: { "Cf-Access-Authenticated-User-Email": "forged@example.test", "X-Verified-Email": "forged@example.test" },
+    headers: { "Cf-Access-Authenticated-User-Email": "forged-principal", "X-Verified-Email": "forged-principal" },
   });
   expect(forged.status()).toBe(401);
 

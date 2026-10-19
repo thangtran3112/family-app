@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStaticServer } from "../static-server.mjs";
 
-const E2E_EMAIL = "e2e@example.test";
+const E2E_EMAIL = "desk-e2e-principal";
 const HOP_BY_HOP = new Set([
   "connection",
   "keep-alive",

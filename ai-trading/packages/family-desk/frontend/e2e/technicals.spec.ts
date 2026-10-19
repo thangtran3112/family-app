@@ -19,14 +19,27 @@ test("Technicals renders gauges, three tables, chart null gaps, and unavailable 
 });
 
 test("Futures ignores stale contract responses and shows root-specific roll rows", async ({ page }) => {
+  let releaseMnq!: () => void;
+  let markMnqStarted!: () => void;
+  let markMnqCompleted!: () => void;
+  const mnqRelease = new Promise<void>((resolve) => { releaseMnq = resolve; });
+  const mnqStarted = new Promise<void>((resolve) => { markMnqStarted = resolve; });
+  const mnqCompleted = new Promise<void>((resolve) => { markMnqCompleted = resolve; });
   await page.route("**/api/desk/bars/%2FMNQ**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await route.continue();
+    markMnqStarted();
+    await mnqRelease;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+    markMnqCompleted();
   });
   await openDesk(page, "/futures");
   await page.getByRole("button", { name: /NQ \/ MNQ/ }).click();
+  await mnqStarted;
   await page.getByRole("button", { name: /CL \/ MCL/ }).click();
   const mclChart = page.getByRole("region", { name: "/MCL 1d market chart" });
+  await expect(mclChart.getByLabel("Latest chart values")).toContainText("Last close 191");
+  releaseMnq();
+  await mnqCompleted;
   await expect(mclChart.getByLabel("Latest chart values")).toContainText("Last close 191");
   await page.goto("/futures/specs");
   const es = page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: "ES", exact: true }) });

@@ -5,6 +5,7 @@ services:
       POSTGRES_DB: desk_target
       POSTGRES_PASSWORD: disposable
       POSTGRES_USER: desk_target
+    volumes: ["${DESK_TARGET_PGDATA:?DESK_TARGET_PGDATA is required}:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U desk_target -d desk_target"]
       interval: 1s
@@ -20,22 +21,28 @@ services:
       DESK_RUNTIME_DATABASE_URL: postgresql+psycopg://desk_target:disposable@postgres:5432/desk_target
     depends_on:
       postgres: { condition: service_healthy }
+  socket-init:
+    image: caddy:2-alpine
+    command: ["sh", "-c", "chmod 0777 /run/desk"]
+    volumes: ["api-sock:/run/desk"]
   api:
     image: ${DESK_IMAGE:-ghcr.io/thangtran3112/family-app/ai-trading-desk:local}
-    command: ["python", "-m", "uvicorn", "ai_trading.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["python", "-m", "uvicorn", "ai_trading.api.main:app", "--uds", "/run/desk/api.sock"]
     environment:
       DESK_RUNTIME_DATABASE_URL: postgresql+psycopg://desk_target:disposable@postgres:5432/desk_target
     depends_on:
       migrate: { condition: service_completed_successfully }
+      socket-init: { condition: service_completed_successfully }
+    volumes: ["api-sock:/run/desk"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect('/run/desk/api.sock')"]
       interval: 1s
       timeout: 3s
       retries: 20
   auth:
     image: ${AUTH_IMAGE:-ghcr.io/thangtran3112/family-app/ai-trading-auth:local}
     environment:
-      ALLOWED_EMAILS: verified@example.test
+      ALLOWED_EMAILS: desk-e2e-principal
       ALLOWED_ORIGINS: http://desk.test
       CLERK_SECRET_KEY: test-only-unused
       SESSION_SIGNING_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -52,9 +59,12 @@ services:
   caddy:
     image: caddy:2-alpine
     ports: ["127.0.0.1::8080"]
-    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "api-sock:/run/desk"]
     depends_on:
       api: { condition: service_healthy }
       auth: { condition: service_started }
       control: { condition: service_started }
       mirofish: { condition: service_started }
+
+volumes:
+  api-sock:

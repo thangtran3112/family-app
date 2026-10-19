@@ -4,8 +4,8 @@ from safety import admin_url, e2e_url
 _ADMIN = "postgresql+psycopg://fake:fake@127.0.0.1/postgres"
 _E2E = "postgresql+psycopg://fake:fake@127.0.0.1/desk_e2e_0123456789ab"
 _OVERRIDES = (
-    "host=192.0.2.1",
-    "hostaddr=192.0.2.1",
+    "host=outside.invalid",
+    "hostaddr=outside.invalid",
     "port=5433",
     "dbname=not_a_test_database",
     "service=production",

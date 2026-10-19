@@ -9,7 +9,7 @@ E2E_NOW = datetime.fromisoformat(os.environ.get("DESK_E2E_NOW", "2026-10-16T00:0
 if E2E_NOW.tzinfo is None or E2E_NOW.utcoffset() is None:
     raise ValueError("DESK_E2E_NOW must include a timezone")
 E2E_NOW = E2E_NOW.astimezone(UTC)
-E2E_EMAIL = "e2e@example.test"
+E2E_EMAIL = "desk-e2e-principal"
 
 
 class FrozenDateTime(datetime):

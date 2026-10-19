@@ -9,6 +9,8 @@ for (const [path, phase] of [["/paper", "6"], ["/holdings", "5"], ["/ask", "7"],
     page.on("request", (request) => { if (request.url().includes("/api/desk")) calls.push(request.url()); });
     await openDesk(page, path);
     await expect(page.getByRole("status")).toContainText(`Fixture — wired in Phase ${phase}`);
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     expect(calls).toEqual([]);
   });
 }

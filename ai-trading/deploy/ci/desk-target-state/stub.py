@@ -17,4 +17,4 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-http.server.HTTPServer(("0.0.0.0", int(os.environ["PORT"])), Handler).serve_forever()
+http.server.HTTPServer(("", int(os.environ["PORT"])), Handler).serve_forever()

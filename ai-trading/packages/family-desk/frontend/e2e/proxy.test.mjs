@@ -69,10 +69,10 @@ test("forged verified identity is stripped; only reserved cookie installs e2e id
   try {
     const forged = await fetch(`${servers.origin}/api/desk/strategies`, {
       headers: {
-        "Cf-Access-Authenticated-User-Email": "attacker@example.test",
-        "X-Verified-Email": "attacker@example.test",
-        "X-User-Email": "attacker@example.test",
-        "X-Amzn-Oidc-Identity": "attacker@example.test",
+        "Cf-Access-Authenticated-User-Email": "forged-principal",
+        "X-Verified-Email": "forged-principal",
+        "X-User-Email": "forged-principal",
+        "X-Amzn-Oidc-Identity": "forged-principal",
         "X-Forwarded-Client-Cert": "forged-cert-identity",
         authorization: "Bearer must-not-echo",
       },
@@ -85,7 +85,7 @@ test("forged verified identity is stripped; only reserved cookie installs e2e id
     const allowed = await fetch(`${servers.origin}/api/desk/strategies`, {
       headers: {
         cookie: "desk_e2e_session=1",
-        "Cf-Access-Authenticated-User-Email": "attacker@example.test",
+        "Cf-Access-Authenticated-User-Email": "forged-principal",
       },
     });
     assert.equal(allowed.status, 200);
@@ -101,7 +101,7 @@ test("forged verified identity is stripped; only reserved cookie installs e2e id
         cookie: undefined,
       },
       {
-        identity: "e2e@example.test",
+        identity: "desk-e2e-principal",
         verified: undefined,
         userEmail: undefined,
         oidc: undefined,
@@ -146,7 +146,7 @@ test("forwards method, encoded path, query, body, and upstream status", async ()
       method: "PATCH",
       url: "/api/desk/watchlists/%2FES?interval=1m&x=a%2Fb",
       body: '{"name":"changed"}',
-      identity: "e2e@example.test",
+      identity: "desk-e2e-principal",
       cookie: "unrelated=session",
     });
   } finally {

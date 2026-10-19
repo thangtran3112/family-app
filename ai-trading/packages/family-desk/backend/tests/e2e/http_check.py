@@ -89,13 +89,13 @@ def test_real_api_proxy_database_engine_and_sse_lifecycle(real_servers):
         before_closed = SESSION_LIFECYCLE.closed
         denied = client.get(
             f"{proxy_origin}/api/desk/bars/NVDA?interval=1m&days=30",
-            headers={IDENTITY_HEADER: "forged@example.test", "X-Verified-Email": "forged@example.test"},
+            headers={IDENTITY_HEADER: "forged-principal", "X-Verified-Email": "forged-principal"},
         )
         assert denied.status_code == 401
-        assert "forged@example.test" not in denied.text
+        assert "forged-principal" not in denied.text
         assert SESSION_LIFECYCLE.wait_for_closed(before_closed + 1, timeout=2)
 
-        session = {"cookie": "desk_e2e_session=1", IDENTITY_HEADER: "forged@example.test"}
+        session = {"cookie": "desk_e2e_session=1", IDENTITY_HEADER: "forged-principal"}
         bars = client.get(f"{proxy_origin}/api/desk/bars/NVDA?interval=1m&days=30", headers=session)
         assert bars.status_code == 200
         assert bars.json()["symbol"] == "NVDA"
