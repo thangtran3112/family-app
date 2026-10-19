@@ -35,8 +35,11 @@ def _wait_for(check, process=None, timeout=10):
     while time.monotonic() < deadline:
         if process is not None and process.poll() is not None:
             raise AssertionError(f"test service exited with {process.returncode}")
-        if check():
-            return
+        try:
+            if check():
+                return
+        except (OSError, httpx.TransportError):
+            pass
         time.sleep(0.025)
     raise AssertionError("test service did not become ready")
 

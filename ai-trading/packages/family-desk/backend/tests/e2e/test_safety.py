@@ -27,3 +27,12 @@ def test_admin_dsn_rejects_connection_query_overrides_without_connecting(overrid
 def test_e2e_dsn_rejects_connection_query_overrides_without_connecting(override):
     with pytest.raises(ValueError, match="query parameters"):
         e2e_url(f"{_E2E}?{override}")
+
+
+@pytest.mark.parametrize("name", ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGSERVICE", "PGSERVICEFILE"))
+def test_dsn_guards_reject_ambient_libpq_routing_overrides(monkeypatch, name):
+    monkeypatch.setenv(name, "unsafe-ambient-override")
+    with pytest.raises(ValueError, match="libpq routing environment"):
+        admin_url(_ADMIN)
+    with pytest.raises(ValueError, match="libpq routing environment"):
+        e2e_url(_E2E)

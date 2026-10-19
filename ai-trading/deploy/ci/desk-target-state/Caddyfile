@@ -1,0 +1,46 @@
+{
+	admin off
+	auto_https off
+}
+
+(availability_gate) {
+	forward_auth control:8182 {
+		uri /gate/{args[0]}?
+		header_up -Authorization
+		header_up -Cookie
+	}
+}
+
+:8080 {
+	handle /__healthz {
+		respond 200
+	}
+
+	@desk_api path /api/desk /api/desk/*
+	handle @desk_api {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			reverse_proxy api:8000
+		}
+	}
+
+	handle /api/* {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			import availability_gate mirofish
+			reverse_proxy mirofish:8000
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

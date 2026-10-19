@@ -212,7 +212,8 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
-      - name: Run isolated real-HTTP and proxy E2E (no browser yet)
+          pnpm exec playwright install --with-deps chromium
+      - name: Run isolated real-HTTP, proxy, and Chromium E2E
         working-directory: ai-trading/packages/family-desk/backend
         env:
           DESK_E2E_ADMIN_DATABASE_URL: postgresql+psycopg://desk:desk@127.0.0.1:55438/postgres
@@ -300,6 +301,16 @@ jobs:
             -f ai-trading/deploy/production/docker-compose.mirofish.yml \
             -f ai-trading/deploy/local/docker-compose.override.yml config --quiet
 
+  desk-caddy-acceptance:
+    name: Desk current-dark and target-state Caddy acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Current production source stays Desk-dark
+        run: ai-trading/deploy/ci/test-l6-desk.sh
+
   images:
     name: Images and smoke tests
     runs-on: ubuntu-latest
@@ -344,6 +355,11 @@ jobs:
         env:
           TAG: ci
         run: ai-trading/deploy/ci/smoke-test.sh all
+      - name: Isolated target-state Desk API/auth/Postgres acceptance
+        env:
+          AUTH_IMAGE: ghcr.io/thangtran3112/family-app/ai-trading-auth:ci
+          DESK_IMAGE: ghcr.io/thangtran3112/family-app/ai-trading-desk:ci
+        run: ai-trading/deploy/ci/test-desk-target-state.sh
       - name: Private Vibe consensus image
         env:
           TAG: ci

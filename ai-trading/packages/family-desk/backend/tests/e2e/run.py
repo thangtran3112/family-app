@@ -1,6 +1,7 @@
 """Run native proxy tests and real HTTP/engine tests in a disposable E2E database."""
 
 import os
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -22,11 +23,7 @@ def _upgrade(database_url: str) -> None:
     command.upgrade(config, "head")
 
 
-def main() -> int:
-    if not (FRONTEND / "out" / "index.html").is_file():
-        raise RuntimeError("build the Desk static export before running E2E tests")
-    admin = admin_url(os.environ["DESK_E2E_ADMIN_DATABASE_URL"])
-    admin_engine = create_engine(admin.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
+def _run_in_database(admin_engine, admin, command) -> int:
     database = f"desk_e2e_{uuid.uuid4().hex[:12]}"
     created = False
     try:
@@ -38,15 +35,36 @@ def main() -> int:
         os.environ.setdefault("DESK_E2E_NOW", "2026-10-16T00:00:00+00:00")
         _upgrade(database_url)
         seed_database(database_url)
-
-        import subprocess
-
-        subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
-        return int(pytest.main(["-q", str(Path(__file__).with_name("http_check.py"))]))
+        return command()
     finally:
+        os.environ.pop("DESK_E2E_DATABASE_URL", None)
         if created:
             with admin_engine.connect() as connection:
                 connection.execute(text(f'DROP DATABASE "{database}" WITH (FORCE)'))
+
+
+def main() -> int:
+    if not (FRONTEND / "out" / "index.html").is_file():
+        raise RuntimeError("build the Desk static export before running E2E tests")
+    admin = admin_url(os.environ["DESK_E2E_ADMIN_DATABASE_URL"])
+    admin_engine = create_engine(admin.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
+    try:
+        subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
+
+        def browser_suite() -> int:
+            subprocess.run(["pnpm", "exec", "playwright", "test"], cwd=FRONTEND, check=True, env=os.environ.copy())
+            return 0
+
+        browser_result = _run_in_database(admin_engine, admin, browser_suite)
+        if browser_result:
+            return browser_result
+
+        return _run_in_database(
+            admin_engine,
+            admin,
+            lambda: int(pytest.main(["-q", str(Path(__file__).with_name("http_check.py"))])),
+        )
+    finally:
         admin_engine.dispose()
 
 

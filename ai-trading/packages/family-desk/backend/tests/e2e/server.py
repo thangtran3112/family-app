@@ -11,7 +11,7 @@ from seeded_source import data_sources
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai_trading.api import market_data, quotes, strategies
+from ai_trading.api import futures, market_data, quotes, strategies
 from ai_trading.api.main import app
 from ai_trading.db.engine import make_health_check_engine
 
@@ -39,6 +39,9 @@ class SessionLifecycle:
 
 SESSION_LIFECYCLE = SessionLifecycle()
 STREAM_CLOSED = threading.Event()
+STREAM_ACTIVE = 0
+STREAMS_CLOSED = 0
+STREAM_LOCK = threading.Lock()
 _production_quote_events = quotes.quote_events
 
 
@@ -85,10 +88,16 @@ async def _e2e_lifespan(application: FastAPI):
 
 
 async def _observed_quote_events(*args, **kwargs):
+    global STREAM_ACTIVE, STREAMS_CLOSED
+    with STREAM_LOCK:
+        STREAM_ACTIVE += 1
     try:
         async for event in _production_quote_events(*args, **kwargs):
             yield event
     finally:
+        with STREAM_LOCK:
+            STREAM_ACTIVE -= 1
+            STREAMS_CLOSED += 1
         STREAM_CLOSED.set()
 
 
@@ -101,6 +110,7 @@ def install_e2e_runtime():
         "quotes_datetime": quotes.datetime,
         "strategies_datetime": strategies.datetime,
         "market_data_pd": market_data.pd,
+        "futures_date": futures.date,
     }
     _production_quote_events = original["quote_events"]
     freeze_api_clocks()
@@ -114,6 +124,7 @@ def install_e2e_runtime():
         quotes.datetime = original["quotes_datetime"]
         strategies.datetime = original["strategies_datetime"]
         market_data.pd = original["market_data_pd"]
+        futures.date = original["futures_date"]
         app.router.lifespan_context = original["lifespan"]
 
     return restore

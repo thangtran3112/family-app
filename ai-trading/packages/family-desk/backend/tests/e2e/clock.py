@@ -1,7 +1,7 @@
 """Fixed weekday fixture clock; imported only by tests/e2e, never production modules."""
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 # 20:00 ET on a Thursday: after the close, but still on the seeded NY trading date. UTC rolls
 # into Friday, so production's date-bounded engine query includes all Thursday bars.
@@ -16,6 +16,12 @@ class FrozenDateTime(datetime):
     @classmethod
     def now(cls, tz=None):
         return E2E_NOW.astimezone(tz) if tz else E2E_NOW.replace(tzinfo=None)
+
+
+class FrozenDate(date):
+    @classmethod
+    def today(cls):
+        return E2E_NOW.date()
 
 
 class _PandasClock:
@@ -36,8 +42,9 @@ class _PandasClock:
 
 
 def freeze_api_clocks() -> None:
-    from ai_trading.api import market_data, quotes, strategies
+    from ai_trading.api import futures, market_data, quotes, strategies
 
+    futures.date = FrozenDate
     market_data.pd = _PandasClock()
     quotes.datetime = FrozenDateTime
     strategies.datetime = FrozenDateTime

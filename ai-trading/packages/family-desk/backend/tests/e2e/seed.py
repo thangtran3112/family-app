@@ -41,23 +41,37 @@ def seed_database(database_url: str) -> tuple[int, int]:
             if len(daily_days) < 30:
                 raise RuntimeError("E2E seed needs at least 30 prior XNYS sessions")
 
-            user = User(email=E2E_EMAIL, settings={})
+            user = User(email=E2E_EMAIL, settings={"e2e_unknown": {"keep": True}})
             session.add(user)
             session.flush()
             day_movers = Watchlist(user_id=user.id, name="Day movers", horizon="intraday")
             futures = Watchlist(user_id=user.id, name="Futures", horizon="intraday")
-            session.add_all([day_movers, futures])
+            identity = Watchlist(user_id=user.id, name="Identity", horizon="swing")
+            session.add_all([day_movers, futures, identity])
             session.flush()
             session.add_all(
                 [
                     WatchlistItem(watchlist_id=day_movers.id, symbol="NVDA", asset_type="stock"),
                     WatchlistItem(watchlist_id=day_movers.id, symbol="/ES", asset_type="future"),
                     WatchlistItem(watchlist_id=futures.id, symbol="/ES", asset_type="future"),
+                    WatchlistItem(watchlist_id=identity.id, symbol="CL", asset_type="stock"),
+                    WatchlistItem(watchlist_id=identity.id, symbol="/CL", asset_type="future"),
                 ]
             )
 
-            for symbol, base in (("NVDA", 100.0), ("/ES", 5_000.0)):
-                for index, trading_day in enumerate(daily_days):
+            symbols = (
+                ("NVDA", 100.0),
+                ("/ES", 5_000.0),
+                ("CL", 70.0),
+                ("/CL", 71.0),
+                ("/MNQ", 15_000.0),
+                ("/MCL", 74.0),
+                ("AAPL", 150.0),
+                ("GAP", 200.0),
+            )
+            for symbol, base in symbols:
+                symbol_days = daily_days[-10:] if symbol == "GAP" else daily_days
+                for index, trading_day in enumerate(symbol_days):
                     close = base + index * (0.5 if symbol == "NVDA" else 3.0)
                     session.add(
                         Bar1d(
@@ -100,7 +114,8 @@ def seed_database(database_url: str) -> tuple[int, int]:
                     )
 
             session.commit()
-            return len(daily_days) * 2, len(bar_starts) * 2
+            daily_count = sum(10 if symbol == "GAP" else len(daily_days) for symbol, _ in symbols)
+            return daily_count, len(bar_starts) * len(symbols)
     finally:
         engine.dispose()
 
