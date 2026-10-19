@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pytest
 import requests
 
 from ai_trading.db.models import Alert, Delivery, User
@@ -85,6 +86,181 @@ def test_dispatch_pending_sends_via_a_wired_channel_on_the_first_attempt(db_sess
     assert delivery.attempted_at == _NOW
 
 
+def test_absent_channel_preferences_keep_legacy_external_delivery_enabled(db_session):
+    user = _make_user(db_session)
+    alert = _make_alert(db_session, user)
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert outcomes == [DeliveryOutcome(delivery.id, "sent")]
+    assert channel.calls == 1
+    assert delivery.status == "sent"
+
+
+def test_explicitly_disabled_external_channel_stays_pending_while_inbox_sends(db_session):
+    user = _make_user(db_session, settings={"channels": []})
+    alert = _make_alert(db_session, user)
+    inbox = _make_delivery(db_session, alert, channel="inbox")
+    telegram = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        telegram.id: "skipped_preferences",
+    }
+    assert channel.calls == 0
+    assert inbox.status == "sent"
+    assert inbox.attempted_at == _NOW
+    assert telegram.status == "pending"
+    assert telegram.attempted_at is None
+
+
+def test_reenabled_external_channel_delivers_its_pending_row(db_session):
+    user = _make_user(db_session, settings={"channels": []})
+    alert = _make_alert(db_session, user)
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    skipped = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+    user.settings = {"channels": ["telegram"]}
+    delivered = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert skipped == [DeliveryOutcome(delivery.id, "skipped_preferences")]
+    assert delivered == [DeliveryOutcome(delivery.id, "sent")]
+    assert channel.calls == 1
+    assert delivery.status == "sent"
+    assert delivery.attempted_at == _NOW
+
+
+def test_malformed_legacy_preferences_fail_closed_without_blocking_other_users(db_session):
+    malformed_user = _make_user(db_session, settings={"quiet_hours": {"start": "25:00", "end": "07:00"}})
+    malformed_alert = _make_alert(db_session, malformed_user)
+    inbox = _make_delivery(db_session, malformed_alert, channel="inbox")
+    deferred = _make_delivery(db_session, malformed_alert, channel="telegram")
+
+    normal_user = User(email="other-test-user", settings={})
+    db_session.add(normal_user)
+    db_session.flush()
+    normal_alert = _make_alert(db_session, normal_user)
+    normal_delivery = _make_delivery(db_session, normal_alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        deferred.id: "skipped_preferences",
+        normal_delivery.id: "sent",
+    }
+    assert channel.calls == 1
+    assert inbox.status == "sent"
+    assert deferred.status == "pending"
+    assert deferred.attempted_at is None
+    assert normal_delivery.status == "sent"
+
+
+def test_malformed_legacy_channel_preferences_fail_closed_for_external_only(db_session):
+    user = _make_user(db_session, settings={"channels": ["telegram", "unknown"]})
+    alert = _make_alert(db_session, user)
+    inbox = _make_delivery(db_session, alert, channel="inbox")
+    telegram = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        telegram.id: "skipped_preferences",
+    }
+    assert channel.calls == 0
+    assert inbox.status == "sent"
+    assert telegram.status == "pending"
+    assert telegram.attempted_at is None
+
+
+@pytest.mark.parametrize("severity", ["risk", "system"])
+def test_urgent_alerts_bypass_malformed_legacy_quiet_hours(db_session, severity):
+    user = _make_user(
+        db_session,
+        settings={
+            "channels": ["telegram"],
+            "quiet_hours": {"start": "25:00", "end": "07:00"},
+        },
+    )
+    alert = _make_alert(db_session, user, severity=severity)
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert outcomes == [DeliveryOutcome(delivery.id, "sent")]
+    assert channel.calls == 1
+    assert delivery.status == "sent"
+    assert delivery.attempted_at == _NOW
+
+
+@pytest.mark.parametrize("severity", ["risk", "system"])
+def test_urgent_alerts_still_respect_explicit_channel_opt_out(db_session, severity):
+    user = _make_user(
+        db_session,
+        settings={
+            "channels": [],
+            "quiet_hours": {"start": "25:00", "end": "07:00"},
+        },
+    )
+    alert = _make_alert(db_session, user, severity=severity)
+    inbox = _make_delivery(db_session, alert, channel="inbox")
+    telegram = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        telegram.id: "skipped_preferences",
+    }
+    assert channel.calls == 0
+    assert inbox.status == "sent"
+    assert telegram.status == "pending"
+    assert telegram.attempted_at is None
+
+
+def test_unicode_legacy_quiet_hours_do_not_block_another_users_delivery(db_session):
+    malformed_user = _make_user(
+        db_session,
+        settings={
+            "quiet_hours": {"start": "0\u0661:0\u0660", "end": "07:00"},
+        },
+    )
+    malformed_alert = _make_alert(db_session, malformed_user)
+    inbox = _make_delivery(db_session, malformed_alert, channel="inbox")
+    deferred = _make_delivery(db_session, malformed_alert, channel="telegram")
+
+    normal_user = User(email="unicode-test-other", settings={})
+    db_session.add(normal_user)
+    db_session.flush()
+    normal_alert = _make_alert(db_session, normal_user)
+    normal_delivery = _make_delivery(db_session, normal_alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert {outcome.delivery_id: outcome.status for outcome in outcomes} == {
+        inbox.id: "sent",
+        deferred.id: "skipped_preferences",
+        normal_delivery.id: "sent",
+    }
+    assert channel.calls == 1
+    assert inbox.status == "sent"
+    assert deferred.status == "pending"
+    assert deferred.attempted_at is None
+    assert normal_delivery.status == "sent"
+
+
 def test_dispatch_pending_retries_then_succeeds(db_session):
     user = _make_user(db_session)
     alert = _make_alert(db_session, user)
@@ -142,6 +318,18 @@ def test_dispatch_pending_still_sends_a_system_alert_during_quiet_hours(db_sessi
     assert channel.calls == 1
     assert outcomes[0].status == "sent"
     assert delivery.status == "sent"
+
+
+def test_equal_quiet_hours_bounds_mean_no_quiet_period(db_session):
+    user = _make_user(db_session, settings={"quiet_hours": {"start": "22:00", "end": "22:00"}})
+    alert = _make_alert(db_session, user)
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+
+    outcomes = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert outcomes == [DeliveryOutcome(delivery.id, "sent")]
+    assert channel.calls == 1
 
 
 def test_dispatch_pending_leaves_an_unwired_channel_delivery_pending_forever(db_session):

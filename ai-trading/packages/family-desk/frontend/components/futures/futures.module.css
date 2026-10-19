@@ -1,0 +1,550 @@
+.page {
+  width: min(100%, var(--container-desk));
+  margin-inline: auto;
+  padding: 24px clamp(16px, 3vw, 32px) 48px;
+}
+
+.pageHeader,
+.blockHeading,
+.marketHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-title);
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+}
+
+.subtitle,
+.muted,
+.sourceNote {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.secondaryLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+.secondaryLink:focus-visible,
+.pairCard:focus-visible,
+.contractToggle button:focus-visible,
+.sizerInputs input:focus-visible,
+.phaseSix button:focus-visible,
+.error button:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 3px;
+}
+
+.pairSection,
+.marketSection,
+.sizerSection,
+.eventCard,
+.phaseSix,
+.specSection {
+  margin-top: 24px;
+}
+
+.pairGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pairCard {
+  display: flex;
+  min-width: 0;
+  min-height: 104px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 12px;
+  text-align: left;
+}
+
+.pairCard[aria-pressed="true"] {
+  border-color: var(--color-amber);
+  background: var(--color-raised);
+}
+
+.pairCard strong {
+  font-size: var(--text-body);
+}
+
+.pairCard span,
+.pairCard small {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.contractToggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.contractToggle button {
+  min-width: 64px;
+  min-height: 44px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  padding-inline: 14px;
+}
+
+.contractToggle button[aria-pressed="true"] {
+  background: var(--color-raised);
+}
+
+.contractToggle span,
+.marketHeader p,
+.blockHeading > span {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.marketSection {
+  min-width: 0;
+}
+
+.marketHeader {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.marketHeader h2,
+.marketHeader p {
+  margin: 0;
+}
+
+.marketHeader h2 {
+  font-size: 20px;
+  font-weight: var(--weight-bold);
+}
+
+.marketHeader p {
+  margin-top: 3px;
+}
+
+.connectionBadge {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  padding: 6px 10px;
+}
+
+.biasGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  border-bottom: 1px solid var(--color-hairline);
+  padding-block: 16px;
+}
+
+.biasGrid > section {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+
+.unavailableCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 190px;
+  text-align: center;
+}
+
+.unavailableCard h3,
+.unavailableCard p {
+  margin: 4px 0;
+}
+
+.unavailableCard p {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.sizerSection,
+.eventCard,
+.phaseSix {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  padding: 18px;
+}
+
+.blockHeading {
+  align-items: baseline;
+}
+
+.blockHeading h2,
+.eventCard h2,
+.phaseSix h2,
+.specSection h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: var(--weight-semibold);
+}
+
+.sizerSection > .muted {
+  margin-block: 10px 14px;
+}
+
+.sizerInputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sizerInputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.sizerInputs input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.sizingResult {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 14px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 12px;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.sizingResult strong {
+  color: var(--color-text);
+  font-size: var(--text-row);
+}
+
+.eventCard p,
+.phaseSix > p:not(.phaseBadge) {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.phaseSix {
+  border-color: color-mix(in srgb, var(--color-amber) 55%, var(--color-hairline));
+}
+
+.phaseBadge {
+  width: fit-content;
+  margin: 0 0 8px;
+  border: 1px solid var(--color-amber);
+  border-radius: 4px;
+  color: var(--color-amber);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  padding: 3px 7px;
+}
+
+.fixturePositionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.fixturePosition {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-ground);
+  padding: 12px;
+  font-size: var(--text-label);
+}
+
+.fixturePosition strong {
+  font-size: var(--text-body);
+}
+
+.fixturePosition > span:not(.fixtureLabel) {
+  color: var(--color-muted);
+}
+
+.fixtureLabel {
+  color: var(--color-amber);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+}
+
+.weekendFixture {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 12px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 12px;
+  font-size: var(--text-label);
+}
+
+.weekendFixture span {
+  color: var(--color-muted);
+}
+
+.disabledControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.disabledControls button {
+  min-height: 44px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  background: var(--color-raised);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  font: inherit;
+  padding: 8px 14px;
+}
+
+.disclaimer {
+  margin: 18px 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-down) 60%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.error button {
+  min-height: 44px;
+}
+
+.sourceNote {
+  margin-top: 10px;
+}
+
+.specSection {
+  min-width: 0;
+}
+
+.specSection > h2 {
+  margin-bottom: 12px;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+}
+
+.specTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.specTable th,
+.specTable td {
+  border-bottom: 1px solid var(--color-hairline);
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+.specTable thead th {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.specTable tbody th {
+  font-size: var(--text-body);
+}
+
+.specTable td {
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.specTable td:nth-child(3),
+.specTable td:nth-child(4) {
+  text-align: right;
+}
+
+.brokerUnavailable {
+  color: var(--color-muted);
+}
+
+.equivalenceGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.equivalence {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-raised);
+  font-variant-numeric: tabular-nums;
+  padding: 10px 16px;
+}
+
+.equivalence span {
+  color: var(--color-muted);
+}
+
+.rollTimeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rollTimeline li {
+  display: flex;
+  min-height: 84px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border-left: 2px solid var(--color-amber);
+  background: var(--color-raised);
+  padding: 10px 12px;
+}
+
+.rollTimeline time {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.rollTimeline span,
+.sessionCard small {
+  color: var(--color-muted);
+}
+
+.sessionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sessionCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  padding: 14px;
+}
+
+.sessionCard span,
+.sessionCard small {
+  font-size: var(--text-label);
+}
+
+.sessionCard strong {
+  font-size: var(--text-row);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .pairGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .equivalenceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pairGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .biasGrid,
+  .sizerInputs,
+  .equivalenceGrid,
+  .rollTimeline,
+  .sessionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fixturePositionGrid {
+    grid-template-columns: 1fr;
+  }
+}

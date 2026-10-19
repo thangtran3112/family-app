@@ -1,0 +1,336 @@
+.page {
+  display: grid;
+  width: min(100%, var(--container-desk));
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  margin-inline: auto;
+}
+
+.main {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 36px;
+  padding: 32px 48px 48px;
+}
+
+.header {
+  display: grid;
+  gap: 6px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-title);
+}
+
+.header p,
+.helper,
+.statusNote {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
+.form {
+  display: grid;
+  min-width: 0;
+  gap: 28px;
+}
+
+.section,
+.fixtureSection {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  line-height: var(--line-micro);
+  text-transform: uppercase;
+}
+
+.preferences {
+  display: grid;
+  min-width: 0;
+}
+
+.channelFieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.channelRow,
+.quietSection,
+.fixtureRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 180px minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 24px;
+  padding-block: 16px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.channelName,
+.rowTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-row);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-row);
+}
+
+.channelDescription {
+  color: var(--color-muted);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
+.checkTarget {
+  display: flex;
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.checkTarget input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--color-amber);
+}
+
+.checkTarget input:focus-visible,
+.timeField input:focus-visible,
+.retryButton:focus-visible,
+.fixtureButton:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 3px;
+}
+
+.quietSection {
+  grid-template-columns: 180px minmax(0, 1fr) 280px;
+}
+
+.quietSection > div:first-child {
+  display: grid;
+  grid-column: 1 / 3;
+  gap: 8px;
+}
+
+.timeFields {
+  display: flex;
+  grid-column: 3;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.timeField {
+  display: grid;
+  gap: 4px;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+}
+
+.timeField input {
+  min-width: 128px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.warning,
+.error,
+.saved {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-label);
+  line-height: 18px;
+}
+
+.warning {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  border-left: 3px solid var(--color-amber);
+  background: #ffb02012;
+}
+
+.error {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  border-left: 3px solid var(--color-down);
+  background: #ff453a12;
+}
+
+.saved { color: var(--color-up); }
+
+.saveRow {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 16px;
+}
+
+.retryButton,
+.fixtureButton {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+}
+
+.retryButton:disabled,
+.fixtureButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.status {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 20px;
+  padding: 32px 28px;
+  border-left: 1px solid var(--color-hairline);
+}
+
+.statusList {
+  display: grid;
+  margin: 0;
+}
+
+.statusItem {
+  display: grid;
+  gap: 4px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.statusItem + .statusItem { padding-top: 16px; }
+
+.statusItem dt {
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-body);
+}
+
+.statusItem dd {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+  line-height: 18px;
+}
+
+.statusError {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.statusError p { margin: 0; }
+.retryButton { cursor: pointer; }
+
+.sectionHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionHeader h2 {
+  margin: 0 0 4px;
+  font-size: var(--text-row);
+  line-height: var(--line-row);
+}
+
+.fixtureTag {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+}
+
+.fixtureList {
+  display: grid;
+}
+
+.fixtureRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.fixtureRow > div {
+  display: grid;
+  gap: 4px;
+}
+
+.fixtureButton { white-space: nowrap; }
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 1050px) {
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .status {
+    padding: 24px 32px;
+    border-top: 1px solid var(--color-hairline);
+    border-left: 0;
+  }
+  .statusList { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  .statusItem:nth-child(2) { border-bottom: 0; }
+}
+
+@media (max-width: 680px) {
+  .main { gap: 28px; padding: 24px 16px 36px; }
+  .channelRow,
+  .quietSection {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 8px 12px;
+  }
+  .channelDescription { grid-column: 1; }
+  .checkTarget { grid-column: 2; grid-row: 1 / span 2; }
+  .quietSection > div:first-child { grid-column: 1 / -1; }
+  .timeFields { grid-column: 1 / -1; justify-content: start; }
+  .status { padding: 24px 16px; }
+  .statusList { grid-template-columns: minmax(0, 1fr); }
+  .statusItem:nth-child(2) { border-bottom: 1px solid var(--color-hairline); }
+  .fixtureRow { grid-template-columns: minmax(0, 1fr); }
+  .fixtureButton { justify-self: start; white-space: normal; }
+}

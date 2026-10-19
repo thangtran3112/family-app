@@ -274,23 +274,11 @@ def _score_group(votes: dict[str, Vote]) -> tuple[VoteCounts, float]:
 _MA_LENGTHS = (10, 20, 30, 50, 100, 200)
 
 
-def bias(bars: pd.DataFrame) -> Bias | Literal["warming up"]:
-    """The Desk Technical Bias: TradingView's 11 oscillator votes and 15 moving-average/filter
-    votes (02f §3), scored into an oscillator score, a moving-average score, and their mean (the
-    summary), each with its Strong Sell..Strong Buy label; plus ATR's volatility label (no vote).
-
-    `bars` is closed-bar OHLCV (columns `high`, `low`, `close`, `volume`), oldest first, matching
-    every other `ai_trading.core.indicators` function's convention. Fewer than `MIN_BARS` (250)
-    rows returns the literal string `"warming up"` instead of a `Bias` (02f §3). Every vote reads
-    only the bars given; closed-bar and look-ahead discipline is the caller's (it passes only bars
-    already closed as of the time being evaluated).
-    """
-    if len(bars) < MIN_BARS:
-        return "warming up"
+def votes(bars: pd.DataFrame) -> tuple[dict[str, Vote], dict[str, Vote]]:
+    """Latest indicator and moving-average values/actions, including during bias warm-up."""
     close = bars["close"]
     price = _last(close)
     uptrend, downtrend = _trend(close)
-
     oscillators: dict[str, Vote] = {
         "rsi": _extreme_turn_vote(indicators.rsi(close, 14), buy_below=30, sell_above=70),
         "stochastic": _stochastic_vote(indicators.stochastic(bars, 14, 3, 3)),
@@ -304,6 +292,11 @@ def bias(bars: pd.DataFrame) -> Bias | Literal["warming up"]:
         "bull_bear_power": _bull_bear_power_vote(indicators.bull_bear_power(bars, 13), uptrend, downtrend),
         "ultimate_oscillator": _ultimate_oscillator_vote(indicators.ultimate_oscillator(bars, 7, 14, 28)),
     }
+    trend_known = not math.isnan(price) and not math.isnan(_last(indicators.sma(close, _TREND_LENGTH)))
+    if not trend_known:
+        for name in ("stoch_rsi", "bull_bear_power"):
+            vote = oscillators[name]
+            oscillators[name] = Vote(vote.values, None)
 
     moving_averages: dict[str, Vote] = {}
     for length in _MA_LENGTHS:
@@ -313,6 +306,23 @@ def bias(bars: pd.DataFrame) -> Bias | Literal["warming up"]:
     moving_averages["vwma_20"] = _ma_vote(_last(indicators.vwma(bars, 20)), price)
     moving_averages["hull_ma_9"] = _ma_vote(_last(indicators.hull_ma(close, 9)), price)
     moving_averages["ichimoku"] = _ichimoku_vote(indicators.ichimoku(bars, 9, 26, 52), price)
+    return oscillators, moving_averages
+
+
+def bias(bars: pd.DataFrame) -> Bias | Literal["warming up"]:
+    """The Desk Technical Bias: TradingView's 11 oscillator votes and 15 moving-average/filter
+    votes (02f §3), scored into an oscillator score, a moving-average score, and their mean (the
+    summary), each with its Strong Sell..Strong Buy label; plus ATR's volatility label (no vote).
+
+    `bars` is closed-bar OHLCV (columns `high`, `low`, `close`, `volume`), oldest first, matching
+    every other `ai_trading.core.indicators` function's convention. Fewer than `MIN_BARS` (250)
+    rows returns the literal string `"warming up"` instead of a `Bias` (02f §3). Every vote reads
+    only the bars given; closed-bar and look-ahead discipline is the caller's (it passes only bars
+    already closed as of the time being evaluated).
+    """
+    if len(bars) < MIN_BARS:
+        return "warming up"
+    oscillators, moving_averages = votes(bars)
 
     oscillator_counts, oscillator_score = _score_group(oscillators)
     ma_counts, ma_score = _score_group(moving_averages)

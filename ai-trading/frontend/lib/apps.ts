@@ -1,22 +1,20 @@
 import type { LucideIcon } from "lucide-react";
-import { Fish, LineChart, MessagesSquare, Monitor, Network } from "lucide-react";
+import { Fish, LineChart, MessagesSquare, Network } from "lucide-react";
 
 export const hubCategories = [
   { id: "research", label: "Research" },
   { id: "funds", label: "Backtesting" },
   { id: "simulation", label: "Simulation" },
-  { id: "desk", label: "Family Desk" },
 ] as const;
 
 export type CategoryId = (typeof hubCategories)[number]["id"];
 
-export type AppIconKey = "tradingAgents" | "hedgeFund" | "vibeTrading" | "familyDesk" | "mirofish";
+export type AppIconKey = "tradingAgents" | "hedgeFund" | "vibeTrading" | "mirofish";
 
 export const appIcons: Record<AppIconKey, LucideIcon> = {
   tradingAgents: Network,
   hedgeFund: LineChart,
   vibeTrading: MessagesSquare,
-  familyDesk: Monitor,
   mirofish: Fish,
 };
 
@@ -130,22 +128,6 @@ export const hubApps: readonly HubApp[] = [
     goodFor: "Trying the original MiroFish simulator — not stock, futures, or broker analysis.",
     costNote: "Zep Cloud free tier plus LLM usage billed to the family provider keys, both kept server-side.",
     firstVisitNote: ["Nothing to set up: your hub sign-in also signs you in to MiroFish."],
-  },
-  {
-    slug: "desk",
-    kind: "planned",
-    status: "planned",
-    release: "Release 2",
-    name: "Family Desk",
-    subtitle: "Our own workspace",
-    category: "desk",
-    tags: ["Morning scan", "Covered calls", "Alerts"],
-    icon: "familyDesk",
-    device: "touch",
-    summary: "Our strategy-first workspace for alerts and paper trading.",
-    launchNote: "Separate from these research tools",
-    goodFor: "Daily habits for both of us, built on the best ideas from the other three apps.",
-    costNote: "Not built yet.",
   },
 ];
 
