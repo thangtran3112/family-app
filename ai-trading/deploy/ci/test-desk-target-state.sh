@@ -5,13 +5,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURE="$SCRIPT_DIR/desk-target-state/docker-compose.yml"
 PROJECT="desk-target-${GITHUB_RUN_ID:-local}-$$-$RANDOM"
 AI_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DESK_TARGET_PGDATA="$AI_ROOT/temp/$PROJECT-pgdata"
-export DESK_TARGET_PGDATA
-mkdir -p "$DESK_TARGET_PGDATA"
 
 cleanup() {
-  docker compose -p "$PROJECT" -f "$FIXTURE" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$DESK_TARGET_PGDATA"
+  local original_status=$? cleanup_status=0 containers networks volumes leftovers
+  trap - EXIT
+  set +e
+  docker compose -p "$PROJECT" -f "$FIXTURE" down --volumes --remove-orphans >/dev/null 2>&1
+  cleanup_status=$?
+  if ! containers="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT")"; then
+    echo "target-state cleanup could not verify project containers: $PROJECT" >&2
+    cleanup_status=1
+  fi
+  if ! networks="$(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT")"; then
+    echo "target-state cleanup could not verify project networks: $PROJECT" >&2
+    cleanup_status=1
+  fi
+  if ! volumes="$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")"; then
+    echo "target-state cleanup could not verify project volumes: $PROJECT" >&2
+    cleanup_status=1
+  fi
+  leftovers="$(printf '%s\n%s\n%s\n' "$containers" "$networks" "$volumes" | sed '/^$/d')"
+  if [[ -n "$leftovers" ]]; then
+    echo "target-state cleanup left resources for exact project $PROJECT: $leftovers" >&2
+    cleanup_status=1
+  elif ((cleanup_status == 0)); then
+    echo "cleanup verified: no containers, networks, or volumes for exact project $PROJECT"
+  fi
+  if ((original_status != 0)); then
+    exit "$original_status"
+  fi
+  exit "$cleanup_status"
 }
 trap cleanup EXIT
 
