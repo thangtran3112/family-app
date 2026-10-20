@@ -17,7 +17,7 @@ cleanup() {
   if ((${#containers[@]})); then
     docker rm -fv "${containers[@]}" >/dev/null 2>&1 || true
   fi
-  docker network rm smoke-gateway-net smoke-research-net >/dev/null 2>&1 || true
+  docker network rm smoke-gateway-net smoke-research-net smoke-desk-db-net >/dev/null 2>&1 || true
   docker volume rm smoke-control-sock >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -316,10 +316,11 @@ smoke_gateway() {
   # `research` network, reusing its exact subnet so ta-research's own
   # FORWARDED_ALLOW_IPS can be tested unchanged from docker-compose.yml.
   # Only smoke-caddy joins both -- it is the one real gateway peer.
-  local net="smoke-gateway-net" net_research="smoke-research-net" research_subnet="172.30.90.0/29" key
-  docker network rm "$net" "$net_research" >/dev/null 2>&1 || true
+  local net="smoke-gateway-net" net_research="smoke-research-net" net_desk_db="smoke-desk-db-net" research_subnet="172.30.90.0/29" key
+  docker network rm "$net" "$net_research" "$net_desk_db" >/dev/null 2>&1 || true
   docker network create "$net" >/dev/null
   docker network create --subnet "$research_subnet" "$net_research" >/dev/null
+  docker network create "$net_desk_db" >/dev/null
   key="$(printf 'a%.0s' {1..64})"
 
   docker run -d --name smoke-auth --network "$net" --network-alias auth \
@@ -327,6 +328,37 @@ smoke_gateway() {
     -e ALLOWED_ORIGINS=https://trading.example.test \
     "$(image auth)" >/dev/null
   containers+=(smoke-auth)
+
+  # Real Desk API + disposable Postgres. The API bridges only the gateway and
+  # database networks, matching production; scheduler/broker/order services are
+  # deliberately absent. Migrate with the real image before starting the API.
+  docker run -d --name smoke-desk-postgres --network "$net_desk_db" --network-alias postgres \
+    --tmpfs /var/lib/postgresql/data \
+    -e POSTGRES_DB=desk_smoke -e POSTGRES_USER=desk_smoke -e POSTGRES_PASSWORD=disposable \
+    postgres:17 >/dev/null
+  containers+=(smoke-desk-postgres)
+  local desk_database_url="postgresql+psycopg://desk_smoke:disposable@postgres:5432/desk_smoke"
+  local desk_db_deadline=$((SECONDS + 30))
+  until docker exec smoke-desk-postgres pg_isready -U desk_smoke -d desk_smoke >/dev/null 2>&1; do
+    ((SECONDS < desk_db_deadline)) || fail "Desk smoke Postgres did not become ready"
+    sleep 1
+  done
+  docker run --rm --network "$net_desk_db" -e DESK_RUNTIME_DATABASE_URL="$desk_database_url" \
+    --entrypoint python "$(image desk)" -c \
+    "import os; from alembic import command; from alembic.config import Config; c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', os.environ['DESK_RUNTIME_DATABASE_URL']); command.upgrade(c, 'head')" \
+    || fail "Desk smoke database migration failed"
+  docker run -d --name smoke-desk-api --network "$net_desk_db" \
+    -e DESK_RUNTIME_DATABASE_URL="$desk_database_url" \
+    "$(image desk)" python -m uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000 >/dev/null
+  containers+=(smoke-desk-api)
+  docker network connect --alias api "$net" smoke-desk-api
+  local desk_api_deadline=$((SECONDS + 30))
+  until docker exec smoke-desk-api python -c \
+    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)" >/dev/null 2>&1; do
+    ((SECONDS < desk_api_deadline)) || fail "real Desk API readiness did not reach Postgres"
+    sleep 1
+  done
+  echo "ok   real Desk API readiness reaches disposable Postgres"
 
   # Header-echo stand-in for ta-terminal: returns whatever it received as
   # Cf-Access-Authenticated-User-Email, so the test can prove Caddy replaced
@@ -453,6 +485,18 @@ srv.serve_forever()
   expired_cookie="$(sign_smoke_cookie "$key" smoke@example.test -10)"
 
   expect_status 401 http://127.0.0.1:18080/u/tradingagents/
+  expect_status 401 http://127.0.0.1:18080/api/desk
+  expect_status 401 http://127.0.0.1:18080/api/desk/strategies
+  expect_status 401 http://127.0.0.1:18080/api/desk/strategies \
+    -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com'
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' \
+    http://127.0.0.1:18080/api/desk/me)"
+  [[ "$body" == '{"email":"smoke@example.test"}' ]] \
+    || fail "Desk received caller-forged identity instead of the signed session identity: $body"
+  body="$(curl -s --cookie "$cookie" -H 'Cf-Access-Authenticated-User-Email: attacker@evil.com' \
+    http://127.0.0.1:18080/api/desk/strategies)"
+  [[ "$body" == "[]" ]] || fail "verified Desk request did not reach the real owner-scoped API: $body"
+  echo "ok   Caddy strips forged Desk identity and forwards only the signed session identity to the real API"
   # Vibe's dedicated hostname must cross this same Clerk/Caddy gate, not
   # reach its upstream API directly through the tunnel.
   expect_status 401 http://127.0.0.1:18080/live -H 'Host: vibe-trading.tobytran.dev'
