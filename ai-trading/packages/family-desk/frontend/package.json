@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"lib/**/*.test.ts\" static-server.test.mjs",
-    "test:export": "node --test export-layout.test.mjs"
+    "test:export": "node --test export-layout.test.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ai-trading/contracts": "link:../contracts",
@@ -23,6 +24,7 @@
     "zod": "^4.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
