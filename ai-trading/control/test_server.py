@@ -698,7 +698,10 @@ class ServerTest(unittest.TestCase):
             conn.putrequest("PUT", "/apps/mirofish", skip_host=True, skip_accept_encoding=True)
             conn.putheader(ACTOR_HEADER, "user_fixture")
             conn.putheader("Content-Length", str(len(payload)))
-            conn.endheaders(payload)
+            try:
+                conn.endheaders(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             resp = conn.getresponse()
             self.assertEqual(resp.status, 400)
             resp.read()
