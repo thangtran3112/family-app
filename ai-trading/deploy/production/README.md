@@ -12,12 +12,14 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
 | `vibe-consensus` | internal only (`vibe` network, port 8000) | Authenticated free Finnhub recommendation counts; missing optional key yields analysis-only without stopping Vibe |
-| Desk `api` / `scheduler` | internal only (`database` network) | Buildable Phase 4 services; no Caddy/gateway connectivity, and every public `/api/desk` path returns 404 |
+| Desk `api` | authenticated `/api/desk` and `/api/desk/*` | Caddy/Clerk only; internal `gateway` + `database` networks, no host port |
+| Desk `scheduler` | internal only (`database` network) | Database-only background loop; no gateway, broker, order service, or host port |
 | `cloudflared` | outbound only | Tunnel connector |
 
-Family Desk stays dark for this Release 1 merge. The Hub exports no
-`/apps/desk` page, including on interim `trading.tobytran.dev`; Desk belongs on
-that hostname only when Phase 4 ships as its own reviewed release.
+This source prepares the authenticated Desk API runtime but does not perform a
+live activation. The Hub still exports no `/apps/desk` page, including on
+interim `trading.tobytran.dev`; its registry and static Worker cutover remain
+unchanged until the separately reviewed Phase 4 release.
 
 On the host:
 
