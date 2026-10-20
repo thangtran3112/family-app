@@ -186,7 +186,7 @@ if [[ -n "$APP_CONFIG_STAGING_DIR" ]]; then
   # shellcheck source=/dev/null
   source "$MIROFISH_LIB_SRC"
 else
-  # shellcheck source=SCRIPTDIR/mirofish-runtime.sh
+  # shellcheck source=/dev/null
   source "$SCRIPT_DIR/mirofish-runtime.sh"
 fi
 MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
@@ -980,7 +980,20 @@ request = urllib.request.Request(
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 try:
     with opener.open(request, timeout=8) as response:
-        print(response.read().decode("utf-8"))
+        body = response.read().decode("utf-8")
+        content_type = response.headers.get_content_type()
+        legacy_spa_fallback = False
+        if action == "probe" and response.getcode() == 200 and content_type == "text/html" and body.strip():
+            try:
+                json.loads(body)
+            except json.JSONDecodeError:
+                legacy_spa_fallback = True
+        if legacy_spa_fallback:
+            print(json.dumps({"http_status": 404}))
+        elif action != "probe" and content_type == "text/html":
+            raise SystemExit(1)
+        else:
+            print(body)
 except urllib.error.HTTPError as exc:
     if action == "probe" and exc.code in (404, 409):
         print(json.dumps({"http_status": exc.code}))
