@@ -35,9 +35,13 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
   account_id = var.cloudflare_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.ai_trading.id
 
+  # Establish the Worker route before removing interim ingress at cutover.
+  # No dependency on the hub/terminal routes and no DNS replacement.
+  depends_on = [cloudflare_workers_route.desk_static]
+
   config = {
     ingress = concat(
-      [
+      var.desk_cutover_enabled ? [] : [
         {
           # Public hostname's dynamic paths are routed to the Caddy "gateway"
           # service (ai-trading/deploy/production/Caddyfile), not directly to
@@ -78,6 +82,8 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
           hostname = var.hub_hostname
           service  = "http://web:3000"
         },
+      ],
+      [
         {
           # Vibe's whole hostname goes through the same Clerk-verified Caddy
           # gateway. Its own API key remains an additional upstream check.
@@ -113,10 +119,9 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
           # probe" -- "private" in that ruling's own wording means
           # "not yet linked from the public hostname", not "network-isolated";
           # see this comment for the corrected, precise claim). The public
-          # hub_hostname routes above are a second, independent path to the
-          # same gateway; Task 11 (separately operator-gated) removes them
-          # once the Worker/GCS static path is cut over, leaving this origin
-          # hostname as the only way dynamic paths reach the gateway.
+          # hub_hostname routes above are the interim path removed only by
+          # desk_cutover_enabled. This origin remains after cutover and also
+          # carries /api/desk/* to the existing Clerk/Caddy gate.
           hostname = var.hub_origin_hostname
           service  = "http://gateway:8080"
         },
