@@ -2816,6 +2816,110 @@ s65="$(new_scratch case65)"
   [[ "$(cat "$s65/legacy.log")" == called ]] || exit 1
 ) || fail "case65: 401/403/503/malformed/transport failures must never be treated as a legacy image"
 
+echo "=== Case 65b (SP5 regression): the legacy SPA fallback is probe-only; neighboring responses fail closed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s65b="$(new_scratch case65b)"
+(
+  APP_DIR="$s65b/app"
+  AI_TRADING_SECRETS_DIR="$s65b/secrets"
+  APP_CONFIG_STAGING_DIR="$s65b/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  read_desired_vibe() { echo true; }
+  vibe_container_ids() { echo old-vibe-container; }
+  enter_legacy_barrier() { echo called >>"$s65b/legacy.log"; return 0; }
+  wait_for_legacy_idle() { return 0; }
+  docker() {
+    [[ "$1" == exec && "$2" == -i && "$3" == old-vibe-container && "$4" == python && "$5" == -c ]] || return 1
+    local embedded="$6" action="$7"
+    API_AUTH_KEY=fake-api-key python3 -c '
+import email.message
+import io
+import os
+import sys
+import urllib.error
+import urllib.request
+
+embedded, action = sys.argv[1:]
+
+class Response:
+    status = 200
+
+    def __init__(self):
+        self.headers = email.message.Message()
+        self.headers["Content-Type"] = os.environ.get("FAKE_CONTENT_TYPE", "application/json")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def getcode(self):
+        return self.status
+
+    def read(self):
+        return os.environ.get("FAKE_BODY", "").encode()
+
+class Opener:
+    def open(self, request, timeout):
+        failure = os.environ.get("FAKE_FAILURE", "")
+        if failure == "transport":
+            raise OSError("synthetic transport failure")
+        if failure.startswith("http-"):
+            code = int(failure.removeprefix("http-"))
+            raise urllib.error.HTTPError(
+                request.full_url, code, "synthetic HTTP failure",
+                email.message.Message(), io.BytesIO(b""),
+            )
+        return Response()
+
+urllib.request.build_opener = lambda *_args: Opener()
+sys.argv = ["vibe-drain-client", action]
+exec(compile(embedded, "<vibe-drain-client>", "exec"), {"__name__": "__main__"})
+' "$embedded" "$action"
+  }
+  expect_probe_denied() {
+    rm -f "$s65b/legacy.log"
+    VIBE_GATE_MODE=none
+    if begin_vibe_release_gate; then return 1; fi
+    [[ ! -e "$s65b/legacy.log" ]]
+  }
+
+  export FAKE_FAILURE='' FAKE_CONTENT_TYPE='text/html; charset=utf-8'
+  export FAKE_BODY='<!doctype html><html><body>legacy SPA</body></html>'
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == legacy && "$(cat "$s65b/legacy.log")" == called ]] || exit 1
+
+  for code in 404 409; do
+    export FAKE_FAILURE="http-$code"
+    reply="$(vibe_drain_request old-vibe-container probe)" || exit 1
+    [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["http_status"])' <<<"$reply")" == "$code" ]] || exit 1
+  done
+
+  export FAKE_FAILURE=''
+  export FAKE_CONTENT_TYPE=application/json FAKE_BODY='{"legacy":true}'
+  expect_probe_denied || exit 1
+  export FAKE_CONTENT_TYPE=text/plain FAKE_BODY='legacy SPA'
+  expect_probe_denied || exit 1
+  export FAKE_CONTENT_TYPE=text/html FAKE_BODY=''
+  expect_probe_denied || exit 1
+  export FAKE_CONTENT_TYPE=application/json FAKE_BODY='{'
+  expect_probe_denied || exit 1
+  for FAKE_FAILURE in http-401 http-403 http-500 transport; do
+    export FAKE_FAILURE
+    expect_probe_denied || exit 1
+  done
+
+  export FAKE_FAILURE='' FAKE_CONTENT_TYPE=text/html
+  export FAKE_BODY='<!doctype html><html><body>legacy SPA</body></html>'
+  for action in start status renew release; do
+    if vibe_drain_request old-vibe-container "$action" fake-lease >/dev/null; then exit 1; fi
+  done
+) || fail "case65b: only a nonempty invalid-JSON 200 HTML probe may map to the bounded legacy 404 envelope"
+
 echo "=== Case 66 (SP5, RED): process-level drain failure aborts before preferences, secrets or containers change ==="
 CASE_COUNT=$((CASE_COUNT + 1))
 s66="$(new_scratch case66)"
