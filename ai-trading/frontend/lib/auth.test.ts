@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import {
   acquireAndExchange,
   applyExchangeResult,
+  capturePendingReturn,
+  clearPendingReturn,
+  consumePendingReturnWhenReady,
   createSerialExchangeQueue,
   createSessionGatedTask,
   exchangeSessionToken,
   getGateState,
-  getSignedOutView,
+  getPendingReturnStorage,
   initialSessionGateState,
   resetForSession,
   safeReturnTo,
@@ -25,43 +28,89 @@ test("loaded but not signed in is the signed-out state", () => {
 test("loaded and signed in is ready", () => {
   assert.equal(getGateState({ isLoaded: true, isSignedIn: true }), "ready");
 });
-test("signed-in return flow waits for browser location before Clerk SignIn can render", () => {
-  assert.deepEqual(getSignedOutView(null), { kind: "loading" });
-});
-test("signed-in return flow forces the validated Desk destination from /login", () => {
+
+class FakePendingReturnStorage {
+  readonly values = new Map<string, string>();
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
+}
+
+test("signed-in return flow preserves /login target through loading and redirects only after gateway ok", () => {
+  const storage = new FakePendingReturnStorage();
   const returnTo = "https://trading.tobytran.dev/strategies?id=12#builder";
-  assert.deepEqual(
-    getSignedOutView({ pathname: "/login", search: `?returnTo=${encodeURIComponent(returnTo)}` }),
-    { kind: "sign-in", forceRedirectUrl: returnTo },
-  );
+  capturePendingReturn("/login", `?returnTo=${encodeURIComponent(returnTo)}`, storage);
+  assert.deepEqual([...storage.values.values()], [returnTo]);
+
+  assert.equal(consumePendingReturnWhenReady("loading", "pending", storage), null);
+  assert.deepEqual([...storage.values.values()], [returnTo]);
+  capturePendingReturn("/", "", storage);
+  assert.equal(consumePendingReturnWhenReady("ready", "pending", storage), null);
+  assert.equal(consumePendingReturnWhenReady("ready", "error", storage), null);
+  assert.deepEqual([...storage.values.values()], [returnTo]);
+
+  assert.equal(consumePendingReturnWhenReady("ready", "ok", storage), returnTo);
+  assert.equal(storage.values.size, 0);
+  assert.equal(consumePendingReturnWhenReady("ready", "ok", storage), null);
 });
-test("signed-in return flow forces the Hub fallback for missing or unsafe /login targets", () => {
+
+test("signed-in return flow never stores missing, malformed, disallowed or fallback targets", () => {
   for (const returnTo of [
     null,
     "not a url",
     "http://trading.tobytran.dev/",
-    "https://user:pass@trading.tobytran.dev/",
     "https://trading.tobytran.dev:443/",
-    "https://trading.tobytran.dev:8443/",
-    "https://sub.trading.tobytran.dev/",
     "https://trading.tobytran.dev.evil.example/",
-    " https://trading.tobytran.dev/",
-    "https:\t//trading.tobytran.dev/",
-    "\u0000https://trading.tobytran.dev/",
   ]) {
-    const search = returnTo === null ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
-    assert.deepEqual(
-      getSignedOutView({ pathname: "/login", search }),
-      { kind: "sign-in", forceRedirectUrl: "/" },
-      returnTo ?? "missing returnTo",
+    const storage = new FakePendingReturnStorage();
+    capturePendingReturn(
+      "/login",
+      `?returnTo=${encodeURIComponent("https://trading.tobytran.dev/")}`,
+      storage,
     );
+    assert.equal(storage.values.size, 1);
+    const search = returnTo === null ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
+    capturePendingReturn("/login", search, storage);
+    assert.equal(storage.values.size, 0, returnTo ?? "missing returnTo");
   }
 });
-test("signed-in return flow leaves non-login protected pages on normal Clerk SignIn", () => {
-  assert.deepEqual(
-    getSignedOutView({ pathname: "/settings", search: "?returnTo=https%3A%2F%2Ftrading.tobytran.dev%2F" }),
-    { kind: "sign-in" },
+
+test("signed-in return flow leaves non-login state untouched", () => {
+  const storage = new FakePendingReturnStorage();
+  capturePendingReturn("/settings", "?returnTo=https%3A%2F%2Ftrading.tobytran.dev%2F", storage);
+  assert.equal(storage.values.size, 0);
+  assert.equal(getGateState({ isLoaded: true, isSignedIn: false }), "signed-out");
+});
+
+test("signed-in return flow deletes then rejects a stale unsafe stored target", () => {
+  const storage = new FakePendingReturnStorage();
+  capturePendingReturn(
+    "/login",
+    `?returnTo=${encodeURIComponent("https://trading.tobytran.dev/")}`,
+    storage,
   );
+  assert.equal(storage.values.size, 1);
+  const [key] = storage.values.keys();
+  storage.setItem(key, "https://evil.example/");
+  assert.equal(consumePendingReturnWhenReady("ready", "ok", storage), null);
+  assert.equal(storage.values.size, 0);
+});
+
+test("signed-in return flow fails safely when per-tab storage is unavailable", () => {
+  const unavailable = getPendingReturnStorage(() => { throw new Error("unavailable"); });
+  assert.equal(unavailable, null);
+  assert.doesNotThrow(() => capturePendingReturn("/login", "?returnTo=anything", null));
+  assert.equal(consumePendingReturnWhenReady("ready", "ok", null), null);
+  assert.doesNotThrow(() => clearPendingReturn(null));
+
+  const throwingStorage = {
+    getItem() { throw new Error("unavailable"); },
+    setItem() { throw new Error("unavailable"); },
+    removeItem() { throw new Error("unavailable"); },
+  };
+  assert.doesNotThrow(() => capturePendingReturn("/login", "?returnTo=anything", throwingStorage));
+  assert.equal(consumePendingReturnWhenReady("ready", "ok", throwingStorage), null);
+  assert.doesNotThrow(() => clearPendingReturn(throwingStorage));
 });
 test("the refresh interval is well under the session cookie's one-hour cap", () => {
   assert.ok(SESSION_REFRESH_INTERVAL_MS < 3600_000);

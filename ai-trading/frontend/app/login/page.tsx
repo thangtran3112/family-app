@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { getLoginReturnTo } from "@/lib/auth";
+import { clearPendingReturn, getLoginReturnTo, getPendingReturnStorage } from "@/lib/auth";
 
 // The MiroFish Worker sends an unauthenticated visitor here as
 // `/login?returnTo=<url>` (01e design, step 5). The root layout's
@@ -24,6 +24,7 @@ import { getLoginReturnTo } from "@/lib/auth";
 // diverge.
 export default function LoginPage() {
   useEffect(() => {
+    clearPendingReturn(getPendingReturnStorage());
     window.location.replace(getLoginReturnTo(window.location.search));
   }, []);
 
