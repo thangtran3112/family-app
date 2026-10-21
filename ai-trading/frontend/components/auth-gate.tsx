@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SignIn, useAuth } from "@clerk/react";
 import type { ReactNode } from "react";
 import {
@@ -8,15 +8,18 @@ import {
   createSerialExchangeQueue,
   createSessionGatedTask,
   getGateState,
+  getSignedOutView,
   initialSessionGateState,
   resetForSession,
   signOutTradingSession,
   SESSION_REFRESH_INTERVAL_MS,
+  type BrowserLocation,
   type ExchangeQueue,
 } from "@/lib/auth";
 
 type SignOutStatus = "idle" | "pending" | "error";
 const TradingSignOutContext = createContext<(() => Promise<void>) | null>(null);
+const subscribeToBrowserLocation = () => () => {};
 
 export function useTradingSignOut() {
   const signOut = useContext(TradingSignOutContext);
@@ -75,6 +78,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, sessionId, getToken, signOut } = useAuth();
   const gateState = getGateState({ isLoaded, isSignedIn });
   const currentSessionId = sessionId ?? null;
+  const browserUrl = useSyncExternalStore<string | null>(
+    subscribeToBrowserLocation,
+    () => window.location.href,
+    () => null,
+  );
+  const browserLocation: BrowserLocation | null = browserUrl ? new URL(browserUrl) : null;
+  const signedOutView = getSignedOutView(browserLocation);
 
   const [sessionGateState, setSessionGateState] = useState(() => initialSessionGateState(currentSessionId));
   const resetState = resetForSession(sessionGateState, currentSessionId);
@@ -192,7 +202,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (gateState === "loading" || (gateState === "ready" && resetState.status === "pending")) {
+  if (
+    gateState === "loading" ||
+    (gateState === "signed-out" && signedOutView.kind === "loading") ||
+    (gateState === "ready" && resetState.status === "pending")
+  ) {
     // Deliberately no manual recovery action here (see the module-level
     // comment above): this screen cannot distinguish a normal
     // sub-second load from a genuinely hung exchange, and offering a
@@ -207,7 +221,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (gateState === "signed-out") {
     return (
       <main className="flex h-dvh items-center justify-center">
-        <SignIn routing="hash" />
+        <SignIn
+          routing="hash"
+          forceRedirectUrl={signedOutView.kind === "sign-in" ? signedOutView.forceRedirectUrl : undefined}
+        />
       </main>
     );
   }

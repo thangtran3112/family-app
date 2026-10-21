@@ -7,6 +7,7 @@ import {
   createSessionGatedTask,
   exchangeSessionToken,
   getGateState,
+  getSignedOutView,
   initialSessionGateState,
   resetForSession,
   safeReturnTo,
@@ -23,6 +24,44 @@ test("loaded but not signed in is the signed-out state", () => {
 });
 test("loaded and signed in is ready", () => {
   assert.equal(getGateState({ isLoaded: true, isSignedIn: true }), "ready");
+});
+test("signed-in return flow waits for browser location before Clerk SignIn can render", () => {
+  assert.deepEqual(getSignedOutView(null), { kind: "loading" });
+});
+test("signed-in return flow forces the validated Desk destination from /login", () => {
+  const returnTo = "https://trading.tobytran.dev/strategies?id=12#builder";
+  assert.deepEqual(
+    getSignedOutView({ pathname: "/login", search: `?returnTo=${encodeURIComponent(returnTo)}` }),
+    { kind: "sign-in", forceRedirectUrl: returnTo },
+  );
+});
+test("signed-in return flow forces the Hub fallback for missing or unsafe /login targets", () => {
+  for (const returnTo of [
+    null,
+    "not a url",
+    "http://trading.tobytran.dev/",
+    "https://user:pass@trading.tobytran.dev/",
+    "https://trading.tobytran.dev:443/",
+    "https://trading.tobytran.dev:8443/",
+    "https://sub.trading.tobytran.dev/",
+    "https://trading.tobytran.dev.evil.example/",
+    " https://trading.tobytran.dev/",
+    "https:\t//trading.tobytran.dev/",
+    "\u0000https://trading.tobytran.dev/",
+  ]) {
+    const search = returnTo === null ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
+    assert.deepEqual(
+      getSignedOutView({ pathname: "/login", search }),
+      { kind: "sign-in", forceRedirectUrl: "/" },
+      returnTo ?? "missing returnTo",
+    );
+  }
+});
+test("signed-in return flow leaves non-login protected pages on normal Clerk SignIn", () => {
+  assert.deepEqual(
+    getSignedOutView({ pathname: "/settings", search: "?returnTo=https%3A%2F%2Ftrading.tobytran.dev%2F" }),
+    { kind: "sign-in" },
+  );
 });
 test("the refresh interval is well under the session cookie's one-hour cap", () => {
   assert.ok(SESSION_REFRESH_INTERVAL_MS < 3600_000);

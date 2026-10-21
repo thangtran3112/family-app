@@ -1,5 +1,20 @@
 export type GateState = "loading" | "signed-out" | "ready";
 
+export type BrowserLocation = { pathname: string; search: string };
+export type SignedOutView =
+  | { kind: "loading" }
+  | { kind: "sign-in"; forceRedirectUrl?: string };
+
+export function getLoginReturnTo(search: string): string {
+  return safeReturnTo(new URLSearchParams(search).get("returnTo"));
+}
+
+export function getSignedOutView(location: BrowserLocation | null): SignedOutView {
+  if (!location) return { kind: "loading" };
+  if (location.pathname !== "/login") return { kind: "sign-in" };
+  return { kind: "sign-in", forceRedirectUrl: getLoginReturnTo(location.search) };
+}
+
 export function getGateState(input: { isLoaded: boolean; isSignedIn: boolean | undefined }): GateState {
   if (!input.isLoaded) return "loading";
   if (!input.isSignedIn) return "signed-out";
