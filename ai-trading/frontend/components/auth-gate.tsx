@@ -1,13 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SignIn, useAuth } from "@clerk/react";
 import type { ReactNode } from "react";
 import {
   applyExchangeResult,
+  capturePendingReturn,
+  consumePendingReturnWhenReady,
   createSerialExchangeQueue,
   createSessionGatedTask,
   getGateState,
+  getPendingReturnStorage,
   initialSessionGateState,
   resetForSession,
   signOutTradingSession,
@@ -75,6 +78,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, sessionId, getToken, signOut } = useAuth();
   const gateState = getGateState({ isLoaded, isSignedIn });
   const currentSessionId = sessionId ?? null;
+
+  useLayoutEffect(() => {
+    capturePendingReturn(window.location.pathname, window.location.search, getPendingReturnStorage());
+  }, []);
 
   const [sessionGateState, setSessionGateState] = useState(() => initialSessionGateState(currentSessionId));
   const resetState = resetForSession(sessionGateState, currentSessionId);
@@ -168,6 +175,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
       // hasn't started yet instead.
     };
   }, [gateState, currentSessionId, getToken, attempt, signOutStatus]);
+
+  useEffect(() => {
+    if (signOutStatus !== "idle") return;
+    const target = consumePendingReturnWhenReady(gateState, resetState.status, getPendingReturnStorage());
+    if (target) window.location.replace(target);
+  }, [gateState, resetState.status, signOutStatus]);
 
   if (signOutStatus === "pending") {
     return (
