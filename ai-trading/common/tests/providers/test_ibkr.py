@@ -517,3 +517,28 @@ def test_the_source_runs_end_to_end_over_the_wire_client(fake_ib):
     finally:
         source.close()
     assert source.gateway_status().state != "connected"
+
+
+def test_waiting_for_first_ticks_shares_one_budget_across_the_call():
+    clock, waits = FakeClock(), []
+    gateway = FakeGateway()
+    gateway.ticks.update({s: tick() for s in ("A", "B", "C")})
+    source = make_source(gateway, clock=clock, tick_wait_s=2.0)
+    session_tick = None
+
+    def slow_open(settings, credentials):
+        nonlocal session_tick
+        session = FakeGateway.open(gateway, settings, credentials)
+        session_tick = session.tick
+
+        def timed(symbol, wait_s):
+            waits.append(wait_s)
+            clock.sleep(1.5)  # a symbol with no tick yet burns 1.5 s of the budget
+            return session_tick(symbol, wait_s)
+
+        session.tick = timed
+        return session
+
+    source._connector = SimpleNamespace(open=slow_open)
+    source.latest(["A", "B", "C"], now=NOW)
+    assert waits == [2.0, 0.5, 0.0]

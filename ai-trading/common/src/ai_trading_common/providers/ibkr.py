@@ -204,8 +204,10 @@ class IbkrSource:
                         self._subscribed.add(symbol)
                         wanted.append(symbol)
                 quotes = []
+                deadline = self._clock() + self._settings.tick_wait_s  # one wait budget for the call, not per symbol
                 for symbol in wanted:
-                    quote = self._quote(symbol, conn.tick(symbol, self._settings.tick_wait_s), now_utc)
+                    wait = max(0.0, deadline - self._clock())
+                    quote = self._quote(symbol, conn.tick(symbol, wait), now_utc)
                     if quote is not None:
                         quotes.append(quote)
                 return quotes
