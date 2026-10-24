@@ -9,6 +9,9 @@ export const DecimalMoneySchema = z
   .string()
   .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
   .refine((value) => Number(value) > 0, "Amount must be positive");
+export const NonNegativeMoneySchema = z
+  .string()
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/);
 
 export const ExpenseStatusSchema = z.enum(["draft", "ready", "archived"]);
 export type ExpenseStatus = z.infer<typeof ExpenseStatusSchema>;
@@ -105,6 +108,7 @@ export const ExpenseSchema = z.strictObject({
   merchant: z.string().min(1).max(200),
   description: z.string().max(2_000).nullable(),
   amount: DecimalMoneySchema,
+  taxAmount: NonNegativeMoneySchema.nullish(),
   currency: CurrencySchema,
   incurredOn: DateOnlySchema,
   taxYear: z.number().int().min(1_900).max(9_999),

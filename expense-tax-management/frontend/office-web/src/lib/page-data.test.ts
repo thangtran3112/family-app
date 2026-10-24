@@ -9,7 +9,14 @@ const { fetchLedger, fetchTaxReport, fetchTags } = vi.hoisted(() => ({
 }));
 vi.mock("./api", () => ({ fetchLedger, fetchTaxReport, fetchTags }));
 
-import { loadDashboard, loadExpenses, loadTax, loadTaxForOffice, loadTags } from "./page-data";
+import {
+  loadDashboard,
+  loadExpenses,
+  loadTax,
+  loadTaxForOffice,
+  loadTags,
+  projectExpenseTaxDisplay,
+} from "./page-data";
 
 const businessSession: OfficeSession = {
   apiBaseUrl: "http://app.test",
@@ -85,5 +92,15 @@ describe("Office page data boundaries", () => {
     fetchTaxReport.mockResolvedValue({ taxYear: 2025 });
     const result = loadTaxForOffice(businessSession, getToken, "org_123");
     expect(result).toBeInstanceOf(Promise);
+  });
+});
+
+describe("expense tax display projection", () => {
+  it.each([
+    ["5.53", "CAD", { kind: "positive", label: "Tax: 5.53 CAD" }],
+    ["0.00", "CAD", { kind: "zero", label: "Tax: 0.00 CAD" }],
+    [null, "CAD", { kind: "unknown", label: "Tax: Not recorded" }],
+  ] as const)("projects tax %s in %s", (taxAmount, currency, expected) => {
+    expect(projectExpenseTaxDisplay(taxAmount, currency)).toEqual(expected);
   });
 });

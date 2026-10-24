@@ -30,7 +30,7 @@ export interface PersonalExpenseCreateCommand {
   readonly actorUserId: string;
   readonly tenantId: string;
   readonly profileId: string;
-  readonly request: ExpenseCreateRequest;
+  readonly request: ExpenseCreateRequest & Pick<Expense, "taxAmount">;
   readonly requestId: string;
 }
 
@@ -38,7 +38,7 @@ export interface BusinessExpenseCreateCommand {
   readonly actorUserId: string;
   readonly tenantId: string;
   readonly businessId: string;
-  readonly request: ExpenseCreateRequest;
+  readonly request: ExpenseCreateRequest & Pick<Expense, "taxAmount">;
   readonly requestId: string;
 }
 
@@ -46,7 +46,7 @@ export interface ExpenseUpdateCommand {
   readonly actorUserId: string;
   readonly tenantId: string;
   readonly expenseId: string;
-  readonly request: ExpenseUpdateRequest;
+  readonly request: ExpenseUpdateRequest & Pick<Expense, "taxAmount">;
   readonly requestId: string;
 }
 
@@ -100,6 +100,7 @@ function toExpense(row: Selectable<ExpenseTable>, tags: ExpenseTagChip[] = []): 
     merchant: row.merchant,
     description: row.description,
     amount: String(row.amount),
+    taxAmount: row.tax_amount === null ? null : String(row.tax_amount),
     currency: row.currency,
     incurredOn: dateOnly(row.incurred_on as Date | string),
     taxYear: row.tax_year,
@@ -258,7 +259,7 @@ export async function insertExpenseInTransaction(
   input: {
     actorUserId: string;
     tenantId: string;
-    request: ExpenseCreateRequest;
+    request: ExpenseCreateRequest & Pick<Expense, "taxAmount">;
     requestId: string;
     scope: Scope;
     source?: "manual" | "ocr" | "forwarded_email" | "connected_mailbox";
@@ -288,6 +289,7 @@ export async function insertExpenseInTransaction(
       merchant: input.request.merchant,
       description: input.request.description ?? null,
       amount: input.request.amount,
+      tax_amount: input.request.taxAmount ?? null,
       currency: input.request.currency,
       incurred_on: input.request.incurredOn,
       source: input.source ?? "manual",
@@ -628,6 +630,9 @@ async function updateExpense(
           ? {}
           : { description: input.request.description }),
         ...(input.request.amount === undefined ? {} : { amount: input.request.amount }),
+        ...(input.request.taxAmount === undefined
+          ? {}
+          : { tax_amount: input.request.taxAmount }),
         ...(input.request.currency === undefined ? {} : { currency: input.request.currency }),
         ...(input.request.incurredOn === undefined
           ? {}

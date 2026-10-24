@@ -93,7 +93,7 @@ describe.skipIf(!integrationEnabled)("App Clerk identity PostgreSQL mapping", ()
       throw new Error("PostgreSQL integration prerequisites are missing");
     }
     database = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/expense_tax_db`,
     );
   });
 

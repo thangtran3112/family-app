@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AI_WORKER_TASK_QUEUE,
+  CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION,
   EXPENSE_ENRICHMENT_WORKFLOW_TYPE,
   FORWARDED_RECEIPT_WORKFLOW_TYPE,
   FOUNDATION_ECHO_WORKFLOW_TYPE,
@@ -39,6 +40,7 @@ describe("Temporal workflow compatibility", () => {
       "MailboxMaterializeWorkflow",
     ]);
     expect(AI_WORKER_TASK_QUEUE).toBe("expense-tax-processing");
+    expect(CAPTURE_OCR_REVIEW_RESULT_SCHEMA_VERSION).toBe("capture-ocr-review-v1");
   });
 
   it("freezes legacy and target dispatch routing identifiers (Task 7 Stage A)", () => {

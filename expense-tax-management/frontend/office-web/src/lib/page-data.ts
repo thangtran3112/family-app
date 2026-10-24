@@ -4,6 +4,19 @@ import { fetchAuthorizedBusinesses, fetchDuplicateMatches, fetchLedger, fetchMai
 import type { ClerkGetToken } from "./clerk";
 import type { OfficeSession } from "./session";
 
+export type ExpenseTaxDisplay =
+  | { kind: "positive"; label: string }
+  | { kind: "zero"; label: string }
+  | { kind: "unknown"; label: "Tax: Not recorded" };
+
+export function projectExpenseTaxDisplay(taxAmount: string | null | undefined, currency: string): ExpenseTaxDisplay {
+  if (taxAmount == null) return { kind: "unknown", label: "Tax: Not recorded" };
+  return {
+    kind: Number(taxAmount) === 0 ? "zero" : "positive",
+    label: `Tax: ${taxAmount} ${currency}`,
+  };
+}
+
 export function loadDashboard(
   session: OfficeSession,
   getToken: ClerkGetToken,

@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Kysely } from "kysely";
 
 import { createAppDatabase } from "../../services/app-api/src/database/client.js";
@@ -153,12 +153,16 @@ describe.skipIf(!integrationEnabled)("Task 7 Stage A dispatch routing fence", ()
       throw new Error("Task 7 Stage A PostgreSQL prerequisites are missing");
     }
     runtimeDatabase = createAppDatabase(
-      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:5433/expense_tax_db`,
+      `postgresql://expense_app_runtime:${encodeURIComponent(runtimePassword)}@127.0.0.1:15434/expense_tax_db`,
     );
     migratorDatabase = createAppDatabase(
-      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:5433/expense_tax_db`,
+      `postgresql://expense_app_migrator:${encodeURIComponent(migratorPassword)}@127.0.0.1:15434/expense_tax_db`,
     );
     resetRoutingToGenerationOne();
+  });
+
+  afterEach(() => {
+    if (postgresContainerId && migratorPassword) resetRoutingToGenerationOne();
   });
 
   afterAll(async () => {

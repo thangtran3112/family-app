@@ -576,6 +576,173 @@ export async function addMatch(
   return row.id;
 }
 
+export async function recordCompletedOcrDeduplicationInTransaction(
+  transaction: Transaction<AppDatabase>,
+  input: {
+    readonly actorUserId: string;
+    readonly tenantId: string;
+    readonly scope: FileScope;
+    readonly expenseId: string;
+    readonly fileId: string;
+    readonly merchant: string;
+    readonly amount: string;
+    readonly currency: string;
+    readonly incurredOn: string;
+    readonly idempotencyKey: string;
+    readonly requestId: string;
+  },
+): Promise<{ readonly decision: "no_match" | "review"; readonly matchIds: readonly string[] }> {
+  const file = await transaction
+    .selectFrom("app.expense_files")
+    .selectAll()
+    .where("id", "=", input.fileId)
+    .where("tenant_id", "=", input.tenantId)
+    .executeTakeFirst();
+  if (!file || file.expense_id !== input.expenseId || file.status !== "READY") {
+    throw DomainError.validation();
+  }
+  const fingerprint = buildDeduplicationFingerprint({
+    merchant: input.merchant,
+    amount: input.amount,
+    currency: input.currency,
+    incurredOn: input.incurredOn,
+  });
+  if (!fingerprint) throw DomainError.validation();
+  const personalProfileId = input.scope.kind === "personal" ? input.scope.profileId : null;
+  const businessId = input.scope.kind === "business" ? input.scope.businessId : null;
+  await transaction
+    .insertInto("app.expense_sources")
+    .values({
+      id: randomUUID(),
+      tenant_id: input.tenantId,
+      personal_profile_id: personalProfileId,
+      business_id: businessId,
+      expense_id: input.expenseId,
+      source_type: "manual_upload",
+      source_file_id: input.fileId,
+      inbound_email_id: null,
+      metadata: toJsonValue({}),
+    })
+    .onConflict((oc) =>
+      oc.columns(["tenant_id", "source_file_id"]).where("source_file_id", "is not", null).doNothing(),
+    )
+    .execute();
+  await transaction
+    .insertInto("app.expense_dedup_fingerprints")
+    .values({
+      id: randomUUID(),
+      tenant_id: input.tenantId,
+      personal_profile_id: personalProfileId,
+      business_id: businessId,
+      expense_id: input.expenseId,
+      fingerprint_version: fingerprint.version,
+      normalized_merchant: fingerprint.normalizedMerchant,
+      amount_minor_units: fingerprint.amountMinorUnits,
+      currency: fingerprint.currency,
+      incurred_on: new Date(`${fingerprint.incurredOn}T00:00:00.000Z`),
+      fingerprint_hash: fingerprint.hash,
+    })
+    .onConflict((oc) => oc.columns(["expense_id", "fingerprint_version"]).doNothing())
+    .execute();
+
+  let fileQuery = transaction
+    .selectFrom("app.expense_files as file")
+    .innerJoin("app.expenses as existing_expense", (join) =>
+      join
+        .onRef("existing_expense.id", "=", "file.expense_id")
+        .onRef("existing_expense.tenant_id", "=", "file.tenant_id")
+        .on("existing_expense.status", "<>", "archived"),
+    )
+    .select([
+      "file.expense_id as expense_id",
+      "file.sha256_hex as sha256_hex",
+      "file.status as status",
+      "file.personal_profile_id as personal_profile_id",
+      "file.business_id as business_id",
+    ])
+    .where("file.tenant_id", "=", input.tenantId)
+    .where("file.sha256_hex", "=", file.sha256_hex)
+    .where("file.status", "=", "READY")
+    .where("file.expense_id", "is not", null);
+  fileQuery = input.scope.kind === "personal"
+    ? fileQuery.where("file.personal_profile_id", "=", input.scope.profileId).where("file.business_id", "is", null)
+    : fileQuery.where("file.business_id", "=", input.scope.businessId).where("file.personal_profile_id", "is", null);
+  const files = file.sha256_hex ? await fileQuery.execute() : [];
+
+  let fingerprintQuery = transaction
+    .selectFrom("app.expense_dedup_fingerprints as fingerprint")
+    .innerJoin("app.expenses as existing_expense", (join) =>
+      join
+        .onRef("existing_expense.id", "=", "fingerprint.expense_id")
+        .onRef("existing_expense.tenant_id", "=", "fingerprint.tenant_id")
+        .on("existing_expense.status", "<>", "archived"),
+    )
+    .selectAll("fingerprint")
+    .where("fingerprint.tenant_id", "=", input.tenantId)
+    .where("fingerprint.normalized_merchant", "=", fingerprint.normalizedMerchant);
+  fingerprintQuery = input.scope.kind === "personal"
+    ? fingerprintQuery.where("fingerprint.personal_profile_id", "=", input.scope.profileId).where("fingerprint.business_id", "is", null)
+    : fingerprintQuery.where("fingerprint.business_id", "=", input.scope.businessId).where("fingerprint.personal_profile_id", "is", null);
+  const fingerprints = await fingerprintQuery.execute();
+  const candidates = findDeterministicCandidates({
+    scope: input.scope,
+    candidateExpenseId: input.expenseId,
+    file: {
+      expenseId: file.expense_id,
+      sha256Hex: file.sha256_hex,
+      status: file.status,
+      personalProfileId: file.personal_profile_id,
+      businessId: file.business_id,
+    },
+    fingerprint,
+    files: files.map((row) => ({
+      expenseId: row.expense_id,
+      sha256Hex: row.sha256_hex,
+      status: row.status,
+      personalProfileId: row.personal_profile_id,
+      businessId: row.business_id,
+    })),
+    fingerprints: fingerprints.map((row) => ({
+      expenseId: row.expense_id,
+      fingerprintHash: row.fingerprint_hash,
+      normalizedMerchant: row.normalized_merchant,
+      amountMinorUnits: Number(row.amount_minor_units),
+      currency: row.currency,
+      incurredOn: row.incurred_on,
+      personalProfileId: row.personal_profile_id,
+      businessId: row.business_id,
+    })),
+  });
+  const matchIds: string[] = [];
+  for (const match of candidates) {
+    matchIds.push(await addMatch(transaction, {
+      tenantId: input.tenantId,
+      scope: input.scope,
+      candidateExpenseId: input.expenseId,
+      existingExpenseId: match.existingExpenseId,
+      matchType: match.matchType,
+      confidence: match.confidence,
+      evidence: match.evidence,
+      idempotencyKey: buildMatchIdempotencyKey(
+        input.idempotencyKey,
+        match.matchType,
+        match.existingExpenseId,
+      ),
+    }));
+  }
+  await recordAuditEvent(transaction, {
+    tenantId: input.tenantId,
+    actorUserId: input.actorUserId,
+    action: "deduplication.evidence_recorded",
+    outcome: "success",
+    resourceType: "expense",
+    resourceId: input.expenseId,
+    requestId: input.requestId,
+    metadata: { matchCount: matchIds.length },
+  });
+  return { decision: matchIds.length > 0 ? "review" : "no_match", matchIds };
+}
+
 export function createDeduplicationDomain(
   database: Kysely<AppDatabase>,
 ): DeduplicationDomain {

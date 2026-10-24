@@ -36,7 +36,7 @@ export default function CapturePage() {
   }
 
   return <>
-    <header className="page-head"><div><p className="kicker">Tran Studio · Owner</p><h1>Catch the receipt.<br />Keep moving.</h1><p>Capture now. Review when you have a moment.</p></div><span className="allowance">18 / 20<small>UTC reset</small></span></header>
+    <header className="page-head"><div><p className="kicker">Tran Studio · Owner</p><h1>Catch the receipt.<br />Keep moving.</h1><p>Complete scans save automatically. Incomplete scans wait in your review queue.</p></div><span className="allowance">18 / 20<small>UTC reset</small></span></header>
     {error && <div className="inline-error" role="alert">{error}<button onClick={() => setError(null)}>Dismiss</button></div>}
     <section className="capture-grid">
       <article className="camera-card"><div className="viewfinder"><Camera size={38} aria-hidden="true" /><span>Align receipt edges</span></div><div className="actions"><button className="primary" onClick={() => input.current?.click()}><Camera size={20} />Capture receipt</button><button onClick={() => input.current?.click()}><FileUp size={20} />Choose file</button></div><input ref={input} hidden type="file" accept={accepted} capture="environment" onChange={(event) => void pick(event.target.files)} /></article>
