@@ -5469,7 +5469,7 @@
     },
     "/api/desk/charts/{symbol}/markers": {
       "get": {
-        "description": "Pattern markers on closed bars plus the fires of her strategies, filtered to `from`..`to`\n(on the bar start for patterns, the bar time for fires). By default only the patterns her attached\nstrategies use; `all_patterns=true` returns every pattern in the fixture. Stub: SPY, NVDA, MSFT patterns\n(the default set is `hammer`); fires are the signal feed's rows for the symbol.",
+        "description": "Pattern markers on closed bars (drawn below the bar) plus the fires of her strategies (a bell above),\nfiltered to `from`..`to` on the bar start for patterns and the bar time for fires.",
         "operationId": "markers_api_desk_charts__symbol__markers_get",
         "parameters": [
           {
