@@ -5,6 +5,8 @@ closed by `as_of` on every call, so catch-up safety falls out of calling `evalua
 the outbox's unique-constraint dedupe, not out of any streaming machinery or tick-side bookkeeping.
 """
 
+import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -17,9 +19,11 @@ from ai_trading.core.calendar import Asset
 from ai_trading.core.evaluate import INTRADAY_CADENCES, SignalCandidate, evaluate
 from ai_trading.data.backfill import ALPACA_FREE_HISTORY_START
 from ai_trading.data.bars import read_bars
-from ai_trading.db.models import Strategy, StrategyVersion, Watchlist, WatchlistItem
+from ai_trading.db.models import Signal, Strategy, StrategyVersion, Watchlist, WatchlistItem
 from ai_trading.engine import degraded
 from ai_trading.engine.outbox import AlertSpec, record_signal
+
+log = logging.getLogger(__name__)
 
 _LIVE_CADENCES = frozenset({"bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h"})
 
@@ -38,6 +42,12 @@ _BARS_1M_LOOKBACK_DAYS = 70
 _BARS_1D_START = ALPACA_FREE_HISTORY_START
 
 
+#: Resolves a `watch.universe.filter` name to the ticker symbols that filter strategy matched on its
+#: last run, for the strategy's owner. `None` means the filter has no stored result (it does not
+#: exist, or the screener has not run yet): the strategy is skipped and the tick reports why.
+FilterMatches = Callable[[Session, Strategy, str], Sequence[str] | None]
+
+
 @dataclass(frozen=True)
 class TickResult:
     evaluated_strategies: int
@@ -50,6 +60,7 @@ def tick(
     *,
     now: datetime,
     live_cadences: frozenset[str] = _LIVE_CADENCES,
+    filter_matches: FilterMatches | None = None,
 ) -> TickResult:
     """Called every ~60s from `api`'s own background loop (bar_close_* cadences, the default
     `live_cadences`) or once per job slot from `jobs.scheduler` (`live_cadences={"premarket_0830"}`
@@ -61,6 +72,11 @@ def tick(
       3. bars_1m/bars_1d = ai_trading.data.bars.read_bars(...) as needed by spec.watch.runOn
       4. candidates = ai_trading.core.evaluate.evaluate(spec, symbol, asset, ..., as_of=now)
       5. for each candidate: outbox.record_signal(...); counted as a new signal only when it returns True
+
+    A strategy watching `{"filter": name}` reads its symbols from `filter_matches` (the screener's
+    stored results); with no resolver, or no result for that name, it is skipped and the reason is
+    appended to `errors`. `then.alert.frequency == "once"` also skips a symbol that already has a
+    signal for this version, so the window sliding past an old signal never fires it again.
 
     A symbol's `evaluate()` raising `ValueError` (e.g. missing 1-minute bars) is caught, appended to
     `errors`, and does not stop the rest of the tick -- this IS Review Focus 2: calling `tick` twice
@@ -83,7 +99,13 @@ def tick(
             continue
         alert = AlertSpec(channels=list(spec.then.alert.channels), severity=spec.then.alert.severity or "info")
 
-        for symbol, asset in _universe(session, strategy, spec):
+        try:
+            universe = _universe(session, strategy, spec, filter_matches)
+        except LookupError as exc:
+            errors.append(f"{strategy.name}: {exc}")
+            log.warning("strategy %s skipped: %s", strategy.id, exc)
+            continue
+        for symbol, asset in universe:
             quality = degraded.quality_for(asset, spec.watch.runOn)
             if quality == "unavailable":
                 continue  # no data source at all for a future in Phase 3 (D-c): never fires
@@ -92,6 +114,8 @@ def tick(
                 candidates = _evaluate_symbol(session, spec, symbol, asset, as_of)
             except ValueError as exc:
                 errors.append(f"{strategy.name} {symbol}: {exc}")
+                continue
+            if spec.then.alert.frequency == "once" and _has_signal(session, version.id, symbol):
                 continue
             for candidate in candidates:
                 wrote = record_signal(
@@ -122,9 +146,19 @@ def _current_version(session: Session, strategy: Strategy) -> StrategyVersion | 
     return session.get(StrategyVersion, strategy.current_version_id)
 
 
-def _universe(session: Session, strategy: Strategy, spec: StrategySpecV1) -> list[tuple[str, Asset]]:
-    """`spec.watch.universe`: an inline symbol list, or a watchlist name resolved against the
-    strategy owner's own `watchlist_items` (joined through `watchlists` by name and owner).
+def _has_signal(session: Session, version_id: int, symbol: str) -> bool:
+    found = session.execute(
+        select(Signal.id).where(Signal.strategy_version_id == version_id, Signal.symbol == symbol).limit(1)
+    )
+    return found.first() is not None
+
+
+def _universe(
+    session: Session, strategy: Strategy, spec: StrategySpecV1, filter_matches: FilterMatches | None
+) -> list[tuple[str, Asset]]:
+    """`spec.watch.universe`: an inline symbol list, a watchlist name resolved against the strategy
+    owner's own `watchlist_items` (joined through `watchlists` by name and owner), or the matches of
+    a named filter strategy (`filter_matches`; raises `LookupError` when it has none).
 
     An inline symbol has no `asset_type` field in the schema (`Universe1.symbols` is a bare string
     list) -- a leading "/" is the Desk's own futures marker (the schema's own `Symbol` pattern,
@@ -134,6 +168,11 @@ def _universe(session: Session, strategy: Strategy, spec: StrategySpecV1) -> lis
     universe = spec.watch.universe
     if hasattr(universe, "symbols"):
         return [_inline_symbol(item.root) for item in universe.symbols]
+    if hasattr(universe, "filter"):
+        matches = filter_matches(session, strategy, universe.filter) if filter_matches else None
+        if matches is None:
+            raise LookupError(f"filter {universe.filter!r} has no stored matches")
+        return [_inline_symbol(symbol) for symbol in matches]
     rows = session.execute(
         select(WatchlistItem.symbol, WatchlistItem.asset_type)
         .join(Watchlist, Watchlist.id == WatchlistItem.watchlist_id)

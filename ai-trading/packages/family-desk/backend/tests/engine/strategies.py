@@ -65,8 +65,10 @@ def make_spec(
     channels: list[str] | None = None,
     severity: str | None = None,
     paper_order: dict[str, Any] | None = None,
+    alert: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    then: dict[str, Any] = {"alert": {"channels": channels or ["inbox"]}}
+    """`alert`: extra `then.alert` fields (`frequency`, `expiresOn`, `message`)."""
+    then: dict[str, Any] = {"alert": {"channels": channels or ["inbox"], **(alert or {})}}
     if severity is not None:
         then["alert"]["severity"] = severity
     if paper_order is not None:
