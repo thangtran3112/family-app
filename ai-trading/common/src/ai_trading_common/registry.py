@@ -28,6 +28,7 @@ from ai_trading_common.providers import (
     eulerpool,
     finnhub,
     fred,
+    ibkr,
     sec_edgar,
 )
 from ai_trading_common.sources import (
@@ -37,12 +38,14 @@ from ai_trading_common.sources import (
     EarningsCalendarSource,
     EarningsSource,
     FundamentalsSource,
+    GatewayStatusSource,
     MacroSource,
     NewsSource,
     QuoteSource,
     TargetsSource,
     UniverseSource,
 )
+from ai_trading_common.types import GatewayStatus
 
 __all__ = ("Kind", "Provider", "REGISTRY", "DEFAULT_CHAINS", "DataSources", "KIND_PROTOCOLS")
 
@@ -237,6 +240,7 @@ REGISTRY: dict[str, Provider] = {
     "eulerpool": eulerpool.PROVIDER,
     "finnhub": finnhub.PROVIDER,
     "fred": fred.PROVIDER,
+    "ibkr": ibkr.PROVIDER,
     "sec_edgar": sec_edgar.PROVIDER,
 }
 
@@ -251,7 +255,7 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
     "fundamentals": ("sec_edgar",),
     "macro": ("fred",),
     "news": ("finnhub",),
-    "quotes": ("alpaca",),
+    "quotes": ("ibkr", "alpaca"),  # ibkr only joins while its switch is on (Provider.enabled)
     "targets": ("eulerpool", "finnhub"),
     "universe": ("alpaca",),
 }
@@ -274,6 +278,14 @@ class DataSources:
     universe: UniverseSource
     quotes: QuoteSource
 
+    def gateway_status(self) -> GatewayStatus:
+        """How the live-quote gateway stands: the first quotes provider that holds one reports it, and
+        with none in the chain (switched off) the answer is `not_configured`."""
+        for provider in getattr(self.quotes, "providers", ()):
+            if isinstance(provider, GatewayStatusSource):
+                return provider.gateway_status()
+        return GatewayStatus("not_configured", None, None)
+
     @staticmethod
     def from_env(
         env: Mapping[str, str] = os.environ,
@@ -286,7 +298,9 @@ class DataSources:
         to `defaults`. Fails fast (`ValueError`, naming the env var) when a list is empty, names
         an unknown provider, or names a provider that doesn't serve that kind -- a missing API
         key is never a startup error (the provider itself raises `NotConfigured` when called).
-        Each named provider is built at most once and shared across every kind it serves.
+        Each named provider is built at most once and shared across every kind it serves. A
+        provider whose `enabled(env)` is False is validated but left out of the chain (a chain with
+        nothing left is a `ValueError` too).
         """
         http = http or ThrottledClient()
         built: dict[str, object] = {}
@@ -309,7 +323,10 @@ class DataSources:
                     raise ValueError(f"{var} names unknown provider {name!r}")
                 if kind not in registry[name].kinds:
                     raise ValueError(f"{var}: provider {name!r} does not serve {kind!r}")
-                providers.append(adapter_for(name))
+                if registry[name].enabled(env):
+                    providers.append(adapter_for(name))
+            if not providers:
+                raise ValueError(f"{var}: every named provider is switched off")
             kinds[kind] = _CHAIN_CLASSES[kind](tuple(providers))
 
         return DataSources(**kinds)

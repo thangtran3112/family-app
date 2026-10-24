@@ -20,9 +20,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "exchange-calendars", specifier = ">=4.13" },
+    { name = "ib-async", marker = "extra == 'ibkr'", specifier = "==2.1.0" },
     { name = "pandas", specifier = ">=2.3" },
     { name = "requests", specifier = ">=2.32" },
 ]
+provides-extras = ["ibkr"]
 
 [package.metadata.requires-dev]
 dev = [
