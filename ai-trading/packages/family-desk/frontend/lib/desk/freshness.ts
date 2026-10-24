@@ -34,6 +34,8 @@ export const COPY = {
   scanning: "Scanning US stocks…",
   notEnoughHistory: "Not enough history for {timeframe} yet",
   noSignalsToday: "No signals yet today · your strategies are watching",
+  libraryUnavailable: "Strategy library unavailable · Try again",
+  noAlertStrategies: "No alert strategies yet",
   futuresNotConnected: "Waiting for IBKR · not connected yet",
   futuresReadOnly: "Futures · read only",
 } as const;
@@ -51,7 +53,8 @@ export const BANNED_TERMS: readonly RegExp[] = [
   /\bnan\b/i,
   /stale cache/i,
   /\bhydrat/i,
-  /(?<![:\d])[1-5]\d{2}(?![:\d])/, // HTTP status codes (3-digit numbers); times such as 10:41:12 do not match
+  /\b(?:http|status|error|code)\s*:?\s*[1-5]\d{2}\b/i, // "Error 503", "HTTP 404"; prices and counts such as 210.99 or "9 of 131" do not match
+  /\b[1-5]\d{2}\s+(?:error|not found|bad gateway|unauthorized|forbidden|internal server)/i,
   /\bundefined\b/i,
   /stack trace/i,
 ];

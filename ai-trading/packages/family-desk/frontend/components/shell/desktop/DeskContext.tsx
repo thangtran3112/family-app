@@ -39,11 +39,16 @@ export function useDeskStatus(): DeskStatusValue {
 export type DeskUiValue = {
   lane: Lane;
   setLane: (lane: Lane) => void;
+  /** Remember the lane for the next visit without switching this screen (Settings > Default view). */
+  rememberLane: (lane: Lane) => void;
   /** The watchlist the left rail and the dashboard are showing; null until the lists load. */
   selectedListId: number | null;
   setSelectedListId: (id: number) => void;
   leftCollapsed: boolean;
   setLeftCollapsed: (collapsed: boolean) => void;
+  /** The left rail's lists, bumped by `invalidate` when a screen creates, renames or deletes one. */
+  revisions: { watchlists: number; filters: number };
+  invalidate: (kind: "watchlists" | "filters") => void;
 };
 
 const UiContext = createContext<DeskUiValue | null>(null);
@@ -53,13 +58,16 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   const [lane, setLaneState] = useState<Lane>(() => readLanePreference(window.localStorage));
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [revisions, setRevisions] = useState({ watchlists: 0, filters: 0 });
+  const invalidate = useCallback((kind: "watchlists" | "filters") => setRevisions((current) => ({ ...current, [kind]: current[kind] + 1 })), []);
   const setLane = useCallback((next: Lane) => {
     writeLanePreference(window.localStorage, next);
     setLaneState(next);
   }, []);
+  const rememberLane = useCallback((next: Lane) => writeLanePreference(window.localStorage, next), []);
   const value = useMemo<DeskUiValue>(
-    () => ({ lane, setLane, selectedListId, setSelectedListId, leftCollapsed, setLeftCollapsed }),
-    [lane, setLane, selectedListId, leftCollapsed],
+    () => ({ lane, setLane, rememberLane, selectedListId, setSelectedListId, leftCollapsed, setLeftCollapsed, revisions, invalidate }),
+    [lane, setLane, rememberLane, selectedListId, leftCollapsed, revisions, invalidate],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

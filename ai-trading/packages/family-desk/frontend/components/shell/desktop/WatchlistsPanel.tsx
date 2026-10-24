@@ -15,15 +15,15 @@ import { ListSwitcher } from "./ListSwitcher";
 import styles from "./leftrail.module.css";
 
 export function WatchlistsPanel({ band }: { band: ShellBand }) {
-  const { selectedListId, setSelectedListId } = useDeskUi();
-  const lists = useDeskQuery("rail-watchlists", (signal) => loadWatchlists({ signal }));
+  const { selectedListId, setSelectedListId, revisions } = useDeskUi();
+  const lists = useDeskQuery("rail-watchlists", (signal) => loadWatchlists({ signal }), { revision: revisions.watchlists });
   const listRows = lists.data ?? [];
   const activeId = selectedListId ?? pickDefaultWatchlist(listRows)?.id ?? null;
   // The fetcher only runs while `enabled` is true, so the `?? 0` fallback is never requested.
   const table = useDeskQuery(
     `rail-table-${activeId}`,
     (signal) => loadWatchlistTable(activeId ?? 0, { signal }),
-    { intervalMs: 60_000, enabled: activeId !== null },
+    { intervalMs: 60_000, enabled: activeId !== null, revision: revisions.watchlists },
   );
 
   const empty = (

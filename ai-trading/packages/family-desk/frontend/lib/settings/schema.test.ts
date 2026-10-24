@@ -54,3 +54,18 @@ test("merging owned preferences preserves unknown top-level and quiet-hours keys
     },
   );
 });
+
+import { readDefaultView, readPauseAll, withDefaultView, withPauseAll } from "./schema.ts";
+
+test("default view and pause-all read safe defaults and write without touching other keys", () => {
+  assert.equal(readDefaultView({}), "technical");
+  assert.equal(readDefaultView({ default_view: "fundamental" }), "fundamental");
+  assert.equal(readDefaultView({ default_view: "nonsense" }), "technical");
+  assert.equal(readPauseAll({}), false);
+  assert.equal(readPauseAll({ pause_all: true }), true);
+  assert.equal(readPauseAll({ pause_all: "yes" }), false);
+  const base = { quiet_hours: { start: "22:00", end: "07:00" }, channels: ["inbox"], other: 1 };
+  assert.deepEqual(withDefaultView(base, "fundamental"), { ...base, default_view: "fundamental" });
+  assert.deepEqual(withPauseAll(base, true), { ...base, pause_all: true });
+  assert.deepEqual(base, { quiet_hours: { start: "22:00", end: "07:00" }, channels: ["inbox"], other: 1 }, "inputs are not mutated");
+});

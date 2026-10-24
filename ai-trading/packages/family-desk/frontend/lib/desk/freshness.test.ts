@@ -103,8 +103,9 @@ test("the copy table and every rendered label avoid the banned words", () => {
     assert.equal(containsBannedTerm(statusBarText(input)), false);
   }
   assert.equal(BANNED_TERMS.length > 10, true);
-  for (const bad of ["Core async update", "fetch failed", "stream closed", "socket", "polling", "timeout", "value is null", "NaN", "stale cache", "hydrate", "Error 503", "undefined"]) {
+  for (const bad of ["Core async update", "fetch failed", "stream closed", "socket", "polling", "timeout", "value is null", "NaN", "stale cache", "hydrate", "Error 503", "HTTP 404", "503 error", "404 Not Found", "undefined"]) {
     assert.equal(containsBannedTerm(bad), true, bad);
   }
   assert.equal(containsBannedTerm("Reconnecting… · last update 10:41:12 AM ET"), false);
+  for (const fine of ["9 of 131", "NVDA 210.99 +0.50%", "Scanned 131 US stocks and ETFs", "Volume 12,883,312"]) assert.equal(containsBannedTerm(fine), false, fine);
 });

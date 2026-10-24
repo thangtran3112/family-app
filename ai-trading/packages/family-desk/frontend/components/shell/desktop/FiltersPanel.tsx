@@ -6,6 +6,7 @@ import type { ScreenerFilter } from "@/lib/api/schemas";
 import { EMPTY_VALUE } from "@/lib/desk/format";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { useDeskUi } from "./DeskContext";
 import styles from "./leftrail.module.css";
 
 function LockIcon() {
@@ -35,7 +36,8 @@ function FilterRow({ filter, active }: { filter: ScreenerFilter; active: boolean
 }
 
 export function FiltersPanel() {
-  const filters = useDeskQuery("rail-filters", (signal) => loadFilters({ signal }));
+  const { revisions } = useDeskUi();
+  const filters = useDeskQuery("rail-filters", (signal) => loadFilters({ signal }), { revision: revisions.filters });
   const current = useSearchParams().get("filter");
 
   if (filters.data === null) {

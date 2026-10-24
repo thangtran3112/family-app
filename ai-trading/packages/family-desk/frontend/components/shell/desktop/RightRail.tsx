@@ -15,16 +15,34 @@ export type RailSection = { id: string; label: string; node: ReactNode };
  * a 40 px tab strip and one section at a time opens in an overlay drawer. Rendered through a portal into
  * the shell's rail slot, so a page without this component simply has no right rail.
  */
-export function RightRail({ sections, label = "Context" }: { sections: readonly RailSection[]; label?: string }) {
+export function RightRail({
+  sections,
+  label = "Context",
+  openId,
+  onOpenChange,
+}: {
+  sections: readonly RailSection[];
+  label?: string;
+  /** Controlled drawer at the 1180 band (a row click opens it); leave unset for the tab strip to own it. */
+  openId?: string | null;
+  onOpenChange?: (id: string | null) => void;
+}) {
   const slot = useContext(RailSlotContext);
   const band = useShellBand();
-  const [open, setOpen] = useState<string | null>(null);
+  const [ownOpen, setOwnOpen] = useState<string | null>(null);
+  const controlled = openId !== undefined;
+  const open = controlled ? openId : ownOpen;
+  const setOpen = (id: string | null) => {
+    if (!controlled) setOwnOpen(id);
+    onOpenChange?.(id);
+  };
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const current = activeRailTab(open, sections);
   const close = useCallback(() => {
-    setOpen(null);
+    if (!controlled) setOwnOpen(null);
+    onOpenChange?.(null);
     if (current) tabRefs.current[current]?.focus();
-  }, [current]);
+  }, [controlled, current, onOpenChange]);
 
   if (!slot) return null;
 

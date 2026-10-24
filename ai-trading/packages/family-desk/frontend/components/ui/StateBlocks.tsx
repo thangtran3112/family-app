@@ -12,11 +12,13 @@ export function LoadingBlock({ label, height = 160 }: { label: string; height?: 
   );
 }
 
-/** "Couldn't load this chart · Try again" (02l §c3). Engineering detail never shows here. */
-export function ErrorBlock({ subject, onRetry }: { subject: string; onRetry: () => void }) {
+/** "Couldn't load this chart · Try again" (02l §c3), or a custom `message`. Engineering detail never shows here. */
+export function ErrorBlock({ subject, message, onRetry }: { subject?: string; message?: string; onRetry: () => void }) {
+  // The copy table ends these messages with "· Try again"; the retry button is that last phrase.
+  const lead = (message ?? loadErrorText(subject ?? "page")).replace(/ · Try again$/, "");
   return (
     <div className={styles.error} role="alert">
-      <span>{loadErrorText(subject)}</span>
+      <span>{lead} ·</span>
       <button type="button" className={styles.button} onClick={onRetry}>Try again</button>
     </div>
   );

@@ -9,6 +9,8 @@ export type DeskQueryOptions = {
   intervalMs?: number;
   /** Skip fetching (for example until a symbol is known). */
   enabled?: boolean;
+  /** Bump to refetch now while keeping the old values on screen (another screen changed the data). */
+  revision?: number;
 };
 
 export type DeskQueryResult<T> = {
@@ -31,7 +33,7 @@ export type DeskQueryResult<T> = {
 export function useDeskQuery<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
-  { intervalMs, enabled = true }: DeskQueryOptions = {},
+  { intervalMs, enabled = true, revision = 0 }: DeskQueryOptions = {},
 ): DeskQueryResult<T> {
   const [raw, dispatch] = useReducer(queryReducer<T>, key, initialQueryState<T>);
   const fetcherRef = useRef(fetcher);
@@ -60,7 +62,7 @@ export function useDeskQuery<T>(
       controller.abort();
       if (timer) clearInterval(timer);
     };
-  }, [key, enabled, intervalMs]);
+  }, [key, enabled, intervalMs, revision]);
 
   const refresh = useCallback(() => runRef.current(true), []);
   // Derived, not stored: when the key changes before the first answer, show a clean loading state.

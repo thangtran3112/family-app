@@ -74,3 +74,12 @@ export function mergeOwnedSettings(
     channels: ["inbox", ...(owned.channels.telegram ? ["telegram"] : []), ...(owned.channels.slack ? ["slack"] : [])],
   };
 }
+
+// Desktop settings (02m §a3.9): `default_view` and `pause_all` live beside the quiet hours and channels.
+export type DefaultView = "technical" | "fundamental";
+
+export const readDefaultView = (settings: SettingsRecord): DefaultView => (settings.default_view === "fundamental" ? "fundamental" : "technical");
+export const readPauseAll = (settings: SettingsRecord): boolean => settings.pause_all === true;
+
+export const withDefaultView = (settings: SettingsRecord, view: DefaultView): SettingsRecord => ({ ...settings, default_view: view });
+export const withPauseAll = (settings: SettingsRecord, paused: boolean): SettingsRecord => ({ ...settings, pause_all: paused });
