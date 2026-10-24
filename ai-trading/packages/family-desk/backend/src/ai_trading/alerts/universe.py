@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_trading.db.models import FilterRun, FilterStrategy, FilterStrategyVersion, Watchlist, WatchlistItem
+from ai_trading.db.models import FilterRun, FilterStrategy, FilterStrategyVersion, Strategy, Watchlist, WatchlistItem
 from ai_trading.screener.runner import newest_run, run_matches
 
 
@@ -56,6 +56,13 @@ def last_filter_run(session: Session, user_id: int, name: str) -> FilterRun | No
     return None if found is None else newest_run(session, found[1].id)
 
 
+def filter_matches(session: Session, strategy: Strategy, name: str) -> list[str] | None:
+    """`engine.tick.FilterMatches` over the owner's saved filters: the symbols of the filter's newest run, or None
+    when it has no run (no such filter, or the screener has not run it yet)."""
+    run = last_filter_run(session, strategy.owner_user_id, name)
+    return None if run is None else [match.symbol for match in run_matches(session, run.id)]
+
+
 def resolve(session: Session, user_id: int, universe: dict[str, Any]) -> list[tuple[str, str]]:
     """`(symbol, asset_type)` for a dumped `watch.universe`. A missing list or filter, or a filter that has
     not run yet, resolves to nothing: the strategy simply has no symbols to watch until one exists."""
@@ -64,9 +71,7 @@ def resolve(session: Session, user_id: int, universe: dict[str, Any]) -> list[tu
     if "watchlist" in universe:
         return watchlist_symbols(session, user_id, universe["watchlist"]) or []
     run = last_filter_run(session, user_id, universe["filter"])
-    if run is None:
-        return []
-    return [(match.symbol, "stock") for match in run_matches(session, run.id)]
+    return [] if run is None else [(match.symbol, "stock") for match in run_matches(session, run.id)]
 
 
 def source_label(session: Session, user_id: int, universe: dict[str, Any]) -> dict[str, Any]:

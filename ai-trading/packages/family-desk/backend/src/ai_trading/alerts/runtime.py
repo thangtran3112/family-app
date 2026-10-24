@@ -12,8 +12,13 @@ background loop and the scheduler's jobs call it in its place. What it adds, in 
    delay. When data returns, only bars that closed within that window can fire: no catch-up burst.
 4. **How often.** `once` (never twice for a strategy and symbol, across versions), `once_per_bar`, `every_time`;
    `limits.cooldownMinutes` compares with the strategy's latest signal on the symbol, across versions.
-5. **The alert.** A signal row, then an inbox alert with its symbol and strategy, the rendered message, and one
-   delivery per channel with `inbox` always first (`notify.dispatch` applies quiet hours and the channel rules).
+5. **The alert.** `engine.outbox.record_signal` writes a signal row, then an inbox alert with its symbol and
+   strategy, the rendered message, and one delivery per channel with `inbox` always first (`notify.dispatch`
+   applies quiet hours and the channel rules).
+
+`core.evaluate` runs everything a spec says about one evaluation: the `frequency` rising-edge or every-bar rule,
+`expiresOn`, and the rendered `message` (`render_message`, with `DEFAULT_MESSAGE` when the spec has none). This
+module adds what needs the stored history: `once`, cooldown, staleness, and the recency window.
 
 Nothing here imports order code: a `paperOrder` in a stored spec is ignored, and the alert contract rejects it
 for new strategies.
@@ -21,12 +26,11 @@ for new strategies.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ai_trading.alerts.service import status_of
@@ -37,8 +41,9 @@ from ai_trading.core.evaluate import CADENCE_MINUTES, INTRADAY_CADENCES, SignalC
 from ai_trading.core.freshness import freshness, market_session, pause_limit
 from ai_trading.data.backfill import ALPACA_FREE_HISTORY_START
 from ai_trading.data.bars import read_bars
-from ai_trading.db.models import Alert, Bar1m, Delivery, FeedHealth, Signal, Strategy, StrategyVersion, User
+from ai_trading.db.models import Bar1m, FeedHealth, Signal, Strategy, StrategyVersion, User
 from ai_trading.engine import degraded
+from ai_trading.engine.outbox import AlertSpec, record_signal
 from ai_trading.engine.tick import TickResult
 
 log = logging.getLogger(__name__)
@@ -64,15 +69,6 @@ class RuntimeResult(TickResult):
 
 
 # -- pure rules ---------------------------------------------------------------------------------------------
-
-
-def render_message(template: str | None, *, symbol: str, close: float | None, at: datetime) -> str:
-    """The alert body: `{symbol}`, `{close}` and `{time}` (New York time as `9:45 AM`) filled into the spec's
-    message, or `DEFAULT_MESSAGE`. An unknown close reads `n/a`."""
-    local = at.astimezone(ET)
-    clock = f"{local.hour % 12 or 12}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
-    price = "n/a" if close is None else f"{close:g}"
-    return (template or DEFAULT_MESSAGE).replace("{symbol}", symbol).replace("{close}", price).replace("{time}", clock)
 
 
 def cadence_interval(run_on: str) -> timedelta:
@@ -125,30 +121,14 @@ def _last_closed_minute(session: Session, symbol: str, as_of: pd.Timestamp) -> p
 
 
 def _eval_spec(spec: dict[str, Any], symbol: str) -> StrategySpecV1:
-    """The spec `evaluate` runs: this symbol as the source, and the alert-block fields this runtime applies
-    itself removed, so the engine gate sees only what the engine evaluates."""
-    stripped = {**spec, "watch": {**spec["watch"], "universe": {"symbols": [symbol]}}}
-    alert = {k: v for k, v in spec["then"]["alert"].items() if k not in ("frequency", "expiresOn", "message")}
-    stripped["then"] = {"alert": alert}
-    return StrategySpecV1.model_validate(stripped)
-
-
-def _close_at(
-    candidate: SignalCandidate, run_on: str, bars_1m: pd.DataFrame | None, bars_1d: pd.DataFrame
-) -> float | None:
-    """The close shown as `{close}`: the `close` operand when the condition used one, else the closing price of
-    the bar the signal is about, from the bars already read."""
-    if "close" in candidate.evidence:
-        return candidate.evidence["close"]
-    if run_on in CADENCE_MINUTES and bars_1m is not None and not bars_1m.empty:
-        last_minute = candidate.bar_time + cadence_interval(run_on) - pd.Timedelta(minutes=1)
-        found = bars_1m.loc[:last_minute]
-        return None if found.empty else float(found["close"].iloc[-1])
-    if run_on == "premarket_0830" and bars_1m is not None and not bars_1m.empty:
-        found = bars_1m.loc[: candidate.bar_time - pd.Timedelta(minutes=1)]
-        return None if found.empty else float(found["close"].iloc[-1])
-    day: date = candidate.bar_time.tz_convert(ET).date()
-    return float(bars_1d.loc[day, "close"]) if day in bars_1d.index else None
+    """The spec `evaluate` runs: this symbol as the source; every candidate carries a rendered message (the
+    spec's, else `DEFAULT_MESSAGE`); and `frequency: once` removed, because one evaluation only sees its own
+    window and `once` is applied here against every signal stored for the strategy."""
+    alert = {k: v for k, v in spec["then"]["alert"].items() if not (k == "frequency" and v == "once")}
+    alert["message"] = alert.get("message") or DEFAULT_MESSAGE
+    return StrategySpecV1.model_validate(
+        {**spec, "watch": {**spec["watch"], "universe": {"symbols": [symbol]}}, "then": {"alert": alert}}
+    )
 
 
 def _signals(session: Session, strategy_id: int, symbol: str) -> list[datetime]:
@@ -163,9 +143,9 @@ def _signals(session: Session, strategy_id: int, symbol: str) -> list[datetime]:
     )
 
 
-def _allowed(candidate_time: pd.Timestamp, history: list[pd.Timestamp], frequency: str, cooldown: int | None) -> bool:
-    """The frequency and cooldown rules against the bar times already signalled (any version)."""
-    if frequency == "once" and history:
+def _allowed(candidate_time: pd.Timestamp, history: list[pd.Timestamp], once: bool, cooldown: int | None) -> bool:
+    """The `once` and cooldown rules against the bar times already signalled (any version)."""
+    if once and history:
         return False
     if candidate_time in history:  # the same bar under another version
         return False
@@ -284,17 +264,17 @@ def _evaluate_symbol(
 
     cutoff = recent_cutoff(run_on, as_of, quality)
     history = [pd.Timestamp(t).tz_convert("UTC") for t in _signals(session, strategy.id, symbol)]
-    frequency = alert.get("frequency", "once_per_bar")
+    once = alert.get("frequency") == "once"
     cooldown = spec.get("limits", {}).get("cooldownMinutes")
     channels = delivery_channels(alert["channels"])
     written = dropped = 0
     for candidate in candidates:
         if bar_close(run_on, candidate.bar_time) < cutoff:
             continue  # older than the recent window: a missed bar, not an alert
-        if not _allowed(candidate.bar_time, history, frequency, cooldown):
+        if not _allowed(candidate.bar_time, history, once, cooldown):
             dropped += 1
             continue
-        if _record(session, strategy, version, spec, candidate, quality, channels, bars_1m, bars_1d, now):
+        if _record(session, strategy, version, spec, candidate, quality, channels, now):
             history.append(candidate.bar_time)
             written += 1
     return written, dropped
@@ -308,53 +288,23 @@ def _record(
     candidate: SignalCandidate,
     quality: str,
     channels: list[str],
-    bars_1m: pd.DataFrame | None,
-    bars_1d: pd.DataFrame,
     now: datetime,
 ) -> bool:
     """Signal, alert and deliveries in one transaction; False when the signal row already exists."""
-    run_on = spec["watch"]["runOn"]
     alert = spec["then"]["alert"]
-    stmt = (
-        pg_insert(Signal)
-        .values(
-            strategy_version_id=version.id,
-            symbol=candidate.symbol,
-            bar_time=candidate.bar_time,
-            evidence=candidate.evidence,
-            data_quality=quality,
-            created_at=now,
-        )
-        .on_conflict_do_nothing(index_elements=["strategy_version_id", "symbol", "bar_time"])
-        .returning(Signal.id)
-    )
-    signal_id = session.execute(stmt).scalar_one_or_none()
-    if signal_id is None:
-        return False
-    fired_at = bar_close(run_on, candidate.bar_time).to_pydatetime()
-    body = render_message(
-        alert.get("message"),
+    return record_signal(
+        session,
+        strategy_version_id=version.id,
+        owner_user_id=strategy.owner_user_id,
         symbol=candidate.symbol,
-        close=_close_at(candidate, run_on, bars_1m, bars_1d),
-        at=fired_at,
-    )
-    row = Alert(
-        user_id=strategy.owner_user_id,
-        signal_id=signal_id,
-        kind="signal",
-        severity=alert.get("severity") or "info",
-        title=f"{candidate.symbol}: {strategy.name}",
-        body=body,
-        payload={"strategy": strategy.name, "bar_time": candidate.bar_time.isoformat(), "evidence": candidate.evidence},
-        created_at=now,
-        symbol=candidate.symbol,
+        candidate=candidate,
+        data_quality=quality,
+        alert=AlertSpec(channels=channels, severity=alert.get("severity") or "info"),
+        now=now,
         strategy_id=strategy.id,
+        text=(f"{candidate.symbol}: {strategy.name}", candidate.message or ""),
+        payload={"strategy": strategy.name, "bar_time": candidate.bar_time.isoformat(), "evidence": candidate.evidence},
     )
-    session.add(row)
-    session.flush()
-    for channel in channels:
-        session.add(Delivery(alert_id=row.id, channel=channel))
-    return True
 
 
 # -- state for /status --------------------------------------------------------------------------------------

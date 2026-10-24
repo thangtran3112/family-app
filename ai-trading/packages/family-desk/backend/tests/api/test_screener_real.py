@@ -167,8 +167,18 @@ def test_a_spec_the_screener_cannot_run_is_422_with_the_reason(client):
     assert response.status_code == 422
     (problem,) = response.json()["detail"]["problems"]
     assert problem["message"] == "vwap needs intraday bars; daily_close uses daily bars"
+
+
+def test_a_pattern_filter_runs_on_candle_cadences_and_is_422_where_there_is_no_closed_candle(client):
     pattern = {**ABOVE_100, "when": {"op": "pattern", "pattern": "hammer"}}
-    assert _create(client, pattern).status_code == 422
+    assert _create(client, pattern).status_code == 201  # the engine runs candle patterns on daily bars
+    weekly = {**pattern, "name": "Weekly hammer", "watch": {**ABOVE_100["watch"], "runOn": "weekly"}}
+    response = _create(client, weekly)
+    assert response.status_code == 422
+    (problem,) = response.json()["detail"]["problems"]
+    assert problem["message"] == (
+        "the pattern condition is not supported by the engine yet: weekly runs on daily bars, not weekly candles"
+    )
 
 
 def test_put_makes_a_new_version_an_unchanged_put_does_not_and_a_seed_is_409(client, db_session):
@@ -325,14 +335,18 @@ def test_the_runner_only_runs_the_requested_cadences_and_reports_what_it_cannot_
     intraday = {**ABOVE_100, "name": "Intraday", "watch": {**ABOVE_100["watch"], "runOn": "bar_close_15m"}}
     daily = service.create_from_spec(db_session, user_id, ABOVE_100, now=NOW)
     service.create_from_spec(db_session, user_id, intraday, now=NOW)
-    broken = {**ABOVE_100, "name": "Broken", "when": {"op": "pattern", "pattern": "hammer"}}
+    broken = {
+        **ABOVE_100,
+        "name": "Broken",
+        "when": {"op": "gt", "left": {"series": "close"}, "right": {"series": "vwap"}},
+    }
     stale = service.create_from_spec(db_session, user_id, broken, now=NOW)  # stored before the gate existed
     _bars(db_session, "AAA", [99.0, 105.0])
     db_session.commit()
 
     report = runner.run_filters(db_session, now=NOW, run_on={"daily_close"})
     assert report.written == 1
-    assert stale.row.id in report.skipped and "pattern" in report.skipped[stale.row.id]
+    assert stale.row.id in report.skipped and "vwap" in report.skipped[stale.row.id]
     assert runner.newest_run(db_session, daily.version.id) is not None
 
     nothing = runner.run_filters(db_session, now=NOW, run_on={"bar_close_15m"})

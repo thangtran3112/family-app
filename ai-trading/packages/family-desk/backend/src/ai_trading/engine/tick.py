@@ -127,6 +127,7 @@ def tick(
                     data_quality=quality,
                     alert=alert,
                     now=now,
+                    strategy_id=strategy.id,
                 )
                 if wrote:
                     new_signals += 1
@@ -191,6 +192,7 @@ def _evaluate_symbol(
     bars_1d = read_bars(session, symbol, "1d", _BARS_1D_START, as_of.date(), asset, as_of=as_of)
     bars_1m = None
     if spec.watch.runOn in INTRADAY_CADENCES:
-        start = (as_of - pd.Timedelta(days=_BARS_1M_LOOKBACK_DAYS)).date()
-        bars_1m = read_bars(session, symbol, "1m", start, as_of.date(), asset, as_of=as_of)
+        # Timestamps, not dates: a date `end` is midnight and would hide the minutes of today's session.
+        start = as_of - pd.Timedelta(days=_BARS_1M_LOOKBACK_DAYS)
+        bars_1m = read_bars(session, symbol, "1m", start, as_of, asset, as_of=as_of)
     return evaluate(spec, symbol, asset, bars_1m=bars_1m, bars_1d=bars_1d, as_of=as_of)

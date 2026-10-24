@@ -32,35 +32,13 @@ log = logging.getLogger(__name__)
 
 DAILY_RUN_ON = ("daily_close", "weekly")
 DEFAULT_AVG_VOLUME_DAYS = 20
-_INTRADAY_ONLY = {"vwap"} | engine._SESSION_LEVELS | engine._OPENING_LEVELS
-_UNSUPPORTED_LEVELS = engine._UNSUPPORTED_LEVELS
 
 
 def check_filter(spec: dict[str, Any]) -> list[str]:
-    """Plain-English reasons a dumped `FilterStrategySpecV1` cannot run, beyond what the schema says: an
-    operand its cadence cannot compute, or a contract feature no engine path executes yet. [] when it can."""
-    run_on = spec["watch"]["runOn"]
-    when = spec["when"]
-    operands = list(engine._operands(when))
-    if spec.get("rank"):
-        operands.append(spec["rank"]["by"])
-    problems = []
-    for operand in operands:
-        name = operand.get("series") or operand["level"]
-        if run_on not in engine.INTRADAY_CADENCES and name in _INTRADAY_ONLY:
-            problems.append(f"{name} needs intraday bars; {run_on} uses daily bars")
-        if run_on == "premarket_0830" and name in _INTRADAY_ONLY:
-            problems.append(f"{name} is not known at 08:30 ET")
-    nodes = list(engine._nodes(when))
-    if run_on not in engine.INTRADAY_CADENCES and any(n.get("op") == "time_between" for n in nodes):
-        problems.append(f"time_between needs intraday bars; {run_on} uses daily bars")
-    if any(n.get("op") == "pattern" for n in nodes):
-        problems.append("the pattern condition is not supported by the screener yet")
-    problems += [
-        f"{name} is not supported by the screener yet"
-        for name in sorted({op["level"] for op in operands if op.get("level") in _UNSUPPORTED_LEVELS})
-    ]
-    return problems
+    """Plain-English reasons a dumped `FilterStrategySpecV1` cannot run: the engine's own cadence gate over its
+    `when` and `rank.by` operands (`core.evaluate.check_filter`, which takes the model; this takes the dump)."""
+    rank = spec.get("rank")
+    return engine._cadence_problems(spec["watch"]["runOn"], spec["when"], [rank["by"]] if rank else [])
 
 
 @dataclass(frozen=True)
@@ -125,7 +103,7 @@ class Frames:
         self._daily = self._closed_daily(bars.daily, as_of)
         self._minutes = bars.minutes
         self._annotated: pd.DataFrame | None = None
-        self._frames: dict[str, engine._Frame | None] = {}
+        self._frames: dict[tuple[str, str], engine._Frame | None] = {}
 
     @staticmethod
     def _closed_daily(daily: pd.DataFrame, as_of: pd.Timestamp) -> pd.DataFrame:
@@ -138,12 +116,15 @@ class Frames:
     def daily(self) -> pd.DataFrame:
         return self._daily
 
-    def get(self, run_on: str) -> "engine._Frame | None":
-        if run_on not in self._frames:
-            self._frames[run_on] = self._build(run_on)
-        return self._frames[run_on]
+    def get(self, run_on: str, watch_session: str = "extended") -> "engine._Frame | None":
+        """`watch_session` matters only to a `pattern` condition: a `regular` filter never reads a pre/post bar
+        as a candle."""
+        key = (run_on, watch_session)
+        if key not in self._frames:
+            self._frames[key] = self._build(run_on, watch_session)
+        return self._frames[key]
 
-    def _build(self, run_on: str) -> "engine._Frame | None":
+    def _build(self, run_on: str, watch_session: str) -> "engine._Frame | None":
         if self._daily.empty:
             return None
         if run_on in DAILY_RUN_ON:
@@ -164,7 +145,7 @@ class Frames:
         )
         if bars.empty:
             return None
-        return engine._Frame(bars, pd.Index(bars["day"]), self._daily, "stock", intraday=True)
+        return engine._Frame(bars, pd.Index(bars["day"]), self._daily, "stock", intraday=True, session=watch_session)
 
 
 def _point_day(point: pd.Timestamp) -> date:
@@ -181,7 +162,7 @@ class _Outcome:
 def evaluate_symbol(spec: dict[str, Any], symbol: str, frames: Frames, as_of: pd.Timestamp) -> _Outcome | None:
     """None when the symbol has no bars the cadence needs; otherwise its state at its last evaluation point."""
     run_on = spec["watch"]["runOn"]
-    frame = frames.get(run_on)
+    frame = frames.get(run_on, spec["watch"]["session"])
     if frame is None:
         return None
     truth = engine._condition(spec["when"], frame)

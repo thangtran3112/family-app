@@ -183,8 +183,8 @@ def test_candidates_before_expiry_are_still_reported_at_a_later_as_of():
 @pytest.mark.parametrize(
     ("template", "expected"),
     [
-        ("{symbol} closed at {close} at {time}", "TEST closed at 101.00 at 10:01 ET"),
-        ("{symbol}/{symbol} {close}/{close} {time}/{time}", "TEST/TEST 101.00/101.00 10:01 ET/10:01 ET"),
+        ("{symbol} closed at {close} at {time}", "TEST closed at 101.00 at 10:01 AM"),
+        ("{symbol}/{symbol} {close}/{close} {time}/{time}", "TEST/TEST 101.00/101.00 10:01 AM/10:01 AM"),
         ("Breakout", "Breakout"),
     ],
 )
@@ -195,26 +195,26 @@ def test_message_placeholders_render_for_the_candidate_bar(template, expected):
 
 def test_time_on_fifteen_minute_bars_is_the_bar_close():
     spec = make_spec(above(100.5), run_on="bar_close_15m", alert={"message": "{time}"})
-    assert [c.message for c in run(spec, held_15m())] == ["10:15 ET", "11:15 ET"]
+    assert [c.message for c in run(spec, held_15m())] == ["10:15 AM", "11:15 AM"]
 
 
 def test_time_on_hour_bars_is_the_bar_close_of_the_open_aligned_hour():
     bars = minute_bars("stock", DAY)
     closes(bars, DAY, "10:30", "11:30", 101.0)  # the hour bar that starts at 10:30, not on the 10:00 hour
     spec = make_spec(above(100.5), run_on="bar_close_1h", alert={"message": "{time}"})
-    assert [c.message for c in run(spec, bars)] == ["11:30 ET"]
+    assert [c.message for c in run(spec, bars)] == ["11:30 AM"]
 
 
-def test_time_on_daily_close_is_the_trading_day():
+def test_time_on_daily_close_is_the_close_of_the_session():
     daily = daily_bars([DAY], [101.0])
     spec = make_spec(above(100.5), run_on="daily_close", alert={"message": "{symbol} {time} {close}"})
-    assert [c.message for c in run(spec, None, daily)] == ["TEST 2026-10-06 101.00"]
+    assert [c.message for c in run(spec, None, daily)] == ["TEST 4:00 PM 101.00"]
 
 
 def test_time_on_premarket_is_the_scan_time():
     daily = daily_bars(trading_days("stock", DAY, 2)[:1], [100.0])
     spec = make_spec(GAP_3_PERCENT, run_on="premarket_0830", alert={"message": "{time}"})
-    assert [c.message for c in run(spec, premarket_gap(DAY), daily)] == ["08:30 ET"]
+    assert [c.message for c in run(spec, premarket_gap(DAY), daily)] == ["8:30 AM"]
 
 
 @pytest.mark.parametrize(

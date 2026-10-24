@@ -10,6 +10,7 @@ recorded on every signal so Phase 6 can read it back and gate paper orders on it
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -37,6 +38,9 @@ def record_signal(
     data_quality: DataQuality,
     alert: AlertSpec,
     now: datetime,
+    strategy_id: int | None = None,
+    text: tuple[str, str] | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> bool:
     """`INSERT INTO signals ... ON CONFLICT (strategy_version_id, symbol, bar_time) DO NOTHING
     RETURNING id`. No row returned (already recorded -- a restart or catch-up re-run) -> returns
@@ -46,6 +50,10 @@ def record_signal(
     Row inserted -> in the SAME transaction (no commit here; the caller commits once per tick),
     inserts one `alerts` row and one `deliveries` row per `alert.channels` entry (status
     defaults to "pending"). Returns True.
+
+    The alert carries its `symbol` and, when given, its `strategy_id` (the inbox filters on both). `text` is
+    a `(title, body)` that replaces the default wording, and `payload` is stored with the alert; the alert
+    runtime (`alerts/runtime.py`) writes its alerts through here with both.
     """
     insert_signal = (
         pg_insert(Signal)
@@ -67,6 +75,8 @@ def record_signal(
     title, body = _render(symbol, candidate)
     if candidate.message is not None:
         title = candidate.message  # the strategy's own text leads; the evidence stays in the body
+    if text is not None:
+        title, body = text
     alert_row = Alert(
         user_id=owner_user_id,
         signal_id=signal_id,
@@ -75,6 +85,9 @@ def record_signal(
         title=title,
         body=body,
         created_at=now,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        payload=payload or {},
     )
     session.add(alert_row)
     session.flush()  # assigns alert_row.id for the deliveries below; still the same transaction

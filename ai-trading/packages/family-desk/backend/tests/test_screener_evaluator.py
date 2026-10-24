@@ -6,13 +6,14 @@ import time
 from datetime import date
 
 import pandas as pd
+import pattern_fixture
 from bars import daily_bars, minute_bars, set_bar, trading_days
 
 from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1
 from ai_trading.core import evaluate as engine
 from ai_trading.core.calendar import et, session
 from ai_trading.library.catalog import load_catalog, load_template
-from ai_trading.screener.evaluator import SymbolBars, check_filter, passes_liquidity, scan
+from ai_trading.screener.evaluator import Frames, SymbolBars, check_filter, passes_liquidity, scan
 
 LAST = date(2026, 10, 6)  # a regular session
 PREVIOUS = date(2026, 10, 5)
@@ -42,7 +43,7 @@ def test_every_seed_filter_passes_the_gate():
             assert check_filter(raw.model_dump(mode="json", by_alias=True, exclude_none=True)) == [], entry.id
 
 
-def test_the_gate_names_operands_the_cadence_cannot_compute_and_features_nothing_runs_yet():
+def test_the_gate_is_the_engines_and_names_what_the_cadence_cannot_compute():
     vwap = _spec(when={"op": "gt", "left": {"series": "close"}, "right": {"series": "vwap"}})
     assert check_filter(vwap) == ["vwap needs intraday bars; daily_close uses daily bars"]
     ranked = _spec(rank={"by": {"series": "vwap"}, "order": "desc"})
@@ -55,18 +56,28 @@ def test_the_gate_names_operands_the_cadence_cannot_compute_and_features_nothing
     clock = _spec(when={"op": "time_between", "start": "09:30", "end": "10:00"})
     assert check_filter(clock) == ["time_between needs intraday bars; daily_close uses daily bars"]
     pattern = _spec(when={"op": "pattern", "pattern": "hammer"})
-    assert check_filter(pattern) == ["the pattern condition is not supported by the screener yet"]
-    session_high = _spec(
-        watch={"universe": {"market": "us_equities"}, "session": "regular", "runOn": "bar_close_5m"},
-        when={"op": "gt", "left": {"series": "close"}, "right": {"level": "session_high"}},
+    assert check_filter(pattern) == []  # candle patterns run on daily bars
+    weekly = _spec(
+        watch={"universe": {"market": "us_equities"}, "session": "regular", "runOn": "weekly"},
+        when={"op": "pattern", "pattern": "hammer"},
     )
-    assert check_filter(session_high) == ["session_high is not supported by the screener yet"]
+    assert check_filter(weekly) == [
+        "the pattern condition is not supported by the engine yet: weekly runs on daily bars, not weekly candles"
+    ]
+    intraday = {"universe": {"market": "us_equities"}, "session": "regular", "runOn": "bar_close_5m"}
+    session_high = _spec(
+        watch=intraday, when={"op": "gt", "left": {"series": "close"}, "right": {"level": "session_high"}}
+    )
+    assert check_filter(session_high) == []  # the running session high is an intraday level the engine computes
+    session_high_daily = _spec(when={"op": "gt", "left": {"series": "close"}, "right": {"level": "session_high"}})
+    assert check_filter(session_high_daily) == ["session_high needs intraday bars; daily_close uses daily bars"]
+    assert check_filter(_spec(watch=intraday, when={"op": "pattern", "pattern": "hammer"})) == []
 
 
 def test_the_engine_helpers_the_evaluator_leans_on_still_exist():
     for name in ("_Frame", "_condition", "_points", "_resample", "_operands", "_nodes", "_series", "label"):
         assert hasattr(engine, name), name
-    for name in ("CADENCE_MINUTES", "INTRADAY_CADENCES", "_SESSION_LEVELS", "_OPENING_LEVELS", "_UNSUPPORTED_LEVELS"):
+    for name in ("CADENCE_MINUTES", "INTRADAY_CADENCES", "_cadence_problems"):
         assert hasattr(engine, name), name
 
 
@@ -190,3 +201,36 @@ def test_the_spec_is_not_changed_by_a_scan():
     before = copy.deepcopy(spec)
     scan(spec, {"A": SymbolBars(_daily([99.0, 105.0]))}, AS_OF)
     assert spec == before
+
+
+def test_a_pattern_filter_matches_the_symbols_whose_last_daily_candle_completes_it():
+    when = load_template("patterns/doji.json")["when"]
+    spec = _spec(when=when)
+    data = {symbol: SymbolBars(pattern_fixture.daily(symbol)) for symbol in pattern_fixture.SYMBOLS}
+    as_of = session("stock", pattern_fixture.DAY).regular_close
+
+    result = scan(spec, data, as_of)
+
+    expected = [s for s in pattern_fixture.SYMBOLS if "2026-10-23" in pattern_fixture.occurrences("doji", s, "1d")]
+    assert expected  # the snapshot found dojis among the seed symbols on the last session
+    assert sorted(m.symbol for m in result.matches) == expected
+    assert (result.scanned, result.no_data) == (len(pattern_fixture.SYMBOLS), 0)
+    (match,) = [m for m in result.matches if m.symbol == expected[0]]
+    assert match.evaluation_point == as_of and match.matched_since == as_of  # a one-candle pattern: today only
+
+
+def test_a_regular_session_filter_never_reads_a_pre_market_bar_as_a_candle():
+    minutes = minute_bars("stock", LAST, price=100.0, volume=1_000)
+    set_bar(minutes, LAST, "04:00", open=99.8, high=99.8, low=99.8, close=99.8)
+    set_bar(minutes, LAST, "04:01", close=98.5)
+    set_bar(minutes, LAST, "04:04", close=100.0)  # a 5-minute hammer before the open
+    frames = Frames(SymbolBars(_daily([100.0] * 30), minutes), AS_OF)
+    node = {"op": "pattern", "pattern": "hammer"}
+    candle = et(LAST, "04:00")
+
+    extended = engine._pattern(node, frames.get("bar_close_5m", "extended"))[0]
+    regular = engine._pattern(node, frames.get("bar_close_5m", "regular"))[0]
+
+    assert bool(extended.loc[candle])
+    assert pd.isna(regular.loc[candle])
+    assert frames.get("bar_close_5m", "regular") is frames.get("bar_close_5m", "regular")

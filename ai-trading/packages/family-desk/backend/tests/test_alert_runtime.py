@@ -2,7 +2,7 @@
 across versions, the rendered message, inbox-first deliveries, and the state `/status` reports. Needs a real
 Postgres (`scripts/test-db.sh`)."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import pytest
@@ -14,10 +14,10 @@ from ai_trading.alerts.runtime import (
     bar_close,
     delivery_channels,
     recent_cutoff,
-    render_message,
     stale_limit,
     tick,
 )
+from ai_trading.alerts.universe import filter_matches
 from ai_trading.core.calendar import et
 from ai_trading.data.bars import upsert_bars
 from ai_trading.db.models import (
@@ -33,6 +33,7 @@ from ai_trading.db.models import (
     Watchlist,
     WatchlistItem,
 )
+from ai_trading.engine.tick import tick as engine_tick
 from ai_trading.screener import service as filters
 
 DAY = date(2026, 10, 6)  # a Tuesday, a regular session
@@ -133,21 +134,6 @@ def _setup(db_session, owner: int, minutes_at: tuple[str, ...] = ("10:30",), now
 # -- pure rules ---------------------------------------------------------------------------------------------
 
 
-def test_the_message_fills_symbol_close_and_new_york_time():
-    at = datetime(2026, 10, 6, 14, 45, tzinfo=UTC)  # 10:45 ET
-    assert render_message(None, symbol="NVDA", close=212.4, at=at) == "NVDA 212.4 at 10:45 AM"
-    assert render_message("{symbol} broke out at {close} ({time})", symbol="AMD", close=100.0, at=at) == (
-        "AMD broke out at 100 (10:45 AM)"
-    )
-    assert render_message("{symbol} {close}", symbol="X", close=None, at=at) == "X n/a"
-    noon = datetime(2026, 10, 6, 16, 5, tzinfo=UTC)
-    midnight = datetime(2026, 10, 6, 4, 5, tzinfo=UTC)
-    assert render_message("{time}", symbol="X", close=1, at=noon) == "12:05 PM"
-    assert render_message("{time}", symbol="X", close=1, at=midnight) == "12:05 AM"
-    afternoon = datetime(2026, 10, 6, 19, 30, tzinfo=UTC)
-    assert render_message("{time}", symbol="X", close=1, at=afternoon) == "3:30 PM"
-
-
 def test_inbox_is_first_and_never_repeated():
     assert delivery_channels(["telegram", "inbox", "slack", "telegram"]) == ["inbox", "telegram", "slack"]
     assert delivery_channels(["inbox"]) == ["inbox"]
@@ -190,7 +176,7 @@ def test_a_fresh_cross_writes_a_signal_an_alert_with_its_symbol_and_an_inbox_del
         "info",
     )
     assert alert.title == "AAPL: Cross"
-    assert alert.body == "AAPL 101 at 10:45 AM"
+    assert alert.body == "AAPL 101.00 at 10:45 AM"
     assert alert.payload["strategy"] == "Cross" and alert.payload["evidence"] == {"close": 101.0}
     delivery = db_session.execute(select(Delivery)).scalar_one()
     assert (delivery.channel, delivery.status) == ("inbox", "pending")
@@ -207,7 +193,7 @@ def test_the_spec_message_and_severity_are_used(db_session, owner):
     _, _, now = _setup(db_session, owner, alert={"message": "{symbol} cleared {close} at {time}", "severity": "risk"})
     tick(db_session, now=now)
     alert = db_session.execute(select(Alert)).scalar_one()
-    assert (alert.body, alert.severity) == ("AAPL cleared 101 at 10:45 AM", "risk")
+    assert (alert.body, alert.severity) == ("AAPL cleared 101.00 at 10:45 AM", "risk")
 
 
 def test_a_restart_replaying_the_same_tick_writes_nothing_more(db_session, owner):
@@ -233,7 +219,7 @@ def test_a_paper_order_in_a_stored_spec_is_ignored(db_session, owner):
     assert tick(db_session, now=now).new_signals == 1  # the alert fires; no order object exists anywhere
 
 
-def test_the_alert_fields_the_engine_gate_rejects_are_applied_here(db_session, owner):
+def test_frequency_expiry_and_message_the_engine_runs_are_honoured_through_the_runtime(db_session, owner):
     _, _, now = _setup(db_session, owner, alert={"frequency": "once", "expiresOn": "2026-10-06", "message": "{symbol}"})
     result = tick(db_session, now=now)
     assert result.errors == [] and result.new_signals == 1
@@ -252,6 +238,16 @@ def test_once_signals_a_symbol_a_single_time(db_session, owner):
 def test_once_per_bar_and_every_time_signal_each_bar_and_cooldown_limits_both(db_session, owner):
     _, _, now = _setup(db_session, owner, minutes_at=("10:30", "11:00"), now_clock="11:20")
     assert tick(db_session, now=now).new_signals == 2  # the default frequency is once_per_bar
+
+
+@pytest.mark.parametrize(("frequency", "signals"), [("once_per_bar", 2), ("every_time", 1), (None, 1)])
+def test_once_per_bar_alerts_each_bar_the_rule_holds_and_every_time_only_when_it_turns_true(
+    db_session, owner, frequency, signals
+):
+    held = {"op": "gt", "left": {"series": "close"}, "right": {"value": 100.5}}  # true on 10:30 and on 10:45
+    alert = {} if frequency is None else {"frequency": frequency}
+    _, _, now = _setup(db_session, owner, minutes_at=("10:30", "10:45"), now_clock="11:05", when=held, alert=alert)
+    assert tick(db_session, now=now).new_signals == signals
 
 
 def test_every_time_is_still_limited_by_the_cooldown(db_session, owner):
@@ -409,7 +405,7 @@ def test_daily_cadences_are_not_subject_to_the_minute_guard(db_session, owner):
     result = tick(db_session, now=et(DAY, "16:30").to_pydatetime(), live_cadences=frozenset({"daily_close"}))
     assert (result.new_signals, result.stale_symbols) == (1, 0)  # no feed_health row, no minutes: still evaluated
     alert = db_session.execute(select(Alert)).scalar_one()
-    assert alert.body == "AAPL 105 at 4:00 PM"
+    assert alert.body == "AAPL 105.00 at 4:00 PM"
 
 
 # -- sources ------------------------------------------------------------------------------------------------
@@ -473,6 +469,21 @@ def test_a_filter_source_with_an_old_run_evaluates_nothing(db_session, owner):
     now = et(DAY, "10:50").to_pydatetime()
     _healthy(db_session, now)
     assert tick(db_session, now=now).evaluated_strategies == 0
+
+
+def test_the_engine_tick_reads_a_filter_source_through_the_same_stored_matches(db_session, owner):
+    _filter_with_matches(db_session, owner, ["AAPL"], date(2026, 10, 5))
+    row, _ = _strategy(db_session, owner, _spec(universe={"filter": "Hot"}))
+    _store(db_session, "AAPL", _bins(minute_bars("stock", DAY), "10:30"))
+    now = et(DAY, "10:50").to_pydatetime()
+
+    unresolved = engine_tick(db_session, now=now)  # no resolver: the filter has no stored matches to read
+    assert unresolved.new_signals == 0 and "has no stored matches" in unresolved.errors[0]
+
+    result = engine_tick(db_session, now=now, filter_matches=filter_matches)
+    assert (result.new_signals, result.errors) == (1, [])
+    alert = db_session.execute(select(Alert)).scalar_one()
+    assert (alert.symbol, alert.strategy_id) == ("AAPL", row.id)  # the engine path fills the inbox filters too
 
 
 def test_a_symbol_list_source_and_unknown_sources_resolve_without_error(db_session, owner):

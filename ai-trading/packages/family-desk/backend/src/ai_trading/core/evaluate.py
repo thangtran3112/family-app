@@ -472,7 +472,7 @@ def evaluate(
                 values |= {f"{name}.{field}": value for field, value in candle.items()}
         message = None
         if alert.message:
-            message = _message(alert.message, symbol, closes[position], run_on, _bar_close(frame, run_on, bar_time))
+            message = render_message(alert.message, symbol, closes[position], _bar_close(frame, run_on, bar_time))
         out.append(SignalCandidate(symbol, bar_time, values, message))
     return out[:1] if alert.frequency == "once" else out
 
@@ -496,10 +496,11 @@ def _bar_close(frame: _Frame, run_on: str, bar_time: pd.Timestamp) -> pd.Timesta
     return min(bar_time + pd.Timedelta(minutes=CADENCE_MINUTES[run_on]), phase_end)
 
 
-def _message(template: str, symbol: str, close: float, run_on: str, closed_at: pd.Timestamp) -> str:
-    """`then.alert.message` with {symbol}, {close} (the evaluated bar's close) and {time} filled in:
-    the bar's close in America/New_York ("10:30 ET"), or the trading day for daily and weekly runs."""
+def render_message(template: str, symbol: str, close: float, closed_at: pd.Timestamp) -> str:
+    """`then.alert.message` with {symbol}, {close} and {time} filled in: `close` is the evaluated bar's close
+    (two decimals, four below one dollar), `closed_at` is when that bar closed, written in America/New_York as
+    `h:mm AM/PM` (02m section b5, rule 4)."""
     local = closed_at.tz_convert(ET)
-    stamp = f"{local:%H:%M} ET" if run_on in INTRADAY_CADENCES else f"{local:%Y-%m-%d}"
+    clock = f"{local.hour % 12 or 12}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
     price = f"{close:.2f}" if abs(close) >= 1 else f"{close:.4f}"
-    return template.replace("{symbol}", symbol).replace("{close}", price).replace("{time}", stamp)
+    return template.replace("{symbol}", symbol).replace("{close}", price).replace("{time}", clock)

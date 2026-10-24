@@ -2,7 +2,7 @@
 
 The template is evaluated over the symbols on her watchlists, on the bars already stored, for the last ten
 sessions; the newest firing is the example. It is `None` when nothing fired, when the template cannot run on
-this engine (for example a pattern condition before `core/patterns.py` lands), or when the time budget ran out
+this engine (a pattern on a cadence with no closed candle), or when the time budget ran out
 (production hides the block; the mock draws a simulated one).
 """
 
@@ -83,7 +83,7 @@ def find_example(session: Session, user_id: int, template: dict[str, Any], *, no
                 continue
         try:
             fired = evaluate(spec, symbol, "stock", bars_1m=bars_1m, bars_1d=bars_1d, as_of=as_of)
-        except ValueError as exc:  # the engine cannot run this template yet; no symbol will do better
+        except ValueError as exc:  # the engine cannot run this template; no symbol will do better
             log.debug("library example: %s", exc)
             return None
         for candidate in fired:

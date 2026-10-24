@@ -160,7 +160,7 @@ def test_a_message_becomes_the_alert_title_and_the_evidence_stays_in_the_body(db
     tick(db_session, now=et(DAY, "20:00"))
 
     alert = db_session.execute(select(Alert)).scalar_one()
-    assert alert.title == "AAPL broke 100, close 101.00 at 10:01 ET"
+    assert alert.title == "AAPL broke 100, close 101.00 at 10:01 AM"
     assert "close=101.0" in alert.body
 
 

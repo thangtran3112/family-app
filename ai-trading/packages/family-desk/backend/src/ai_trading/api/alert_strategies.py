@@ -40,20 +40,13 @@ router = APIRouter(
 _RUNTIME_OFF = "Alerts start when live quotes are connected"
 
 
-def _engine_problem(message: str) -> dict[str, str]:
-    """`check()` names an alert-block field in its message ("then.alert.frequency is not supported ..."); every
-    other engine problem is an operand in `when`."""
-    path = message.split(" ", 1)[0] if message.startswith("then.") else "when"
-    return {"path": path, "message": message}
-
-
 def _check(raw: dict[str, Any]) -> tuple[AlertStrategySpecV1 | None, list[dict[str, str]]]:
     """The validated spec (None when pydantic rejects it) and every problem: pydantic's, or the engine gate's."""
     try:
         model = AlertStrategySpecV1.model_validate(raw)
     except ValidationError as exc:
         return None, problems_from_validation_error(exc)
-    return model, [_engine_problem(message) for message in check(model)]
+    return model, [{"path": "when", "message": message} for message in check(model)]
 
 
 def _valid_spec(raw: dict[str, Any]) -> dict[str, Any]:
@@ -109,7 +102,7 @@ def validate_alert_strategy(
     model, problems = _check(body.spec)
     if model is None:  # not even a spec: nothing to resolve
         return AlertStrategyValidateOut(problems=problems, resolved_symbols=[], run_on=None)
-    # Engine problems (for example a filter source, which the engine cannot run yet) still resolve, so the
+    # Engine problems (for example a pattern on a cadence with no closed candle) still resolve, so the
     # summary pane can show the first symbol while the user is still editing.
     universe = model.model_dump(mode="json", by_alias=True, exclude_none=True)["watch"]["universe"]
     return AlertStrategyValidateOut(

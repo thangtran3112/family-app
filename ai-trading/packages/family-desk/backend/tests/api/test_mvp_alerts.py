@@ -330,15 +330,32 @@ def test_validate_reports_the_channel_rule_at_then_alert_channels(client, stub):
     }
 
 
-def test_validate_engine_gate_names_the_unsupported_operand_and_still_resolves(client, stub):
-    body = client.post(VALIDATE, json={"spec": _world_spec(3)}, headers=auth_headers()).json()
+def test_validate_accepts_the_features_the_engine_now_runs_and_still_resolves(client, stub):
+    spec = _world_spec(3)  # a pattern condition with a frequency on a 15-minute cadence
+    assert spec["when"] and spec["then"]["alert"]["frequency"]
 
-    assert {"path": "when", "message": "the pattern condition is not supported by the engine yet"} in body["problems"]
-    assert {"path": "then.alert.frequency", "message": "then.alert.frequency is not supported by the engine yet"} in (
-        body["problems"]
-    )
+    body = client.post(VALIDATE, json={"spec": spec}, headers=auth_headers()).json()
+
+    assert body["problems"] == []
     assert body["resolved_symbols"][:2] == ["NVDA", "AMD"]
     assert body["run_on"] == "bar_close_15m"
+
+
+def test_validate_engine_gate_names_a_pattern_on_a_cadence_with_no_closed_candle(client, stub):
+    spec = _world_spec(3)
+    spec["watch"]["runOn"] = "premarket_0830"
+
+    body = client.post(VALIDATE, json={"spec": spec}, headers=auth_headers()).json()
+
+    assert body["problems"] == [
+        {
+            "path": "when",
+            "message": "the pattern condition is not supported by the engine yet: "
+            "premarket_0830 has no closed candle at its evaluation point",
+        }
+    ]
+    assert body["resolved_symbols"][:2] == ["NVDA", "AMD"]
+    assert body["run_on"] == "premarket_0830"
 
 
 def test_validate_resolves_the_users_watchlist_in_position_order(client, db_session, real):
@@ -380,7 +397,7 @@ def test_validate_resolves_a_filter_source_to_the_top_of_its_screener_in_the_stu
     body = client.post(VALIDATE, json={"spec": spec}, headers=auth_headers()).json()
 
     assert body["resolved_symbols"] == ["BOLT", "LKQ", "SPTI", "RHI", "TNGX"]
-    assert [problem["path"] for problem in body["problems"]] == ["when"]  # the engine cannot run filter sources yet
+    assert body["problems"] == []  # the engine runs a filter source from the filter's last matches
 
 
 def test_put_creates_the_next_version_with_its_change_note(client, stub):

@@ -63,7 +63,7 @@ def test_the_detect_window_stays_inside_its_group_and_a_group_start_is_decided_b
     assert grouped[2:] == [True, False, False]
 
 
-@pytest.mark.parametrize(("run_on", "first", "last"), [("bar_close_1h", "10:30 ET", "16:00 ET")])
+@pytest.mark.parametrize(("run_on", "first", "last"), [("bar_close_1h", "10:30 AM", "4:00 PM")])
 def test_time_in_a_message_is_the_real_close_of_a_capped_last_bin(run_on, first, last):
     spec = _spec(
         {"op": "gt", "left": {"series": "close"}, "right": {"value": 50}},
