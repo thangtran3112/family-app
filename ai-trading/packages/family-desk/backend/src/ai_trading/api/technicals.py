@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from math import isnan
 from typing import Literal
 
@@ -8,9 +9,21 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, FiniteFloat
 
 from ai_trading.api.auth import get_current_user, get_data_sources
-from ai_trading.api.market_data import bar_as_of, finite_or_none, get_market_bars
+from ai_trading.api.bars import INTERVAL_DELTA, utc_datetime
+from ai_trading.api.market_data import bar_as_of, finite_or_none, get_market_bars, validate_symbol
+from ai_trading.api.schemas.common import Stamp
+from ai_trading.api.schemas.market import (
+    BiasHistoryOut,
+    GaugeLabel,
+    LevelsOut,
+    StrategiesGaugeOut,
+    VoteCountsOut,
+)
+from ai_trading.api.stamp import make_stamp
 from ai_trading.core import bias, indicators, pivots
 from ai_trading.engine.cardback import _PIVOT_PERIOD, CardBack, compute_card_back, pivot_inputs
+from ai_trading.mvp_stub import market as stub_market
+from ai_trading.mvp_stub import stub_enabled
 
 router = APIRouter(prefix="/api/desk/technicals", tags=["market data"], dependencies=[Depends(get_current_user)])
 
@@ -25,14 +38,7 @@ _CARD_TIMEFRAME = {
     "4h": "4h",
     "1m": "1m",
 }
-GaugeLabel = Literal["Strong Sell", "Sell", "Neutral", "Buy", "Strong Buy", "warming up"]
 VolatilityLabel = Literal["low", "normal", "high"]
-
-
-class VoteCountsOut(BaseModel):
-    sell: int
-    neutral: int
-    buy: int
 
 
 class GaugeOut(BaseModel):
@@ -45,6 +51,7 @@ class GaugesOut(BaseModel):
     summary: GaugeOut
     oscillators: GaugeOut
     moving_averages: GaugeOut
+    strategies: StrategiesGaugeOut | None  # the fourth gauge (02l §e4); null with no attached strategy
 
 
 class VoteOut(BaseModel):
@@ -93,6 +100,15 @@ class TechnicalsOut(BaseModel):
     macd: MacdOut
     volatility: VolatilityOut
     card_back: CardBackOut
+    timeframe: str
+    bars_used: int
+    first_bar: datetime | None
+    last_bar: datetime | None
+    bias_ready: bool  # false while the bias is "warming up" (fewer than 250 closed bars)
+    indicators: dict[str, FiniteFloat | str | None] | None  # stub only until the real series lands
+    bias_history: BiasHistoryOut | None
+    levels: LevelsOut | None
+    stamp: Stamp
 
 
 def _counts(value: bias.VoteCounts | None) -> VoteCountsOut | None:
@@ -173,6 +189,13 @@ def technicals(
     days: int = Query(default=365, ge=1, le=3650),
     data_sources: DataSources = Depends(get_data_sources),
 ) -> TechnicalsOut:
+    """The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;
+    `gauges.strategies` is a sample for NVDA 15m only. Real mode fills `timeframe`, `bars_used`, the bar
+    bounds, `bias_ready` and `stamp`; `indicators`, `bias_history`, `levels` and `gauges.strategies` are null
+    until their services land."""
+    if stub_enabled():
+        validate_symbol(symbol)
+        return stub_market.technicals(symbol, timeframe)
     asset = "future" if symbol.startswith("/") else "stock"
     market = get_market_bars(
         data_sources, symbol, timeframe, days, stock_session="regular" if asset == "stock" else None
@@ -188,6 +211,7 @@ def technicals(
             summary=_gauge("warming up", None, None),
             oscillators=_gauge("warming up", None, None),
             moving_averages=_gauge("warming up", None, None),
+            strategies=None,
         )
         oscillators, moving_averages = bias.votes(frame)
         oscillator_votes = _votes(oscillators)
@@ -197,9 +221,12 @@ def technicals(
             summary=_gauge(result.summary_label, result.summary_score, None),
             oscillators=_gauge(result.oscillator_label, result.oscillator_score, result.oscillator_counts),
             moving_averages=_gauge(result.ma_label, result.ma_score, result.ma_counts),
+            strategies=None,
         )
         oscillator_votes = _votes(result.oscillators)
         moving_average_votes = _votes(result.moving_averages)
+    first_bar = utc_datetime(frame.index[0]) if not frame.empty else None
+    last_bar = utc_datetime(frame.index[-1]) if not frame.empty else None
 
     return TechnicalsOut(
         symbol=symbol,
@@ -217,4 +244,19 @@ def technicals(
         ),
         volatility=_volatility(frame),
         card_back=_card_back(back),
+        timeframe=timeframe,
+        bars_used=len(frame),
+        first_bar=first_bar,
+        last_bar=last_bar,
+        bias_ready=result != "warming up",
+        indicators=None,
+        bias_history=None,
+        levels=None,
+        stamp=make_stamp(
+            quality=quality,
+            source="alpaca" if asset == "stock" else None,
+            as_of=last_bar,
+            interval=INTERVAL_DELTA[timeframe],
+            last_ok_at=datetime.now(UTC) if not frame.empty else None,
+        ),
     )

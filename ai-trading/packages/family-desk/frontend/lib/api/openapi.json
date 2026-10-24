@@ -1,6 +1,87 @@
 {
   "components": {
     "schemas": {
+      "AlertLogOut": {
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "integer"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "delivered",
+              "held_quiet_hours",
+              "no_channel",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "strategy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Name"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "alert_id",
+          "created_at",
+          "symbol",
+          "strategy_id",
+          "strategy_name",
+          "channel",
+          "status",
+          "detail"
+        ],
+        "title": "AlertLogOut",
+        "type": "object"
+      },
       "AlertOut": {
         "properties": {
           "body": {
@@ -41,6 +122,39 @@
             "title": "Severity",
             "type": "string"
           },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "strategy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Name"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -54,12 +168,28 @@
           "body",
           "payload",
           "created_at",
-          "read_at"
+          "read_at",
+          "symbol",
+          "strategy_id",
+          "strategy_name"
         ],
         "title": "AlertOut",
         "type": "object"
       },
-      "BarOut": {
+      "AlertReadAllOut": {
+        "properties": {
+          "marked": {
+            "title": "Marked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "marked"
+        ],
+        "title": "AlertReadAllOut",
+        "type": "object"
+      },
+      "AlertStrategyBarOut": {
         "properties": {
           "c": {
             "anyOf": [
@@ -129,6 +259,722 @@
           "c",
           "v"
         ],
+        "title": "AlertStrategyBarOut",
+        "type": "object"
+      },
+      "AlertStrategyCreate": {
+        "properties": {
+          "save_as": {
+            "enum": [
+              "draft",
+              "on"
+            ],
+            "title": "Save As",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec",
+          "save_as"
+        ],
+        "title": "AlertStrategyCreate",
+        "type": "object"
+      },
+      "AlertStrategyDeliveryOut": {
+        "properties": {
+          "channel": {
+            "enum": [
+              "inbox",
+              "telegram",
+              "slack"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "delivered",
+              "held_quiet_hours",
+              "no_channel",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "status"
+        ],
+        "title": "AlertStrategyDeliveryOut",
+        "type": "object"
+      },
+      "AlertStrategyDetailOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "pattern",
+              "indicator",
+              "level",
+              "screener"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "channels": {
+            "items": {
+              "enum": [
+                "inbox",
+                "telegram",
+                "slack"
+              ],
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "cooldown_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Minutes"
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On"
+          },
+          "fires_7d": {
+            "title": "Fires 7D",
+            "type": "integer"
+          },
+          "frequency": {
+            "enum": [
+              "once",
+              "once_per_bar",
+              "every_time"
+            ],
+            "title": "Frequency",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_fired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fired At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "seed",
+              "library",
+              "user"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Reason"
+          },
+          "run_on": {
+            "enum": [
+              "bar_close_1m",
+              "bar_close_5m",
+              "bar_close_15m",
+              "bar_close_1h",
+              "premarket_0830",
+              "daily_close",
+              "weekly"
+            ],
+            "title": "Run On",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "opportunity",
+              "risk"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AlertStrategySourceOut"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "stage": {
+            "enum": [
+              "draft",
+              "alert_only"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "expired",
+              "draft"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/AlertStrategyVersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "stage",
+          "status",
+          "paused_reason",
+          "version",
+          "source",
+          "category",
+          "run_on",
+          "frequency",
+          "cooldown_minutes",
+          "expires_on",
+          "channels",
+          "severity",
+          "last_fired_at",
+          "fires_7d",
+          "spec",
+          "versions"
+        ],
+        "title": "AlertStrategyDetailOut",
+        "type": "object"
+      },
+      "AlertStrategyFireOut": {
+        "properties": {
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/AlertStrategyDeliveryOut"
+            },
+            "title": "Deliveries",
+            "type": "array"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "signal_id": {
+            "title": "Signal Id",
+            "type": "integer"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "thumb": {
+            "$ref": "#/components/schemas/AlertStrategyThumbOut"
+          }
+        },
+        "required": [
+          "signal_id",
+          "symbol",
+          "bar_time",
+          "evidence",
+          "deliveries",
+          "thumb"
+        ],
+        "title": "AlertStrategyFireOut",
+        "type": "object"
+      },
+      "AlertStrategyOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "pattern",
+              "indicator",
+              "level",
+              "screener"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "channels": {
+            "items": {
+              "enum": [
+                "inbox",
+                "telegram",
+                "slack"
+              ],
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "cooldown_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Minutes"
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On"
+          },
+          "fires_7d": {
+            "title": "Fires 7D",
+            "type": "integer"
+          },
+          "frequency": {
+            "enum": [
+              "once",
+              "once_per_bar",
+              "every_time"
+            ],
+            "title": "Frequency",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_fired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fired At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "seed",
+              "library",
+              "user"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Reason"
+          },
+          "run_on": {
+            "enum": [
+              "bar_close_1m",
+              "bar_close_5m",
+              "bar_close_15m",
+              "bar_close_1h",
+              "premarket_0830",
+              "daily_close",
+              "weekly"
+            ],
+            "title": "Run On",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "opportunity",
+              "risk"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AlertStrategySourceOut"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "stage": {
+            "enum": [
+              "draft",
+              "alert_only"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "expired",
+              "draft"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "stage",
+          "status",
+          "paused_reason",
+          "version",
+          "source",
+          "category",
+          "run_on",
+          "frequency",
+          "cooldown_minutes",
+          "expires_on",
+          "channels",
+          "severity",
+          "last_fired_at",
+          "fires_7d",
+          "spec"
+        ],
+        "title": "AlertStrategyOut",
+        "type": "object"
+      },
+      "AlertStrategyPauseIn": {
+        "properties": {
+          "reason": {
+            "const": "user",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AlertStrategyPauseIn",
+        "type": "object"
+      },
+      "AlertStrategySourceOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "enum": [
+              "symbol",
+              "watchlist",
+              "filter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "AlertStrategySourceOut",
+        "type": "object"
+      },
+      "AlertStrategyThumbOut": {
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/AlertStrategyBarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "interval": {
+            "const": "15m",
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interval",
+          "bars"
+        ],
+        "title": "AlertStrategyThumbOut",
+        "type": "object"
+      },
+      "AlertStrategyUpdate": {
+        "properties": {
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "AlertStrategyUpdate",
+        "type": "object"
+      },
+      "AlertStrategyValidateIn": {
+        "properties": {
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "AlertStrategyValidateIn",
+        "type": "object"
+      },
+      "AlertStrategyValidateOut": {
+        "properties": {
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "resolved_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resolved Symbols",
+            "type": "array"
+          },
+          "run_on": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bar_close_1m",
+                  "bar_close_5m",
+                  "bar_close_15m",
+                  "bar_close_1h",
+                  "premarket_0830",
+                  "daily_close",
+                  "weekly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run On"
+          }
+        },
+        "required": [
+          "problems",
+          "resolved_symbols",
+          "run_on"
+        ],
+        "title": "AlertStrategyValidateOut",
+        "type": "object"
+      },
+      "AlertStrategyVersionOut": {
+        "properties": {
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "created_at",
+          "change_note"
+        ],
+        "title": "AlertStrategyVersionOut",
+        "type": "object"
+      },
+      "BarOut": {
+        "properties": {
+          "c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "C"
+          },
+          "ext": {
+            "title": "Ext",
+            "type": "boolean"
+          },
+          "h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H"
+          },
+          "l": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L"
+          },
+          "o": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "O"
+          },
+          "t": {
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v",
+          "ext"
+        ],
         "title": "BarOut",
         "type": "object"
       },
@@ -177,6 +1023,9 @@
             "title": "Quality",
             "type": "string"
           },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
           "symbol": {
             "title": "Symbol",
             "type": "string"
@@ -187,9 +1036,142 @@
           "interval",
           "quality",
           "as_of",
-          "bars"
+          "bars",
+          "stamp"
         ],
         "title": "BarsOut",
+        "type": "object"
+      },
+      "BiasChangeOut": {
+        "properties": {
+          "at_bar": {
+            "format": "date-time",
+            "title": "At Bar",
+            "type": "string"
+          },
+          "from": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "at_bar"
+        ],
+        "title": "BiasChangeOut",
+        "type": "object"
+      },
+      "BiasHistoryEntryOut": {
+        "properties": {
+          "bar": {
+            "format": "date-time",
+            "title": "Bar",
+            "type": "string"
+          },
+          "moving_averages": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "Moving Averages",
+            "type": "string"
+          },
+          "oscillators": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "Oscillators",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "summary": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bar",
+          "summary",
+          "score",
+          "oscillators",
+          "moving_averages"
+        ],
+        "title": "BiasHistoryEntryOut",
+        "type": "object"
+      },
+      "BiasHistoryOut": {
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/BiasHistoryEntryOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "last_change_in_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BiasChangeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "history",
+          "last_change_in_window"
+        ],
+        "title": "BiasHistoryOut",
         "type": "object"
       },
       "CardBackOut": {
@@ -282,6 +1264,342 @@
           "pivots"
         ],
         "title": "CardBackOut",
+        "type": "object"
+      },
+      "DashboardEventOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "kind": {
+            "const": "earnings",
+            "title": "Kind",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timing": {
+            "title": "Timing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "kind",
+          "date",
+          "timing"
+        ],
+        "title": "DashboardEventOut",
+        "type": "object"
+      },
+      "DashboardMarketOut": {
+        "properties": {
+          "next_open": {
+            "format": "date-time",
+            "title": "Next Open",
+            "type": "string"
+          },
+          "session": {
+            "enum": [
+              "pre",
+              "regular",
+              "after",
+              "closed"
+            ],
+            "title": "Session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "next_open"
+        ],
+        "title": "DashboardMarketOut",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "properties": {
+          "alerts_state": {
+            "enum": [
+              "running",
+              "paused_no_quotes",
+              "paused_by_user",
+              "not_started"
+            ],
+            "title": "Alerts State",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "market": {
+            "$ref": "#/components/schemas/DashboardMarketOut"
+          },
+          "market_strip": {
+            "items": {
+              "$ref": "#/components/schemas/MarketStripTileOut"
+            },
+            "title": "Market Strip",
+            "type": "array"
+          },
+          "screener_matches": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardScreenerMatchOut"
+            },
+            "title": "Screener Matches",
+            "type": "array"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSignalOut"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "watchlist": {
+            "$ref": "#/components/schemas/DashboardWatchlistOut"
+          }
+        },
+        "required": [
+          "stamp",
+          "market",
+          "market_strip",
+          "signals",
+          "screener_matches",
+          "watchlist",
+          "events",
+          "alerts_state"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
+      "DashboardScreenerMatchOut": {
+        "properties": {
+          "filter_id": {
+            "title": "Filter Id",
+            "type": "integer"
+          },
+          "matches_total": {
+            "title": "Matches Total",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_on": {
+            "title": "Run On",
+            "type": "string"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "top": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top",
+            "type": "array"
+          }
+        },
+        "required": [
+          "filter_id",
+          "name",
+          "run_on",
+          "scanned",
+          "matches_total",
+          "top",
+          "stamp"
+        ],
+        "title": "DashboardScreenerMatchOut",
+        "type": "object"
+      },
+      "DashboardSignalOut": {
+        "properties": {
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "orb",
+              "vwap_reclaim",
+              "pattern",
+              "rvol",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "integer"
+          },
+          "strategy_name": {
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "strategy_id",
+          "strategy_name",
+          "kind",
+          "bar_time",
+          "summary",
+          "evidence"
+        ],
+        "title": "DashboardSignalOut",
+        "type": "object"
+      },
+      "DashboardWatchlistOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardWatchlistRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "rows"
+        ],
+        "title": "DashboardWatchlistOut",
+        "type": "object"
+      },
+      "DashboardWatchlistRowOut": {
+        "properties": {
+          "bias_label": {
+            "title": "Bias Label",
+            "type": "string"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "rvol_10d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rvol 10D"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "vs_vwap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vs Vwap Pct"
+          }
+        },
+        "required": [
+          "symbol",
+          "last",
+          "change_pct",
+          "rvol_10d",
+          "vs_vwap_pct",
+          "bias_label"
+        ],
+        "title": "DashboardWatchlistRowOut",
+        "type": "object"
+      },
+      "FireMarkerOut": {
+        "properties": {
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "signal_id": {
+            "title": "Signal Id",
+            "type": "integer"
+          },
+          "strategy_name": {
+            "title": "Strategy Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal_id",
+          "strategy_name",
+          "bar_time"
+        ],
+        "title": "FireMarkerOut",
         "type": "object"
       },
       "FuturesSpecOut": {
@@ -407,6 +1725,16 @@
           "oscillators": {
             "$ref": "#/components/schemas/GaugeOut"
           },
+          "strategies": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategiesGaugeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "summary": {
             "$ref": "#/components/schemas/GaugeOut"
           }
@@ -414,7 +1742,8 @@
         "required": [
           "summary",
           "oscillators",
-          "moving_averages"
+          "moving_averages",
+          "strategies"
         ],
         "title": "GaugesOut",
         "type": "object"
@@ -430,6 +1759,500 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LevelsOut": {
+        "properties": {
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "session_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session High"
+          },
+          "session_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Low"
+          }
+        },
+        "required": [
+          "prior_close",
+          "session_high",
+          "session_low"
+        ],
+        "title": "LevelsOut",
+        "type": "object"
+      },
+      "LibraryAttachIn": {
+        "properties": {
+          "channels": {
+            "default": [
+              "inbox"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "severity": {
+            "default": "opportunity",
+            "title": "Severity",
+            "type": "string"
+          },
+          "watchlist_id": {
+            "title": "Watchlist Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "watchlist_id"
+        ],
+        "title": "LibraryAttachIn",
+        "type": "object"
+      },
+      "LibraryAttachOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "pattern",
+              "indicator",
+              "level",
+              "screener"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "cooldown_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Minutes"
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On"
+          },
+          "fires_7d": {
+            "title": "Fires 7D",
+            "type": "integer"
+          },
+          "frequency": {
+            "enum": [
+              "once",
+              "once_per_bar",
+              "every_time"
+            ],
+            "title": "Frequency",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_fired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fired At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "seed",
+              "library",
+              "user"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Reason"
+          },
+          "run_on": {
+            "title": "Run On",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "opportunity",
+              "risk"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LibraryAttachSourceOut"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "stage": {
+            "enum": [
+              "draft",
+              "alert_only"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "expired",
+              "draft"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "stage",
+          "status",
+          "paused_reason",
+          "version",
+          "source",
+          "category",
+          "run_on",
+          "frequency",
+          "cooldown_minutes",
+          "expires_on",
+          "channels",
+          "severity",
+          "last_fired_at",
+          "fires_7d",
+          "spec"
+        ],
+        "title": "LibraryAttachOut",
+        "type": "object"
+      },
+      "LibraryAttachSourceOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "symbol",
+              "watchlist",
+              "filter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "LibraryAttachSourceOut",
+        "type": "object"
+      },
+      "LibraryEntryOut": {
+        "properties": {
+          "attach_blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach Blocked Reason"
+          },
+          "attachable": {
+            "title": "Attachable",
+            "type": "boolean"
+          },
+          "bias": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Bias",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "candlestick",
+              "breakout",
+              "trend",
+              "volume",
+              "futures",
+              "income",
+              "long_term"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "title": "Defaults",
+            "type": "object"
+          },
+          "example": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryExampleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "strategy",
+              "filter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lane": {
+            "enum": [
+              "technical",
+              "fundamental"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "file",
+          "kind",
+          "lane",
+          "category",
+          "bias",
+          "label",
+          "summary",
+          "attachable",
+          "attach_blocked_reason",
+          "spec",
+          "defaults",
+          "example"
+        ],
+        "title": "LibraryEntryOut",
+        "type": "object"
+      },
+      "LibraryExampleOut": {
+        "description": "A real occurrence on stored bars (the stub's snapshot here); the mock draws it as an example.",
+        "properties": {
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "ohlc": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Ohlc",
+            "type": "array"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "timeframe",
+          "bar_time",
+          "ohlc"
+        ],
+        "title": "LibraryExampleOut",
+        "type": "object"
+      },
+      "LibraryItemOut": {
+        "description": "One catalog entry, as `PresetCatalogV1` ships it, plus whether it can be attached.",
+        "properties": {
+          "attach_blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach Blocked Reason"
+          },
+          "attachable": {
+            "title": "Attachable",
+            "type": "boolean"
+          },
+          "bias": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Bias",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "candlestick",
+              "breakout",
+              "trend",
+              "volume",
+              "futures",
+              "income",
+              "long_term"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "strategy",
+              "filter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lane": {
+            "enum": [
+              "technical",
+              "fundamental"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "file",
+          "kind",
+          "lane",
+          "category",
+          "bias",
+          "label",
+          "summary",
+          "attachable",
+          "attach_blocked_reason"
+        ],
+        "title": "LibraryItemOut",
         "type": "object"
       },
       "MacdOut": {
@@ -476,6 +2299,71 @@
         "title": "MacdOut",
         "type": "object"
       },
+      "MarkersOut": {
+        "properties": {
+          "fires": {
+            "items": {
+              "$ref": "#/components/schemas/FireMarkerOut"
+            },
+            "title": "Fires",
+            "type": "array"
+          },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/PatternMarkerOut"
+            },
+            "title": "Patterns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "patterns",
+          "fires"
+        ],
+        "title": "MarkersOut",
+        "type": "object"
+      },
+      "MarketStripTileOut": {
+        "properties": {
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "last",
+          "change_pct",
+          "stamp"
+        ],
+        "title": "MarketStripTileOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "email": {
@@ -487,6 +2375,207 @@
           "email"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "Metrics": {
+        "description": "The snapshot's metric names, exactly (02m \u00a7a1). Numbers or null, never NaN.",
+        "properties": {
+          "atr_pct_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Pct 14"
+          },
+          "avg_volume_20d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Volume 20D"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "dist_to_252d_high_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dist To 252D High Pct"
+          },
+          "gap_pct_open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Pct Open"
+          },
+          "high_252d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High 252D"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "prev_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Close"
+          },
+          "rsi_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi 14"
+          },
+          "rvol_10d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rvol 10D"
+          },
+          "rvol_intraday_10d_at_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rvol Intraday 10D At Close"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume"
+          },
+          "vs_vwap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vs Vwap Pct"
+          },
+          "vwap_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap Close"
+          }
+        },
+        "title": "Metrics",
+        "type": "object"
+      },
+      "PatternMarkerOut": {
+        "properties": {
+          "bar_close": {
+            "format": "date-time",
+            "title": "Bar Close",
+            "type": "string"
+          },
+          "bar_start": {
+            "format": "date-time",
+            "title": "Bar Start",
+            "type": "string"
+          },
+          "ohlc": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Ohlc",
+            "type": "array"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern",
+          "template",
+          "bar_start",
+          "bar_close",
+          "ohlc"
+        ],
+        "title": "PatternMarkerOut",
         "type": "object"
       },
       "PivotMethodsOut": {
@@ -542,6 +2631,618 @@
         "title": "PivotMethodsOut",
         "type": "object"
       },
+      "Problem": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "ScreenerFilterCreate": {
+        "properties": {
+          "copy_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Of"
+          },
+          "spec": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spec"
+          }
+        },
+        "title": "ScreenerFilterCreate",
+        "type": "object"
+      },
+      "ScreenerFilterDetailOut": {
+        "properties": {
+          "default_spec": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Spec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "seed",
+              "user"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "read_only",
+          "version",
+          "spec",
+          "default_spec",
+          "stamp"
+        ],
+        "title": "ScreenerFilterDetailOut",
+        "type": "object"
+      },
+      "ScreenerFilterOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenerLastRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "seed",
+              "user"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "run_on": {
+            "enum": [
+              "bar_close_1m",
+              "bar_close_5m",
+              "bar_close_15m",
+              "bar_close_1h",
+              "premarket_0830",
+              "daily_close",
+              "weekly"
+            ],
+            "title": "Run On",
+            "type": "string"
+          },
+          "seed_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed Key"
+          },
+          "session": {
+            "enum": [
+              "regular",
+              "extended"
+            ],
+            "title": "Session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "seed_key",
+          "read_only",
+          "run_on",
+          "session",
+          "last_run"
+        ],
+        "title": "ScreenerFilterOut",
+        "type": "object"
+      },
+      "ScreenerFilterUpdate": {
+        "properties": {
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "ScreenerFilterUpdate",
+        "type": "object"
+      },
+      "ScreenerLastRunOut": {
+        "properties": {
+          "evaluation_point": {
+            "format": "date-time",
+            "title": "Evaluation Point",
+            "type": "string"
+          },
+          "matches_total": {
+            "title": "Matches Total",
+            "type": "integer"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          }
+        },
+        "required": [
+          "evaluation_point",
+          "matches_total",
+          "scanned",
+          "stamp"
+        ],
+        "title": "ScreenerLastRunOut",
+        "type": "object"
+      },
+      "ScreenerLiquidityOut": {
+        "properties": {
+          "avgVolumeDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avgvolumedays"
+          },
+          "minAvgVolume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minavgvolume"
+          },
+          "minPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minprice"
+          }
+        },
+        "title": "ScreenerLiquidityOut",
+        "type": "object"
+      },
+      "ScreenerMatchOut": {
+        "properties": {
+          "columns": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "matched_since": {
+            "format": "date-time",
+            "title": "Matched Since",
+            "type": "string"
+          },
+          "operands": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Operands",
+            "type": "object"
+          },
+          "rank_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Value"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "matched_since",
+          "rank_value",
+          "operands",
+          "columns"
+        ],
+        "title": "ScreenerMatchOut",
+        "type": "object"
+      },
+      "ScreenerPreviewIn": {
+        "properties": {
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "ScreenerPreviewIn",
+        "type": "object"
+      },
+      "ScreenerPreviewOut": {
+        "properties": {
+          "matches_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Total"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenerPreviewTopOut"
+            },
+            "title": "Top",
+            "type": "array"
+          }
+        },
+        "required": [
+          "problems",
+          "matches_total",
+          "scanned",
+          "top"
+        ],
+        "title": "ScreenerPreviewOut",
+        "type": "object"
+      },
+      "ScreenerPreviewTopOut": {
+        "properties": {
+          "rank_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Value"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "rank_value"
+        ],
+        "title": "ScreenerPreviewTopOut",
+        "type": "object"
+      },
+      "ScreenerRankOut": {
+        "properties": {
+          "by": {
+            "additionalProperties": true,
+            "title": "By",
+            "type": "object"
+          },
+          "order": {
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "title": "Order",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "order"
+        ],
+        "title": "ScreenerRankOut",
+        "type": "object"
+      },
+      "ScreenerResultsOut": {
+        "properties": {
+          "evaluation_point": {
+            "format": "date-time",
+            "title": "Evaluation Point",
+            "type": "string"
+          },
+          "filter_id": {
+            "title": "Filter Id",
+            "type": "integer"
+          },
+          "liquidity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenerLiquidityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenerMatchOut"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "matches_returned": {
+            "title": "Matches Returned",
+            "type": "integer"
+          },
+          "matches_total": {
+            "title": "Matches Total",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "no_data_on_eval_day": {
+            "title": "No Data On Eval Day",
+            "type": "integer"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenerRankOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_on": {
+            "enum": [
+              "bar_close_1m",
+              "bar_close_5m",
+              "bar_close_15m",
+              "bar_close_1h",
+              "premarket_0830",
+              "daily_close",
+              "weekly"
+            ],
+            "title": "Run On",
+            "type": "string"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "session": {
+            "enum": [
+              "regular",
+              "extended"
+            ],
+            "title": "Session",
+            "type": "string"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "table_columns": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenerTableColumnOut"
+            },
+            "title": "Table Columns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "filter_id",
+          "name",
+          "run_on",
+          "session",
+          "rank",
+          "liquidity",
+          "evaluation_point",
+          "scanned",
+          "no_data_on_eval_day",
+          "matches_total",
+          "matches_returned",
+          "stamp",
+          "table_columns",
+          "matches"
+        ],
+        "title": "ScreenerResultsOut",
+        "type": "object"
+      },
+      "ScreenerTableColumnOut": {
+        "properties": {
+          "format": {
+            "enum": [
+              "price",
+              "pct",
+              "pct_signed",
+              "compact",
+              "ratio",
+              "number",
+              "time"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "format"
+        ],
+        "title": "ScreenerTableColumnOut",
+        "type": "object"
+      },
+      "ScreenerUniverseOut": {
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "dropped_non_plain_tickers": {
+            "title": "Dropped Non Plain Tickers",
+            "type": "integer"
+          },
+          "liquidity_floor": {
+            "$ref": "#/components/schemas/ScreenerLiquidityOut"
+          },
+          "no_daily_data": {
+            "title": "No Daily Data",
+            "type": "integer"
+          },
+          "scan_basis": {
+            "title": "Scan Basis",
+            "type": "string"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          }
+        },
+        "required": [
+          "scan_basis",
+          "candidates",
+          "scanned",
+          "dropped_non_plain_tickers",
+          "no_daily_data",
+          "liquidity_floor",
+          "stamp"
+        ],
+        "title": "ScreenerUniverseOut",
+        "type": "object"
+      },
       "SessionOut": {
         "properties": {
           "close_time": {
@@ -574,6 +3275,72 @@
         "title": "SettingsBody",
         "type": "object"
       },
+      "SettingsChannelStateOut": {
+        "description": "`locked` is true only for the inbox, and `configured` is false until the owner wires the\nchannel's key. The inbox row is sent without `configured`, and telegram/slack without `locked`\n(the endpoint uses `response_model_exclude_unset`), which is the a3.8 example shape.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "inbox",
+              "telegram",
+              "slack"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "configured": {
+            "default": true,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel",
+          "connected"
+        ],
+        "title": "SettingsChannelStateOut",
+        "type": "object"
+      },
+      "SettingsChannelTestOut": {
+        "properties": {
+          "status": {
+            "enum": [
+              "sent",
+              "not_connected",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "SettingsChannelTestOut",
+        "type": "object"
+      },
+      "SettingsTelegramLinkBody": {
+        "properties": {
+          "chat_id": {
+            "pattern": "^-?[0-9]{1,20}$",
+            "title": "Chat Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chat_id"
+        ],
+        "title": "SettingsTelegramLinkBody",
+        "type": "object"
+      },
       "SignalOut": {
         "properties": {
           "bar_time": {
@@ -599,6 +3366,25 @@
             "title": "Id",
             "type": "integer"
           },
+          "kind": {
+            "enum": [
+              "orb",
+              "vwap_reclaim",
+              "pattern",
+              "rvol",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "integer"
+          },
+          "strategy_name": {
+            "title": "Strategy Name",
+            "type": "string"
+          },
           "strategy_version_id": {
             "title": "Strategy Version Id",
             "type": "integer"
@@ -615,7 +3401,10 @@
           "bar_time",
           "evidence",
           "data_quality",
-          "created_at"
+          "created_at",
+          "strategy_id",
+          "strategy_name",
+          "kind"
         ],
         "title": "SignalOut",
         "type": "object"
@@ -638,31 +3427,170 @@
         "title": "StageUpdate",
         "type": "object"
       },
+      "Stamp": {
+        "description": "Embedded in every response that carries market data; the UI never computes freshness.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "freshness": {
+            "enum": [
+              "live",
+              "delayed",
+              "closed",
+              "paused",
+              "unavailable"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "realtime",
+              "delayed-15m",
+              "eod",
+              "fallback",
+              "unavailable"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "as_of",
+          "source",
+          "quality",
+          "freshness"
+        ],
+        "title": "Stamp",
+        "type": "object"
+      },
+      "StatusAlertsOut": {
+        "properties": {
+          "state": {
+            "enum": [
+              "running",
+              "paused_no_quotes",
+              "paused_by_user",
+              "not_started"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "unread"
+        ],
+        "title": "StatusAlertsOut",
+        "type": "object"
+      },
+      "StatusMarketOut": {
+        "properties": {
+          "last_close": {
+            "format": "date-time",
+            "title": "Last Close",
+            "type": "string"
+          },
+          "next_open": {
+            "format": "date-time",
+            "title": "Next Open",
+            "type": "string"
+          },
+          "session": {
+            "enum": [
+              "pre",
+              "regular",
+              "after",
+              "closed"
+            ],
+            "title": "Session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "next_open",
+          "last_close"
+        ],
+        "title": "StatusMarketOut",
+        "type": "object"
+      },
       "StatusOut": {
         "properties": {
+          "alerts": {
+            "$ref": "#/components/schemas/StatusAlertsOut"
+          },
           "backups": {
             "title": "Backups",
             "type": "null"
           },
           "data_sources": {
-            "const": "unknown",
+            "enum": [
+              "unknown",
+              "alpaca",
+              "ibkr",
+              "mixed"
+            ],
             "title": "Data Sources",
             "type": "string"
           },
           "gateway": {
-            "const": "not_configured",
+            "enum": [
+              "not_configured",
+              "connected",
+              "reconnecting",
+              "down"
+            ],
             "title": "Gateway",
             "type": "string"
+          },
+          "market": {
+            "$ref": "#/components/schemas/StatusMarketOut"
+          },
+          "quotes": {
+            "$ref": "#/components/schemas/Stamp"
           },
           "reconciliation": {
             "title": "Reconciliation",
             "type": "null"
+          },
+          "scans": {
+            "$ref": "#/components/schemas/StatusScansOut"
           },
           "streaming_slots": {
             "$ref": "#/components/schemas/StreamingSlotsOut"
           }
         },
         "required": [
+          "market",
+          "quotes",
+          "scans",
+          "alerts",
           "gateway",
           "data_sources",
           "streaming_slots",
@@ -670,6 +3598,129 @@
           "reconciliation"
         ],
         "title": "StatusOut",
+        "type": "object"
+      },
+      "StatusScansOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "freshness": {
+            "enum": [
+              "live",
+              "delayed",
+              "closed",
+              "paused",
+              "unavailable"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "quality": {
+            "enum": [
+              "realtime",
+              "delayed-15m",
+              "eod",
+              "fallback",
+              "unavailable"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "as_of",
+          "source",
+          "quality",
+          "freshness",
+          "next_run_at"
+        ],
+        "title": "StatusScansOut",
+        "type": "object"
+      },
+      "StrategiesGaugeOut": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/VoteCountsOut"
+          },
+          "label": {
+            "enum": [
+              "Strong Sell",
+              "Sell",
+              "Neutral",
+              "Buy",
+              "Strong Buy",
+              "warming up"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyVoteOut"
+            },
+            "title": "Votes",
+            "type": "array"
+          },
+          "watching": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyWatchOut"
+            },
+            "title": "Watching",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "score",
+          "counts",
+          "votes",
+          "watching"
+        ],
+        "title": "StrategiesGaugeOut",
         "type": "object"
       },
       "StrategyCreate": {
@@ -791,6 +3842,62 @@
         "title": "StrategyVersionOut",
         "type": "object"
       },
+      "StrategyVoteOut": {
+        "properties": {
+          "bias": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Bias",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "integer"
+          },
+          "vote": {
+            "enum": [
+              "buy",
+              "neutral",
+              "sell"
+            ],
+            "title": "Vote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "name",
+          "bias",
+          "vote"
+        ],
+        "title": "StrategyVoteOut",
+        "type": "object"
+      },
+      "StrategyWatchOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "name"
+        ],
+        "title": "StrategyWatchOut",
+        "type": "object"
+      },
       "StreamingSlotsOut": {
         "properties": {
           "max": {
@@ -809,6 +3916,38 @@
         "title": "StreamingSlotsOut",
         "type": "object"
       },
+      "SymbolSearchOut": {
+        "properties": {
+          "asset_type": {
+            "enum": [
+              "stock",
+              "etf"
+            ],
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "in_watchlist": {
+            "title": "In Watchlist",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "asset_type",
+          "in_watchlist"
+        ],
+        "title": "SymbolSearchOut",
+        "type": "object"
+      },
       "TechnicalsOut": {
         "properties": {
           "as_of": {
@@ -822,11 +3961,87 @@
             ],
             "title": "As Of"
           },
+          "bars_used": {
+            "title": "Bars Used",
+            "type": "integer"
+          },
+          "bias_history": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BiasHistoryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bias_ready": {
+            "title": "Bias Ready",
+            "type": "boolean"
+          },
           "card_back": {
             "$ref": "#/components/schemas/CardBackOut"
           },
+          "first_bar": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Bar"
+          },
           "gauges": {
             "$ref": "#/components/schemas/GaugesOut"
+          },
+          "indicators": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicators"
+          },
+          "last_bar": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Bar"
+          },
+          "levels": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LevelsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "macd": {
             "$ref": "#/components/schemas/MacdOut"
@@ -870,8 +4085,15 @@
             ],
             "title": "Rsi"
           },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
           "symbol": {
             "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
             "type": "string"
           },
           "volatility": {
@@ -889,7 +4111,16 @@
           "rsi",
           "macd",
           "volatility",
-          "card_back"
+          "card_back",
+          "timeframe",
+          "bars_used",
+          "first_bar",
+          "last_bar",
+          "bias_ready",
+          "indicators",
+          "bias_history",
+          "levels",
+          "stamp"
         ],
         "title": "TechnicalsOut",
         "type": "object"
@@ -1145,6 +4376,23 @@
         "title": "WatchlistItemReadOut",
         "type": "object"
       },
+      "WatchlistOrder": {
+        "description": "`PUT /api/desk/watchlists/{id}/order`: the list's own symbols in their new order.",
+        "properties": {
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "title": "WatchlistOrder",
+        "type": "object"
+      },
       "WatchlistOut": {
         "properties": {
           "horizon": {
@@ -1167,6 +4415,206 @@
         ],
         "title": "WatchlistOut",
         "type": "object"
+      },
+      "WatchlistRename": {
+        "description": "`PATCH /api/desk/watchlists/{id}`.",
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WatchlistRename",
+        "type": "object"
+      },
+      "WatchlistTable": {
+        "description": "`GET /api/desk/watchlists/{id}/table`: rows in stored `position` order.",
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/WatchlistTableRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "watchlist": {
+            "$ref": "#/components/schemas/WatchlistTableHeader"
+          }
+        },
+        "required": [
+          "watchlist",
+          "stamp",
+          "rows"
+        ],
+        "title": "WatchlistTable",
+        "type": "object"
+      },
+      "WatchlistTableHeader": {
+        "properties": {
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "horizon"
+        ],
+        "title": "WatchlistTableHeader",
+        "type": "object"
+      },
+      "WatchlistTableRow": {
+        "properties": {
+          "asset_type": {
+            "enum": [
+              "stock",
+              "etf",
+              "future"
+            ],
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "bias_label": {
+            "title": "Bias Label",
+            "type": "string"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "freshness": {
+            "enum": [
+              "live",
+              "delayed",
+              "closed",
+              "paused",
+              "unavailable"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rvol_10d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rvol 10D"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/WatchlistTableTag"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "vs_vwap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vs Vwap Pct"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "asset_type",
+          "last",
+          "change_pct",
+          "rvol_10d",
+          "vs_vwap_pct",
+          "bias_label",
+          "freshness",
+          "tags"
+        ],
+        "title": "WatchlistTableRow",
+        "type": "object"
+      },
+      "WatchlistTableTag": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "kind": {
+            "enum": [
+              "pattern",
+              "armed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "at"
+        ],
+        "title": "WatchlistTableTag",
+        "type": "object"
       }
     }
   },
@@ -1176,6 +4624,491 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/desk/alert-strategies": {
+      "get": {
+        "operationId": "list_alert_strategies_api_desk_alert_strategies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "paused",
+                    "expired",
+                    "draft"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pattern",
+                    "indicator",
+                    "level",
+                    "screener"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "watchlist_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Watchlist Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "name",
+              "enum": [
+                "name",
+                "last_fired",
+                "status"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertStrategyOut"
+                  },
+                  "title": "Response List Alert Strategies Api Desk Alert Strategies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alert Strategies",
+        "tags": [
+          "alert strategies"
+        ]
+      },
+      "post": {
+        "operationId": "create_alert_strategy_api_desk_alert_strategies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStrategyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
+    "/api/desk/alert-strategies/validate": {
+      "post": {
+        "operationId": "validate_alert_strategy_api_desk_alert_strategies_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStrategyValidateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyValidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
+    "/api/desk/alert-strategies/{strategy_id}": {
+      "delete": {
+        "operationId": "archive_alert_strategy_api_desk_alert_strategies__strategy_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      },
+      "get": {
+        "operationId": "get_alert_strategy_api_desk_alert_strategies__strategy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      },
+      "put": {
+        "operationId": "update_alert_strategy_api_desk_alert_strategies__strategy_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStrategyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
+    "/api/desk/alert-strategies/{strategy_id}/fires": {
+      "get": {
+        "operationId": "list_alert_strategy_fires_api_desk_alert_strategies__strategy_id__fires_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertStrategyFireOut"
+                  },
+                  "title": "Response List Alert Strategy Fires Api Desk Alert Strategies  Strategy Id  Fires Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alert Strategy Fires",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
+    "/api/desk/alert-strategies/{strategy_id}/pause": {
+      "post": {
+        "operationId": "pause_alert_strategy_api_desk_alert_strategies__strategy_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStrategyPauseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
+    "/api/desk/alert-strategies/{strategy_id}/resume": {
+      "post": {
+        "operationId": "resume_alert_strategy_api_desk_alert_strategies__strategy_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Alert Strategy",
+        "tags": [
+          "alert strategies"
+        ]
+      }
+    },
     "/api/desk/alerts": {
       "get": {
         "operationId": "list_alerts_api_desk_alerts_get",
@@ -1194,6 +5127,61 @@
                 }
               ],
               "title": "Unread"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strategy_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strategy Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],
@@ -1224,6 +5212,125 @@
           }
         },
         "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/desk/alerts/log": {
+      "get": {
+        "operationId": "delivery_log_api_desk_alerts_log_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "delivered",
+                    "held_quiet_hours",
+                    "no_channel",
+                    "failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertLogOut"
+                  },
+                  "title": "Response Delivery Log Api Desk Alerts Log Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delivery Log",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/desk/alerts/read-all": {
+      "post": {
+        "operationId": "mark_all_read_api_desk_alerts_read_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertReadAllOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mark All Read",
         "tags": [
           "alerts"
         ]
@@ -1273,6 +5380,7 @@
     },
     "/api/desk/bars/{symbol}": {
       "get": {
+        "description": "Closed bars for the chart. `ext` marks pre/after-hours bars; `stamp` is the freshness the UI shows.\nStub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot, `session=extended` reads the Friday 5m series.",
         "operationId": "bars_api_desk_bars__symbol__get",
         "parameters": [
           {
@@ -1359,6 +5467,156 @@
         ]
       }
     },
+    "/api/desk/charts/{symbol}/markers": {
+      "get": {
+        "description": "Pattern markers on closed bars plus the fires of her strategies, filtered to `from`..`to`\n(on the bar start for patterns, the bar time for fires). By default only the patterns her attached\nstrategies use; `all_patterns=true` returns every pattern in the fixture. Stub: SPY, NVDA, MSFT patterns\n(the default set is `hammer`); fires are the signal feed's rows for the symbol.",
+        "operationId": "markers_api_desk_charts__symbol__markers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "15m",
+              "enum": [
+                "1d",
+                "1w",
+                "1h",
+                "5m",
+                "15m",
+                "30m",
+                "4h",
+                "1m"
+              ],
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "all_patterns",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "All Patterns",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Markers",
+        "tags": [
+          "charts"
+        ]
+      }
+    },
+    "/api/desk/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_desk_dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "watchlist_id",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashboard",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/api/desk/futures/specs": {
       "get": {
         "operationId": "futures_specs_api_desk_futures_specs_get",
@@ -1381,6 +5639,197 @@
         "summary": "Futures Specs",
         "tags": [
           "futures"
+        ]
+      }
+    },
+    "/api/desk/library": {
+      "get": {
+        "operationId": "list_library_api_desk_library_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "strategy",
+              "enum": [
+                "strategy",
+                "filter"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lane",
+            "required": false,
+            "schema": {
+              "default": "technical",
+              "enum": [
+                "technical",
+                "fundamental"
+              ],
+              "title": "Lane",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryItemOut"
+                  },
+                  "title": "Response List Library Api Desk Library Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Library",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/desk/library/{entry_id}": {
+      "get": {
+        "operationId": "get_library_entry_api_desk_library__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Library Entry",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/desk/library/{entry_id}/attach": {
+      "post": {
+        "operationId": "attach_library_entry_api_desk_library__entry_id__attach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryAttachIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryAttachOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Library Entry",
+        "tags": [
+          "library"
         ]
       }
     },
@@ -1407,6 +5856,7 @@
     },
     "/api/desk/quotes/{symbol}": {
       "get": {
+        "description": "Server-sent events, one connection per symbol. Each `quote` event's data is JSON:\n`{\"symbol\", \"close\", \"quality\", \"as_of\", \"freshness\", \"source\", \"session\"}`.\n`as_of` is the closed 1m bar's start (`+00:00`, `Z` in the stub).\n`freshness` is live|delayed|closed|paused|unavailable; `source` is the bar's provider;\n`session` is pre|regular|after|closed (the market session now).\nAn event is sent only when the quote changes; the stream stays open until the client disconnects.\nStub: one event for SPY, NVDA or MSFT from the last 15m fixture bar, then the stream stays open.",
         "operationId": "stream_quotes_api_desk_quotes__symbol__get",
         "parameters": [
           {
@@ -1442,6 +5892,319 @@
         "summary": "Stream Quotes",
         "tags": [
           "quotes"
+        ]
+      }
+    },
+    "/api/desk/screener/filters": {
+      "get": {
+        "operationId": "list_filters_api_desk_screener_filters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScreenerFilterOut"
+                  },
+                  "title": "Response List Filters Api Desk Screener Filters Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Filters",
+        "tags": [
+          "screener"
+        ]
+      },
+      "post": {
+        "operationId": "create_filter_api_desk_screener_filters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenerFilterCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerFilterDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Filter",
+        "tags": [
+          "screener"
+        ]
+      }
+    },
+    "/api/desk/screener/filters/{filter_id}": {
+      "delete": {
+        "operationId": "delete_filter_api_desk_screener_filters__filter_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filter_id",
+            "required": true,
+            "schema": {
+              "title": "Filter Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Filter",
+        "tags": [
+          "screener"
+        ]
+      },
+      "get": {
+        "operationId": "get_filter_api_desk_screener_filters__filter_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filter_id",
+            "required": true,
+            "schema": {
+              "title": "Filter Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerFilterDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Filter",
+        "tags": [
+          "screener"
+        ]
+      },
+      "put": {
+        "operationId": "update_filter_api_desk_screener_filters__filter_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filter_id",
+            "required": true,
+            "schema": {
+              "title": "Filter Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenerFilterUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerFilterDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Filter",
+        "tags": [
+          "screener"
+        ]
+      }
+    },
+    "/api/desk/screener/filters/{filter_id}/results": {
+      "get": {
+        "operationId": "get_results_api_desk_screener_filters__filter_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filter_id",
+            "required": true,
+            "schema": {
+              "title": "Filter Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "regular",
+                    "extended"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerResultsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Results",
+        "tags": [
+          "screener"
+        ]
+      }
+    },
+    "/api/desk/screener/preview": {
+      "post": {
+        "operationId": "preview_api_desk_screener_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenerPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "screener"
+        ]
+      }
+    },
+    "/api/desk/screener/universe": {
+      "get": {
+        "operationId": "get_universe_api_desk_screener_universe_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerUniverseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Universe",
+        "tags": [
+          "screener"
         ]
       }
     },
@@ -1500,6 +6263,119 @@
           }
         },
         "summary": "Put Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/desk/settings/channels": {
+      "get": {
+        "operationId": "list_channels_api_desk_settings_channels_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SettingsChannelStateOut"
+                  },
+                  "title": "Response List Channels Api Desk Settings Channels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Channels",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/desk/settings/channels/telegram": {
+      "put": {
+        "operationId": "link_telegram_api_desk_settings_channels_telegram_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsTelegramLinkBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsChannelStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Telegram",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/desk/settings/channels/{channel}/test": {
+      "post": {
+        "operationId": "test_channel_api_desk_settings_channels__channel__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "enum": [
+                "inbox",
+                "telegram",
+                "slack"
+              ],
+              "title": "Channel",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsChannelTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Channel",
         "tags": [
           "settings"
         ]
@@ -1831,8 +6707,68 @@
         ]
       }
     },
+    "/api/desk/symbols/search": {
+      "get": {
+        "operationId": "search_symbols_api_desk_symbols_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SymbolSearchOut"
+                  },
+                  "title": "Response Search Symbols Api Desk Symbols Search Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Symbols",
+        "tags": [
+          "symbols"
+        ]
+      }
+    },
     "/api/desk/technicals/{symbol}": {
       "get": {
+        "description": "The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;\n`gauges.strategies` is a sample for NVDA 15m only. Real mode fills `timeframe`, `bars_used`, the bar\nbounds, `bias_ready` and `stamp`; `indicators`, `bias_history`, `levels` and `gauges.strategies` are null\nuntil their services land.",
         "operationId": "technicals_api_desk_technicals__symbol__get",
         "parameters": [
           {
@@ -1964,6 +6900,91 @@
           }
         },
         "summary": "Create Watchlist",
+        "tags": [
+          "watchlists"
+        ]
+      }
+    },
+    "/api/desk/watchlists/{watchlist_id}": {
+      "delete": {
+        "operationId": "delete_watchlist_api_desk_watchlists__watchlist_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Watchlist",
+        "tags": [
+          "watchlists"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_watchlist_api_desk_watchlists__watchlist_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchlistRename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchlistOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Watchlist",
         "tags": [
           "watchlists"
         ]
@@ -2104,6 +7125,104 @@
           }
         },
         "summary": "Remove Watchlist Item",
+        "tags": [
+          "watchlists"
+        ]
+      }
+    },
+    "/api/desk/watchlists/{watchlist_id}/order": {
+      "put": {
+        "operationId": "reorder_watchlist_items_api_desk_watchlists__watchlist_id__order_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchlistOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WatchlistItemReadOut"
+                  },
+                  "title": "Response Reorder Watchlist Items Api Desk Watchlists  Watchlist Id  Order Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Watchlist Items",
+        "tags": [
+          "watchlists"
+        ]
+      }
+    },
+    "/api/desk/watchlists/{watchlist_id}/table": {
+      "get": {
+        "operationId": "watchlist_table_api_desk_watchlists__watchlist_id__table_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchlistTable"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Watchlist Table",
         "tags": [
           "watchlists"
         ]

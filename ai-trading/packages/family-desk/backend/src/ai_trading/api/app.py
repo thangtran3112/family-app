@@ -27,15 +27,21 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_trading.api import (
+    alert_strategies,
     alerts,
     bars,
+    charts,
+    dashboard,
     futures,
+    library,
     me,
     quotes,
+    screener,
     settings,
     signals,
     status,
     strategies,
+    symbols,
     technicals,
     watchlists,
 )
@@ -97,6 +103,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.health_engine = make_health_check_engine(database_url)
         app.state.data_sources = DataSources.from_env()
         channels = _build_channels(dict(os.environ))
+        app.state.channels = channels  # `POST /settings/channels/{channel}/test` sends through these
         tasks.append(
             asyncio.create_task(
                 _background_loop(
@@ -140,6 +147,12 @@ for _router_module in (
     technicals,
     futures,
     status,
+    symbols,
+    dashboard,
+    charts,
+    screener,
+    library,
+    alert_strategies,
 ):
     app.include_router(_router_module.router)
 
