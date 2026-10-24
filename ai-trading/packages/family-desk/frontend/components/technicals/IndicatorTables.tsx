@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TechnicalsSchema } from "@/lib/api/schemas";
-import { formatEtTimeZone } from "@/lib/desk/format";
+import { formatAsOfText } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
 import { qualityLabel } from "@/lib/labels";
 import styles from "./technicals.module.css";
@@ -26,7 +26,7 @@ const displayNames: Record<string, string> = {
 
 /** "delayed-15m · 2026-10-23T19:45:00+00:00" on mobile; "Delayed 15 min · 3:45 PM ET" on desktop. */
 function metaText(quality: Technicals["quality"], asOf: string | null, plain: boolean): string {
-  if (plain) return `${qualityPhrase(quality)} · ${asOf ? formatEtTimeZone(asOf) : "time unavailable"}`;
+  if (plain) return `${qualityPhrase(quality)} · ${asOf ? formatAsOfText(asOf) : "time unavailable"}`;
   return `${qualityLabel(quality)} · ${asOf ?? "as of unavailable"}`;
 }
 

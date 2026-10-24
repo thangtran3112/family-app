@@ -10,12 +10,12 @@ export function PrimaryNav() {
   const pathname = usePathname() ?? "/";
   return (
     <nav className={styles.nav} aria-label="Primary navigation">
-      {PRIMARY_NAV[lane].map(({ label, href }) => (
+      {PRIMARY_NAV[lane].map(({ label, href, match }) => (
         <a
           key={href}
           className={styles.navLink}
           href={href}
-          aria-current={isNavActive(href, pathname) ? "page" : undefined}
+          aria-current={isNavActive(href, pathname, match) ? "page" : undefined}
         >
           {label}
         </a>

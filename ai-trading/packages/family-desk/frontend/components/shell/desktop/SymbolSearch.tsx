@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { isSearchShortcut, moveActive, symbolHref } from "@/lib/desk/listNav";
 import { searchSymbols } from "@/lib/desk/status";
 import styles from "./topbar.module.css";
@@ -12,6 +13,7 @@ type Answer = { q: string; hits: Hit[] | null };
 
 export function SymbolSearch({ compact }: { compact: boolean }) {
   const router = useRouter();
+  const { confirmLeave } = useDeskUi();
   const baseId = useId();
   const listId = `${baseId}-list`;
   const optionId = (index: number) => `${baseId}-option-${index}`;
@@ -64,6 +66,7 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
   }
 
   function choose(symbol: string) {
+    if (!confirmLeave()) return;
     latest.current = "";
     window.clearTimeout(timer.current);
     setText("");
@@ -81,6 +84,10 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
     } else if (event.key === "Enter" && hits[active]) {
       event.preventDefault();
       choose(hits[active].symbol);
+    } else if (event.key === "Enter" && /^\/?[A-Za-z][A-Za-z0-9.]{0,9}$/.test(text.trim())) {
+      // No row highlighted: a typed ticker still opens its chart.
+      event.preventDefault();
+      choose(text.trim().toUpperCase());
     } else if (event.key === "Escape") {
       setOpen(false);
       setActive(-1);

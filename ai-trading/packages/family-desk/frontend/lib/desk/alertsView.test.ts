@@ -42,6 +42,7 @@ test("a 409 shows the API sentence; anything else a generic one with no code", (
   const generic = actionError(new DeskApiError("http", 503));
   assert.equal(generic, "Couldn't update the alert · Try again");
   assert.doesNotMatch(generic, /503/);
+  assert.equal(actionError(new DeskApiError("http", 404, { detail: "Not Found" })), "Couldn't update the alert · Try again");
 });
 
 test("log rows show delivery wording, with held and no-channel visible", () => {

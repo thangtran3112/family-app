@@ -2,11 +2,13 @@ import type { QuietHours as QuietRange } from "@/lib/settings/schema";
 import styles from "./settingsDesktop.module.css";
 
 /** Overnight hold window for channel messages (02m §a3.9 `quiet_hours`). Validation is the parent's `QuietHoursSchema`. */
-export function QuietHours({ value, disabled, validationError, onChange }: Readonly<{
+export function QuietHours({ value, disabled, validationError, onChange, onCommit }: Readonly<{
   value: QuietRange;
   disabled: boolean;
   validationError: boolean;
   onChange: (boundary: keyof QuietRange, value: string) => void;
+  /** Called when a time field loses focus: the draft is saved then, not on every keystroke. */
+  onCommit: () => void;
 }>) {
   const describedBy = validationError ? "quiet-hours-error" : "quiet-hours-note";
   return (
@@ -26,6 +28,7 @@ export function QuietHours({ value, disabled, validationError, onChange }: Reado
             aria-describedby={describedBy}
             value={value.start}
             onChange={(event) => onChange("start", event.currentTarget.value)}
+            onBlur={onCommit}
           />
         </label>
         <label className={styles.timeField}>
@@ -39,6 +42,7 @@ export function QuietHours({ value, disabled, validationError, onChange }: Reado
             aria-describedby={describedBy}
             value={value.end}
             onChange={(event) => onChange("end", event.currentTarget.value)}
+            onBlur={onCommit}
           />
         </label>
       </div>

@@ -4,6 +4,7 @@ import {
   changeTone,
   formatAgo,
   formatCompact,
+  formatAsOfText,
   formatEtClock,
   formatEtDay,
   formatEtStamp,
@@ -67,4 +68,15 @@ test("tones, relative time and initials", () => {
   assert.equal(formatAgo(null, now), "—");
   assert.equal(initialOf("willa"), "W");
   assert.equal(initialOf(null), "?");
+});
+
+test("a plain date has no time of day and never slides to the evening before", () => {
+  assert.equal(formatEtTime("2026-10-23"), "—");
+  assert.equal(formatEtTimeZone("2026-10-23"), "—");
+  assert.equal(formatEtStamp("2026-10-23"), "—");
+  assert.equal(formatEtClock("2026-10-23"), "—");
+  assert.equal(formatEtDay("2026-10-23"), "Fri 2026-10-23");
+  assert.equal(formatAsOfText("2026-10-23"), "Fri 2026-10-23");
+  assert.equal(formatAsOfText("2026-10-23T19:45:00+00:00"), "3:45 PM ET");
+  assert.equal(formatAsOfText(null), "—");
 });

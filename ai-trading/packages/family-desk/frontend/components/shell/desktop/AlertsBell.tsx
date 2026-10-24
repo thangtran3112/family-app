@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
@@ -15,6 +15,7 @@ type Alert = Awaited<ReturnType<typeof loadAlertInbox>>[number];
 export function AlertsBell() {
   const router = useRouter();
   const { status, refresh: refreshStatus } = useDeskStatus();
+  const { confirmLeave } = useDeskUi();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -44,7 +45,7 @@ export function AlertsBell() {
     refreshStatus();
     if (alert.symbol) {
       setOpen(false);
-      router.push(symbolHref(alert.symbol));
+      if (confirmLeave()) router.push(symbolHref(alert.symbol));
     } else {
       alerts.refresh();
     }

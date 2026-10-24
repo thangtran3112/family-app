@@ -40,7 +40,7 @@ export const orderChange = (original: readonly string[], draft: readonly string[
 /** What went wrong with a manage-mode request, in words she can act on. */
 export function manageErrorMessage(error: unknown, action: "rename" | "delete" | "add" | "remove" | "reorder"): string {
   if (error instanceof DeskApiError && error.kind === "http") {
-    if (error.detail) return error.detail;
+    if (error.detail && (error.status === 409 || error.status === 422)) return error.detail;
     if (error.status === 409 && action === "rename") return "You already have a list with that name";
     if (error.status === 409 && action === "delete") return "An alert strategy still uses this list. Pause or remove it first";
     if (error.status === 422 && action === "reorder") return "The list changed. Reload it and try again";

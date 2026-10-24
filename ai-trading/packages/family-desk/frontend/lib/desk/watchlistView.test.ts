@@ -46,6 +46,7 @@ test("manage errors use plain words, the API detail first", () => {
   assert.match(manageErrorMessage(new DeskApiError("http", 422), "reorder"), /changed/);
   assert.equal(manageErrorMessage(new Error("boom"), "add"), "Couldn't save that change · Try again");
   assert.doesNotMatch(manageErrorMessage(new DeskApiError("http", 503), "add"), /503/);
+  assert.equal(manageErrorMessage(new DeskApiError("http", 404, { detail: "Not Found" }), "add"), "Couldn't save that change · Try again");
 });
 
 test("1180 drops RVOL then bias label on the watchlist table", () => {

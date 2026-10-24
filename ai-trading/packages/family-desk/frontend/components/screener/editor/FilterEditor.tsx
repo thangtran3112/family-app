@@ -63,7 +63,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   onNotice: (text: string) => void;
 }) {
   const router = useRouter();
-  const { invalidate } = useDeskUi();
+  const { invalidate, setDirty } = useDeskUi();
   const [original] = useState(() => specToForm(spec));
   const [form, setForm] = useState(original);
   const [previewSpecJson, setPreviewSpecJson] = useState(() => JSON.stringify(formToSpec(original)));
@@ -84,6 +84,11 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   const unplaced = unplacedProblems(problems, form);
 
   useEffect(() => () => clearTimeout(previewTimer.current), []);
+
+  useEffect(() => {
+    setDirty(dirty);
+    return () => setDirty(false);
+  }, [dirty, setDirty]);
 
   useEffect(() => {
     if (!dirty) return;

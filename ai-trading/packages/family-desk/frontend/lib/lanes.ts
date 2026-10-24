@@ -48,7 +48,8 @@ export function isWrongLane(activeLane: Lane, pathname: string): boolean {
 
 export const otherLane = (lane: Lane): Lane => (lane === "technical" ? "fundamental" : "technical");
 
-export type NavItem = { label: string; href: string };
+/** `match` is the path prefix that keeps the tab highlighted when it differs from `href`. */
+export type NavItem = { label: string; href: string; match?: string };
 /** Primary nav per lane. Settings and More live under the avatar menu (02l §b2). */
 export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
   technical: [
@@ -56,7 +57,7 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Screener", href: "/screener" },
     { label: "Watchlists", href: "/watchlists" },
     { label: "Alerts", href: "/alerts" },
-    { label: "Strategies", href: "/strategies" },
+    { label: "Strategies", href: "/strategies/library", match: "/strategies" },
   ],
   fundamental: [
     { label: "Holdings", href: "/holdings" },
@@ -70,10 +71,10 @@ export const AVATAR_MENU: readonly NavItem[] = [
   { label: "More", href: "/more" },
 ];
 
-export function isNavActive(href: string, pathname: string): boolean {
+export function isNavActive(href: string, pathname: string, match: string = href): boolean {
   const path = normalize(pathname);
-  if (href === "/") return path === "/" || path === "/today";
-  return path === href || path.startsWith(`${href}/`);
+  if (match === "/") return path === "/" || path === "/today";
+  return path === match || path.startsWith(`${match}/`);
 }
 
 export const LANE_STORAGE_KEY = "desk.lane";

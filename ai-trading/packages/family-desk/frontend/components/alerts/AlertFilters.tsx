@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CATEGORY_FILTERS, SORTS, STATUS_FILTERS, type AlertFilterState } from "@/lib/desk/alertsView";
 import { statusLabel } from "@/lib/desk/labels";
 import styles from "./alerts.module.css";
@@ -12,6 +13,11 @@ const CATEGORY_LABEL: Record<(typeof CATEGORY_FILTERS)[number], string> = {
 };
 
 export function AlertFilters({ value, onChange }: { value: AlertFilterState; onChange: (next: AlertFilterState) => void }) {
+  // The symbol filter applies on Enter or blur, so typing "NVDA" is one request and not four.
+  const [symbol, setSymbol] = useState(value.symbol);
+  const commitSymbol = () => {
+    if (symbol !== value.symbol) onChange({ ...value, symbol });
+  };
   return (
     <div className={styles.filters}>
       <label className={styles.field}>
@@ -33,10 +39,14 @@ export function AlertFilters({ value, onChange }: { value: AlertFilterState; onC
         <input
           type="text"
           className={`${styles.control} ${styles.symbolInput}`}
-          value={value.symbol}
+          value={symbol}
           placeholder="All symbols"
           autoComplete="off"
-          onChange={(event) => onChange({ ...value, symbol: event.target.value })}
+          onChange={(event) => setSymbol(event.target.value)}
+          onBlur={commitSymbol}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commitSymbol();
+          }}
         />
       </label>
       <label className={styles.field}>

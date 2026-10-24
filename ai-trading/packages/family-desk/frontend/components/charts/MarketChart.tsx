@@ -151,6 +151,7 @@ export function MarketChart({
   const markerPlugin = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const crosshairCallback = useRef(onCrosshair);
   const fitKey = useRef<string | null>(null);
+  const paneSignature = useRef("");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -229,6 +230,7 @@ export function MarketChart({
       shadeSeries.current = null;
       markerPlugin.current = null;
       fitKey.current = null;
+      paneSignature.current = "";
       overlayMap.clear();
       paneMap.clear();
       priceLines.current = [];
@@ -265,6 +267,15 @@ export function MarketChart({
       });
       series.setData(lineData(bars, overlay.values));
     });
+
+    // When panes are added, removed or reordered the library renumbers them, so series that stay would sit in the
+    // wrong pane. Rebuild the pane series from scratch whenever the pane layout changes.
+    const signature = panes.map((pane) => `${pane.id}[${pane.series.map((item) => `${item.id}:${item.kind}`).join(",")}]`).join("|");
+    if (signature !== paneSignature.current) {
+      for (const entry of paneSeries.current.values()) currentChart.removeSeries(entry.series);
+      paneSeries.current.clear();
+      paneSignature.current = signature;
+    }
 
     const wantedPaneSeries = new Set(panes.flatMap(({ id, series }) => series.map((item) => `${id}:${item.id}`)));
     for (const [id, entry] of paneSeries.current) {

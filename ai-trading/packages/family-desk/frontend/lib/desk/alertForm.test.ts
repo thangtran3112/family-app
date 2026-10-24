@@ -100,8 +100,8 @@ test("mini chart: a number the price is compared with becomes a level, a pattern
   const level = form({ rows: [{ op: "crosses_above", left: { series: "close" }, right: { value: 215.5 } }] });
   assert.deepEqual(miniChartModel(level, ["NVDA"]), { symbol: "NVDA", level: 215.5, levelLabel: "Alert level 215.5", patternLabel: null, interval: "15m" });
   const pattern = form({ rows: [{ op: "pattern", pattern: "bullish_engulfing" }], runOn: "daily_close" });
-  assert.deepEqual(miniChartModel(pattern, []), { symbol: "NVDA", level: null, levelLabel: null, patternLabel: "Bullish engulfing", interval: "1d" });
-  assert.equal(miniChartModel(form({ symbol: "" }), []).symbol, null);
+  assert.deepEqual(miniChartModel(pattern, ["NVDA"]), { symbol: "NVDA", level: null, levelLabel: null, patternLabel: "Bullish engulfing", interval: "1d" });
+  assert.equal(miniChartModel(form({ symbol: "N" }), []).symbol, null, "a half-typed ticker is not charted");
 });
 
 test("Turn on is disabled until the alert runtime starts", () => {

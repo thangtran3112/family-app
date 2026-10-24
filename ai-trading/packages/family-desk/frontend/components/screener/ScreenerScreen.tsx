@@ -64,7 +64,7 @@ export function ScreenerScreen() {
 
     body = (
       <>
-        <FilterHeader
+        <FilterHeader key={filter.id}
           filter={filter}
           detail={detail.data}
           session={session}

@@ -4,7 +4,7 @@ import type { AlertStrategySpecV1 } from "@ai-trading/contracts/alert-strategy";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -23,7 +23,7 @@ import {
   type AlertForm,
   type SourcePrefill,
 } from "@/lib/desk/alertForm";
-import { createAlertStrategy, loadAlertStrategy, updateAlertStrategy, validateAlertStrategy } from "@/lib/desk/alerts";
+import { createAlertStrategy, loadAlertStrategy, resumeAlertStrategy, updateAlertStrategy, validateAlertStrategy } from "@/lib/desk/alerts";
 import { loadChannels } from "@/lib/desk/settings";
 import { loadFilters } from "@/lib/desk/screener";
 import { loadWatchlists } from "@/lib/desk/watchlists";
@@ -37,6 +37,8 @@ import { TriggerStep } from "./TriggerStep";
 import styles from "./setup.module.css";
 
 type Named = { id: number; name: string };
+
+const hasSource = (form: AlertForm) => (form.sourceKind === "symbol" ? form.symbol.trim() !== "" : form.sourceKind === "watchlist" ? form.watchlist !== "" : form.filter !== "");
 
 /** `/alerts/new`: four steps, a live check and summary, `Save draft` or `Turn on` (02l D10). `?edit=ID` edits a saved alert. */
 export function AlertSetupForm() {
@@ -101,7 +103,10 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   );
   const [form, setForm] = useState(original);
   // The spec the live check runs on; null until the first change, so a fresh form does not open with errors.
-  const [specJson, setSpecJson] = useState<string | null>(null);
+  const [specJson, setSpecJson] = useState<string | null>(() => (hasSource(original) ? JSON.stringify(alertFormToSpec(original)) : null));
+  const { setDirty } = useDeskUi();
+  const [createdId, setCreatedId] = useState<number | null>(null);
+  const targetId = editId ?? createdId;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [saving, setSaving] = useState<"draft" | "on" | "edit" | null>(null);
   const [saveProblems, setSaveProblems] = useState<Problem[]>([]);
@@ -123,6 +128,11 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   const channelsFailed = channels.data === null && channels.error !== null;
 
   useEffect(() => () => clearTimeout(timer.current), []);
+
+  useEffect(() => {
+    setDirty(dirty);
+    return () => setDirty(false);
+  }, [dirty, setDirty]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -147,11 +157,14 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
     setSaveProblems([]);
     setSaveNote("");
     try {
-      if (editId !== null) {
-        const detail = await updateAlertStrategy(editId, body);
-        setSaved(`Saved as version ${detail.version}`);
+      if (targetId !== null) {
+        // Saved once already: later saves update that strategy instead of creating a second one.
+        const detail = await updateAlertStrategy(targetId, body);
+        if (mode === "on" && editId === null) await resumeAlertStrategy(targetId);
+        setSaved(mode === "on" && editId === null ? "Turned on" : editId === null ? "Saved as a draft" : `Saved as version ${detail.version}`);
       } else {
-        await createAlertStrategy(body, mode === "on" ? "on" : "draft");
+        const created = await createAlertStrategy(body, mode === "on" ? "on" : "draft");
+        setCreatedId(created.id);
         setSaved(mode === "on" ? "Turned on" : "Saved as a draft");
       }
       setOriginal(form);
@@ -213,11 +226,11 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
             </button>
           ) : (
             <>
-              <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null || saved !== null} onClick={() => void save("draft")}>
-                {saving === "draft" ? "Saving…" : "Save draft"}
+              <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null} onClick={() => void save("draft")}>
+                {saving === "draft" ? "Saving…" : createdId !== null ? "Save changes" : "Save draft"}
               </button>
               <div className={styles.turn}>
-                <button type="button" className={editorStyles.button} disabled={saving !== null || saved !== null || !turn.enabled} onClick={() => void save("on")}>
+                <button type="button" className={editorStyles.button} disabled={saving !== null || !turn.enabled} onClick={() => void save("on")}>
                   {saving === "on" ? "Saving…" : "Turn on"}
                 </button>
                 {turn.reason && <p className={editorStyles.note}>{turn.reason}</p>}

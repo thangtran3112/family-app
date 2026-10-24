@@ -10,8 +10,12 @@ export type MetricFormat = "price" | "pct" | "pct_signed" | "compact" | "ratio" 
 
 const cleanSpaces = (text: string) => text.replace(/[  ]/g, " ");
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 function partsOf(iso: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
-  const date = new Date(iso);
+  // A plain date (a daily bar's as-of) has no time of day: reading it as midnight UTC would print the evening before.
+  if (DATE_ONLY.test(iso) && (options.hour || options.minute)) return {};
+  const date = new Date(DATE_ONLY.test(iso) ? `${iso}T12:00:00Z` : iso);
   if (Number.isNaN(date.getTime())) return {};
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: ET, ...options }).formatToParts(date);
   return Object.fromEntries(parts.map(({ type, value }) => [type, cleanSpaces(value)]));
@@ -50,9 +54,14 @@ export function formatEtStamp(iso: string | null): string {
 /** "Fri 2026-10-23" from a UTC instant or a plain `YYYY-MM-DD` date. */
 export function formatEtDay(value: string | null): string {
   if (!value) return EMPTY_VALUE;
-  const instant = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value;
-  const p = partsOf(instant, { weekday: "short", year: "numeric", month: "2-digit", day: "2-digit" });
+  const p = partsOf(value, { weekday: "short", year: "numeric", month: "2-digit", day: "2-digit" });
   return p.year ? `${p.weekday} ${p.year}-${p.month}-${p.day}` : EMPTY_VALUE;
+}
+
+/** An as-of value: "3:45 PM ET" for a timestamp, "Fri 2026-10-23" for a plain date (daily and weekly data). */
+export function formatAsOfText(value: string | null): string {
+  if (!value) return EMPTY_VALUE;
+  return DATE_ONLY.test(value) ? formatEtDay(value) : formatEtTimeZone(value);
 }
 
 /** "Mon 9:30 AM ET" */

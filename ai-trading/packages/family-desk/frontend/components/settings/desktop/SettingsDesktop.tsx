@@ -96,9 +96,12 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
     const draft = { ...quiet, [boundary]: value };
     setQuietDraft(draft);
     setSaveStatus("idle");
-    if (QuietHoursSchema.safeParse(draft).success) {
-      edit((base) => mergeOwnedSettings(base, { quietHours: draft, channels: owned.channels }));
-    }
+  }
+
+  // Quiet hours save when a field loses focus: saving on each keystroke disabled the field mid-edit.
+  function commitQuiet() {
+    const changed = quiet.start !== owned.quietHours.start || quiet.end !== owned.quietHours.end;
+    if (quietValid && changed) edit((base) => mergeOwnedSettings(base, { quietHours: quiet, channels: owned.channels }));
   }
 
   function retry() {
@@ -165,7 +168,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
           ) : (
             <ErrorBlock message="Couldn't load alert channels · Try again" onRetry={channelsQuery.refresh} />
           )}
-          <QuietHours value={quiet} disabled={disabled} validationError={!quietValid} onChange={changeQuiet} />
+          <QuietHours value={quiet} disabled={disabled} validationError={!quietValid} onChange={changeQuiet} onCommit={commitQuiet} />
         </section>
 
         <section className={styles.card} aria-labelledby="settings-market-data">

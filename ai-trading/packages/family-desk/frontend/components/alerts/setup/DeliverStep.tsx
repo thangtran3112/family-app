@@ -38,12 +38,12 @@ export function DeliverStep({ form, onChange, problems, channels, channelsFailed
           <span className={editorStyles.note}>Always first</span>
         </label>
         <label className={editorStyles.option}>
-          <input type="checkbox" checked={form.telegram} disabled={telegram.disabled} onChange={(event) => onChange({ ...form, telegram: event.target.checked })} />
+          <input type="checkbox" checked={form.telegram} disabled={telegram.disabled && !form.telegram} onChange={(event) => onChange({ ...form, telegram: event.target.checked })} />
           Telegram
           <span className={editorStyles.note}>{telegram.text}</span>
         </label>
         <label className={editorStyles.option}>
-          <input type="checkbox" checked={form.slack} disabled={slack.disabled} onChange={(event) => onChange({ ...form, slack: event.target.checked })} />
+          <input type="checkbox" checked={form.slack} disabled={slack.disabled && !form.slack} onChange={(event) => onChange({ ...form, slack: event.target.checked })} />
           Slack
           <span className={editorStyles.note}>{slack.text}</span>
         </label>

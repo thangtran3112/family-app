@@ -1,6 +1,6 @@
 import type { TechnicalsSchema } from "@/lib/api/schemas";
 import { countsLine, formatScore, gaugeAriaLabel, needleGeometry } from "@/lib/desk/summary";
-import { formatEtTimeZone } from "@/lib/desk/format";
+import { formatAsOfText } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
 import { qualityLabel } from "@/lib/labels";
 import styles from "./technicals.module.css";
@@ -71,7 +71,7 @@ export function BiasGauge({
         </> : <span>Vote counts unavailable</span>}
       </div>
       )}
-      {size !== "compact" && <time className={styles.asOf} dateTime={asOf ?? undefined}>{asOf ? `Source bar · ${desktop ? formatEtTimeZone(asOf) : asOf}` : "Source bar unavailable"}</time>}
+      {size !== "compact" && <time className={styles.asOf} dateTime={asOf ?? undefined}>{asOf ? `Source bar · ${desktop ? formatAsOfText(asOf) : asOf}` : "Source bar unavailable"}</time>}
     </section>
   );
 }

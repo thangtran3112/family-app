@@ -53,8 +53,9 @@ export function FilterHeader({
     try {
       await task();
     } catch {
-      setPending(null);
       setFailed(action);
+    } finally {
+      setPending(null);
     }
   }
 

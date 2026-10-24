@@ -65,7 +65,7 @@ export const actionLabel = (action: Exclude<RowAction, null>): string => (action
 
 /** Plain words for a failed pause/resume/turn on: the API's own sentence for a 409, else a generic one. */
 export function actionError(error: unknown): string {
-  if (error instanceof DeskApiError && error.kind === "http" && error.detail) return error.detail;
+  if (error instanceof DeskApiError && error.kind === "http" && error.detail && (error.status === 409 || error.status === 422)) return error.detail;
   return "Couldn't update the alert · Try again";
 }
 

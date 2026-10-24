@@ -42,7 +42,7 @@ export function WatchlistDesktop() {
 
   function deleted() {
     const next = listRows.find((list) => list.id !== activeId);
-    if (next) setSelectedListId(next.id);
+    setSelectedListId(next ? next.id : null);
     setManage(false);
     listsChanged();
   }

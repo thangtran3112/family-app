@@ -1,7 +1,7 @@
 import type { Technicals } from "@/lib/api/schemas";
-import { formatPrice } from "@/lib/desk/format";
+import { formatAsOfText, formatPrice } from "@/lib/desk/format";
+import { qualityPhrase } from "@/lib/desk/freshness";
 import { PIVOT_METHODS, pivotRows, type PivotMethod } from "@/lib/desk/summary";
-import { qualityLabel } from "@/lib/labels";
 import styles from "./summary.module.css";
 
 const METHOD_LABEL: Record<PivotMethod, string> = { classic: "Classic", fibonacci: "Fibonacci", camarilla: "Camarilla" };
@@ -20,7 +20,7 @@ export function PivotsTable({
       <header className={styles.header}>
         <h2>Pivot points</h2>
         <span className={styles.meta}>
-          {qualityLabel(quality)} · <time dateTime={asOf ?? undefined}>{asOf ? `Source bar · ${asOf}` : "Source bar unavailable"}</time>
+          {qualityPhrase(quality)} · <time dateTime={asOf ?? undefined}>{asOf ? `Source bar · ${formatAsOfText(asOf)}` : "Source bar unavailable"}</time>
         </span>
       </header>
       <table className={styles.table}>

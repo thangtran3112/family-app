@@ -171,7 +171,8 @@ export type MiniChartModel = { symbol: string | null; level: number | null; leve
 
 /** What the right-hand mini chart shows: the first resolved symbol, a number the condition compares with, or the pattern. */
 export function miniChartModel(form: AlertForm, resolvedSymbols: readonly string[]): MiniChartModel {
-  const symbol = resolvedSymbols[0] ?? (form.sourceKind === "symbol" ? symbolsFromText(form.symbol)[0] ?? null : null);
+  // Only a symbol the live check resolved (after typing stops): a half-typed ticker never triggers a chart request.
+  const symbol = resolvedSymbols[0] ?? null;
   const priceSeries = new Set(["open", "high", "low", "close"]);
   let level: number | null = null;
   let patternLabel: string | null = null;

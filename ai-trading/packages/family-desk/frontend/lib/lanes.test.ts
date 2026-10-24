@@ -36,7 +36,9 @@ test("technical primary nav and the avatar menu match 02l §b2", () => {
   assert.equal(isNavActive("/", "/today"), true);
   assert.equal(isNavActive("/", "/screener"), false);
   assert.equal(isNavActive("/screener", "/screener/filters"), true);
-  assert.equal(isNavActive("/strategies", "/strategies/library"), true);
+  assert.equal(isNavActive("/strategies/library", "/strategies/new", "/strategies"), true);
+  assert.equal(isNavActive("/strategies/library", "/alerts", "/strategies"), false);
+  assert.equal(PRIMARY_NAV.technical.find((item) => item.label === "Strategies")?.href, "/strategies/library");
   assert.equal(isNavActive("/alerts", "/alerts/new"), true);
 });
 

@@ -3,6 +3,7 @@
 
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { AlertsBell } from "./AlertsBell";
 import { AvatarMenu } from "./AvatarMenu";
@@ -13,7 +14,7 @@ import { SymbolSearch } from "./SymbolSearch";
 import styles from "./topbar.module.css";
 
 export function TopBar({ band }: { band: ShellBand }) {
-  const { status, connection } = useDeskStatus();
+  const { status, connection, failed } = useDeskStatus();
   return (
     <header className={styles.bar} role="banner" data-band={band}>
       <a className={styles.wordmark} href="/">
@@ -31,7 +32,11 @@ export function TopBar({ band }: { band: ShellBand }) {
       <span className={styles.spacer} />
       <SymbolSearch compact={band === "1180"} />
       <MarketStatusPill band={band} />
-      <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} />
+      {failed ? (
+        <span className={`${styles.pill} ${styles.topBadge}`} role="status">{COPY.statusUnavailable}</span>
+      ) : (
+        <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} />
+      )}
       <AlertsBell />
       <AvatarMenu />
     </header>
