@@ -1,6 +1,7 @@
 import type { Condition, Operand, StrategySpecV1 } from "@ai-trading/contracts";
+import type { FilterStrategySpecV1 } from "@ai-trading/contracts/filter-strategy-spec-v1";
 
-const runLabels: Record<StrategySpecV1["watch"]["runOn"], string> = {
+export const runLabels: Record<StrategySpecV1["watch"]["runOn"], string> = {
   bar_close_1m: "each 1-minute close",
   bar_close_5m: "each 5-minute close",
   bar_close_15m: "each 15-minute close",
@@ -10,7 +11,7 @@ const runLabels: Record<StrategySpecV1["watch"]["runOn"], string> = {
   weekly: "each weekly close",
 };
 
-function describeOperand(operand: Operand): string {
+export function describeOperand(operand: Operand): string {
   if ("value" in operand) return String(operand.value);
   if ("series" in operand) {
     if (operand.series === "vwap") return "VWAP";
@@ -42,7 +43,7 @@ function describePattern(condition: Extract<Condition, { op: "pattern" }>): stri
   return `${withArticle(`${condition.pattern.replaceAll("_", " ")} pattern`)} appears${after}${within}`;
 }
 
-function describeCondition(condition: Condition): string {
+export function describeCondition(condition: Condition): string {
   if ("all" in condition) {
     return condition.all.map((item) => {
       const description = describeCondition(item);
@@ -68,13 +69,47 @@ function describeCondition(condition: Condition): string {
   return `${left} ${operator} ${right}`;
 }
 
-export function describeSpec(spec: StrategySpecV1): string {
-  const session = spec.watch.session === "regular" ? "regular hours" : "extended hours";
+type Universe = StrategySpecV1["watch"]["universe"] | FilterStrategySpecV1["watch"]["universe"];
+
+/** "watchlist Day movers", "NVDA and AMD", "US stocks and ETFs", "matches of filter Abnormal volume". */
+export function describeUniverse(universe: Universe, assetTypes?: FilterStrategySpecV1["assetTypes"]): string {
+  if ("market" in universe) {
+    const kinds = assetTypes && assetTypes.length === 1 ? (assetTypes[0] === "etf" ? "ETFs" : "stocks") : "stocks and ETFs";
+    return `US ${kinds}`;
+  }
+  if ("watchlist" in universe) return `watchlist ${universe.watchlist}`;
+  if ("filter" in universe) return `matches of filter ${universe.filter}`;
+  return universe.symbols.join(", ").replace(/, ([^,]*)$/, " and $1");
+}
+
+const sessionLabel = (session: "regular" | "extended") => (session === "regular" ? "regular hours" : "extended hours");
+
+function describeAlertSpec(spec: StrategySpecV1): string {
   const channels = spec.then.alert.channels.join(" and ");
   const paperOrder = spec.then.paperOrder;
   const paper = paperOrder
     ? `; paper ${paperOrder.side} with ${"riskUsd" in paperOrder.size ? `$${paperOrder.size.riskUsd} risk` : "the selected size"}${"atrMultiple" in paperOrder.stop ? `, stop ${paperOrder.stop.atrMultiple}× ATR` : ""}${"r" in paperOrder.target ? `, target ${paperOrder.target.r}R` : ""}`
     : "";
 
-  return `At ${runLabels[spec.watch.runOn]} during ${session}, alert when ${describeCondition(spec.when)}; notify ${channels}${paper}.`;
+  return `At ${runLabels[spec.watch.runOn]} during ${sessionLabel(spec.watch.session)}, alert when ${describeCondition(spec.when)}; notify ${channels}${paper}.`;
+}
+
+const money = (value: number) => `$${value.toLocaleString("en-US")}`;
+
+/** One sentence for a screener: where it looks, the liquidity floor, the rule, the ranking (D5 header, D6, D8). */
+function describeFilterSpec(spec: FilterStrategySpecV1): string {
+  const floor: string[] = [];
+  if (spec.liquidity?.minPrice !== undefined) floor.push(`price above ${money(spec.liquidity.minPrice)}`);
+  if (spec.liquidity?.minAvgVolume !== undefined) floor.push(`average volume above ${spec.liquidity.minAvgVolume.toLocaleString("en-US")}`);
+  const floorText = floor.length ? ` with ${floor.join(" and ")}` : "";
+  const rank = spec.rank
+    ? `; ranked by ${describeOperand(spec.rank.by)}, ${spec.rank.order === "desc" ? "highest" : "lowest"} first`
+    : "";
+  const matches = `${spec.maxResults} ${spec.maxResults === 1 ? "match" : "matches"}`;
+  return `At ${runLabels[spec.watch.runOn]} during ${sessionLabel(spec.watch.session)}, find ${describeUniverse(spec.watch.universe, spec.assetTypes)}${floorText} where ${describeCondition(spec.when)}${rank}; up to ${matches}.`;
+}
+
+/** Plain English for an alert strategy (alert-only or with a paper order) or a filter strategy. */
+export function describeSpec(spec: StrategySpecV1 | FilterStrategySpecV1): string {
+  return "then" in spec ? describeAlertSpec(spec) : describeFilterSpec(spec);
 }

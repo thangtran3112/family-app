@@ -20,9 +20,10 @@ test("chart bar conversion preserves source OHLC, null gaps, real zero, and orde
     interval: "5m",
     quality: "delayed-15m",
     as_of: "2026-10-16T14:01:00Z",
+    stamp: { as_of: "2026-10-16T14:01:00Z", source: "alpaca", quality: "delayed-15m", freshness: "delayed" },
     bars: [
-      { t: "2026-10-16T14:00:00Z", o: 10, h: 12, l: 9, c: 0, v: 4 },
-      { t: "2026-10-16T14:01:00Z", o: null, h: null, l: null, c: null, v: null },
+      { t: "2026-10-16T14:00:00Z", o: 10, h: 12, l: 9, c: 0, v: 4, ext: false },
+      { t: "2026-10-16T14:01:00Z", o: null, h: null, l: null, c: null, v: null, ext: false },
     ],
   }).bars;
 
@@ -39,7 +40,8 @@ test("chart presentation passes source quality and as-of without altering OHLC",
     interval: "5m",
     quality: "delayed-15m",
     as_of: "2026-10-16T14:00:00Z",
-    bars: [{ t: "2026-10-16T14:00:00Z", o: 10, h: 12, l: 9, c: 0, v: 4 }],
+    stamp: { as_of: "2026-10-16T14:00:00Z", source: "alpaca", quality: "delayed-15m", freshness: "delayed" },
+    bars: [{ t: "2026-10-16T14:00:00Z", o: 10, h: 12, l: 9, c: 0, v: 4, ext: false }],
   });
 
   const data = chartPresentation(source);
@@ -83,6 +85,7 @@ test("chart response must match selected canonical symbol and interval", () => {
     interval: "5m",
     quality: "delayed-15m",
     as_of: "2026-10-16T14:00:00Z",
+    stamp: { as_of: "2026-10-16T14:00:00Z", source: "alpaca", quality: "delayed-15m", freshness: "delayed" },
     bars: [],
   });
   const selection: TodayChartSelection = { symbol: "CL", asset_type: "future", interval: "5m" };

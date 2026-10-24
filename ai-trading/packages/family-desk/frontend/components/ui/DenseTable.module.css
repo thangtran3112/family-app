@@ -1,0 +1,26 @@
+.wrap { width: 100%; overflow-x: hidden; }
+.scrollX { overflow-x: auto; }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.table th, .table td { height: 28px; padding: 0 var(--space-3); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--color-hairline); }
+.wrap[data-density="compact"] .table th, .wrap[data-density="compact"] .table td { height: 24px; padding-inline: 6px; }
+.table th { position: sticky; top: 0; z-index: 1; background: var(--color-ground); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.right { text-align: right !important; }
+.row { box-shadow: inset 2px 0 0 transparent; }
+.row:hover { background: var(--color-raised); }
+.clickable { cursor: pointer; }
+.row:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.selected { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.sortButton { display: inline-flex; min-height: 24px; align-items: center; gap: 4px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.sortButton:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.caret { width: 8px; color: var(--color-amber); font-size: 8px; }
+.sticky { position: sticky; left: 0; z-index: 1; background: var(--color-ground); }
+.row:hover .sticky { background: var(--color-raised); }
+.selected .sticky { background: var(--color-panel); }
+th.sticky { z-index: 2; }
+.actionsHead { width: 1%; }
+.actions { width: 1%; text-align: right; }
+.actions > * { opacity: 0; }
+.row:hover .actions > *, .row:focus-within .actions > *, .actions > *:focus-visible { opacity: 1; }
+.wrap[data-dim="true"] td { opacity: 0.55; }
+.empty { padding: var(--space-6) var(--space-4); color: var(--color-muted); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

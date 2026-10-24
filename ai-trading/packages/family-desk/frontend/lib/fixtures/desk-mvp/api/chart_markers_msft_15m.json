@@ -1,0 +1,185 @@
+{
+ "fires": [],
+ "patterns": [
+  {
+   "bar_close": "2026-10-23T13:45:00Z",
+   "bar_start": "2026-10-23T13:30:00Z",
+   "ohlc": [
+    518.11,
+    522.36,
+    515.7,
+    517.49
+   ],
+   "pattern": "doji",
+   "template": "doji"
+  },
+  {
+   "bar_close": "2026-10-23T14:00:00Z",
+   "bar_start": "2026-10-23T13:45:00Z",
+   "ohlc": [
+    517.485,
+    521.55,
+    516.58,
+    520.55
+   ],
+   "pattern": "bullish_engulfing",
+   "template": "bullish-engulfing"
+  },
+  {
+   "bar_close": "2026-10-23T14:00:00Z",
+   "bar_start": "2026-10-23T13:45:00Z",
+   "ohlc": [
+    517.485,
+    521.55,
+    516.58,
+    520.55
+   ],
+   "pattern": "inside_bar",
+   "template": "inside-bar"
+  },
+  {
+   "bar_close": "2026-10-23T14:30:00Z",
+   "bar_start": "2026-10-23T14:15:00Z",
+   "ohlc": [
+    523.5301,
+    523.61,
+    521.22,
+    522.47
+   ],
+   "pattern": "inside_bar",
+   "template": "inside-bar"
+  },
+  {
+   "bar_close": "2026-10-23T15:45:00Z",
+   "bar_start": "2026-10-23T15:30:00Z",
+   "ohlc": [
+    525.11,
+    525.5,
+    524.56,
+    524.57
+   ],
+   "pattern": "tweezer_top",
+   "template": "tweezer-top"
+  },
+  {
+   "bar_close": "2026-10-23T16:15:00Z",
+   "bar_start": "2026-10-23T16:00:00Z",
+   "ohlc": [
+    525.145,
+    525.32,
+    524.485,
+    524.54
+   ],
+   "pattern": "bearish_engulfing",
+   "template": "bearish-engulfing"
+  },
+  {
+   "bar_close": "2026-10-23T16:45:00Z",
+   "bar_start": "2026-10-23T16:30:00Z",
+   "ohlc": [
+    524.15,
+    525.31,
+    524.15,
+    525.205
+   ],
+   "pattern": "inside_bar",
+   "template": "inside-bar"
+  },
+  {
+   "bar_close": "2026-10-23T17:30:00Z",
+   "bar_start": "2026-10-23T17:15:00Z",
+   "ohlc": [
+    524.785,
+    525.14,
+    524.16,
+    524.86
+   ],
+   "pattern": "doji",
+   "template": "doji"
+  },
+  {
+   "bar_close": "2026-10-23T18:00:00Z",
+   "bar_start": "2026-10-23T17:45:00Z",
+   "ohlc": [
+    524.255,
+    524.755,
+    523.97,
+    524.5
+   ],
+   "pattern": "inside_bar",
+   "template": "inside-bar"
+  },
+  {
+   "bar_close": "2026-10-23T18:15:00Z",
+   "bar_start": "2026-10-23T18:00:00Z",
+   "ohlc": [
+    524.5375,
+    524.79,
+    524.03,
+    524.41
+   ],
+   "pattern": "tweezer_top",
+   "template": "tweezer-top"
+  },
+  {
+   "bar_close": "2026-10-23T18:30:00Z",
+   "bar_start": "2026-10-23T18:15:00Z",
+   "ohlc": [
+    524.405,
+    524.77,
+    524.17,
+    524.305
+   ],
+   "pattern": "inside_bar",
+   "template": "inside-bar"
+  },
+  {
+   "bar_close": "2026-10-23T19:00:00Z",
+   "bar_start": "2026-10-23T18:45:00Z",
+   "ohlc": [
+    523.805,
+    524.09,
+    523.27,
+    524.035
+   ],
+   "pattern": "bullish_harami",
+   "template": "bullish-harami"
+  },
+  {
+   "bar_close": "2026-10-23T19:00:00Z",
+   "bar_start": "2026-10-23T18:45:00Z",
+   "ohlc": [
+    523.805,
+    524.09,
+    523.27,
+    524.035
+   ],
+   "pattern": "hammer",
+   "template": "hammer"
+  },
+  {
+   "bar_close": "2026-10-23T19:45:00Z",
+   "bar_start": "2026-10-23T19:30:00Z",
+   "ohlc": [
+    523.595,
+    524.4117,
+    523.37,
+    523.59
+   ],
+   "pattern": "doji",
+   "template": "doji"
+  },
+  {
+   "bar_close": "2026-10-23T20:00:00Z",
+   "bar_start": "2026-10-23T19:45:00Z",
+   "ohlc": [
+    523.6,
+    525.11,
+    523.35,
+    524.525
+   ],
+   "pattern": "tweezer_bottom",
+   "template": "tweezer-bottom"
+  }
+ ]
+}

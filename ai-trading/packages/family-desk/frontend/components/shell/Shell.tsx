@@ -3,10 +3,18 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { useViewportBand } from "@/lib/desk/useViewportBand";
 import { DesktopNav } from "./DesktopNav";
+import { DesktopShell } from "./desktop/DesktopShell";
 import { MobileTabs } from "./MobileTabs";
 
+/** Desktop shell from 1100 px; the existing mobile shell below it (02m §c1). Prerender is always mobile. */
 export function Shell({ children }: { children: ReactNode }) {
+  const band = useViewportBand();
+  return band === "mobile" ? <MobileShell>{children}</MobileShell> : <DesktopShell band={band}>{children}</DesktopShell>;
+}
+
+function MobileShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
 
   return (

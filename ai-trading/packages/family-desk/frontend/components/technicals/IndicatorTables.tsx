@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { TechnicalsSchema } from "@/lib/api/schemas";
+import { formatAsOfText } from "@/lib/desk/format";
+import { qualityPhrase } from "@/lib/desk/freshness";
 import { qualityLabel } from "@/lib/labels";
 import styles from "./technicals.module.css";
 
@@ -21,6 +23,12 @@ const displayNames: Record<string, string> = {
   vwma_20: "VWMA (20)",
   hull_ma_9: "Hull MA (9)",
 };
+
+/** "delayed-15m · 2026-10-23T19:45:00+00:00" on mobile; "Delayed 15 min · 3:45 PM ET" on desktop. */
+function metaText(quality: Technicals["quality"], asOf: string | null, plain: boolean): string {
+  if (plain) return `${qualityPhrase(quality)} · ${asOf ? formatAsOfText(asOf) : "time unavailable"}`;
+  return `${qualityLabel(quality)} · ${asOf ?? "as of unavailable"}`;
+}
 
 function titleFor(key: string): string {
   return displayNames[key] ?? key.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
@@ -47,7 +55,9 @@ function VoteTable({
   timeframe,
   quality,
   asOf,
+  plain,
 }: {
+  plain: boolean;
   title: string;
   votes: Record<string, { values: Record<string, number | null>; action: "Sell" | "Neutral" | "Buy" | null }>;
   symbol: string;
@@ -59,7 +69,7 @@ function VoteTable({
     <section className={styles.tableBlock}>
       <header className={styles.blockHeader}>
         <h2>{title}</h2>
-        <span className={styles.quality}>{qualityLabel(quality)} · {asOf ?? "as of unavailable"}</span>
+        <span className={styles.quality}>{metaText(quality, asOf, plain)}</span>
       </header>
       <div className={styles.tableScroll}>
         <table className={styles.indicatorTable}>
@@ -83,13 +93,13 @@ function VoteTable({
   );
 }
 
-export function VolatilityBlock({ technicals }: { technicals: Technicals }) {
+export function VolatilityBlock({ technicals, plain = false }: { technicals: Technicals; plain?: boolean }) {
   const { atr14, atr_percent: atrPercent, label } = technicals.volatility;
   return (
     <section className={styles.volatilityBlock} aria-label="Non-voting volatility">
       <header className={styles.blockHeader}>
         <h2>Volatility · no vote</h2>
-        <span className={styles.quality}>{qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</span>
+        <span className={styles.quality}>{metaText(technicals.quality, technicals.as_of, plain)}</span>
       </header>
       <dl className={styles.volatilityValues}>
         <div><dt>ATR (14)</dt><dd>{numberText(atr14)}</dd></div>
@@ -100,18 +110,18 @@ export function VolatilityBlock({ technicals }: { technicals: Technicals }) {
   );
 }
 
-export function IndicatorTables({ technicals, timeframe }: { technicals: Technicals; timeframe: string }) {
+export function IndicatorTables({ technicals, timeframe, showPivots = true, plain = false }: { technicals: Technicals; timeframe: string; showPivots?: boolean; plain?: boolean }) {
   return (
-    <div className={styles.tables}>
-      <VolatilityBlock technicals={technicals} />
-      <VoteTable title="Oscillators" votes={technicals.oscillators} symbol={technicals.symbol} timeframe={timeframe} quality={technicals.quality} asOf={technicals.as_of} />
-      <VoteTable title="Moving averages" votes={technicals.moving_averages} symbol={technicals.symbol} timeframe={timeframe} quality={technicals.quality} asOf={technicals.as_of} />
-      <div className={styles.pivotGrid}>
+    <div className={`${styles.tables} ${plain ? styles.tablesDense : ""}`}>
+      <VolatilityBlock technicals={technicals} plain={plain} />
+      <VoteTable plain={plain} title="Oscillators" votes={technicals.oscillators} symbol={technicals.symbol} timeframe={timeframe} quality={technicals.quality} asOf={technicals.as_of} />
+      <VoteTable plain={plain} title="Moving averages" votes={technicals.moving_averages} symbol={technicals.symbol} timeframe={timeframe} quality={technicals.quality} asOf={technicals.as_of} />
+      {showPivots && <div className={styles.pivotGrid}>
         {(["classic", "fibonacci", "camarilla"] as const).map((method) => (
           <section className={styles.tableBlock} key={method}>
             <header className={styles.blockHeader}>
               <h2>{method} pivots</h2>
-              <span className={styles.quality}>{qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</span>
+              <span className={styles.quality}>{metaText(technicals.quality, technicals.as_of, plain)}</span>
             </header>
             <div className={styles.pivotList}>
               {Object.entries(technicals.pivots[method]).map(([level, value]) => (
@@ -121,7 +131,7 @@ export function IndicatorTables({ technicals, timeframe }: { technicals: Technic
             </div>
           </section>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

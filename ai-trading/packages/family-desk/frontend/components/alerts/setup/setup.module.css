@@ -1,0 +1,81 @@
+.card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.stepTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: var(--weight-semibold);
+}
+
+.date {
+  width: 160px;
+  height: 32px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+  padding: 0 var(--space-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.date:hover {
+  border-color: var(--color-muted);
+}
+
+.saved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.saved p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+}
+
+.link {
+  color: var(--color-text);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* The rail sits outside the editor wrapper, so its buttons need the amber ring here. */
+.summary button:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+.sentence {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 20px;
+}
