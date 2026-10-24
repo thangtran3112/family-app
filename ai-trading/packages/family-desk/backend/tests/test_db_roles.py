@@ -91,7 +91,7 @@ def role_split_urls() -> Iterator[RoleSplitUrls]:
         admin_engine.dispose()
 
 
-def test_desk_migrator_migration_leaves_all_twelve_tables_reachable_by_desk_runtime(
+def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
     role_split_urls: RoleSplitUrls,
 ) -> None:
     runtime_engine = create_engine(role_split_urls.runtime_url)
@@ -114,7 +114,60 @@ def test_desk_migrator_migration_leaves_all_twelve_tables_reachable_by_desk_runt
         "signals",
         "alerts",
         "deliveries",
+        "filter_strategies",
+        "filter_strategy_versions",
+        "filter_runs",
+        "filter_matches",
+        "universe_symbols",
+        "symbol_metrics",
+        "feed_health",
     }
+
+
+def test_desk_runtime_can_select_insert_update_delete_technical_mvp_tables(role_split_urls: RoleSplitUrls) -> None:
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            conn.execute(text("INSERT INTO feed_health (feed, state, updated_at) VALUES ('roles-test', 'ok', now())"))
+            conn.execute(text("UPDATE feed_health SET state = 'degraded' WHERE feed = 'roles-test'"))
+            state = conn.execute(text("SELECT state FROM feed_health WHERE feed = 'roles-test'")).scalar_one()
+            assert state == "degraded"
+            conn.execute(text("DELETE FROM feed_health WHERE feed = 'roles-test'"))
+
+            conn.execute(
+                text(
+                    "INSERT INTO universe_symbols (symbol, name, asset_type, exchange, active, passed_floor, "
+                    "floor_reason, updated_at) "
+                    "VALUES ('ROLES', 'Roles Test', 'stock', 'NASDAQ', true, true, NULL, now())"
+                )
+            )
+            conn.execute(text("UPDATE universe_symbols SET passed_floor = false WHERE symbol = 'ROLES'"))
+            passed = conn.execute(text("SELECT passed_floor FROM universe_symbols WHERE symbol = 'ROLES'")).scalar_one()
+            assert passed is False
+            conn.execute(text("DELETE FROM universe_symbols WHERE symbol = 'ROLES'"))
+
+            conn.execute(
+                text(
+                    "INSERT INTO symbol_metrics (symbol, as_of, source, quality, metrics) "
+                    "VALUES ('ROLES', now(), 'bars_delayed', 'delayed-15m', '{}'::jsonb)"
+                )
+            )
+            conn.execute(text("UPDATE symbol_metrics SET quality = 'eod' WHERE symbol = 'ROLES'"))
+            quality = conn.execute(text("SELECT quality FROM symbol_metrics WHERE symbol = 'ROLES'")).scalar_one()
+            assert quality == "eod"
+            conn.execute(text("DELETE FROM symbol_metrics WHERE symbol = 'ROLES'"))
+
+            # Each DELETE above left nothing behind; the begin() block commits only if every step passed.
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM feed_health WHERE feed = 'roles-test') "
+                    "+ (SELECT COUNT(*) FROM universe_symbols WHERE symbol = 'ROLES') "
+                    "+ (SELECT COUNT(*) FROM symbol_metrics WHERE symbol = 'ROLES')"
+                )
+            ).scalar_one()
+            assert remaining == 0
+    finally:
+        runtime_engine.dispose()
 
 
 def test_desk_runtime_can_select_insert_update_delete(role_split_urls: RoleSplitUrls) -> None:

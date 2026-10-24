@@ -1,0 +1,45 @@
+"""`DESK_MVP_STUB` is a development flag: it must never reach a deployed environment (02m §d2 step 2)."""
+
+from pathlib import Path
+
+import pytest
+
+from ai_trading.mvp_stub import STUB_FLAG, stub_enabled
+
+_BACKEND = Path(__file__).resolve().parents[1]
+_AI_TRADING = _BACKEND.parents[2]
+_REPO = _AI_TRADING.parent
+#: Everything that configures a deployed environment: compose files and scripts, the image, the
+#: infrastructure tree, and the CI workflows that build and deploy ai-trading.
+_DEPLOY_PATHS = [
+    _AI_TRADING / "deploy",
+    _BACKEND / "Dockerfile",
+    _BACKEND / "docker",
+    _REPO / "infrastructure",
+    *sorted((_REPO / ".github" / "workflows").glob("ai-trading*")),
+]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [("1", True), ("0", False), ("true", False), ("", False), (None, False)]
+)
+def test_only_exactly_one_turns_the_stub_on(monkeypatch: pytest.MonkeyPatch, value: str | None, expected: bool) -> None:
+    if value is None:
+        monkeypatch.delenv(STUB_FLAG, raising=False)
+    else:
+        monkeypatch.setenv(STUB_FLAG, value)
+    assert stub_enabled() is expected
+
+
+def test_no_deploy_file_sets_the_stub_flag() -> None:
+    existing = [path for path in _DEPLOY_PATHS if path.exists()]
+    assert existing, "deploy paths moved: update _DEPLOY_PATHS"
+    offenders = []
+    for root in existing:
+        for path in [root] if root.is_file() else (p for p in root.rglob("*") if p.is_file()):
+            try:
+                if STUB_FLAG in path.read_text(errors="ignore"):
+                    offenders.append(str(path.relative_to(_REPO)))
+            except OSError:
+                continue
+    assert offenders == []

@@ -1,0 +1,27 @@
+{
+ "matches_total": 9,
+ "problems": [],
+ "scanned": 131,
+ "top": [
+  {
+   "rank_value": 472.720678,
+   "symbol": "BOLT"
+  },
+  {
+   "rank_value": 7.677417,
+   "symbol": "LKQ"
+  },
+  {
+   "rank_value": 6.640691,
+   "symbol": "SPTI"
+  },
+  {
+   "rank_value": 5.237476,
+   "symbol": "RHI"
+  },
+  {
+   "rank_value": 4.387339,
+   "symbol": "TNGX"
+  }
+ ]
+}

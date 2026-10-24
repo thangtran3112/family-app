@@ -1,0 +1,58 @@
+{
+ "attach_blocked_reason": null,
+ "attachable": true,
+ "bias": "bullish",
+ "category": "candlestick",
+ "defaults": {
+  "channels": [
+   "inbox"
+  ],
+  "limits": {},
+  "severity": "opportunity"
+ },
+ "example": {
+  "bar_time": "2026-10-23T18:45:00Z",
+  "ohlc": [
+   523.805,
+   524.09,
+   523.27,
+   524.035
+  ],
+  "symbol": "MSFT",
+  "timeframe": "15m"
+ },
+ "file": "patterns/hammer.json",
+ "id": "hammer",
+ "kind": "strategy",
+ "label": "Hammer",
+ "lane": "technical",
+ "spec": {
+  "name": "Hammer",
+  "schemaVersion": 1,
+  "then": {
+   "alert": {
+    "channels": [
+     "inbox"
+    ],
+    "frequency": "once_per_bar",
+    "message": "{symbol} hammer on the 15m, close {close} at {time}",
+    "severity": "opportunity"
+   }
+  },
+  "watch": {
+   "runOn": "bar_close_15m",
+   "session": "regular",
+   "universe": {
+    "watchlist": "Day movers"
+   }
+  },
+  "when": {
+   "op": "pattern",
+   "pattern": "hammer",
+   "trend": "after_downtrend",
+   "trendBars": 5,
+   "withinBars": 1
+  }
+ },
+ "summary": "Alerts when a hammer prints on a 15-minute bar after a 5-bar downtrend."
+}

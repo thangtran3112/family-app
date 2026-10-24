@@ -1,0 +1,5 @@
+.workspace { display: flex; height: 100%; min-height: 0; flex-direction: column; }
+.chartSlot { display: flex; min-height: 280px; flex: 1 1 0; flex-direction: column; padding: 0; }
+.chartArea { position: relative; display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
+.legend { position: absolute; top: 8px; left: 12px; z-index: 3; pointer-events: none; }
+.paneLegend { position: absolute; left: 12px; z-index: 3; }

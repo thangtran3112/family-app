@@ -1,0 +1,60 @@
+/* Alerts desktop (D9; 02l §b2, 02m §a3.7, §c2): header, List and Log tabs, filters, dense tables, detail rail. */
+
+.root { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.header { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
+.title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-hairline); padding: 0 var(--space-4); }
+.tab { display: inline-flex; min-height: 32px; align-items: center; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 0 var(--space-3); color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { border-bottom-color: var(--color-amber); color: var(--color-text); }
+.body { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); }
+
+/* Controls: 32 px form controls, 24 px row buttons */
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--color-muted); font-size: var(--text-micro); }
+.control { display: block; min-height: 32px; min-width: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.control:hover { background: var(--color-raised); }
+.symbolInput { width: 140px; }
+.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--color-raised); }
+.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+.small { min-height: 24px; padding: 0 var(--space-2); }
+.primary { border-color: var(--color-amber); color: var(--color-amber); }
+.danger { border-color: var(--color-down); color: var(--color-down); }
+.link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
+.link:hover { text-decoration: underline; }
+.control:focus-visible, .button:focus-visible, .tab:focus-visible, .link:focus-visible, .details summary:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+/* Cells and text */
+.name { font-weight: var(--weight-bold); }
+.clip { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip { display: inline-flex; min-height: 20px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
+.chip[data-tone="up"] { border-color: var(--color-up); color: var(--color-up); }
+.chip[data-tone="amber"] { border-color: var(--color-amber); color: var(--color-amber); }
+.chip[data-tone="down"] { border-color: var(--color-down); color: var(--color-down); }
+.muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
+.error { margin: 0; color: var(--color-down); font-size: var(--text-label); }
+
+/* Detail pane (right rail) */
+.pane { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
+.paneTitle { margin: 0; overflow-wrap: anywhere; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.meta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
+.sentence { margin: 0; font-size: var(--text-label); line-height: var(--line-body); }
+.actions, .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
+.heading { margin: var(--space-2) 0 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.fires { display: flex; margin: 0; flex-direction: column; gap: var(--space-2); padding: 0; list-style: none; }
+.fire { display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding-bottom: var(--space-2); }
+.fireText { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.details { min-width: 0; }
+.details summary { display: flex; min-height: 24px; align-items: center; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; cursor: pointer; }
+.json { max-height: 280px; margin: var(--space-2) 0 0; overflow: auto; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2); color: var(--color-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+
+/* Fire thumbnail: colour comes from data-tone, the SVG uses currentColor */
+.thumb { display: block; flex: 0 0 120px; }
+.thumb[data-tone="up"] { color: var(--color-up); }
+.thumb[data-tone="down"] { color: var(--color-down); }
+.noChart { display: inline-flex; flex: 0 0 120px; height: 40px; align-items: center; justify-content: center; color: var(--color-muted); font-size: var(--text-micro); }
+.fire > :last-child { min-width: 0; }
+.chip { max-width: 100%; }
+.fireText .chip { white-space: normal; padding-block: 2px; }

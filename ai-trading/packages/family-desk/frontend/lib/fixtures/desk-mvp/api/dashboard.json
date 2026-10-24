@@ -1,0 +1,550 @@
+{
+ "alerts_state": "running",
+ "events": [
+  {
+   "date": "2026-10-28",
+   "kind": "earnings",
+   "symbol": "MSFT",
+   "timing": "after_close"
+  },
+  {
+   "date": "2026-10-28",
+   "kind": "earnings",
+   "symbol": "GOOGL",
+   "timing": "after_close"
+  },
+  {
+   "date": "2026-10-29",
+   "kind": "earnings",
+   "symbol": "META",
+   "timing": "after_close"
+  },
+  {
+   "date": "2026-10-29",
+   "kind": "earnings",
+   "symbol": "AAPL",
+   "timing": "after_close"
+  },
+  {
+   "date": "2026-10-29",
+   "kind": "earnings",
+   "symbol": "AMZN",
+   "timing": "after_close"
+  }
+ ],
+ "market": {
+  "next_open": "2026-10-26T13:30:00Z",
+  "session": "closed"
+ },
+ "market_strip": [
+  {
+   "change_pct": -0.522,
+   "last": 759.97,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "symbol": "SPY"
+  },
+  {
+   "change_pct": -0.01,
+   "last": 704.4,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "symbol": "QQQ"
+  },
+  {
+   "change_pct": -0.333,
+   "last": 275.75,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "symbol": "IWM"
+  },
+  {
+   "change_pct": null,
+   "last": null,
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "symbol": "/ES"
+  },
+  {
+   "change_pct": null,
+   "last": null,
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "symbol": "/NQ"
+  }
+ ],
+ "screener_matches": [
+  {
+   "filter_id": 1,
+   "matches_total": 9,
+   "name": "Abnormal volume",
+   "run_on": "bar_close_15m",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BOLT",
+    "LKQ",
+    "SPTI"
+   ]
+  },
+  {
+   "filter_id": 2,
+   "matches_total": 65,
+   "name": "High volatility",
+   "run_on": "daily_close",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BEX",
+    "SNXX",
+    "KORU"
+   ]
+  },
+  {
+   "filter_id": 3,
+   "matches_total": 4,
+   "name": "Gap up",
+   "run_on": "premarket_0830",
+   "scanned": 129,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BEZ",
+    "NOK",
+    "SNXX"
+   ]
+  },
+  {
+   "filter_id": 4,
+   "matches_total": 10,
+   "name": "Gap down",
+   "run_on": "premarket_0830",
+   "scanned": 129,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "LKQ",
+    "TNGX",
+    "INFY"
+   ]
+  },
+  {
+   "filter_id": 5,
+   "matches_total": 12,
+   "name": "New 20-day high",
+   "run_on": "daily_close",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BOLT",
+    "RHI",
+    "BIL"
+   ]
+  },
+  {
+   "filter_id": 6,
+   "matches_total": 5,
+   "name": "52-week breakout",
+   "run_on": "daily_close",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BIL",
+    "PBR",
+    "XLE"
+   ]
+  },
+  {
+   "filter_id": 7,
+   "matches_total": 17,
+   "name": "Oversold RSI",
+   "run_on": "daily_close",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "CIFR",
+    "RIVN",
+    "LKQ"
+   ]
+  },
+  {
+   "filter_id": 8,
+   "matches_total": 9,
+   "name": "Overbought RSI",
+   "run_on": "daily_close",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BIL",
+    "BOLT",
+    "CVX"
+   ]
+  },
+  {
+   "filter_id": 9,
+   "matches_total": 2,
+   "name": "Above VWAP on volume",
+   "run_on": "bar_close_5m",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "RHI",
+    "BEZ"
+   ]
+  },
+  {
+   "filter_id": 10,
+   "matches_total": 11,
+   "name": "Top movers",
+   "run_on": "bar_close_15m",
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   },
+   "top": [
+    "BOLT",
+    "BEZ",
+    "RHI"
+   ]
+  }
+ ],
+ "signals": [
+  {
+   "bar_time": "2026-10-23T16:15:00Z",
+   "evidence": {
+    "ema(21)": 347.643793,
+    "ema(9)": 347.562449
+   },
+   "id": 15,
+   "kind": "other",
+   "strategy_id": 6,
+   "strategy_name": "EMA 9/21 cross",
+   "summary": "EMA 9/21 cross on AAPL",
+   "symbol": "AAPL"
+  },
+  {
+   "bar_time": "2026-10-23T14:45:00Z",
+   "evidence": {
+    "ema(21)": 644.41872,
+    "ema(9)": 644.426197
+   },
+   "id": 13,
+   "kind": "other",
+   "strategy_id": 6,
+   "strategy_name": "EMA 9/21 cross",
+   "summary": "EMA 9/21 cross on META",
+   "symbol": "META"
+  },
+  {
+   "bar_time": "2026-10-23T14:45:00Z",
+   "evidence": {
+    "ema(21)": 195.434329,
+    "ema(9)": 195.508224
+   },
+   "id": 14,
+   "kind": "other",
+   "strategy_id": 6,
+   "strategy_name": "EMA 9/21 cross",
+   "summary": "EMA 9/21 cross on PLTR",
+   "symbol": "PLTR"
+  },
+  {
+   "bar_time": "2026-10-23T14:30:00Z",
+   "evidence": {
+    "ema(21)": 323.851588,
+    "ema(9)": 324.075203
+   },
+   "id": 12,
+   "kind": "other",
+   "strategy_id": 6,
+   "strategy_name": "EMA 9/21 cross",
+   "summary": "EMA 9/21 cross on AVGO",
+   "symbol": "AVGO"
+  },
+  {
+   "bar_time": "2026-10-23T14:26:00Z",
+   "evidence": {
+    "close": 369.53,
+    "vwap": 370.164294
+   },
+   "id": 11,
+   "kind": "other",
+   "strategy_id": 7,
+   "strategy_name": "VWAP loss",
+   "summary": "VWAP loss on TSLA",
+   "symbol": "TSLA"
+  },
+  {
+   "bar_time": "2026-10-23T14:19:00Z",
+   "evidence": {
+    "close": 323.65,
+    "vwap": 323.585786
+   },
+   "id": 10,
+   "kind": "vwap_reclaim",
+   "strategy_id": 2,
+   "strategy_name": "VWAP reclaim",
+   "summary": "VWAP reclaim on AVGO",
+   "symbol": "AVGO"
+  },
+  {
+   "bar_time": "2026-10-23T14:18:00Z",
+   "evidence": {
+    "close": 323.55,
+    "vwap": 323.584946
+   },
+   "id": 9,
+   "kind": "other",
+   "strategy_id": 7,
+   "strategy_name": "VWAP loss",
+   "summary": "VWAP loss on AVGO",
+   "symbol": "AVGO"
+  },
+  {
+   "bar_time": "2026-10-23T14:07:00Z",
+   "evidence": {
+    "close": 370.1762,
+    "vwap": 369.696176
+   },
+   "id": 8,
+   "kind": "vwap_reclaim",
+   "strategy_id": 2,
+   "strategy_name": "VWAP reclaim",
+   "summary": "VWAP reclaim on TSLA",
+   "symbol": "TSLA"
+  },
+  {
+   "bar_time": "2026-10-23T13:57:00Z",
+   "evidence": {
+    "close": 513.445,
+    "vwap": 513.332661
+   },
+   "id": 7,
+   "kind": "vwap_reclaim",
+   "strategy_id": 2,
+   "strategy_name": "VWAP reclaim",
+   "summary": "VWAP reclaim on AMD",
+   "symbol": "AMD"
+  },
+  {
+   "bar_time": "2026-10-23T13:53:00Z",
+   "evidence": {
+    "close": 512.9663,
+    "vwap": 513.395767
+   },
+   "id": 6,
+   "kind": "other",
+   "strategy_id": 7,
+   "strategy_name": "VWAP loss",
+   "summary": "VWAP loss on AMD",
+   "symbol": "AMD"
+  },
+  {
+   "bar_time": "2026-10-23T13:47:00Z",
+   "evidence": {
+    "close": 169.59,
+    "vwap": 168.811174
+   },
+   "id": 4,
+   "kind": "vwap_reclaim",
+   "strategy_id": 2,
+   "strategy_name": "VWAP reclaim",
+   "summary": "VWAP reclaim on COIN",
+   "symbol": "COIN"
+  },
+  {
+   "bar_time": "2026-10-23T13:47:00Z",
+   "evidence": {
+    "close": 192.88,
+    "vwap": 192.559771
+   },
+   "id": 5,
+   "kind": "vwap_reclaim",
+   "strategy_id": 2,
+   "strategy_name": "VWAP reclaim",
+   "summary": "VWAP reclaim on PLTR",
+   "symbol": "PLTR"
+  },
+  {
+   "bar_time": "2026-10-23T13:46:00Z",
+   "evidence": {
+    "close": 168.78,
+    "vwap": 168.79587
+   },
+   "id": 3,
+   "kind": "other",
+   "strategy_id": 7,
+   "strategy_name": "VWAP loss",
+   "summary": "VWAP loss on COIN",
+   "symbol": "COIN"
+  },
+  {
+   "bar_time": "2026-10-23T13:45:00Z",
+   "evidence": {
+    "ema(21)": 511.798786,
+    "ema(9)": 512.193329
+   },
+   "id": 1,
+   "kind": "other",
+   "strategy_id": 6,
+   "strategy_name": "EMA 9/21 cross",
+   "summary": "EMA 9/21 cross on AMD",
+   "symbol": "AMD"
+  },
+  {
+   "bar_time": "2026-10-23T13:45:00Z",
+   "evidence": {
+    "close": 369.31,
+    "vwap": 371.415411
+   },
+   "id": 2,
+   "kind": "other",
+   "strategy_id": 7,
+   "strategy_name": "VWAP loss",
+   "summary": "VWAP loss on TSLA",
+   "symbol": "TSLA"
+  }
+ ],
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "watchlist": {
+  "id": 1,
+  "name": "Day movers",
+  "rows": [
+   {
+    "bias_label": "Sell",
+    "change_pct": -0.589,
+    "last": 210.96,
+    "rvol_10d": 0.805,
+    "symbol": "NVDA",
+    "vs_vwap_pct": -0.526
+   },
+   {
+    "bias_label": "Sell",
+    "change_pct": 1.744,
+    "last": 516.79,
+    "rvol_10d": 0.7507,
+    "symbol": "AMD",
+    "vs_vwap_pct": -0.079
+   },
+   {
+    "bias_label": "Sell",
+    "change_pct": -0.63,
+    "last": 372.22,
+    "rvol_10d": 0.9426,
+    "symbol": "TSLA",
+    "vs_vwap_pct": 0.067
+   },
+   {
+    "bias_label": "Buy",
+    "change_pct": 0.285,
+    "last": 196.75,
+    "rvol_10d": 0.7177,
+    "symbol": "PLTR",
+    "vs_vwap_pct": 0.788
+   },
+   {
+    "bias_label": "Sell",
+    "change_pct": -0.96,
+    "last": 642.62,
+    "rvol_10d": 0.6819,
+    "symbol": "META",
+    "vs_vwap_pct": -0.135
+   },
+   {
+    "bias_label": "Strong Buy",
+    "change_pct": -0.142,
+    "last": 347.725,
+    "rvol_10d": 0.975,
+    "symbol": "AAPL",
+    "vs_vwap_pct": -0.04
+   },
+   {
+    "bias_label": "Strong Sell",
+    "change_pct": -0.483,
+    "last": 321.68,
+    "rvol_10d": 0.7561,
+    "symbol": "AVGO",
+    "vs_vwap_pct": -0.806
+   },
+   {
+    "bias_label": "Sell",
+    "change_pct": -2.744,
+    "last": 164.45,
+    "rvol_10d": 0.8373,
+    "symbol": "COIN",
+    "vs_vwap_pct": -1.036
+   }
+  ]
+ }
+}

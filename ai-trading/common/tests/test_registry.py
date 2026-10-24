@@ -1,6 +1,6 @@
 """`DataSources.from_env` (02j §5, §9 "Registry" and "Swap").
 
-Uses a small, synthetic registry/defaults covering all nine kinds with fake adapters -- not the
+Uses a small, synthetic registry/defaults covering all eleven kinds with fake adapters -- not the
 real six vendors -- so these tests pin the registry *machinery* (defaults, env override, startup
 failures, whitespace, build-once, swapping a provider) independently of any real provider's
 shape. `test_conformance.py` and `test_chains.py` cover the real `REGISTRY`.
@@ -16,7 +16,7 @@ NOW = pd.Timestamp("2026-10-11T00:00:00Z")
 
 
 class FakeAdapter:
-    """Implements every Protocol method across all nine kinds with trivial canned values, so one
+    """Implements every Protocol method across all eleven kinds with trivial canned values, so one
     fake can serve as the provider for any kind in a test's custom `registry=`/`defaults=`."""
 
     def __init__(self, label: str, *, raises: Exception | None = None) -> None:
@@ -59,6 +59,18 @@ class FakeAdapter:
     def analyst_targets(self, symbol, *, now):
         return self._value()
 
+    def assets(self):
+        return [self._value()]
+
+    def most_actives(self, by, top):
+        return [self._value()]
+
+    def movers(self, top):
+        return [self._value()]
+
+    def latest(self, symbols, *, now):
+        return [self._value()]
+
 
 _ALL_KINDS = (
     "bars",
@@ -70,6 +82,8 @@ _ALL_KINDS = (
     "consensus",
     "earnings",
     "targets",
+    "universe",
+    "quotes",
 )
 
 
@@ -82,7 +96,7 @@ def _provider(name: str, adapter: FakeAdapter, kinds: tuple[str, ...] = _ALL_KIN
 
 
 def _full_setup(*, extra: dict[str, Provider] | None = None) -> tuple[dict[str, Provider], dict[str, tuple[str, ...]]]:
-    """A complete registry/defaults pair covering all nine kinds with one shared fake provider
+    """A complete registry/defaults pair covering all eleven kinds with one shared fake provider
     named "fake", so a test only has to override the one kind (or provider) it cares about."""
     fake = FakeAdapter("fake")
     registry = {"fake": _provider("fake", fake)}

@@ -1,0 +1,32 @@
+{
+ "alerts": {
+  "state": "running",
+  "unread": 2
+ },
+ "backups": null,
+ "data_sources": "alpaca",
+ "gateway": "not_configured",
+ "market": {
+  "last_close": "2026-10-23T20:00:00Z",
+  "next_open": "2026-10-26T13:30:00Z",
+  "session": "closed"
+ },
+ "quotes": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "reconciliation": null,
+ "scans": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "delayed",
+  "next_run_at": "2026-10-26T12:30:00Z",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "streaming_slots": {
+  "max": 70,
+  "used": 0
+ }
+}

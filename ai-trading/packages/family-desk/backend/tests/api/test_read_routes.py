@@ -186,6 +186,7 @@ def test_bars_unavailable_is_empty_not_fabricated(client):
         "quality": "unavailable",
         "as_of": None,
         "bars": [],
+        "stamp": {"as_of": None, "source": "alpaca", "quality": "unavailable", "freshness": "unavailable"},
     }
 
 
@@ -247,7 +248,7 @@ def test_bars_5m_resamples_provider_minute_bars(client):
     assert source.calls[0][1] == "1m"
     assert response.json()["interval"] == "5m"
     assert response.json()["bars"] == [
-        {"t": starts[0].isoformat(), "o": 10.0, "h": 15.0, "l": 9.0, "c": 14.5, "v": 15.0}
+        {"t": starts[0].isoformat(), "o": 10.0, "h": 15.0, "l": 9.0, "c": 14.5, "v": 15.0, "ext": False}
     ]
 
 
@@ -566,6 +567,19 @@ def test_technicals_reports_warming_history(client):
     assert body["moving_averages"]["sma_10"]["action"] == "Buy"
     assert body["moving_averages"]["sma_200"]["action"] is None
     assert body["card_back"]["bias_label"] is None
+    # Additive (02m §a3.3): real mode reports the bar bounds, readiness, the last-value map and the levels.
+    assert body["timeframe"] == "1d"
+    assert body["bars_used"] == 19  # 20 weekdays; the 2024-12-25 holiday has no closed bar
+    assert body["first_bar"] == "2024-12-04T00:00:00Z"
+    assert body["last_bar"] == "2024-12-31T00:00:00Z"
+    assert body["bias_ready"] is False
+    assert body["indicators"]["sma_10"] == pytest.approx(101.89)
+    assert body["indicators"]["sma_50"] is None  # 19 bars: the long averages are not known yet
+    assert body["bias_history"] is None  # still warming up: no bar has a bias
+    assert body["levels"]["session_high"] is not None and body["levels"]["prior_close"] is not None
+    assert body["gauges"]["strategies"] is None  # no attached strategy
+    assert body["stamp"]["quality"] == "eod"
+    assert body["stamp"]["source"] == "alpaca"
 
 
 def test_technicals_volatility_is_unknown_for_empty_bars_without_changing_card_back(client):
@@ -668,6 +682,11 @@ def test_status_never_reports_gateway_up(client):
     assert body["streaming_slots"] == {"used": 0, "max": 70}
     assert body["backups"] is None
     assert body["reconciliation"] is None
+    # Additive fields (02m §a3.1): with no feed rows and no alerts, nothing is reported as live.
+    assert body["data_sources"] == "unknown"
+    assert body["quotes"]["quality"] == "unavailable"
+    assert body["scans"]["next_run_at"] is None
+    assert body["alerts"] == {"state": "not_started", "unread": 0}
 
 
 def test_watchlist_items_backfill_is_derived_from_stored_daily_bars(client, db_session):

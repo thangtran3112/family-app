@@ -1,0 +1,18 @@
+{
+ "candidates": 245,
+ "dropped_non_plain_tickers": 4,
+ "liquidity_floor": {
+  "avgVolumeDays": 20,
+  "minAvgVolume": 500000,
+  "minPrice": 5.0
+ },
+ "no_daily_data": 5,
+ "scan_basis": "seed lists + market strip + Alpaca screener most-actives (by volume, by trades, top 100 each) + movers (top 50 gainers and losers). The registry has no asset-list/universe call, so this is NOT the full US equity universe.",
+ "scanned": 131,
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ }
+}

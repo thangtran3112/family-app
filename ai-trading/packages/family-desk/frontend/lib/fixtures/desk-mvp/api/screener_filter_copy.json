@@ -1,0 +1,79 @@
+{
+ "default_spec": {
+  "liquidity": {
+   "minAvgVolume": 500000,
+   "minPrice": 5.0
+  },
+  "maxResults": 50,
+  "name": "Abnormal volume",
+  "rank": {
+   "by": {
+    "lookbackDays": 10,
+    "series": "rvol"
+   },
+   "order": "desc"
+  },
+  "schemaVersion": 1,
+  "watch": {
+   "runOn": "bar_close_15m",
+   "session": "regular",
+   "universe": {
+    "market": "us_equities"
+   }
+  },
+  "when": {
+   "left": {
+    "lookbackDays": 10,
+    "series": "rvol"
+   },
+   "op": "gte",
+   "right": {
+    "value": 2.5
+   }
+  }
+ },
+ "id": 11,
+ "name": "Abnormal volume (copy)",
+ "origin": "user",
+ "read_only": false,
+ "spec": {
+  "liquidity": {
+   "minAvgVolume": 500000,
+   "minPrice": 5.0
+  },
+  "maxResults": 50,
+  "name": "Abnormal volume (copy)",
+  "rank": {
+   "by": {
+    "lookbackDays": 10,
+    "series": "rvol"
+   },
+   "order": "desc"
+  },
+  "schemaVersion": 1,
+  "watch": {
+   "runOn": "bar_close_15m",
+   "session": "regular",
+   "universe": {
+    "market": "us_equities"
+   }
+  },
+  "when": {
+   "left": {
+    "lookbackDays": 10,
+    "series": "rvol"
+   },
+   "op": "gte",
+   "right": {
+    "value": 2.5
+   }
+  }
+ },
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "version": 1
+}

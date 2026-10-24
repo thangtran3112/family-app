@@ -1,0 +1,402 @@
+{
+ "as_of": "2026-10-23",
+ "bars_used": 311,
+ "bias_history": {
+  "history": [
+   {
+    "bar": "2026-10-12T00:00:00Z",
+    "moving_averages": "Strong Buy",
+    "oscillators": "Neutral",
+    "score": 0.4,
+    "summary": "Buy"
+   },
+   {
+    "bar": "2026-10-13T00:00:00Z",
+    "moving_averages": "Strong Buy",
+    "oscillators": "Neutral",
+    "score": 0.445,
+    "summary": "Buy"
+   },
+   {
+    "bar": "2026-10-14T00:00:00Z",
+    "moving_averages": "Buy",
+    "oscillators": "Neutral",
+    "score": 0.133,
+    "summary": "Buy"
+   },
+   {
+    "bar": "2026-10-15T00:00:00Z",
+    "moving_averages": "Strong Buy",
+    "oscillators": "Neutral",
+    "score": 0.267,
+    "summary": "Buy"
+   },
+   {
+    "bar": "2026-10-16T00:00:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Sell",
+    "score": -0.291,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-19T00:00:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Sell",
+    "score": -0.158,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-20T00:00:00Z",
+    "moving_averages": "Buy",
+    "oscillators": "Sell",
+    "score": 0.042,
+    "summary": "Neutral"
+   },
+   {
+    "bar": "2026-10-21T00:00:00Z",
+    "moving_averages": "Strong Buy",
+    "oscillators": "Neutral",
+    "score": 0.512,
+    "summary": "Strong Buy"
+   },
+   {
+    "bar": "2026-10-22T00:00:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Sell",
+    "score": -0.291,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T00:00:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Sell",
+    "score": -0.336,
+    "summary": "Sell"
+   }
+  ],
+  "last_change_in_window": {
+   "at_bar": "2026-10-22T00:00:00Z",
+   "from": "Strong Buy",
+   "to": "Sell"
+  }
+ },
+ "bias_ready": true,
+ "card_back": {
+  "atr_pct_label": "normal",
+  "bias_label": "Sell",
+  "bias_score": -0.33636363636363636,
+  "moving_averages": {
+   "ema_10": -1.0,
+   "ema_100": 1.0,
+   "ema_20": -1.0,
+   "ema_200": 1.0,
+   "ema_30": -1.0,
+   "ema_50": -1.0,
+   "hull_ma_9": -1.0,
+   "ichimoku": 0.0,
+   "sma_10": -1.0,
+   "sma_100": 1.0,
+   "sma_20": -1.0,
+   "sma_200": 1.0,
+   "sma_30": -1.0,
+   "sma_50": -1.0,
+   "vwma_20": -1.0
+  },
+  "oscillators": {
+   "adx": 0.0,
+   "awesome_oscillator": -1.0,
+   "bull_bear_power": 0.0,
+   "cci": 0.0,
+   "macd": -1.0,
+   "momentum": -1.0,
+   "rsi": 0.0,
+   "stoch_rsi": 0.0,
+   "stochastic": 0.0,
+   "ultimate_oscillator": 0.0,
+   "williams_r": 0.0
+  },
+  "pivots": {
+   "P": 764.3633333333333,
+   "R1": 770.0466666666667,
+   "R2": 780.1233333333334,
+   "R3": 785.8066666666668,
+   "S1": 754.2866666666666,
+   "S2": 748.6033333333332,
+   "S3": 738.5266666666665
+  },
+  "symbol": "SPY",
+  "timeframe": "1D"
+ },
+ "first_bar": "2025-07-31T00:00:00Z",
+ "gauges": {
+  "moving_averages": {
+   "counts": {
+    "buy": 4,
+    "neutral": 1,
+    "sell": 10
+   },
+   "label": "Sell",
+   "score": -0.4
+  },
+  "oscillators": {
+   "counts": {
+    "buy": 0,
+    "neutral": 8,
+    "sell": 3
+   },
+   "label": "Sell",
+   "score": -0.2727272727272727
+  },
+  "strategies": null,
+  "summary": {
+   "counts": null,
+   "label": "Sell",
+   "score": -0.33636363636363636
+  }
+ },
+ "indicators": {
+  "atr_14": 7.2112,
+  "atr_label": "normal",
+  "atr_pct": 0.9489,
+  "ema_10": 767.8173,
+  "ema_100": 753.7342,
+  "ema_20": 768.6865,
+  "ema_200": 730.3398,
+  "ema_5": 765.4654,
+  "ema_50": 765.1078,
+  "macd_histogram": -1.5768,
+  "macd_line": -0.116,
+  "macd_signal": 1.4608,
+  "rsi_14": 42.3482,
+  "sma_10": 769.33,
+  "sma_100": 756.5544,
+  "sma_20": 770.1505,
+  "sma_200": 723.9946,
+  "sma_5": 766.51,
+  "sma_50": 766.8978
+ },
+ "last_bar": "2026-10-23T00:00:00Z",
+ "levels": {
+  "prior_close": 763.96,
+  "session_high": 763.47,
+  "session_low": 758.68
+ },
+ "macd": {
+  "histogram": -1.5768197464515437,
+  "line": -0.11602208045007956,
+  "signal": 1.460797666001464
+ },
+ "moving_averages": {
+  "ema_10": {
+   "action": "Sell",
+   "values": {
+    "value": 767.8173018591624
+   }
+  },
+  "ema_100": {
+   "action": "Buy",
+   "values": {
+    "value": 753.7341523293076
+   }
+  },
+  "ema_20": {
+   "action": "Sell",
+   "values": {
+    "value": 768.6864724881934
+   }
+  },
+  "ema_200": {
+   "action": "Buy",
+   "values": {
+    "value": 730.3397754926123
+   }
+  },
+  "ema_30": {
+   "action": "Sell",
+   "values": {
+    "value": 768.0110960756855
+   }
+  },
+  "ema_50": {
+   "action": "Sell",
+   "values": {
+    "value": 765.1077650975769
+   }
+  },
+  "hull_ma_9": {
+   "action": "Sell",
+   "values": {
+    "value": 765.3318888888889
+   }
+  },
+  "ichimoku": {
+   "action": "Neutral",
+   "values": {
+    "base": 769.7955,
+    "conversion": 768.7149999999999,
+    "span_a": 769.2552499999999,
+    "span_b": 764.6800000000001
+   }
+  },
+  "sma_10": {
+   "action": "Sell",
+   "values": {
+    "value": 769.33
+   }
+  },
+  "sma_100": {
+   "action": "Buy",
+   "values": {
+    "value": 756.5544
+   }
+  },
+  "sma_20": {
+   "action": "Sell",
+   "values": {
+    "value": 770.1505
+   }
+  },
+  "sma_200": {
+   "action": "Buy",
+   "values": {
+    "value": 723.99465
+   }
+  },
+  "sma_30": {
+   "action": "Sell",
+   "values": {
+    "value": 768.1773333333333
+   }
+  },
+  "sma_50": {
+   "action": "Sell",
+   "values": {
+    "value": 766.8978
+   }
+  },
+  "vwma_20": {
+   "action": "Sell",
+   "values": {
+    "value": 769.0129611444158
+   }
+  }
+ },
+ "oscillators": {
+  "adx": {
+   "action": "Neutral",
+   "values": {
+    "adx": 14.507445767552442,
+    "minus_di": 30.6649317728077,
+    "plus_di": 16.69662514965449
+   }
+  },
+  "awesome_oscillator": {
+   "action": "Sell",
+   "values": {
+    "value": -0.6780735294117903
+   }
+  },
+  "bull_bear_power": {
+   "action": "Neutral",
+   "values": {
+    "bear": -9.724612753999395,
+    "bull": -4.934612753999318
+   }
+  },
+  "cci": {
+   "action": "Neutral",
+   "values": {
+    "value": -132.57610831037374
+   }
+  },
+  "macd": {
+   "action": "Sell",
+   "values": {
+    "line": -0.11602208045007956,
+    "signal": 1.460797666001464
+   }
+  },
+  "momentum": {
+   "action": "Sell",
+   "values": {
+    "value": -18.600000000000023
+   }
+  },
+  "rsi": {
+   "action": "Neutral",
+   "values": {
+    "value": 42.348208422481044
+   }
+  },
+  "stoch_rsi": {
+   "action": "Neutral",
+   "values": {
+    "d": 27.80780773044569,
+    "k": 19.572868994885376
+   }
+  },
+  "stochastic": {
+   "action": "Neutral",
+   "values": {
+    "d": 37.651550920346445,
+    "k": 26.93006361630883
+   }
+  },
+  "ultimate_oscillator": {
+   "action": "Neutral",
+   "values": {
+    "value": 47.221783738461504
+   }
+  },
+  "williams_r": {
+   "action": "Neutral",
+   "values": {
+    "value": -94.37663469921502
+   }
+  }
+ },
+ "pivots": {
+  "camarilla": {
+   "P": 764.3633333333333,
+   "R1": 761.4146666666667,
+   "R2": 762.8593333333333,
+   "R3": 764.3040000000001,
+   "S1": 758.5253333333334,
+   "S2": 757.0806666666667,
+   "S3": 755.636
+  },
+  "classic": {
+   "P": 764.3633333333333,
+   "R1": 770.0466666666667,
+   "R2": 780.1233333333334,
+   "R3": 785.8066666666668,
+   "S1": 754.2866666666666,
+   "S2": 748.6033333333332,
+   "S3": 738.5266666666665
+  },
+  "fibonacci": {
+   "P": 764.3633333333333,
+   "R1": 770.3836533333334,
+   "R2": 774.1030133333334,
+   "R3": 780.1233333333334,
+   "S1": 758.3430133333333,
+   "S2": 754.6236533333333,
+   "S3": 748.6033333333332
+  }
+ },
+ "quality": "eod",
+ "rsi": 42.348208422481044,
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "eod",
+  "source": "alpaca"
+ },
+ "symbol": "SPY",
+ "timeframe": "1d",
+ "volatility": {
+  "atr14": 7.211173065909916,
+  "atr_percent": 0.9488760169361837,
+  "label": "normal"
+ }
+}

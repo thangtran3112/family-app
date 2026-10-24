@@ -149,7 +149,7 @@ test("owned watchlist items and future daily bars use the real read routes", asy
       if (url.pathname === "/api/desk/watchlists/3/items") {
         return Response.json([{ symbol: "CL", asset_type: "future", backfill: "pending" }]);
       }
-      return Response.json({ symbol: "/CL", interval: "1d", quality: "unavailable", as_of: null, bars: [] });
+      return Response.json({ symbol: "/CL", interval: "1d", quality: "unavailable", as_of: null, stamp: { as_of: null, source: null, quality: "unavailable", freshness: "unavailable" }, bars: [] });
     },
     () => ({ href: "https://trading.tobytran.dev/" }),
   );
@@ -177,6 +177,9 @@ test("watchlist signal counts can read every page of owned signals", async () =>
     evidence: {},
     data_quality: "delayed-15m",
     created_at: "2026-10-16T14:00:00Z",
+    strategy_id: 7,
+    strategy_name: "ORB 15m",
+    kind: "orb",
   }));
   const secondPage = firstPage.slice(0, 3).map((signal, index) => ({ ...signal, id: 201 + index }));
   const fetcher = createDeskApiClient(
@@ -217,6 +220,9 @@ test("shifting page boundaries deduplicate repeated signal ids and mark total pa
     evidence: {},
     data_quality: "delayed-15m",
     created_at: "2026-10-16T14:00:00Z",
+    strategy_id: 7,
+    strategy_name: "ORB 15m",
+    kind: "orb",
   }));
   const shiftedPage = [firstPage[199], { ...firstPage[0], id: 201 }, { ...firstPage[0], id: 202 }];
   let calls = 0;
@@ -245,6 +251,9 @@ test("repeated full pages stop as a partial result instead of looping", async ()
     evidence: {},
     data_quality: "delayed-15m",
     created_at: "2026-10-16T14:00:00Z",
+    strategy_id: 7,
+    strategy_name: "ORB 15m",
+    kind: "orb",
   }));
   let calls = 0;
   const fetcher = createDeskApiClient(
@@ -275,6 +284,9 @@ test("five full pages exhaust request cap and return partial rather than exact c
         evidence: {},
         data_quality: "delayed-15m",
         created_at: "2026-10-16T14:00:00Z",
+        strategy_id: 7,
+        strategy_name: "ORB 15m",
+        kind: "orb",
       })));
     },
     () => ({ href: "https://trading.tobytran.dev/" }),
@@ -303,6 +315,9 @@ test("aborting after a signal page prevents the next page request", async () => 
         evidence: {},
         data_quality: "delayed-15m",
         created_at: "2026-10-16T14:00:00Z",
+        strategy_id: 7,
+        strategy_name: "ORB 15m",
+        kind: "orb",
       })));
     },
     () => ({ href: "https://trading.tobytran.dev/" }),
@@ -329,6 +344,9 @@ test("mark-read sends the authenticated Desk API POST and validates returned ale
     payload: {},
     created_at: "2026-10-16T14:00:00Z",
     read_at: "2026-10-16T14:01:00Z",
+    symbol: null,
+    strategy_id: null,
+    strategy_name: null,
   };
   const fetcher = createDeskApiClient(
     async (input, init) => {

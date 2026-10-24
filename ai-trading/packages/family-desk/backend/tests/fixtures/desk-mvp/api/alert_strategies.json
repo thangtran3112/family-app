@@ -1,0 +1,493 @@
+[
+ {
+  "category": "indicator",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": 60,
+  "expires_on": null,
+  "fires_7d": 0,
+  "frequency": "once_per_bar",
+  "id": 4,
+  "last_fired_at": null,
+  "name": "Abnormal volume",
+  "origin": "seed",
+  "paused_reason": null,
+  "run_on": "bar_close_15m",
+  "severity": "opportunity",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "limits": {
+    "cooldownMinutes": 60
+   },
+   "name": "Abnormal volume",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "severity": "opportunity"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_15m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "left": {
+     "lookbackDays": 10,
+     "series": "rvol"
+    },
+    "op": "gte",
+    "right": {
+     "value": 2.5
+    }
+   }
+  },
+  "stage": "draft",
+  "status": "draft",
+  "version": 1
+ },
+ {
+  "category": "indicator",
+  "channels": [
+   "inbox"
+  ],
+  "cooldown_minutes": null,
+  "expires_on": null,
+  "fires_7d": 5,
+  "frequency": "once_per_bar",
+  "id": 6,
+  "last_fired_at": "2026-10-23T16:15:00Z",
+  "name": "EMA 9/21 cross",
+  "origin": "library",
+  "paused_reason": null,
+  "run_on": "bar_close_15m",
+  "severity": "info",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "name": "EMA 9/21 cross",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox"
+     ],
+     "severity": "info"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_15m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "any": [
+     {
+      "left": {
+       "length": 9,
+       "series": "ema"
+      },
+      "op": "crosses_above",
+      "right": {
+       "length": 21,
+       "series": "ema"
+      }
+     },
+     {
+      "left": {
+       "length": 9,
+       "series": "ema"
+      },
+      "op": "crosses_below",
+      "right": {
+       "length": 21,
+       "series": "ema"
+      }
+     }
+    ]
+   }
+  },
+  "stage": "alert_only",
+  "status": "active",
+  "version": 1
+ },
+ {
+  "category": "pattern",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": null,
+  "expires_on": null,
+  "fires_7d": 0,
+  "frequency": "once_per_bar",
+  "id": 3,
+  "last_fired_at": null,
+  "name": "Hammer 15m near S1",
+  "origin": "seed",
+  "paused_reason": null,
+  "run_on": "bar_close_15m",
+  "severity": "opportunity",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "name": "Hammer 15m near S1",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "frequency": "once_per_bar",
+     "message": "{symbol} hammer on the 15m, close {close} at {time}",
+     "severity": "opportunity"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_15m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "all": [
+     {
+      "op": "pattern",
+      "pattern": "hammer",
+      "trend": "after_downtrend",
+      "trendBars": 5,
+      "withinBars": 1
+     },
+     {
+      "left": {
+       "series": "low"
+      },
+      "op": "within_pct",
+      "pct": 0.5,
+      "right": {
+       "level": "pivot",
+       "method": "classic",
+       "period": "session",
+       "point": "S1"
+      }
+     }
+    ]
+   }
+  },
+  "stage": "draft",
+  "status": "draft",
+  "version": 1
+ },
+ {
+  "category": "level",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": 30,
+  "expires_on": null,
+  "fires_7d": 0,
+  "frequency": "once_per_bar",
+  "id": 5,
+  "last_fired_at": null,
+  "name": "High-of-day break",
+  "origin": "seed",
+  "paused_reason": null,
+  "run_on": "bar_close_1m",
+  "severity": "opportunity",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "limits": {
+    "cooldownMinutes": 30
+   },
+   "name": "High-of-day break",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "severity": "opportunity"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_1m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "all": [
+     {
+      "left": {
+       "series": "close"
+      },
+      "op": "crosses_above",
+      "right": {
+       "level": "session_high"
+      }
+     },
+     {
+      "left": {
+       "lookbackDays": 10,
+       "series": "rvol"
+      },
+      "op": "gte",
+      "right": {
+       "value": 1.5
+      }
+     },
+     {
+      "end": "15:30",
+      "op": "time_between",
+      "start": "09:45"
+     }
+    ]
+   }
+  },
+  "stage": "draft",
+  "status": "draft",
+  "version": 1
+ },
+ {
+  "category": "level",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": null,
+  "expires_on": null,
+  "fires_7d": 0,
+  "frequency": "once_per_bar",
+  "id": 1,
+  "last_fired_at": null,
+  "name": "ORB 15m",
+  "origin": "seed",
+  "paused_reason": null,
+  "run_on": "bar_close_1m",
+  "severity": "opportunity",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "name": "ORB 15m",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "severity": "opportunity"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_1m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "all": [
+     {
+      "left": {
+       "series": "close"
+      },
+      "op": "crosses_above",
+      "right": {
+       "level": "opening_range_high",
+       "minutes": 15
+      }
+     },
+     {
+      "left": {
+       "lookbackDays": 10,
+       "series": "rvol"
+      },
+      "op": "gte",
+      "right": {
+       "value": 2.0
+      }
+     },
+     {
+      "left": {
+       "series": "close"
+      },
+      "op": "gt",
+      "right": {
+       "series": "vwap"
+      }
+     }
+    ]
+   }
+  },
+  "stage": "draft",
+  "status": "draft",
+  "version": 1
+ },
+ {
+  "category": "indicator",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": 30,
+  "expires_on": null,
+  "fires_7d": 5,
+  "frequency": "once_per_bar",
+  "id": 7,
+  "last_fired_at": "2026-10-23T14:26:00Z",
+  "name": "VWAP loss",
+  "origin": "library",
+  "paused_reason": "user",
+  "run_on": "bar_close_1m",
+  "severity": "risk",
+  "source": {
+   "id": 2,
+   "kind": "watchlist",
+   "label": "Swing"
+  },
+  "spec": {
+   "limits": {
+    "cooldownMinutes": 30
+   },
+   "name": "VWAP loss",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "severity": "risk"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_1m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Swing"
+    }
+   },
+   "when": {
+    "all": [
+     {
+      "left": {
+       "series": "close"
+      },
+      "op": "crosses_below",
+      "right": {
+       "series": "vwap"
+      }
+     },
+     {
+      "end": "15:30",
+      "op": "time_between",
+      "start": "09:45"
+     }
+    ]
+   }
+  },
+  "stage": "alert_only",
+  "status": "paused",
+  "version": 1
+ },
+ {
+  "category": "indicator",
+  "channels": [
+   "inbox",
+   "telegram"
+  ],
+  "cooldown_minutes": 30,
+  "expires_on": null,
+  "fires_7d": 5,
+  "frequency": "once_per_bar",
+  "id": 2,
+  "last_fired_at": "2026-10-23T14:19:00Z",
+  "name": "VWAP reclaim",
+  "origin": "seed",
+  "paused_reason": null,
+  "run_on": "bar_close_1m",
+  "severity": "opportunity",
+  "source": {
+   "id": 1,
+   "kind": "watchlist",
+   "label": "Day movers"
+  },
+  "spec": {
+   "limits": {
+    "cooldownMinutes": 30
+   },
+   "name": "VWAP reclaim",
+   "schemaVersion": 1,
+   "then": {
+    "alert": {
+     "channels": [
+      "inbox",
+      "telegram"
+     ],
+     "severity": "opportunity"
+    }
+   },
+   "watch": {
+    "runOn": "bar_close_1m",
+    "session": "regular",
+    "universe": {
+     "watchlist": "Day movers"
+    }
+   },
+   "when": {
+    "all": [
+     {
+      "left": {
+       "series": "close"
+      },
+      "op": "crosses_above",
+      "right": {
+       "series": "vwap"
+      }
+     },
+     {
+      "end": "15:30",
+      "op": "time_between",
+      "start": "09:45"
+     }
+    ]
+   }
+  },
+  "stage": "alert_only",
+  "status": "active",
+  "version": 1
+ }
+]

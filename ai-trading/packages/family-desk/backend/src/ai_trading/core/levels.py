@@ -35,6 +35,18 @@ def pre_phase(ann: pd.DataFrame, side: str) -> pd.Series:
     return pd.Series(ann["day"].map(per_day).to_numpy(), index=ann.index).where(known)
 
 
+def session_extreme(ann: pd.DataFrame, side: str) -> pd.Series:
+    """High ("high") or low ("low") of the current regular session before each bar, aligned to
+    `ann`'s index: the running extreme of the earlier regular-phase bars of the same trading day,
+    so a close beyond it is a break of the session's high or low. NaN on the session's first bar
+    and outside the regular phase."""
+    regular = ann["phase"] == "regular"
+    values = ann[side].where(regular)
+    running = values.groupby(ann["day"].to_numpy())
+    extreme = running.cummax() if side == "high" else running.cummin()
+    return extreme.groupby(ann["day"].to_numpy()).shift(1).where(regular)
+
+
 def opening_range(ann: pd.DataFrame, asset: Asset, minutes: int, side: str) -> pd.Series:
     """High or low of the first `minutes` of each regular session, known from the bar that
     starts when the range ends. NaN on days whose session is shorter than the range."""

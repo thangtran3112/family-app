@@ -1,0 +1,70 @@
+/* Strategy library (D8, 02m §a3.6): category list | preset list | preview. Tokens only; amber is the one accent. */
+
+.screen { display: flex; min-height: 100%; flex-direction: column; }
+
+.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-6) var(--space-3); }
+.title { margin: 0; font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-tight); }
+
+.target { display: flex; align-items: center; gap: var(--space-2); color: var(--color-muted); font-size: var(--text-label); }
+
+.input { min-height: 32px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); }
+
+.panes { display: grid; min-height: 0; flex: 1; grid-template-columns: 200px minmax(240px, 280px) minmax(0, 1fr); border-top: 1px solid var(--color-hairline); }
+
+.categories { border-right: 1px solid var(--color-hairline); padding: var(--space-3) 0; }
+.catList { margin: 0; padding: 0; list-style: none; }
+.catButton { display: flex; width: 100%; min-height: 32px; align-items: center; justify-content: space-between; gap: var(--space-2); border: 0; background: transparent; padding: 0 var(--space-4); color: var(--color-muted); font: inherit; font-size: var(--text-label); text-align: left; cursor: pointer; }
+.catButton:hover { background: var(--color-raised); color: var(--color-text); }
+.catButton[aria-current="true"] { box-shadow: inset 2px 0 0 var(--color-amber); color: var(--color-text); font-weight: var(--weight-semibold); }
+.count { font-variant-numeric: tabular-nums; }
+
+.listPane { display: flex; min-width: 0; flex-direction: column; border-right: 1px solid var(--color-hairline); }
+.search { display: block; padding: var(--space-3); }
+.search .input { width: 100%; }
+.rows { margin: 0; padding: 0; list-style: none; }
+.row { display: flex; width: 100%; min-height: 36px; flex-direction: column; justify-content: center; gap: 2px; border: 0; border-bottom: 1px solid var(--color-hairline); background: transparent; box-shadow: inset 2px 0 0 transparent; padding: var(--space-2) var(--space-3); color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.row:hover { background: var(--color-raised); }
+.row[aria-current="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.rowTop { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.rowLabel { min-width: 0; overflow: hidden; font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); text-overflow: ellipsis; white-space: nowrap; }
+.rowSummary { display: -webkit-box; overflow: hidden; color: var(--color-muted); font-size: 12px; line-height: 16px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.tag { align-self: flex-start; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 0 6px; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.footnote { margin: auto 0 0; padding: var(--space-3); color: var(--color-muted); font-size: 12px; line-height: 16px; }
+
+.bias { flex-shrink: 0; border: 1px solid currentColor; border-radius: var(--radius-full); padding: 0 var(--space-2); font-size: var(--text-micro); font-weight: var(--weight-semibold); line-height: 18px; }
+.bullish { color: var(--color-up); }
+.bearish { color: var(--color-down); }
+.neutral { color: var(--color-muted); }
+
+.preview { min-width: 0; padding: var(--space-4) var(--space-6) var(--space-6); }
+.previewTitle { margin: 0; font-size: 22px; line-height: 28px; font-weight: var(--weight-semibold); }
+.previewMeta { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; color: var(--color-muted); font-size: var(--text-label); }
+.body { margin: var(--space-2) 0 0; }
+.section { margin-top: var(--space-6); }
+.heading { margin: 0 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.whenBox { margin: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3) var(--space-4); }
+.defaults { margin: 0; padding-left: var(--space-4); color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.example { display: flex; margin: 0; align-items: center; gap: var(--space-4); }
+.exampleText { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-label); }
+.caption { font-weight: var(--weight-semibold); }
+.ohlc { color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.candleUp { fill: var(--color-up); stroke: var(--color-up); }
+.candleDown { fill: var(--color-down); stroke: var(--color-down); }
+
+.attach { display: flex; margin-top: var(--space-6); flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.attachButton { min-height: 32px; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); background: var(--color-amber); padding: 0 var(--space-4); color: var(--color-on-pill); font: inherit; font-weight: var(--weight-semibold); cursor: pointer; }
+.attachButton:hover:not(:disabled) { opacity: 0.88; }
+.attachButton:disabled { border-color: var(--color-hairline); background: transparent; color: var(--color-muted); cursor: default; }
+.note { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.result { margin: 0; font-size: var(--text-label); }
+.resultError { color: var(--color-down); }
+.link { color: var(--color-amber); font-weight: var(--weight-semibold); }
+.link:hover { text-decoration: underline; }
+
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.input:focus-visible,
+.catButton:focus-visible,
+.row:focus-visible,
+.attachButton:focus-visible,
+.link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }

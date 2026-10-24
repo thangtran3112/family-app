@@ -437,3 +437,17 @@
     flex-direction: column;
   }
 }
+
+/* Desktop gauge sizes (D3 rail, D4 summary): half-dial odometer, 28 px verdict, count line. */
+.gaugeLarge .gaugeSvg { width: min(100%, 220px); }
+.gaugeLarge .gaugeLabel { font-size: 28px; line-height: 32px; letter-spacing: var(--tracking-tight); }
+.gaugeLarge .voteCounts { font-size: 13px; }
+.gaugeCompact .gaugeSvg { width: min(100%, 160px); }
+.gaugeCompact .gaugeLabel { font-size: 20px; line-height: 24px; }
+.gaugeCompact .voteCounts { font-size: 12px; }
+
+/* Desktop density for the shared vote tables (28 px rows, 13 px text). */
+.tablesDense .indicatorTable th, .tablesDense .indicatorTable td { padding: 4px 12px; }
+.tablesDense .indicatorTable tbody th { min-width: 0; font-size: 13px; }
+.tablesDense .indicatorTable td { font-size: 13px; }
+.gaugeLarge > header, .gaugeCompact > header { flex-direction: column; align-items: center; gap: 2px; }

@@ -8,21 +8,26 @@ vendor class. No vendor module is imported here.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 import pandas as pd
 
 from ai_trading_common.bars import Bars, Timeframe
 from ai_trading_common.types import (
+    ActiveSymbol,
     AnalystTargets,
     ConsensusSnapshot,
     EarningsAnnouncement,
     EarningsEvent,
     EarningsResult,
     Fact,
+    Mover,
     NewsItem,
     Observation,
+    Quote,
+    UniverseAsset,
 )
 
 
@@ -73,3 +78,17 @@ class EarningsSource(Protocol):
 @runtime_checkable
 class TargetsSource(Protocol):
     def analyst_targets(self, symbol: str, *, now: pd.Timestamp) -> AnalystTargets: ...
+
+
+@runtime_checkable
+class UniverseSource(Protocol):
+    def assets(self) -> list[UniverseAsset]: ...
+
+    def most_actives(self, by: Literal["volume", "trades"], top: int) -> list[ActiveSymbol]: ...
+
+    def movers(self, top: int) -> list[Mover]: ...
+
+
+@runtime_checkable
+class QuoteSource(Protocol):
+    def latest(self, symbols: Sequence[str], *, now: pd.Timestamp) -> list[Quote]: ...
