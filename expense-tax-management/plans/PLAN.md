@@ -1,6 +1,6 @@
 # Expense Tax Management - Master Plan
 
-> **Status:** Production foundation complete. Release 2026-10-05 (`main` `d7426e5`, expense only) is deployed: Phases 3B, 3C, 3D-A/B/C, runtime migration Task 7 Stage A/B with shared Temporal active, and family-config runtime env (Firestore `family-config`, `common/config/family_config.py`). Runtime migration is complete: generation 2 routes all jobs to the TypeScript `workflow-worker` (2026-10-06), and Stage C removed the Python worker (2026-10-07, `main` `f20c451`). Connected mailbox (Phase 3D/4) is live since 2026-10-08/09 with `MAILBOX_FEATURE_ENABLED=true`. Incomplete Capture OCR review Phases 1-6 are merged to `dev` (#139-#144), not recorded as released to `main`. Open items are listed under Open Operations.
+> **Status:** Production foundation complete. Release 2026-10-05 (`main` `d7426e5`, expense only) is deployed: Phases 3B, 3C, 3D-A/B/C, runtime migration Task 7 Stage A/B with shared Temporal active, and family-config runtime env (Firestore `family-config`, `common/config/family_config.py`). Runtime migration is complete: generation 2 routes all jobs to the TypeScript `workflow-worker` (2026-10-06), and Stage C removed the Python worker (2026-10-07, `main` `f20c451`). Connected mailbox (Phase 3D/4) is live since 2026-10-08/09 with `MAILBOX_FEATURE_ENABLED=true`. Incomplete Capture OCR review Phases 1-6 were released on 2026-10-24 through PR #161 (`main` `c6af31a`); Expense Tax CI run `40107180521` passed including E2E, Expense Tax Deploy run `40108519887` succeeded, and authenticated production browser acceptance was owner-approved. Open items are listed under Open Operations.
 > **Last updated:** 2026-10-24
 > **Source of truth:** This file tracks phase state. Completed implementation details were removed after verification and remain available in git history.
 
@@ -8,7 +8,7 @@
 
 - Runtime migration complete: Tasks 1-7 merged (#12, #14, #35); operator cutover done 2026-10-06 (generation 2); Stage C Python removal released 2026-10-07 (#36, `main` `f20c451`).
 - Phase 3D-A/B/C merged (#15, #16, #17), released inert on 2026-10-05, and live since 2026-10-08/09 with `MAILBOX_FEATURE_ENABLED=true` (`main` `be7af1e`). The runtime migration Task 7 cutover that 3D-B/3D-C depended on is complete.
-- Incomplete Capture OCR review: Phases 1-6 merged to `dev` (#139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`). Task 7 CI isolation fix merged (#149, `eb79a59`).
+- Incomplete Capture OCR review: released through PR #161 (`main` `c6af31a`) on 2026-10-24 from nine expense squash commits: #139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`, #145 `39a692d`, #149 `eb79a59`, and #158 `4d1ec4b`. The released expense tree matches `origin/dev`.
 - VPS encrypted backup/restore tooling merged (#13); production activation (bucket/IAM provisioning, first real backup, operator restore rehearsal) is operator-only and pending.
 - Work on `feature/toby` from current `origin/dev`; create a separate worktree only when explicitly requested.
 - Merge only through a pull request to protected `dev`; required quality CI must pass. Integration CI is advisory and must be reported when red.
@@ -65,7 +65,7 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 - **Phase 3B - Deduplication:** Scoped provenance, deterministic duplicate evidence, pending-review matches, transactional resolution, Office review, and production deployment complete.
 - **Runtime TypeScript Temporal migration:** Tasks 1-7 merged; generation 2 cutover 2026-10-06; Python worker removed 2026-10-07 (#35/#36, `main` `f20c451`). Rollback cannot restore the Python worker.
 - **Phases 3C and 3D-A/B/C - Auto-tagging and connected mailbox:** released 2026-10-05; mailbox live 2026-10-08/09 (see Remaining Work and the 3D Operator Activation sections).
-- **Incomplete Capture OCR review, Phases 1-6:** merged to `dev` on 2026-10-17/18 (#139-#144). Functional Capture and Office UI; no release to `main` recorded.
+- **Incomplete Capture OCR review, Phases 1-6:** released on 2026-10-24 through PR #161 (`main` `c6af31a`) with the expense tree identical to `origin/dev`; CI run `40107180521` passed including E2E, deploy run `40108519887` succeeded, and owner-approved authenticated production acceptance passed.
 
 ## Remaining Work
 
@@ -78,7 +78,7 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 | 2 | **3D-A - Mailbox broker and connection lifecycle** | Merged (#15); deployed inert 2026-10-05; live since 2026-10-08/09 (`MAILBOX_FEATURE_ENABLED=true`, `main` `be7af1e`) | [shared spec](../../docs/superpowers/specs/2026-09-12-phase-3d-connected-mailbox-design.md) / [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-a-mailbox-broker.md) |
 | 3 | **3D-B - Mailbox discovery and review** | Merged (#16); live since 2026-10-08/09; daily 02:00 scan schedule running | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-b-mailbox-discovery.md) |
 | 4 | **3D-C - Mailbox ingestion and provenance** | Merged (#17); live since 2026-10-08/09; Gmail test-account e2e still open (see 3D-C Operator Activation) | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-c-mailbox-ingestion.md) |
-| Parallel | **Incomplete Capture OCR review, Phases 1-6** | Merged to `dev`: #139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`; Task 7 CI isolation fix #149 `eb79a59`. Not released to `main` | Commit and PR history (no separate plan document in repo) |
+| Parallel | **Incomplete Capture OCR review, Phases 1-6** | Released 2026-10-24 through PR #161 (`main` `c6af31a`) from #139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`, #145 `39a692d`, #149 `eb79a59`, and #158 `4d1ec4b`; CI `40107180521` passed including E2E; deploy `40108519887` succeeded; released expense tree matches `origin/dev`; authenticated production acceptance owner-approved | Commit and PR history (no separate plan document in repo) |
 | Later | **6A/6B/6C - SQL, semantic, and AI search** | Deferred; replan before execution | `plans/sub-plans/phase-6*.md` |
 | Later | **9A/9B/9C - Graph foundation, ingestion, and search** | Deferred; replan before execution | `plans/sub-plans/phase-9*.md` |
 | Later | **12A/12B/12C - Mobile application** | Deferred; framework decision pending | `plans/sub-plans/phase-12*.md` |
@@ -145,10 +145,10 @@ Not done. Do not mark these complete without recorded evidence:
 
 - VPS encrypted backup activation: Task 1 Terraform, writer key, and `bootstrap.sh --only backup` (see [ROADMAP.md](ROADMAP.md)).
 - Task 8 recovery operations: the live recovery drill (`sub-plans/vps-backup-and-restore.md`, Task 8) has not run against real infrastructure.
-- Authenticated browser acceptance: no acceptance record in this repo.
-- Expense release or deployment of the Incomplete Capture OCR work (#139-#144, #149): merged to `dev`, not released to `main`.
 - Cloudflare credential rotation after plan-artifact exposure (`production-activation-runbook.md` §1, R.1-R.3): completion is not recorded in this repo.
 - Gmail test-account e2e verification (3D-C Operator Activation, item 3).
+- Local Clerk development webhook and frontend sign-in checks.
+- Remaining Incomplete Capture live acceptance: `no_tax`, 409/412 conflict edit preservation, cross-device review list, keyboard and error-summary focus, and phone-width overflow. Automated component and unit coverage exists; live checks are deferred.
 - Deferred, not started: Phases 6A-6C (SQL, semantic, and AI search), 9A-9C (graph), 12A-12C (mobile application). Replan before execution.
 
 ## Known Local Limitations

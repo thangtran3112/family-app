@@ -344,3 +344,11 @@ runtime cutover.
 Status (2026-10-24): seven tasks merged; TypeScript dispatch active (generation 2,
 2026-10-06); Python worker removed (2026-10-07). Rollback evidence is not recorded
 in this repo, and the Python worker cannot be restored after Stage C.
+
+## Expense Release Checkpoint (2026-10-24)
+
+- PR #161 squash-merged to `main` as `c6af31a`, cherry-picking nine expense squash commits: #139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`, #145 `39a692d`, #149 `eb79a59`, and #158 `4d1ec4b`. Expense Tax CI run `40107180521` passed on `main`, including E2E; Expense Tax Deploy run `40108519887` succeeded. The released expense tree is identical to `origin/dev`.
+- Before release, all three `shared/llm` OpenAI keys returned HTTP 401, causing every OCR path to fail with `OCR_FAILED: extraction pipeline error`. The slots were replaced with a valid key verified by HTTP 200, and deployment reloaded the worker environment.
+- Owner-approved authenticated production browser acceptance used disposable records: a complete receipt auto-saved as ACME TEST SUPPLY CO, 42.50 CAD, with Tax 3.15 CAD in detail; an incomplete receipt entered `needs_input`, showed prefilled OCR fields, flagged the empty merchant with `aria-invalid`, displayed an error summary, and disabled Save until completion; completing it saved 12.90 CAD and returned to the queue. Remove deleted the server file before the local item. Office ledger and expense detail rendered both expenses with auto-tags.
+- Live acceptance deferred with automated component and unit coverage: `no_tax`, 409/412 conflict edit preservation, cross-device review list, keyboard and error-summary focus, and phone-width overflow.
+- Open operations remain VPS backup activation, Task 8 recovery drill, Gmail test-account e2e, Cloudflare credential rotation confirmation, and local Clerk development webhook and sign-in checks. Phases 6A-6C, 9A-9C, and 12A-12C remain deferred.
