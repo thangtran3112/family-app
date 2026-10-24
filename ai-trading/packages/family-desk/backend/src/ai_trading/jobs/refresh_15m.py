@@ -8,10 +8,10 @@ from ai_trading_common.registry import DataSources
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.core.calendar import ET, session
 from ai_trading.data.bars import upsert_bars
 from ai_trading.db.models import WatchlistItem
-from ai_trading.engine.tick import tick
 from ai_trading.jobs import JobResult
 
 NAME = "refresh_15m"
@@ -32,7 +32,7 @@ def due_now(now: datetime) -> bool:
 
 def run(session_: Session, data_sources: DataSources, *, now: datetime) -> JobResult:
     """Fetches today's 1-minute bars for every distinct stock watchlist symbol directly from
-    `data_sources.bars` and `upsert_bars`s them, then runs `engine.tick.tick` for the live
+    `data_sources.bars` and `upsert_bars`s them, then runs `alerts.runtime.tick` for the live
     cadences (quality stays `delayed-15m`: this job supplies fresher delayed bars, never realtime
     ones).
 

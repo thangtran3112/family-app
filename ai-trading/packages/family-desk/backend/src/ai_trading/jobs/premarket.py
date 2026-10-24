@@ -9,8 +9,8 @@ from datetime import datetime, time
 
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.core.calendar import ET, session
-from ai_trading.engine.tick import tick
 from ai_trading.jobs import JobResult
 from ai_trading.jobs.clock import JobClock
 

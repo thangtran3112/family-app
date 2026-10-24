@@ -6,12 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.runtime import alert_state
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.api.schemas.common import Stamp
 from ai_trading.api.schemas.platform import StatusAlertsOut, StatusMarketOut, StatusScansOut
 from ai_trading.api.stamp import feed_last_ok, make_stamp
 from ai_trading.core.freshness import market_state
-from ai_trading.db.models import Alert, User
+from ai_trading.db.models import Alert
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
 
@@ -60,7 +61,6 @@ def status(
     market = market_state(now)
     quotes = _delayed_feed_stamp(session, "bars_delayed", now)
     scans = _delayed_feed_stamp(session, "scan", now)
-    pause_all = session.execute(select(User.settings).where(User.id == user.id)).scalar_one().get("pause_all") is True
     unread = session.execute(
         select(func.count(Alert.id)).where(Alert.user_id == user.id, Alert.read_at.is_(None))
     ).scalar_one()
@@ -68,7 +68,7 @@ def status(
         market=StatusMarketOut(session=market.session, next_open=market.next_open, last_close=market.last_close),
         quotes=quotes,
         scans=StatusScansOut(**scans.model_dump(), next_run_at=None),
-        alerts=StatusAlertsOut(state="paused_by_user" if pause_all else "not_started", unread=unread),
+        alerts=StatusAlertsOut(state=alert_state(session, user.id, now), unread=unread),
         gateway="not_configured",
         data_sources="alpaca" if quotes.as_of is not None else "unknown",
         streaming_slots=StreamingSlotsOut(used=0, max=70),

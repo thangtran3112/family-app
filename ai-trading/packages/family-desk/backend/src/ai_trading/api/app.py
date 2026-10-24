@@ -1,6 +1,6 @@
 """FastAPI app wiring (PROTO-BRIEF.md §4 L4): identity (`api/auth.py`), the `/api/desk/*` REST
 routers, SSE quotes, the `/healthz` route `health-check.sh` polls, and two background loops --
-`engine.tick.tick` every 60s and `notify.dispatch.dispatch_pending` every 10s, each against a
+`alerts.runtime.tick` every 60s and `notify.dispatch.dispatch_pending` every 10s, each against a
 fresh `Session` (never one long-lived session for the process's lifetime).
 
 Run by the `api` compose service via `ai_trading.api.main:app` (`main.py` re-exports this exact
@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.api import (
     alert_strategies,
     alerts,
@@ -46,7 +47,6 @@ from ai_trading.api import (
     watchlists,
 )
 from ai_trading.db.engine import make_engine, make_health_check_engine, make_session_factory, session_scope
-from ai_trading.engine.tick import tick
 from ai_trading.notify.channel import Channel
 from ai_trading.notify.dispatch import dispatch_pending
 from ai_trading.notify.slack import SlackChannel

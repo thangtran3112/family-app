@@ -9,10 +9,10 @@ from ai_trading_common.registry import DataSources
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.core.calendar import ET, session
 from ai_trading.data.backfill import backfill
 from ai_trading.db.models import WatchlistItem
-from ai_trading.engine.tick import tick
 from ai_trading.jobs import JobResult
 from ai_trading.jobs.clock import JobClock
 

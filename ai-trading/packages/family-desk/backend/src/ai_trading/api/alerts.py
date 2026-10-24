@@ -149,7 +149,7 @@ def delivery_log(
     mapped = case(
         (Delivery.status == "sent", "delivered"),
         (Delivery.status == "skipped_quiet_hours", "held_quiet_hours"),
-        (Delivery.status == "skipped_preferences", "no_channel"),
+        (Delivery.status.in_(("skipped_preferences", "no_channel")), "no_channel"),
         (and_(Delivery.status == "pending", Delivery.channel.not_in(wired)), "no_channel"),
         (Delivery.status == "failed", "failed"),
     )

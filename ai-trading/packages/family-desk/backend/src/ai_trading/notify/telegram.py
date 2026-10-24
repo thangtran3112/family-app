@@ -30,13 +30,15 @@ class TelegramChannel:
         self._chat_id = chat_id
         self._post = post
 
-    def send(self, *, title: str, body: str, severity: str) -> None:
+    def send(self, *, title: str, body: str, severity: str, chat_id: str | None = None) -> None:
+        """`chat_id` sends to that chat instead of the configured one (a user's own linked chat)."""
+        target = chat_id or self._chat_id
         url = f"{_API_BASE}/bot{self._bot_token}/sendMessage"
-        payload = {"chat_id": self._chat_id, "text": f"[{severity.upper()}] {title}\n\n{body}"}
+        payload = {"chat_id": target, "text": f"[{severity.upper()}] {title}\n\n{body}"}
         try:
             response = self._post(url, payload)
         except requests.RequestException as exc:
-            raise ChannelError(redact(str(exc), self._bot_token, self._chat_id)) from exc
+            raise ChannelError(redact(str(exc), self._bot_token, target)) from exc
         if not 200 <= response.status_code < 300:
             message = f"telegram responded {response.status_code}: {response.text}"
-            raise ChannelError(redact(message, self._bot_token, self._chat_id))
+            raise ChannelError(redact(message, self._bot_token, target))
