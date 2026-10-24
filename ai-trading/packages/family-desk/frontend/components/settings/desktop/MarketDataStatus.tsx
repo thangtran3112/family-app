@@ -1,17 +1,10 @@
 "use client";
 
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
-import type { DeskStatus } from "@/lib/api/schemas";
 import { alertsBanner, marketDataLine } from "@/lib/desk/freshness";
+import { gatewayLine } from "@/lib/desk/gateway";
 import { slotsText } from "@/lib/watchlists/slots";
 import styles from "./settingsDesktop.module.css";
-
-const GATEWAY_LINE: Record<DeskStatus["gateway"], string> = {
-  not_configured: "IBKR gateway: not connected",
-  connected: "IBKR gateway: connected",
-  reconnecting: "IBKR gateway: reconnecting…",
-  down: "IBKR gateway: unavailable",
-};
 
 /** Plain-words data sources, read from the shell's shared `/status` (02m §a3.8). */
 export function MarketDataStatus() {
@@ -22,7 +15,7 @@ export function MarketDataStatus() {
   const lines = [
     marketDataLine("Quotes", status.quotes),
     marketDataLine("Scans", status.scans),
-    GATEWAY_LINE[status.gateway],
+    gatewayLine(status.gateway),
     `Quote slots: ${slotsText(status.streaming_slots)}`,
     alertsBanner(status.alerts.state) ?? "Alerts are running",
   ];
