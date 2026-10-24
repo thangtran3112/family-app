@@ -11,7 +11,7 @@ from seeded_source import data_sources
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai_trading.api import futures, market_data, quotes, strategies
+from ai_trading.api import quotes
 from ai_trading.api.main import app
 from ai_trading.db.engine import make_health_check_engine
 
@@ -104,27 +104,18 @@ async def _observed_quote_events(*args, **kwargs):
 def install_e2e_runtime():
     """Install process-local test overrides and return restoration callback."""
     global _production_quote_events
-    original = {
-        "lifespan": app.router.lifespan_context,
-        "quote_events": quotes.quote_events,
-        "quotes_datetime": quotes.datetime,
-        "strategies_datetime": strategies.datetime,
-        "market_data_pd": market_data.pd,
-        "futures_date": futures.date,
-    }
-    _production_quote_events = original["quote_events"]
-    freeze_api_clocks()
+    original_lifespan = app.router.lifespan_context
+    original_quote_events = quotes.quote_events
+    _production_quote_events = original_quote_events
+    restore_clocks = freeze_api_clocks()
     quotes.quote_events = _observed_quote_events
     app.router.lifespan_context = _e2e_lifespan
 
     def restore():
         global _production_quote_events
-        _production_quote_events = original["quote_events"]
-        quotes.quote_events = original["quote_events"]
-        quotes.datetime = original["quotes_datetime"]
-        strategies.datetime = original["strategies_datetime"]
-        market_data.pd = original["market_data_pd"]
-        futures.date = original["futures_date"]
-        app.router.lifespan_context = original["lifespan"]
+        _production_quote_events = original_quote_events
+        quotes.quote_events = original_quote_events
+        restore_clocks()
+        app.router.lifespan_context = original_lifespan
 
     return restore

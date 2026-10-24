@@ -1,6 +1,6 @@
 # 02l: Family Desk desktop-first MVP (Technical lane)
 
-Status: owner directive, planned 2026-10-24 (plan merged, PR #159). Mocks: Run 0 and Runs 1–2 (D1–D4) done and owner-approved; Runs 3–5 (D5–D10) built, in verification; Run 6 (D11, D12) running (see the run table in §d2). Real-data build waits on the Gateway probe. Desk lane only. This plan supersedes the mobile-first order of the R3 persona-split
+Status: owner directive, planned 2026-10-24 (plan merged, PR #159). Mocks: all 13 desktop boards built (Runs 0–6, §d2); D1–D4 owner-approved. The real-data build (§e) is implemented, released, and deployed ([02m](02m-desk-mvp-implementation-spec.md), phase PR #163, release #164); the IBKR slot and the live-data acceptance (§e5) wait on the Gateway probe, and the next roadmap step (§f step 3, plan `02n`) is in flight. Desk lane only. This plan supersedes the mobile-first order of the R3 persona-split
 plan (`paper-persona-split-plan.md`, local Hermes run `desk-activation-20261020`). It keeps that plan's lane taxonomy (§a), board
 specs (§b2), technical-lane specs (§c1–c5), and schema outline (§e, built as [02k](02k-desk-strategy-config-contracts.md)).
 
@@ -265,10 +265,10 @@ D11, and the two D12 boards).
 | 0 | Sonnet (no Paper) | real-data snapshot (§c1) | Alpaca keys in family-config | Done |
 | 1 | Sonnet | D1 Shell & states, D2 Dashboard | Run 0 | Done, owner-approved |
 | 2 | Sonnet | D3 Chart workspace, D4 Technical summary | Run 1 | Done, owner-approved |
-| 3 | Sonnet | D5 Screener, D10 Alert setup | Run 2 (chart group) | Built, in verification |
-| 4 | Haiku | D6 Filter editor, D7 Watchlists | Run 1 | Built, in verification |
-| 5 | Haiku | D8 Strategy library, D9 Alerts | Run 1 | Built, in verification |
-| 6 | Haiku | D11 Settings & More, D12 × 2 (duplicates) | Runs 2, 1 | Running |
+| 3 | Sonnet | D5 Screener, D10 Alert setup | Run 2 (chart group) | Built and verified |
+| 4 | Haiku | D6 Filter editor, D7 Watchlists | Run 1 | Built and verified |
+| 5 | Haiku | D8 Strategy library, D9 Alerts | Run 1 | Built and verified |
+| 6 | Haiku | D11 Settings & More, D12 × 2 (duplicates) | Runs 2, 1 | Built and verified |
 
 - One Paper writer at a time: runs are sequential, never parallel, because they write to the same file.
 - **Owner gate after Run 2:** the shell and chart are the template for everything else. Continue only after the owner (and the
@@ -284,7 +284,7 @@ then the same screens ship with live data. Broker and order flags stay off throu
 
 ### e1. Real-data plumbing (02j registry + IBKR Gateway)
 
-- **IBKR Gateway probe, Mon 2026-10-26 09:30 ET**, with the data user (02e); the owner approves its sign-in on the phone. Monday morning order: retry the data user's Reporting access grant first (open since IBKR Account Management was down on 2026-10-24), then the data-user sign-in for the probe, then move Flex to the data user ([STATUS.md](../STATUS.md) 2026-10-24 IBKR rows). The data account is the default surface for agents; the main account stays owner-gated. The probe decides 02c Phase 2b: `providers/ibkr.py` through
+- **IBKR Gateway probe, Mon 2026-10-26 09:30 ET**, with the data user (02e); the owner approves its sign-in on the phone. Monday morning order: retry the data user's Reporting access grant first (open since IBKR Account Management was down on 2026-10-24), then the data-user sign-in for the probe, then move Flex to the data user, remove the main-account Flex setup, and close the spike with Task 0.6 ([STATUS.md](../STATUS.md) Open Questions, "Pending IBKR sequence"; the owner-gated cron `caae82600785` owns it). The data account is the default surface for agents; the main account stays owner-gated. The probe decides 02c Phase 2b: `providers/ibkr.py` through
   `ib_async`, live 1-minute bars, and streaming quotes behind the 02j registry, so no caller changes when IBKR joins the chain.
 - **Who serves what:**
   - IBKR streams quotes and live bars for symbols she is looking at: her watchlists and open charts, allocated by the existing
@@ -355,9 +355,8 @@ true on the last closed bar votes its catalog `bias` (bullish = buy, bearish = s
 ## f. Roadmap order
 
 1. **Desktop Technical MVP mocks** (this plan, §d): Runs 0–6.
-2. **Real-data implementation** (§e): IBKR probe outcome, engine follow-ups, alert runtime, desktop frontend; she practises on
-   the Paper boards meanwhile, then the screens ship live.
-3. **Desktop Fundamental views** for Toby at 1440: the R3 F-set re-laid as desktop boards (F11 timeline was already 1440).
+2. **Real-data implementation** (§e): engine, services, alert runtime, and desktop frontend are done, released, and deployed (02m; STATUS 5F). Still open: the IBKR slot after the probe (the flag-gated Gateway client and the desktop Playwright e2e are in flight, STATUS 5G) and the live-data acceptance (§e5).
+3. **Desktop Fundamental views** for Toby at 1440: the R3 F-set re-laid as desktop boards (F11 timeline was already 1440). **In flight:** plan `02n` (STATUS 5G).
 4. **Mobile Fundamental** views (R3 F1–F12).
 5. **Deferred:** the B8 re-chrome of the mobile baseline, backtesting, and automated order support (each needs its own approval).
 

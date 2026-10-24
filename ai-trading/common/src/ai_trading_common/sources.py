@@ -23,6 +23,7 @@ from ai_trading_common.types import (
     EarningsEvent,
     EarningsResult,
     Fact,
+    GatewayStatus,
     Mover,
     NewsItem,
     Observation,
@@ -92,3 +93,10 @@ class UniverseSource(Protocol):
 @runtime_checkable
 class QuoteSource(Protocol):
     def latest(self, symbols: Sequence[str], *, now: pd.Timestamp) -> list[Quote]: ...
+
+
+@runtime_checkable
+class GatewayStatusSource(Protocol):
+    """A provider that holds a live gateway session and can say how it is doing."""
+
+    def gateway_status(self) -> GatewayStatus: ...

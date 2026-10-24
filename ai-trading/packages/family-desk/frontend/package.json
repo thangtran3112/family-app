@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"lib/**/*.test.ts\" static-server.test.mjs",
     "test:export": "node --test export-layout.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "bash ../backend/scripts/e2e.sh",
+    "test:e2e:desktop": "bash ../backend/scripts/e2e.sh --browser -- --project=desktop-1440 --project=desktop-1180",
+    "test:e2e:playwright": "playwright test"
   },
   "dependencies": {
     "@ai-trading/contracts": "link:../contracts",
