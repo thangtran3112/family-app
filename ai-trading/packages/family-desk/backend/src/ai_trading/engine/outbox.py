@@ -65,6 +65,8 @@ def record_signal(
         return False
 
     title, body = _render(symbol, candidate)
+    if candidate.message is not None:
+        title = candidate.message  # the strategy's own text leads; the evidence stays in the body
     alert_row = Alert(
         user_id=owner_user_id,
         signal_id=signal_id,
