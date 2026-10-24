@@ -191,8 +191,8 @@ def test_markers_futures_root_path_and_auth_and_flag(client, monkeypatch):
     assert client.get("/api/desk/charts/ABC!/markers", headers=auth_headers()).status_code == 422
     monkeypatch.delenv(STUB, raising=False)
     off = client.get("/api/desk/charts/NVDA/markers", headers=auth_headers())
-    assert off.status_code == 503
-    assert off.json()["detail"] == "not available yet"
+    assert off.status_code == 200  # the real service: nothing stored for NVDA here, so nothing to mark
+    assert off.json() == {"patterns": [], "fires": []}
 
 
 def test_signals_stub_is_newest_first_in_the_signal_shape(client, monkeypatch):
