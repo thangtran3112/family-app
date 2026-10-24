@@ -159,7 +159,7 @@ def test_status_walks_not_configured_down_connected_reconnecting():
     clock.sleep(RETRY_AFTER_S + 1)
     source.latest(["AAPL"], now=NOW)
     status = source.gateway_status()
-    assert (status.state, status.quality, status.as_of) == ("connected", "realtime", TICK_AT)
+    assert (status.state, status.quality, status.as_of, status.lines_used) == ("connected", "realtime", TICK_AT, 1)
 
     gateway.drop_all()
     assert source.gateway_status().state == "reconnecting"

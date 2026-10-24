@@ -264,7 +264,7 @@ class IbkrSource:
             return GatewayStatus("not_configured", None, None)
         conn = self._conn
         if conn is not None and conn.is_connected():
-            return GatewayStatus("connected", quality, as_of)
+            return GatewayStatus("connected", quality, as_of, len(self._subscribed))
         return GatewayStatus("reconnecting" if self._ever_connected else "down", quality, as_of)
 
     def close(self) -> None:
