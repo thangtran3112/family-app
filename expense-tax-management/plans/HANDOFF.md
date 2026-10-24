@@ -15,14 +15,15 @@ plan remains the source of truth for scope and acceptance criteria.
 
 ## Repository State
 
+> Current state as of 2026-10-24. The sections below record the handoff at Task 3; the Task 4-7 sections are the historical execution record. Canonical status is in `plans/PLAN.md`.
+
 - Repository: `https://github.com/thangtran3112/family-app.git`
 - Branch: `dev`
 - Package root: `expense-tax-management/`
-- Completed migration tasks: 1, 2, and 3
-- Next task: Task 4, Port Workflows and Activities
-- Task 4 design: approved, not implemented
-- Deployment or production mutation performed: none
-- Python worker removal performed: none
+- Completed migration tasks: 1-7. Stage C Python removal released 2026-10-07 (#36, `main` `f20c451`).
+- Next task: none in the runtime migration. Open operations are listed in `plans/PLAN.md` (Open Operations).
+- Operator cutover: dispatch generation 2 on 2026-10-06, routing to the TypeScript worker.
+- Python worker: removed from code, CI, and production.
 
 For a fresh clone on the new machine:
 
@@ -266,7 +267,7 @@ Python parity references:
 
 ## Remaining Plan
 
-Complete Tasks 4 through 7 in the authoritative plan:
+Historical: Tasks 4 through 7 are complete (see Repository State). The list below was the plan at Task 3:
 
 1. Port workflows and activities.
 2. Add worker image and CI.
@@ -320,9 +321,9 @@ legacy constants, or parity logic changes.
 
 ## Known Notes
 
-- `services/workflow-worker/src/worker.ts` still passes `activities: {}`.
-  Task 4 must replace this with real injected activities.
-- TypeScript Temporal test environment is not installed yet.
+Historical (Task 3 state). Resolved since: `worker.ts` injects real activities (Task 4).
+
+- Local run of `test/integration/app-domain-task7-dispatch-routing.test.ts` is blocked by the no-host-TCP database rule: the test builds host-TCP PostgreSQL URLs. CI is the verification path (PR #149, `eb79a59`).
 - No `.codegraph/` index exists for this checkout. Use normal repository search
   or initialize codegraph explicitly on the new machine if desired.
 - App API has a pre-existing local enrichment transport schema matching the
@@ -339,3 +340,7 @@ Migration is complete only when all seven tasks in the authoritative plan are
 checked, CI is green, TypeScript dispatch is active, rollback evidence exists,
 and Python worker removal has been verified. Task 3 completion alone is not a
 runtime cutover.
+
+Status (2026-10-24): seven tasks merged; TypeScript dispatch active (generation 2,
+2026-10-06); Python worker removed (2026-10-07). Rollback evidence is not recorded
+in this repo, and the Python worker cannot be restored after Stage C.

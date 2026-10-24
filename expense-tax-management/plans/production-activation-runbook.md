@@ -8,16 +8,20 @@ derived from the cited source file; no flag, env var name, container name, or
 Compose project name is invented. Secrets are referenced only by variable name
 and file path; no secret value is shown anywhere in this document.
 
-Status as of this commit (`plans/PLAN.md`, `plans/ROADMAP.md`):
+Status as of 2026-10-24 (`plans/PLAN.md`, `plans/ROADMAP.md`). The phase
+sections below keep their original procedure; each carries its recorded status:
 
-- Runtime TypeScript Temporal migration: Tasks 1-6 and Task 7 Stage A merged;
-  Task 7 Stage B source merged (`workflow-worker` ships idle in production
-  Compose). Operator cutover (shared Temporal activation, release, `advance`,
-  drain) and Stage C Python removal are **not executed**.
-- Phase 3D-A/3D-B/3D-C merged; all inert in production
-  (`MAILBOX_FEATURE_ENABLED` unset). **Not deployed.**
-- VPS encrypted backup/restore tooling merged; Task 1 Terraform (bucket +
-  identities) **never applied**; no live writer key or VPS install exists yet.
+- Runtime TypeScript Temporal migration: **complete**. Shared Temporal
+  `family-temporal` active (by the 2026-10-05 release). Phase 2 `advance` to
+  generation 2 ran 2026-10-06. Phase 3 Stage C ran 2026-10-07 (#35/#36, `main`
+  `f20c451`); the Python worker is removed and cannot be restored.
+- Phase 4 connected mailbox: **live** since 2026-10-08/09
+  (`MAILBOX_FEATURE_ENABLED=true`, `main` `be7af1e`). Step 9 (Gmail test-account
+  e2e) is **open**.
+- Phase 0 (backup before change) and Phase 5 (restore drill): **not recorded**
+  as executed in this repo. VPS backup activation remains **open**; Task 1
+  Terraform and the writer key were not recorded as applied or created.
+- Credential rotation R.1-R.3: completion **not recorded** in this repo.
 
 Execute phases strictly in order. Each phase's approval gate must be
 explicitly granted by the owner before its mutating steps run.
@@ -64,6 +68,8 @@ explicitly granted by the owner before its mutating steps run.
 
 ### Credential rotation after plan-artifact exposure (do before Phase 1)
 
+**Status:** Phase 1 has run, but completion of R.1-R.3 is not recorded in this repo. Confirm with the owner; treat the rotation as open until then.
+
 Six `main` runs of the Cloudflare workflow (2026-09-11 and 2026-09-12)
 uploaded saved plans as 1-day artifacts on this public repository. Those
 plans contained `TF_VAR_cloudflare_api_token` and the state's `tunnel_token`
@@ -80,6 +86,8 @@ STOP: owner approval required before R.2/R.3 (production traffic path).
 ---
 
 ## 2. Phase 0 — Verified Backup Before Any Change
+
+**Status:** Not recorded as executed in this repo. VPS backup activation remains open (see [ROADMAP.md](ROADMAP.md)).
 
 **Purpose:** Prove a restorable, encrypted copy of every database (including
 `temporal`/`temporal_visibility` once they exist under the shared server) and
@@ -135,6 +143,8 @@ off-VPS `.tar.age` + key until Phase 1 completes.
 
 ## 3. Phase 1 — Shared Temporal Activation + First `dev` → `main` Release
 
+**Status:** Executed. Shared Temporal `family-temporal` active by the 2026-10-05 release; exact step dates are not recorded.
+
 **Purpose:** Move App API/the TypeScript worker onto the shared Temporal
 server before the dispatch-routing cutover, in the order that fails closed
 with zero production impact if anything is wrong.
@@ -170,7 +180,7 @@ afterwards.
 | # | Where | Step |
 |---|---|---|
 | 1.1 | GitHub (PR) | Merge `dev` → `main` (required check green, current with `dev`). Triggers `Expense Tax CI` then `Expense Tax Deploy` (`workflow_run` on CI success, `head_branch == 'main'`). |
-| 1.2 | GitHub Actions UI | Confirm: `build` job succeeds (8 images pushed, incl. `expense-tax-workflow-worker`, `expense-tax-mailbox-broker`); `deploy` job **fails** at `require_shared_temporal` or `is_known_key`. Confirm via VPS `docker ps`/`curl` that the previous release's containers are still running unchanged — `deploy.sh` dies before any `compose pull`/`up`/env-file swap. |
+| 1.2 | GitHub Actions UI | Confirm: `build` job succeeds (seven images pushed, incl. `expense-tax-workflow-worker`, `expense-tax-mailbox-broker`); `deploy` job **fails** at `require_shared_temporal` or `is_known_key`. Confirm via VPS `docker ps`/`curl` that the previous release's containers are still running unchanged — `deploy.sh` dies before any `compose pull`/`up`/env-file swap. |
 | 1.3 | — | **STOP: owner approval required.** Next step stops legacy Temporal; downtime begins here. |
 | 1.4 | VPS | Preserve rollback material per `infrastructure/README.md` §"Shared Temporal Activation" step 1: record the last known-good image tag (`/opt/expense-tax-management/app/deployed-image-tag`), copy the current `docker-compose.yml`/`deploy.sh` into a root-only recovery directory. Keep `temporal`/`temporal_visibility` databases and role `expense_temporal` as-is. |
 | 1.5 | VPS | Create `family_shared` network once; stage `infrastructure/temporal/{docker-compose.yml,dynamicconfig.yaml,bootstrap-namespaces.sh}` into `/opt/family-app/temporal/`; create root-only mode-`0600` `/etc/family-app/temporal.env` with **only** `TEMPORAL_DB_PASSWORD` set to the **existing** `expense_temporal` role password, sourced from Firestore `shared/temporal` `TEMPORAL_DB_PASSWORD` (verify it equals the existing role password before use — never newly generated). |
@@ -197,6 +207,8 @@ window while legacy Temporal is down and the new release completes.
 ---
 
 ## 4. Phase 2 — TypeScript Worker Verification, Advance, Drain
+
+**Status:** Executed 2026-10-06 (dispatch generation 2, `expense-tax-processing`). Stage C followed 2026-10-07; the step 2.5 drain-proof readings are not recorded in this repo.
 
 **Purpose:** Cut new job dispatch over to the TypeScript worker while Python
 drains its own backlog, with no container restart.
@@ -325,7 +337,7 @@ and does not depend on Phase 3 at all.
 | 6 | — | **STOP: owner approval required** before the deploy that flips the flag live. |
 | 7 | GitHub Actions UI | Re-run the latest successful "Expense Tax Deploy" run ("Re-run all jobs") — `deploy.sh` loads the current production profile from Firestore on the VPS, overlays `docker-compose.mailbox.yml` (now present per Prerequisites), runs `mailbox-broker-migrate`, starts `mailbox-broker` + the mailbox-augmented `app-api`/`workflow-worker` env, and `health-check.sh` additionally polls `http://127.0.0.1:8300/health/live`. |
 | 8 | VPS | **3D-B schedule reconcile** (one-time; safe to repeat): `etm_compose run --rm -e MAILBOX_FEATURE_ENABLED=true -e TEMPORAL_HOST=temporal:7233 -e TEMPORAL_NAMESPACE=expense-tax app-api-migrate node dist/temporal/mailbox-schedule-reconcile.js reconcile` (`services/app-api/src/temporal/mailbox-schedule-reconcile.ts` — the `app-api-migrate` service's own environment carries neither `MAILBOX_FEATURE_ENABLED` nor `TEMPORAL_HOST`/`TEMPORAL_NAMESPACE`, so all three must be passed on this one-off `run` invocation). Creates the daily `02:00` Temporal Schedule for every existing active/scan-enabled connection. |
-| 9 | — | **Before enabling for real tenants:** run the Gmail test-account end-to-end verification (`test/e2e/connected-mailbox.e2e.test.ts`, operator-gated, never run in CI) against the production-shaped VPS stack, per `plans/PLAN.md` 3D-C Operator Activation item 3. |
+| 9 | — | **Open.** Before enabling for real tenants beyond the family tenant: run the Gmail test-account end-to-end verification (`test/e2e/connected-mailbox.e2e.test.ts`, operator-gated, never run in CI) against the production-shaped VPS stack, per `plans/PLAN.md` 3D-C Operator Activation item 3. |
 
 **Rollback:** see Rollback Matrix #4.
 
@@ -337,6 +349,8 @@ Temporal swap).
 ---
 
 ## 7. Phase 5 — Restore Drill
+
+**Status:** Not recorded as executed in this repo. The live drill against the real bucket is open (see [ROADMAP.md](ROADMAP.md)).
 
 **Purpose:** Prove the Phase 0 backup (or, if Option A was taken, the first
 live scheduled backup) actually restores, onto disposable infrastructure —
@@ -366,8 +380,8 @@ tooling in this repo).
 | # | Failure point | Rollback |
 |---|---|---|
 | 1 | Shared Temporal activation fails (Phase 1, steps 1.4-1.7) | Stop the shared server first. Restore the saved Expense Compose file, `deploy.sh`, env file, and prior image tag (1.4's recovery directory); restart the old Temporal service against the **same preserved** `temporal`/`temporal_visibility` databases. Verify `default` namespace histories and Python worker polling before resuming dispatch. Never start the legacy server until the shared server is stopped (`infrastructure/README.md`). Application image rollback alone cannot recover a failed shared Temporal server — this manual sequence is required. |
-| 2 | Release deploy fails after state mutation (Phase 1 step 1.9, or Phase 3 step 3.3/3.4) | `deploy.sh`'s own `ERR` trap runs automatically: restores `IMAGE_TAG` to the previous recorded tag (the deploy no longer persists an env file; it reloads the production profile from Firestore on every run), treats `workflow-worker`/`mailbox-broker` as optional-image services (probes `docker manifest inspect`; drops them from the rollback set only if genuinely missing for that tag), re-runs `health-check.sh` with the reduced required-worker list, and verifies running images match the restored tag. **Caveat for Phase 3:** once Stage C's new `docker-compose.yml`/`deploy.sh` are installed on disk, an automatic rollback operates over that same Python-free service set — it cannot restore `ai-worker` even transiently (acceptable only because Phase 2's drain proof is required before Phase 3 starts). |
-| 3 | `advance` regretted (Phase 2) | No reverse command exists (`dispatch-routing.ts` only implements `status`/`advance`). Manual, migration-credentialed SQL is required: `UPDATE app.temporal_dispatch_routing SET generation = generation + 1, temporal_namespace = 'default', task_queue = 'expense-tax-ai-worker', updated_at = now() WHERE singleton = true AND generation = <current>;` — only meaningful **before** Stage C (Phase 3) removes `ai-worker`, and only affects *new* enqueues; jobs already stamped with the post-`advance` target keep that target. Treat as high-risk, operator-typed SQL, not a provided tool. |
+| 2 | Release deploy fails after state mutation (Phase 1 step 1.9, or Phase 3 step 3.3/3.4) | `deploy.sh`'s own `ERR` trap runs automatically: restores `IMAGE_TAG` to the previous recorded tag (the deploy no longer persists an env file; it reloads the production profile from Firestore on every run), treats `workflow-worker`/`mailbox-broker` as optional-image services (probes `docker manifest inspect`; drops them from the rollback set only if genuinely missing for that tag), re-runs `health-check.sh` with the reduced required-worker list, and verifies running images match the restored tag. **Caveat for Phase 3 (in effect since Stage C, 2026-10-07):** the Stage C `docker-compose.yml`/`deploy.sh` are installed, so an automatic rollback operates over that same Python-free service set — it cannot restore `ai-worker` even transiently (acceptable only because Phase 2's drain proof is required before Phase 3 starts). |
+| 3 | `advance` regretted (Phase 2) | No reverse command exists (`dispatch-routing.ts` only implements `status`/`advance`). Manual, migration-credentialed SQL is required: `UPDATE app.temporal_dispatch_routing SET generation = generation + 1, temporal_namespace = 'default', task_queue = 'expense-tax-ai-worker', updated_at = now() WHERE singleton = true AND generation = <current>;` — only meaningful **before** Stage C (Phase 3) removes `ai-worker`, and only affects *new* enqueues; jobs already stamped with the post-`advance` target keep that target. Treat as high-risk, operator-typed SQL, not a provided tool. **Status:** Stage C removed `ai-worker` on 2026-10-07, so this reversal can no longer restore the Python worker; treat it as unavailable. |
 | 4 | Mailbox activation fails (Phase 4) | Set `MAILBOX_FEATURE_ENABLED` to `false` with `printf false \| common/config/family_config.py set expense-tax-management/production MAILBOX_FEATURE_ENABLED`, then re-run the deploy job. `deploy.sh` drops `mailbox-broker` from `APPLICATION_SERVICES` and the base `docker-compose.yml` needs none of the mailbox env/vault DB/Clerk identities — no destructive cleanup of the (now simply unused) vault database or Clerk identities is required. |
 
 ---

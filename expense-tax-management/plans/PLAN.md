@@ -1,15 +1,15 @@
 # Expense Tax Management - Master Plan
 
-> **Status:** Production foundation complete. Release 2026-10-05 (`main` `d7426e5`, expense only) is deployed: Phases 3B, 3C, 3D-A/B/C (3D inert, `MAILBOX_FEATURE_ENABLED=false`), runtime migration Task 7 Stage A/B with shared Temporal active, and family-config runtime env (Firestore `family-config`, `common/config/family_config.py`). Runtime migration is complete: generation 2 routes all jobs to the TypeScript worker (2026-10-06), and Stage C removed the Python worker (2026-10-07, `main` `f20c451`). Web session wiring and first-upload fixes are live (#31, #33). Remaining: 3D operator activation and VPS backup tooling activation.
-> **Last updated:** 2026-10-07
+> **Status:** Production foundation complete. Release 2026-10-05 (`main` `d7426e5`, expense only) is deployed: Phases 3B, 3C, 3D-A/B/C, runtime migration Task 7 Stage A/B with shared Temporal active, and family-config runtime env (Firestore `family-config`, `common/config/family_config.py`). Runtime migration is complete: generation 2 routes all jobs to the TypeScript `workflow-worker` (2026-10-06), and Stage C removed the Python worker (2026-10-07, `main` `f20c451`). Connected mailbox (Phase 3D/4) is live since 2026-10-08/09 with `MAILBOX_FEATURE_ENABLED=true`. Incomplete Capture OCR review Phases 1-6 are merged to `dev` (#139-#144), not recorded as released to `main`. Open items are listed under Open Operations.
+> **Last updated:** 2026-10-24
 > **Source of truth:** This file tracks phase state. Completed implementation details were removed after verification and remain available in git history.
 
 ## Handoff
 
 - Runtime migration complete: Tasks 1-7 merged (#12, #14, #35); operator cutover done 2026-10-06 (generation 2); Stage C Python removal released 2026-10-07 (#36, `main` `f20c451`).
-- Phase 3D-A merged (#15), Phase 3D-B merged (#16), Phase 3D-C merged (#17). All three remain undeployed and inert in production (`MAILBOX_FEATURE_ENABLED` unset); The runtime migration that 3D-B/3D-C activation depended on is complete.
+- Phase 3D-A/B/C merged (#15, #16, #17), released inert on 2026-10-05, and live since 2026-10-08/09 with `MAILBOX_FEATURE_ENABLED=true` (`main` `be7af1e`). The runtime migration Task 7 cutover that 3D-B/3D-C depended on is complete.
+- Incomplete Capture OCR review: Phases 1-6 merged to `dev` (#139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`). Task 7 CI isolation fix merged (#149, `eb79a59`).
 - VPS encrypted backup/restore tooling merged (#13); production activation (bucket/IAM provisioning, first real backup, operator restore rehearsal) is operator-only and pending.
-- Execute Phase 3D-A, Phase 3D-B, then Phase 3D-C only after Phase 3C completes.
 - Work on `feature/toby` from current `origin/dev`; create a separate worktree only when explicitly requested.
 - Merge only through a pull request to protected `dev`; required quality CI must pass. Integration CI is advisory and must be reported when red.
 - `main` remains production-only. Merges to `dev` never deploy production.
@@ -36,11 +36,12 @@ Office Web ------/                |
                                   +--> Temporal TypeScript client
                                              |
                                              v
-                                  Python Temporal worker --> signed storage adapter
-                                                              (local now; GCS pending)
-                                             |
+                                  TypeScript workflow-worker (shared Temporal,
+                                  namespace expense-tax) --> signed storage adapter
+                                             |                 (local now; GCS pending)
                                              +--> App API callbacks
                                              +--> Foundry internal API
+                                             +--> Mailbox broker (VPS container) --> Gmail API
 
 Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
                                   |
@@ -50,8 +51,8 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 
 - App API owns all customer-domain persistence.
 - Foundry owns provider catalog, routing, quotas, reservations, and telemetry.
-- Python owns durable workflows and data processing, never App or Foundry database writes.
-- Zod contracts are canonical; generated TypeScript/Python artifacts are read-only.
+- TypeScript Temporal workers (`services/workflow-worker`) own durable workflows and data processing, never App or Foundry database writes. The Python worker is removed from code, CI, and production.
+- Zod contracts are canonical; generated artifacts are read-only.
 - `expense-service/` and `frontend/web/` are transitional legacy surfaces and remain untouched.
 
 ## Completed Phases
@@ -62,6 +63,9 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 - **Phase 1C - Gateway hardening:** Cloudflare free-tier Tunnel/DNS, explicit host/path ingress, loopback-only origins, bounded application rate limits/body limits, security headers, and fail-closed route checks complete.
 - **Phase 1D - Protected development:** `dev` is default and protected; `feature/* -> dev` PRs require `Contracts, services, workers, frontends`; integration is advisory; production deployment remains `main`-only.
 - **Phase 3B - Deduplication:** Scoped provenance, deterministic duplicate evidence, pending-review matches, transactional resolution, Office review, and production deployment complete.
+- **Runtime TypeScript Temporal migration:** Tasks 1-7 merged; generation 2 cutover 2026-10-06; Python worker removed 2026-10-07 (#35/#36, `main` `f20c451`). Rollback cannot restore the Python worker.
+- **Phases 3C and 3D-A/B/C - Auto-tagging and connected mailbox:** released 2026-10-05; mailbox live 2026-10-08/09 (see Remaining Work and the 3D Operator Activation sections).
+- **Incomplete Capture OCR review, Phases 1-6:** merged to `dev` on 2026-10-17/18 (#139-#144). Functional Capture and Office UI; no release to `main` recorded.
 
 ## Remaining Work
 
@@ -70,10 +74,11 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 | Parallel | **TypeScript Temporal worker migration** | Complete: Tasks 1-7 merged (#12, #14, #35); generation 2 cutover 2026-10-06; Stage C released 2026-10-07 (#36, `main` `f20c451`) | [migration plan](sub-plans/runtime-typescript-temporal-migration.md) / [historical handoff](HANDOFF.md) |
 | Parallel | **Local Clerk development bootstrap** | Development credentials, M2M checks, local Compose stack (PostgreSQL/Temporal/both workers), and a reproducible dual-generation worker smoke complete; local frontend sign-in and local Clerk webhook remain owner-action-required | [sub-plan](sub-plans/local-clerk-development-bootstrap.md) |
 | Parallel | **VPS encrypted backup and restore tooling** | Merged (#13); production activation (bucket/IAM provisioning, first backup, operator restore rehearsal) pending | [plan](sub-plans/vps-backup-and-restore.md) |
-| 1 | **3C - Auto-tagging and categorization** | Implemented on `dev` (commits `a4ae60b`..`14bd9df`; PostgreSQL evidence 2026-09-19); not deployed | [spec](../../docs/superpowers/specs/2026-09-12-phase-3c-auto-tagging-design.md) / [implementation plan](../../docs/superpowers/plans/2026-09-12-phase-3c-auto-tagging.md) |
-| 2 | **3D-A - Mailbox broker and connection lifecycle** | Merged (#15); not deployed; operator activation pending | [shared spec](../../docs/superpowers/specs/2026-09-12-phase-3d-connected-mailbox-design.md) / [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-a-mailbox-broker.md) |
-| 3 | **3D-B - Mailbox discovery and review** | Merged (#16); not deployed; production use additionally requires the runtime migration Task 7 operator cutover since 3D workflows run only on the TypeScript worker | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-b-mailbox-discovery.md) |
-| 4 | **3D-C - Mailbox ingestion and provenance** | Merged (#17); not deployed; production use additionally requires runtime migration Task 7 cutover and 3D-A activation | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-c-mailbox-ingestion.md) |
+| 1 | **3C - Auto-tagging and categorization** | Deployed in the 2026-10-05 release (`main` `d7426e5`; `dev` commits `a4ae60b`..`14bd9df`) | [spec](../../docs/superpowers/specs/2026-09-12-phase-3c-auto-tagging-design.md) / [implementation plan](../../docs/superpowers/plans/2026-09-12-phase-3c-auto-tagging.md) |
+| 2 | **3D-A - Mailbox broker and connection lifecycle** | Merged (#15); deployed inert 2026-10-05; live since 2026-10-08/09 (`MAILBOX_FEATURE_ENABLED=true`, `main` `be7af1e`) | [shared spec](../../docs/superpowers/specs/2026-09-12-phase-3d-connected-mailbox-design.md) / [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-a-mailbox-broker.md) |
+| 3 | **3D-B - Mailbox discovery and review** | Merged (#16); live since 2026-10-08/09; daily 02:00 scan schedule running | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-b-mailbox-discovery.md) |
+| 4 | **3D-C - Mailbox ingestion and provenance** | Merged (#17); live since 2026-10-08/09; Gmail test-account e2e still open (see 3D-C Operator Activation) | [plan](../../docs/superpowers/plans/2026-09-12-phase-3d-c-mailbox-ingestion.md) |
+| Parallel | **Incomplete Capture OCR review, Phases 1-6** | Merged to `dev`: #139 `4cc5204`, #140 `b17b974`, #141 `2c1c8e2`, #142 `676bd7c`, #143 `ea1c605`, #144 `fd0db42`; Task 7 CI isolation fix #149 `eb79a59`. Not released to `main` | Commit and PR history (no separate plan document in repo) |
 | Later | **6A/6B/6C - SQL, semantic, and AI search** | Deferred; replan before execution | `plans/sub-plans/phase-6*.md` |
 | Later | **9A/9B/9C - Graph foundation, ingestion, and search** | Deferred; replan before execution | `plans/sub-plans/phase-9*.md` |
 | Later | **12A/12B/12C - Mobile application** | Deferred; framework decision pending | `plans/sub-plans/phase-12*.md` |
@@ -85,12 +90,12 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 3. Phase 3D-A creates mailbox migration `018` and a VPS-container mailbox broker in the Expense production Compose, with a dedicated PostgreSQL token-vault database/roles.
 4. Phase 3D-B creates discovery migration `019` and opaque Temporal discovery orchestration on the TypeScript workflow worker.
 5. Phase 3D-C creates ingestion migration `020` and direct broker-to-App materialization.
-6. 3D-A source may merge to `dev` once Phase 3C is in; production activation of 3D-B/C requires runtime migration Task 7 cutover (`sub-plans/runtime-typescript-temporal-migration.md`), since 3D workflows run only on the TypeScript worker.
-7. Production rollout for Phase 3C/3D requires separate release planning and explicit deployment approval.
+6. Done: the runtime migration Task 7 cutover (`sub-plans/runtime-typescript-temporal-migration.md`, generation 2 on 2026-10-06) preceded 3D activation, since 3D workflows run only on the TypeScript worker.
+7. Done: Phase 3C/3D released 2026-10-05; mailbox activated 2026-10-08/09.
 
-### 3D-A Operator Activation (post-merge, pre-production)
+### 3D-A Operator Activation (completed 2026-10-08/09)
 
-3D-A source is feature-complete and phase-verified on `dev` (pending merge) but the mailbox feature stays fully inert in production (`MAILBOX_FEATURE_ENABLED` unset/false) until an operator explicitly completes every item below, in order:
+The mailbox feature is live for the owner's family tenant (`MAILBOX_FEATURE_ENABLED=true`). The list below is the activation record in order. `expense-tax-management/AGENTS.md` (Current Production) records the resulting state: Clerk M2M machines, the Gmail OAuth client, and the enabled flag. This repo does not log vault bootstrap or the Cloudflare apply as separate records:
 
 1. **Vault bootstrap** — run `deploy/production/bootstrap-mailbox-vault-db.sh` against the production Postgres cluster to create the token-vault database and its separate runtime (DML-only) / migration (DDL-only) roles. Operator-only; never run by normal deploy.
 2. **Clerk mailbox identities** — provision the three real machine identities (`app-api-mailbox`, `workflow-worker-mailbox`, `mailbox-broker-app`) in production Clerk, then store their audience, subjects, and machine secret keys in the Firestore production profile (`common/config/family_config.py set expense-tax-management/production <NAME>`).
@@ -98,19 +103,19 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 4. **Production profile with `MAILBOX_FEATURE_ENABLED=true`** — set every remaining mailbox key in `expense-tax-management/production` (vault keys, broker URLs, vault database URLs, and `MAILBOX_SERVICE_TOKEN_*`/`MAILBOX_SERVICE_JWKS_URL` equal to the Clerk values), then set `MAILBOX_FEATURE_ENABLED` to `true` last. `deploy.sh` (`validate_required_values`) refuses an enabled profile with missing or mismatched values.
 5. **Cloudflare Terraform apply** — run `terraform plan`/`apply` in `infrastructure/cloudflare/expense-tax/` (via `.github/workflows/expense-tax-cloudflare.yml`'s production-environment, manually-dispatched job) to create the `expense-mailbox.tobytran.dev` DNS record and Tunnel ingress rule for `/oauth/google/callback`.
 
-3D-B/3D-C source may also merge to `dev` once implemented, but their workflows' production activation additionally depends on runtime migration Task 7 cutover (3D workflows run only on the TypeScript worker) — independent of, and in addition to, the 3D-A list above.
+The runtime migration Task 7 cutover (2026-10-06) happened before this activation, as the 3D workflows require.
 
-### 3D-B Operator Activation (additional, after the 3D-A list above)
+### 3D-B Operator Activation (completed 2026-10-08/09; the owner's Gmail has a daily 02:00 scan schedule)
 
 3D-B's scheduled scans do not start themselves: nothing calls `ensureMailboxSchedule` automatically (by design — reconciliation over import-time creation). After `MAILBOX_FEATURE_ENABLED` is turned on and runtime migration Task 7 cutover has happened, an operator must run `node dist/temporal/mailbox-schedule-reconcile.js reconcile` (`services/app-api/src/temporal/mailbox-schedule-reconcile.ts`) once to create the daily `02:00` Temporal Schedule for every existing active/scan-enabled connection; re-running it later is safe (idempotent) and is how a newly-connected mailbox's schedule gets created going forward until a startup hook replaces this manual step.
 
-### 3D-C Operator Activation (additional, after the 3D-A/3D-B lists above)
+### 3D-C Operator Activation (items 1-2 done; item 3 open)
 
-3D-C source is feature-complete and phase-verified against real PostgreSQL (`test/integration/app-domain-3d-c-mailbox.test.ts`, gated `PHASE_3D_C_T7_INTEGRATION=1`, wired into the zero-skip CI chain), but production ingestion stays inert until, in addition to the 3D-A/3D-B activation steps above:
+3D-C source is feature-complete and phase-verified against real PostgreSQL (`test/integration/app-domain-3d-c-mailbox.test.ts`, gated `PHASE_3D_C_T7_INTEGRATION=1`, wired into the zero-skip CI chain). Production ingestion went live with the 3D-A/3D-B activation steps above:
 
-1. **Runtime migration Task 7 cutover** has happened — `MailboxMaterializeWorkflow`/`MailboxOcrReceiptWorkflow` run only on the TypeScript `services/workflow-worker`, never the legacy Python worker.
-2. **3D-A activation is complete** (real Clerk mailbox identities, token-vault bootstrap, Google OAuth client, `MAILBOX_FEATURE_ENABLED=true` secret bundle) and **3D-B's schedule reconcile** has run — 3D-C's `ingest` approval is the consumer of a `queued` candidate that only an active, scheduled scan ever produces.
-3. **Real Gmail test-account verification** (plan Task 7 Step 6, `test/e2e/connected-mailbox.e2e.test.ts`) — operator-gated, run against a provisioned test Google account and the production-shaped VPS Compose stack before enabling the feature for real tenants; never run in CI.
+1. **Done:** runtime migration Task 7 cutover (2026-10-06). `MailboxMaterializeWorkflow`/`MailboxOcrReceiptWorkflow` run only on the TypeScript `services/workflow-worker`.
+2. **Done:** 3D-A activation (2026-10-08/09) and 3D-B's schedule. The first real Gmail receipt became an expense on 2026-10-10.
+3. **Open:** real Gmail test-account verification (plan Task 7 Step 6, `test/e2e/connected-mailbox.e2e.test.ts`) — operator-gated, never run in CI. The 2026-10-10 real run is recorded only through the resolve step. Complete this before enabling `connected_mailbox_scan` for any tenant other than the family tenant.
 
 ## Remaining-Phase Constraints
 
@@ -128,11 +133,27 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 
 - Public edge: Cloudflare free-tier Tunnel and DNS.
 - Origins: VPS application ports bound to loopback only.
-- Services: App API, Foundry Service, AI worker, Temporal, Capture Web, Office Web, and Foundry Web deployed through `.github/workflows/expense-tax-deploy.yml`.
+- Services: App API, Foundry Service, TypeScript `workflow-worker`, mailbox broker (VPS container), shared Temporal (`family-temporal`), Capture Web, Office Web, and Foundry Web deployed through `.github/workflows/expense-tax-deploy.yml`.
 - Authentication: Clerk user, organization, platform, and M2M boundaries verified; production smoke passed 13/13.
 - Webhook: exact supported Clerk events active; signed delivery and replay verified.
 - Secret handling: one non-destroyed production Secret Manager bundle version; no repository secrets.
 - Infrastructure status and deferred operations: [ROADMAP.md](ROADMAP.md).
+
+## Open Operations
+
+Not done. Do not mark these complete without recorded evidence:
+
+- VPS encrypted backup activation: Task 1 Terraform, writer key, and `bootstrap.sh --only backup` (see [ROADMAP.md](ROADMAP.md)).
+- Task 8 recovery operations: the live recovery drill (`sub-plans/vps-backup-and-restore.md`, Task 8) has not run against real infrastructure.
+- Authenticated browser acceptance: no acceptance record in this repo.
+- Expense release or deployment of the Incomplete Capture OCR work (#139-#144, #149): merged to `dev`, not released to `main`.
+- Cloudflare credential rotation after plan-artifact exposure (`production-activation-runbook.md` §1, R.1-R.3): completion is not recorded in this repo.
+- Gmail test-account e2e verification (3D-C Operator Activation, item 3).
+- Deferred, not started: Phases 6A-6C (SQL, semantic, and AI search), 9A-9C (graph), 12A-12C (mobile application). Replan before execution.
+
+## Known Local Limitations
+
+- `test/integration/app-domain-task7-dispatch-routing.test.ts` builds host-TCP PostgreSQL URLs (`createAppDatabase` with a loopback host and published port). CI passes with the PR #149 isolation fix (`eb79a59`), but local execution is blocked by the no-host-TCP database rule. Verify this test in CI until it stops using host TCP.
 
 ## Durable Boundaries
 
