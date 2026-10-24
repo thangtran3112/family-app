@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "Near prior close",
+  "watch": {
+    "universe": {
+      "symbols": [
+        "AAPL",
+        "BRK.B",
+        "/ES"
+      ]
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "within_pct",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "level": "prior_day_close"
+    },
+    "pct": 0.5
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

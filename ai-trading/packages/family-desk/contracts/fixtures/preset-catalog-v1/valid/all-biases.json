@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "bias-bullish",
+      "file": "filters/gap-up.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Gap up",
+      "summary": "Stocks gapping up through the prior day high."
+    },
+    {
+      "id": "bias-bearish",
+      "file": "filters/gap-down.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bearish",
+      "label": "Gap down",
+      "summary": "Stocks gapping down through the prior day low."
+    },
+    {
+      "id": "bias-neutral",
+      "file": "filters/inside-day.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "neutral",
+      "label": "Inside day",
+      "summary": "Trades inside the prior day range."
+    }
+  ]
+}

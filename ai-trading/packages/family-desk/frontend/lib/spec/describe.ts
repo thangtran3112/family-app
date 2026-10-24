@@ -33,6 +33,15 @@ function describeOperand(operand: Operand): string {
   return name;
 }
 
+const withArticle = (phrase: string) => `${/^[aeiou]/.test(phrase) ? "an" : "a"} ${phrase}`;
+
+function describePattern(condition: Extract<Condition, { op: "pattern" }>): string {
+  const trend = condition.trend === "after_downtrend" ? "downtrend" : condition.trend === "after_uptrend" ? "uptrend" : undefined;
+  const after = trend ? ` after ${withArticle(trend)}${condition.trendBars ? ` over ${condition.trendBars} bars` : ""}` : "";
+  const within = condition.withinBars && condition.withinBars > 1 ? ` within the last ${condition.withinBars} bars` : "";
+  return `${withArticle(`${condition.pattern.replaceAll("_", " ")} pattern`)} appears${after}${within}`;
+}
+
 function describeCondition(condition: Condition): string {
   if ("all" in condition) {
     return condition.all.map((item) => {
@@ -43,6 +52,7 @@ function describeCondition(condition: Condition): string {
   if ("any" in condition) return `either ${condition.any.map(describeCondition).join(" or ")}`;
   if ("not" in condition) return `not (${describeCondition(condition.not)})`;
   if (condition.op === "time_between") return `time is between ${condition.start} and ${condition.end}`;
+  if (condition.op === "pattern") return describePattern(condition);
 
   const left = describeOperand(condition.left);
   const right = describeOperand(condition.right);

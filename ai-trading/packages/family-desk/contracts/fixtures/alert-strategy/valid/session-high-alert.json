@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "Session high break",
+  "watch": {
+    "universe": {
+      "watchlist": "Day movers"
+    },
+    "session": "extended",
+    "runOn": "bar_close_1m"
+  },
+  "when": {
+    "op": "crosses_above",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "level": "session_high"
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ],
+      "severity": "info"
+    }
+  }
+}

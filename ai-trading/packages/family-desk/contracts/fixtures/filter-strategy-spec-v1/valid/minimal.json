@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "name": "Minimal",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "value": 10
+    }
+  },
+  "maxResults": 10
+}

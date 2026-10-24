@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "name": "Gap down",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "extended",
+    "runOn": "premarket_0830"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "lte",
+    "left": {
+      "series": "gap_pct"
+    },
+    "right": {
+      "value": -3
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "gap_pct"
+    },
+    "order": "asc"
+  },
+  "maxResults": 50
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "Abnormal volume",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "gte",
+    "left": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "right": {
+      "value": 2.5
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "order": "desc"
+  },
+  "maxResults": 50,
+  "assetTypes": [
+    "stock",
+    "etf",
+    "stock"
+  ]
+}

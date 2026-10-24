@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "name": "Above VWAP on volume",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "all": [
+      {
+        "op": "gt",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "series": "vwap"
+        }
+      },
+      {
+        "op": "gte",
+        "left": {
+          "series": "rvol",
+          "lookbackDays": 10
+        },
+        "right": {
+          "value": 2
+        }
+      }
+    ]
+  },
+  "rank": {
+    "by": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

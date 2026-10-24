@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Evening star",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": { "op": "pattern", "pattern": "evening_star", "trend": "after_uptrend", "trendBars": 5, "withinBars": 1 },
+  "then": {
+    "alert": {
+      "channels": ["inbox"],
+      "severity": "risk",
+      "frequency": "once_per_bar",
+      "message": "{symbol} evening star on the 15m, close {close} at {time}"
+    }
+  }
+}
