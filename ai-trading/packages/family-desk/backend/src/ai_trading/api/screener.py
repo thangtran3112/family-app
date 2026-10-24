@@ -6,7 +6,7 @@ development fixture, removed at the end of 02m §d2 step 3). Spec validation is 
 bad spec gets its `problems` either way.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.api.problems import problems_from_validation_error
-from ai_trading.api.schemas.common import Stamp
 from ai_trading.api.schemas.screener import (
     ScreenerFilterCreate,
     ScreenerFilterDetailOut,
@@ -27,10 +26,9 @@ from ai_trading.api.schemas.screener import (
     ScreenerSession,
     ScreenerUniverseOut,
 )
-from ai_trading.api.stamp import feed_last_ok, make_stamp
+from ai_trading.api.stamp import SCAN_INTERVAL, feed_last_ok, make_stamp, no_run_stamp, run_stamp
 from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1
 from ai_trading.data.universe import MIN_AVG_VOLUME, MIN_PRICE
-from ai_trading.db.models import FilterRun
 from ai_trading.mvp_stub import screener as stub
 from ai_trading.mvp_stub import stub_enabled
 from ai_trading.screener import runner, service
@@ -42,8 +40,6 @@ router = APIRouter(prefix="/api/desk/screener", tags=["screener"], dependencies=
 
 _SEED_EDIT = "Default filters can't be edited · copy it to edit"
 _SEED_DELETE = "Default filters can't be deleted"
-#: The scheduler's scan feed runs every 15 minutes (02m §b3), whatever a filter's own cadence is.
-_SCAN_INTERVAL = timedelta(minutes=15)
 _SAVE_RUN_BUDGET = 5.0  # seconds a save may spend running the filter once so its results are not empty
 
 
@@ -79,23 +75,6 @@ def _view(session: Session, user: AuthedUser, filter_id: int) -> FilterView:
         raise HTTPException(status_code=404, detail="filter not found") from exc
 
 
-def _no_run_stamp() -> Stamp:
-    return Stamp(as_of=None, source=None, quality="unavailable", freshness="unavailable")
-
-
-def _run_stamp(session: Session, run: FilterRun | None, now: datetime) -> Stamp:
-    if run is None:
-        return _no_run_stamp()
-    return make_stamp(
-        quality=run.quality,
-        source=run.source,
-        as_of=run.evaluation_point,
-        interval=_SCAN_INTERVAL,
-        last_ok_at=feed_last_ok(session, "scan"),
-        now=now,
-    )
-
-
 def _list_row(session: Session, view: FilterView, now: datetime) -> dict[str, Any]:
     run = service.last_run(session, view)
     return {
@@ -112,7 +91,7 @@ def _list_row(session: Session, view: FilterView, now: datetime) -> dict[str, An
             "evaluation_point": run.evaluation_point,
             "matches_total": run.matches_total,
             "scanned": run.scanned,
-            "stamp": _run_stamp(session, run, now),
+            "stamp": run_stamp(session, run, now),
         },
     }
 
@@ -127,7 +106,7 @@ def _detail(session: Session, view: FilterView, now: datetime) -> dict[str, Any]
         "version": view.version.version,
         "spec": view.spec,
         "default_spec": default,
-        "stamp": _run_stamp(session, service.last_run(session, view), now),
+        "stamp": run_stamp(session, service.last_run(session, view), now),
     }
 
 
@@ -261,7 +240,7 @@ def get_results(
         "no_data_on_eval_day": 0 if run is None else run.no_data,
         "matches_total": 0 if run is None else run.matches_total,
         "matches_returned": len(rows),
-        "stamp": _run_stamp(session, run, now),
+        "stamp": run_stamp(session, run, now),
         "table_columns": table_columns(spec),
         "matches": [
             {
@@ -308,13 +287,13 @@ def get_universe(session: Session = Depends(get_session)) -> dict[str, Any]:
     counts = service.universe_counts(session)
     now = datetime.now(UTC)
     if counts.as_of is None:
-        stamp = _no_run_stamp()
+        stamp = no_run_stamp()
     else:
         stamp = make_stamp(
             quality=counts.quality,
             source="alpaca",
             as_of=counts.as_of,
-            interval=_SCAN_INTERVAL,
+            interval=SCAN_INTERVAL,
             last_ok_at=feed_last_ok(session, "scan"),
             now=now,
         )

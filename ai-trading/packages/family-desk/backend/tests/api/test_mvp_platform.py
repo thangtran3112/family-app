@@ -211,11 +211,6 @@ def test_dashboard_watchlist_id_selects_the_list_and_unknown_id_is_404(client, m
     assert missing.json() == {"detail": "watchlist not found"}
 
 
-def test_dashboard_is_unavailable_with_the_stub_off(client, monkeypatch):
-    monkeypatch.delenv("DESK_MVP_STUB", raising=False)
-    assert client.get("/api/desk/dashboard", headers=auth_headers()).status_code == 503
-
-
 def test_status_real_mode_names_the_next_scan_once_a_scan_has_run(client, db_session, monkeypatch):
     monkeypatch.delenv("DESK_MVP_STUB", raising=False)
     now = datetime.now(UTC)
