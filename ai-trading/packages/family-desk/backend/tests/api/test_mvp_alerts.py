@@ -450,25 +450,6 @@ def _valid_body() -> dict:
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
-        ("GET", "/api/desk/alert-strategies", None),
-        ("POST", "/api/desk/alert-strategies", _valid_body()),
-        ("GET", "/api/desk/alert-strategies/2", None),
-        ("PUT", "/api/desk/alert-strategies/2", _valid_body()),
-        ("DELETE", "/api/desk/alert-strategies/2", None),
-        ("POST", "/api/desk/alert-strategies/2/pause", {"reason": "user"}),
-        ("POST", "/api/desk/alert-strategies/2/resume", None),
-        ("GET", "/api/desk/alert-strategies/2/fires", None),
-    ],
-)
-def test_stub_off_answers_503_for_every_pure_stub_endpoint(client, real, method, path, body):
-    response = client.request(method, path, json=body, headers=auth_headers())
-
-    assert response.status_code == 503
-
-
-@pytest.mark.parametrize(
-    ("method", "path", "body"),
-    [
         ("GET", "/api/desk/alert-strategies/99", None),
         ("PUT", "/api/desk/alert-strategies/99", _valid_body()),
         ("DELETE", "/api/desk/alert-strategies/99", None),

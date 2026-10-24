@@ -1,5 +1,5 @@
 """02m §a3.6: the strategy library. The catalog is read from files; attach validates for real and stores
-nothing in stub mode (the response is the copy's shape, and 503 with the stub flag off)."""
+nothing in stub mode (the response is the copy's shape). The stored path is `test_library_real.py`."""
 
 from conftest import OTHER_EMAIL, auth_headers
 
@@ -140,13 +140,6 @@ def test_attach_reports_alert_only_when_the_runtime_flag_is_on(client, monkeypat
     body = _attach(client, "hammer", watchlist_id=watchlist_id).json()
 
     assert (body["stage"], body["status"]) == ("alert_only", "active")
-
-
-def test_attach_is_503_with_the_stub_flag_off_once_the_request_is_valid(client, monkeypatch):
-    monkeypatch.delenv("DESK_MVP_STUB", raising=False)
-    watchlist_id = _watchlist(client)
-
-    assert _attach(client, "hammer", watchlist_id=watchlist_id).status_code == 503
 
 
 def test_attach_refuses_filters_and_futures_with_422(client, monkeypatch):

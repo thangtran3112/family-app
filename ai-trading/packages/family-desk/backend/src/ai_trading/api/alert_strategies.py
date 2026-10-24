@@ -1,15 +1,18 @@
-"""`/api/desk/alert-strategies*` (02m §a3.7). Validation is real in every mode: pydantic, then the engine gate
-(`core.evaluate.check`). `POST .../validate` is the one endpoint that answers without the stub: it reads the
-user's watchlists. Every other endpoint answers from the fixture world while `DESK_MVP_STUB=1` and 503s otherwise.
-`validate` is declared before the `/{id}` routes."""
+"""`/api/desk/alert-strategies*` (02m §a3.7). Validation is the same in every mode: pydantic, then the engine
+gate (`core.evaluate.check`). The handlers read and write the strategy tables through `alerts/service.py`; with
+`DESK_MVP_STUB=1` they answer from the fixture world instead (the frontend stream's development fixture, removed
+at the end of 02m §d2 step 3). `validate` is declared before the `/{id}` routes."""
 
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts import service
+from ai_trading.alerts.service import RuntimeDisabled, StrategyNotFound
+from ai_trading.alerts.universe import resolve
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.api.problems import problems_from_validation_error
 from ai_trading.api.schemas.alerts import (
@@ -26,9 +29,8 @@ from ai_trading.api.schemas.alerts import (
 )
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
 from ai_trading.core.evaluate import check
-from ai_trading.db.models import Watchlist, WatchlistItem
 from ai_trading.mvp_stub import alerts as mvp_alerts
-from ai_trading.mvp_stub import stub_enabled, unavailable
+from ai_trading.mvp_stub import stub_enabled
 from ai_trading.runtime_flags import alerts_runtime_enabled
 
 router = APIRouter(
@@ -69,33 +71,33 @@ def _stub_row(strategy_id: int) -> dict[str, Any]:
     return row
 
 
-def _db_watchlist_symbols(session: Session, user_id: int, name: str) -> list[str] | None:
-    """The symbols of the user's watchlist named `name`, in manage-mode order; None when there is no such list."""
-    watchlist_id = session.execute(
-        select(Watchlist.id).where(Watchlist.user_id == user_id, Watchlist.name == name)
-    ).scalar_one_or_none()
-    if watchlist_id is None:
-        return None
-    return list(
-        session.execute(
-            select(WatchlistItem.symbol)
-            .where(WatchlistItem.watchlist_id == watchlist_id)
-            .order_by(WatchlistItem.position, WatchlistItem.symbol)
-        ).scalars()
-    )
-
-
 def _resolved_symbols(session: Session, user: AuthedUser, universe: dict[str, Any]) -> list[str]:
-    """What a source resolves to. A watchlist is the user's list (in the stub, the fixture list when the user has
-    none by that name); a symbol source is its list; a filter source has no real run yet, so it is empty."""
+    """What a source resolves to: the symbols listed, the user's watchlist, or a filter's last matches. In the
+    stub, a watchlist or filter the user does not have resolves to the fixture world's."""
     if "symbols" in universe:
         return list(universe["symbols"])
+    found = [symbol for symbol, _ in resolve(session, user.id, universe)]
+    if found or not stub_enabled():
+        return found
     if "watchlist" in universe:
-        found = _db_watchlist_symbols(session, user.id, universe["watchlist"])
-        if found is not None:
-            return found
-        return mvp_alerts.watchlist_symbols(universe["watchlist"]) if stub_enabled() else []
-    return mvp_alerts.screener_symbols(universe["filter"]) if stub_enabled() else []
+        return mvp_alerts.watchlist_symbols(universe["watchlist"])
+    return mvp_alerts.screener_symbols(universe["filter"])
+
+
+def _wired(request: Request) -> list[str]:
+    return ["inbox", *getattr(request.app.state, "channels", {})]
+
+
+def _real_one(session: Session, user: AuthedUser, view: service.StrategyView, now: datetime) -> dict[str, Any]:
+    return service.strategy_out(session, user.id, [view], now)[0]
+
+
+def _real_detail(session: Session, user: AuthedUser, view: service.StrategyView, now: datetime) -> dict[str, Any]:
+    return {**_real_one(session, user, view, now), "versions": service.versions_out(session, view.row.id)}
+
+
+def _not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="alert strategy not found")
 
 
 @router.post("/validate", response_model=AlertStrategyValidateOut)
@@ -124,67 +126,140 @@ def list_alert_strategies(
     symbol: str | None = None,
     watchlist_id: int | None = None,
     sort: Literal["name", "last_fired", "status"] = "name",
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ) -> list[dict[str, Any]]:
     if stub_enabled():
         return mvp_alerts.strategies(
             status=status, category=category, symbol=symbol, watchlist_id=watchlist_id, sort=sort
         )
-    unavailable()
+    return service.list_strategies(
+        session,
+        user.id,
+        now=datetime.now(UTC),
+        status=status,
+        category=category,
+        symbol=symbol,
+        watchlist_id=watchlist_id,
+        sort=sort,
+    )
 
 
 @router.post("", status_code=201, response_model=AlertStrategyOut)
-def create_alert_strategy(body: AlertStrategyCreate) -> dict[str, Any]:
+def create_alert_strategy(
+    body: AlertStrategyCreate,
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
     spec = _valid_spec(body.spec)
     if body.save_as == "on" and not alerts_runtime_enabled():
         raise HTTPException(status_code=409, detail=_RUNTIME_OFF)
     if stub_enabled():
         return mvp_alerts.new_strategy(spec, save_as=body.save_as)
-    unavailable()
+    now = datetime.now(UTC)
+    try:
+        view = service.create_strategy(session, user.id, spec, save_as=body.save_as, now=now)
+    except RuntimeDisabled as exc:
+        raise HTTPException(status_code=409, detail=_RUNTIME_OFF) from exc
+    session.commit()
+    return _real_one(session, user, view, now)
 
 
 @router.get("/{strategy_id}", response_model=AlertStrategyDetailOut)
-def get_alert_strategy(strategy_id: int) -> dict[str, Any]:
+def get_alert_strategy(
+    strategy_id: int, user: AuthedUser = Depends(get_current_user), session: Session = Depends(get_session)
+) -> dict[str, Any]:
     if stub_enabled():
         return mvp_alerts.detail(_stub_row(strategy_id))
-    unavailable()
+    try:
+        view = service.get_strategy(session, user.id, strategy_id)
+    except StrategyNotFound as exc:
+        raise _not_found() from exc
+    return _real_detail(session, user, view, datetime.now(UTC))
 
 
 @router.put("/{strategy_id}", response_model=AlertStrategyDetailOut)
-def update_alert_strategy(strategy_id: int, body: AlertStrategyUpdate) -> dict[str, Any]:
+def update_alert_strategy(
+    strategy_id: int,
+    body: AlertStrategyUpdate,
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
     spec = _valid_spec(body.spec)
     if stub_enabled():
         return mvp_alerts.revise(_stub_row(strategy_id), spec, body.change_note)
-    unavailable()
+    now = datetime.now(UTC)
+    try:
+        view = service.revise_strategy(session, user.id, strategy_id, spec, body.change_note, now=now)
+    except StrategyNotFound as exc:
+        raise _not_found() from exc
+    session.commit()
+    return _real_detail(session, user, view, now)
 
 
 @router.delete("/{strategy_id}", status_code=204, response_model=None)
-def archive_alert_strategy(strategy_id: int) -> None:
+def archive_alert_strategy(
+    strategy_id: int, user: AuthedUser = Depends(get_current_user), session: Session = Depends(get_session)
+) -> None:
     if stub_enabled():
         _stub_row(strategy_id)  # the fixture has nothing to archive; the id must still exist
         return None
-    unavailable()
+    try:
+        service.archive_strategy(session, user.id, strategy_id, now=datetime.now(UTC))
+    except StrategyNotFound as exc:
+        raise _not_found() from exc
+    session.commit()
+    return None
 
 
 @router.post("/{strategy_id}/pause", response_model=AlertStrategyOut)
-def pause_alert_strategy(strategy_id: int, body: AlertStrategyPauseIn) -> dict[str, Any]:
+def pause_alert_strategy(
+    strategy_id: int,
+    body: AlertStrategyPauseIn,
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
     if stub_enabled():
         return mvp_alerts.pause(_stub_row(strategy_id), body.reason)
-    unavailable()
+    try:
+        view = service.pause_strategy(session, user.id, strategy_id, body.reason)
+    except StrategyNotFound as exc:
+        raise _not_found() from exc
+    session.commit()
+    return _real_one(session, user, view, datetime.now(UTC))
 
 
 @router.post("/{strategy_id}/resume", response_model=AlertStrategyOut)
-def resume_alert_strategy(strategy_id: int) -> dict[str, Any]:
+def resume_alert_strategy(
+    strategy_id: int, user: AuthedUser = Depends(get_current_user), session: Session = Depends(get_session)
+) -> dict[str, Any]:
     if stub_enabled():
         row = _stub_row(strategy_id)
         # A draft only leaves draft for alert_only when the runtime is on (02m §b5 item 6).
         if row["stage"] == "draft" and not alerts_runtime_enabled():
             raise HTTPException(status_code=409, detail=_RUNTIME_OFF)
         return mvp_alerts.resume(row)
-    unavailable()
+    try:
+        view = service.resume_strategy(session, user.id, strategy_id)
+    except StrategyNotFound as exc:
+        raise _not_found() from exc
+    except RuntimeDisabled as exc:
+        raise HTTPException(status_code=409, detail=_RUNTIME_OFF) from exc
+    session.commit()
+    return _real_one(session, user, view, datetime.now(UTC))
 
 
 @router.get("/{strategy_id}/fires", response_model=list[AlertStrategyFireOut])
-def list_alert_strategy_fires(strategy_id: int, limit: int = Query(10, ge=1, le=200)) -> list[dict[str, Any]]:
+def list_alert_strategy_fires(
+    strategy_id: int,
+    request: Request,
+    limit: int = Query(10, ge=1, le=200),
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
     if stub_enabled():
         return mvp_alerts.fires(_stub_row(strategy_id), limit)
-    unavailable()
+    try:
+        return service.fires(session, user.id, strategy_id, limit, _wired(request))
+    except StrategyNotFound as exc:
+        raise _not_found() from exc

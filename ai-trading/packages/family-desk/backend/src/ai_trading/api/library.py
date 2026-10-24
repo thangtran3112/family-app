@@ -1,14 +1,17 @@
-"""`/api/desk/library*` (02m §a3.6): the shipped preset catalog, read from files on each request, and
-attach. Reads and attach validation are real in both modes. Only the stored copy is stub-only: with the
-stub flag on, attach answers 201 with the copy and stores nothing; with it off, attach answers 503."""
+"""`/api/desk/library*` (02m §a3.6): the shipped preset catalog, read from files on each request, the real
+example found on her stored bars, and attach, which writes the alert-only strategy (`library/attach.py`). With
+`DESK_MVP_STUB=1` the example comes from the snapshot and attach answers 201 with the copy and stores nothing
+(the frontend stream's development fixture, removed at the end of 02m §d2 step 3)."""
 
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts import service
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.api.problems import problems_from_validation_error
 from ai_trading.api.schemas.library import (
@@ -19,9 +22,11 @@ from ai_trading.api.schemas.library import (
 )
 from ai_trading.contracts.strategy_spec_v1 import Entry
 from ai_trading.db.models import Watchlist
+from ai_trading.library.attach import attach
 from ai_trading.library.catalog import alert_only_spec, load_catalog, load_template
+from ai_trading.library.example import find_example
 from ai_trading.mvp_stub import library as stub_library
-from ai_trading.mvp_stub import stub_enabled, unavailable
+from ai_trading.mvp_stub import stub_enabled
 from ai_trading.runtime_flags import alerts_runtime_enabled
 
 router = APIRouter(prefix="/api/desk/library", tags=["library"], dependencies=[Depends(get_current_user)])
@@ -82,10 +87,17 @@ def list_library(
 
 
 @router.get("/{entry_id}", response_model=LibraryEntryOut)
-def get_library_entry(entry_id: str) -> LibraryEntryOut:
+def get_library_entry(
+    entry_id: str, user: AuthedUser = Depends(get_current_user), session: Session = Depends(get_session)
+) -> LibraryEntryOut:
     _, entry = _entry(entry_id)
     template = load_template(entry.file)
-    example = stub_library.example(template) if stub_enabled() else None
+    if stub_enabled():
+        example = stub_library.example(template)
+    elif entry.kind == "strategy":
+        example = find_example(session, user.id, template, now=datetime.now(UTC))
+    else:
+        example = None
     return LibraryEntryOut(
         **_item(entry).model_dump(),
         spec=template,
@@ -98,6 +110,7 @@ def get_library_entry(entry_id: str) -> LibraryEntryOut:
 def attach_library_entry(
     entry_id: str,
     body: LibraryAttachIn,
+    response: Response,
     user: AuthedUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> LibraryAttachOut:
@@ -110,22 +123,24 @@ def attach_library_entry(
     ).scalar_one_or_none()
     if watchlist is None:
         raise HTTPException(status_code=404, detail="watchlist not found")
+    template = load_template(entry.file)
     try:
-        spec = alert_only_spec(
-            load_template(entry.file),
-            watchlist=watchlist.name,
-            channels=body.channels,
-            severity=body.severity,
-        )
+        spec = alert_only_spec(template, watchlist=watchlist.name, channels=body.channels, severity=body.severity)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail={"problems": problems_from_validation_error(exc)}) from exc
-    if not stub_enabled():
-        unavailable()
-    stage = "alert_only" if alerts_runtime_enabled() else "draft"
-    return stub_library.attached(
-        index,
-        spec.model_dump(mode="json", by_alias=True, exclude_none=True),
-        watchlist_id=watchlist.id,
-        watchlist_name=watchlist.name,
-        stage=stage,
+    if stub_enabled():
+        stage = "alert_only" if alerts_runtime_enabled() else "draft"
+        return stub_library.attached(
+            index,
+            spec.model_dump(mode="json", by_alias=True, exclude_none=True),
+            watchlist_id=watchlist.id,
+            watchlist_name=watchlist.name,
+            stage=stage,
+        )
+    now = datetime.now(UTC)
+    view, created = attach(
+        session, user.id, entry, template, watchlist, channels=body.channels, severity=body.severity, now=now
     )
+    session.commit()
+    response.status_code = 201 if created else 200
+    return service.strategy_out(session, user.id, [view], now)[0]
