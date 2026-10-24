@@ -1,0 +1,240 @@
+/* Desk technical summary (D4), desktop density: 32 px tabs, 28 px rows, 2 px amber focus ring. */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.tab {
+  min-width: 40px;
+  height: 32px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  padding: 0 10px;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--color-amber);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.tab:focus-visible,
+.method summary:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+.up {
+  color: var(--color-up);
+}
+
+.down {
+  color: var(--color-down);
+}
+
+.flat,
+.muted {
+  color: var(--color-muted);
+}
+
+.caps {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.meta {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  text-align: right;
+}
+
+.card,
+.pivots {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.votes {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  list-style: none;
+  font-size: var(--text-label);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.row:hover {
+  background: var(--color-raised);
+}
+
+.row > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.row > span:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+}
+
+.row > span:nth-child(2) {
+  font-weight: var(--weight-semibold);
+}
+
+.watching .list > li {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.watching h3 {
+  margin: 0 0 4px;
+}
+
+.empty {
+  margin: 8px 0 0;
+  font-size: var(--text-label);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table thead th {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.table tbody th {
+  text-align: left;
+  font-weight: var(--weight-medium);
+}
+
+.table tbody tr:hover th,
+.table tbody tr:hover td,
+.pivotP th,
+.pivotP td {
+  background: var(--color-raised);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.whatChanged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: var(--text-label);
+}
+
+.footnote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.advice {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.method {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.method summary {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+
+.method summary:hover {
+  text-decoration: underline;
+}
+
+.method p {
+  max-width: 900px;
+  margin: 4px 0 0;
+  line-height: 1.6;
+}

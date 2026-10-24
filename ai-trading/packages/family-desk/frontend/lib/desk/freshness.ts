@@ -17,6 +17,8 @@ export const COPY = {
   alertsPaused: "Alerts paused until quotes return",
   alertsPausedByUser: "Alerts paused · all strategies are paused",
   alertsNotStarted: "Alerts start when live quotes are connected",
+  alertsRunning: "Alerts on",
+  statusUnavailable: "Status unavailable right now",
   emptyScan: "No matches right now · next scan {time}",
   emptyScanNoTime: "No matches right now",
   loadError: "Couldn't load this {subject} · Try again",
@@ -32,6 +34,8 @@ export const COPY = {
   scanning: "Scanning US stocks…",
   notEnoughHistory: "Not enough history for {timeframe} yet",
   noSignalsToday: "No signals yet today · your strategies are watching",
+  futuresNotConnected: "Waiting for IBKR · not connected yet",
+  futuresReadOnly: "Futures · read only",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -145,6 +149,8 @@ const QUALITY_PHRASE: Record<Stamp["quality"], string> = {
   unavailable: "Unavailable",
 };
 
+export const qualityPhrase = (quality: Stamp["quality"]): string => QUALITY_PHRASE[quality];
+
 /** D11 market-data rows: "Quotes: Alpaca · Delayed 15 min". */
 export function marketDataLine(kind: "Quotes" | "Scans", stamp: Pick<Stamp, "source" | "quality"> | null): string {
   if (!stamp) return `${kind}: Unavailable`;
@@ -157,6 +163,11 @@ export function marketPillText(session: MarketSession, nextOpen: string | null):
   if (session === "pre") return COPY.marketPre;
   if (session === "after") return COPY.marketAfter;
   return nextOpen ? fill(COPY.marketClosedOpens, { time: formatEtWeekdayTime(nextOpen) }) : "Market closed";
+}
+
+/** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */
+export function marketPillShort(session: MarketSession): string {
+  return session === "regular" ? "Open" : session === "pre" ? COPY.marketPre : session === "after" ? COPY.marketAfter : "Closed";
 }
 
 export type AlertsRuntimeState = "running" | "paused_no_quotes" | "paused_by_user" | "not_started";

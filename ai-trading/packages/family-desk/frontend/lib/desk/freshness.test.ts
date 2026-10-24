@@ -8,6 +8,7 @@ import {
   emptyScanText,
   loadErrorText,
   marketDataLine,
+  marketPillShort,
   marketPillText,
   notEnoughHistoryText,
   resolveFreshness,
@@ -75,6 +76,7 @@ test("status bar, market data rows and the market pill use plain wording", () =>
   assert.equal(marketPillText("after", null), "After hours");
   assert.equal(marketPillText("closed", "2026-10-26T13:30:00Z"), "Market closed · opens Mon 9:30 AM ET");
   assert.equal(marketPillText("closed", null), "Market closed");
+  assert.deepEqual((["regular", "pre", "after", "closed"] as const).map(marketPillShort), ["Open", "Pre-market", "After hours", "Closed"]);
 });
 
 test("alerts banner, empty scan, load error and wrong lane copy", () => {

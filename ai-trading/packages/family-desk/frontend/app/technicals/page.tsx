@@ -1,7 +1,14 @@
 import { Suspense } from "react";
+import { DeskResponsive } from "@/components/shell/desktop/DeskResponsive";
+import { TechnicalsDesktop } from "@/components/technicals/TechnicalsDesktop";
 import { TechnicalsScreen } from "@/components/technicals/TechnicalsScreen";
 import styles from "@/components/technicals/technicals.module.css";
 
 export default function TechnicalsPage() {
-  return <Suspense fallback={<main className={styles.page}><p role="status">Loading technicals…</p></main>}><TechnicalsScreen /></Suspense>;
+  const loading = <main className={styles.page}><p role="status">Loading technicals…</p></main>;
+  return (
+    <Suspense fallback={loading}>
+      <DeskResponsive desktop={<TechnicalsDesktop />} mobile={<TechnicalsScreen />} />
+    </Suspense>
+  );
 }

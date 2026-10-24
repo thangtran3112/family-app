@@ -1,5 +1,6 @@
 // Adapted from Vibe-Trading `frontend/src/lib/indicators.ts` at commit
-// `8be01c8fe25f25c2e699ea8d2ab0b322f58c8c9e`, MIT License. Copied unchanged;
+// `8be01c8fe25f25c2e699ea8d2ab0b322f58c8c9e`, MIT License. Copied unchanged except
+// `tradingDay` and `calcVWAP` at the end, which are Family Desk additions (02m §a3.3);
 // see `indicators.LICENSE` and `packages/family-desk/THIRD_PARTY_NOTICES.md`.
 type N = number | null;
 
@@ -113,4 +114,33 @@ export function calcKDJ(highs: number[], lows: number[], closes: number[], perio
     j[i] = 3 * pk - 2 * pd;
   }
   return { k, d, j };
+}
+
+// ---- Family Desk addition (not part of the Vibe-Trading original). ----
+
+const etDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** The New York trading day of a bar: `YYYY-MM-DD` for a timestamp, the date itself for a daily bar. */
+export function tradingDay(t: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : etDayFormat.format(new Date(t));
+}
+
+export type VwapBar = { t: string; h: number; l: number; c: number; v: number };
+
+/** Session-anchored VWAP of the typical price (h+l+c)/3, reset at each New York trading day. */
+export function calcVWAP(bars: VwapBar[]): N[] {
+  let day = "";
+  let priceVolume = 0;
+  let volume = 0;
+  return bars.map((bar) => {
+    const barDay = tradingDay(bar.t);
+    if (barDay !== day) {
+      day = barDay;
+      priceVolume = 0;
+      volume = 0;
+    }
+    priceVolume += ((bar.h + bar.l + bar.c) / 3) * bar.v;
+    volume += bar.v;
+    return volume > 0 ? priceVolume / volume : null;
+  });
 }
