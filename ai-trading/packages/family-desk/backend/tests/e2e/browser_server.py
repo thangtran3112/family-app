@@ -12,12 +12,16 @@ import uvicorn
 from clock import E2E_EMAIL, current_now, reset_now, set_now
 from fastapi import Header, HTTPException
 from pydantic import BaseModel
-from seed import SEED_MODES, seed_database
+from seed import SEED_MODES
+from seed import reset_database as reset_seeded_database
 from server import SESSION_LIFECYCLE, app, install_e2e_runtime
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ai_trading.db.models import Base, FeedHealth
+from ai_trading.db.models import FeedHealth
+
+# The control routes below are plain `def`, so FastAPI runs them in its thread pool. `reset_database` blocks on a
+# TRUNCATE until every other session is done; as `async def` it would hold the event loop, and a request whose
+# session closes through the loop (a page navigated away mid-request) could then never finish: a deadlock.
 
 
 def _verified(identity: str | None) -> None:
@@ -25,7 +29,7 @@ def _verified(identity: str | None) -> None:
         raise HTTPException(status_code=401, detail="Missing verified identity")
 
 
-async def runtime(identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email")):
+def runtime(identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email")):
     _verified(identity)
     return {
         "active_sessions": SESSION_LIFECYCLE.active,
@@ -35,7 +39,7 @@ async def runtime(identity: str | None = Header(default=None, alias="Cf-Access-A
     }
 
 
-async def reset_database(
+def reset_database(
     seed: str = "legacy",
     identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email"),
 ):
@@ -43,10 +47,7 @@ async def reset_database(
     if seed not in SEED_MODES:
         raise HTTPException(status_code=422, detail=f"seed must be one of {', '.join(SEED_MODES)}")
     reset_now()
-    tables = ", ".join(f'"{table.name}"' for table in reversed(Base.metadata.sorted_tables))
-    with app.state.e2e_engine.begin() as connection:
-        connection.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
-    seed_database(os.environ["DESK_E2E_DATABASE_URL"], seed)
+    reset_seeded_database(os.environ["DESK_E2E_DATABASE_URL"], seed)
     with server.STREAM_LOCK:
         server.STREAM_ACTIVE = 0
         server.STREAMS_CLOSED = 0
@@ -61,7 +62,7 @@ class Scenario(BaseModel):
     feed_state: str = "ok"
 
 
-async def scenario(
+def scenario(
     body: Scenario,
     identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email"),
 ):
@@ -85,7 +86,7 @@ async def scenario(
     return {"now": current_now().isoformat()}
 
 
-async def engine_tick(identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email")):
+def engine_tick(identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email")):
     _verified(identity)
     try:
         result = subprocess.run(

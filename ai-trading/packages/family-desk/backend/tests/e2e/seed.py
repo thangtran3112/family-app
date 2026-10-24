@@ -7,6 +7,7 @@
 
 import json
 import os
+import time
 from datetime import UTC
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,7 @@ import pandas as pd
 from clock import E2E_EMAIL, E2E_NOW
 from safety import e2e_url
 from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from ai_trading.db.models import Bar1d, Bar1m, Base, User, Watchlist, WatchlistItem
@@ -136,14 +138,29 @@ def seed_database(database_url: str, mode: str = "legacy") -> tuple[int, int]:
         engine.dispose()
 
 
+TRUNCATE_ATTEMPTS = 12
+
+
 def reset_database(database_url: str, mode: str = "legacy") -> tuple[int, int]:
-    """Empty every table, then seed `mode`: the per-test reset of the browser and alert-path checks."""
+    """Empty every table, then seed `mode`: the per-test reset of the browser and alert-path checks.
+
+    A page that left the previous screen can still have a request finishing, and `TRUNCATE` needs every table
+    to itself: Postgres then reports a deadlock or the lock wait runs out. Neither is an error here; the request
+    ends within moments, so the truncate is tried again."""
     url = e2e_url(database_url)
     engine = create_engine(url.render_as_string(hide_password=False))
     try:
         tables = ", ".join(f'"{table.name}"' for table in reversed(Base.metadata.sorted_tables))
-        with engine.begin() as connection:
-            connection.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+        for attempt in range(TRUNCATE_ATTEMPTS):
+            try:
+                with engine.begin() as connection:
+                    connection.execute(text("SET LOCAL lock_timeout = '1s'"))
+                    connection.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+                break
+            except OperationalError:
+                if attempt == TRUNCATE_ATTEMPTS - 1:
+                    raise
+                time.sleep(0.25)
     finally:
         engine.dispose()
     return seed_database(database_url, mode)
