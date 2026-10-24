@@ -2,9 +2,56 @@ import { z } from "zod";
 
 // "HH:MM" in America/New_York. [0-9], not \d: Python's regex engine would also
 // accept non-ASCII digits for \d, and both validators must agree.
-export const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
+const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
 // A leading "/" marks a futures root (/ES): ES, CL, and GC are also stock tickers.
 export const TickerSchema = z.string().regex(/^\/?[A-Z][A-Z0-9.]{0,9}$/);
+
+// When a strategy (or a filter strategy) evaluates; shared with filter-strategy-spec-v1.ts.
+export const RunOnSchema = z.enum([
+  "bar_close_1m",
+  "bar_close_5m",
+  "bar_close_15m",
+  "bar_close_1h",
+  "premarket_0830",
+  "daily_close",
+  "weekly",
+]);
+
+// Candlestick patterns, in plan order (paper-persona-split-plan section c2).
+export const PATTERN_IDS = [
+  "hammer",
+  "inverted_hammer",
+  "hanging_man",
+  "shooting_star",
+  "doji",
+  "dragonfly_doji",
+  "gravestone_doji",
+  "bullish_engulfing",
+  "bearish_engulfing",
+  "bullish_harami",
+  "bearish_harami",
+  "piercing_line",
+  "dark_cloud_cover",
+  "morning_star",
+  "evening_star",
+  "tweezer_bottom",
+  "tweezer_top",
+  "three_white_soldiers",
+  "three_black_crows",
+  "inside_bar",
+] as const;
+
+// "YYYY-MM-DD" in America/New_York. The regex checks month and day ranges, not the calendar
+// (2026-02-30 passes); an alert that never expires leaves the field out.
+const EtDateSchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);
+
+// Alert text: 1-140 BMP characters (no C0/C1 controls or DEL, no surrogates, so Zod's UTF-16 length
+// and Python's code-point length agree) with only the {symbol}, {close}, and {time} placeholders.
+const AlertMessageSchema = z
+  .string()
+  .min(1)
+  .max(140)
+  .regex(/^([\u0020-\u007A\u007C\u007E\u00A0-\uD7FF\uE000-\uFFFF]|\{symbol\}|\{close\}|\{time\})+$/);
 
 export const SeriesOperandSchema = z
   .union([
@@ -95,6 +142,8 @@ export const LevelOperandSchema = z
         "premarket_low",
         "overnight_high",
         "overnight_low",
+        "session_high",
+        "session_low",
       ]),
     }),
     z.strictObject({
@@ -152,6 +201,16 @@ const TimeBetweenConditionSchema = z
   })
   .meta({ id: "TimeBetweenCondition" });
 
+const PatternConditionSchema = z
+  .strictObject({
+    op: z.literal("pattern"),
+    pattern: z.enum(PATTERN_IDS),
+    trend: z.enum(["any", "after_downtrend", "after_uptrend"]).optional(),
+    trendBars: z.int().min(3).max(50).optional(),
+    withinBars: z.int().min(1).max(5).optional(),
+  })
+  .meta({ id: "PatternCondition" });
+
 const AllConditionSchema = z
   .strictObject({
     get all(): z.ZodArray<typeof ConditionSchema> {
@@ -181,6 +240,7 @@ export const ConditionSchema = z
     CompareConditionSchema,
     WithinPctConditionSchema,
     TimeBetweenConditionSchema,
+    PatternConditionSchema,
     AllConditionSchema,
     AnyConditionSchema,
     NotConditionSchema,
@@ -225,23 +285,20 @@ export const StrategySpecV1Schema = z.strictObject({
     universe: z.union([
       z.strictObject({ watchlist: z.string().min(1).max(80) }),
       z.strictObject({ symbols: z.array(TickerSchema).min(1).max(70) }),
+      // The matches of a saved filter strategy, by name.
+      z.strictObject({ filter: z.string().min(1).max(80) }),
     ]),
     session: z.enum(["regular", "extended"]),
-    runOn: z.enum([
-      "bar_close_1m",
-      "bar_close_5m",
-      "bar_close_15m",
-      "bar_close_1h",
-      "premarket_0830",
-      "daily_close",
-      "weekly",
-    ]),
+    runOn: RunOnSchema,
   }),
   when: ConditionSchema,
   then: z.strictObject({
     alert: z.strictObject({
       channels: z.array(z.enum(["inbox", "telegram", "slack"])).min(1).max(3),
       severity: z.enum(["info", "opportunity", "risk"]).optional(),
+      frequency: z.enum(["once", "once_per_bar", "every_time"]).optional(), // absent = engine default
+      expiresOn: EtDateSchema.optional(),
+      message: AlertMessageSchema.optional(),
     }),
     paperOrder: PaperOrderSchema.optional(),
   }),

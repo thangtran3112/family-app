@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "hammer-reversal",
+      "file": "patterns/hammer.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Hammer",
+      "summary": "Hammer candlestick after a down move."
+    },
+    {
+      "id": "orb-breakout",
+      "file": "setups/orb-breakout.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Opening range breakout",
+      "summary": "Breaks out of the first 15-minute range."
+    },
+    {
+      "id": "golden-cross",
+      "file": "setups/golden-death-cross.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "Golden cross",
+      "summary": "50-day average crosses above the 200-day average."
+    },
+    {
+      "id": "volume-spike",
+      "file": "filters/volume-spike.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "volume",
+      "bias": "neutral",
+      "label": "Volume spike",
+      "summary": "Relative volume well above its usual level."
+    },
+    {
+      "id": "overnight-range-break",
+      "file": "setups/futures-overnight-range-break.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "futures",
+      "bias": "neutral",
+      "label": "Overnight range break",
+      "summary": "Breaks the overnight range on index futures."
+    },
+    {
+      "id": "dividend-screen",
+      "file": "filters/dividend-yield-screen.json",
+      "kind": "filter",
+      "lane": "fundamental",
+      "category": "income",
+      "bias": "bullish",
+      "label": "Dividend yield screen",
+      "summary": "Steady dividend payers with a modest payout."
+    },
+    {
+      "id": "quality-compounders",
+      "file": "filters/quality-compounders.json",
+      "kind": "filter",
+      "lane": "fundamental",
+      "category": "long_term",
+      "bias": "bullish",
+      "label": "Quality compounders",
+      "summary": "Durable margins and growing earnings over years."
+    }
+  ]
+}

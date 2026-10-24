@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "custom",
-  "name": "Target 501 percent",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
-  "risk": { "stop": { "type": "pct", "value": 5 }, "target": { "type": "pct", "value": 501 } }
-}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "name": "Top movers",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "gte",
+    "left": {
+      "series": "gap_pct"
+    },
+    "right": {
+      "value": 4
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "gap_pct"
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

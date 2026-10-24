@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "52-week breakout",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "crosses_above",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "level": "n_day_high",
+      "days": 252
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "filter",
-  "name": "Unknown operator",
-  "timeframe": "1d",
-  "match": { "all": [{ "metric": "close", "op": "eq", "threshold": 1 }] }
-}

@@ -13,3 +13,14 @@ export function jsonFiles(directory: string): [string, unknown][] {
     .sort()
     .map((name) => [name, JSON.parse(readFileSync(path.join(full, name), "utf8"))]);
 }
+
+/** Every `*.json` path under `directory` at any depth, relative to it, sorted. */
+export function jsonPaths(directory: string): string[] {
+  return (readdirSync(path.join(root, directory), { recursive: true }) as string[])
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+}
+
+export function readJson(relative: string): unknown {
+  return JSON.parse(readFileSync(path.join(root, relative), "utf8"));
+}

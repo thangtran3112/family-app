@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "filter",
-  "name": "Wrong kind",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] }
-}

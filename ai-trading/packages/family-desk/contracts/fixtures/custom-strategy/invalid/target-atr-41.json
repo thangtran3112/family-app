@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "custom",
-  "name": "ATR target 41",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
-  "risk": { "stop": { "type": "atr_multiple", "value": 2 }, "target": { "type": "atr_multiple", "value": 41 } }
-}

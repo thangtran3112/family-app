@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "custom",
-  "name": "Stop 51 percent",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
-  "risk": { "stop": { "type": "pct", "value": 51 } }
-}

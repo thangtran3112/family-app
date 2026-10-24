@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 2,
-  "kind": "custom",
-  "name": "Schema version 2",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] }
-}

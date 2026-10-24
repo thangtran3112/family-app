@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "Volume spike alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Day movers"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ],
+      "severity": "info"
+    }
+  }
+}

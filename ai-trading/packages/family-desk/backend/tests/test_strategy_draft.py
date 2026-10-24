@@ -6,22 +6,15 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from ai_trading.contracts.alert_strategy import AlertStrategy
-from ai_trading.contracts.filter_strategy import FilterStrategy
+from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
 from ai_trading.contracts.json_pointer import apply_edits, json_equal
 from ai_trading.contracts.strategy_draft import DRAFT_RULES, StrategyDraft
+from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1
 
-BACKEND = Path(__file__).resolve().parents[1]
-CONTRACTS = BACKEND.parent / "contracts"
+CONTRACTS = Path(__file__).resolve().parents[2] / "contracts"
 FIXTURES = CONTRACTS / "fixtures" / "strategy-draft"
-
-
-def _files(directory: Path) -> list[Path]:
-    return sorted(directory.glob("*.json"))
-
-
-VALID = _files(FIXTURES / "valid")
-INVALID = _files(FIXTURES / "invalid")
+VALID = sorted((FIXTURES / "valid").glob("*.json"))
+INVALID = sorted((FIXTURES / "invalid").glob("*.json"))
 
 
 def _dump(model: BaseModel) -> dict[str, Any]:
@@ -29,7 +22,7 @@ def _dump(model: BaseModel) -> dict[str, Any]:
 
 
 def test_fixture_folders_are_not_empty():
-    assert len(VALID) >= 8 and len(INVALID) >= 20
+    assert len(VALID) >= 9 and len(INVALID) >= 36
 
 
 @pytest.mark.parametrize("path", VALID, ids=lambda p: p.name)
@@ -70,10 +63,15 @@ def test_rule_ids_match_the_zod_source():
 FINAL = [path for path in VALID if json.loads(path.read_text())["status"] == "final"]
 
 
+def test_there_are_final_fixtures_for_both_targets():
+    assert len(FINAL) >= 4
+    assert {json.loads(path.read_text())["target"] for path in FINAL} == {"filter", "alert"}
+
+
 @pytest.mark.parametrize("path", FINAL, ids=lambda p: p.name)
 def test_round_trip_draft_config_plus_edits_equals_final_config(path: Path):
     draft = StrategyDraft.model_validate_json(path.read_text())
     assert draft.finalConfig is not None
-    config_type = FilterStrategy if draft.draftConfig.kind == "filter" else AlertStrategy
-    replayed = config_type.model_validate(apply_edits(_dump(draft.draftConfig), draft.edits))
+    spec_type = FilterStrategySpecV1 if draft.target == "filter" else AlertStrategySpecV1
+    replayed = spec_type.model_validate(apply_edits(_dump(draft.draftConfig), draft.edits))
     assert json_equal(_dump(replayed), _dump(draft.finalConfig))

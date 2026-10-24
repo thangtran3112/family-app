@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Support break",
+  "watch": {
+    "universe": {
+      "watchlist": "Core holdings"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "when": {
+    "op": "crosses_below",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "level": "support",
+      "days": 60
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox",
+        "telegram"
+      ],
+      "severity": "risk"
+    }
+  }
+}

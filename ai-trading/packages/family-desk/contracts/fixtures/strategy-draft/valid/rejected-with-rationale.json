@@ -1,26 +1,43 @@
 {
   "schemaVersion": 1,
-  "kind": "draft",
-  "draftId": "draft-qqq-always-on",
-  "createdAt": "2026-10-23T14:37:00Z",
-  "request": "Alert me when QQQ closes above 150, any day.",
-  "rationale": "Rejected the always-on schedule: a daily close check on weekends and holidays notifies on stale prices. Asking for a weekday regular-session alert instead would fit the intent better.",
+  "draftId": "rejected-with-rationale",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Find US stocks with relative volume of at least 3x on each 15-minute bar close.",
+  "rationale": "3x RVOL on 15-minute bars flags unusual volume; ranking by RVOL puts the strongest names first.",
   "status": "rejected",
+  "target": "filter",
   "draftConfig": {
     "schemaVersion": 1,
-    "kind": "alert",
-    "name": "QQQ close above 150, any day",
-    "timeframe": "15m",
-    "trigger": {
-      "type": "indicator_threshold",
-      "symbol": "QQQ",
-      "indicator": { "metric": "close" },
-      "op": "gt",
-      "threshold": 150.25
+    "name": "Volume leaders",
+    "watch": {
+      "universe": {
+        "market": "us_equities"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
     },
-    "schedule": { "sessions": "always", "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
-    "cooldown": { "minutes": 0, "dedupe": "per_bar" },
-    "channels": ["in_app"]
+    "liquidity": {
+      "minPrice": 5,
+      "minAvgVolume": 500000
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "rank": {
+      "by": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "order": "desc"
+    },
+    "maxResults": 25
   },
   "edits": []
 }

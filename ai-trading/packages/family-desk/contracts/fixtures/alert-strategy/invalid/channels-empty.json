@@ -1,10 +1,27 @@
 {
   "schemaVersion": 1,
-  "kind": "alert",
-  "name": "No channels",
-  "timeframe": "1d",
-  "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
-  "schedule": { "sessions": "regular", "days": ["mon"] },
-  "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
-  "channels": []
+  "name": "Volume spike alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Day movers"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "when": {
+    "op": "gte",
+    "left": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "right": {
+      "value": 3
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [],
+      "severity": "info"
+    }
+  }
 }

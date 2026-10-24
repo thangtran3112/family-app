@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "name": "Full optionals",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "extended",
+    "runOn": "bar_close_1m"
+  },
+  "assetTypes": [
+    "stock",
+    "etf"
+  ],
+  "liquidity": {
+    "minPrice": 1.5,
+    "minAvgVolume": 250000,
+    "avgVolumeDays": 30
+  },
+  "when": {
+    "all": [
+      {
+        "any": [
+          {
+            "op": "gte",
+            "left": {
+              "series": "rvol",
+              "lookbackDays": 10
+            },
+            "right": {
+              "value": 2
+            }
+          },
+          {
+            "op": "gte",
+            "left": {
+              "series": "gap_pct"
+            },
+            "right": {
+              "value": 5
+            }
+          }
+        ]
+      },
+      {
+        "not": {
+          "op": "lt",
+          "left": {
+            "series": "close"
+          },
+          "right": {
+            "series": "ema",
+            "length": 20
+          }
+        }
+      }
+    ]
+  },
+  "rank": {
+    "by": {
+      "series": "rvol",
+      "lookbackDays": 5
+    },
+    "order": "asc"
+  },
+  "maxResults": 40
+}

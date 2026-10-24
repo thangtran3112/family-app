@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 2,
-  "kind": "filter",
-  "name": "Future schema",
-  "timeframe": "1d",
-  "match": { "all": [{ "metric": "close", "op": "gt", "threshold": 1 }] }
-}

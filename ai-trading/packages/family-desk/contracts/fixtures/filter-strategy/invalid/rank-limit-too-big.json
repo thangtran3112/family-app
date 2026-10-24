@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "filter",
-  "name": "Rank limit over 200",
-  "timeframe": "1d",
-  "match": { "all": [{ "metric": "close", "op": "gt", "threshold": 1 }] },
-  "rank": { "by": { "metric": "close" }, "order": "desc", "limit": 201 }
-}

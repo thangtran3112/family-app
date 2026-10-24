@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Gap down alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Gappers"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "lt",
+    "left": {
+      "series": "gap_pct"
+    },
+    "right": {
+      "value": -5
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox",
+        "telegram",
+        "slack"
+      ],
+      "severity": "info"
+    }
+  }
+}

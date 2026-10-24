@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "gap-up",
+      "file": "filters/gap-up.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Gap up",
+      "summary": ""
+    }
+  ]
+}

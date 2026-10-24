@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "EMA 9/21 cross",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": {
+    "any": [
+      { "op": "crosses_above", "left": { "series": "ema", "length": 9 }, "right": { "series": "ema", "length": 21 } },
+      { "op": "crosses_below", "left": { "series": "ema", "length": 9 }, "right": { "series": "ema", "length": 21 } }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox"], "severity": "info" } }
+}

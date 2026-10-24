@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "op": "crosses_above",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "level": "session_high"
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    },
+    "paperOrder": {
+      "side": "buy",
+      "size": {
+        "shares": 10
+      },
+      "stop": {
+        "level": "session_low"
+      },
+      "target": {
+        "r": 2
+      }
+    }
+  }
+}

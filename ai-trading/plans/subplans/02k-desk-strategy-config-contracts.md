@@ -1,228 +1,200 @@
 # 02k: Desk strategy-config contracts (persona split, technical-trading lane)
 
-Status: implementation spec for `packages/family-desk/contracts` (Zod) and
-`packages/family-desk/backend` (Pydantic mirror). Desk lane only.
+Status: implementation spec for `packages/family-desk/contracts` (Zod) and `packages/family-desk/backend`
+(Pydantic). Desk lane only. Source design: the approved Paper persona-split plan, sections c1 (screener
+defaults), c2 (preset library), and e (strategy-config schema outline). This document describes what is built;
+where the code deviates from the plan it says so (section 10).
 
-## 1. What this adds
+## 1. Architecture
 
-Five JSON config families. Every strategy result the Desk persists (or an AI assistant proposes) is
-one of these documents, validated by the Zod schema in the browser/API layer and by the Pydantic
-mirror in the backend. They sit next to `strategy-spec-v1` (the alert-and-paper-order spec) and do
-not replace it. Nothing here places an order: `risk` fields are sizing hints, and no schema has an
-order, broker, or activation field. The Desk stays dark and trading stays off.
+The Desk engine already consumes one config language, `strategy-spec-v1` (`StrategySpecV1`): a `watch`
+(universe, session, `runOn`), a `when` condition tree over a closed set of operands (`SeriesOperand`,
+`LevelOperand`, constants), and a `then` (alert, optional paper order). The persona split adds no second
+language. It adds one new spec (the screener) and extends v1 additively, so the Paper boards show exactly the
+configs the engine can read.
 
-| Family | `kind` | Zod file (`contracts/src/`) | Pydantic file (`backend/src/ai_trading/contracts/`) |
-|---|---|---|---|
-| Filter strategy (+ shipped preset catalog entry) | `filter`, `filter_preset` | `filter-strategy.ts` | `filter_strategy.py` |
-| Pattern preset | `pattern` | `pattern-preset-strategy.ts` | `pattern_preset_strategy.py` |
-| Custom strategy | `custom` | `custom-strategy.ts` | `custom_strategy.py` |
-| Alert strategy | `alert` | `alert-strategy.ts` | `alert_strategy.py` |
-| Strategy draft (AI proposal exchange) | `draft` | `strategy-draft.ts` | `strategy_draft.py` |
+| Strategy kind | Contract | Where it lives |
+|---|---|---|
+| 1 Filter strategy (screener) | `FilterStrategySpecV1` | `contracts/src/filter-strategy-spec-v1.ts`; shipped defaults in `contracts/templates/filters/` |
+| 2 Pattern preset | `StrategySpecV1` template using the new `pattern` condition, plus a catalog entry | `contracts/templates/patterns/` (20 candlestick presets), `contracts/catalog.json` |
+| 3 Custom strategy | plain `StrategySpecV1` (same shape) | no new schema; `origin` (`template:<id>` / `custom` / `ai_draft`) and `lane` are DB-record fields, not spec fields |
+| 4 Alert strategy | `StrategySpecV1` at stage `alert_only`: `then` carries the alert and no `paperOrder` | `contracts/src/alert-strategy.ts` (`AlertStrategySpecV1`) |
+| Draft exchange | `StrategyDraft`: an AI proposal for a filter or an alert, the user's edits, the final config | `contracts/src/strategy-draft.ts` |
+| Preset index | `PresetCatalogV1` | `contracts/src/preset-catalog-v1.ts`; data in `contracts/catalog.json` |
 
-Shared: `strategy-common.ts` / `common.py` (primitives), `json-pointer.ts` / `json_pointer.py`
-(RFC 6901 pointers, replace/add/remove edits, `jsonEqual`), `strategy-config.ts` / `strategy_config.py`
-(one discriminated union over `kind`).
+Nothing here places an order. The Desk stays dark and trading stays off.
 
 ## 2. Conventions (match `strategy-spec-v1`)
 
-- camelCase keys, `z.strictObject` (Pydantic `extra="forbid"` via `ConfigModel`), `schemaVersion: 1` and a
-  `kind` literal on every top-level document.
-- No booleans and no nulls anywhere (the Pydantic `SpecModel` base rejects both). A flag is an enum.
-- No `.meta({ id })` in the new Zod files (ids are global; only v1 emits JSON Schema).
-- Python models are hand-written; every Zod `superRefine` rule has a same-named `model_validator` rule.
-- Fixtures: `contracts/fixtures/<family>/valid|invalid/*.json`. Shipped presets: `contracts/presets/...`.
-  The same files feed the Zod tests (`contracts/test/`) and the Pydantic tests (`backend/tests/`).
-- Do not put `1.0`-style integral floats in an integer field in fixtures (JS cannot tell `1.0` from `1`).
+- Zod is the source of truth. camelCase keys, `z.strictObject` everywhere, `schemaVersion: 1` on every document.
+- No booleans and no nulls anywhere (the Pydantic `SpecModel` base rejects both). A flag is an enum. Every field is an
+  enum, a bounded number, or a bounded or patterned string.
+- Specs carry no `kind` field. The caller knows which spec it holds (a DB table, a catalog entry's `kind`, a draft's
+  `target`).
+- Changes to v1 are additive: every existing spec, template, and fixture stays valid.
 
-## 3. Filter strategy (`filter-strategy.ts`)
+## 3. Additive changes to `strategy-spec-v1`
 
-Metric (`FilterMetricSchema`, discriminated union on `metric`; `lookback`/`window` are bars of the timeframe):
+| Change | Shape |
+|---|---|
+| `LevelOperand` gains two levels | `{ level: "session_high" }`, `{ level: "session_low" }` (no extra keys): the high or low of the current session so far; powers the high-of-day break |
+| `Condition` gains `PatternCondition` | `{ op: "pattern", pattern: PatternId, trend?: "any" \| "after_downtrend" \| "after_uptrend", trendBars?: int 3..50, withinBars?: int 1..5 }` |
+| `PatternId` (`PATTERN_IDS`) | `hammer`, `inverted_hammer`, `hanging_man`, `shooting_star`, `doji`, `dragonfly_doji`, `gravestone_doji`, `bullish_engulfing`, `bearish_engulfing`, `bullish_harami`, `bearish_harami`, `piercing_line`, `dark_cloud_cover`, `morning_star`, `evening_star`, `tweezer_bottom`, `tweezer_top`, `three_white_soldiers`, `three_black_crows`, `inside_bar` |
+| `watch.universe` gains a third form | `{ filter: string 1..80 }`: the matches of a saved filter strategy, by name |
+| `then.alert` gains three optional fields | `frequency: "once" \| "once_per_bar" \| "every_time"` (absent = current engine behavior); `expiresOn: "YYYY-MM-DD"` (America/New_York); `message: string 1..140` with only the `{symbol}`, `{close}`, `{time}` placeholders |
+| `RunOnSchema` exported | the `watch.runOn` enum, reused by the filter spec (the JSON Schema is unchanged by this) |
 
-| `metric` | extra fields | meaning |
-|---|---|---|
-| `close`, `volume`, `dollar_volume`, `gap_pct` | none | last close; bar volume; close x volume; open vs prior close, % |
-| `avg_volume`, `volume_ratio`, `atr`, `atr_pct`, `stdev_pct`, `pct_from_high`, `pct_from_low`, `sma`, `ema`, `rsi` | `lookback` int 2..500 | `volume_ratio` = volume / avg_volume(lookback); `atr_pct` = ATR / close x 100; `stdev_pct` = stdev of bar returns, %; `pct_from_high` = % below the highest high in `lookback` bars (0 = at the high); `pct_from_low` = % above the lowest low |
-| `change_pct` | `lookback` int 1..500 | % change over `lookback` bars |
-| `volatility_percentile` | `measure` `atr`\|`stdev`, `lookback` int 2..500, `window` int 20..1000 | percent rank (0..100) of the current `measure` within the trailing `window` bars |
+Notes:
 
-`FILTER_METRIC_DOMAIN`: metric -> `[min, max]` allowed threshold range (`null` = unbounded): `volatility_percentile`
-`[0,100]`, `rsi` `[0,100]`, `pct_from_high` `[0,100]`, `gap_pct` and `change_pct` `[-100, null]`, every other metric `[0, null]`.
+- `expiresOn` is checked for month 01..12 and day 01..31, not for the calendar (`2026-02-30` passes). The engine treats an
+  unparseable date as expired when it enforces the field.
+- `message` is restricted to BMP characters (no C0 or C1 control characters, no DEL, no surrogates, no `{` or `}` except the
+  three placeholders). That keeps Zod's UTF-16 length and Python's code-point length equal, so the 140 limit means the same in both.
+- Candle geometry (what a "hammer" is) is not in the schema. It lives in backend code (`core/patterns.py`, to be written) and is
+  not user-tunable in v1.
 
-Condition (`FilterConditionSchema`, union): the metric's own fields, flat, plus either `op: gt|gte|lt|lte` with
-`threshold: number`, or `op: "between"` with `min`, `max` (rule: `min < max`), for example
-`{ "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2 }`. Every threshold/min/max must lie
-inside the metric's domain.
-
-Group (`FilterGroupSchema`): `{ all: Node[] }` or `{ any: Node[] }`, 1..20 nodes, `Node` = condition | group
-(recursive, same getter style as `strategy-spec-v1`). Exported helper `filterGroupStats(group)` ->
-`{ depth, leaves }` (top group has depth 1). Rule on every consumer: depth <= 3 and leaves <= 30.
-
-`FilterStrategySchema`:
+## 4. FilterStrategySpecV1
 
 ```
-{ schemaVersion: 1, kind: "filter", name, description?, timeframe, universe?,
-  match: FilterGroup,
-  rank?: { by: FilterMetric, order: "asc"|"desc", limit: int 1..200 },
-  preset?: { id: Slug, params: { [paramKey]: number } } }   // provenance of a customized preset
+{ schemaVersion: 1, name: string 1..80,
+  watch: { universe: { market: "us_equities" } | { watchlist: string 1..80 } | { symbols: Ticker[] 1..70 },
+           session: "regular" | "extended",
+           runOn: <same enum as StrategySpecV1.watch.runOn> },
+  assetTypes?: ("stock" | "etf")[] 1..2,
+  liquidity?: { minPrice?: number >0 <=100000, minAvgVolume?: int 1..10_000_000_000, avgVolumeDays?: int 5..60 },
+  when: Condition,                                   // the shared ConditionSchema and operands
+  rank?: { by: SeriesOperand, order: "desc" | "asc" },
+  maxResults: int 1..100 }
 ```
 
-`universe` absent means the caller's active watchlist. `paramKey` = `^[a-z][A-Za-z0-9]{0,31}$`.
+A filter has no `then`: it places no alert and no order. A `StrategySpecV1` can watch its matches through
+`watch.universe.filter`. `when` uses the real operand names (`rvol`, `atr_pct`, `gap_pct`, `rsi`, `vwap`, `n_day_high`,
+`close`, `prior_day_close`, and so on), not flat metric names, so the engine evaluates a screener with the code it already has.
+`rank.by` is a `SeriesOperand` (a level or a constant has nothing to sort by).
 
-`FilterPresetSchema` (shipped catalog entry; files in `contracts/presets/filters/`):
+### Screener defaults (plan section c1)
 
-```
-{ schemaVersion: 1, kind: "filter_preset", id: Slug, name, description,
-  category: "volume"|"volatility"|"gap"|"range"|"proximity",
-  params: [{ key: paramKey, label (1..60), unit: "x"|"pct"|"percentile"|"bars"|"usd"|"shares",
-             path: JsonPointer, default, min, max, step? }],     // 1..8, keys and paths unique
-  strategy: FilterStrategy }
-```
+Ten files in `contracts/templates/filters/`. All are read-only; users copy them to edit. Every default shares the liquidity floor
+`minPrice 5`, `minAvgVolume 500000`, universe `us_equities`, and `maxResults 50` (the plan names no result cap; 50 is the Desk's
+screener page size). `RVOL10` is `rvol` with `lookbackDays 10`.
 
-Rules: `strategy.preset` exists with `id` equal to the entry id and `params` keys/values equal to the param keys/defaults;
-each param has `min < max`, `min <= default <= max`, and its `path` resolves inside `strategy` to a number equal to `default`.
-A user customizes a preset by editing the values at those paths and recording them in `strategy.preset.params`.
+| File | `when` | `session` / `runOn` | Rank by |
+|---|---|---|---|
+| `abnormal-volume` | `rvol(10) gte 2.5` | regular / `bar_close_15m` | `rvol(10)` desc |
+| `high-volatility` | `atr_pct(14, 50) gte 4` | regular / `daily_close` | `atr_pct` desc |
+| `gap-up` | `gap_pct gte 3` AND `rvol(10) gte 1.5` | extended / `premarket_0830` | `gap_pct` desc |
+| `gap-down` | `gap_pct lte -3` | extended / `premarket_0830` | `gap_pct` asc |
+| `new-20-day-high` | `close crosses_above n_day_high(20)` | regular / `daily_close` | `rvol(10)` desc |
+| `52-week-breakout` | `close crosses_above n_day_high(252)` | regular / `daily_close` | `rvol(10)` desc |
+| `oversold-rsi` | `rsi(14) lt 30` | regular / `daily_close` | `rsi(14)` asc |
+| `overbought-rsi` | `rsi(14) gt 70` | regular / `daily_close` | `rsi(14)` desc |
+| `above-vwap-on-volume` | `close gt vwap` AND `rvol(10) gte 2` | regular / `bar_close_5m` | `rvol(10)` desc |
+| `top-movers` | `gap_pct gte 4` (intraday `gap_pct` is the last price against the prior close) | regular / `bar_close_15m` | `gap_pct` desc |
 
-Shipped presets (`id`): `abnormal-volume` (volume_ratio, lookback 20, >= 2), `volatility-atr-percentile`
-(volatility_percentile atr, >= 80), `volatility-stdev-percentile` (same with stdev), `gap-up` (gap_pct >= 3),
-`gap-down` (gap_pct <= -3), `price-volume-range` (close between 5 and 50 AND avg_volume >= 1000000),
-`near-52w-high` (pct_from_high lookback 252 <= 5, timeframe `1d`).
+The Bollinger "volatility squeeze" default is left out: the contract has no Bollinger operand yet. Add it when that operand exists.
+The gap defaults use the extended session because the 08:30 premarket scan reads extended-hours bars, as the existing
+`gap-and-go` template does. `contracts/test/filter-strategy-spec-v1.test.ts` pins every value above, and a backend test proves
+each default is runnable today: as a `StrategySpecV1` it passes `core.evaluate.check()`.
 
-## 4. Pattern preset (`pattern-preset-strategy.ts`)
+## 5. Pattern presets and other templates (plan section c2)
 
-`PatternKindSchema`: `hammer`, `inverted_hammer`, `bullish_engulfing`, `bearish_engulfing`, `doji`, `morning_star`,
-`evening_star`, `three_white_soldiers`, `three_black_crows`, `breakout`, `bullish_reversal`, `bearish_reversal`.
+Presets are `StrategySpecV1` files under `contracts/templates/`, indexed by `catalog.json`.
 
-`PATTERN_RULES` (one table, mirrored in Python) drives the validity rules:
+- `templates/*.json` (flat): the eleven pre-existing templates. They stay put: `backend/tests/test_templates.py` asserts the flat
+  folder holds exactly its golden-tested set.
+- `templates/patterns/`: the 20 candlestick presets (9 bullish reversal, 9 bearish reversal, doji, inside bar). Defaults: `runOn
+  bar_close_15m`, `withinBars 1`; a reversal sets `trend after_downtrend` (bullish) or `after_uptrend` (bearish) with `trendBars 5`;
+  an alert-only `then` (`inbox`, `frequency once_per_bar`, a `message` with placeholders), no paper order. Optional extras (RVOL >= 1.5
+  confirmation, a near-level check with `within_pct 0.5`) are for the user to add in the builder.
+- `templates/setups/`: the six new non-candlestick templates: `hod-break` (close crosses above `session_high`), `red-to-green`
+  (close crosses above `prior_day_close`), `ema-9-21-cross`, `golden-death-cross` (SMA 50/200), `macd-signal-cross` (12/26/9), and
+  `abnormal-volume-up-day`. The cross presets fire both ways (`any` of `crosses_above` and `crosses_below`).
+- `templates/filters/`: the ten screener defaults (section 4).
 
-| kind | category | bars | `lookback` | allowed `direction` | exact `tolerance` keys |
-|---|---|---|---|---|---|
-| hammer, inverted_hammer | candlestick | 1 | absent | bullish | `shadowMinRatio`, `bodyMaxPct` |
-| bullish_engulfing | candlestick | 2 | absent | bullish | `engulfMinRatio` |
-| bearish_engulfing | candlestick | 2 | absent | bearish | `engulfMinRatio` |
-| doji | candlestick | 1 | absent | neutral | `bodyMaxPct` |
-| morning_star | candlestick | 3 | absent | bullish | `starBodyMaxPct` |
-| evening_star | candlestick | 3 | absent | bearish | `starBodyMaxPct` |
-| three_white_soldiers | candlestick | 3 | absent | bullish | `bodyMinPct` |
-| three_black_crows | candlestick | 3 | absent | bearish | `bodyMinPct` |
-| breakout | technical | n/a | required | bullish (close above prior N-bar high), bearish (below low) | `bufferPct` |
-| bullish_reversal | technical | n/a | required | bullish | `retracePct` |
-| bearish_reversal | technical | n/a | required | bearish | `retracePct` |
-
-Tolerance fields (all `number`): `bodyMaxPct` (0,100], `bodyMinPct` (0,100], `starBodyMaxPct` (0,100], `shadowMinRatio` (0,20],
-`engulfMinRatio` [1,5], `bufferPct` [0,10], `retracePct` (0,100].
-
-`PatternSpecSchema`:
-
-```
-{ pattern: PatternKind, direction: "bullish"|"bearish"|"neutral", timeframe,
-  lookback?: int 2..260,
-  priorTrend?: { direction: "up"|"down"|"any", bars: int 1..50 },
-  confirmation: { type: "none" } | { type: "next_bar_close", bars: int 1..3 }
-              | { type: "volume", minRatio: number 1..20, lookback: int 2..60 },
-  tolerance: { ...keys above } }
-```
-
-Rules: direction is allowed for the kind; `lookback` present exactly for the lookback kinds; `tolerance` has exactly the
-kind's keys; for candlestick kinds with `priorTrend`, a bullish pattern needs `down` or `any` and a bearish pattern needs
-`up` or `any`.
-
-`PatternPresetSchema`: `{ schemaVersion: 1, kind: "pattern", id: Slug, name, description?, spec: PatternSpec }`.
-Shipped presets in `contracts/presets/patterns/`: `hammer`, `inverted-hammer`, `bullish-engulfing`, `bearish-engulfing`,
-`doji`, `morning-star`, `evening-star`, `three-white-soldiers`, `three-black-crows`, `breakout-up`, `breakout-down`,
-`bullish-reversal`, `bearish-reversal`.
-
-## 5. Custom strategy (`custom-strategy.ts`)
+`PresetCatalogV1` (`contracts/catalog.json`; an `id` is a slug, `^[a-z0-9][a-z0-9_-]{0,63}$`, so `52-week-breakout` is valid):
 
 ```
-{ schemaVersion: 1, kind: "custom", name, description?, timeframe, universe?,
-  direction: "long"|"short"|"either",
-  filters?: FilterGroup,
-  patterns?: { match: "all"|"any", entries: [{ presetId?: Slug, spec: PatternSpec }] },   // 1..8 entries
-  risk?: { stop?: Stop, target?: Target, positionSizeHint?: SizeHint } }                  // non-empty
-Stop   = { type: "pct", value: (0,50] } | { type: "atr_multiple", value: (0,20] }
-Target = { type: "pct", value: (0,500] } | { type: "r_multiple", value: (0,20] } | { type: "atr_multiple", value: (0,40] }
-SizeHint = { type: "risk_pct_of_book", value: (0,5] } | { type: "notional_usd", value: (0,1000000] }
-         | { type: "shares", value: int 1..100000 }
+{ schemaVersion: 1,
+  entries: { id: slug, file: string (path under templates/), kind: "strategy" | "filter", lane: "technical" | "fundamental",
+             category: "candlestick" | "breakout" | "trend" | "volume" | "futures" | "income" | "long_term",
+             bias: "bullish" | "bearish" | "neutral", label: string 1..80, summary: string 1..160 }[] 1..200 }
 ```
 
-Validity rule set (`CUSTOM_RULES`, each rule has a fixture in `invalid/`):
+The catalog ships 47 technical-lane entries (10 filters, 20 candlestick, 5 breakout, 9 trend, 2 volume, 1 futures). The schema checks each
+entry's shape; the tests check what a schema cannot: ids and files are unique, every `file` exists, every template file is cataloged
+exactly once, `kind` matches the schema the file parses with, and the 20 pattern files cover the 20 `PatternId`s once each.
 
-1. `filters` or `patterns` present.
-2. Filter group depth <= 3 and leaves <= 30.
-3. Every pattern `spec.timeframe` is the strategy timeframe or longer (`timeframeAtLeast`).
-4. No two pattern entries share `(pattern, timeframe, direction)`.
-5. With `patterns.match = "all"`, entries cannot mix bullish and bearish directions.
-6. `direction: "long"` rejects bearish entries; `"short"` rejects bullish entries (neutral is always fine).
-7. A `r_multiple` target requires a `stop`.
-8. `risk`, when present, has at least one of its three keys.
+## 6. Custom strategy
 
-## 6. Alert strategy (`alert-strategy.ts`)
+A plain `StrategySpecV1`; there is no separate schema. The builder (plan c3) writes it, with the Pattern tab in the operand picker
+producing `pattern` conditions. A preset's "Customize" copies the template into a draft, and the DB record carries
+`origin: "template:<id>"`. Fixtures under `fixtures/strategy-spec-v1/valid/v2-custom-*.json` show the shape.
 
-```
-{ schemaVersion: 1, kind: "alert", name, description?, severity?, timeframe,
-  trigger: { type: "strategy_match", strategyId: Slug }
-         | { type: "price_cross", symbol: Ticker, direction: "above"|"below", level: number (0,1000000] }
-         | { type: "indicator_threshold", symbol: Ticker, indicator: FilterMetric,   // nested metric object
-             op: gt|gte|lt|lte|crosses_above|crosses_below, threshold: number },
-  schedule: { sessions: "regular"|"extended"|"always", days: ("mon".."sun")[1..7], window?: { start: HH:MM, end: HH:MM } },
-  cooldown: { minutes: int 0..1440, dedupe: "per_symbol"|"per_trigger"|"per_bar" },
-  maxPerDay?: int 1..50,
-  channels: ("in_app"|"telegram"|"slack")[1..3] }
-```
+## 7. Alert strategy (`AlertStrategySpecV1`)
 
-`in_app` is the first-class channel (v1 specs call it `inbox`; the API layer maps the two). Rules: `channels` unique and
-`channels[0] === "in_app"`; `days` unique and, for `regular`/`extended`, no `sat`/`sun`; `window.start < window.end`
-(same-day, New York time); a `regular` window stays inside 09:30-16:00 and an `extended` window inside 04:00-20:00;
-`indicator_threshold.threshold` lies in the metric's domain (`FILTER_METRIC_DOMAIN`).
+`StrategySpecV1.extend({ then: { alert } })`: the same `watch`, `when`, and `limits`, but `then` holds the alert alone, so a
+`paperOrder` is an unrecognized key. This keeps 02a's rule that only strategies create alerts; the DB stage `alert_only` is where
+such a spec lives. Channels stay the v1 enum `inbox | telegram | slack` (`inbox` is the in-app channel; there is no `in_app`
+value). Two rules, ids in `ALERT_RULES`: channels do not repeat, and the first channel is `inbox`, so every alert lands in the Desk
+inbox. The Pydantic class subclasses the generated `StrategySpecV1` and adds the same two checks (JSON Schema cannot say "unique,
+inbox first"). Every valid alert fixture is also a valid plain `StrategySpecV1`.
 
-## 7. Strategy draft (`strategy-draft.ts`)
+## 8. Strategy draft (`strategy-draft.ts`)
 
 ```
-{ schemaVersion: 1, kind: "draft", draftId: Slug, createdAt: UtcTimestamp,
-  request: string (1..2000),        // the user's natural-language ask
-  rationale: string (1..2000),      // the assistant's explanation
-  status: "proposed"|"edited"|"final"|"rejected",
-  draftConfig: FilterStrategy | AlertStrategy,       // discriminated on kind
-  edits: Edit[] (0..50),                              // user edits: replace/add/remove at JSON pointers into draftConfig
-  finalConfig?: FilterStrategy | AlertStrategy }
+{ schemaVersion: 1, draftId: slug, createdAt: "YYYY-MM-DDTHH:MM:SSZ",
+  request: string 1..2000, rationale: string 1..2000,
+  status: "proposed" | "edited" | "final" | "rejected",
+  target: "filter" | "alert",
+  draftConfig: FilterStrategySpecV1 | AlertStrategySpecV1,
+  edits: Edit[] 0..50,                      // replace / add / remove at RFC 6901 pointers into draftConfig
+  finalConfig?: FilterStrategySpecV1 | AlertStrategySpecV1 }
 ```
 
-Rules: `proposed` has no edits and no `finalConfig`; `edited` has edits and no `finalConfig`; `final` has `finalConfig`;
-`rejected` has no `finalConfig`; `edits` apply cleanly to `draftConfig` (`applyEdits`) for `edited` and `final`;
-`finalConfig.kind === draftConfig.kind`; for `final`, `jsonEqual(applyEdits(draftConfig, edits), finalConfig)`.
-That last rule is the round trip: draft + edits = the validated final config, in both languages.
+`target` says which of the two specs the configs are (neither carries a `kind`). Rules, ids in `DRAFT_RULES` (Zod) and the same-named
+Python tuple, each enforced in both languages: `proposed` has no edits and no `finalConfig`; `edited` has edits and no `finalConfig`;
+`final` has a `finalConfig`; `rejected` has none; `draftConfig` and `finalConfig` are the spec `target` names; `edits` apply cleanly;
+for `edited` and `final`, `draftConfig` with the edits applied is a valid spec of its target; and for `final` it equals `finalConfig`
+(the round trip: draft + edits = the validated final config).
 
-## 8. Cross-check
+The plan's API-only `DraftResponse { kind, spec, problems, diff, basedOnVersionId }` is a Pydantic-only API model and not part of this
+contract set; it wraps these specs when the `draft_strategy` and `draft_filter` tools are built.
 
-- Zod tests accept every `valid` fixture and preset, reject every `invalid` fixture, and the new shared edit cases
-  (`fixtures/json-pointer/cases.json`).
-- Pydantic tests do the same over the same files, and assert `model_dump(mode="json", by_alias=True, exclude_unset=True)`
-  of a parsed valid file equals the file.
-- `backend/tests/test_strategy_config_crosscheck.py` dumps every Pydantic-parsed valid file back to JSON and runs
-  `contracts/scripts/parse-configs.ts` (Zod `StrategyConfigSchema`) over the dumps: Zod JSON <-> Pydantic parse in both directions.
+## 9. Generation pipeline and verification
 
-## 9. Implementation notes (as built)
+- `contracts/scripts/generate-json-schema.ts` writes one bundle, `generated/strategy-spec-v1.schema.json`. Its root is `StrategySpecV1`;
+  `FilterStrategySpecV1` and `PresetCatalogV1` ride along as extra `$defs`, and a def shared by several schemas (`Condition`,
+  `SeriesOperand`, ...) must be identical or the generator throws. One bundle means one `datamodel-codegen` run and one generated
+  module: `backend/src/ai_trading/contracts/strategy_spec_v1.py` now holds `StrategySpecV1`, `FilterStrategySpecV1`, and
+  `PresetCatalogV1`, with the shared operand classes emitted once. `backend/scripts/generate-contracts.sh` is unchanged.
+- Hand-written Pydantic is limited to what JSON Schema cannot carry: `alert_strategy.py` (channel rules), `strategy_draft.py`
+  (cross-field rules and the edit replay), `json_pointer.py`, and `common.py` (draft primitives).
+- Engine gate: `core.evaluate.check()` (called on every version save and every evaluation) now rejects the contract features no
+  engine path runs yet: `watch.universe.filter`, the `pattern` condition, the `session_high` and `session_low` levels, and
+  `then.alert.frequency`, `expiresOn`, and `message`. A saved spec therefore never reaches a tick that would crash on it or silently
+  ignore an expiry. Remove an entry from `_UNSUPPORTED_*` as the engine learns it (`backend/tests/test_unsupported_features.py`).
+- Tests: Zod tests accept every `valid` fixture and template and reject every `invalid` one; Pydantic tests do the same over the same
+  files; `backend/tests/test_contract_crosscheck.py` dumps every Pydantic-parsed valid file back to JSON and re-parses it with
+  `contracts/scripts/parse-configs.ts` (the matching Zod schema), and replays every invalid file through both validators. It needs
+  `node` and `pnpm install` in `contracts/`; without them the two Zod-side tests skip.
+- Run `pnpm typecheck && pnpm test` in `contracts/` and `uv run ruff check . && uv run ruff format --check . && uv run pytest -q` in
+  `backend/`. After changing any Zod schema run `pnpm generate:json-schema` and then `backend/scripts/generate-contracts.sh`; both
+  have a "generated file is current" test.
 
-- Verification: `pnpm typecheck && pnpm test` in `contracts/` and `uv run ruff check . && uv run ruff format --check . && uv run pytest -q`
-  in `backend/` are green. A one-off differential fuzz (about 41,000 single-field mutations of every valid fixture: delete, null,
-  boolean, wrong type, boundary numbers) gave the same accept/reject verdict from Zod and Pydantic in every case.
-- Rule ids live in `CUSTOM_RULES`, `ALERT_RULES`, `DRAFT_RULES` (Zod) and the same-named Python tuples; the tests assert the two
-  lists match and that each rule has an `invalid/` fixture prefixed with its id. Filter and pattern rules are unnamed but each has
-  an `invalid/` fixture.
-- Filter conditions are flat (`{ "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 }`); `rank.by` and the alert's
-  `indicator` carry the nested metric object.
-- `backend/tests/test_strategy_config_crosscheck.py` is the Zod JSON <-> Pydantic check. It needs `node` and `pnpm install` in
-  `contracts/`; without them the two Zod-side tests skip and the Pydantic-side tests still run.
-- `strategy-spec-v1` is unchanged except that `HhMmSchema` and `TickerSchema` are now exported. The only package change is the
-  `./*` subpath export and the `node --test test/*.test.ts` script.
+## 10. Deviations from the plan, and known gaps
 
-Known gaps, deliberately left for the consumer layers:
-
-- A customized filter's `preset.params` is not checked against the shipped preset's `min`/`max`/`path`: the catalog entry is the
-  only place those live, so the API layer that loads a customized strategy must check it against the entry.
-- `presetId` in a custom strategy's pattern entry is only a slug; it is not required to match a shipped preset or its `spec`.
-- Edits on a `rejected` draft are not replayed. `bars` in `PATTERN_RULES` is informational.
-- The engine still needs exact definitions for `breakout.bufferPct`, `*_reversal.retracePct`, and `lookback` on the technical
-  patterns; the schema only fixes their shape and range.
-- `request`, `rationale`, `name`, and `description` limits count UTF-16 units in Zod and code points in Python (astral characters
-  such as emoji differ by one).
+- One JSON Schema bundle, not a second schema file with a second `--input` (section 9): avoids duplicating about 300 lines of
+  generated operand classes and keeps the single ruff exclusion.
+- The five new non-candlestick templates live in `templates/setups/`, not `templates/patterns/`: they use no `pattern` condition,
+  and the flat folder is locked by `test_templates.py`. "Abnormal volume + up day" had no file yet, so it is one of the six.
+- "Futures position risk (02g section 5)" is not shipped: it belongs to 02g and has no template yet.
+- `liquidity.minAvgVolume` has an upper bound of 10,000,000,000 (the plan says only "int >= 1"); every field is bounded.
+- `assetTypes` may repeat a value (`["stock", "stock"]`): harmless, and JSON Schema uniqueness would need hand-written Pydantic.
+- Alert strategy: the plan's "stage alert_only" is a DB column, not a spec field, so the contract expresses it as "no `paperOrder`".
+- A `filter` universe, `pattern` conditions, the new levels, and the new alert fields validate but cannot be saved as a strategy
+  version until the engine implements them (the gate above); the filter defaults themselves use only operands the engine runs.
+- `name`, `request`, and `rationale` limits count UTF-16 units in Zod and code points in Python (astral characters differ by one);
+  `message` avoids the problem by being BMP-only.
+- Code follow-ups (Desk lane): `core/patterns.py` and the pattern evaluator; `session_high` and `session_low` levels; the alert
+  `frequency`, `expiresOn`, and `message` behavior; `filter` universe resolution; the `filter_strategies` and
+  `filter_strategy_versions` tables, `strategies.lane` and `strategies.origin`, and the `draft_filter` tool.

@@ -1,26 +1,17 @@
-"""Alert strategy (kind "alert"): when to notify, and where. Nothing here places an order.
+"""Alert strategy: a StrategySpecV1 for a strategy at stage "alert_only" (mirror of contracts/src/alert-strategy.ts).
 
-Mirror of contracts/src/alert-strategy.ts: same field names, same limits, same rules. Every rule in
-ALERT_RULES has a model_validator here with the same message (the validator names are ours; Zod has
-none). Hand-written, not generated.
+Same watch/when/limits as StrategySpecV1, but `then` carries the alert alone, never a paperOrder
+(02a: only strategies create alerts). The alert's channels are unique and start with "inbox", the
+in-app channel. Hand-written on top of the generated StrategySpecV1: JSON Schema cannot say
+"unique, inbox first".
 """
 
-from typing import Annotated, Literal, NamedTuple
+from typing import NamedTuple
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 
-from ai_trading.contracts.common import (
-    ConfigModel,
-    Description,
-    HhMm,
-    Name,
-    SchemaVersion,
-    Severity,
-    Slug,
-    Ticker,
-    Timeframe,
-)
-from ai_trading.contracts.filter_strategy import FILTER_METRIC_DOMAIN, FilterMetric
+from ai_trading.contracts.common import ConfigModel
+from ai_trading.contracts.strategy_spec_v1 import Alert, StrategySpecV1
 
 
 class _Rule(NamedTuple):
@@ -29,104 +20,27 @@ class _Rule(NamedTuple):
 
 
 ALERT_RULES: tuple[_Rule, ...] = (
-    _Rule("channels-unique", "channels must be unique"),
-    _Rule("channels-in-app-first", "channels[0] must be in_app"),
-    _Rule("days-unique", "days must be unique"),
-    _Rule("days-weekday-session", "regular and extended sessions cannot include sat or sun"),
-    _Rule("window-start-before-end", "window.start must be before window.end"),
-    _Rule("window-regular-bounds", "a regular window must lie inside 09:30-16:00"),
-    _Rule("window-extended-bounds", "an extended window must lie inside 04:00-20:00"),
-    _Rule("threshold-in-domain", "threshold must lie in the indicator metric's domain"),
+    _Rule("channels-unique", "alert channels must not repeat"),
+    _Rule("channels-inbox-first", "the first alert channel must be inbox"),
 )
 _RULE_TEXT: dict[str, str] = {rule.id: rule.description for rule in ALERT_RULES}
 
-AlertChannel = Literal["in_app", "telegram", "slack"]
-Weekday = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+class AlertOnlyThen(ConfigModel):
+    alert: Alert
 
 
-class StrategyMatchTrigger(ConfigModel):
-    type: Literal["strategy_match"]
-    strategyId: Slug
-
-
-class PriceCrossTrigger(ConfigModel):
-    type: Literal["price_cross"]
-    symbol: Ticker
-    direction: Literal["above", "below"]
-    level: Annotated[float, Field(gt=0, le=1000000)]
-
-
-class IndicatorThresholdTrigger(ConfigModel):
-    type: Literal["indicator_threshold"]
-    symbol: Ticker
-    indicator: FilterMetric
-    op: Literal["gt", "gte", "lt", "lte", "crosses_above", "crosses_below"]
-    threshold: float
+class AlertStrategySpecV1(StrategySpecV1):
+    then: AlertOnlyThen  # narrower than StrategySpecV1.then: no paperOrder
 
     @model_validator(mode="after")
-    def _threshold_in_domain(self) -> "IndicatorThresholdTrigger":
-        low, high = FILTER_METRIC_DOMAIN[self.indicator.metric]
-        if self.threshold < low or (high is not None and self.threshold > high):
-            raise ValueError(_RULE_TEXT["threshold-in-domain"])
-        return self
-
-
-AlertTrigger = Annotated[
-    StrategyMatchTrigger | PriceCrossTrigger | IndicatorThresholdTrigger,
-    Field(discriminator="type"),
-]
-
-
-class AlertWindow(ConfigModel):
-    start: HhMm
-    end: HhMm
-
-
-class AlertSchedule(ConfigModel):
-    sessions: Literal["regular", "extended", "always"]
-    days: Annotated[list[Weekday], Field(min_length=1, max_length=7)]
-    window: AlertWindow | None = None
-
-    @model_validator(mode="after")
-    def _schedule_rules(self) -> "AlertSchedule":
-        if len(set(self.days)) != len(self.days):
-            raise ValueError(_RULE_TEXT["days-unique"])
-        if self.sessions != "always" and {"sat", "sun"} & set(self.days):
-            raise ValueError(_RULE_TEXT["days-weekday-session"])
-        if self.window is None:
-            return self
-        start, end = self.window.start, self.window.end
-        if not start < end:
-            raise ValueError(_RULE_TEXT["window-start-before-end"])
-        if self.sessions == "regular" and not ("09:30" <= start and end <= "16:00"):
-            raise ValueError(_RULE_TEXT["window-regular-bounds"])
-        if self.sessions == "extended" and not ("04:00" <= start and end <= "20:00"):
-            raise ValueError(_RULE_TEXT["window-extended-bounds"])
-        return self
-
-
-class AlertCooldown(ConfigModel):
-    minutes: Annotated[int, Field(ge=0, le=1440)]
-    dedupe: Literal["per_symbol", "per_trigger", "per_bar"]
-
-
-class AlertStrategy(ConfigModel):
-    schemaVersion: SchemaVersion
-    kind: Literal["alert"]
-    name: Name
-    description: Description | None = None
-    severity: Severity | None = None
-    timeframe: Timeframe
-    trigger: AlertTrigger
-    schedule: AlertSchedule
-    cooldown: AlertCooldown
-    maxPerDay: Annotated[int, Field(ge=1, le=50)] | None = None
-    channels: Annotated[list[AlertChannel], Field(min_length=1, max_length=3)]
-
-    @model_validator(mode="after")
-    def _channels_rules(self) -> "AlertStrategy":
-        if len(set(self.channels)) != len(self.channels):
-            raise ValueError(_RULE_TEXT["channels-unique"])
-        if self.channels[0] != "in_app":
-            raise ValueError(_RULE_TEXT["channels-in-app-first"])
+    def _channel_rules(self) -> "AlertStrategySpecV1":
+        channels = self.then.alert.channels
+        problems = []
+        if len(set(channels)) != len(channels):
+            problems.append(_RULE_TEXT["channels-unique"])
+        if channels[0] != "inbox":
+            problems.append(_RULE_TEXT["channels-inbox-first"])
+        if problems:
+            raise ValueError("; ".join(problems))
         return self

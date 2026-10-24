@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Bullish harami",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": { "op": "pattern", "pattern": "bullish_harami", "trend": "after_downtrend", "trendBars": 5, "withinBars": 1 },
+  "then": {
+    "alert": {
+      "channels": ["inbox"],
+      "severity": "opportunity",
+      "frequency": "once_per_bar",
+      "message": "{symbol} bullish harami on the 15m, close {close} at {time}"
+    }
+  }
+}

@@ -1,20 +1,40 @@
 {
   "schemaVersion": 1,
-  "kind": "draft",
-  "draftId": "draft-abnormal-volume-watch",
-  "createdAt": "2026-10-23T14:31:00Z",
-  "request": "Tell me when the abnormal volume screen matches, at most once per symbol an hour.",
-  "rationale": "The strategy_match trigger fires whenever the abnormal-volume preset matches. Limiting it to in-app notifications with a 60-minute per-symbol cooldown keeps it quiet.",
+  "draftId": "proposed-alert",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Tell me in the inbox when a watched name trades at 3x its usual volume on a 15-minute bar.",
+  "rationale": "A 3x RVOL alert on the Day movers list fires once per bar close, so it stays quiet between bars.",
   "status": "proposed",
+  "target": "alert",
   "draftConfig": {
     "schemaVersion": 1,
-    "kind": "alert",
-    "name": "Abnormal volume watch",
-    "timeframe": "1d",
-    "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
-    "schedule": { "sessions": "regular", "days": ["mon", "tue", "wed", "thu", "fri"] },
-    "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
-    "channels": ["in_app"]
+    "name": "Volume spike alert",
+    "watch": {
+      "universe": {
+        "watchlist": "Day movers"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "then": {
+      "alert": {
+        "channels": [
+          "inbox",
+          "telegram"
+        ],
+        "severity": "info"
+      }
+    }
   },
   "edits": []
 }

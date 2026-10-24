@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "pattern",
-  "name": "Wrong kind",
-  "timeframe": "1d",
-  "match": { "all": [{ "metric": "close", "op": "gt", "threshold": 1 }] }
-}

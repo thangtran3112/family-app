@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "filter",
-  "name": "RSI above 100",
-  "timeframe": "1d",
-  "match": { "all": [{ "metric": "rsi", "lookback": 14, "op": "gt", "threshold": 120 }] }
-}

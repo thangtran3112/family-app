@@ -27,6 +27,10 @@ CADENCE_MINUTES = {"bar_close_1m": 1, "bar_close_5m": 5, "bar_close_15m": 15, "b
 INTRADAY_CADENCES = set(CADENCE_MINUTES) | {"premarket_0830"}
 _SESSION_LEVELS = {"premarket_high", "premarket_low", "overnight_high", "overnight_low"}
 _OPENING_LEVELS = {"opening_range_high", "opening_range_low"}
+# Contract features (02k) that no engine path executes yet. `check()` rejects them at save time, so a
+# stored spec never reaches a tick that would crash on them or silently ignore them.
+_UNSUPPORTED_LEVELS = {"session_high", "session_low"}
+_UNSUPPORTED_ALERT_FIELDS = ("frequency", "expiresOn", "message")
 _COMPARE = {"gt": np.greater, "gte": np.greater_equal, "lt": np.less, "lte": np.less_equal}
 _PIVOT_METHODS = {
     "classic": pivots.classic_pivots,
@@ -78,7 +82,8 @@ def label(operand: dict[str, Any]) -> str:
 def check(spec: StrategySpecV1) -> list[str]:
     """Rules the JSON Schema cannot express: operands that the cadence cannot compute."""
     run_on = spec.watch.runOn
-    when = spec.model_dump(by_alias=True, exclude_none=True)["when"]
+    dumped = spec.model_dump(by_alias=True, exclude_none=True)
+    when = dumped["when"]
     intraday_only = {"vwap"} | _SESSION_LEVELS | _OPENING_LEVELS
     problems = []
     for operand in _operands(when):
@@ -89,7 +94,20 @@ def check(spec: StrategySpecV1) -> list[str]:
             problems.append(f"{name} is not known at 08:30 ET")
     if run_on not in INTRADAY_CADENCES and any(n.get("op") == "time_between" for n in _nodes(when)):
         problems.append(f"time_between needs intraday bars; {run_on} uses daily bars")
+    problems += [f"{name} is not supported by the engine yet" for name in _unsupported(dumped)]
     return problems
+
+
+def _unsupported(dumped: dict[str, Any]) -> list[str]:
+    """The 02k contract features in a dumped spec that the engine cannot run yet."""
+    found = []
+    if "filter" in dumped["watch"]["universe"]:
+        found.append("watch.universe.filter")
+    if any(node.get("op") == "pattern" for node in _nodes(dumped["when"])):
+        found.append("the pattern condition")
+    found += sorted({op["level"] for op in _operands(dumped["when"]) if op.get("level") in _UNSUPPORTED_LEVELS})
+    found += [f"then.alert.{key}" for key in _UNSUPPORTED_ALERT_FIELDS if key in dumped["then"]["alert"]]
+    return found
 
 
 @dataclass(frozen=True)

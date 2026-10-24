@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "custom",
-  "name": "Oversold with a stop only",
-  "timeframe": "1d",
-  "direction": "either",
-  "filters": { "all": [{ "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 }] },
-  "risk": { "stop": { "type": "atr_multiple", "value": 1.5 } }
-}

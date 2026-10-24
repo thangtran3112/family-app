@@ -1,58 +1,76 @@
 {
   "schemaVersion": 1,
-  "kind": "draft",
-  "draftId": "draft-liquid-gaps",
-  "createdAt": "2026-10-23T14:36:00Z",
-  "request": "Liquid names with a gap up or a volume spike, or an oversold bounce setup.",
-  "rationale": "Kept the proposal as written. The liquidity floor applies to every branch, and the three branches are the gap, the volume spike, and the oversold bounce.",
+  "draftId": "final-accepted-as-is",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Find US stocks with relative volume of at least 3x on each 15-minute bar close.",
+  "rationale": "3x RVOL on 15-minute bars flags unusual volume; ranking by RVOL puts the strongest names first.",
   "status": "final",
+  "target": "filter",
   "draftConfig": {
     "schemaVersion": 1,
-    "kind": "filter",
-    "name": "Liquid gaps or volume spikes",
-    "description": "Liquid names with a gap up or a volume spike, or a deep oversold bounce setup",
-    "timeframe": "1d",
-    "match": {
-      "all": [
-        { "metric": "avg_volume", "lookback": 20, "op": "gte", "threshold": 500000 },
-        {
-          "any": [
-            { "metric": "gap_pct", "op": "between", "min": 3, "max": 15 },
-            { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2.5 },
-            {
-              "all": [
-                { "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 },
-                { "metric": "pct_from_high", "lookback": 252, "op": "gt", "threshold": 40 }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+    "name": "Volume leaders",
+    "watch": {
+      "universe": {
+        "market": "us_equities"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "liquidity": {
+      "minPrice": 5,
+      "minAvgVolume": 500000
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "rank": {
+      "by": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "order": "desc"
+    },
+    "maxResults": 25
   },
   "edits": [],
   "finalConfig": {
     "schemaVersion": 1,
-    "kind": "filter",
-    "name": "Liquid gaps or volume spikes",
-    "description": "Liquid names with a gap up or a volume spike, or a deep oversold bounce setup",
-    "timeframe": "1d",
-    "match": {
-      "all": [
-        { "metric": "avg_volume", "lookback": 20, "op": "gte", "threshold": 500000 },
-        {
-          "any": [
-            { "metric": "gap_pct", "op": "between", "min": 3, "max": 15 },
-            { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2.5 },
-            {
-              "all": [
-                { "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 },
-                { "metric": "pct_from_high", "lookback": 252, "op": "gt", "threshold": 40 }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+    "name": "Volume leaders",
+    "watch": {
+      "universe": {
+        "market": "us_equities"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "liquidity": {
+      "minPrice": 5,
+      "minAvgVolume": 500000
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "rank": {
+      "by": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "order": "desc"
+    },
+    "maxResults": 25
   }
 }

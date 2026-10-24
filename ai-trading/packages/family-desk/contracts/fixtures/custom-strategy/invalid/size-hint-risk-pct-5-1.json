@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "custom",
-  "name": "Risk 5.1 percent of book",
-  "timeframe": "1d",
-  "direction": "long",
-  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
-  "risk": { "positionSizeHint": { "type": "risk_pct_of_book", "value": 5.1 } }
-}

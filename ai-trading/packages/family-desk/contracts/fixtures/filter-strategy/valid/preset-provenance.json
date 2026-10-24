@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "kind": "filter",
-  "name": "Abnormal volume, 3x over 10 bars",
-  "timeframe": "1d",
-  "preset": { "id": "abnormal-volume", "params": { "multiple": 3, "lookback": 10 } },
-  "match": { "all": [{ "metric": "volume_ratio", "lookback": 10, "op": "gte", "threshold": 3 }] }
-}

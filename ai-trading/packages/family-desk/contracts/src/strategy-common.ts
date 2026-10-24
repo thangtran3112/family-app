@@ -1,36 +1,15 @@
 import { z } from "zod";
-import { HhMmSchema, TickerSchema } from "./strategy-spec-v1.ts";
 
-// Shared primitives for the persona-split strategy configs (filter, pattern, custom, alert,
-// draft). Every config is a strict JSON object. The Pydantic mirror (ai_trading.contracts.*)
-// rejects nulls and booleans everywhere, so these schemas have no boolean field: a flag is an
-// enum instead. No `.meta({ id })` here: ids are global in Zod and only the v1 spec exports JSON Schema.
-export { HhMmSchema, TickerSchema };
+// Shared primitives for the strategy-draft exchange model and the preset catalog. The specs
+// themselves (strategy-spec-v1.ts, filter-strategy-spec-v1.ts) own their field schemas. The
+// Pydantic mirror (ai_trading.contracts.*) rejects nulls and booleans everywhere, so nothing here
+// is a boolean: a flag is an enum instead. No `.meta({ id })`: ids are global in Zod, and the
+// JSON Schema bundle (scripts/generate-json-schema.ts) names only the spec and catalog schemas.
 
 export const SchemaVersionSchema = z.literal(1);
 
-// Stable ids for presets, strategies, and drafts. [a-z0-9], not \w: both validators must agree.
-export const SlugSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
-
-export const NameSchema = z.string().min(1).max(80);
-export const DescriptionSchema = z.string().min(1).max(500);
-
-// Bar cadence, shortest to longest. Order matters: see TIMEFRAME_ORDER.
-export const TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d", "1w"] as const;
-export const TimeframeSchema = z.enum(TIMEFRAMES);
-export type Timeframe = z.infer<typeof TimeframeSchema>;
-
-/** True when `a` is the same bar length as `b` or a longer one. */
-export function timeframeAtLeast(a: Timeframe, b: Timeframe): boolean {
-  return TIMEFRAMES.indexOf(a) >= TIMEFRAMES.indexOf(b);
-}
-
-export const UniverseSchema = z.union([
-  z.strictObject({ watchlist: z.string().min(1).max(80) }),
-  z.strictObject({ symbols: z.array(TickerSchema).min(1).max(70) }),
-]);
-
-export const SeveritySchema = z.enum(["info", "opportunity", "risk"]);
+// Stable ids for presets and drafts. [a-z0-9], not \w: both validators must agree.
+export const SlugSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 
 // UTC instant, whole seconds: "2026-10-23T14:30:00Z".
 export const UtcTimestampSchema = z
