@@ -7,12 +7,15 @@ from ai_trading_common.quality import Quality
 from ai_trading_common.registry import DataSources
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, FiniteFloat
+from sqlalchemy.orm import Session
 
-from ai_trading.api.auth import get_current_user, get_data_sources
+from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
 from ai_trading.api.bars import INTERVAL_DELTA, utc_datetime
 from ai_trading.api.market_data import bar_as_of, finite_or_none, get_market_bars, validate_symbol
 from ai_trading.api.schemas.common import Stamp
 from ai_trading.api.schemas.market import (
+    BiasChangeOut,
+    BiasHistoryEntryOut,
     BiasHistoryOut,
     GaugeLabel,
     LevelsOut,
@@ -20,10 +23,11 @@ from ai_trading.api.schemas.market import (
     VoteCountsOut,
 )
 from ai_trading.api.stamp import make_stamp
-from ai_trading.core import bias, indicators, pivots
+from ai_trading.core import bias, indicators, panel, pivots
 from ai_trading.engine.cardback import _PIVOT_PERIOD, CardBack, compute_card_back, pivot_inputs
 from ai_trading.mvp_stub import market as stub_market
 from ai_trading.mvp_stub import stub_enabled
+from ai_trading.strategies.votes import strategies_gauge
 
 router = APIRouter(prefix="/api/desk/technicals", tags=["market data"], dependencies=[Depends(get_current_user)])
 
@@ -105,10 +109,52 @@ class TechnicalsOut(BaseModel):
     first_bar: datetime | None
     last_bar: datetime | None
     bias_ready: bool  # false while the bias is "warming up" (fewer than 250 closed bars)
-    indicators: dict[str, FiniteFloat | str | None] | None  # stub only until the real series lands
+    indicators: dict[str, FiniteFloat | str | None] | None  # last values; null for an empty frame
     bias_history: BiasHistoryOut | None
     levels: LevelsOut | None
     stamp: Stamp
+
+
+#: `bias_history` recomputes the bias for each of 20 bars (about a second), and a chart re-asks for the same
+#: timeframe often, so the result is kept per (symbol, timeframe, last bar, bar count).
+_BIAS_HISTORY_CACHE: dict[tuple[str, str, str, int], BiasHistoryOut | None] = {}
+_BIAS_HISTORY_CACHE_SIZE = 256
+
+
+def _bias_history(symbol: str, timeframe: str, frame: pd.DataFrame) -> BiasHistoryOut | None:
+    if frame.empty:
+        return None
+    key = (symbol, timeframe, str(frame.index[-1]), len(frame))
+    if key not in _BIAS_HISTORY_CACHE:
+        points, change = panel.bias_history(frame)
+        built = None
+        if points:
+            built = BiasHistoryOut(
+                history=[
+                    BiasHistoryEntryOut(
+                        bar=utc_datetime(point.bar),
+                        summary=point.summary,
+                        score=point.score,
+                        oscillators=point.oscillators,
+                        moving_averages=point.moving_averages,
+                    )
+                    for point in points
+                ],
+                last_change_in_window=None
+                if change is None
+                else BiasChangeOut(from_=change.from_label, to=change.to_label, at_bar=utc_datetime(change.at_bar)),
+            )
+        if len(_BIAS_HISTORY_CACHE) >= _BIAS_HISTORY_CACHE_SIZE:
+            _BIAS_HISTORY_CACHE.pop(next(iter(_BIAS_HISTORY_CACHE)))
+        _BIAS_HISTORY_CACHE[key] = built
+    return _BIAS_HISTORY_CACHE[key]
+
+
+def _levels(frame: pd.DataFrame) -> LevelsOut | None:
+    if frame.empty:
+        return None
+    found = panel.session_levels(frame)
+    return LevelsOut(prior_close=found.prior_close, session_high=found.session_high, session_low=found.session_low)
 
 
 def _counts(value: bias.VoteCounts | None) -> VoteCountsOut | None:
@@ -188,11 +234,13 @@ def technicals(
     timeframe: Timeframe = "1d",
     days: int = Query(default=365, ge=1, le=3650),
     data_sources: DataSources = Depends(get_data_sources),
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ) -> TechnicalsOut:
     """The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;
-    `gauges.strategies` is a sample for NVDA 15m only. Real mode fills `timeframe`, `bars_used`, the bar
-    bounds, `bias_ready` and `stamp`; `indicators`, `bias_history`, `levels` and `gauges.strategies` are null
-    until their services land."""
+    `gauges.strategies` is a sample for NVDA 15m only. Real mode computes everything from the bars: the last
+    values (`indicators`), the bias history and its newest change, the key `levels`, and the fourth gauge from
+    her strategies (null with none on this timeframe)."""
     if stub_enabled():
         validate_symbol(symbol)
         return stub_market.technicals(symbol, timeframe)
@@ -202,6 +250,8 @@ def technicals(
     )
     frame, quality = market.frame, market.quality
     back = compute_card_back(symbol, _CARD_TIMEFRAME[timeframe], frame, asset, daily_bars=market.daily_bars)
+    now = datetime.now(UTC)
+    strategies = strategies_gauge(session, user.id, symbol, timeframe, now=now)
     result = bias.bias(frame)
     close = frame["close"] if "close" in frame else pd.Series(dtype=float)
     rsi = indicators.rsi(close, 14)
@@ -211,7 +261,7 @@ def technicals(
             summary=_gauge("warming up", None, None),
             oscillators=_gauge("warming up", None, None),
             moving_averages=_gauge("warming up", None, None),
-            strategies=None,
+            strategies=strategies,
         )
         oscillators, moving_averages = bias.votes(frame)
         oscillator_votes = _votes(oscillators)
@@ -221,7 +271,7 @@ def technicals(
             summary=_gauge(result.summary_label, result.summary_score, None),
             oscillators=_gauge(result.oscillator_label, result.oscillator_score, result.oscillator_counts),
             moving_averages=_gauge(result.ma_label, result.ma_score, result.ma_counts),
-            strategies=None,
+            strategies=strategies,
         )
         oscillator_votes = _votes(result.oscillators)
         moving_average_votes = _votes(result.moving_averages)
@@ -249,9 +299,9 @@ def technicals(
         first_bar=first_bar,
         last_bar=last_bar,
         bias_ready=result != "warming up",
-        indicators=None,
-        bias_history=None,
-        levels=None,
+        indicators=panel.indicator_panel(frame) if not frame.empty else None,
+        bias_history=_bias_history(symbol, timeframe, frame),
+        levels=_levels(frame),
         stamp=make_stamp(
             quality=quality,
             source="alpaca" if asset == "stock" else None,

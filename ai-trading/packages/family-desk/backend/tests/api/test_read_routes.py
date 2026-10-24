@@ -567,16 +567,17 @@ def test_technicals_reports_warming_history(client):
     assert body["moving_averages"]["sma_10"]["action"] == "Buy"
     assert body["moving_averages"]["sma_200"]["action"] is None
     assert body["card_back"]["bias_label"] is None
-    # Additive (02m §a3.3): real mode reports the bar bounds and readiness; the later-step fields stay null.
+    # Additive (02m §a3.3): real mode reports the bar bounds, readiness, the last-value map and the levels.
     assert body["timeframe"] == "1d"
     assert body["bars_used"] == 19  # 20 weekdays; the 2024-12-25 holiday has no closed bar
     assert body["first_bar"] == "2024-12-04T00:00:00Z"
     assert body["last_bar"] == "2024-12-31T00:00:00Z"
     assert body["bias_ready"] is False
-    assert body["indicators"] is None
-    assert body["bias_history"] is None
-    assert body["levels"] is None
-    assert body["gauges"]["strategies"] is None
+    assert body["indicators"]["sma_10"] == pytest.approx(101.89)
+    assert body["indicators"]["sma_50"] is None  # 19 bars: the long averages are not known yet
+    assert body["bias_history"] is None  # still warming up: no bar has a bias
+    assert body["levels"]["session_high"] is not None and body["levels"]["prior_close"] is not None
+    assert body["gauges"]["strategies"] is None  # no attached strategy
     assert body["stamp"]["quality"] == "eod"
     assert body["stamp"]["source"] == "alpaca"
 

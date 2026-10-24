@@ -6770,7 +6770,7 @@
     },
     "/api/desk/technicals/{symbol}": {
       "get": {
-        "description": "The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;\n`gauges.strategies` is a sample for NVDA 15m only. Real mode fills `timeframe`, `bars_used`, the bar\nbounds, `bias_ready` and `stamp`; `indicators`, `bias_history`, `levels` and `gauges.strategies` are null\nuntil their services land.",
+        "description": "The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;\n`gauges.strategies` is a sample for NVDA 15m only. Real mode computes everything from the bars: the last\nvalues (`indicators`), the bias history and its newest change, the key `levels`, and the fourth gauge from\nher strategies (null with none on this timeframe).",
         "operationId": "technicals_api_desk_technicals__symbol__get",
         "parameters": [
           {

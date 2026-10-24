@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.tags import table_tags
 from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
 from ai_trading.api.market_data import validate_symbol
 from ai_trading.api.schemas.watchlists import (
@@ -145,6 +146,7 @@ def watchlist_table(
     }
     last_ok_at = feed_last_ok(session, "scan")
     stub = stub_enabled()
+    tags = {} if stub else table_tags(session, user.id, watchlist.name, symbols, now=datetime.now(UTC))
     rows: list[WatchlistTableRow] = []
     for item in items:
         known = universe.get(item.symbol)
@@ -157,8 +159,9 @@ def watchlist_table(
             values = data.metrics if data is not None else {}
             fields = {
                 **{key: values.get(key) for key in ("last", "change_pct", "rvol_10d", "vs_vwap_pct")},
-                "bias_label": "warming up",
-                "tags": [],
+                # The refresher writes the 15-minute summary label beside the metrics; none yet reads "warming up".
+                "bias_label": values.get("bias_15m") or "warming up",
+                "tags": tags[item.symbol],
             }
             freshness = (
                 "unavailable"

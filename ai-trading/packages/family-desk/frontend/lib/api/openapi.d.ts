@@ -628,9 +628,9 @@ export interface paths {
         /**
          * Technicals
          * @description The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;
-         *     `gauges.strategies` is a sample for NVDA 15m only. Real mode fills `timeframe`, `bars_used`, the bar
-         *     bounds, `bias_ready` and `stamp`; `indicators`, `bias_history`, `levels` and `gauges.strategies` are null
-         *     until their services land.
+         *     `gauges.strategies` is a sample for NVDA 15m only. Real mode computes everything from the bars: the last
+         *     values (`indicators`), the bias history and its newest change, the key `levels`, and the fourth gauge from
+         *     her strategies (null with none on this timeframe).
          */
         get: operations["technicals_api_desk_technicals__symbol__get"];
         put?: never;
