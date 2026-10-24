@@ -62,9 +62,6 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Holdings", href: "/holdings" },
     { label: "Covered calls", href: "/covered-calls" },
     { label: "Stocks", href: "/stocks" },
-    { label: "Paper", href: "/paper" },
-    { label: "Backtests", href: "/backtests" },
-    { label: "Ask", href: "/ask" },
   ],
 };
 
