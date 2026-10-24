@@ -1,6 +1,6 @@
 # 02l: Family Desk desktop-first MVP (Technical lane)
 
-Status: owner directive, planned 2026-10-24. Desk lane only. This plan supersedes the mobile-first order of the R3 persona-split
+Status: owner directive, planned 2026-10-24 (plan merged, PR #159). Mocks: Run 0 and Runs 1–2 (D1–D4) done and owner-approved; Runs 3–5 (D5–D10) built, in verification; Run 6 (D11, D12) running (see the run table in §d2). Real-data build waits on the Gateway probe. Desk lane only. This plan supersedes the mobile-first order of the R3 persona-split
 plan (`paper-persona-split-plan.md`, local Hermes run `desk-activation-20261020`). It keeps that plan's lane taxonomy (§a), board
 specs (§b2), technical-lane specs (§c1–c5), and schema outline (§e, built as [02k](02k-desk-strategy-config-contracts.md)).
 
@@ -260,19 +260,19 @@ D11, and the two D12 boards).
 
 ### d2. Runs
 
-| Run | Model | Boards | Depends on |
-|---|---|---|---|
-| 0 | Sonnet (no Paper) | real-data snapshot (§c1) | Alpaca keys in family-config |
-| 1 | Sonnet | D1 Shell & states, D2 Dashboard | Run 0 |
-| 2 | Sonnet | D3 Chart workspace, D4 Technical summary | Run 1 |
-| 3 | Sonnet | D5 Screener, D10 Alert setup | Run 2 (chart group) |
-| 4 | Haiku | D6 Filter editor, D7 Watchlists | Run 1 |
-| 5 | Haiku | D8 Strategy library, D9 Alerts | Run 1 |
-| 6 | Haiku | D11 Settings & More, D12 × 2 (duplicates) | Runs 2, 1 |
+| Run | Model | Boards | Depends on | Status (2026-10-24) |
+|---|---|---|---|---|
+| 0 | Sonnet (no Paper) | real-data snapshot (§c1) | Alpaca keys in family-config | Done |
+| 1 | Sonnet | D1 Shell & states, D2 Dashboard | Run 0 | Done, owner-approved |
+| 2 | Sonnet | D3 Chart workspace, D4 Technical summary | Run 1 | Done, owner-approved |
+| 3 | Sonnet | D5 Screener, D10 Alert setup | Run 2 (chart group) | Built, in verification |
+| 4 | Haiku | D6 Filter editor, D7 Watchlists | Run 1 | Built, in verification |
+| 5 | Haiku | D8 Strategy library, D9 Alerts | Run 1 | Built, in verification |
+| 6 | Haiku | D11 Settings & More, D12 × 2 (duplicates) | Runs 2, 1 | Running |
 
 - One Paper writer at a time: runs are sequential, never parallel, because they write to the same file.
 - **Owner gate after Run 2:** the shell and chart are the template for everything else. Continue only after the owner (and the
-  wife) approve D1–D4. Opus reviews only on request.
+  wife) approve D1–D4 (passed: the owner approved D1–D4). Opus reviews only on request.
 - Per run: load the Paper guide once, call `get_font_family_info` for Inter once, duplicate the named shell groups from D1, take one
   screenshot per board at the end, call `finish_working_on_nodes`. No Mobbin calls: the TradingView conventions are already in R3
   §c5 and §b5 here. Every number is copied from the snapshot file.
@@ -284,7 +284,7 @@ then the same screens ship with live data. Broker and order flags stay off throu
 
 ### e1. Real-data plumbing (02j registry + IBKR Gateway)
 
-- **IBKR Gateway probe, Mon 2026-10-26 09:30 ET**, with the data user (02e). It decides 02c Phase 2b: `providers/ibkr.py` through
+- **IBKR Gateway probe, Mon 2026-10-26 09:30 ET**, with the data user (02e); the owner approves its sign-in on the phone. Monday morning order: retry the data user's Reporting access grant first (open since IBKR Account Management was down on 2026-10-24), then the data-user sign-in for the probe, then move Flex to the data user ([STATUS.md](../STATUS.md) 2026-10-24 IBKR rows). The data account is the default surface for agents; the main account stays owner-gated. The probe decides 02c Phase 2b: `providers/ibkr.py` through
   `ib_async`, live 1-minute bars, and streaming quotes behind the 02j registry, so no caller changes when IBKR joins the chain.
 - **Who serves what:**
   - IBKR streams quotes and live bars for symbols she is looking at: her watchlists and open charts, allocated by the existing

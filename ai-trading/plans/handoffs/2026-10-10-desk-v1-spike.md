@@ -1,5 +1,7 @@
 # Handoff: Family Desk v1 (Phases 1c and 1d Done; Phase 2a Next)
 
+> **Historical snapshot (2026-10-10).** Current state: Phases 1–4 are done and the Desk is live, Phase 0's Flex probe is done and the Gateway probe runs Mon 2026-10-26, and the desktop-first Technical MVP ([02l](../subplans/02l-desk-desktop-first-mvp.md)) comes next. Read [STATUS.md](../STATUS.md) and [02l](../subplans/02l-desk-desktop-first-mvp.md) first; most decisions below still hold (STATUS.md records the changes), but its "Where Things Stand" and "Next Steps" are out of date.
+
 **Date:** 2026-10-10
 **From:** the ai-trading main session that designed Desk v1 and ran Phases 1 and 1b
 **For:** the next Desk-lane main session, started with the working directory `ai-trading/`
@@ -66,7 +68,7 @@ Still open: the Flex token and query ID are not in Firestore (Task 0.4 Step 4).
   - One pull request to `dev` per finished phase, from `feature/toby`. If `feature/toby` holds another lane's unmerged work, open it from a dedicated branch instead, as PR #95 did. Push to an open pull request only when its CI fails.
   - The required check is "Contracts, services, workers, frontends", and auto-merge is off. Use `gh pr checks <n> --watch`; when the branch falls behind `dev` (the expense CI takes about 15 minutes, so `dev` moves), run `gh pr update-branch <n>` and wait again; then `gh pr merge <n> --squash`. Never pass `--delete-branch` or `--admin`, and never force-push.
   - Commit messages are a single line with no trailer.
-- **Subagents** (subagent-driven development): pool-sonnet for implementers, pool-terra for reviewers, `general` for the final review. pool-haiku, the `explore` agent, and the OpenCode Go pools were unavailable on 2026-10-10. The SDD `task-brief` script needs dotted task numbers (`1b.1`).
+- **Subagents** (subagent-driven development): Claude Code agents now run the Desk work (Sonnet and Haiku executors in worktrees, Opus on request); the earlier pool-* / OpenCode Go setup is retired. The SDD `task-brief` script needs dotted task numbers (`1b.1`).
 - **IBKR facts** (02d): two-factor login likely applies to paper logins too, so plan for a weekly phone approval; streaming US stocks over the API needs the $4.50 add-on; updates arrive every 250 ms (100 ms for options), not every tick; up to 32 API clients can connect to one gateway; pacing is 60 historical requests per 10 minutes.
 - **VPS headroom** (read-only check): 6 vCPU, 11.4 GiB RAM with 9.4 GiB available, no swap, 35 GB of disk free. Phase 3 memory limits are in 02d check 6.
 - **Paper MCP quirks** (for mockup edits):

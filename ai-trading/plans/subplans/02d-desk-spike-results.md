@@ -2,7 +2,8 @@
 
 Status: In progress, started 2026-10-10.
 - The desk-side checks and the documentation research are done.
-- The owner set up the data user ([phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4, guide [02e](02e-ibkr-data-user-setup.md)). The IBKR checks wait for IBKR to approve it, then Task 0.5.
+- The owner set up the data user ([phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4, guide [02e](02e-ibkr-data-user-setup.md)).
+- The Flex check (7) passed on 2026-10-24. The Gateway checks (1, 3, 4, 9) run in the streaming probe on Mon 2026-10-26 at 09:30 ET (Task 0.5, owner phone approval), then Task 0.6 closes the spike.
 
 Related:
 - [02a §12](02a-desk-v1-strategies-design.md): the checks and their decided fallbacks
@@ -96,7 +97,9 @@ Related:
 
 ### 7. Flex token for read-only holdings
 
-**Status:** pending the owner's token.
+**Status: PASS (2026-10-24).** The `desk-holdings` Activity Flex query and its token are in Firestore `ai-trading/desk`. The Flex probe returned an `OpenPositions` section with 21 records at `LOT` level of detail (counts only; no values recorded here). The token expires 2027-09-24 and cannot trade.
+
+**Interim account:** the query and token were created on the main account. Moving them to the data user needs its Reporting access, granted through User Access Rights in the main account's settings; that grant is still open ([STATUS.md](../STATUS.md) 2026-10-24 IBKR rows). After the data-user Flex path works, the main-account Flex setup is removed.
 
 **From the docs:**
 - Flex v3 `SendRequest` and `GetStatement` on `ndcdyn.interactivebrokers.com`.
@@ -104,7 +107,7 @@ Related:
 - Tokens last 6 hours to 1 year, with optional IP restriction.
 - Limits: 1 request per second and 10 per minute.
 
-**Decision:** Phase 5 imports nightly. CSV upload is the fallback.
+**Decision:** Phase 5 imports nightly from the data user's query once it exists. CSV upload is the fallback.
 
 ### 8. `trading-hub` hostname move
 

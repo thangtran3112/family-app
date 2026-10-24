@@ -1,7 +1,8 @@
 # 02k: Desk strategy-config contracts (persona split, technical-trading lane)
 
-Status: implementation spec for `packages/family-desk/contracts` (Zod) and `packages/family-desk/backend`
-(Pydantic). Desk lane only. Source design: the approved Paper persona-split plan, sections c1 (screener
+Status: built and merged to `dev` (PR #157, 2026-10-24); the deploy waits for the end of the phase. Implementation spec for
+`packages/family-desk/contracts` (Zod) and `packages/family-desk/backend` (Pydantic). Desk lane only. The desktop-first MVP
+([02l](02l-desk-desktop-first-mvp.md)) is its first consumer. Source design: the approved Paper persona-split plan, sections c1 (screener
 defaults), c2 (preset library), and e (strategy-config schema outline). This document describes what is built;
 where the code deviates from the plan it says so (section 10).
 

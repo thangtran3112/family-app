@@ -96,6 +96,8 @@ Signed in with your **usual** username on the account whose holdings the Desk sh
 
 The token can only read reports; it cannot trade. The second account is imported later (Phase 5).
 
+> **Status, 2026-10-24:** this step was run on the main account (the "usual" username) as an interim path: the `desk-holdings` query and token exist in `ai-trading/desk`, and the Flex probe passed. The target is the data user's own query: the data account is the default read-only data surface, and the main account is owner-gated ([STATUS.md](../STATUS.md) account policy). That needs the data user's **Reporting** access, granted from the main account's settings (Settings → User Access Rights, owner-authorized). The grant is still TODO because IBKR Account Management was down on 2026-10-24. Once it works: sign in as the data user, repeat this step for its own query and token, switch `ai-trading/desk` to the data-user token, and remove the main-account Flex setup.
+
 ## Step 5: Install IB Gateway on the Mac
 
 1. Download **IB Gateway (stable)** for macOS from <https://www.interactivebrokers.com/en/trading/ibgateway-stable.php> and install it.
