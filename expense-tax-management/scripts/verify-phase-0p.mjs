@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForReady } from "./wait-for-ready.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const composeScript = path.join(repoRoot, "scripts", "compose.sh");
@@ -54,12 +55,15 @@ run("Generated drift", "pnpm", ["contracts:check"]);
 run("App Docker build", composeScript, ["build", "app-api"]);
 run("App readiness", composeScript, ["up", "-d", "app-api"]);
 
-const ready = spawnSync(
-  "curl",
-  ["--fail", "--silent", "http://127.0.0.1:8100/health/ready"],
-  { cwd: repoRoot, encoding: "utf8" },
+const ready = waitForReady(
+  () =>
+    spawnSync(
+      "curl",
+      ["--fail", "--silent", "http://127.0.0.1:8100/health/ready"],
+      { cwd: repoRoot, encoding: "utf8" },
+    ).status === 0,
 );
-if (ready.status !== 0) {
+if (!ready) {
   console.error("FAIL App readiness probe");
   process.exit(1);
 }
