@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import requests
@@ -99,7 +99,7 @@ def test_absent_channel_preferences_keep_legacy_external_delivery_enabled(db_ses
     assert delivery.status == "sent"
 
 
-def test_explicitly_disabled_external_channel_stays_pending_while_inbox_sends(db_session):
+def test_explicitly_disabled_external_channel_is_recorded_as_skipped_while_inbox_sends(db_session):
     user = _make_user(db_session, settings={"channels": []})
     alert = _make_alert(db_session, user)
     inbox = _make_delivery(db_session, alert, channel="inbox")
@@ -115,7 +115,7 @@ def test_explicitly_disabled_external_channel_stays_pending_while_inbox_sends(db
     assert channel.calls == 0
     assert inbox.status == "sent"
     assert inbox.attempted_at == _NOW
-    assert telegram.status == "pending"
+    assert telegram.status == "skipped_preferences"
     assert telegram.attempted_at is None
 
 
@@ -158,7 +158,7 @@ def test_malformed_legacy_preferences_fail_closed_without_blocking_other_users(d
     }
     assert channel.calls == 1
     assert inbox.status == "sent"
-    assert deferred.status == "pending"
+    assert deferred.status == "skipped_preferences"
     assert deferred.attempted_at is None
     assert normal_delivery.status == "sent"
 
@@ -178,7 +178,7 @@ def test_malformed_legacy_channel_preferences_fail_closed_for_external_only(db_s
     }
     assert channel.calls == 0
     assert inbox.status == "sent"
-    assert telegram.status == "pending"
+    assert telegram.status == "skipped_preferences"
     assert telegram.attempted_at is None
 
 
@@ -225,7 +225,7 @@ def test_urgent_alerts_still_respect_explicit_channel_opt_out(db_session, severi
     }
     assert channel.calls == 0
     assert inbox.status == "sent"
-    assert telegram.status == "pending"
+    assert telegram.status == "skipped_preferences"
     assert telegram.attempted_at is None
 
 
@@ -256,7 +256,7 @@ def test_unicode_legacy_quiet_hours_do_not_block_another_users_delivery(db_sessi
     }
     assert channel.calls == 1
     assert inbox.status == "sent"
-    assert deferred.status == "pending"
+    assert deferred.status == "skipped_preferences"
     assert deferred.attempted_at is None
     assert normal_delivery.status == "sent"
 
@@ -293,7 +293,7 @@ def test_dispatch_pending_exhausts_retries_and_marks_failed(db_session):
     assert delivery.error == "telegram responded 500: internal error"
 
 
-def test_dispatch_pending_skips_a_channel_delivery_during_quiet_hours_leaving_it_pending(db_session):
+def test_dispatch_pending_holds_a_channel_delivery_during_quiet_hours_and_sends_it_once_they_end(db_session):
     user = _make_user(db_session, settings={"quiet_hours": {"start": "00:00", "end": "23:59"}})
     alert = _make_alert(db_session, user, severity="info")
     delivery = _make_delivery(db_session, alert, channel="telegram")
@@ -303,8 +303,49 @@ def test_dispatch_pending_skips_a_channel_delivery_during_quiet_hours_leaving_it
 
     assert channel.calls == 0
     assert outcomes == [DeliveryOutcome(delivery.id, "skipped_quiet_hours")]
-    assert delivery.status == "pending"
+    assert delivery.status == "skipped_quiet_hours"  # recorded, so the delivery log can show the hold
     assert delivery.attempted_at is None
+
+    user.settings = {}  # her quiet hours end (here: she clears them; the default window is 22:00-07:00 ET)
+    later = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+    assert later == [DeliveryOutcome(delivery.id, "sent")]
+    assert delivery.status == "sent" and channel.calls == 1
+
+
+def test_a_held_delivery_is_dropped_from_rechecking_once_its_alert_is_a_day_old(db_session):
+    user = _make_user(db_session, settings={"quiet_hours": {"start": "00:00", "end": "23:59"}})
+    alert = _make_alert(db_session, user, severity="info")
+    delivery = _make_delivery(db_session, alert, channel="telegram")
+    channel = _FakeChannel()
+    dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+    user.settings = {}
+
+    stale = dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW + timedelta(hours=25))
+    assert stale == [] and delivery.status == "skipped_quiet_hours" and channel.calls == 0
+
+
+def test_a_user_who_linked_her_own_telegram_chat_gets_it_there_and_others_get_the_configured_chat(db_session):
+    class Recording(_FakeChannel):
+        def __init__(self):
+            super().__init__()
+            self.targets = []
+
+        def send(self, *, title, body, severity, chat_id=None):
+            self.targets.append(chat_id)
+            super().send(title=title, body=body, severity=severity)
+
+    linked = _make_user(db_session)
+    linked.telegram_chat_id = "555"
+    plain = User(email="plain-user", settings={})
+    db_session.add(plain)
+    db_session.flush()
+    _make_delivery(db_session, _make_alert(db_session, linked), channel="telegram")
+    _make_delivery(db_session, _make_alert(db_session, plain), channel="telegram")
+    channel = Recording()
+
+    dispatch_pending(db_session, channels={"telegram": channel}, now=_NOW)
+
+    assert channel.targets == ["555", None]
 
 
 def test_dispatch_pending_still_sends_a_system_alert_during_quiet_hours(db_session):
@@ -332,16 +373,20 @@ def test_equal_quiet_hours_bounds_mean_no_quiet_period(db_session):
     assert channel.calls == 1
 
 
-def test_dispatch_pending_leaves_an_unwired_channel_delivery_pending_forever(db_session):
+def test_dispatch_pending_records_an_unwired_channel_as_no_channel_and_never_sends_it_later(db_session):
     user = _make_user(db_session)
     alert = _make_alert(db_session, user)
     delivery = _make_delivery(db_session, alert, channel="slack")
 
     outcomes = dispatch_pending(db_session, channels={}, now=_NOW)  # neither telegram nor slack wired (D-a)
 
-    assert outcomes == []
-    assert delivery.status == "pending"
-    assert delivery.attempted_at is None
+    assert outcomes == [DeliveryOutcome(delivery.id, "no_channel")]
+    assert delivery.status == "no_channel"
+    assert delivery.attempted_at == _NOW
+    channel = _FakeChannel()
+    channel.name = "slack"
+    assert dispatch_pending(db_session, channels={"slack": channel}, now=_NOW) == []  # wired later: still not sent
+    assert channel.calls == 0
 
 
 def test_dispatch_pending_is_a_no_op_on_a_second_call_for_already_handled_rows(db_session):

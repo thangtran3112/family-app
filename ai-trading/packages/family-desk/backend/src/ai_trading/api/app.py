@@ -1,6 +1,6 @@
 """FastAPI app wiring (PROTO-BRIEF.md §4 L4): identity (`api/auth.py`), the `/api/desk/*` REST
 routers, SSE quotes, the `/healthz` route `health-check.sh` polls, and two background loops --
-`engine.tick.tick` every 60s and `notify.dispatch.dispatch_pending` every 10s, each against a
+`alerts.runtime.tick` every 60s and `notify.dispatch.dispatch_pending` every 10s, each against a
 fresh `Session` (never one long-lived session for the process's lifetime).
 
 Run by the `api` compose service via `ai_trading.api.main:app` (`main.py` re-exports this exact
@@ -26,21 +26,27 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.api import (
+    alert_strategies,
     alerts,
     bars,
+    charts,
+    dashboard,
     futures,
+    library,
     me,
     quotes,
+    screener,
     settings,
     signals,
     status,
     strategies,
+    symbols,
     technicals,
     watchlists,
 )
 from ai_trading.db.engine import make_engine, make_health_check_engine, make_session_factory, session_scope
-from ai_trading.engine.tick import tick
 from ai_trading.notify.channel import Channel
 from ai_trading.notify.dispatch import dispatch_pending
 from ai_trading.notify.slack import SlackChannel
@@ -97,6 +103,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.health_engine = make_health_check_engine(database_url)
         app.state.data_sources = DataSources.from_env()
         channels = _build_channels(dict(os.environ))
+        app.state.channels = channels  # `POST /settings/channels/{channel}/test` sends through these
         tasks.append(
             asyncio.create_task(
                 _background_loop(
@@ -140,6 +147,12 @@ for _router_module in (
     technicals,
     futures,
     status,
+    symbols,
+    dashboard,
+    charts,
+    screener,
+    library,
+    alert_strategies,
 ):
     app.include_router(_router_module.router)
 

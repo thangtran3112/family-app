@@ -74,6 +74,9 @@
           "$ref": "#/$defs/TimeBetweenCondition"
         },
         {
+          "$ref": "#/$defs/PatternCondition"
+        },
+        {
           "$ref": "#/$defs/AllCondition"
         },
         {
@@ -83,6 +86,168 @@
           "$ref": "#/$defs/NotCondition"
         }
       ]
+    },
+    "FilterStrategySpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "assetTypes": {
+          "items": {
+            "enum": [
+              "stock",
+              "etf"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "type": "array"
+        },
+        "liquidity": {
+          "additionalProperties": false,
+          "properties": {
+            "avgVolumeDays": {
+              "maximum": 60,
+              "minimum": 5,
+              "type": "integer"
+            },
+            "minAvgVolume": {
+              "maximum": 10000000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "minPrice": {
+              "exclusiveMinimum": 0,
+              "maximum": 100000,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "maxResults": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "rank": {
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/SeriesOperand"
+            },
+            "order": {
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "by",
+            "order"
+          ],
+          "type": "object"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        },
+        "watch": {
+          "additionalProperties": false,
+          "properties": {
+            "runOn": {
+              "enum": [
+                "bar_close_1m",
+                "bar_close_5m",
+                "bar_close_15m",
+                "bar_close_1h",
+                "premarket_0830",
+                "daily_close",
+                "weekly"
+              ],
+              "type": "string"
+            },
+            "session": {
+              "enum": [
+                "regular",
+                "extended"
+              ],
+              "type": "string"
+            },
+            "universe": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "market": {
+                      "const": "us_equities",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "market"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "watchlist": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "watchlist"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "symbols": {
+                      "items": {
+                        "pattern": "^\\/?[A-Z][A-Z0-9.]{0,9}$",
+                        "type": "string"
+                      },
+                      "maxItems": 70,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "symbols"
+                  ],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "required": [
+            "universe",
+            "session",
+            "runOn"
+          ],
+          "type": "object"
+        },
+        "when": {
+          "$ref": "#/$defs/Condition"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "name",
+        "watch",
+        "when",
+        "maxResults"
+      ],
+      "type": "object"
     },
     "LevelOperand": {
       "anyOf": [
@@ -97,7 +262,9 @@
                 "premarket_high",
                 "premarket_low",
                 "overnight_high",
-                "overnight_low"
+                "overnight_low",
+                "session_high",
+                "session_low"
               ],
               "type": "string"
             }
@@ -397,6 +564,151 @@
         "size",
         "stop",
         "target"
+      ],
+      "type": "object"
+    },
+    "PatternCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "pattern",
+          "type": "string"
+        },
+        "pattern": {
+          "enum": [
+            "hammer",
+            "inverted_hammer",
+            "hanging_man",
+            "shooting_star",
+            "doji",
+            "dragonfly_doji",
+            "gravestone_doji",
+            "bullish_engulfing",
+            "bearish_engulfing",
+            "bullish_harami",
+            "bearish_harami",
+            "piercing_line",
+            "dark_cloud_cover",
+            "morning_star",
+            "evening_star",
+            "tweezer_bottom",
+            "tweezer_top",
+            "three_white_soldiers",
+            "three_black_crows",
+            "inside_bar"
+          ],
+          "type": "string"
+        },
+        "trend": {
+          "enum": [
+            "any",
+            "after_downtrend",
+            "after_uptrend"
+          ],
+          "type": "string"
+        },
+        "trendBars": {
+          "maximum": 50,
+          "minimum": 3,
+          "type": "integer"
+        },
+        "withinBars": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "op",
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "PresetCatalogV1": {
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bias": {
+                "enum": [
+                  "bullish",
+                  "bearish",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              "category": {
+                "enum": [
+                  "candlestick",
+                  "breakout",
+                  "trend",
+                  "volume",
+                  "futures",
+                  "income",
+                  "long_term"
+                ],
+                "type": "string"
+              },
+              "file": {
+                "maxLength": 80,
+                "pattern": "^[a-z0-9][a-z0-9-]*(\\/[a-z0-9][a-z0-9-]*)*\\.json$",
+                "type": "string"
+              },
+              "id": {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "strategy",
+                  "filter"
+                ],
+                "type": "string"
+              },
+              "label": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              "lane": {
+                "enum": [
+                  "technical",
+                  "fundamental"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "file",
+              "kind",
+              "lane",
+              "category",
+              "bias",
+              "label",
+              "summary"
+            ],
+            "type": "object"
+          },
+          "maxItems": 200,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "entries"
       ],
       "type": "object"
     },
@@ -893,6 +1205,24 @@
               "minItems": 1,
               "type": "array"
             },
+            "expiresOn": {
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+              "type": "string"
+            },
+            "frequency": {
+              "enum": [
+                "once",
+                "once_per_bar",
+                "every_time"
+              ],
+              "type": "string"
+            },
+            "message": {
+              "maxLength": 140,
+              "minLength": 1,
+              "pattern": "^([\\u0020-\\u007A\\u007C\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]|\\{symbol\\}|\\{close\\}|\\{time\\})+$",
+              "type": "string"
+            },
             "severity": {
               "enum": [
                 "info",
@@ -969,6 +1299,20 @@
               },
               "required": [
                 "symbols"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "filter": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "filter"
               ],
               "type": "object"
             }

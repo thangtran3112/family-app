@@ -1,0 +1,12 @@
+[
+ {
+  "horizon": "intraday",
+  "id": 1,
+  "name": "Day movers"
+ },
+ {
+  "horizon": "swing",
+  "id": 2,
+  "name": "Swing"
+ }
+]

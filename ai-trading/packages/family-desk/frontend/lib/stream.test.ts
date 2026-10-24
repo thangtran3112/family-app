@@ -169,3 +169,16 @@ test("invalid quote events report a fixed error and never reach subscribers", ()
     unsubscribe();
   });
 });
+
+test("quote events keep the optional freshness, source and session fields and drop invalid ones", () => {
+  withEventSource(() => {
+    const quotes: Quote[] = [];
+    const close = openQuoteStream("NVDA", (quote) => quotes.push(quote));
+    const base = { symbol: "NVDA", close: 210.5, quality: "delayed-15m", as_of: "2026-10-23T20:00:00Z" };
+    FakeEventSource.instances[0]!.emit(JSON.stringify({ ...base, freshness: "closed", source: "alpaca", session: "closed" }));
+    FakeEventSource.instances[0]!.emit(JSON.stringify({ ...base, freshness: "sideways", source: 5, session: "lunch" }));
+    close();
+    assert.deepEqual(quotes[0], { ...base, freshness: "closed", source: "alpaca", session: "closed" });
+    assert.deepEqual(quotes[1], base);
+  });
+});

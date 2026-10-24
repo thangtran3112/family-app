@@ -1,0 +1,202 @@
+[
+ {
+  "id": 1,
+  "last_run": {
+   "evaluation_point": "2026-10-23T19:45:00Z",
+   "matches_total": 9,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Abnormal volume",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "bar_close_15m",
+  "seed_key": "abnormal-volume",
+  "session": "regular"
+ },
+ {
+  "id": 2,
+  "last_run": {
+   "evaluation_point": "2026-10-23T20:00:00Z",
+   "matches_total": 65,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "High volatility",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "daily_close",
+  "seed_key": "high-volatility",
+  "session": "regular"
+ },
+ {
+  "id": 3,
+  "last_run": {
+   "evaluation_point": "2026-10-23T12:30:00Z",
+   "matches_total": 4,
+   "scanned": 129,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Gap up",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "premarket_0830",
+  "seed_key": "gap-up",
+  "session": "extended"
+ },
+ {
+  "id": 4,
+  "last_run": {
+   "evaluation_point": "2026-10-23T12:30:00Z",
+   "matches_total": 10,
+   "scanned": 129,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Gap down",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "premarket_0830",
+  "seed_key": "gap-down",
+  "session": "extended"
+ },
+ {
+  "id": 5,
+  "last_run": {
+   "evaluation_point": "2026-10-23T20:00:00Z",
+   "matches_total": 12,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "New 20-day high",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "daily_close",
+  "seed_key": "new-20-day-high",
+  "session": "regular"
+ },
+ {
+  "id": 6,
+  "last_run": {
+   "evaluation_point": "2026-10-23T20:00:00Z",
+   "matches_total": 5,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "52-week breakout",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "daily_close",
+  "seed_key": "52-week-breakout",
+  "session": "regular"
+ },
+ {
+  "id": 7,
+  "last_run": {
+   "evaluation_point": "2026-10-23T20:00:00Z",
+   "matches_total": 17,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Oversold RSI",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "daily_close",
+  "seed_key": "oversold-rsi",
+  "session": "regular"
+ },
+ {
+  "id": 8,
+  "last_run": {
+   "evaluation_point": "2026-10-23T20:00:00Z",
+   "matches_total": 9,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Overbought RSI",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "daily_close",
+  "seed_key": "overbought-rsi",
+  "session": "regular"
+ },
+ {
+  "id": 9,
+  "last_run": {
+   "evaluation_point": "2026-10-23T19:55:00Z",
+   "matches_total": 2,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Above VWAP on volume",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "bar_close_5m",
+  "seed_key": "above-vwap-on-volume",
+  "session": "regular"
+ },
+ {
+  "id": 10,
+  "last_run": {
+   "evaluation_point": "2026-10-23T19:45:00Z",
+   "matches_total": 11,
+   "scanned": 131,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "alpaca"
+   }
+  },
+  "name": "Top movers",
+  "origin": "seed",
+  "read_only": true,
+  "run_on": "bar_close_15m",
+  "seed_key": "top-movers",
+  "session": "regular"
+ }
+]

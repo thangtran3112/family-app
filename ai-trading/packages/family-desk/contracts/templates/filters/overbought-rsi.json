@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "Overbought RSI",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "rsi",
+      "length": 14
+    },
+    "right": {
+      "value": 70
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "rsi",
+      "length": 14
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

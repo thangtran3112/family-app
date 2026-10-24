@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Abnormal volume on an up day",
+  "watch": { "universe": { "watchlist": "Swing" }, "session": "regular", "runOn": "daily_close" },
+  "when": {
+    "all": [
+      { "op": "gte", "left": { "series": "rvol", "lookbackDays": 10 }, "right": { "value": 2 } },
+      { "op": "gt", "left": { "series": "close" }, "right": { "level": "prior_day_close" } }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox", "telegram"], "severity": "opportunity" } }
+}

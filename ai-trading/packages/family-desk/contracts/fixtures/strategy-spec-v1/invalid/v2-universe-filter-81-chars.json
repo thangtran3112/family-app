@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "filter": "Volume leaders, rising relative volume, tight ranges-----------------------------"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "value": 100
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "name": "Gap up",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "extended",
+    "runOn": "premarket_0830"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "all": [
+      {
+        "op": "gte",
+        "left": {
+          "series": "gap_pct"
+        },
+        "right": {
+          "value": 3
+        }
+      },
+      {
+        "op": "gte",
+        "left": {
+          "series": "rvol",
+          "lookbackDays": 10
+        },
+        "right": {
+          "value": 1.5
+        }
+      }
+    ]
+  },
+  "rank": {
+    "by": {
+      "series": "gap_pct"
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

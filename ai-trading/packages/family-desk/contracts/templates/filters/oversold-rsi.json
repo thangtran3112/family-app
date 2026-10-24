@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "Oversold RSI",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "lt",
+    "left": {
+      "series": "rsi",
+      "length": 14
+    },
+    "right": {
+      "value": 30
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "rsi",
+      "length": 14
+    },
+    "order": "asc"
+  },
+  "maxResults": 50
+}

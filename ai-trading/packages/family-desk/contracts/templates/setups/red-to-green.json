@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "Red to green",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_5m" },
+  "when": {
+    "all": [
+      { "op": "crosses_above", "left": { "series": "close" }, "right": { "level": "prior_day_close" } },
+      { "op": "gte", "left": { "series": "rvol", "lookbackDays": 10 }, "right": { "value": 1.5 } }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox", "telegram"], "severity": "opportunity" } },
+  "limits": { "cooldownMinutes": 60 }
+}

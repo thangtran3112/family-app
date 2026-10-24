@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "name": "Trend pullback alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Core holdings"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "when": {
+    "all": [
+      {
+        "op": "gt",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "series": "sma",
+          "length": 50
+        }
+      },
+      {
+        "any": [
+          {
+            "op": "lt",
+            "left": {
+              "series": "rsi",
+              "length": 14
+            },
+            "right": {
+              "value": 30
+            }
+          },
+          {
+            "op": "gte",
+            "left": {
+              "series": "rvol",
+              "lookbackDays": 10
+            },
+            "right": {
+              "value": 2.5
+            }
+          }
+        ]
+      },
+      {
+        "not": {
+          "op": "time_between",
+          "start": "09:30",
+          "end": "09:45"
+        }
+      }
+    ]
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ],
+      "severity": "info"
+    }
+  }
+}

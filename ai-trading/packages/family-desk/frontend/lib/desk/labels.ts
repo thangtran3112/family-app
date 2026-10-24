@@ -1,0 +1,45 @@
+// Short plain labels shared by several screens.
+const RUN_ON: Record<string, string> = {
+  bar_close_1m: "Each 1m close",
+  bar_close_5m: "Each 5m close",
+  bar_close_15m: "Each 15m close",
+  bar_close_1h: "Each 1h close",
+  premarket_0830: "Premarket 8:30",
+  daily_close: "Each daily close",
+  weekly: "Each weekly close",
+};
+export const runOnLabel = (runOn: string): string => RUN_ON[runOn] ?? runOn;
+
+const TIMING: Record<string, string> = { after_close: "After close", before_open: "Before open", during: "During the day" };
+export const timingLabel = (timing: string): string => TIMING[timing] ?? timing.replaceAll("_", " ");
+
+const CATEGORY: Record<string, string> = {
+  candlestick: "Candlesticks",
+  breakout: "Breakouts",
+  trend: "Trend",
+  volume: "Volume",
+  futures: "Futures",
+  income: "Income",
+  long_term: "Long term",
+};
+export const categoryLabel = (category: string): string => CATEGORY[category] ?? category;
+
+const STATUS: Record<string, string> = { active: "Active", paused: "Paused", expired: "Expired", draft: "Draft" };
+export const statusLabel = (status: string): string => STATUS[status] ?? status;
+
+const CHANNEL: Record<string, string> = { inbox: "Inbox", telegram: "Telegram", slack: "Slack" };
+export const channelLabel = (channel: string): string => CHANNEL[channel] ?? channel;
+
+const DELIVERY: Record<string, string> = {
+  delivered: "Delivered",
+  held_quiet_hours: "Held for quiet hours",
+  no_channel: "No channel connected",
+  failed: "Could not deliver",
+};
+export const deliveryLabel = (status: string): string => DELIVERY[status] ?? status;
+
+export const FREQUENCY_LABEL: Record<string, string> = {
+  once: "Once",
+  once_per_bar: "Once per bar close",
+  every_time: "Every time",
+};

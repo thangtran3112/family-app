@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { deskFetch } from "@/lib/api/client";
+import { deskFetch, DeskApiError } from "@/lib/api/client";
+import { manageErrorMessage } from "@/lib/desk/watchlistView";
 import { WatchlistItemOutSchema } from "@/lib/api/schemas";
 import { canonicalWatchlistSymbol, type AssetType } from "@/lib/watchlists/symbols";
 import styles from "./watchlists.module.css";
@@ -32,7 +33,7 @@ export function AddSymbol({ watchlistId, onAdded }: { watchlistId: number; onAdd
       setMessage(`Added ${normalized}. Checking history…`);
       onAdded();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not add symbol.");
+      setError(cause instanceof DeskApiError ? manageErrorMessage(cause, "add") : cause instanceof Error ? cause.message : "Could not add symbol.");
     } finally {
       setSaving(false);
     }

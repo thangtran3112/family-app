@@ -1,0 +1,475 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "abnormal-volume",
+      "file": "filters/abnormal-volume.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "volume",
+      "bias": "neutral",
+      "label": "Abnormal volume",
+      "summary": "Relative volume of at least 2.5x its 10-day average, ranked by relative volume."
+    },
+    {
+      "id": "high-volatility",
+      "file": "filters/high-volatility.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "neutral",
+      "label": "High volatility",
+      "summary": "ATR(14) as a percent of price at least 4%, ranked by volatility."
+    },
+    {
+      "id": "gap-up",
+      "file": "filters/gap-up.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Gap up",
+      "summary": "Gaps up 3% or more on at least 1.5x relative volume at the 08:30 ET premarket scan."
+    },
+    {
+      "id": "gap-down",
+      "file": "filters/gap-down.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bearish",
+      "label": "Gap down",
+      "summary": "Gaps down 3% or more at the 08:30 ET premarket scan, biggest gap first."
+    },
+    {
+      "id": "new-20-day-high",
+      "file": "filters/new-20-day-high.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "New 20-day high",
+      "summary": "Close crosses above the 20-day high, ranked by relative volume."
+    },
+    {
+      "id": "52-week-breakout",
+      "file": "filters/52-week-breakout.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "52-week breakout",
+      "summary": "Close crosses above the 52-week high (252 trading days), ranked by relative volume."
+    },
+    {
+      "id": "oversold-rsi",
+      "file": "filters/oversold-rsi.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "Oversold RSI",
+      "summary": "Daily RSI(14) below 30, most oversold first."
+    },
+    {
+      "id": "overbought-rsi",
+      "file": "filters/overbought-rsi.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bearish",
+      "label": "Overbought RSI",
+      "summary": "Daily RSI(14) above 70, most overbought first."
+    },
+    {
+      "id": "above-vwap-on-volume",
+      "file": "filters/above-vwap-on-volume.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "volume",
+      "bias": "bullish",
+      "label": "Above VWAP on volume",
+      "summary": "Price above VWAP on at least 2x relative volume, checked every 5-minute bar."
+    },
+    {
+      "id": "top-movers",
+      "file": "filters/top-movers.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Top movers",
+      "summary": "Up 4% or more against the prior close, checked every 15-minute bar."
+    },
+    {
+      "id": "hammer",
+      "file": "patterns/hammer.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Hammer",
+      "summary": "Alerts when a hammer prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "inverted-hammer",
+      "file": "patterns/inverted-hammer.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Inverted hammer",
+      "summary": "Alerts when an inverted hammer prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "bullish-engulfing",
+      "file": "patterns/bullish-engulfing.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Bullish engulfing",
+      "summary": "Alerts when a bullish engulfing prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "piercing-line",
+      "file": "patterns/piercing-line.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Piercing line",
+      "summary": "Alerts when a piercing line prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "morning-star",
+      "file": "patterns/morning-star.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Morning star",
+      "summary": "Alerts when a morning star prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "dragonfly-doji",
+      "file": "patterns/dragonfly-doji.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Dragonfly doji",
+      "summary": "Alerts when a dragonfly doji prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "tweezer-bottom",
+      "file": "patterns/tweezer-bottom.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Tweezer bottom",
+      "summary": "Alerts when a tweezer bottom prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "bullish-harami",
+      "file": "patterns/bullish-harami.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Bullish harami",
+      "summary": "Alerts when a bullish harami prints on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "three-white-soldiers",
+      "file": "patterns/three-white-soldiers.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bullish",
+      "label": "Three white soldiers",
+      "summary": "Alerts when three white soldiers print on a 15-minute bar after a 5-bar downtrend."
+    },
+    {
+      "id": "shooting-star",
+      "file": "patterns/shooting-star.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Shooting star",
+      "summary": "Alerts when a shooting star prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "hanging-man",
+      "file": "patterns/hanging-man.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Hanging man",
+      "summary": "Alerts when a hanging man prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "bearish-engulfing",
+      "file": "patterns/bearish-engulfing.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Bearish engulfing",
+      "summary": "Alerts when a bearish engulfing prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "dark-cloud-cover",
+      "file": "patterns/dark-cloud-cover.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Dark cloud cover",
+      "summary": "Alerts when a dark cloud cover prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "evening-star",
+      "file": "patterns/evening-star.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Evening star",
+      "summary": "Alerts when an evening star prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "gravestone-doji",
+      "file": "patterns/gravestone-doji.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Gravestone doji",
+      "summary": "Alerts when a gravestone doji prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "tweezer-top",
+      "file": "patterns/tweezer-top.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Tweezer top",
+      "summary": "Alerts when a tweezer top prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "bearish-harami",
+      "file": "patterns/bearish-harami.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Bearish harami",
+      "summary": "Alerts when a bearish harami prints on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "three-black-crows",
+      "file": "patterns/three-black-crows.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "bearish",
+      "label": "Three black crows",
+      "summary": "Alerts when three black crows print on a 15-minute bar after a 5-bar uptrend."
+    },
+    {
+      "id": "doji",
+      "file": "patterns/doji.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "neutral",
+      "label": "Doji",
+      "summary": "Alerts when a doji prints on a 15-minute bar."
+    },
+    {
+      "id": "inside-bar",
+      "file": "patterns/inside-bar.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "candlestick",
+      "bias": "neutral",
+      "label": "Inside bar",
+      "summary": "Alerts when an inside bar prints on a 15-minute bar."
+    },
+    {
+      "id": "orb-breakout",
+      "file": "orb-breakout.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Opening range breakout (15m)",
+      "summary": "Closes above the 15-minute opening range high on at least 2x relative volume and above VWAP."
+    },
+    {
+      "id": "premarket-high-break",
+      "file": "premarket-high-break.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Pre-market high break",
+      "summary": "Closes above the pre-market high on at least 1.5x relative volume between 09:30 and 11:00 ET."
+    },
+    {
+      "id": "gap-and-go",
+      "file": "gap-and-go.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "neutral",
+      "label": "Gap and go",
+      "summary": "Gaps 3% or more up or down at the 08:30 ET premarket scan on at least 2x relative volume."
+    },
+    {
+      "id": "n-day-breakout",
+      "file": "n-day-breakout.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "N-day breakout",
+      "summary": "Daily close crosses above the 20-day high on at least 1.5x relative volume."
+    },
+    {
+      "id": "hod-break",
+      "file": "setups/hod-break.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "High-of-day break",
+      "summary": "Closes above the session high on at least 1.5x relative volume between 09:45 and 15:30 ET."
+    },
+    {
+      "id": "vwap-reclaim",
+      "file": "vwap-reclaim.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "VWAP reclaim",
+      "summary": "Closes back above VWAP between 09:45 and 15:30 ET, checked every 1-minute bar."
+    },
+    {
+      "id": "vwap-loss",
+      "file": "vwap-loss.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bearish",
+      "label": "VWAP loss",
+      "summary": "Closes below VWAP between 09:45 and 15:30 ET, checked every 1-minute bar."
+    },
+    {
+      "id": "pullback-to-average",
+      "file": "pullback-to-average.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "Pullback to 20/50",
+      "summary": "Daily close within 1% of the 20- or 50-day average while the 20-day sits above the 50-day."
+    },
+    {
+      "id": "rsi-reversal",
+      "file": "rsi-reversal.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "RSI reversal",
+      "summary": "Daily RSI(14) crosses back above 30, leaving oversold territory."
+    },
+    {
+      "id": "technical-bias-change",
+      "file": "technical-bias-change.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "neutral",
+      "label": "Technical bias change",
+      "summary": "Technical summary bias crosses above +0.1 or below -0.1, checked every 15-minute bar."
+    },
+    {
+      "id": "red-to-green",
+      "file": "setups/red-to-green.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "bullish",
+      "label": "Red to green",
+      "summary": "Closes above the prior day's close on at least 1.5x relative volume, checked every 5-minute bar."
+    },
+    {
+      "id": "ema-9-21-cross",
+      "file": "setups/ema-9-21-cross.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "neutral",
+      "label": "EMA 9/21 cross",
+      "summary": "The 9-period EMA crosses the 21-period EMA in either direction, checked every 15-minute bar."
+    },
+    {
+      "id": "golden-death-cross",
+      "file": "setups/golden-death-cross.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "neutral",
+      "label": "Golden / death cross 50/200",
+      "summary": "The 50-day SMA crosses the 200-day SMA in either direction, checked daily."
+    },
+    {
+      "id": "macd-signal-cross",
+      "file": "setups/macd-signal-cross.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "trend",
+      "bias": "neutral",
+      "label": "MACD signal cross",
+      "summary": "The MACD line (12, 26, 9) crosses its signal line in either direction, checked daily."
+    },
+    {
+      "id": "volume-spike",
+      "file": "volume-spike.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "volume",
+      "bias": "neutral",
+      "label": "Volume spike",
+      "summary": "Relative volume of at least 3x its 10-day average between 09:45 and 15:45 ET, checked every 1-minute bar."
+    },
+    {
+      "id": "abnormal-volume-up-day",
+      "file": "setups/abnormal-volume-up-day.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "volume",
+      "bias": "bullish",
+      "label": "Abnormal volume on an up day",
+      "summary": "Daily relative volume of at least 2x its 10-day average on a close above the prior close."
+    },
+    {
+      "id": "futures-overnight-range-break",
+      "file": "futures-overnight-range-break.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "futures",
+      "bias": "neutral",
+      "label": "Futures overnight-range break",
+      "summary": "Closes through the overnight high or low on /ES or /NQ, checked every 1-minute bar."
+    }
+  ]
+}

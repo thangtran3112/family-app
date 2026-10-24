@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "High volatility",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "liquidity": {
+    "minPrice": 5,
+    "minAvgVolume": 500000
+  },
+  "when": {
+    "op": "gte",
+    "left": {
+      "series": "atr_pct",
+      "length": 14,
+      "medianLength": 50
+    },
+    "right": {
+      "value": 4
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "atr_pct",
+      "length": 14,
+      "medianLength": 50
+    },
+    "order": "desc"
+  },
+  "maxResults": 50
+}

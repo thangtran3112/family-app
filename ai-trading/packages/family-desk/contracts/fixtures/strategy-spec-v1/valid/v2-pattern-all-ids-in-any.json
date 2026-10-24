@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "any": [
+      {
+        "op": "pattern",
+        "pattern": "hammer"
+      },
+      {
+        "op": "pattern",
+        "pattern": "inverted_hammer"
+      },
+      {
+        "op": "pattern",
+        "pattern": "hanging_man"
+      },
+      {
+        "op": "pattern",
+        "pattern": "shooting_star"
+      },
+      {
+        "op": "pattern",
+        "pattern": "doji"
+      },
+      {
+        "op": "pattern",
+        "pattern": "dragonfly_doji"
+      },
+      {
+        "op": "pattern",
+        "pattern": "gravestone_doji"
+      },
+      {
+        "op": "pattern",
+        "pattern": "bullish_engulfing"
+      },
+      {
+        "op": "pattern",
+        "pattern": "bearish_engulfing"
+      },
+      {
+        "op": "pattern",
+        "pattern": "bullish_harami"
+      },
+      {
+        "op": "pattern",
+        "pattern": "bearish_harami"
+      },
+      {
+        "op": "pattern",
+        "pattern": "piercing_line"
+      },
+      {
+        "op": "pattern",
+        "pattern": "dark_cloud_cover"
+      },
+      {
+        "op": "pattern",
+        "pattern": "morning_star"
+      },
+      {
+        "op": "pattern",
+        "pattern": "evening_star"
+      },
+      {
+        "op": "pattern",
+        "pattern": "tweezer_bottom"
+      },
+      {
+        "op": "pattern",
+        "pattern": "tweezer_top"
+      },
+      {
+        "op": "pattern",
+        "pattern": "three_white_soldiers"
+      },
+      {
+        "op": "pattern",
+        "pattern": "three_black_crows"
+      },
+      {
+        "op": "pattern",
+        "pattern": "inside_bar"
+      }
+    ]
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+ "category": "pattern",
+ "channels": [
+  "inbox"
+ ],
+ "cooldown_minutes": null,
+ "expires_on": null,
+ "fires_7d": 0,
+ "frequency": "once_per_bar",
+ "id": 110,
+ "last_fired_at": null,
+ "name": "Hammer",
+ "origin": "library",
+ "paused_reason": null,
+ "run_on": "bar_close_15m",
+ "severity": "opportunity",
+ "source": {
+  "id": 1,
+  "kind": "watchlist",
+  "label": "Day movers"
+ },
+ "spec": {
+  "name": "Hammer",
+  "schemaVersion": 1,
+  "then": {
+   "alert": {
+    "channels": [
+     "inbox"
+    ],
+    "frequency": "once_per_bar",
+    "message": "{symbol} hammer on the 15m, close {close} at {time}",
+    "severity": "opportunity"
+   }
+  },
+  "watch": {
+   "runOn": "bar_close_15m",
+   "session": "regular",
+   "universe": {
+    "watchlist": "Day movers"
+   }
+  },
+  "when": {
+   "op": "pattern",
+   "pattern": "hammer",
+   "trend": "after_downtrend",
+   "trendBars": 5,
+   "withinBars": 1
+  }
+ },
+ "stage": "draft",
+ "status": "draft",
+ "version": 1
+}

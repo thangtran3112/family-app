@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Breakout watch",
+  "watch": {
+    "universe": {
+      "watchlist": "Breakout list"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "op": "crosses_above",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "series": "sma",
+      "length": 20
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox",
+        "slack",
+        "telegram"
+      ]
+    }
+  }
+}

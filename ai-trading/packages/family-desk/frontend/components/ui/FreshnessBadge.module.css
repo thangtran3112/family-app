@@ -1,0 +1,6 @@
+.badge { display: inline-flex; min-height: 24px; align-items: center; gap: 6px; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 10px; color: var(--color-muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.badge[data-tone="up"] { color: var(--color-text); }
+.badge[data-tone="amber"] { border-color: var(--color-amber); color: var(--color-amber); }
+.badge[data-tone="down"] { border-color: var(--color-down); color: var(--color-down); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-up); }
+.label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

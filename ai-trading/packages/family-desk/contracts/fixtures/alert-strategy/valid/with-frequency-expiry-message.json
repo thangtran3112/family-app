@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Close alert for the week",
+  "watch": {
+    "universe": {
+      "watchlist": "Core holdings"
+    },
+    "session": "regular",
+    "runOn": "bar_close_1h"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "value": 150
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ],
+      "frequency": "once_per_bar",
+      "expiresOn": "2026-12-31",
+      "message": "{symbol} closed {close} at {time}"
+    }
+  }
+}

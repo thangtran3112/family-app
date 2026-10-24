@@ -10,8 +10,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.describe import SignalKind, signal_kind
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.db.models import Signal, Strategy, StrategyVersion
+from ai_trading.mvp_stub import market as stub_market
+from ai_trading.mvp_stub import stub_enabled
 
 router = APIRouter(prefix="/api/desk/signals", tags=["signals"])
 
@@ -27,6 +30,9 @@ class SignalOut(BaseModel):
     evidence: dict[str, Any]
     data_quality: str
     created_at: datetime
+    strategy_id: int
+    strategy_name: str
+    kind: SignalKind  # the icon family: orb | vwap_reclaim | pattern | rvol | other
 
 
 @router.get("", response_model=list[SignalOut])
@@ -38,8 +44,10 @@ def list_signals(
     user: AuthedUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[SignalOut]:
+    if stub_enabled():
+        return stub_market.signal_rows(symbol, since, limit, offset)
     query = (
-        select(Signal)
+        select(Signal, Strategy.id, Strategy.name, StrategyVersion.spec)
         .join(StrategyVersion, Signal.strategy_version_id == StrategyVersion.id)
         .join(Strategy, StrategyVersion.strategy_id == Strategy.id)
         .where(Strategy.owner_user_id == user.id)
@@ -49,7 +57,7 @@ def list_signals(
     if since is not None:
         query = query.where(Signal.created_at >= since)
     query = query.order_by(Signal.created_at.desc(), Signal.id.desc()).limit(limit).offset(offset)
-    rows = session.execute(query).scalars()
+    rows = session.execute(query).all()
     return [
         SignalOut(
             id=row.id,
@@ -59,6 +67,10 @@ def list_signals(
             evidence=row.evidence,
             data_quality=row.data_quality,
             created_at=row.created_at,
+            strategy_id=strategy_id,
+            strategy_name=strategy_name,
+            # A version without an alert `when` (another lane's spec shape) is "other", not an error.
+            kind=signal_kind(spec) if "when" in spec else "other",
         )
-        for row in rows
+        for row, strategy_id, strategy_name, spec in rows
     ]

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "MACD signal cross",
+  "watch": { "universe": { "watchlist": "Swing" }, "session": "regular", "runOn": "daily_close" },
+  "when": {
+    "any": [
+      {
+        "op": "crosses_above",
+        "left": { "series": "macd", "line": "line", "fast": 12, "slow": 26, "signal": 9 },
+        "right": { "series": "macd", "line": "signal", "fast": 12, "slow": 26, "signal": 9 }
+      },
+      {
+        "op": "crosses_below",
+        "left": { "series": "macd", "line": "line", "fast": 12, "slow": 26, "signal": 9 },
+        "right": { "series": "macd", "line": "signal", "fast": 12, "slow": 26, "signal": 9 }
+      }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox"], "severity": "info" } }
+}

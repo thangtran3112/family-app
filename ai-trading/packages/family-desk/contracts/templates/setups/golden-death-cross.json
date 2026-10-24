@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Golden / death cross 50/200",
+  "watch": { "universe": { "watchlist": "Swing" }, "session": "regular", "runOn": "daily_close" },
+  "when": {
+    "any": [
+      { "op": "crosses_above", "left": { "series": "sma", "length": 50 }, "right": { "series": "sma", "length": 200 } },
+      { "op": "crosses_below", "left": { "series": "sma", "length": 50 }, "right": { "series": "sma", "length": 200 } }
+    ]
+  },
+  "then": { "alert": { "channels": ["inbox"], "severity": "info" } }
+}

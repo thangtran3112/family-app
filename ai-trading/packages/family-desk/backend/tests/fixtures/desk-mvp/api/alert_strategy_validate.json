@@ -1,0 +1,14 @@
+{
+ "problems": [],
+ "resolved_symbols": [
+  "NVDA",
+  "AMD",
+  "TSLA",
+  "PLTR",
+  "META",
+  "AAPL",
+  "AVGO",
+  "COIN"
+ ],
+ "run_on": "bar_close_1m"
+}

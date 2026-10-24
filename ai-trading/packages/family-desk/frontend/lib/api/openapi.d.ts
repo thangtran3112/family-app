@@ -4,6 +4,111 @@
  */
 
 export interface paths {
+    "/api/desk/alert-strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alert Strategies */
+        get: operations["list_alert_strategies_api_desk_alert_strategies_get"];
+        put?: never;
+        /** Create Alert Strategy */
+        post: operations["create_alert_strategy_api_desk_alert_strategies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alert-strategies/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Alert Strategy */
+        post: operations["validate_alert_strategy_api_desk_alert_strategies_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alert-strategies/{strategy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Alert Strategy */
+        get: operations["get_alert_strategy_api_desk_alert_strategies__strategy_id__get"];
+        /** Update Alert Strategy */
+        put: operations["update_alert_strategy_api_desk_alert_strategies__strategy_id__put"];
+        post?: never;
+        /** Archive Alert Strategy */
+        delete: operations["archive_alert_strategy_api_desk_alert_strategies__strategy_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alert-strategies/{strategy_id}/fires": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alert Strategy Fires */
+        get: operations["list_alert_strategy_fires_api_desk_alert_strategies__strategy_id__fires_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alert-strategies/{strategy_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Alert Strategy */
+        post: operations["pause_alert_strategy_api_desk_alert_strategies__strategy_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alert-strategies/{strategy_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Alert Strategy */
+        post: operations["resume_alert_strategy_api_desk_alert_strategies__strategy_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/alerts": {
         parameters: {
             query?: never;
@@ -15,6 +120,40 @@ export interface paths {
         get: operations["list_alerts_api_desk_alerts_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alerts/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Delivery Log */
+        get: operations["delivery_log_api_desk_alerts_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/alerts/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark All Read */
+        post: operations["mark_all_read_api_desk_alerts_read_all_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -45,8 +184,50 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Bars */
+        /**
+         * Bars
+         * @description Closed bars for the chart. `ext` marks pre/after-hours bars; `stamp` is the freshness the UI shows.
+         *     Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot, `session=extended` reads the Friday 5m series.
+         */
         get: operations["bars_api_desk_bars__symbol__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/charts/{symbol}/markers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Markers
+         * @description Pattern markers on closed bars (drawn below the bar) plus the fires of her strategies (a bell above),
+         *     filtered to `from`..`to` on the bar start for patterns and the bar time for fires.
+         */
+        get: operations["markers_api_desk_charts__symbol__markers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dashboard */
+        get: operations["dashboard_api_desk_dashboard_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -66,6 +247,57 @@ export interface paths {
         get: operations["futures_specs_api_desk_futures_specs_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Library */
+        get: operations["list_library_api_desk_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/library/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Library Entry */
+        get: operations["get_library_entry_api_desk_library__entry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/library/{entry_id}/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Attach Library Entry */
+        post: operations["attach_library_entry_api_desk_library__entry_id__attach_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -96,8 +328,113 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stream Quotes */
+        /**
+         * Stream Quotes
+         * @description Server-sent events, one connection per symbol. Each `quote` event's data is JSON:
+         *     `{"symbol", "close", "quality", "as_of", "freshness", "source", "session"}`.
+         *     `as_of` is the closed 1m bar's start (`+00:00`, `Z` in the stub).
+         *     `freshness` is live|delayed|closed|paused|unavailable; `source` is the bar's provider;
+         *     `session` is pre|regular|after|closed (the market session now).
+         *     An event is sent only when the quote changes; the stream stays open until the client disconnects.
+         *     Stub: one event for SPY, NVDA or MSFT from the last 15m fixture bar, then the stream stays open.
+         */
         get: operations["stream_quotes_api_desk_quotes__symbol__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/screener/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Filters */
+        get: operations["list_filters_api_desk_screener_filters_get"];
+        put?: never;
+        /** Create Filter */
+        post: operations["create_filter_api_desk_screener_filters_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/screener/filters/{filter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Filter */
+        get: operations["get_filter_api_desk_screener_filters__filter_id__get"];
+        /** Update Filter */
+        put: operations["update_filter_api_desk_screener_filters__filter_id__put"];
+        post?: never;
+        /** Delete Filter */
+        delete: operations["delete_filter_api_desk_screener_filters__filter_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/screener/filters/{filter_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Results
+         * @description The filter's newest stored run. Before its first run it answers 200 with no matches and an
+         *     `unavailable` stamp (no `as_of`), so the screen can say "Waiting for the first scan" without an error.
+         */
+        get: operations["get_results_api_desk_screener_filters__filter_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/screener/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description Evaluate an unsaved spec over the stored universe, never a provider, within `PREVIEW_BUDGET_SECONDS`.
+         *     Over budget it answers `matches_total: null` and no `top` (a partial ranking would mislead).
+         */
+        post: operations["preview_api_desk_screener_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/screener/universe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Universe */
+        get: operations["get_universe_api_desk_screener_universe_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -118,6 +455,57 @@ export interface paths {
         /** Put Settings */
         put: operations["put_settings_api_desk_settings_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/settings/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Channels */
+        get: operations["list_channels_api_desk_settings_channels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/settings/channels/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Link Telegram */
+        put: operations["link_telegram_api_desk_settings_channels_telegram_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/settings/channels/{channel}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Channel */
+        post: operations["test_channel_api_desk_settings_channels__channel__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -211,6 +599,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/symbols/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Symbols */
+        get: operations["search_symbols_api_desk_symbols_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/technicals/{symbol}": {
         parameters: {
             query?: never;
@@ -218,7 +623,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Technicals */
+        /**
+         * Technicals
+         * @description The desk's technical view for one timeframe. Stub (`DESK_MVP_STUB=1`): SPY, NVDA, MSFT from the snapshot;
+         *     `gauges.strategies` is a sample for NVDA 15m only. Real mode computes everything from the bars: the last
+         *     values (`indicators`), the bias history and its newest change, the key `levels`, and the fourth gauge from
+         *     her strategies (null with none on this timeframe).
+         */
         get: operations["technicals_api_desk_technicals__symbol__get"];
         put?: never;
         post?: never;
@@ -244,6 +655,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/desk/watchlists/{watchlist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Watchlist */
+        delete: operations["delete_watchlist_api_desk_watchlists__watchlist_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Watchlist */
+        patch: operations["rename_watchlist_api_desk_watchlists__watchlist_id__patch"];
         trace?: never;
     };
     "/api/desk/watchlists/{watchlist_id}/items": {
@@ -281,6 +710,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/watchlists/{watchlist_id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder Watchlist Items */
+        put: operations["reorder_watchlist_items_api_desk_watchlists__watchlist_id__order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/watchlists/{watchlist_id}/table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Watchlist Table */
+        get: operations["watchlist_table_api_desk_watchlists__watchlist_id__table_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -302,6 +765,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlertLogOut */
+        AlertLogOut: {
+            /** Alert Id */
+            alert_id: number;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Delivery Id */
+            delivery_id: number;
+            /** Detail */
+            detail: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "delivered" | "held_quiet_hours" | "no_channel" | "failed";
+            /** Strategy Id */
+            strategy_id: number | null;
+            /** Strategy Name */
+            strategy_name: string | null;
+            /** Symbol */
+            symbol: string | null;
+        };
         /** AlertOut */
         AlertOut: {
             /** Body */
@@ -323,13 +813,276 @@ export interface components {
             read_at: string | null;
             /** Severity */
             severity: string;
+            /** Strategy Id */
+            strategy_id: number | null;
+            /** Strategy Name */
+            strategy_name: string | null;
+            /** Symbol */
+            symbol: string | null;
             /** Title */
             title: string;
+        };
+        /** AlertReadAllOut */
+        AlertReadAllOut: {
+            /** Marked */
+            marked: number;
+        };
+        /** AlertStrategyBarOut */
+        AlertStrategyBarOut: {
+            /** C */
+            c: number | null;
+            /** H */
+            h: number | null;
+            /** L */
+            l: number | null;
+            /** O */
+            o: number | null;
+            /** T */
+            t: string;
+            /** V */
+            v: number | null;
+        };
+        /** AlertStrategyCreate */
+        AlertStrategyCreate: {
+            /**
+             * Save As
+             * @enum {string}
+             */
+            save_as: "draft" | "on";
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** AlertStrategyDeliveryOut */
+        AlertStrategyDeliveryOut: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "inbox" | "telegram" | "slack";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "delivered" | "held_quiet_hours" | "no_channel" | "failed";
+        };
+        /** AlertStrategyDetailOut */
+        AlertStrategyDetailOut: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "pattern" | "indicator" | "level" | "screener";
+            /** Channels */
+            channels: ("inbox" | "telegram" | "slack")[];
+            /** Cooldown Minutes */
+            cooldown_minutes: number | null;
+            /** Expires On */
+            expires_on: string | null;
+            /** Fires 7D */
+            fires_7d: number;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "once" | "once_per_bar" | "every_time";
+            /** Id */
+            id: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "seed" | "library" | "user";
+            /** Paused Reason */
+            paused_reason: string | null;
+            /**
+             * Run On
+             * @enum {string}
+             */
+            run_on: "bar_close_1m" | "bar_close_5m" | "bar_close_15m" | "bar_close_1h" | "premarket_0830" | "daily_close" | "weekly";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "opportunity" | "risk";
+            source: components["schemas"]["AlertStrategySourceOut"];
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "draft" | "alert_only";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "paused" | "expired" | "draft";
+            /** Version */
+            version: number;
+            /** Versions */
+            versions: components["schemas"]["AlertStrategyVersionOut"][];
+        };
+        /** AlertStrategyFireOut */
+        AlertStrategyFireOut: {
+            /**
+             * Bar Time
+             * Format: date-time
+             */
+            bar_time: string;
+            /** Deliveries */
+            deliveries: components["schemas"]["AlertStrategyDeliveryOut"][];
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Signal Id */
+            signal_id: number;
+            /** Symbol */
+            symbol: string;
+            thumb: components["schemas"]["AlertStrategyThumbOut"];
+        };
+        /** AlertStrategyOut */
+        AlertStrategyOut: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "pattern" | "indicator" | "level" | "screener";
+            /** Channels */
+            channels: ("inbox" | "telegram" | "slack")[];
+            /** Cooldown Minutes */
+            cooldown_minutes: number | null;
+            /** Expires On */
+            expires_on: string | null;
+            /** Fires 7D */
+            fires_7d: number;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "once" | "once_per_bar" | "every_time";
+            /** Id */
+            id: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "seed" | "library" | "user";
+            /** Paused Reason */
+            paused_reason: string | null;
+            /**
+             * Run On
+             * @enum {string}
+             */
+            run_on: "bar_close_1m" | "bar_close_5m" | "bar_close_15m" | "bar_close_1h" | "premarket_0830" | "daily_close" | "weekly";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "opportunity" | "risk";
+            source: components["schemas"]["AlertStrategySourceOut"];
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "draft" | "alert_only";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "paused" | "expired" | "draft";
+            /** Version */
+            version: number;
+        };
+        /** AlertStrategyPauseIn */
+        AlertStrategyPauseIn: {
+            /**
+             * Reason
+             * @constant
+             */
+            reason: "user";
+        };
+        /** AlertStrategySourceOut */
+        AlertStrategySourceOut: {
+            /** Id */
+            id: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "symbol" | "watchlist" | "filter";
+            /** Label */
+            label: string;
+        };
+        /** AlertStrategyThumbOut */
+        AlertStrategyThumbOut: {
+            /** Bars */
+            bars: components["schemas"]["AlertStrategyBarOut"][];
+            /**
+             * Interval
+             * @constant
+             */
+            interval: "15m";
+        };
+        /** AlertStrategyUpdate */
+        AlertStrategyUpdate: {
+            /** Change Note */
+            change_note?: string | null;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** AlertStrategyValidateIn */
+        AlertStrategyValidateIn: {
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** AlertStrategyValidateOut */
+        AlertStrategyValidateOut: {
+            /** Problems */
+            problems: components["schemas"]["Problem"][];
+            /** Resolved Symbols */
+            resolved_symbols: string[];
+            /** Run On */
+            run_on: ("bar_close_1m" | "bar_close_5m" | "bar_close_15m" | "bar_close_1h" | "premarket_0830" | "daily_close" | "weekly") | null;
+        };
+        /** AlertStrategyVersionOut */
+        AlertStrategyVersionOut: {
+            /** Change Note */
+            change_note: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Version */
+            version: number;
         };
         /** BarOut */
         BarOut: {
             /** C */
             c: number | null;
+            /** Ext */
+            ext: boolean;
             /** H */
             h: number | null;
             /** L */
@@ -357,8 +1110,58 @@ export interface components {
              * @enum {string}
              */
             quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            stamp: components["schemas"]["Stamp"];
             /** Symbol */
             symbol: string;
+        };
+        /** BiasChangeOut */
+        BiasChangeOut: {
+            /**
+             * At Bar
+             * Format: date-time
+             */
+            at_bar: string;
+            /**
+             * From
+             * @enum {string}
+             */
+            from: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+            /**
+             * To
+             * @enum {string}
+             */
+            to: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+        };
+        /** BiasHistoryEntryOut */
+        BiasHistoryEntryOut: {
+            /**
+             * Bar
+             * Format: date-time
+             */
+            bar: string;
+            /**
+             * Moving Averages
+             * @enum {string}
+             */
+            moving_averages: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+            /**
+             * Oscillators
+             * @enum {string}
+             */
+            oscillators: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+            /** Score */
+            score: number | null;
+            /**
+             * Summary
+             * @enum {string}
+             */
+            summary: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+        };
+        /** BiasHistoryOut */
+        BiasHistoryOut: {
+            /** History */
+            history: components["schemas"]["BiasHistoryEntryOut"][];
+            last_change_in_window: components["schemas"]["BiasChangeOut"] | null;
         };
         /** CardBackOut */
         CardBackOut: {
@@ -384,6 +1187,134 @@ export interface components {
             symbol: string;
             /** Timeframe */
             timeframe: string;
+        };
+        /** DashboardEventOut */
+        DashboardEventOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "earnings";
+            /** Symbol */
+            symbol: string;
+            /** Timing */
+            timing: string;
+        };
+        /** DashboardMarketOut */
+        DashboardMarketOut: {
+            /**
+             * Next Open
+             * Format: date-time
+             */
+            next_open: string;
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "pre" | "regular" | "after" | "closed";
+        };
+        /** DashboardOut */
+        DashboardOut: {
+            /**
+             * Alerts State
+             * @enum {string}
+             */
+            alerts_state: "running" | "paused_no_quotes" | "paused_by_user" | "not_started";
+            /** Events */
+            events: components["schemas"]["DashboardEventOut"][];
+            market: components["schemas"]["DashboardMarketOut"];
+            /** Market Strip */
+            market_strip: components["schemas"]["MarketStripTileOut"][];
+            /** Screener Matches */
+            screener_matches: components["schemas"]["DashboardScreenerMatchOut"][];
+            /** Signals */
+            signals: components["schemas"]["DashboardSignalOut"][];
+            stamp: components["schemas"]["Stamp"];
+            watchlist: components["schemas"]["DashboardWatchlistOut"];
+        };
+        /** DashboardScreenerMatchOut */
+        DashboardScreenerMatchOut: {
+            /** Filter Id */
+            filter_id: number;
+            /** Matches Total */
+            matches_total: number;
+            /** Name */
+            name: string;
+            /** Run On */
+            run_on: string;
+            /** Scanned */
+            scanned: number;
+            stamp: components["schemas"]["Stamp"];
+            /** Top */
+            top: string[];
+        };
+        /** DashboardSignalOut */
+        DashboardSignalOut: {
+            /**
+             * Bar Time
+             * Format: date-time
+             */
+            bar_time: string;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "orb" | "vwap_reclaim" | "pattern" | "rvol" | "other";
+            /** Strategy Id */
+            strategy_id: number;
+            /** Strategy Name */
+            strategy_name: string;
+            /** Summary */
+            summary: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /** DashboardWatchlistOut */
+        DashboardWatchlistOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Rows */
+            rows: components["schemas"]["DashboardWatchlistRowOut"][];
+        };
+        /** DashboardWatchlistRowOut */
+        DashboardWatchlistRowOut: {
+            /** Bias Label */
+            bias_label: string;
+            /** Change Pct */
+            change_pct: number | null;
+            /** Last */
+            last: number | null;
+            /** Rvol 10D */
+            rvol_10d: number | null;
+            /** Symbol */
+            symbol: string;
+            /** Vs Vwap Pct */
+            vs_vwap_pct: number | null;
+        };
+        /** FireMarkerOut */
+        FireMarkerOut: {
+            /**
+             * Bar Time
+             * Format: date-time
+             */
+            bar_time: string;
+            /** Signal Id */
+            signal_id: number;
+            /** Strategy Name */
+            strategy_name: string;
         };
         /** FuturesSpecOut */
         FuturesSpecOut: {
@@ -420,12 +1351,208 @@ export interface components {
         GaugesOut: {
             moving_averages: components["schemas"]["GaugeOut"];
             oscillators: components["schemas"]["GaugeOut"];
+            strategies: components["schemas"]["StrategiesGaugeOut"] | null;
             summary: components["schemas"]["GaugeOut"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LevelsOut */
+        LevelsOut: {
+            /** Prior Close */
+            prior_close: number | null;
+            /** Session High */
+            session_high: number | null;
+            /** Session Low */
+            session_low: number | null;
+        };
+        /** LibraryAttachIn */
+        LibraryAttachIn: {
+            /**
+             * Channels
+             * @default [
+             *       "inbox"
+             *     ]
+             */
+            channels: string[];
+            /**
+             * Severity
+             * @default opportunity
+             */
+            severity: string;
+            /** Watchlist Id */
+            watchlist_id: number;
+        };
+        /** LibraryAttachOut */
+        LibraryAttachOut: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "pattern" | "indicator" | "level" | "screener";
+            /** Channels */
+            channels: string[];
+            /** Cooldown Minutes */
+            cooldown_minutes: number | null;
+            /** Expires On */
+            expires_on: string | null;
+            /** Fires 7D */
+            fires_7d: number;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "once" | "once_per_bar" | "every_time";
+            /** Id */
+            id: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "seed" | "library" | "user";
+            /** Paused Reason */
+            paused_reason: string | null;
+            /** Run On */
+            run_on: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "opportunity" | "risk";
+            source: components["schemas"]["LibraryAttachSourceOut"];
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "draft" | "alert_only";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "paused" | "expired" | "draft";
+            /** Version */
+            version: number;
+        };
+        /** LibraryAttachSourceOut */
+        LibraryAttachSourceOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "symbol" | "watchlist" | "filter";
+            /** Label */
+            label: string;
+        };
+        /** LibraryEntryOut */
+        LibraryEntryOut: {
+            /** Attach Blocked Reason */
+            attach_blocked_reason: string | null;
+            /** Attachable */
+            attachable: boolean;
+            /**
+             * Bias
+             * @enum {string}
+             */
+            bias: "bullish" | "bearish" | "neutral";
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "candlestick" | "breakout" | "trend" | "volume" | "futures" | "income" | "long_term";
+            /** Defaults */
+            defaults: {
+                [key: string]: unknown;
+            };
+            example: components["schemas"]["LibraryExampleOut"] | null;
+            /** File */
+            file: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "strategy" | "filter";
+            /** Label */
+            label: string;
+            /**
+             * Lane
+             * @enum {string}
+             */
+            lane: "technical" | "fundamental";
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * LibraryExampleOut
+         * @description A real occurrence on stored bars (the stub's snapshot here); the mock draws it as an example.
+         */
+        LibraryExampleOut: {
+            /**
+             * Bar Time
+             * Format: date-time
+             */
+            bar_time: string;
+            /** Ohlc */
+            ohlc: number[];
+            /** Symbol */
+            symbol: string;
+            /** Timeframe */
+            timeframe: string;
+        };
+        /**
+         * LibraryItemOut
+         * @description One catalog entry, as `PresetCatalogV1` ships it, plus whether it can be attached.
+         */
+        LibraryItemOut: {
+            /** Attach Blocked Reason */
+            attach_blocked_reason: string | null;
+            /** Attachable */
+            attachable: boolean;
+            /**
+             * Bias
+             * @enum {string}
+             */
+            bias: "bullish" | "bearish" | "neutral";
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "candlestick" | "breakout" | "trend" | "volume" | "futures" | "income" | "long_term";
+            /** File */
+            file: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "strategy" | "filter";
+            /** Label */
+            label: string;
+            /**
+             * Lane
+             * @enum {string}
+             */
+            lane: "technical" | "fundamental";
+            /** Summary */
+            summary: string;
         };
         /** MacdOut */
         MacdOut: {
@@ -436,10 +1563,80 @@ export interface components {
             /** Signal */
             signal: number | null;
         };
+        /** MarkersOut */
+        MarkersOut: {
+            /** Fires */
+            fires: components["schemas"]["FireMarkerOut"][];
+            /** Patterns */
+            patterns: components["schemas"]["PatternMarkerOut"][];
+        };
+        /** MarketStripTileOut */
+        MarketStripTileOut: {
+            /** Change Pct */
+            change_pct: number | null;
+            /** Last */
+            last: number | null;
+            stamp: components["schemas"]["Stamp"];
+            /** Symbol */
+            symbol: string;
+        };
         /** MeOut */
         MeOut: {
             /** Email */
             email: string;
+        };
+        /**
+         * Metrics
+         * @description The snapshot's metric names, exactly (02m §a1). Numbers or null, never NaN.
+         */
+        Metrics: {
+            /** Atr Pct 14 */
+            atr_pct_14?: number | null;
+            /** Avg Volume 20D */
+            avg_volume_20d?: number | null;
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Dist To 252D High Pct */
+            dist_to_252d_high_pct?: number | null;
+            /** Gap Pct Open */
+            gap_pct_open?: number | null;
+            /** High 252D */
+            high_252d?: number | null;
+            /** Last */
+            last?: number | null;
+            /** Prev Close */
+            prev_close?: number | null;
+            /** Rsi 14 */
+            rsi_14?: number | null;
+            /** Rvol 10D */
+            rvol_10d?: number | null;
+            /** Rvol Intraday 10D At Close */
+            rvol_intraday_10d_at_close?: number | null;
+            /** Volume */
+            volume?: number | null;
+            /** Vs Vwap Pct */
+            vs_vwap_pct?: number | null;
+            /** Vwap Close */
+            vwap_close?: number | null;
+        };
+        /** PatternMarkerOut */
+        PatternMarkerOut: {
+            /**
+             * Bar Close
+             * Format: date-time
+             */
+            bar_close: string;
+            /**
+             * Bar Start
+             * Format: date-time
+             */
+            bar_start: string;
+            /** Ohlc */
+            ohlc: number[];
+            /** Pattern */
+            pattern: string;
+            /** Template */
+            template: string;
         };
         /** PivotMethodsOut */
         PivotMethodsOut: {
@@ -456,6 +1653,223 @@ export interface components {
                 [key: string]: number | null;
             };
         };
+        /** Problem */
+        Problem: {
+            /** Message */
+            message: string;
+            /** Path */
+            path: string;
+        };
+        /** ScreenerFilterCreate */
+        ScreenerFilterCreate: {
+            /** Copy Of */
+            copy_of?: number | null;
+            /** Spec */
+            spec?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** ScreenerFilterDetailOut */
+        ScreenerFilterDetailOut: {
+            /** Default Spec */
+            default_spec: {
+                [key: string]: unknown;
+            } | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "seed" | "user";
+            /** Read Only */
+            read_only: boolean;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            stamp: components["schemas"]["Stamp"];
+            /** Version */
+            version: number;
+        };
+        /** ScreenerFilterOut */
+        ScreenerFilterOut: {
+            /** Id */
+            id: number;
+            last_run: components["schemas"]["ScreenerLastRunOut"] | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "seed" | "user";
+            /** Read Only */
+            read_only: boolean;
+            /**
+             * Run On
+             * @enum {string}
+             */
+            run_on: "bar_close_1m" | "bar_close_5m" | "bar_close_15m" | "bar_close_1h" | "premarket_0830" | "daily_close" | "weekly";
+            /** Seed Key */
+            seed_key: string | null;
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "regular" | "extended";
+        };
+        /** ScreenerFilterUpdate */
+        ScreenerFilterUpdate: {
+            /** Change Note */
+            change_note?: string | null;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** ScreenerLastRunOut */
+        ScreenerLastRunOut: {
+            /**
+             * Evaluation Point
+             * Format: date-time
+             */
+            evaluation_point: string;
+            /** Matches Total */
+            matches_total: number;
+            /** Scanned */
+            scanned: number;
+            stamp: components["schemas"]["Stamp"];
+        };
+        /** ScreenerLiquidityOut */
+        ScreenerLiquidityOut: {
+            /** Avgvolumedays */
+            avgVolumeDays?: number | null;
+            /** Minavgvolume */
+            minAvgVolume?: number | null;
+            /** Minprice */
+            minPrice?: number | null;
+        };
+        /** ScreenerMatchOut */
+        ScreenerMatchOut: {
+            columns: components["schemas"]["Metrics"];
+            /**
+             * Matched Since
+             * Format: date-time
+             */
+            matched_since: string;
+            /** Operands */
+            operands: {
+                [key: string]: number | null;
+            };
+            /** Rank Value */
+            rank_value: number | null;
+            /** Symbol */
+            symbol: string;
+        };
+        /** ScreenerPreviewIn */
+        ScreenerPreviewIn: {
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** ScreenerPreviewOut */
+        ScreenerPreviewOut: {
+            /** Matches Total */
+            matches_total: number | null;
+            /** Problems */
+            problems: components["schemas"]["Problem"][];
+            /** Scanned */
+            scanned: number;
+            /** Top */
+            top: components["schemas"]["ScreenerPreviewTopOut"][];
+        };
+        /** ScreenerPreviewTopOut */
+        ScreenerPreviewTopOut: {
+            /** Rank Value */
+            rank_value: number | null;
+            /** Symbol */
+            symbol: string;
+        };
+        /** ScreenerRankOut */
+        ScreenerRankOut: {
+            /** By */
+            by: {
+                [key: string]: unknown;
+            };
+            /**
+             * Order
+             * @enum {string}
+             */
+            order: "desc" | "asc";
+        };
+        /** ScreenerResultsOut */
+        ScreenerResultsOut: {
+            /**
+             * Evaluation Point
+             * Format: date-time
+             */
+            evaluation_point: string;
+            /** Filter Id */
+            filter_id: number;
+            liquidity: components["schemas"]["ScreenerLiquidityOut"] | null;
+            /** Matches */
+            matches: components["schemas"]["ScreenerMatchOut"][];
+            /** Matches Returned */
+            matches_returned: number;
+            /** Matches Total */
+            matches_total: number;
+            /** Name */
+            name: string;
+            /** No Data On Eval Day */
+            no_data_on_eval_day: number;
+            rank: components["schemas"]["ScreenerRankOut"] | null;
+            /**
+             * Run On
+             * @enum {string}
+             */
+            run_on: "bar_close_1m" | "bar_close_5m" | "bar_close_15m" | "bar_close_1h" | "premarket_0830" | "daily_close" | "weekly";
+            /** Scanned */
+            scanned: number;
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "regular" | "extended";
+            stamp: components["schemas"]["Stamp"];
+            /** Table Columns */
+            table_columns: components["schemas"]["ScreenerTableColumnOut"][];
+        };
+        /** ScreenerTableColumnOut */
+        ScreenerTableColumnOut: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "price" | "pct" | "pct_signed" | "compact" | "ratio" | "number" | "time";
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** ScreenerUniverseOut */
+        ScreenerUniverseOut: {
+            /** Candidates */
+            candidates: number;
+            /** Dropped Non Plain Tickers */
+            dropped_non_plain_tickers: number;
+            liquidity_floor: components["schemas"]["ScreenerLiquidityOut"];
+            /** No Daily Data */
+            no_daily_data: number;
+            /** Scan Basis */
+            scan_basis: string;
+            /** Scanned */
+            scanned: number;
+            stamp: components["schemas"]["Stamp"];
+        };
         /** SessionOut */
         SessionOut: {
             /** Close Time */
@@ -469,6 +1883,44 @@ export interface components {
             settings: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * SettingsChannelStateOut
+         * @description `locked` is true only for the inbox, and `configured` is false until the owner wires the
+         *     channel's key. The inbox row is sent without `configured`, and telegram/slack without `locked`
+         *     (the endpoint uses `response_model_exclude_unset`), which is the a3.8 example shape.
+         */
+        SettingsChannelStateOut: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "inbox" | "telegram" | "slack";
+            /**
+             * Configured
+             * @default true
+             */
+            configured: boolean;
+            /** Connected */
+            connected: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+        };
+        /** SettingsChannelTestOut */
+        SettingsChannelTestOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "sent" | "not_connected" | "failed";
+        };
+        /** SettingsTelegramLinkBody */
+        SettingsTelegramLinkBody: {
+            /** Chat Id */
+            chat_id: string;
         };
         /** SignalOut */
         SignalOut: {
@@ -490,6 +1942,15 @@ export interface components {
             };
             /** Id */
             id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "orb" | "vwap_reclaim" | "pattern" | "rvol" | "other";
+            /** Strategy Id */
+            strategy_id: number;
+            /** Strategy Name */
+            strategy_name: string;
             /** Strategy Version Id */
             strategy_version_id: number;
             /** Symbol */
@@ -505,23 +1966,109 @@ export interface components {
             /** Stage */
             stage: string;
         };
+        /**
+         * Stamp
+         * @description Embedded in every response that carries market data; the UI never computes freshness.
+         */
+        Stamp: {
+            /** As Of */
+            as_of: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            /** Source */
+            source: string | null;
+        };
+        /** StatusAlertsOut */
+        StatusAlertsOut: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "paused_no_quotes" | "paused_by_user" | "not_started";
+            /** Unread */
+            unread: number;
+        };
+        /** StatusMarketOut */
+        StatusMarketOut: {
+            /**
+             * Last Close
+             * Format: date-time
+             */
+            last_close: string;
+            /**
+             * Next Open
+             * Format: date-time
+             */
+            next_open: string;
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "pre" | "regular" | "after" | "closed";
+        };
         /** StatusOut */
         StatusOut: {
+            alerts: components["schemas"]["StatusAlertsOut"];
             /** Backups */
             backups: null;
             /**
              * Data Sources
-             * @constant
+             * @enum {string}
              */
-            data_sources: "unknown";
+            data_sources: "unknown" | "alpaca" | "ibkr" | "mixed";
             /**
              * Gateway
-             * @constant
+             * @enum {string}
              */
-            gateway: "not_configured";
+            gateway: "not_configured" | "connected" | "reconnecting" | "down";
+            market: components["schemas"]["StatusMarketOut"];
+            quotes: components["schemas"]["Stamp"];
             /** Reconciliation */
             reconciliation: null;
+            scans: components["schemas"]["StatusScansOut"];
             streaming_slots: components["schemas"]["StreamingSlotsOut"];
+        };
+        /** StatusScansOut */
+        StatusScansOut: {
+            /** As Of */
+            as_of: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            /** Next Run At */
+            next_run_at: string | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            /** Source */
+            source: string | null;
+        };
+        /** StrategiesGaugeOut */
+        StrategiesGaugeOut: {
+            counts: components["schemas"]["VoteCountsOut"];
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "Strong Sell" | "Sell" | "Neutral" | "Buy" | "Strong Buy" | "warming up";
+            /** Score */
+            score: number | null;
+            /** Votes */
+            votes: components["schemas"]["StrategyVoteOut"][];
+            /** Watching */
+            watching: components["schemas"]["StrategyWatchOut"][];
         };
         /** StrategyCreate */
         StrategyCreate: {
@@ -565,6 +2112,30 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** StrategyVoteOut */
+        StrategyVoteOut: {
+            /**
+             * Bias
+             * @enum {string}
+             */
+            bias: "bullish" | "bearish" | "neutral";
+            /** Name */
+            name: string;
+            /** Strategy Id */
+            strategy_id: number;
+            /**
+             * Vote
+             * @enum {string}
+             */
+            vote: "buy" | "neutral" | "sell";
+        };
+        /** StrategyWatchOut */
+        StrategyWatchOut: {
+            /** Name */
+            name: string;
+            /** Strategy Id */
+            strategy_id: number;
+        };
         /** StreamingSlotsOut */
         StreamingSlotsOut: {
             /** Max */
@@ -572,12 +2143,40 @@ export interface components {
             /** Used */
             used: number;
         };
+        /** SymbolSearchOut */
+        SymbolSearchOut: {
+            /**
+             * Asset Type
+             * @enum {string}
+             */
+            asset_type: "stock" | "etf";
+            /** In Watchlist */
+            in_watchlist: boolean;
+            /** Name */
+            name: string;
+            /** Symbol */
+            symbol: string;
+        };
         /** TechnicalsOut */
         TechnicalsOut: {
             /** As Of */
             as_of: string | null;
+            /** Bars Used */
+            bars_used: number;
+            bias_history: components["schemas"]["BiasHistoryOut"] | null;
+            /** Bias Ready */
+            bias_ready: boolean;
             card_back: components["schemas"]["CardBackOut"];
+            /** First Bar */
+            first_bar: string | null;
             gauges: components["schemas"]["GaugesOut"];
+            /** Indicators */
+            indicators: {
+                [key: string]: number | string | null;
+            } | null;
+            /** Last Bar */
+            last_bar: string | null;
+            levels: components["schemas"]["LevelsOut"] | null;
             macd: components["schemas"]["MacdOut"];
             /** Moving Averages */
             moving_averages: {
@@ -595,8 +2194,11 @@ export interface components {
             quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
             /** Rsi */
             rsi: number | null;
+            stamp: components["schemas"]["Stamp"];
             /** Symbol */
             symbol: string;
+            /** Timeframe */
+            timeframe: string;
             volatility: components["schemas"]["VolatilityOut"];
         };
         /** ValidationError */
@@ -680,6 +2282,14 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /**
+         * WatchlistOrder
+         * @description `PUT /api/desk/watchlists/{id}/order`: the list's own symbols in their new order.
+         */
+        WatchlistOrder: {
+            /** Symbols */
+            symbols: string[];
+        };
         /** WatchlistOut */
         WatchlistOut: {
             /** Horizon */
@@ -688,6 +2298,74 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /**
+         * WatchlistRename
+         * @description `PATCH /api/desk/watchlists/{id}`.
+         */
+        WatchlistRename: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * WatchlistTable
+         * @description `GET /api/desk/watchlists/{id}/table`: rows in stored `position` order.
+         */
+        WatchlistTable: {
+            /** Rows */
+            rows: components["schemas"]["WatchlistTableRow"][];
+            stamp: components["schemas"]["Stamp"];
+            watchlist: components["schemas"]["WatchlistTableHeader"];
+        };
+        /** WatchlistTableHeader */
+        WatchlistTableHeader: {
+            /** Horizon */
+            horizon: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** WatchlistTableRow */
+        WatchlistTableRow: {
+            /**
+             * Asset Type
+             * @enum {string}
+             */
+            asset_type: "stock" | "etf" | "future";
+            /** Bias Label */
+            bias_label: string;
+            /** Change Pct */
+            change_pct: number | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            /** Last */
+            last: number | null;
+            /** Name */
+            name: string;
+            /** Rvol 10D */
+            rvol_10d: number | null;
+            /** Symbol */
+            symbol: string;
+            /** Tags */
+            tags: components["schemas"]["WatchlistTableTag"][];
+            /** Vs Vwap Pct */
+            vs_vwap_pct: number | null;
+        };
+        /** WatchlistTableTag */
+        WatchlistTableTag: {
+            /** At */
+            at: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pattern" | "armed";
+            /** Label */
+            label: string;
         };
     };
     responses: never;
@@ -698,10 +2376,309 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_alert_strategies_api_desk_alert_strategies_get: {
+        parameters: {
+            query?: {
+                status?: ("active" | "paused" | "expired" | "draft") | null;
+                category?: ("pattern" | "indicator" | "level" | "screener") | null;
+                symbol?: string | null;
+                watchlist_id?: number | null;
+                sort?: "name" | "last_fired" | "status";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_alert_strategy_api_desk_alert_strategies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStrategyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_alert_strategy_api_desk_alert_strategies_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStrategyValidateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyValidateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alert_strategy_api_desk_alert_strategies__strategy_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_alert_strategy_api_desk_alert_strategies__strategy_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStrategyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_alert_strategy_api_desk_alert_strategies__strategy_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alert_strategy_fires_api_desk_alert_strategies__strategy_id__fires_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyFireOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_alert_strategy_api_desk_alert_strategies__strategy_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStrategyPauseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_alert_strategy_api_desk_alert_strategies__strategy_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertStrategyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_alerts_api_desk_alerts_get: {
         parameters: {
             query?: {
                 unread?: boolean | null;
+                symbol?: string | null;
+                strategy_id?: number | null;
+                limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -725,6 +2702,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delivery_log_api_desk_alerts_log_get: {
+        parameters: {
+            query?: {
+                status?: ("delivered" | "held_quiet_hours" | "no_channel" | "failed") | null;
+                symbol?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertLogOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_read_api_desk_alerts_read_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertReadAllOut"];
                 };
             };
         };
@@ -795,6 +2826,73 @@ export interface operations {
             };
         };
     };
+    markers_api_desk_charts__symbol__markers_get: {
+        parameters: {
+            query?: {
+                timeframe?: "1d" | "1w" | "1h" | "5m" | "15m" | "30m" | "4h" | "1m";
+                from?: string | null;
+                to?: string | null;
+                all_patterns?: boolean;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkersOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_api_desk_dashboard_get: {
+        parameters: {
+            query?: {
+                watchlist_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     futures_specs_api_desk_futures_specs_get: {
         parameters: {
             query?: never;
@@ -811,6 +2909,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FuturesSpecOut"][];
+                };
+            };
+        };
+    };
+    list_library_api_desk_library_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                q?: string | null;
+                kind?: "strategy" | "filter";
+                lane?: "technical" | "fundamental";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_library_entry_api_desk_library__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryEntryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attach_library_entry_api_desk_library__entry_id__attach_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryAttachIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryAttachOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -866,6 +3064,240 @@ export interface operations {
             };
         };
     };
+    list_filters_api_desk_screener_filters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFilterOut"][];
+                };
+            };
+        };
+    };
+    create_filter_api_desk_screener_filters_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerFilterCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFilterDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_filter_api_desk_screener_filters__filter_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filter_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFilterDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_filter_api_desk_screener_filters__filter_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filter_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerFilterUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFilterDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_filter_api_desk_screener_filters__filter_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filter_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_results_api_desk_screener_filters__filter_id__results_get: {
+        parameters: {
+            query?: {
+                session?: ("regular" | "extended") | null;
+            };
+            header?: never;
+            path: {
+                filter_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerResultsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_desk_screener_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_universe_api_desk_screener_universe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerUniverseOut"];
+                };
+            };
+        };
+    };
     get_settings_api_desk_settings_get: {
         parameters: {
             query?: never;
@@ -906,6 +3338,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsBody"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_channels_api_desk_settings_channels_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsChannelStateOut"][];
+                };
+            };
+        };
+    };
+    link_telegram_api_desk_settings_channels_telegram_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsTelegramLinkBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsChannelStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_channel_api_desk_settings_channels__channel__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel: "inbox" | "telegram" | "slack";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsChannelTestOut"];
                 };
             };
             /** @description Validation Error */
@@ -1127,6 +3643,38 @@ export interface operations {
             };
         };
     };
+    search_symbols_api_desk_symbols_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolSearchOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     technicals_api_desk_technicals__symbol__get: {
         parameters: {
             query?: {
@@ -1196,6 +3744,70 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_watchlist_api_desk_watchlists__watchlist_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_watchlist_api_desk_watchlists__watchlist_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1298,6 +3910,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_watchlist_items_api_desk_watchlists__watchlist_id__order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistItemReadOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_table_api_desk_watchlists__watchlist_id__table_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistTable"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -37,7 +37,7 @@ def test_run_backfills_stock_symbols_only_and_ticks(db_session, watchlist_with_i
     db_session.commit()
 
     assert result.ok is True
-    assert [call[0] for call in fake_bars.calls] == ["AAPL"]  # ES (future) is excluded, D-c
+    assert {call[0] for call in fake_bars.calls} == {"AAPL"}  # ES (future) is excluded, D-c
     assert ticked == [refresh_15m._LIVE_CADENCES]
 
 

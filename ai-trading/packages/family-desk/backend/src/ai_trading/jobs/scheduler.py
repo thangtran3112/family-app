@@ -74,7 +74,7 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
             continue
         try:
             if name == "premarket_0830":
-                results.append(premarket.run(session, clock, now=now))
+                results.append(premarket.run(session, clock, now=now, data_sources=data_sources))
             elif name == "daily_close":
                 results.append(daily_close.run(session, data_sources, clock, now=now))
             elif name == "weekly":

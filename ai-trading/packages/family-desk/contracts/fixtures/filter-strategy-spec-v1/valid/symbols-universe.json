@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "name": "Symbols above SMA",
+  "watch": {
+    "universe": {
+      "symbols": [
+        "AAPL",
+        "MSFT",
+        "/ES"
+      ]
+    },
+    "session": "regular",
+    "runOn": "bar_close_1h"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "series": "sma",
+      "length": 50
+    }
+  },
+  "maxResults": 3
+}

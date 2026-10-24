@@ -8,10 +8,11 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.orm import sessionmaker
 
+import ai_trading.api.quotes as quotes_module
 from ai_trading.api.app import app
 from ai_trading.api.auth import IDENTITY_HEADER, AuthedUser, get_current_user_for_stream
 from ai_trading.api.quotes import POLL_INTERVAL_SECONDS, _latest_quote, quote_events, stream_quotes
-from ai_trading.db.models import Bar1m
+from ai_trading.db.models import Bar1m, FeedHealth
 
 
 def _store_bar(session, *, symbol="AAPL", bar_start=None, close=101.0, source="alpaca"):
@@ -36,7 +37,8 @@ def _factory(db_session):
     return sessionmaker(db_session.get_bind(), expire_on_commit=False)
 
 
-def test_latest_quote_uses_persisted_timestamp_for_delayed_data(db_session):
+def test_latest_quote_uses_persisted_timestamp_for_delayed_data(db_session, monkeypatch):
+    monkeypatch.setattr(quotes_module, "market_session", lambda now: "closed")
     bar_start = _store_bar(db_session)
 
     quote = _latest_quote("AAPL", _factory(db_session))
@@ -46,7 +48,23 @@ def test_latest_quote_uses_persisted_timestamp_for_delayed_data(db_session):
         "close": 101.0,
         "quality": "delayed-15m",
         "as_of": bar_start.isoformat(),
+        "freshness": "unavailable",  # no bars_delayed feed_health row yet
+        "source": "alpaca",
+        "session": "closed",
     }
+
+
+def test_latest_quote_freshness_reads_the_bars_delayed_feed_health(db_session, monkeypatch):
+    monkeypatch.setattr(quotes_module, "market_session", lambda now: "regular")
+    _store_bar(db_session)
+    now = datetime.now(UTC)
+    db_session.add(FeedHealth(feed="bars_delayed", state="ok", last_ok_at=now, updated_at=now))
+    db_session.commit()
+
+    quote = _latest_quote("AAPL", _factory(db_session))
+
+    assert quote is not None
+    assert quote["freshness"] == "delayed"  # delayed-15m quality, a recent feed success, market open
 
 
 @pytest.mark.parametrize("source", ["unknown-provider", "fallback"])
@@ -97,7 +115,8 @@ def test_quote_events_stops_as_soon_as_the_client_disconnects(db_session):
     assert asyncio.run(run()) == []
 
 
-def test_quote_events_sends_one_changed_stored_quote_and_skips_unknown_symbols(db_session):
+def test_quote_events_sends_one_changed_stored_quote_and_skips_unknown_symbols(db_session, monkeypatch):
+    monkeypatch.setattr(quotes_module, "market_session", lambda now: "closed")
     bar_start = _store_bar(db_session)
     sleeps: list[float] = []
 
@@ -125,6 +144,9 @@ def test_quote_events_sends_one_changed_stored_quote_and_skips_unknown_symbols(d
         "close": 101.0,
         "quality": "delayed-15m",
         "as_of": bar_start.isoformat(),
+        "freshness": "unavailable",
+        "source": "alpaca",
+        "session": "closed",
     }
     assert unknown == []
     assert future == []

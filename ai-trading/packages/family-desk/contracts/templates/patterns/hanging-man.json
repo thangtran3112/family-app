@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Hanging man",
+  "watch": { "universe": { "watchlist": "Day movers" }, "session": "regular", "runOn": "bar_close_15m" },
+  "when": { "op": "pattern", "pattern": "hanging_man", "trend": "after_uptrend", "trendBars": 5, "withinBars": 1 },
+  "then": {
+    "alert": {
+      "channels": ["inbox"],
+      "severity": "risk",
+      "frequency": "once_per_bar",
+      "message": "{symbol} hanging man on the 15m, close {close} at {time}"
+    }
+  }
+}

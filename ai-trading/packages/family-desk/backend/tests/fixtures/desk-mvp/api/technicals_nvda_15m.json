@@ -1,0 +1,548 @@
+{
+ "as_of": "2026-10-23T19:45:00+00:00",
+ "bars_used": 858,
+ "bias_history": {
+  "history": [
+   {
+    "bar": "2026-10-23T13:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Buy",
+    "score": -0.176,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T13:45:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Buy",
+    "score": -0.042,
+    "summary": "Neutral"
+   },
+   {
+    "bar": "2026-10-23T14:00:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Sell",
+    "score": -0.291,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T14:15:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Neutral",
+    "score": -0.155,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T14:30:00Z",
+    "moving_averages": "Neutral",
+    "oscillators": "Buy",
+    "score": 0.091,
+    "summary": "Neutral"
+   },
+   {
+    "bar": "2026-10-23T14:45:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Buy",
+    "score": -0.042,
+    "summary": "Neutral"
+   },
+   {
+    "bar": "2026-10-23T15:00:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Sell",
+    "score": -0.47,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T15:15:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Sell",
+    "score": -0.558,
+    "summary": "Strong Sell"
+   },
+   {
+    "bar": "2026-10-23T15:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.421,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T15:45:00Z",
+    "moving_averages": "Sell",
+    "oscillators": "Neutral",
+    "score": -0.067,
+    "summary": "Neutral"
+   },
+   {
+    "bar": "2026-10-23T16:00:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Sell",
+    "score": -0.491,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T16:15:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.467,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T16:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Buy",
+    "score": -0.309,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T16:45:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.512,
+    "summary": "Strong Sell"
+   },
+   {
+    "bar": "2026-10-23T17:00:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.4,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T17:15:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Buy",
+    "score": -0.264,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T17:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Buy",
+    "score": -0.264,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T17:45:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Buy",
+    "score": -0.176,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T18:00:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.467,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T18:15:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Sell",
+    "score": -0.358,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T18:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.355,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T18:45:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.421,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T19:00:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Sell",
+    "score": -0.358,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T19:15:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.421,
+    "summary": "Sell"
+   },
+   {
+    "bar": "2026-10-23T19:30:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.512,
+    "summary": "Strong Sell"
+   },
+   {
+    "bar": "2026-10-23T19:45:00Z",
+    "moving_averages": "Strong Sell",
+    "oscillators": "Neutral",
+    "score": -0.421,
+    "summary": "Sell"
+   }
+  ],
+  "last_change_in_window": {
+   "at_bar": "2026-10-23T19:45:00Z",
+   "from": "Strong Sell",
+   "to": "Sell"
+  }
+ },
+ "bias_ready": true,
+ "card_back": {
+  "atr_pct_label": "low",
+  "bias_label": "Sell",
+  "bias_score": -0.4212121212121212,
+  "moving_averages": {
+   "ema_10": -1.0,
+   "ema_100": -1.0,
+   "ema_20": -1.0,
+   "ema_200": -1.0,
+   "ema_30": -1.0,
+   "ema_50": -1.0,
+   "hull_ma_9": -1.0,
+   "ichimoku": 0.0,
+   "sma_10": -1.0,
+   "sma_100": -1.0,
+   "sma_20": -1.0,
+   "sma_200": -1.0,
+   "sma_30": -1.0,
+   "sma_50": -1.0,
+   "vwma_20": -1.0
+  },
+  "oscillators": {
+   "adx": 0.0,
+   "awesome_oscillator": 0.0,
+   "bull_bear_power": 0.0,
+   "cci": 0.0,
+   "macd": 1.0,
+   "momentum": -1.0,
+   "rsi": 0.0,
+   "stoch_rsi": 0.0,
+   "stochastic": 0.0,
+   "ultimate_oscillator": 0.0,
+   "williams_r": 1.0
+  },
+  "pivots": {
+   "P": 214.14333333333332,
+   "R1": 217.02666666666664,
+   "R2": 221.76333333333332,
+   "R3": 224.64666666666665,
+   "S1": 209.40666666666664,
+   "S2": 206.5233333333333,
+   "S3": 201.78666666666663
+  },
+  "symbol": "NVDA",
+  "timeframe": "15m"
+ },
+ "first_bar": "2026-09-09T13:30:00Z",
+ "gauges": {
+  "moving_averages": {
+   "counts": {
+    "buy": 0,
+    "neutral": 1,
+    "sell": 14
+   },
+   "label": "Strong Sell",
+   "score": -0.9333333333333333
+  },
+  "oscillators": {
+   "counts": {
+    "buy": 2,
+    "neutral": 8,
+    "sell": 1
+   },
+   "label": "Neutral",
+   "score": 0.09090909090909091
+  },
+  "strategies": {
+   "counts": {
+    "buy": 2,
+    "neutral": 0,
+    "sell": 1
+   },
+   "label": "Buy",
+   "score": 0.33,
+   "votes": [
+    {
+     "bias": "bullish",
+     "name": "VWAP reclaim",
+     "strategy_id": 2,
+     "vote": "buy"
+    },
+    {
+     "bias": "bullish",
+     "name": "EMA 9/21 cross",
+     "strategy_id": 6,
+     "vote": "buy"
+    },
+    {
+     "bias": "bearish",
+     "name": "VWAP loss",
+     "strategy_id": 7,
+     "vote": "sell"
+    }
+   ],
+   "watching": [
+    {
+     "name": "ORB 15m",
+     "strategy_id": 1
+    }
+   ]
+  },
+  "summary": {
+   "counts": null,
+   "label": "Sell",
+   "score": -0.4212121212121212
+  }
+ },
+ "indicators": {
+  "atr_14": 0.7152,
+  "atr_label": "low",
+  "atr_pct": 0.3389,
+  "ema_10": 211.6678,
+  "ema_100": 214.868,
+  "ema_20": 211.9608,
+  "ema_200": 217.5803,
+  "ema_5": 211.4727,
+  "ema_50": 213.2033,
+  "macd_histogram": 0.0179,
+  "macd_line": -0.4529,
+  "macd_signal": -0.4707,
+  "rsi_14": 36.0418,
+  "sma_10": 211.7414,
+  "sma_100": 215.7563,
+  "sma_20": 211.9377,
+  "sma_200": 216.7111,
+  "sma_5": 211.5748,
+  "sma_50": 212.6078
+ },
+ "last_bar": "2026-10-23T19:45:00Z",
+ "levels": {
+  "prior_close": 212.21,
+  "session_high": 213.85,
+  "session_low": 210.18
+ },
+ "macd": {
+  "histogram": 0.01786556883554613,
+  "line": -0.45285515518344255,
+  "signal": -0.4707207240189887
+ },
+ "moving_averages": {
+  "ema_10": {
+   "action": "Sell",
+   "values": {
+    "value": 211.66778401823098
+   }
+  },
+  "ema_100": {
+   "action": "Sell",
+   "values": {
+    "value": 214.86800573994233
+   }
+  },
+  "ema_20": {
+   "action": "Sell",
+   "values": {
+    "value": 211.96078492010432
+   }
+  },
+  "ema_200": {
+   "action": "Sell",
+   "values": {
+    "value": 217.580343992834
+   }
+  },
+  "ema_30": {
+   "action": "Sell",
+   "values": {
+    "value": 212.3424128955753
+   }
+  },
+  "ema_50": {
+   "action": "Sell",
+   "values": {
+    "value": 213.20332636987845
+   }
+  },
+  "hull_ma_9": {
+   "action": "Sell",
+   "values": {
+    "value": 211.39519592592592
+   }
+  },
+  "ichimoku": {
+   "action": "Neutral",
+   "values": {
+    "base": 212.015,
+    "conversion": 211.525,
+    "span_a": 211.76999999999998,
+    "span_b": 214.53
+   }
+  },
+  "sma_10": {
+   "action": "Sell",
+   "values": {
+    "value": 211.74139
+   }
+  },
+  "sma_100": {
+   "action": "Sell",
+   "values": {
+    "value": 215.75626
+   }
+  },
+  "sma_20": {
+   "action": "Sell",
+   "values": {
+    "value": 211.937705
+   }
+  },
+  "sma_200": {
+   "action": "Sell",
+   "values": {
+    "value": 216.711064
+   }
+  },
+  "sma_30": {
+   "action": "Sell",
+   "values": {
+    "value": 212.18197
+   }
+  },
+  "sma_50": {
+   "action": "Sell",
+   "values": {
+    "value": 212.60784600000002
+   }
+  },
+  "vwma_20": {
+   "action": "Sell",
+   "values": {
+    "value": 211.8275303669902
+   }
+  }
+ },
+ "oscillators": {
+  "adx": {
+   "action": "Neutral",
+   "values": {
+    "adx": 36.51958074671544,
+    "minus_di": 26.379763924466385,
+    "plus_di": 9.052443517187351
+   }
+  },
+  "awesome_oscillator": {
+   "action": "Neutral",
+   "values": {
+    "value": -0.49794735294116776
+   }
+  },
+  "bull_bear_power": {
+   "action": "Neutral",
+   "values": {
+    "bear": -1.0036082980614083,
+    "bull": 0.006391701938582628
+   }
+  },
+  "cci": {
+   "action": "Neutral",
+   "values": {
+    "value": -177.57265039031017
+   }
+  },
+  "macd": {
+   "action": "Buy",
+   "values": {
+    "line": -0.45285515518344255,
+    "signal": -0.4707207240189887
+   }
+  },
+  "momentum": {
+   "action": "Sell",
+   "values": {
+    "value": -0.6324999999999932
+   }
+  },
+  "rsi": {
+   "action": "Neutral",
+   "values": {
+    "value": 36.041811235593755
+   }
+  },
+  "stoch_rsi": {
+   "action": "Neutral",
+   "values": {
+    "d": 52.92457955554574,
+    "k": 32.44470509803699
+   }
+  },
+  "stochastic": {
+   "action": "Neutral",
+   "values": {
+    "d": 19.575859248839993,
+    "k": 14.655698900475976
+   }
+  },
+  "ultimate_oscillator": {
+   "action": "Neutral",
+   "values": {
+    "value": 45.665524571211805
+   }
+  },
+  "williams_r": {
+   "action": "Buy",
+   "values": {
+    "value": -84.81595092024521
+   }
+  }
+ },
+ "pivots": {
+  "camarilla": {
+   "P": 214.14333333333332,
+   "R1": 212.9885,
+   "R2": 213.68699999999998,
+   "R3": 214.38549999999998,
+   "S1": 211.5915,
+   "S2": 210.893,
+   "S3": 210.1945
+  },
+  "classic": {
+   "P": 214.14333333333332,
+   "R1": 217.02666666666664,
+   "R2": 221.76333333333332,
+   "R3": 224.64666666666665,
+   "S1": 209.40666666666664,
+   "S2": 206.5233333333333,
+   "S3": 201.78666666666663
+  },
+  "fibonacci": {
+   "P": 214.14333333333332,
+   "R1": 217.05417333333332,
+   "R2": 218.8524933333333,
+   "R3": 221.76333333333332,
+   "S1": 211.2324933333333,
+   "S2": 209.43417333333332,
+   "S3": 206.5233333333333
+  }
+ },
+ "quality": "delayed-15m",
+ "rsi": 36.041811235593755,
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "symbol": "NVDA",
+ "timeframe": "15m",
+ "volatility": {
+  "atr14": 0.7151716458783162,
+  "atr_percent": 0.3389479239698651,
+  "label": "low"
+ }
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "Near VWAP",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "when": {
+    "op": "within_pct",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "series": "vwap"
+    },
+    "pct": 0.5
+  },
+  "maxResults": 50
+}

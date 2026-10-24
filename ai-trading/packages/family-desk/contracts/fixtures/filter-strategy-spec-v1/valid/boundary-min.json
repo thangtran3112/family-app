@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "Boundary minimum",
+  "watch": {
+    "universe": {
+      "symbols": [
+        "AAPL"
+      ]
+    },
+    "session": "regular",
+    "runOn": "bar_close_1m"
+  },
+  "assetTypes": [
+    "etf"
+  ],
+  "liquidity": {
+    "minPrice": 0.01,
+    "minAvgVolume": 1,
+    "avgVolumeDays": 5
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "close"
+    },
+    "right": {
+      "value": 0.01
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "volume"
+    },
+    "order": "asc"
+  },
+  "maxResults": 1
+}

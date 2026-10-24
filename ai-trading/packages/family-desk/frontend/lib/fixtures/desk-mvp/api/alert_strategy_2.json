@@ -1,0 +1,74 @@
+{
+ "category": "indicator",
+ "channels": [
+  "inbox",
+  "telegram"
+ ],
+ "cooldown_minutes": 30,
+ "expires_on": null,
+ "fires_7d": 5,
+ "frequency": "once_per_bar",
+ "id": 2,
+ "last_fired_at": "2026-10-23T14:19:00Z",
+ "name": "VWAP reclaim",
+ "origin": "seed",
+ "paused_reason": null,
+ "run_on": "bar_close_1m",
+ "severity": "opportunity",
+ "source": {
+  "id": 1,
+  "kind": "watchlist",
+  "label": "Day movers"
+ },
+ "spec": {
+  "limits": {
+   "cooldownMinutes": 30
+  },
+  "name": "VWAP reclaim",
+  "schemaVersion": 1,
+  "then": {
+   "alert": {
+    "channels": [
+     "inbox",
+     "telegram"
+    ],
+    "severity": "opportunity"
+   }
+  },
+  "watch": {
+   "runOn": "bar_close_1m",
+   "session": "regular",
+   "universe": {
+    "watchlist": "Day movers"
+   }
+  },
+  "when": {
+   "all": [
+    {
+     "left": {
+      "series": "close"
+     },
+     "op": "crosses_above",
+     "right": {
+      "series": "vwap"
+     }
+    },
+    {
+     "end": "15:30",
+     "op": "time_between",
+     "start": "09:45"
+    }
+   ]
+  }
+ },
+ "stage": "alert_only",
+ "status": "active",
+ "version": 1,
+ "versions": [
+  {
+   "change_note": null,
+   "created_at": "2026-10-22T14:00:00Z",
+   "version": 1
+  }
+ ]
+}

@@ -155,6 +155,51 @@ class AnalystTargets:
     period: date | None = None
 
 
+@dataclass(frozen=True)
+class UniverseAsset:
+    """One tradable US equity or ETF from a provider's asset list (name and venue, no price)."""
+
+    symbol: str
+    name: str
+    exchange: str
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class ActiveSymbol:
+    """One row of a most-actives list: the day's volume and trade count so far."""
+
+    symbol: str
+    volume: float | None
+    trade_count: int | None
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class Mover:
+    """One top gainer or loser: the percent change on the day and the last price."""
+
+    symbol: str
+    side: Literal["gainer", "loser"]
+    change_pct: float | None
+    price: float | None
+    provider: str
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class Quote:
+    """The latest known price for a symbol: the close of its newest closed bar, `as_of` that bar's start."""
+
+    symbol: str
+    price: float
+    as_of: pd.Timestamp  # UTC
+    provider: str
+    quality: Quality
+
+
 def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:
     """Pure point-in-time selector: only facts filed on or before `as_of`.
 

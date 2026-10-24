@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "RSI oversold alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Day movers"
+    },
+    "session": "regular",
+    "runOn": "bar_close_1h"
+  },
+  "when": {
+    "op": "lt",
+    "left": {
+      "series": "rsi",
+      "length": 14
+    },
+    "right": {
+      "value": 30
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox",
+        "slack"
+      ],
+      "severity": "opportunity"
+    }
+  }
+}

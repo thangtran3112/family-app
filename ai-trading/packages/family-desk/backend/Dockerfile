@@ -37,9 +37,14 @@ RUN uv sync --frozen --no-dev --no-editable
 FROM ${PYTHON_IMAGE}
 RUN useradd --create-home --shell /usr/sbin/nologin app
 COPY --from=build --chown=app:app /src/packages/family-desk/backend /app
+# The seed CLI and the strategy library read the shipped catalog and templates at runtime (02m
+# section b6). Only these two paths of contracts/ are needed: not its Zod sources or tests.
+COPY --chown=app:app packages/family-desk/contracts/catalog.json /app/contracts/catalog.json
+COPY --chown=app:app packages/family-desk/contracts/templates /app/contracts/templates
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    DESK_CONTRACTS_DIR=/app/contracts
 USER app
 WORKDIR /app
 EXPOSE 8000
