@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-liquid-gaps",
+  "createdAt": "2026-10-23T14:36:00Z",
+  "request": "Liquid names with a gap up or a volume spike, or an oversold bounce setup.",
+  "rationale": "Kept the proposal as written. The liquidity floor applies to every branch, and the three branches are the gap, the volume spike, and the oversold bounce.",
+  "status": "final",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Liquid gaps or volume spikes",
+    "description": "Liquid names with a gap up or a volume spike, or a deep oversold bounce setup",
+    "timeframe": "1d",
+    "match": {
+      "all": [
+        { "metric": "avg_volume", "lookback": 20, "op": "gte", "threshold": 500000 },
+        {
+          "any": [
+            { "metric": "gap_pct", "op": "between", "min": 3, "max": 15 },
+            { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2.5 },
+            {
+              "all": [
+                { "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 },
+                { "metric": "pct_from_high", "lookback": 252, "op": "gt", "threshold": 40 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "edits": [],
+  "finalConfig": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Liquid gaps or volume spikes",
+    "description": "Liquid names with a gap up or a volume spike, or a deep oversold bounce setup",
+    "timeframe": "1d",
+    "match": {
+      "all": [
+        { "metric": "avg_volume", "lookback": 20, "op": "gte", "threshold": 500000 },
+        {
+          "any": [
+            { "metric": "gap_pct", "op": "between", "min": 3, "max": 15 },
+            { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2.5 },
+            {
+              "all": [
+                { "metric": "rsi", "lookback": 14, "op": "lt", "threshold": 30 },
+                { "metric": "pct_from_high", "lookback": 252, "op": "gt", "threshold": 40 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Volume-backed engulfing with full risk",
+  "description": "Bullish engulfing on 2x average volume in a liquid name, stop 5 percent, target 2R",
+  "timeframe": "1d",
+  "universe": { "watchlist": "Day movers" },
+  "direction": "long",
+  "filters": {
+    "all": [
+      { "metric": "avg_volume", "lookback": 20, "op": "gte", "threshold": 1000000 },
+      { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2 }
+    ]
+  },
+  "patterns": {
+    "match": "any",
+    "entries": [
+      {
+        "presetId": "bullish-engulfing",
+        "spec": {
+          "pattern": "bullish_engulfing",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "priorTrend": { "direction": "down", "bars": 3 },
+          "confirmation": { "type": "next_bar_close", "bars": 1 },
+          "tolerance": { "engulfMinRatio": 1.2 }
+        }
+      }
+    ]
+  },
+  "risk": {
+    "stop": { "type": "pct", "value": 5 },
+    "target": { "type": "r_multiple", "value": 2 },
+    "positionSizeHint": { "type": "risk_pct_of_book", "value": 1 }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Trailing stop type",
+  "timeframe": "1d",
+  "direction": "long",
+  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
+  "risk": { "stop": { "type": "trailing", "value": 2 } }
+}

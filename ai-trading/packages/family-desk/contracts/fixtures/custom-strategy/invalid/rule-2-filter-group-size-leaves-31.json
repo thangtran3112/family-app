@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Thirty-one conditions",
+  "timeframe": "1d",
+  "direction": "either",
+  "filters": {
+    "all": [
+      {
+        "any": [
+          { "metric": "close", "op": "gt", "threshold": 1 },
+          { "metric": "close", "op": "gt", "threshold": 2 },
+          { "metric": "close", "op": "gt", "threshold": 3 },
+          { "metric": "close", "op": "gt", "threshold": 4 },
+          { "metric": "close", "op": "gt", "threshold": 5 },
+          { "metric": "close", "op": "gt", "threshold": 6 },
+          { "metric": "close", "op": "gt", "threshold": 7 },
+          { "metric": "close", "op": "gt", "threshold": 8 },
+          { "metric": "close", "op": "gt", "threshold": 9 },
+          { "metric": "close", "op": "gt", "threshold": 10 }
+        ]
+      },
+      {
+        "any": [
+          { "metric": "close", "op": "gt", "threshold": 11 },
+          { "metric": "close", "op": "gt", "threshold": 12 },
+          { "metric": "close", "op": "gt", "threshold": 13 },
+          { "metric": "close", "op": "gt", "threshold": 14 },
+          { "metric": "close", "op": "gt", "threshold": 15 },
+          { "metric": "close", "op": "gt", "threshold": 16 },
+          { "metric": "close", "op": "gt", "threshold": 17 },
+          { "metric": "close", "op": "gt", "threshold": 18 },
+          { "metric": "close", "op": "gt", "threshold": 19 },
+          { "metric": "close", "op": "gt", "threshold": 20 }
+        ]
+      },
+      {
+        "any": [
+          { "metric": "close", "op": "gt", "threshold": 21 },
+          { "metric": "close", "op": "gt", "threshold": 22 },
+          { "metric": "close", "op": "gt", "threshold": 23 },
+          { "metric": "close", "op": "gt", "threshold": 24 },
+          { "metric": "close", "op": "gt", "threshold": 25 },
+          { "metric": "close", "op": "gt", "threshold": 26 },
+          { "metric": "close", "op": "gt", "threshold": 27 },
+          { "metric": "close", "op": "gt", "threshold": 28 },
+          { "metric": "close", "op": "gt", "threshold": 29 },
+          { "metric": "close", "op": "gt", "threshold": 30 },
+          { "metric": "close", "op": "gt", "threshold": 31 }
+        ]
+      }
+    ]
+  }
+}

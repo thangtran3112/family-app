@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-abnormal-volume-watch",
+  "createdAt": "2026-10-23T14:31:00Z",
+  "request": "Tell me when the abnormal volume screen matches, at most once per symbol an hour.",
+  "rationale": "The strategy_match trigger fires whenever the abnormal-volume preset matches. Limiting it to in-app notifications with a 60-minute per-symbol cooldown keeps it quiet.",
+  "status": "proposed",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "alert",
+    "name": "Abnormal volume watch",
+    "timeframe": "1d",
+    "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+    "schedule": { "sessions": "regular", "days": ["mon", "tue", "wed", "thu", "fri"] },
+    "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+    "channels": ["in_app"]
+  },
+  "edits": []
+}

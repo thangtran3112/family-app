@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter_preset",
+  "id": "gap-down",
+  "name": "Gap down",
+  "description": "Open at least a percentage below the prior close",
+  "category": "gap",
+  "params": [
+    { "key": "threshold", "label": "Gap at most", "unit": "pct", "path": "/match/all/0/threshold", "default": -3, "min": -10, "max": -1, "step": 0.5 }
+  ],
+  "strategy": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Gap down",
+    "timeframe": "1d",
+    "preset": { "id": "gap-down", "params": { "threshold": -3 } },
+    "match": { "all": [{ "metric": "gap_pct", "op": "lte", "threshold": -3 }] }
+  }
+}

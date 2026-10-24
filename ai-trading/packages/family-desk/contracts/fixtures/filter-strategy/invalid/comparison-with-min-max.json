@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Comparison with min",
+  "timeframe": "1d",
+  "match": { "all": [{ "metric": "close", "op": "gt", "threshold": 5, "min": 1 }] }
+}

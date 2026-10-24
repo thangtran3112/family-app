@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "No pattern entries",
+  "timeframe": "1d",
+  "direction": "long",
+  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
+  "patterns": { "match": "any", "entries": [] }
+}

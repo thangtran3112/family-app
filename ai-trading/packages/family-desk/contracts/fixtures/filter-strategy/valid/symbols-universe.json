@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Futures and megacaps",
+  "timeframe": "1h",
+  "universe": { "symbols": ["AAPL", "MSFT", "/ES", "BRK.B"] },
+  "match": {
+    "any": [
+      { "metric": "change_pct", "lookback": 4, "op": "gte", "threshold": -1.5 },
+      { "metric": "rsi", "lookback": 14, "op": "between", "min": 40, "max": 60 }
+    ]
+  }
+}

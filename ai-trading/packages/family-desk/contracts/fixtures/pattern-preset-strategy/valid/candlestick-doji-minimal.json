@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "doji-minimal",
+  "name": "Doji minimal",
+  "spec": {
+    "pattern": "doji",
+    "direction": "neutral",
+    "timeframe": "5m",
+    "confirmation": { "type": "none" },
+    "tolerance": { "bodyMaxPct": 5.5 }
+  }
+}

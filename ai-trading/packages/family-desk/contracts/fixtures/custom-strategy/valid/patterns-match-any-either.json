@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Breakout either way",
+  "timeframe": "1h",
+  "direction": "either",
+  "patterns": {
+    "match": "any",
+    "entries": [
+      {
+        "spec": {
+          "pattern": "breakout",
+          "direction": "bullish",
+          "timeframe": "1h",
+          "lookback": 20,
+          "confirmation": { "type": "volume", "minRatio": 1.5, "lookback": 20 },
+          "tolerance": { "bufferPct": 0.2 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "breakout",
+          "direction": "bearish",
+          "timeframe": "1h",
+          "lookback": 20,
+          "confirmation": { "type": "none" },
+          "tolerance": { "bufferPct": 0.2 }
+        }
+      }
+    ]
+  }
+}

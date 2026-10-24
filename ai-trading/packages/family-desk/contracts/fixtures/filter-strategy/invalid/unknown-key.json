@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Unknown key",
+  "timeframe": "1d",
+  "notes": "not in the schema",
+  "match": { "all": [{ "metric": "close", "op": "gt", "threshold": 1 }] }
+}

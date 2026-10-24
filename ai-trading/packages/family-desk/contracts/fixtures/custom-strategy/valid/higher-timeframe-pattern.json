@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Daily reversal on an hourly strategy",
+  "description": "A daily bullish reversal, traded on the hourly bars",
+  "timeframe": "1h",
+  "direction": "long",
+  "filters": { "all": [{ "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 1.5 }] },
+  "patterns": {
+    "match": "all",
+    "entries": [
+      {
+        "spec": {
+          "pattern": "bullish_reversal",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "lookback": 20,
+          "confirmation": { "type": "none" },
+          "tolerance": { "retracePct": 50 }
+        }
+      }
+    ]
+  },
+  "risk": {
+    "stop": { "type": "pct", "value": 3 },
+    "target": { "type": "pct", "value": 10 },
+    "positionSizeHint": { "type": "shares", "value": 50 }
+  }
+}

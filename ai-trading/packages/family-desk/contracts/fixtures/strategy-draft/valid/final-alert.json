@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-abnormal-volume-final",
+  "createdAt": "2026-10-23T14:35:00Z",
+  "request": "Abnormal volume watch, but quieter, and also on Telegram.",
+  "rationale": "Doubled the per-symbol cooldown to two hours and added Telegram as a second channel after in-app.",
+  "status": "final",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "alert",
+    "name": "Abnormal volume watch",
+    "timeframe": "1d",
+    "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+    "schedule": { "sessions": "regular", "days": ["mon", "tue", "wed", "thu", "fri"] },
+    "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+    "channels": ["in_app"]
+  },
+  "edits": [
+    { "op": "replace", "path": "/cooldown/minutes", "value": 120 },
+    { "op": "add", "path": "/channels/-", "value": "telegram" }
+  ],
+  "finalConfig": {
+    "schemaVersion": 1,
+    "kind": "alert",
+    "name": "Abnormal volume watch",
+    "timeframe": "1d",
+    "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+    "schedule": { "sessions": "regular", "days": ["mon", "tue", "wed", "thu", "fri"] },
+    "cooldown": { "minutes": 120, "dedupe": "per_symbol" },
+    "channels": ["in_app", "telegram"]
+  }
+}

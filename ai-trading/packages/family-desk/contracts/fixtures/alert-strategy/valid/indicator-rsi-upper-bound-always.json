@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "RSI at its ceiling",
+  "timeframe": "1d",
+  "trigger": {
+    "type": "indicator_threshold",
+    "symbol": "AMD",
+    "indicator": { "metric": "rsi", "lookback": 2 },
+    "op": "gte",
+    "threshold": 100
+  },
+  "schedule": { "sessions": "always", "days": ["sat", "sun"] },
+  "cooldown": { "minutes": 5, "dedupe": "per_symbol" },
+  "maxPerDay": 50,
+  "channels": ["in_app"]
+}

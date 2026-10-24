@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-qqq-always-on",
+  "createdAt": "2026-10-23T14:37:00Z",
+  "request": "Alert me when QQQ closes above 150, any day.",
+  "rationale": "Rejected the always-on schedule: a daily close check on weekends and holidays notifies on stale prices. Asking for a weekday regular-session alert instead would fit the intent better.",
+  "status": "rejected",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "alert",
+    "name": "QQQ close above 150, any day",
+    "timeframe": "15m",
+    "trigger": {
+      "type": "indicator_threshold",
+      "symbol": "QQQ",
+      "indicator": { "metric": "close" },
+      "op": "gt",
+      "threshold": 150.25
+    },
+    "schedule": { "sessions": "always", "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
+    "cooldown": { "minutes": 0, "dedupe": "per_bar" },
+    "channels": ["in_app"]
+  },
+  "edits": []
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "SPY below the upper bound",
+  "timeframe": "5m",
+  "trigger": { "type": "price_cross", "symbol": "SPY", "direction": "below", "level": 1000000 },
+  "schedule": {
+    "sessions": "extended",
+    "days": ["mon", "tue", "wed", "thu", "fri"],
+    "window": { "start": "04:00", "end": "20:00" }
+  },
+  "cooldown": { "minutes": 0, "dedupe": "per_bar" },
+  "channels": ["in_app"]
+}

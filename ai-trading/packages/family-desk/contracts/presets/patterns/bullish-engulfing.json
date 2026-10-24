@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "bullish-engulfing",
+  "name": "Bullish Engulfing",
+  "description": "A bullish body that engulfs the prior bearish body, after a downtrend.",
+  "spec": {
+    "pattern": "bullish_engulfing",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "priorTrend": { "direction": "down", "bars": 3 },
+    "confirmation": { "type": "next_bar_close", "bars": 1 },
+    "tolerance": { "engulfMinRatio": 1 }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "evening-star-test",
+  "name": "Evening star test",
+  "spec": {
+    "pattern": "evening_star",
+    "direction": "bearish",
+    "timeframe": "1d",
+    "priorTrend": { "direction": "down", "bars": 3 },
+    "confirmation": { "type": "none" },
+    "tolerance": { "starBodyMaxPct": 30 }
+  }
+}

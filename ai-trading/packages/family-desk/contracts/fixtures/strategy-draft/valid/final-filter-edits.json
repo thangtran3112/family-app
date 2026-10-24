@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-volume-spikes-final",
+  "createdAt": "2026-10-23T14:34:00Z",
+  "request": "Top volume spikes, but 2.5x or more, and the stock has to be above $5.",
+  "rationale": "Set the ratio to 2.5 and added a price floor of $5 as a third condition. Both are the user's choices, so the accepted config is the user's version.",
+  "status": "final",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Top volume spikes",
+    "timeframe": "1d",
+    "match": {
+      "all": [
+        { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2 },
+        { "metric": "dollar_volume", "op": "gte", "threshold": 5000000 }
+      ]
+    },
+    "rank": { "by": { "metric": "volume_ratio", "lookback": 20 }, "order": "desc", "limit": 25 }
+  },
+  "edits": [
+    { "op": "replace", "path": "/match/all/0/threshold", "value": 2.5 },
+    { "op": "add", "path": "/match/all/-", "value": { "metric": "close", "op": "gt", "threshold": 5 } }
+  ],
+  "finalConfig": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Top volume spikes",
+    "timeframe": "1d",
+    "match": {
+      "all": [
+        { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2.5 },
+        { "metric": "dollar_volume", "op": "gte", "threshold": 5000000 },
+        { "metric": "close", "op": "gt", "threshold": 5 }
+      ]
+    },
+    "rank": { "by": { "metric": "volume_ratio", "lookback": 20 }, "order": "desc", "limit": 25 }
+  }
+}

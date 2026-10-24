@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter_preset",
+  "id": "near-52w-high",
+  "name": "Near 52-week high",
+  "description": "Close within a percentage of the highest high of the last year of daily bars",
+  "category": "proximity",
+  "params": [
+    { "key": "threshold", "label": "Within percent of high", "unit": "pct", "path": "/match/all/0/threshold", "default": 5, "min": 1, "max": 20, "step": 0.5 },
+    { "key": "lookback", "label": "High window", "unit": "bars", "path": "/match/all/0/lookback", "default": 252, "min": 126, "max": 500 }
+  ],
+  "strategy": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Near 52-week high",
+    "timeframe": "1d",
+    "preset": { "id": "near-52w-high", "params": { "threshold": 5, "lookback": 252 } },
+    "match": { "all": [{ "metric": "pct_from_high", "lookback": 252, "op": "lte", "threshold": 5 }] }
+  }
+}

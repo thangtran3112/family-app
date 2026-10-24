@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Four levels of groups",
+  "timeframe": "1d",
+  "match": {
+    "all": [
+      {
+        "any": [
+          {
+            "all": [
+              {
+                "any": [{ "metric": "close", "op": "gt", "threshold": 1 }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "Window ends before it starts",
+  "timeframe": "1d",
+  "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+  "schedule": {
+    "sessions": "regular",
+    "days": ["mon", "tue", "wed", "thu", "fri"],
+    "window": { "start": "14:00", "end": "10:00" }
+  },
+  "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+  "channels": ["in_app"]
+}

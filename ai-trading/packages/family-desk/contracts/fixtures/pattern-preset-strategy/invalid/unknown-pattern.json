@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "shooting-star",
+  "name": "Shooting star",
+  "spec": {
+    "pattern": "shooting_star",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "confirmation": { "type": "none" },
+    "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "QQQ close above 150, any day",
+  "timeframe": "15m",
+  "trigger": {
+    "type": "indicator_threshold",
+    "symbol": "QQQ",
+    "indicator": { "metric": "close" },
+    "op": "gt",
+    "threshold": 150.25
+  },
+  "schedule": { "sessions": "always", "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
+  "cooldown": { "minutes": 0, "dedupe": "per_bar" },
+  "channels": ["in_app"]
+}

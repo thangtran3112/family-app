@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "No in-app channel",
+  "timeframe": "1d",
+  "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+  "schedule": { "sessions": "regular", "days": ["mon"] },
+  "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+  "channels": ["slack"]
+}

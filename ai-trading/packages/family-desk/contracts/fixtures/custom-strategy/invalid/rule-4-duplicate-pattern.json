@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Two hammers, same timeframe and side",
+  "timeframe": "1d",
+  "direction": "long",
+  "patterns": {
+    "match": "any",
+    "entries": [
+      {
+        "spec": {
+          "pattern": "hammer",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "hammer",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "next_bar_close", "bars": 1 },
+          "tolerance": { "shadowMinRatio": 3, "bodyMaxPct": 25 }
+        }
+      }
+    ]
+  }
+}

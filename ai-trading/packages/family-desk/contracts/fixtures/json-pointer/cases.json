@@ -1,0 +1,132 @@
+[
+  {
+    "name": "replace an object member",
+    "doc": { "a": { "b": 1 } },
+    "edits": [{ "op": "replace", "path": "/a/b", "value": 2 }],
+    "result": { "a": { "b": 2 } }
+  },
+  {
+    "name": "add a new object member",
+    "doc": { "a": {} },
+    "edits": [{ "op": "add", "path": "/a/b", "value": "x" }],
+    "result": { "a": { "b": "x" } }
+  },
+  {
+    "name": "add replaces an existing object member",
+    "doc": { "a": 1 },
+    "edits": [{ "op": "add", "path": "/a", "value": 3 }],
+    "result": { "a": 3 }
+  },
+  {
+    "name": "add inserts into an array",
+    "doc": { "l": [1, 3] },
+    "edits": [{ "op": "add", "path": "/l/1", "value": 2 }],
+    "result": { "l": [1, 2, 3] }
+  },
+  {
+    "name": "add appends with a dash",
+    "doc": { "l": [1] },
+    "edits": [{ "op": "add", "path": "/l/-", "value": 2 }],
+    "result": { "l": [1, 2] }
+  },
+  {
+    "name": "add at the array length appends",
+    "doc": { "l": [1] },
+    "edits": [{ "op": "add", "path": "/l/1", "value": 2 }],
+    "result": { "l": [1, 2] }
+  },
+  {
+    "name": "remove an object member",
+    "doc": { "a": 1, "b": 2 },
+    "edits": [{ "op": "remove", "path": "/a" }],
+    "result": { "b": 2 }
+  },
+  {
+    "name": "remove an array element",
+    "doc": { "l": [1, 2, 3] },
+    "edits": [{ "op": "remove", "path": "/l/1" }],
+    "result": { "l": [1, 3] }
+  },
+  {
+    "name": "replace an array element",
+    "doc": { "l": [1, 2, 3] },
+    "edits": [{ "op": "replace", "path": "/l/2", "value": 9 }],
+    "result": { "l": [1, 2, 9] }
+  },
+  {
+    "name": "escaped tokens",
+    "doc": { "a/b": { "c~d": 1 } },
+    "edits": [{ "op": "replace", "path": "/a~1b/c~0d", "value": 2 }],
+    "result": { "a/b": { "c~d": 2 } }
+  },
+  {
+    "name": "edits apply in order",
+    "doc": { "l": [] },
+    "edits": [
+      { "op": "add", "path": "/l/-", "value": { "n": 1 } },
+      { "op": "replace", "path": "/l/0/n", "value": 5 },
+      { "op": "add", "path": "/l/-", "value": "last" }
+    ],
+    "result": { "l": [{ "n": 5 }, "last"] }
+  },
+  {
+    "name": "no edits is the identity",
+    "doc": { "a": [1, { "b": 2 }] },
+    "edits": [],
+    "result": { "a": [1, { "b": 2 }] }
+  },
+  {
+    "name": "replace a missing member fails",
+    "doc": { "a": 1 },
+    "edits": [{ "op": "replace", "path": "/b", "value": 2 }],
+    "error": true
+  },
+  {
+    "name": "remove a missing member fails",
+    "doc": { "a": 1 },
+    "edits": [{ "op": "remove", "path": "/b" }],
+    "error": true
+  },
+  {
+    "name": "add under a missing parent fails",
+    "doc": { "a": 1 },
+    "edits": [{ "op": "add", "path": "/x/y", "value": 2 }],
+    "error": true
+  },
+  {
+    "name": "add past the array length fails",
+    "doc": { "l": [1] },
+    "edits": [{ "op": "add", "path": "/l/2", "value": 2 }],
+    "error": true
+  },
+  {
+    "name": "replace past the array length fails",
+    "doc": { "l": [1] },
+    "edits": [{ "op": "replace", "path": "/l/1", "value": 2 }],
+    "error": true
+  },
+  {
+    "name": "dash is only for add",
+    "doc": { "l": [1] },
+    "edits": [{ "op": "remove", "path": "/l/-" }],
+    "error": true
+  },
+  {
+    "name": "leading zero index fails",
+    "doc": { "l": [1, 2] },
+    "edits": [{ "op": "replace", "path": "/l/01", "value": 2 }],
+    "error": true
+  },
+  {
+    "name": "__proto__ token fails",
+    "doc": { "a": {} },
+    "edits": [{ "op": "add", "path": "/a/__proto__", "value": 1 }],
+    "error": true
+  },
+  {
+    "name": "scalar parent fails",
+    "doc": { "a": 1 },
+    "edits": [{ "op": "add", "path": "/a/b", "value": 2 }],
+    "error": true
+  }
+]

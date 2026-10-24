@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "ATR percentile at the top",
+  "description": "Volatility is in the top fifth of the last year.",
+  "severity": "info",
+  "timeframe": "1d",
+  "trigger": {
+    "type": "indicator_threshold",
+    "symbol": "MSFT",
+    "indicator": { "metric": "volatility_percentile", "measure": "atr", "lookback": 14, "window": 252 },
+    "op": "gte",
+    "threshold": 80
+  },
+  "schedule": { "sessions": "regular", "days": ["mon", "tue", "wed", "thu", "fri"] },
+  "cooldown": { "minutes": 1440, "dedupe": "per_trigger" },
+  "channels": ["in_app"]
+}

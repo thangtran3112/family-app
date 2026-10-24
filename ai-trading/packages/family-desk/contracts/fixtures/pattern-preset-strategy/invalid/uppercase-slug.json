@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "Hammer-Test",
+  "name": "Hammer test",
+  "spec": {
+    "pattern": "hammer",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "confirmation": { "type": "none" },
+    "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+  }
+}

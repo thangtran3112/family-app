@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "R target without a stop",
+  "timeframe": "1d",
+  "direction": "long",
+  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
+  "risk": { "target": { "type": "r_multiple", "value": 2 } }
+}

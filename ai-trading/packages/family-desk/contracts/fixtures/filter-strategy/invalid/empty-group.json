@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Empty group",
+  "timeframe": "1d",
+  "match": { "all": [] }
+}

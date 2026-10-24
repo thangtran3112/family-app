@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "engulf-test",
+  "name": "Engulf test",
+  "spec": {
+    "pattern": "bullish_engulfing",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "confirmation": { "type": "none" },
+    "tolerance": { "engulfMinRatio": 0.5 }
+  }
+}

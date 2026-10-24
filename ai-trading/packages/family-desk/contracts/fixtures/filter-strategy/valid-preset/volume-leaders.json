@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter_preset",
+  "id": "volume-leaders",
+  "name": "Volume leaders",
+  "description": "Liquid names ranked by volume ratio over a lookback window",
+  "category": "volume",
+  "params": [
+    { "key": "lookback", "label": "Average window", "unit": "bars", "path": "/rank/by/lookback", "default": 20, "min": 5, "max": 60 },
+    { "key": "minDollarVolume", "label": "Minimum dollar volume", "unit": "usd", "path": "/match/all/0/threshold", "default": 5000000, "min": 1000000, "max": 50000000, "step": 1000000 }
+  ],
+  "strategy": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Volume leaders",
+    "timeframe": "1d",
+    "preset": { "id": "volume-leaders", "params": { "lookback": 20, "minDollarVolume": 5000000 } },
+    "match": { "all": [{ "metric": "dollar_volume", "op": "gte", "threshold": 5000000 }] },
+    "rank": { "by": { "metric": "volume_ratio", "lookback": 20 }, "order": "desc", "limit": 25 }
+  }
+}

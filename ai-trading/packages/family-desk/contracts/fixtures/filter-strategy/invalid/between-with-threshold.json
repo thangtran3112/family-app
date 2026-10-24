@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "filter",
+  "name": "Between with threshold",
+  "timeframe": "1d",
+  "match": { "all": [{ "metric": "close", "op": "between", "min": 5, "max": 10, "threshold": 7 }] }
+}

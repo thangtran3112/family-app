@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "bearish-reversal-wide",
+  "name": "Bearish reversal, wide",
+  "spec": {
+    "pattern": "bearish_reversal",
+    "direction": "bearish",
+    "timeframe": "1d",
+    "lookback": 60,
+    "confirmation": { "type": "none" },
+    "tolerance": { "retracePct": 100 }
+  }
+}

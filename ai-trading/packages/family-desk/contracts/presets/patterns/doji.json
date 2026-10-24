@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "doji",
+  "name": "Doji",
+  "description": "Open and close nearly equal: indecision. Neutral, so it takes no prior trend.",
+  "spec": {
+    "pattern": "doji",
+    "direction": "neutral",
+    "timeframe": "1d",
+    "confirmation": { "type": "none" },
+    "tolerance": { "bodyMaxPct": 10 }
+  }
+}

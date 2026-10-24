@@ -2,9 +2,9 @@ import { z } from "zod";
 
 // "HH:MM" in America/New_York. [0-9], not \d: Python's regex engine would also
 // accept non-ASCII digits for \d, and both validators must agree.
-const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
+export const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
 // A leading "/" marks a futures root (/ES): ES, CL, and GC are also stock tickers.
-const TickerSchema = z.string().regex(/^\/?[A-Z][A-Z0-9.]{0,9}$/);
+export const TickerSchema = z.string().regex(/^\/?[A-Z][A-Z0-9.]{0,9}$/);
 
 export const SeriesOperandSchema = z
   .union([

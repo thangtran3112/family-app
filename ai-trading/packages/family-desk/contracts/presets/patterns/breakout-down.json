@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "breakout-down",
+  "name": "Breakout Down",
+  "description": "Close at least 0.2 percent below the prior 20-bar low, on 1.5x average volume.",
+  "spec": {
+    "pattern": "breakout",
+    "direction": "bearish",
+    "timeframe": "1d",
+    "lookback": 20,
+    "confirmation": { "type": "volume", "minRatio": 1.5, "lookback": 20 },
+    "tolerance": { "bufferPct": 0.2 }
+  }
+}

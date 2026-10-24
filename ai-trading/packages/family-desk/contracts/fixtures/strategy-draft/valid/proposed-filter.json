@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "draft",
+  "draftId": "draft-volume-spikes",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Show me liquid stocks with a volume spike today, the top 25 by volume ratio.",
+  "rationale": "A volume ratio of 2 over 20 bars, with at least $5M traded, catches abnormal volume in liquid names. Ranking by the same ratio puts the strongest spikes first.",
+  "status": "proposed",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "kind": "filter",
+    "name": "Top volume spikes",
+    "timeframe": "1d",
+    "match": {
+      "all": [
+        { "metric": "volume_ratio", "lookback": 20, "op": "gte", "threshold": 2 },
+        { "metric": "dollar_volume", "op": "gte", "threshold": 5000000 }
+      ]
+    },
+    "rank": { "by": { "metric": "volume_ratio", "lookback": 20 }, "order": "desc", "limit": 25 }
+  },
+  "edits": []
+}

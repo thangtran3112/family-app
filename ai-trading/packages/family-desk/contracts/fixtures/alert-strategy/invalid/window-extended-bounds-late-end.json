@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "Extended window runs past 20:00",
+  "timeframe": "1d",
+  "trigger": { "type": "strategy_match", "strategyId": "abnormal-volume" },
+  "schedule": {
+    "sessions": "extended",
+    "days": ["mon", "tue", "wed", "thu", "fri"],
+    "window": { "start": "10:00", "end": "20:30" }
+  },
+  "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+  "channels": ["in_app"]
+}

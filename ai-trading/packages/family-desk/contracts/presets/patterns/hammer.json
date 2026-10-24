@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "hammer",
+  "name": "Hammer",
+  "description": "Small body near the top of the range with a long lower shadow, after a downtrend.",
+  "spec": {
+    "pattern": "hammer",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "priorTrend": { "direction": "down", "bars": 3 },
+    "confirmation": { "type": "next_bar_close", "bars": 1 },
+    "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+  }
+}

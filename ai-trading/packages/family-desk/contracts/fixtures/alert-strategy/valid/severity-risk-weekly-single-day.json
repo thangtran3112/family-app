@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "Weekly risk check",
+  "description": "Friday review of the 52-week-high watchlist.",
+  "severity": "risk",
+  "timeframe": "1w",
+  "trigger": { "type": "strategy_match", "strategyId": "near-52w-high" },
+  "schedule": { "sessions": "regular", "days": ["fri"] },
+  "cooldown": { "minutes": 1440, "dedupe": "per_symbol" },
+  "maxPerDay": 1,
+  "channels": ["in_app"]
+}

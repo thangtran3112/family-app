@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Smallest sizes and widest R target",
+  "timeframe": "1m",
+  "direction": "either",
+  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 0.01 }] },
+  "risk": {
+    "stop": { "type": "atr_multiple", "value": 0.1 },
+    "target": { "type": "r_multiple", "value": 20 },
+    "positionSizeHint": { "type": "shares", "value": 1 }
+  }
+}

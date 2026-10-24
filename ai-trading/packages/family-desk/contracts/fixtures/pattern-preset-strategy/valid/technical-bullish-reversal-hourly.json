@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "bullish-reversal-hourly",
+  "name": "Bullish reversal, hourly",
+  "description": "Hourly upside reversal confirmed by the next bar.",
+  "spec": {
+    "pattern": "bullish_reversal",
+    "direction": "bullish",
+    "timeframe": "1h",
+    "lookback": 20,
+    "confirmation": { "type": "next_bar_close", "bars": 1 },
+    "tolerance": { "retracePct": 50 }
+  }
+}

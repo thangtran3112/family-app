@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "breakout-test",
+  "name": "Breakout test",
+  "spec": {
+    "pattern": "breakout",
+    "direction": "bullish",
+    "timeframe": "1d",
+    "lookback": 261,
+    "confirmation": { "type": "none" },
+    "tolerance": { "bufferPct": 0.2 }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "alert",
+  "name": "Negative level",
+  "timeframe": "1m",
+  "trigger": { "type": "price_cross", "symbol": "AAPL", "direction": "below", "level": -5 },
+  "schedule": { "sessions": "always", "days": ["mon"] },
+  "cooldown": { "minutes": 60, "dedupe": "per_symbol" },
+  "channels": ["in_app"]
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "hammer-bounds",
+  "name": "Hammer at the bounds",
+  "spec": {
+    "pattern": "hammer",
+    "direction": "bullish",
+    "timeframe": "1w",
+    "priorTrend": { "direction": "any", "bars": 50 },
+    "confirmation": { "type": "next_bar_close", "bars": 3 },
+    "tolerance": { "shadowMinRatio": 20, "bodyMaxPct": 100 }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Fractional shares",
+  "timeframe": "1d",
+  "direction": "long",
+  "filters": { "all": [{ "metric": "close", "op": "gt", "threshold": 5 }] },
+  "risk": { "positionSizeHint": { "type": "shares", "value": 10.5 } }
+}

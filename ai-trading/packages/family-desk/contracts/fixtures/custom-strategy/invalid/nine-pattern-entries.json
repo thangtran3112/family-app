@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "kind": "custom",
+  "name": "Nine pattern entries",
+  "timeframe": "1d",
+  "direction": "either",
+  "patterns": {
+    "match": "any",
+    "entries": [
+      {
+        "spec": {
+          "pattern": "hammer",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "inverted_hammer",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "shadowMinRatio": 2, "bodyMaxPct": 35 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "bullish_engulfing",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "engulfMinRatio": 1 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "bearish_engulfing",
+          "direction": "bearish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "engulfMinRatio": 1 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "doji",
+          "direction": "neutral",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "bodyMaxPct": 10 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "morning_star",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "starBodyMaxPct": 30 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "evening_star",
+          "direction": "bearish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "starBodyMaxPct": 30 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "three_white_soldiers",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "confirmation": { "type": "none" },
+          "tolerance": { "bodyMinPct": 50 }
+        }
+      },
+      {
+        "spec": {
+          "pattern": "breakout",
+          "direction": "bullish",
+          "timeframe": "1d",
+          "lookback": 20,
+          "confirmation": { "type": "none" },
+          "tolerance": { "bufferPct": 0 }
+        }
+      }
+    ]
+  }
+}

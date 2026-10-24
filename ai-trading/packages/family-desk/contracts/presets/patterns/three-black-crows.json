@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "pattern",
+  "id": "three-black-crows",
+  "name": "Three Black Crows",
+  "description": "Three long bearish candles in a row, each closing lower, after an uptrend.",
+  "spec": {
+    "pattern": "three_black_crows",
+    "direction": "bearish",
+    "timeframe": "1d",
+    "priorTrend": { "direction": "up", "bars": 3 },
+    "confirmation": { "type": "none" },
+    "tolerance": { "bodyMinPct": 60 }
+  }
+}
