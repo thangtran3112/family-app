@@ -192,10 +192,8 @@ contract set; it wraps these specs when the `draft_strategy` and `draft_filter` 
 - `liquidity.minAvgVolume` has an upper bound of 10,000,000,000 (the plan says only "int >= 1"); every field is bounded.
 - `assetTypes` may repeat a value (`["stock", "stock"]`): harmless, and JSON Schema uniqueness would need hand-written Pydantic.
 - Alert strategy: the plan's "stage alert_only" is a DB column, not a spec field, so the contract expresses it as "no `paperOrder`".
-- A `filter` universe, `pattern` conditions, the new levels, and the new alert fields validate but cannot be saved as a strategy
-  version until the engine implements them (the gate above); the filter defaults themselves use only operands the engine runs.
+- ~~A `filter` universe, `pattern` conditions, the new levels, and the new alert fields validate but cannot be saved as a strategy
+  version until the engine implements them~~ — implemented 2026-10-24 (see the follow-up note below); all of these now save and run.
 - `name`, `request`, and `rationale` limits count UTF-16 units in Zod and code points in Python (astral characters differ by one);
   `message` avoids the problem by being BMP-only.
-- Code follow-ups (Desk lane): `core/patterns.py` and the pattern evaluator; `session_high` and `session_low` levels; the alert
-  `frequency`, `expiresOn`, and `message` behavior; `filter` universe resolution; the `filter_strategies` and
-  `filter_strategy_versions` tables, `strategies.lane` and `strategies.origin`, and the `draft_filter` tool.
+- Code follow-ups (Desk lane) — **DONE 2026-10-24** by the desktop-MVP implementation phase (`02m`): `core/patterns.py` detects all 20 pattern ids (validated 299/299 against the Run 0 snapshot occurrences); the evaluator runs `pattern` conditions, `session_high`/`session_low` levels, and the alert `frequency`, `expiresOn`, and `message` behavior; `filter` universe resolution is wired through an injected `filter_matches` callback; the `filter_strategies` and `filter_strategy_versions` tables, `strategies.lane` and `strategies.origin` shipped in the `0003_technical_mvp` migration; and `draft_filter` round-trips like `draft_strategy`. `check()` now rejects only patterns on `premarket_0830` and `weekly` (no closed candle to match).
