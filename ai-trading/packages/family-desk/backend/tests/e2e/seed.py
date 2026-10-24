@@ -1,4 +1,9 @@
-"""Seed invented NVDA and /ES bars into one fresh, uniquely named loopback E2E database."""
+"""Seed one fresh, uniquely named loopback E2E database, in one of two modes:
+
+- `legacy` (default): invented NVDA and /ES bars, the three-list watchlist set the first Desk specs use.
+- `technical`: the desktop MVP's world (02m §d5), derived from the Run 0 snapshot; see `technical_seed.py`.
+- `technical-alerts`: `technical` after her alert runtime fired four times (strategies `alert_only`, alerts, log rows).
+"""
 
 import json
 import os
@@ -9,16 +14,18 @@ import exchange_calendars as xcals
 import pandas as pd
 from clock import E2E_EMAIL, E2E_NOW
 from safety import e2e_url
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
 from ai_trading.db.models import Bar1d, Bar1m, Base, User, Watchlist, WatchlistItem
 
+SEED_MODES = ("legacy", "technical", "technical-alerts")
 
-def seed_database(database_url: str) -> tuple[int, int]:
+
+def seed_database(database_url: str, mode: str = "legacy") -> tuple[int, int]:
+    if mode not in SEED_MODES:
+        raise ValueError(f"unknown E2E seed mode {mode!r}")
     url = e2e_url(database_url)
-    from sqlalchemy import create_engine
-
     engine = create_engine(url.render_as_string(hide_password=False))
     try:
         with Session(engine) as session:
@@ -44,6 +51,15 @@ def seed_database(database_url: str) -> tuple[int, int]:
             user = User(email=E2E_EMAIL, settings={"e2e_unknown": {"keep": True}})
             session.add(user)
             session.flush()
+            if mode.startswith("technical"):
+                from technical_seed import seed_technical
+
+                seed_technical(session, user.id, alerts=mode == "technical-alerts")
+                session.commit()
+                return (
+                    session.scalar(select(func.count()).select_from(Bar1d)),
+                    session.scalar(select(func.count()).select_from(Bar1m)),
+                )
             day_movers = Watchlist(user_id=user.id, name="Day movers", horizon="intraday")
             futures = Watchlist(user_id=user.id, name="Futures", horizon="intraday")
             identity = Watchlist(user_id=user.id, name="Identity", horizon="swing")
@@ -118,6 +134,19 @@ def seed_database(database_url: str) -> tuple[int, int]:
             return daily_count, len(bar_starts) * len(symbols)
     finally:
         engine.dispose()
+
+
+def reset_database(database_url: str, mode: str = "legacy") -> tuple[int, int]:
+    """Empty every table, then seed `mode`: the per-test reset of the browser and alert-path checks."""
+    url = e2e_url(database_url)
+    engine = create_engine(url.render_as_string(hide_password=False))
+    try:
+        tables = ", ".join(f'"{table.name}"' for table in reversed(Base.metadata.sorted_tables))
+        with engine.begin() as connection:
+            connection.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+    finally:
+        engine.dispose()
+    return seed_database(database_url, mode)
 
 
 if __name__ == "__main__":

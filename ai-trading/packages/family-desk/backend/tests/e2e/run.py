@@ -1,5 +1,12 @@
-"""Run native proxy tests and real HTTP/engine tests in a disposable E2E database."""
+"""Run native proxy tests, the Playwright suite and the real HTTP/engine checks, each in a disposable E2E database.
 
+    uv run python tests/e2e/run.py                                  # everything (CI)
+    uv run python tests/e2e/run.py --browser -- --project=desktop-1440 e2e/desk/shell.spec.ts
+
+`--browser` runs only Playwright; whatever follows `--` goes to `playwright test`. Needs the static export
+(`pnpm build`) and `DESK_E2E_ADMIN_DATABASE_URL`, a loopback Postgres maintenance database."""
+
+import argparse
 import os
 import subprocess
 import uuid
@@ -43,27 +50,36 @@ def _run_in_database(admin_engine, admin, command) -> int:
                 connection.execute(text(f'DROP DATABASE "{database}" WITH (FORCE)'))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--browser", action="store_true", help="run only the Playwright suite")
+    parser.add_argument("playwright_args", nargs="*", help="after `--`: passed to `playwright test`")
+    args = parser.parse_args(argv)
     if not (FRONTEND / "out" / "index.html").is_file():
         raise RuntimeError("build the Desk static export before running E2E tests")
     admin = admin_url(os.environ["DESK_E2E_ADMIN_DATABASE_URL"])
     admin_engine = create_engine(admin.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
     try:
-        subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
+        if not args.browser:
+            subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
 
         def browser_suite() -> int:
-            subprocess.run(["pnpm", "exec", "playwright", "test"], cwd=FRONTEND, check=True, env=os.environ.copy())
-            return 0
+            command = ["pnpm", "exec", "playwright", "test", *args.playwright_args]
+            return subprocess.run(command, cwd=FRONTEND, env=os.environ.copy()).returncode
 
         browser_result = _run_in_database(admin_engine, admin, browser_suite)
-        if browser_result:
+        if browser_result or args.browser:
             return browser_result
 
-        return _run_in_database(
-            admin_engine,
-            admin,
-            lambda: int(pytest.main(["-q", str(Path(__file__).with_name("http_check.py"))])),
-        )
+        for check in ("http_check.py", "technical_check.py"):
+            result = _run_in_database(
+                admin_engine,
+                admin,
+                lambda check=check: int(pytest.main(["-q", str(Path(__file__).with_name(check))])),
+            )
+            if result:
+                return result
+        return 0
     finally:
         admin_engine.dispose()
 
