@@ -1,0 +1,36 @@
+.root { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; }
+.header { display: flex; min-height: 32px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: 0 var(--space-2) 0 var(--space-3); }
+.tabs { display: flex; align-items: center; gap: var(--space-1); }
+.tab { min-height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
+.tab:hover { background: var(--color-raised); color: var(--color-text); }
+.tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
+.iconButton { display: inline-flex; width: 28px; min-width: 24px; height: 28px; min-height: 24px; flex: 0 0 auto; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0; color: var(--color-muted); cursor: pointer; }
+.iconButton:hover { background: var(--color-raised); color: var(--color-text); }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.lock { width: 12px; height: 12px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; color: var(--color-muted); }
+.tab:focus-visible, .iconButton:focus-visible, .select:focus-visible, .symbol:focus-visible, .link:focus-visible, .filterRow:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.strip { display: flex; width: 48px; height: 100%; flex-direction: column; align-items: center; gap: var(--space-2); padding-top: var(--space-2); }
+.panel { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; }
+.body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+.select { width: 100%; height: 32px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); cursor: pointer; }
+.select:hover { background: var(--color-raised); }
+.caption { margin: 0; color: var(--color-muted); font-size: var(--text-micro); }
+.symbol { display: block; width: fit-content; color: var(--color-text); font-weight: var(--weight-bold); text-decoration: none; }
+.symbol:hover { text-decoration: underline; }
+.name { display: block; max-width: 150px; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-regular); text-overflow: ellipsis; }
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.flat { color: var(--color-muted); }
+.tagDot { display: inline-block; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-amber); vertical-align: middle; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.filters { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-3); }
+.groupTitle { margin: 0 0 var(--space-1); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.list { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
+.filterRow { display: flex; min-height: 28px; align-items: center; gap: var(--space-2); border-radius: var(--radius-sm); padding: 0 var(--space-2); color: var(--color-text); font-size: var(--text-label); text-decoration: none; }
+.filterRow:hover { background: var(--color-raised); }
+.filterRow[aria-current="page"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.filterName { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { flex: 0 0 auto; color: var(--color-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.muted { margin: 0; padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-label); }
+.link { color: var(--color-amber); font-weight: var(--weight-semibold); }
+.link:hover { text-decoration: underline; }

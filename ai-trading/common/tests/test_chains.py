@@ -19,7 +19,15 @@ import pandas as pd
 from ai_trading_common.errors import NotConfigured, Unavailable
 from ai_trading_common.registry import REGISTRY, DataSources, Provider
 from ai_trading_common.testing import FakeResponse, make_client
-from ai_trading_common.types import AnalystTargets, ConsensusSnapshot, EarningsResult
+from ai_trading_common.types import (
+    ActiveSymbol,
+    AnalystTargets,
+    ConsensusSnapshot,
+    EarningsResult,
+    Mover,
+    Quote,
+    UniverseAsset,
+)
 
 NOW = pd.Timestamp("2026-10-11T21:00:00Z")
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -123,6 +131,8 @@ def _sources_with(**overrides) -> DataSources:
         "consensus": ("eulerpool", "alphavantage"),
         "earnings": ("eulerpool", "finnhub", "alphavantage"),
         "targets": ("eulerpool", "finnhub"),
+        "universe": ("alpaca",),
+        "quotes": ("alpaca",),
     }
     for kind, (names, adapter) in overrides.items():
         names_tuple = tuple(names) if isinstance(names, list) else names
@@ -177,6 +187,73 @@ class TestTargetsChain:
         sources = _sources_with(targets=(["e", "f"], [primary, finnhub]))
         got = sources.targets.analyst_targets("AAPL", now=NOW)
         assert got.provider == "finnhub"
+
+
+class FakeUniverse:
+    def __init__(self, *, result=None, raises=None):
+        self._result, self._raises = result, raises
+
+    def assets(self):
+        return self._pick()
+
+    def most_actives(self, by, top):
+        return self._pick()
+
+    def movers(self, top):
+        return self._pick()
+
+    def _pick(self):
+        if self._raises:
+            raise self._raises
+        return self._result
+
+
+class FakeQuotes:
+    def __init__(self, *, result=None, raises=None):
+        self._result, self._raises = result, raises
+
+    def latest(self, symbols, *, now):
+        if self._raises:
+            raise self._raises
+        return self._result
+
+
+class TestUniverseChain:
+    def test_every_universe_call_falls_back_and_relabels(self):
+        asset = UniverseAsset("AAPL", "Apple", "NASDAQ", "b", "eod")
+        active = ActiveSymbol("AAPL", 10.0, 5, "b", "delayed-15m")
+        mover = Mover("AAPL", "gainer", 1.5, 10.0, "b", "delayed-15m")
+        sources = _sources_with(
+            universe=(
+                ["a", "b"],
+                [FakeUniverse(raises=Unavailable("a", "down")), FakeUniverse(result=[asset])],
+            )
+        )
+        assert sources.universe.assets()[0].quality == "fallback"
+        sources = _sources_with(
+            universe=(["a", "b"], [FakeUniverse(raises=Unavailable("a", "down")), FakeUniverse(result=[active])])
+        )
+        assert sources.universe.most_actives("volume", 10) == [ActiveSymbol("AAPL", 10.0, 5, "b", "fallback")]
+        sources = _sources_with(
+            universe=(["a", "b"], [FakeUniverse(raises=Unavailable("a", "down")), FakeUniverse(result=[mover])])
+        )
+        assert sources.universe.movers(5)[0].quality == "fallback"
+
+
+class TestQuotesChain:
+    def test_a_later_provider_quote_is_relabeled_fallback(self):
+        quote = Quote("AAPL", 10.0, NOW, "b", "delayed-15m")
+        sources = _sources_with(
+            quotes=(["a", "b"], [FakeQuotes(raises=NotConfigured("a", "no key")), FakeQuotes(result=[quote])])
+        )
+        got = sources.quotes.latest(["AAPL"], now=NOW)
+        assert got[0].quality == "fallback"
+        assert got[0].provider == "b"
+
+    def test_the_primary_keeps_its_own_quality(self):
+        quote = Quote("AAPL", 10.0, NOW, "a", "delayed-15m")
+        sources = _sources_with(quotes=(["a"], [FakeQuotes(result=[quote])]))
+        assert sources.quotes.latest(["AAPL"], now=NOW)[0].quality == "delayed-15m"
 
 
 class TestRealAdapterFallback:

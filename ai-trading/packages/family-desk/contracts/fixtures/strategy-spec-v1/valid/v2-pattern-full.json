@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "pattern",
+    "pattern": "bullish_engulfing",
+    "trend": "after_downtrend",
+    "trendBars": 5,
+    "withinBars": 1
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

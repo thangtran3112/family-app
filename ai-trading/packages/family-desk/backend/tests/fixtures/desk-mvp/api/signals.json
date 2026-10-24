@@ -1,0 +1,227 @@
+[
+ {
+  "bar_time": "2026-10-23T16:15:00Z",
+  "created_at": "2026-10-23T16:15:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "ema(21)": 347.643793,
+   "ema(9)": 347.562449
+  },
+  "id": 15,
+  "kind": "other",
+  "strategy_id": 6,
+  "strategy_name": "EMA 9/21 cross",
+  "strategy_version_id": 6,
+  "symbol": "AAPL"
+ },
+ {
+  "bar_time": "2026-10-23T14:45:00Z",
+  "created_at": "2026-10-23T14:45:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "ema(21)": 195.434329,
+   "ema(9)": 195.508224
+  },
+  "id": 14,
+  "kind": "other",
+  "strategy_id": 6,
+  "strategy_name": "EMA 9/21 cross",
+  "strategy_version_id": 6,
+  "symbol": "PLTR"
+ },
+ {
+  "bar_time": "2026-10-23T14:45:00Z",
+  "created_at": "2026-10-23T14:45:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "ema(21)": 644.41872,
+   "ema(9)": 644.426197
+  },
+  "id": 13,
+  "kind": "other",
+  "strategy_id": 6,
+  "strategy_name": "EMA 9/21 cross",
+  "strategy_version_id": 6,
+  "symbol": "META"
+ },
+ {
+  "bar_time": "2026-10-23T14:30:00Z",
+  "created_at": "2026-10-23T14:30:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "ema(21)": 323.851588,
+   "ema(9)": 324.075203
+  },
+  "id": 12,
+  "kind": "other",
+  "strategy_id": 6,
+  "strategy_name": "EMA 9/21 cross",
+  "strategy_version_id": 6,
+  "symbol": "AVGO"
+ },
+ {
+  "bar_time": "2026-10-23T14:26:00Z",
+  "created_at": "2026-10-23T14:26:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 369.53,
+   "vwap": 370.164294
+  },
+  "id": 11,
+  "kind": "other",
+  "strategy_id": 7,
+  "strategy_name": "VWAP loss",
+  "strategy_version_id": 7,
+  "symbol": "TSLA"
+ },
+ {
+  "bar_time": "2026-10-23T14:19:00Z",
+  "created_at": "2026-10-23T14:19:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 323.65,
+   "vwap": 323.585786
+  },
+  "id": 10,
+  "kind": "vwap_reclaim",
+  "strategy_id": 2,
+  "strategy_name": "VWAP reclaim",
+  "strategy_version_id": 2,
+  "symbol": "AVGO"
+ },
+ {
+  "bar_time": "2026-10-23T14:18:00Z",
+  "created_at": "2026-10-23T14:18:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 323.55,
+   "vwap": 323.584946
+  },
+  "id": 9,
+  "kind": "other",
+  "strategy_id": 7,
+  "strategy_name": "VWAP loss",
+  "strategy_version_id": 7,
+  "symbol": "AVGO"
+ },
+ {
+  "bar_time": "2026-10-23T14:07:00Z",
+  "created_at": "2026-10-23T14:07:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 370.1762,
+   "vwap": 369.696176
+  },
+  "id": 8,
+  "kind": "vwap_reclaim",
+  "strategy_id": 2,
+  "strategy_name": "VWAP reclaim",
+  "strategy_version_id": 2,
+  "symbol": "TSLA"
+ },
+ {
+  "bar_time": "2026-10-23T13:57:00Z",
+  "created_at": "2026-10-23T13:57:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 513.445,
+   "vwap": 513.332661
+  },
+  "id": 7,
+  "kind": "vwap_reclaim",
+  "strategy_id": 2,
+  "strategy_name": "VWAP reclaim",
+  "strategy_version_id": 2,
+  "symbol": "AMD"
+ },
+ {
+  "bar_time": "2026-10-23T13:53:00Z",
+  "created_at": "2026-10-23T13:53:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 512.9663,
+   "vwap": 513.395767
+  },
+  "id": 6,
+  "kind": "other",
+  "strategy_id": 7,
+  "strategy_name": "VWAP loss",
+  "strategy_version_id": 7,
+  "symbol": "AMD"
+ },
+ {
+  "bar_time": "2026-10-23T13:47:00Z",
+  "created_at": "2026-10-23T13:47:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 192.88,
+   "vwap": 192.559771
+  },
+  "id": 5,
+  "kind": "vwap_reclaim",
+  "strategy_id": 2,
+  "strategy_name": "VWAP reclaim",
+  "strategy_version_id": 2,
+  "symbol": "PLTR"
+ },
+ {
+  "bar_time": "2026-10-23T13:47:00Z",
+  "created_at": "2026-10-23T13:47:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 169.59,
+   "vwap": 168.811174
+  },
+  "id": 4,
+  "kind": "vwap_reclaim",
+  "strategy_id": 2,
+  "strategy_name": "VWAP reclaim",
+  "strategy_version_id": 2,
+  "symbol": "COIN"
+ },
+ {
+  "bar_time": "2026-10-23T13:46:00Z",
+  "created_at": "2026-10-23T13:46:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 168.78,
+   "vwap": 168.79587
+  },
+  "id": 3,
+  "kind": "other",
+  "strategy_id": 7,
+  "strategy_name": "VWAP loss",
+  "strategy_version_id": 7,
+  "symbol": "COIN"
+ },
+ {
+  "bar_time": "2026-10-23T13:45:00Z",
+  "created_at": "2026-10-23T13:45:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "close": 369.31,
+   "vwap": 371.415411
+  },
+  "id": 2,
+  "kind": "other",
+  "strategy_id": 7,
+  "strategy_name": "VWAP loss",
+  "strategy_version_id": 7,
+  "symbol": "TSLA"
+ },
+ {
+  "bar_time": "2026-10-23T13:45:00Z",
+  "created_at": "2026-10-23T13:45:00Z",
+  "data_quality": "delayed-15m",
+  "evidence": {
+   "ema(21)": 511.798786,
+   "ema(9)": 512.193329
+  },
+  "id": 1,
+  "kind": "other",
+  "strategy_id": 6,
+  "strategy_name": "EMA 9/21 cross",
+  "strategy_version_id": 6,
+  "symbol": "AMD"
+ }
+]

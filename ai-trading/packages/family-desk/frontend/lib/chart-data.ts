@@ -1,13 +1,24 @@
 import type {
   BusinessDay,
   CandlestickData,
+  HistogramData,
   LineData,
+  SeriesMarker,
   Time,
   UTCTimestamp,
   WhitespaceData,
 } from "lightweight-charts";
 
-export type ChartBar = { t: string; o: number | null; h: number | null; l: number | null; c: number | null };
+export type ChartBar = {
+  t: string;
+  o: number | null;
+  h: number | null;
+  l: number | null;
+  c: number | null;
+  v?: number | null;
+  /** Pre- or after-hours bar (extended-hours shading). */
+  ext?: boolean;
+};
 
 export function chartTime(value: string): Time {
   const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -51,4 +62,89 @@ export function lineData(bars: ChartBar[], values: Array<number | null>): Array<
     const value = values[index];
     return value === null || value === undefined || !Number.isFinite(value) ? { time } : { time, value };
   }));
+}
+
+const UP_VOLUME = "#30D15866";
+const DOWN_VOLUME = "#FF453A66";
+const SHADE = "#141416";
+
+/** Volume columns coloured by candle direction at 40% opacity (02l §b5). */
+export function volumeData(bars: ChartBar[]): Array<HistogramData<Time> | WhitespaceData<Time>> {
+  return sortedUnique(bars.map((bar) => {
+    const time = chartTime(bar.t);
+    if (bar.v === null || bar.v === undefined || !Number.isFinite(bar.v)) return { time };
+    const up = bar.c !== null && bar.o !== null && bar.c >= bar.o;
+    return { time, value: bar.v, color: up ? UP_VOLUME : DOWN_VOLUME };
+  }));
+}
+
+/** Full-height columns behind extended-hours bars; regular bars are whitespace (02l §b5 session shading). */
+export function shadingData(bars: ChartBar[]): Array<HistogramData<Time> | WhitespaceData<Time>> {
+  return sortedUnique(bars.map((bar) => {
+    const time = chartTime(bar.t);
+    return bar.ext ? { time, value: 1, color: SHADE } : { time };
+  }));
+}
+
+export type ChartMarkerInput = {
+  /** UTC bar start. Patterns use `bar_start`, fired alerts `bar_time`. */
+  time: string;
+  kind: "pattern" | "fire";
+  label: string;
+};
+
+const etDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/**
+ * Pattern labels below the bar, an amber bell above it for each fired alert (02l §b5). A marker that
+ * matches no loaded bar is dropped; the library needs them sorted by time.
+ */
+export function seriesMarkers(bars: ChartBar[], markers: ChartMarkerInput[]): SeriesMarker<Time>[] {
+  if (bars.length === 0) return [];
+  const daily = /^\d{4}-\d{2}-\d{2}$/.test(bars[0]!.t);
+  const have = new Set(bars.map((bar) => timeKey(chartTime(bar.t))));
+  const placed = markers.flatMap((marker): Array<{ key: number; marker: SeriesMarker<Time> }> => {
+    const time = chartTime(daily ? etDay.format(new Date(marker.time)) : marker.time);
+    const key = timeKey(time);
+    if (!have.has(key)) return [];
+    return [{
+      key,
+      marker: marker.kind === "pattern"
+        ? { time, position: "belowBar", shape: "arrowUp", color: "#F2F2F4", text: marker.label }
+        : { time, position: "aboveBar", shape: "circle", color: "#FFB020", text: "🔔" },
+    }];
+  });
+  return placed.sort((a, b) => a.key - b.key).map(({ marker }) => marker);
+}
+
+/** What the legend shows under the cursor; null values mean "no data at this bar". */
+export type CrosshairPoint = {
+  time: Time;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  /** Overlay and pane series by id (`ema9`, `rsi:rsi-line`). */
+  values: Record<string, number | null>;
+};
+
+type SeriesPoint = { value?: number; open?: number; high?: number; low?: number; close?: number } | undefined;
+const num = (value: number | undefined) => (value !== undefined && Number.isFinite(value) ? value : null);
+
+export function crosshairPoint(
+  time: Time,
+  candle: SeriesPoint,
+  volume: SeriesPoint,
+  values: Record<string, SeriesPoint>,
+): CrosshairPoint {
+  return {
+    time,
+    open: num(candle?.open),
+    high: num(candle?.high),
+    low: num(candle?.low),
+    close: num(candle?.close),
+    volume: num(volume?.value),
+    values: Object.fromEntries(Object.entries(values).map(([id, point]) => [id, num(point?.value)])),
+  };
 }

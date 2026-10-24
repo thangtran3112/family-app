@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/strategy-spec-v1.ts"
+    ".": "./src/strategy-spec-v1.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/strategy-spec-v1.test.ts",
+    "test": "node --test test/*.test.ts",
     "generate:json-schema": "node scripts/generate-json-schema.ts"
   },
   "dependencies": {

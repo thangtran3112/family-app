@@ -14,6 +14,16 @@ class Alert(SpecModel):
         extra="forbid",
     )
     channels: Annotated[list[Literal["inbox", "telegram", "slack"]], Field(max_length=3, min_length=1)]
+    expiresOn: Annotated[str | None, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")] = None
+    frequency: Literal["once", "once_per_bar", "every_time"] | None = None
+    message: Annotated[
+        str | None,
+        Field(
+            max_length=140,
+            min_length=1,
+            pattern="^([\\u0020-\\u007A\\u007C\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]|\\{symbol\\}|\\{close\\}|\\{time\\})+$",
+        ),
+    ] = None
     severity: Literal["info", "opportunity", "risk"] | None = None
 
 
@@ -35,20 +45,66 @@ class Universe1(SpecModel):
     symbols: Annotated[list[Symbol], Field(max_length=70, min_length=1)]
 
 
+class Universe2(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filter: Annotated[str, Field(max_length=80, min_length=1)]
+
+
 class Watch(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     runOn: Literal["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]
     session: Literal["regular", "extended"]
-    universe: Universe | Universe1
+    universe: Universe | Universe1 | Universe2
+
+
+class Liquidity(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    avgVolumeDays: Annotated[int | None, Field(ge=5, le=60)] = None
+    minAvgVolume: Annotated[int | None, Field(ge=1, le=10000000000)] = None
+    minPrice: Annotated[float | None, Field(gt=0.0, le=100000.0)] = None
+
+
+class Universe3(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    market: Literal["us_equities"]
+
+
+class Universe4(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    watchlist: Annotated[str, Field(max_length=80, min_length=1)]
+
+
+class Universe5(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    symbols: Annotated[list[Symbol], Field(max_length=70, min_length=1)]
+
+
+class Watch1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    runOn: Literal["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]
+    session: Literal["regular", "extended"]
+    universe: Universe3 | Universe4 | Universe5
 
 
 class LevelOperand1(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    level: Literal["prior_day_high", "prior_day_low", "prior_day_close", "premarket_high", "premarket_low", "overnight_high", "overnight_low"]
+    level: Literal["prior_day_high", "prior_day_low", "prior_day_close", "premarket_high", "premarket_low", "overnight_high", "overnight_low", "session_high", "session_low"]
 
 
 class LevelOperand2(SpecModel):
@@ -147,6 +203,39 @@ class PaperOrder(SpecModel):
     size: Size | Size1 | Size2 | Size3
     stop: Stop | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
     target: Target | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
+
+
+class PatternCondition(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    op: Literal["pattern"]
+    pattern: Literal["hammer", "inverted_hammer", "hanging_man", "shooting_star", "doji", "dragonfly_doji", "gravestone_doji", "bullish_engulfing", "bearish_engulfing", "bullish_harami", "bearish_harami", "piercing_line", "dark_cloud_cover", "morning_star", "evening_star", "tweezer_bottom", "tweezer_top", "three_white_soldiers", "three_black_crows", "inside_bar"]
+    trend: Literal["any", "after_downtrend", "after_uptrend"] | None = None
+    trendBars: Annotated[int | None, Field(ge=3, le=50)] = None
+    withinBars: Annotated[int | None, Field(ge=1, le=5)] = None
+
+
+class Entry(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    bias: Literal["bullish", "bearish", "neutral"]
+    category: Literal["candlestick", "breakout", "trend", "volume", "futures", "income", "long_term"]
+    file: Annotated[str, Field(max_length=80, pattern="^[a-z0-9][a-z0-9-]*(\\/[a-z0-9][a-z0-9-]*)*\\.json$")]
+    id: Annotated[str, Field(pattern="^[a-z0-9][a-z0-9_-]{0,63}$")]
+    kind: Literal["strategy", "filter"]
+    label: Annotated[str, Field(max_length=80, min_length=1)]
+    lane: Literal["technical", "fundamental"]
+    summary: Annotated[str, Field(max_length=160, min_length=1)]
+
+
+class PresetCatalogV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    entries: Annotated[list[Entry], Field(max_length=200, min_length=1)]
+    schemaVersion: Literal[1]
 
 
 class SeriesOperand1(SpecModel):
@@ -295,6 +384,14 @@ class Then(SpecModel):
     paperOrder: PaperOrder | None = None
 
 
+class Rank(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    by: SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13
+    order: Literal["desc", "asc"]
+
+
 class WithinPctCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -323,7 +420,7 @@ class StrategySpecV1(SpecModel):
     schemaVersion: Literal[1]
     then: Then
     watch: Watch
-    when: CompareCondition | WithinPctCondition | TimeBetweenCondition | AllCondition | AnyCondition | NotCondition
+    when: CompareCondition | WithinPctCondition | TimeBetweenCondition | PatternCondition | AllCondition | AnyCondition | NotCondition
 
 
 class AllCondition(SpecModel):
@@ -331,7 +428,7 @@ class AllCondition(SpecModel):
         extra="forbid",
     )
     all: Annotated[
-        list[CompareCondition | WithinPctCondition | TimeBetweenCondition | AllCondition | AnyCondition | NotCondition],
+        list[CompareCondition | WithinPctCondition | TimeBetweenCondition | PatternCondition | AllCondition | AnyCondition | NotCondition],
         Field(max_length=20, min_length=1),
     ]
 
@@ -341,9 +438,23 @@ class AnyCondition(SpecModel):
         extra="forbid",
     )
     any: Annotated[
-        list[CompareCondition | WithinPctCondition | TimeBetweenCondition | AllCondition | AnyCondition | NotCondition],
+        list[CompareCondition | WithinPctCondition | TimeBetweenCondition | PatternCondition | AllCondition | AnyCondition | NotCondition],
         Field(max_length=20, min_length=1),
     ]
+
+
+class FilterStrategySpecV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    assetTypes: Annotated[list[Literal["stock", "etf"]] | None, Field(max_length=2, min_length=1)] = None
+    liquidity: Liquidity | None = None
+    maxResults: Annotated[int, Field(ge=1, le=100)]
+    name: Annotated[str, Field(max_length=80, min_length=1)]
+    rank: Rank | None = None
+    schemaVersion: Literal[1]
+    watch: Watch1
+    when: CompareCondition | WithinPctCondition | TimeBetweenCondition | PatternCondition | AllCondition | AnyCondition | NotCondition
 
 
 class NotCondition(SpecModel):
@@ -351,7 +462,7 @@ class NotCondition(SpecModel):
         extra="forbid",
     )
     not_: Annotated[
-        CompareCondition | WithinPctCondition | TimeBetweenCondition | AllCondition | AnyCondition | NotCondition,
+        CompareCondition | WithinPctCondition | TimeBetweenCondition | PatternCondition | AllCondition | AnyCondition | NotCondition,
         Field(alias="not"),
     ]
 
@@ -359,4 +470,5 @@ class NotCondition(SpecModel):
 StrategySpecV1.model_rebuild()
 AllCondition.model_rebuild()
 AnyCondition.model_rebuild()
+FilterStrategySpecV1.model_rebuild()
 NotCondition.model_rebuild()

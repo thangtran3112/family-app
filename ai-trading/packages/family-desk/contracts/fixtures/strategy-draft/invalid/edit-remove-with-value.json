@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "draftId": "edit-case",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Find US stocks with relative volume of at least 3x on each 15-minute bar close.",
+  "rationale": "3x RVOL on 15-minute bars flags unusual volume; ranking by RVOL puts the strongest names first.",
+  "status": "edited",
+  "target": "filter",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "name": "Volume leaders",
+    "watch": {
+      "universe": {
+        "market": "us_equities"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "liquidity": {
+      "minPrice": 5,
+      "minAvgVolume": 500000
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "rank": {
+      "by": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "order": "desc"
+    },
+    "maxResults": 25
+  },
+  "edits": [
+    {
+      "op": "remove",
+      "path": "/rank",
+      "value": 1
+    }
+  ]
+}

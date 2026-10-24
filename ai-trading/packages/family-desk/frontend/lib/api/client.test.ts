@@ -146,3 +146,28 @@ test("a 200 response with invalid JSON remains malformed", async () => {
     return true;
   });
 });
+
+test("a 422 keeps the spec problems and a 409 keeps its plain detail", async () => {
+  const location = () => ({ href: "https://trading.tobytran.dev/" });
+  const unprocessable = createDeskApiClient(
+    async () => Response.json({ detail: { problems: [{ path: "then.alert.channels", message: "the first alert channel must be inbox" }, { nope: 1 }] } }, { status: 422 }),
+    location,
+  );
+  await assert.rejects(unprocessable("/api/desk/test", responseSchema), (error: unknown) => {
+    assert.ok(error instanceof DeskApiError);
+    assert.equal(error.status, 422);
+    assert.deepEqual(error.problems, [{ path: "then.alert.channels", message: "the first alert channel must be inbox" }]);
+    return true;
+  });
+
+  const conflict = createDeskApiClient(
+    async () => Response.json({ detail: "Alerts start when live quotes are connected" }, { status: 409 }),
+    location,
+  );
+  await assert.rejects(conflict("/api/desk/test", responseSchema), (error: unknown) => {
+    assert.ok(error instanceof DeskApiError);
+    assert.equal(error.detail, "Alerts start when live quotes are connected");
+    assert.deepEqual(error.problems, []);
+    return true;
+  });
+});

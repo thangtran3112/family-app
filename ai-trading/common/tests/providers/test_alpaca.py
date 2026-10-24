@@ -99,3 +99,67 @@ class TestIntradayBars:
         got = alpaca.bars("AAPL", "1m", start, now, now=now)
         assert got.frame.empty
         assert session.calls == []
+
+
+class TestUniverse:
+    def test_assets_maps_name_and_exchange_and_drops_untradable(self):
+        body = [
+            {"symbol": "AAPL", "name": "Apple Inc. Common Stock", "exchange": "NASDAQ", "tradable": True},
+            {"symbol": "ZZZZ", "name": "Delisted", "exchange": "OTC", "tradable": False},
+        ]
+        client, session, _ = make_client([FakeResponse(200, body)])
+        got = AlpacaBars("kid", "sec", http=client).assets()
+        assert [(a.symbol, a.name, a.exchange, a.quality) for a in got] == [
+            ("AAPL", "Apple Inc. Common Stock", "NASDAQ", "eod")
+        ]
+        url, params, headers = session.calls[0]
+        assert url == "https://paper-api.alpaca.markets/v2/assets"
+        assert params == {"status": "active", "asset_class": "us_equity"}
+        assert headers["APCA-API-KEY-ID"] == "kid"
+
+    def test_most_actives_maps_volume_and_trade_count(self):
+        body = {"most_actives": [{"symbol": "NVDA", "volume": 1000, "trade_count": 50}]}
+        client, session, _ = make_client([FakeResponse(200, body)])
+        got = AlpacaBars("kid", "sec", http=client).most_actives("trades", 100)
+        assert [(a.symbol, a.volume, a.trade_count, a.quality) for a in got] == [("NVDA", 1000.0, 50, "delayed-15m")]
+        assert session.calls[0][1] == {"by": "trades", "top": "100"}
+
+    def test_movers_keeps_both_sides(self):
+        body = {
+            "gainers": [{"symbol": "UP", "percent_change": 12.5, "price": 3.0}],
+            "losers": [{"symbol": "DN", "percent_change": -9.0, "price": 4.0}],
+        }
+        client, _, _ = make_client([FakeResponse(200, body)])
+        got = AlpacaBars("kid", "sec", http=client).movers(50)
+        assert [(m.symbol, m.side, m.change_pct) for m in got] == [("UP", "gainer", 12.5), ("DN", "loser", -9.0)]
+
+    def test_a_rejected_key_is_not_configured_and_an_empty_key_sends_nothing(self):
+        client, _, _ = make_client([FakeResponse(401)])
+        with pytest.raises(NotConfigured):
+            AlpacaBars("bad", "key", http=client).movers(5)
+        client, session, _ = make_client([])
+        with pytest.raises(NotConfigured):
+            AlpacaBars("", "", http=client).assets()
+        assert session.calls == []
+
+    def test_the_trading_host_is_configurable(self):
+        client, session, _ = make_client([FakeResponse(200, [])])
+        AlpacaBars("kid", "sec", http=client, trading_url="https://api.alpaca.markets/").assets()
+        assert session.calls[0][0] == "https://api.alpaca.markets/v2/assets"
+
+
+class TestLatestQuotes:
+    def test_returns_the_newest_closed_bar_per_symbol_and_skips_unknown_symbols(self):
+        now = pd.Timestamp("2026-01-10 12:00", tz="UTC")
+        client, session, _ = make_client(
+            [
+                FakeResponse(200, {"bars": [bar("2026-01-09T20:59:00Z", 11)]}),
+                FakeResponse(404),
+            ]
+        )
+        got = AlpacaBars("kid", "sec", http=client).latest(["AAPL", "ZZZZ"], now=now)
+        assert [(q.symbol, q.price, q.quality) for q in got] == [("AAPL", 11.0, "delayed-15m")]
+        assert got[0].as_of == pd.Timestamp("2026-01-09T20:59:00Z")
+        params = session.calls[0][1]
+        assert params["sort"] == "desc" and params["limit"] == "1"
+        assert params["end"] == (now - pd.Timedelta(minutes=15)).isoformat()

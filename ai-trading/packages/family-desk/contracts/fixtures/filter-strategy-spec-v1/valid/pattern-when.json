@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "Hammer after selloff",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "pattern",
+    "pattern": "hammer",
+    "trend": "after_downtrend",
+    "trendBars": 5,
+    "withinBars": 1
+  },
+  "maxResults": 25
+}

@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > This file is the master plan for the whole Desk. Each phase has its own task file under [02c-desk-v1-tasks/](02c-desk-v1-tasks/). A task file is written with the writing-plans skill, from a tested prototype, and the owner reviews it before that phase starts. That keeps every task file small enough to carry complete code. Phases 0, 1, 1b, 1c, and 1d have task files. Each later phase gets its own before it starts.
+>
+> **Re-sequenced 2026-10-24 ([02l](02l-desk-desktop-first-mvp.md)):** the desktop-first Technical-lane MVP now comes before Phases 5-7 and 6b. That MVP is alerts, filters, and recommendations on real data, with no backtests and no orders of any kind; paper trading, backtests, the Fundamental lane, and mobile follow it. Phases 0-4 below are unchanged and mostly done.
 
 **Goal:** ship Family Desk v1 at `trading.tobytran.dev`, in phases that each deliver working, tested software:
 - the two users' strategies alert automatically and paper-trade on IBKR paper;
@@ -104,17 +106,17 @@
 
 | Phase | Ships | Depends on | Task file | Status |
 |---|---|---|---|---|
-| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Blocked: waiting for the IBKR data user (owner confirmed 2026-10-16) |
+| 0. Verification spike | Answers for 02a §12; read-only IBKR and Flex probe tools | none | [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) | Flex done 2026-10-24; Gateway probe Mon 2026-10-26 09:30 ET (owner phone approval); Task 0.6 after |
 | 1. Strategy core | Contracts, backend scaffold, session calendar, first indicators, levels, evaluator, ten templates | none | [phase-1-strategy-core.md](02c-desk-v1-tasks/phase-1-strategy-core.md) | Done (PR #95) |
 | 1b. Ported quant core | Option math, covered-call math, support/resistance, order sizing | 1 | [phase-1b-ported-quant-core.md](02c-desk-v1-tasks/phase-1b-ported-quant-core.md) | Done (PR #104) |
 | 1c. Technicals and futures math | The 02f §3 indicators, pivots, the Desk Technical Bias and its blocks; the 02g §4 futures specs, roll dates, and micro-first sizer | 1, 1b | [phase-1c-technicals-and-futures.md](02c-desk-v1-tasks/phase-1c-technicals-and-futures.md) | Done |
 | 1d. Research math | As-of helpers, valuation methods, earnings reaction, the backtest engine core, AI call settlement (02h) | 1, 1b | [phase-1d-research-math.md](02c-desk-v1-tasks/phase-1d-research-math.md) | Done |
 | 2. Data foundation | `ai-trading/common` providers behind one registry (02j: Alpaca, SEC EDGAR, FRED, Finnhub, Alpha Vantage, Eulerpool, consensus EPS; IBKR after Phase 0), the Postgres schema, bar store, roll map, streaming slots | 1c; the IBKR client waits on 0 | [phase-2a-data-without-ibkr.md](02c-desk-v1-tasks/phase-2a-data-without-ibkr.md) | 2a done; 2b waits on Phase 0 |
-| 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | `phase-3-runtime.md` | Planned |
-| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | [phase-4-web.md](02c-desk-v1-tasks/phase-4-web.md) | Defaults approved 2026-10-16; in progress without IBKR |
-| 5. Long-term, covered calls, Desk AI | Imports, Holdings, valuation and consensus cards, the covered-call scan and screens, the daily Desk AI verdict, the AI brief, the track record, the timeline | 1d, 3 (UI after 4) | `phase-5-long-term.md` | Planned |
-| 6. Paper trading | The paper broker and order gate, the fills journal, futures brackets, reconciliation, limits, stats, the Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned |
-| 6b. Backtests | Backtest runs over stored bars, the results page, "Promote to Paper" | 1d, 2 (UI after 4) | `phase-6b-backtests.md` | Planned |
+| 3. Runtime and alerts | `api` and `scheduler`, live evaluation, card backs, alert outbox, Telegram/Slack, watchdog, deploy (first `main` release) | 2 | [phase-3-runtime-and-alerts.md](02c-desk-v1-tasks/phase-3-runtime-and-alerts.md) | Done, live (deployed and verified 2026-10-12) |
+| 4. Desk web and hostnames | The static app with every mocked screen (wired as its phase lands); `trading.tobytran.dev` | 3; the shell can start earlier on fixtures | [phase-4-web.md](02c-desk-v1-tasks/phase-4-web.md) | Live at `trading.tobytran.dev` (recutover accepted 2026-10-20); fixtures where data is not wired yet |
+| 5. Long-term, covered calls, Desk AI | Imports, Holdings, valuation and consensus cards, the covered-call scan and screens, the daily Desk AI verdict, the AI brief, the track record, the timeline | 1d, 3 (UI after 4) | `phase-5-long-term.md` | Planned; after the 02l MVP |
+| 6. Paper trading | The paper broker and order gate, the fills journal, futures brackets, reconciliation, limits, stats, the Paper tab | 3 (UI after 4) | `phase-6-paper.md` | Planned; deferred past the 02l MVP |
+| 6b. Backtests | Backtest runs over stored bars, the results page, "Promote to Paper" | 1d, 2 (UI after 4) | `phase-6b-backtests.md` | Planned; deferred past the 02l MVP |
 | 7. Ask | The PydanticAI agent over AG-UI with typed evidence tools; budgets | 5, 6 | `phase-7-ask.md` | Planned |
 
 **Delivery** (AGENTS.md's standing authorization):
@@ -129,9 +131,10 @@ Phases 0–2, 1c, and 1d change nothing that is deployed, so they stop at `dev`.
 
 | Wave | Who | What |
 |---|---|---|
-| A | Main session + owner | Phase 0 Tasks 0.5–0.6 once the IBKR data user is available (a weekday, 09:30–16:00 ET, with the owner); then the IBKR client (Phase 2b) |
-| B (now) | Subagents in worktrees | Phases 1c, then 1d: pure code, no data or IBKR needed |
-| C | Main session with subagents per task file | Phase 2a (data without IBKR) → 3 → 4 (the shell can start on fixtures during 2a or 3) → 5, 6, and 6b (UI after 4) → 7 |
+| A (next) | Main session + owner | Phase 0 Task 0.5 Steps 1-2 on Mon 2026-10-26 at 09:30 ET with the owner (the Flex step is done), then Task 0.6; then the IBKR client (Phase 2b) |
+| B (done) | Subagents in worktrees | Phases 1c, then 1d: pure code, no data or IBKR needed |
+| C | Main session with subagents per task file | Phase 2a (data without IBKR, done) → 3 (done) → 4 (done, live) → 5, 6, and 6b (UI after 4) → 7; re-sequenced behind wave D |
+| D (now) | Claude Code agents, one Paper writer at a time | The 02l desktop Technical MVP: Paper boards (Runs 0-6), then the real-data build after the Gateway probe |
 
 ## Shared Interfaces
 
@@ -156,12 +159,12 @@ These names are fixed for every phase. A task file may add names but must not re
 | Tables | 02 §7, 02a §9, 02b §5, plus `consensus_snapshots`, `earnings_results`, `analyst_targets` (02f); `ai_verdicts`, `ai_calls`, `ai_call_outcomes` (02f, 02h); `backtest_runs`, `backtest_trades` (02h) |
 | Probe tools | `ai-trading/tools/ibkr-probe/` (Phase 0), kept as the manual gateway smoke test |
 
-Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`. The Desk links `shared/alpaca` now, and links `shared/ibkr` only once the IBKR data user is available (Phase 2b). A dashboard login stored in a shared group is never linked into an app profile.
+Firestore keys in `ai-trading/desk` (names only; values only through `family_config.py`). The profile has existed since 2026-10-10. Shared values live once in `shared/ibkr` and `shared/alpaca`. The Desk links `shared/alpaca` and the free data-provider keys now, and links `shared/ibkr` only once the Gateway probe passes (Phase 2b). A dashboard login stored in a shared group is never linked into an app profile.
 
 | Group | Keys |
 |---|---|
-| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, not linked until the IBKR data user is available (values stay in `shared/ibkr`; Phase 2b links them); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
-| Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes); **not in Firestore yet** (Task 0.4 Step 4) |
+| IBKR | `IBKR_DATA_USERNAME` and `IBKR_DATA_PASSWORD`, not linked until the Gateway probe passes (values stay in `shared/ibkr`; Phase 2b links them); `IBKR_PAPER_USERNAME` and `IBKR_PAPER_PASSWORD` once Task 0.6 settles the gateway layout |
+| Flex import | `IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` per imported account (Phase 5 names the suffixes); both set 2026-10-24 on the main account's query (interim; the token expires 2027-09-24). They move to the data user's own query once its Reporting access is granted, then the main-account setup is removed ([STATUS.md](../STATUS.md) 2026-10-24 IBKR rows) |
 | Data sources | `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`, linked to `shared/alpaca` (set); `FINNHUB_API_KEY`, `FRED_API_KEY`, `EULERPOOL_API_KEY`, `ALPHA_VANTAGE_API_KEY` (Phase 2) |
 | Alert channels | `TELEGRAM_BOT_TOKEN`, `SLACK_WEBHOOK_URL_OWNER`, `SLACK_WEBHOOK_URL_SPOUSE` |
 | Database | `DESK_DB_PASSWORD` |
@@ -173,14 +176,13 @@ Firestore keys in `ai-trading/desk` (names only; values only through `family_con
 
 Each phase's task file turns its outline into complete, test-first tasks. "Reuse" points at 02a §11 rows. Sizes are rough task counts.
 
-### Phase 0: Verification spike (waiting on IBKR)
+### Phase 0: Verification spike (Gateway probe Mon 2026-10-26)
 
-Tasks 0.1–0.4 are done. The owner set up the data user, and IBKR has not approved it yet.
-- **Task 0.5,** with the owner on a weekday during market hours:
+Tasks 0.1–0.4 are done, and so is the Flex part of Task 0.5 (2026-10-24: 21 `OpenPositions` LOT records). The data user's Reporting access grant is still open ([STATUS.md](../STATUS.md) 2026-10-24 IBKR rows).
+- **Task 0.5,** with the owner on a weekday during market hours (Mon 2026-10-26, 09:30 ET; the data user's sign-in needs the owner's phone approval):
   - live stock and futures quotes;
   - option greeks through the $4.50 add-on;
-  - a paper session alongside the live login;
-  - Flex.
+  - a paper session alongside the live login.
 - **Task 0.6:** the gateway layout decision. Results go in [02d](02d-desk-spike-results.md).
 
 ### Phase 1: Strategy core (done, PR #95)
@@ -191,7 +193,7 @@ The contracts package, the backend scaffold, the session calendar, the first ind
 
 Black-Scholes and implied volatility (from Vibe-Trading), the 02 §6.3 covered-call math, support/resistance from confirmed pivots, and paper-order sizing that returns a reason when there is no order. Contracts have 40 tests, the backend 169.
 
-### Phase 1c: Technicals and futures math (no I/O; next)
+### Phase 1c: Technicals and futures math (no I/O; done, PR #110)
 
 **Scope:**
 - `core/indicators.py` gains:

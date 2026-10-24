@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "bar_close_15m"
+  },
+  "when": {
+    "all": [
+      {
+        "any": [
+          {
+            "op": "pattern",
+            "pattern": "hammer",
+            "trend": "after_downtrend",
+            "trendBars": 10
+          },
+          {
+            "op": "pattern",
+            "pattern": "bullish_engulfing",
+            "withinBars": 2
+          }
+        ]
+      },
+      {
+        "not": {
+          "op": "lt",
+          "left": {
+            "series": "close"
+          },
+          "right": {
+            "series": "sma",
+            "length": 50
+          }
+        }
+      },
+      {
+        "op": "within_pct",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "level": "n_day_high",
+          "days": 20
+        },
+        "pct": 2
+      },
+      {
+        "op": "time_between",
+        "start": "09:30",
+        "end": "15:00"
+      }
+    ]
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

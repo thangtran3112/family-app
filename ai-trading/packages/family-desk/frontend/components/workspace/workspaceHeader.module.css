@@ -1,0 +1,352 @@
+/* Chart workspace: symbol header, chart toolbar, legends (02l §b2, §b5, §b6). Tokens only. */
+
+.header,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+  background: var(--color-ground);
+  font-variant-numeric: tabular-nums;
+}
+
+.header {
+  flex: 0 0 56px;
+  height: 56px;
+  justify-content: space-between;
+  padding-inline: var(--space-4);
+}
+
+.toolbar {
+  flex: 0 0 36px;
+  height: 36px;
+  padding-inline: var(--space-4);
+}
+
+/* ---- Symbol header ---- */
+
+.identity {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.symbol {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--weight-bold);
+  line-height: 24px;
+}
+
+.name {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote {
+  display: flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.quote[data-dim="true"] {
+  opacity: 0.55;
+}
+
+.price {
+  font-size: 20px;
+  font-weight: var(--weight-semibold);
+  line-height: 24px;
+}
+
+.change {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.change[data-tone="up"] {
+  color: var(--color-up);
+}
+
+.change[data-tone="down"] {
+  color: var(--color-down);
+}
+
+.tabs {
+  display: flex;
+  flex-shrink: 0;
+  align-self: stretch;
+  gap: var(--space-4);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab[aria-current="page"] {
+  border-bottom-color: var(--color-amber);
+  color: var(--color-text);
+}
+
+/* ---- Chart toolbar ---- */
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.timeframe {
+  min-width: 32px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0 var(--space-2);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.timeframe:hover {
+  background: var(--color-raised);
+  color: var(--color-text);
+}
+
+.timeframe[aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--color-amber);
+  color: var(--color-text);
+}
+
+.segmented {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 32px;
+  gap: 2px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.segment {
+  height: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0 var(--space-3);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.segment:hover {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--color-raised);
+  box-shadow: inset 0 -2px 0 var(--color-amber);
+  color: var(--color-text);
+}
+
+.menuAnchor {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.menuButton {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0 10px;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"] {
+  background: var(--color-raised);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: 220px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  padding: 4px;
+}
+
+.groupLabel {
+  padding: 8px 8px 4px;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.menuItem {
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0 var(--space-2);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--color-raised);
+}
+
+.tick {
+  width: 12px;
+  color: var(--color-amber);
+  font-size: 12px;
+  text-align: center;
+}
+
+.alert {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 28px;
+  align-items: center;
+  margin-left: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.alert:hover {
+  background: var(--color-raised);
+}
+
+/* ---- Legends (the parent positions them) ---- */
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.legendTitle {
+  color: var(--color-text);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 2px;
+}
+
+.paneLegend {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  background: var(--color-panel);
+  padding: 0 4px 0 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.paneLabel {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.paneClose {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.paneClose:hover {
+  background: var(--color-raised);
+  color: var(--color-text);
+}
+
+.tab:focus-visible,
+.timeframe:focus-visible,
+.segment:focus-visible,
+.menuButton:focus-visible,
+.menuItem:focus-visible,
+.alert:focus-visible,
+.paneClose:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "pattern"
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

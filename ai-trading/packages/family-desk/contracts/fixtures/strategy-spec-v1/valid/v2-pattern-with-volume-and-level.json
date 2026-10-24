@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "all": [
+      {
+        "op": "pattern",
+        "pattern": "bullish_harami",
+        "withinBars": 1
+      },
+      {
+        "op": "gte",
+        "left": {
+          "series": "rvol",
+          "lookbackDays": 20
+        },
+        "right": {
+          "value": 1.5
+        }
+      },
+      {
+        "op": "within_pct",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "level": "pivot",
+          "method": "classic",
+          "period": "session",
+          "point": "S1"
+        },
+        "pct": 0.5
+      }
+    ]
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

@@ -1,0 +1,146 @@
+{
+ "rows": [
+  {
+   "asset_type": "stock",
+   "bias_label": "Sell",
+   "change_pct": -0.589,
+   "freshness": "closed",
+   "last": 210.96,
+   "name": "NVIDIA Corp",
+   "rvol_10d": 0.805,
+   "symbol": "NVDA",
+   "tags": [
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "VWAP reclaim armed"
+    },
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "EMA 9/21 cross armed"
+    }
+   ],
+   "vs_vwap_pct": -0.526
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Sell",
+   "change_pct": 1.744,
+   "freshness": "closed",
+   "last": 516.79,
+   "name": "Advanced Micro Devices",
+   "rvol_10d": 0.7507,
+   "symbol": "AMD",
+   "tags": [],
+   "vs_vwap_pct": -0.079
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Sell",
+   "change_pct": -0.63,
+   "freshness": "closed",
+   "last": 372.22,
+   "name": "Tesla Inc",
+   "rvol_10d": 0.9426,
+   "symbol": "TSLA",
+   "tags": [
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "EMA 9/21 cross armed"
+    }
+   ],
+   "vs_vwap_pct": 0.067
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Buy",
+   "change_pct": 0.285,
+   "freshness": "closed",
+   "last": 196.75,
+   "name": "Palantir Technologies",
+   "rvol_10d": 0.7177,
+   "symbol": "PLTR",
+   "tags": [],
+   "vs_vwap_pct": 0.788
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Sell",
+   "change_pct": -0.96,
+   "freshness": "closed",
+   "last": 642.62,
+   "name": "Meta Platforms",
+   "rvol_10d": 0.6819,
+   "symbol": "META",
+   "tags": [
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "VWAP reclaim armed"
+    }
+   ],
+   "vs_vwap_pct": -0.135
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Strong Buy",
+   "change_pct": -0.142,
+   "freshness": "closed",
+   "last": 347.725,
+   "name": "Apple Inc",
+   "rvol_10d": 0.975,
+   "symbol": "AAPL",
+   "tags": [
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "VWAP reclaim armed"
+    }
+   ],
+   "vs_vwap_pct": -0.04
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Strong Sell",
+   "change_pct": -0.483,
+   "freshness": "closed",
+   "last": 321.68,
+   "name": "Broadcom Inc",
+   "rvol_10d": 0.7561,
+   "symbol": "AVGO",
+   "tags": [],
+   "vs_vwap_pct": -0.806
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "Sell",
+   "change_pct": -2.744,
+   "freshness": "closed",
+   "last": 164.45,
+   "name": "Coinbase Global",
+   "rvol_10d": 0.8373,
+   "symbol": "COIN",
+   "tags": [
+    {
+     "at": null,
+     "kind": "armed",
+     "label": "EMA 9/21 cross armed"
+    }
+   ],
+   "vs_vwap_pct": -1.036
+  }
+ ],
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "watchlist": {
+  "horizon": "intraday",
+  "id": 1,
+  "name": "Day movers"
+ }
+}

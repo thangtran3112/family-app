@@ -6,12 +6,24 @@ import type {
   IChartApi,
   IPriceLine,
   ISeriesApi,
+  ISeriesMarkersPluginApi,
   Time,
   UTCTimestamp,
   WhitespaceData,
 } from "lightweight-charts";
 import { qualityLabel } from "@/lib/labels";
-import { candlestickData, currentValue, lineData, type ChartBar } from "@/lib/chart-data";
+import {
+  candlestickData,
+  crosshairPoint,
+  currentValue,
+  lineData,
+  seriesMarkers,
+  shadingData,
+  volumeData,
+  type ChartBar,
+  type ChartMarkerInput,
+  type CrosshairPoint,
+} from "@/lib/chart-data";
 import styles from "./MarketChart.module.css";
 
 export type MarketChartOverlay = {
@@ -19,6 +31,8 @@ export type MarketChartOverlay = {
   label: string;
   color: string;
   values: Array<number | null>;
+  /** Told apart by colour and line style (02l §b5): EMA 21 is dashed. */
+  style?: "solid" | "dashed";
 };
 
 export type MarketChartPaneSeries = MarketChartOverlay & {
@@ -38,6 +52,8 @@ export type MarketChartLevel = {
   label: string;
   price: number | null;
   color?: string;
+  /** Dashed by default; pivots and prior-day levels are dotted (02l §b5). */
+  style?: "dashed" | "dotted";
 };
 
 export type MarketChartProps = {
@@ -49,7 +65,21 @@ export type MarketChartProps = {
   overlays?: MarketChartOverlay[];
   panes?: MarketChartPane[];
   levels?: MarketChartLevel[];
-  height?: number;
+  height?: number | "fill";
+  /** Pattern labels below the bar and fired-alert bells above it. */
+  markers?: ChartMarkerInput[];
+  /** Shade pre- and after-hours bars (`bars[].ext`). */
+  sessionShading?: boolean;
+  /** Volume columns in the bottom 20% of the main pane at 40% opacity. */
+  volume?: boolean;
+  /** Called on every cursor move with the values under the crosshair; null when it leaves the chart. */
+  onCrosshair?: (point: CrosshairPoint | null) => void;
+  /** Last price label on the price axis in the up/down colour (on by default, as before). */
+  lastPricePill?: boolean;
+  /** The workspace draws its own header, legend and value row; the card chrome is dropped. */
+  chrome?: "card" | "bare";
+  /** Values stay visible but dimmed (the quote connection dropped). */
+  dimmed?: boolean;
 };
 
 type PaneSeriesApi =
@@ -57,7 +87,7 @@ type PaneSeriesApi =
   | { kind: "histogram"; series: ISeriesApi<"Histogram", Time> };
 type Library = typeof import("lightweight-charts");
 
-function formatTime(time: Time): string {
+export function formatChartTime(time: Time): string {
   if (typeof time === "object") {
     const date = new Date(Date.UTC(time.year, time.month - 1, time.day));
     return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(date);
@@ -69,7 +99,7 @@ function formatTime(time: Time): string {
 function formatAsOf(value: string | null): string {
   if (value === null) return "as of unavailable";
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `as of ${value}`;
-  return `as of ${formatTime(Math.floor(Date.parse(value) / 1000) as UTCTimestamp)}`;
+  return `as of ${formatChartTime(Math.floor(Date.parse(value) / 1000) as UTCTimestamp)}`;
 }
 
 function formatValue(value: number | null | undefined): string {
@@ -100,6 +130,13 @@ export function MarketChart({
   panes = [],
   levels = [],
   height = 440,
+  markers = [],
+  sessionShading = false,
+  volume = false,
+  onCrosshair,
+  lastPricePill = true,
+  chrome = "card",
+  dimmed = false,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
@@ -109,7 +146,17 @@ export function MarketChart({
   const paneSeries = useRef(new Map<string, PaneSeriesApi>());
   const priceLines = useRef<IPriceLine[]>([]);
   const panePriceLines = useRef(new Map<string, IPriceLine[]>());
+  const volumeSeries = useRef<ISeriesApi<"Histogram", Time> | null>(null);
+  const shadeSeries = useRef<ISeriesApi<"Histogram", Time> | null>(null);
+  const markerPlugin = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const crosshairCallback = useRef(onCrosshair);
+  const fitKey = useRef<string | null>(null);
+  const paneSignature = useRef("");
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    crosshairCallback.current = onCrosshair;
+  }, [onCrosshair]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,14 +178,19 @@ export function MarketChart({
           vertLines: { color: "#2C2C30" },
           horzLines: { color: "#2C2C30" },
         },
+        crosshair: {
+          mode: module.CrosshairMode.Normal,
+          vertLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
+          horzLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
+        },
         rightPriceScale: { borderColor: "#2C2C30" },
         timeScale: {
           borderColor: "#2C2C30",
           timeVisible: true,
           secondsVisible: false,
-          tickMarkFormatter: (time: Time) => formatTime(time),
+          tickMarkFormatter: (time: Time) => formatChartTime(time),
         },
-        localization: { locale: "en-US", timeFormatter: formatTime },
+        localization: { locale: "en-US", timeFormatter: formatChartTime },
       });
       chart.current = currentChart;
       candles.current = currentChart.addSeries(module.CandlestickSeries, {
@@ -148,6 +200,25 @@ export function MarketChart({
         wickDownColor: "#FF453A",
         borderVisible: false,
       });
+      currentChart.subscribeCrosshairMove((param) => {
+        const callback = crosshairCallback.current;
+        const candleSeries = candles.current;
+        if (!callback || !candleSeries) return;
+        if (!param.time || !param.point) {
+          callback(null);
+          return;
+        }
+        const values: Record<string, { value?: number } | undefined> = {};
+        for (const [id, series] of overlaySeries.current) values[id] = param.seriesData.get(series) as { value?: number } | undefined;
+        for (const [id, entry] of paneSeries.current) values[id] = param.seriesData.get(entry.series) as { value?: number } | undefined;
+        const volumeEntry = volumeSeries.current ? param.seriesData.get(volumeSeries.current) : undefined;
+        callback(crosshairPoint(
+          param.time,
+          param.seriesData.get(candleSeries) as Parameters<typeof crosshairPoint>[1],
+          volumeEntry as Parameters<typeof crosshairPoint>[2],
+          values,
+        ));
+      });
       setReady(true);
     });
     return () => {
@@ -155,6 +226,11 @@ export function MarketChart({
       chart.current?.remove();
       chart.current = null;
       candles.current = null;
+      volumeSeries.current = null;
+      shadeSeries.current = null;
+      markerPlugin.current = null;
+      fitKey.current = null;
+      paneSignature.current = "";
       overlayMap.clear();
       paneMap.clear();
       priceLines.current = [];
@@ -184,9 +260,22 @@ export function MarketChart({
         series = currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2 });
         overlaySeries.current.set(overlay.id, series);
       }
-      series.applyOptions({ color: overlay.color, title: overlay.label });
+      series.applyOptions({
+        color: overlay.color,
+        title: overlay.label,
+        lineStyle: overlay.style === "dashed" ? chartLibrary.LineStyle.Dashed : chartLibrary.LineStyle.Solid,
+      });
       series.setData(lineData(bars, overlay.values));
     });
+
+    // When panes are added, removed or reordered the library renumbers them, so series that stay would sit in the
+    // wrong pane. Rebuild the pane series from scratch whenever the pane layout changes.
+    const signature = panes.map((pane) => `${pane.id}[${pane.series.map((item) => `${item.id}:${item.kind}`).join(",")}]`).join("|");
+    if (signature !== paneSignature.current) {
+      for (const entry of paneSeries.current.values()) currentChart.removeSeries(entry.series);
+      paneSeries.current.clear();
+      paneSignature.current = signature;
+    }
 
     const wantedPaneSeries = new Set(panes.flatMap(({ id, series }) => series.map((item) => `${id}:${item.id}`)));
     for (const [id, entry] of paneSeries.current) {
@@ -249,38 +338,81 @@ export function MarketChart({
     });
 
     for (const line of priceLines.current) candleSeries.removePriceLine(line);
-    priceLines.current = levels.flatMap(({ label, price, color }) => {
+    priceLines.current = levels.flatMap(({ label, price, color, style }) => {
       if (price === null || !Number.isFinite(price)) return [];
       return [candleSeries.createPriceLine({
         price,
         title: label,
         color: color ?? "#9B9BA1",
-        lineStyle: chartLibrary.LineStyle.Dashed,
+        lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
         lineWidth: 1,
         axisLabelVisible: true,
       })];
     });
 
+    candleSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
     candleSeries.setData(candlestickData(bars));
-    if (bars.length) currentChart.timeScale().fitContent();
-  }, [ready, symbol, interval, bars, overlays, panes, levels]);
+
+    if (volume && !volumeSeries.current) {
+      volumeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
+        priceScaleId: "",
+        priceFormat: { type: "volume" },
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      volumeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    } else if (!volume && volumeSeries.current) {
+      currentChart.removeSeries(volumeSeries.current);
+      volumeSeries.current = null;
+    }
+    volumeSeries.current?.setData(volumeData(bars));
+
+    if (sessionShading && !shadeSeries.current) {
+      shadeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
+        priceScaleId: "extended-hours",
+        priceFormat: { type: "volume" },
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      shadeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+    } else if (!sessionShading && shadeSeries.current) {
+      currentChart.removeSeries(shadeSeries.current);
+      shadeSeries.current = null;
+    }
+    shadeSeries.current?.setData(shadingData(bars));
+
+    if (!markerPlugin.current) markerPlugin.current = chartLibrary.createSeriesMarkers(candleSeries, []);
+    markerPlugin.current.setMarkers(seriesMarkers(bars, markers));
+
+    // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
+    const key = `${symbol}:${interval}`;
+    if (bars.length && fitKey.current !== key) {
+      currentChart.timeScale().fitContent();
+      fitKey.current = key;
+    }
+  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill]);
 
   const lastBar = bars.at(-1);
+  const bare = chrome === "bare";
   return (
-    <section className={styles.chartCard} aria-label={`${symbol} ${interval} market chart`}>
-      <header className={styles.chartHeader}>
+    <section
+      className={`${styles.chartCard} ${bare ? styles.bare : ""}`}
+      aria-label={`${symbol} ${interval} market chart`}
+      data-dim={dimmed ? "true" : undefined}
+    >
+      {!bare && <header className={styles.chartHeader}>
         <h2>{interval.toUpperCase()} chart · {symbol}</h2>
         <p><span>{qualityLabel(quality)}</span><span>{formatAsOf(asOf)}</span></p>
-      </header>
-      {(overlays.length > 0 || panes.length > 0) && <div className={styles.chartLegend}>
+      </header>}
+      {!bare && (overlays.length > 0 || panes.length > 0) && <div className={styles.chartLegend}>
         {overlays.map((overlay) => <span key={overlay.id}><i style={{ backgroundColor: overlay.color }} />{overlay.label}</span>)}
         {panes.map((pane) => <span key={pane.id}><strong>{pane.label}</strong> · {pane.series.map(({ label }) => label).join(" · ")}</span>)}
       </div>}
-      <div className={styles.canvasWrap} style={{ height }}>
+      <div className={styles.canvasWrap} style={height === "fill" ? { flex: "1 1 0", minHeight: 0 } : { height }}>
         <div ref={container} className={styles.canvas} aria-hidden="true" />
         {bars.length === 0 && <p className={styles.empty} role="status">No closed bars available for this symbol and timeframe.</p>}
       </div>
-      <div className={styles.currentValues} aria-label="Latest chart values">
+      {!bare && <div className={styles.currentValues} aria-label="Latest chart values">
         <span>Last close <strong>{formatValue(lastBar?.c)}</strong></span>
         {overlays.map((overlay) => (
           <span key={overlay.id}>{overlay.label} <strong>{formatValue(currentValue(overlay.values))}</strong></span>
@@ -288,7 +420,8 @@ export function MarketChart({
         {panes.flatMap((pane) => pane.series.map((series) => (
           <span key={`${pane.id}:${series.id}`}>{series.label} <strong>{formatValue(currentValue(series.values))}</strong></span>
         )))}
-      </div>
+      </div>}
+      <div className={styles.footerRow}>
       <details className={styles.dataTable}>
         <summary>Chart data table · {bars.length} source bars</summary>
         <div className={styles.tableScroll}>
@@ -301,6 +434,7 @@ export function MarketChart({
         </div>
       </details>
       <footer className={styles.chartFooter}><a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></footer>
+      </div>
     </section>
   );
 }

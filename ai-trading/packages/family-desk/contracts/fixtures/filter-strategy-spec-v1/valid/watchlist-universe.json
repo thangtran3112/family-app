@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "Watchlist volume",
+  "watch": {
+    "universe": {
+      "watchlist": "Core tech"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "op": "gte",
+    "left": {
+      "series": "rvol",
+      "lookbackDays": 10
+    },
+    "right": {
+      "value": 1.5
+    }
+  },
+  "maxResults": 25
+}

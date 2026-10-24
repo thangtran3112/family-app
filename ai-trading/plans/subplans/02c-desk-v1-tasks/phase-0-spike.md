@@ -2,7 +2,7 @@
 
 Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints and Shared Interfaces first. Results go in [02d-desk-spike-results.md](../02d-desk-spike-results.md).
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Tasks 0.1–0.4 are done (checked); the owner is waiting for IBKR to approve the data user. The main session runs Tasks 0.5 and 0.6 after that.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Tasks 0.1–0.4 are done (checked), and so is the Flex probe (Task 0.5 Step 3, 2026-10-24). The Gateway probe (Steps 1–2) runs Mon 2026-10-26 at 09:30 ET with the owner (phone approval for the data user's sign-in); the main session then runs Task 0.6. The data user's Reporting access grant is still open ([STATUS.md](../../STATUS.md) 2026-10-24 IBKR rows).
 
 **Goal:** Answer every 02a §12 check with evidence, and apply each check's decided fallback where it fails, before Phases 2, 3, and 6 commit to a gateway layout.
 
@@ -101,10 +101,10 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
 - [x] **Step 1: Create the data username** (02e Step 1).
 - [x] **Step 2: Subscribe the data username** (02e Step 2): the USD 10 bundle and the USD 4.50 streaming add-on; OPRA only if Task 0.5 shows it is needed.
 - [x] **Step 3: Paper account and data sharing** (02e Step 3). If there is no paper account, Task 0.5 probes the two-gateway fallback.
-- [ ] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). Reopened 2026-10-10: the profile had no Flex keys. The IBKR data user and Alpaca keys moved there from `temp/.env` as links to `shared/ibkr` and `shared/alpaca`. One account for the spike; Phase 5 adds the other with per-account key names.
+- [x] **Step 4: Flex query and token in `ai-trading/desk`** (02e Step 4). Done 2026-10-24: query `desk-holdings` and its token (expires 2027-09-24) are in Firestore. They were created on the main account as an interim path; they move to the data user's own query once its Reporting access is granted (STATUS.md 2026-10-24 IBKR rows). One account for the spike; Phase 5 adds the other with per-account key names.
 - [x] **Step 5: Install IB Gateway on the Mac** (02e Step 5).
 
-### Task 0.5: Run the probes and record the results (main session with the owner)
+### Task 0.5: Run the probes and record the results (main session with the owner; Steps 1–2 on Mon 2026-10-26, 09:30 ET)
 
 **Files:**
 - Modify: [02d-desk-spike-results.md](../02d-desk-spike-results.md) (checks 1, 3, 4, 7, 9)
@@ -126,7 +126,7 @@ The owner follows the step-by-step guide [02e-ibkr-data-user-setup.md](../02e-ib
   - The owner logs a second IB Gateway into the data username's live login, with Read-Only API on.
   - Run: `uv run ai-trading/tools/ibkr-probe/probe.py --port 4001 --out ai-trading/temp/spike/probe-live-data.json`
   - Expected: `paper: false`, and live streams.
-- [ ] **Step 3: Probe Flex.**
+- [x] **Step 3: Probe Flex.** Done 2026-10-24: `OpenPositions` returned 21 records at `LOT` level of detail.
   - Run: `common/config/family_config.py run ai-trading/desk -- uv run ai-trading/tools/ibkr-probe/flex_probe.py`
   - Expected: `OpenPositions` with `level_of_detail` including `LOT`.
 - [ ] **Step 4: Record the results in 02d.**

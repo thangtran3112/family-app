@@ -1,0 +1,17 @@
+[
+ {
+  "channel": "inbox",
+  "connected": true,
+  "locked": true
+ },
+ {
+  "channel": "telegram",
+  "configured": false,
+  "connected": false
+ },
+ {
+  "channel": "slack",
+  "configured": false,
+  "connected": false
+ }
+]

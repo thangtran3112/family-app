@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "gap-up",
+      "file": "filters/gap-up.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Gap up",
+      "summary": "Stocks gapping up through the prior day high."
+    }
+  ],
+  "generatedAt": "2026-10-23T14:30:00Z"
+}

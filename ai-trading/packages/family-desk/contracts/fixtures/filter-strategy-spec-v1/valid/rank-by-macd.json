@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "MACD cross",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "crosses_above",
+    "left": {
+      "series": "macd",
+      "line": "line",
+      "fast": 12,
+      "slow": 26,
+      "signal": 9
+    },
+    "right": {
+      "series": "macd",
+      "line": "signal",
+      "fast": 12,
+      "slow": 26,
+      "signal": 9
+    }
+  },
+  "rank": {
+    "by": {
+      "series": "macd",
+      "line": "histogram",
+      "fast": 12,
+      "slow": 26,
+      "signal": 9
+    },
+    "order": "desc"
+  },
+  "maxResults": 30
+}

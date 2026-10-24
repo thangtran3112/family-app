@@ -16,16 +16,29 @@ const bar = {
   l: 9,
   c: 11,
   v: 500,
+  ext: false,
 };
+
+const stamp = { as_of: "2026-10-20T14:35:00Z", source: "alpaca", quality: "delayed-15m", freshness: "delayed" };
 
 const warmingTechnicals = {
   symbol: "AAPL",
   quality: "eod",
   as_of: "2024-12-31",
+  timeframe: "1d",
+  bars_used: 12,
+  first_bar: null,
+  last_bar: null,
+  bias_ready: false,
+  indicators: null,
+  bias_history: null,
+  levels: null,
+  stamp,
   gauges: {
     summary: { label: "warming up", score: null, counts: null },
     oscillators: { label: "warming up", score: null, counts: null },
     moving_averages: { label: "warming up", score: null, counts: null },
+    strategies: null,
   },
   moving_averages: {
     sma_10: { values: { value: 101.89 }, action: "Buy" },
@@ -57,12 +70,13 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     interval: "5m",
     quality: "fallback",
     as_of: bar.t,
+    stamp,
     bars: [bar],
   };
   assert.deepEqual(BarsSchema.parse(validBars), validBars);
   assert.deepEqual(
-    BarsSchema.parse({ symbol: "AAPL", interval: "1d", quality: "unavailable", as_of: null, bars: [] }),
-    { symbol: "AAPL", interval: "1d", quality: "unavailable", as_of: null, bars: [] },
+    BarsSchema.parse({ symbol: "AAPL", interval: "1d", quality: "unavailable", as_of: null, stamp, bars: [] }),
+    { symbol: "AAPL", interval: "1d", quality: "unavailable", as_of: null, stamp, bars: [] },
   );
   assert.deepEqual(
     BarsSchema.parse({ ...validBars, interval: "1d", as_of: "2024-12-31", bars: [{ ...bar, t: "2024-12-31" }] }),
@@ -123,12 +137,20 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     streaming_slots: { used: 0, max: 70 },
     backups: null,
     reconciliation: null,
+    market: { session: "closed", next_open: "2026-10-26T13:30:00Z", last_close: "2026-10-23T20:00:00Z" },
+    quotes: stamp,
+    scans: { ...stamp, next_run_at: null },
+    alerts: { state: "running", unread: 0 },
   }), {
     gateway: "not_configured",
     data_sources: "unknown",
     streaming_slots: { used: 0, max: 70 },
     backups: null,
     reconciliation: null,
+    market: { session: "closed", next_open: "2026-10-26T13:30:00Z", last_close: "2026-10-23T20:00:00Z" },
+    quotes: stamp,
+    scans: { ...stamp, next_run_at: null },
+    alerts: { state: "running", unread: 0 },
   });
   assert.deepEqual(MeSchema.parse({ email: "desk-user" }), { email: "desk-user" });
   assert.deepEqual(WatchlistItemsSchema.parse([
@@ -183,6 +205,7 @@ test("as-of values accept source dates and UTC timestamps, not other offsets", (
     interval: "1m",
     quality: "realtime",
     as_of: bar.t,
+    stamp,
     bars: [bar],
   };
 
@@ -196,6 +219,7 @@ test("numeric API response schemas reject non-finite values", () => {
     interval: "1m",
     quality: "realtime",
     as_of: bar.t,
+    stamp,
     bars: [{ ...bar, c: Number.POSITIVE_INFINITY }],
   }).success, false);
   assert.equal(FuturesSpecsSchema.safeParse([{
@@ -215,5 +239,9 @@ test("numeric API response schemas reject non-finite values", () => {
     streaming_slots: { used: Number.POSITIVE_INFINITY, max: 70 },
     backups: null,
     reconciliation: null,
+    market: { session: "closed", next_open: "2026-10-26T13:30:00Z", last_close: "2026-10-23T20:00:00Z" },
+    quotes: stamp,
+    scans: { ...stamp, next_run_at: null },
+    alerts: { state: "running", unread: 0 },
   }).success, false);
 });

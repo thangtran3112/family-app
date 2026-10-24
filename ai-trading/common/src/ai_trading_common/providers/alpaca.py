@@ -1,4 +1,5 @@
-"""Alpaca bars: daily (eod), hourly and 1-minute (delayed-15m) history.
+"""Alpaca bars: daily (eod), hourly and 1-minute (delayed-15m) history; plus the screener universe
+(assets, most-actives, movers) and latest quotes (02m §b4 items 1 and 2).
 
 Adapted from `ai-trading/market-data/alpaca.py` (ours; open-source lane) and
 moved here per the Phase 2 reuse map (02a §11, "move"). No attribution notice
@@ -15,8 +16,9 @@ client class itself may be the `<Name>Source`").
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Literal
 from urllib.parse import quote
 
 import pandas as pd
@@ -26,9 +28,13 @@ from ai_trading_common.bars import Bars, Timeframe, drop_unclosed, to_utc, valid
 from ai_trading_common.errors import NoData, NotConfigured, ProviderError, Unavailable
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.quality import Quality
+from ai_trading_common.types import ActiveSymbol, Mover, Quote, UniverseAsset
 
 PROVIDER_NAME = "alpaca"
 BASE = "https://data.alpaca.markets/v2/stocks"
+SCREENER_BASE = "https://data.alpaca.markets/v1beta1/screener/stocks"
+#: The asset list is a trading-API call; a data-only (paper) key pair works against the paper host.
+DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"
 USER_AGENT = "ai-trading-common/0.1 (+family-desk; https://github.com/thangtran3112/family-app)"
 HOST_KEY = "alpaca"
 
@@ -46,10 +52,18 @@ _QUALITY: dict[Timeframe, Quality] = {"1d": "eod", "1h": "delayed-15m", "1m": "d
 class AlpacaBars:
     """Daily, hourly, and 1-minute bars from Alpaca's `/v2/stocks` market data API."""
 
-    def __init__(self, key_id: str, secret: str, *, http: ThrottledClient | None = None) -> None:
+    def __init__(
+        self,
+        key_id: str,
+        secret: str,
+        *,
+        http: ThrottledClient | None = None,
+        trading_url: str = DEFAULT_TRADING_URL,
+    ) -> None:
         self.key_id = key_id
         self.secret = secret
         self._http = http or ThrottledClient()
+        self._trading_url = trading_url.rstrip("/")
 
     def bars(
         self,
@@ -122,6 +136,121 @@ class AlpacaBars:
         except ValueError as exc:
             raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
 
+    def assets(self) -> list[UniverseAsset]:
+        """Every active, tradable US equity or ETF (`/v2/assets`): symbol, name, exchange."""
+        body = self._get_url(
+            f"{self._trading_url}/v2/assets", {"status": "active", "asset_class": "us_equity"}, "universe"
+        )
+        if not isinstance(body, list):
+            raise ProviderError(PROVIDER_NAME, "malformed asset list")
+        return [
+            UniverseAsset(
+                symbol=str(row["symbol"]),
+                name=str(row.get("name") or row["symbol"]),
+                exchange=str(row.get("exchange") or ""),
+                provider=PROVIDER_NAME,
+                quality="eod",
+            )
+            for row in body
+            if isinstance(row, dict) and row.get("symbol") and row.get("tradable", True)
+        ]
+
+    def most_actives(self, by: Literal["volume", "trades"], top: int) -> list[ActiveSymbol]:
+        body = self._get_url(f"{SCREENER_BASE}/most-actives", {"by": by, "top": str(top)}, "universe")
+        return [
+            ActiveSymbol(
+                symbol=str(row["symbol"]),
+                volume=_number(row.get("volume")),
+                trade_count=None if row.get("trade_count") is None else int(row["trade_count"]),
+                provider=PROVIDER_NAME,
+                quality="delayed-15m",
+            )
+            for row in body.get("most_actives") or []
+            if row.get("symbol")
+        ]
+
+    def movers(self, top: int) -> list[Mover]:
+        body = self._get_url(f"{SCREENER_BASE}/movers", {"top": str(top)}, "universe")
+        out: list[Mover] = []
+        for key, side in (("gainers", "gainer"), ("losers", "loser")):
+            for row in body.get(key) or []:
+                if row.get("symbol"):
+                    out.append(
+                        Mover(
+                            symbol=str(row["symbol"]),
+                            side=side,
+                            change_pct=_number(row.get("percent_change")),
+                            price=_number(row.get("price")),
+                            provider=PROVIDER_NAME,
+                            quality="delayed-15m",
+                        )
+                    )
+        return out
+
+    def latest(self, symbols: Sequence[str], *, now: pd.Timestamp | datetime) -> list[Quote]:
+        """The close of each symbol's newest closed 1-minute bar inside the SIP embargo (so 15 minutes
+        old at best, `delayed-15m`). A symbol with no bar in the last week is left out, not an error."""
+        if not (self.key_id and self.secret):
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
+        now_utc = to_utc(now)
+        end = now_utc - SIP_EMBARGO
+        out: list[Quote] = []
+        for symbol in symbols:
+            params = {
+                "timeframe": "1Min",
+                "start": (end - pd.Timedelta(days=7)).isoformat(),
+                "end": end.isoformat(),
+                "adjustment": "all",
+                "feed": "sip",
+                "sort": "desc",
+                "limit": "1",
+            }
+            try:
+                body = self._get(symbol, params)
+            except NoData:
+                continue
+            rows = body.get("bars") or []
+            if rows:
+                out.append(
+                    Quote(
+                        symbol=symbol,
+                        price=float(rows[0]["c"]),
+                        as_of=pd.Timestamp(rows[0]["t"]).tz_convert("UTC"),
+                        provider=PROVIDER_NAME,
+                        quality="delayed-15m",
+                    )
+                )
+        return out
+
+    def _get_url(self, url: str, params: dict, host_key: str) -> dict | list:
+        """A keyed GET returning decoded JSON; `host_key` separates the trading and screener hosts' throttles."""
+        if not (self.key_id and self.secret):
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
+        response = self._http.get(
+            url,
+            provider=PROVIDER_NAME,
+            host_key=f"{HOST_KEY}-{host_key}",
+            user_agent=USER_AGENT,
+            min_interval=MIN_INTERVAL_S,
+            params=params,
+            headers={"APCA-API-KEY-ID": self.key_id, "APCA-API-SECRET-KEY": self.secret},
+        )
+        if response.status_code in (401, 403):
+            raise NotConfigured(PROVIDER_NAME, f"key rejected (HTTP {response.status_code})")
+        if response.status_code != 200:
+            raise Unavailable(PROVIDER_NAME, f"HTTP {response.status_code}")
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise Unavailable(PROVIDER_NAME, f"malformed JSON body: {exc}") from exc
+
+
+def _number(value: object) -> float | None:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
 
 def _empty_frame(timeframe: Timeframe) -> pd.DataFrame:
     columns = ("open", "high", "low", "close", "volume")
@@ -157,7 +286,12 @@ def _to_frame(rows: list[dict], timeframe: Timeframe) -> pd.DataFrame:
 
 
 def _build(env: Mapping[str, str], http: ThrottledClient) -> AlpacaBars:
-    return AlpacaBars(env.get("ALPACA_API_KEY_ID", ""), env.get("ALPACA_API_SECRET_KEY", ""), http=http)
+    return AlpacaBars(
+        env.get("ALPACA_API_KEY_ID", ""),
+        env.get("ALPACA_API_SECRET_KEY", ""),
+        http=http,
+        trading_url=env.get("ALPACA_TRADING_URL") or DEFAULT_TRADING_URL,
+    )
 
 
-PROVIDER = Provider(name=PROVIDER_NAME, kinds=("bars",), build=_build)
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("bars", "universe", "quotes"), build=_build)

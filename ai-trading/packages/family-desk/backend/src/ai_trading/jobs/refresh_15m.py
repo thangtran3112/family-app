@@ -1,17 +1,16 @@
-"""The 15-minute in-session refresh (02 §8): backfills the day's forming session for every
-distinct stock watchlist symbol, then evaluates the live (`bar_close_*`) cadences against the
-freshly delayed bars. Stocks only -- futures stay `unavailable` without IBKR (D-c)."""
+"""The 15-minute in-session refresh (02 §8, 02m §b3): stores the newest delayed minutes for every watchlist
+symbol and every screener survivor (`data.refresher.intraday_pass`), recomputes their metrics and the 15-minute
+bias, runs the intraday filters, then evaluates the live (`bar_close_*`) cadences with `alerts.runtime.tick`.
+Stocks only -- futures stay `unavailable` without IBKR (D-c)."""
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from ai_trading_common.registry import DataSources
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.alerts.runtime import tick
 from ai_trading.core.calendar import ET, session
-from ai_trading.data.bars import upsert_bars
-from ai_trading.db.models import WatchlistItem
-from ai_trading.engine.tick import tick
+from ai_trading.data import refresher
 from ai_trading.jobs import JobResult
 
 NAME = "refresh_15m"
@@ -30,38 +29,30 @@ def due_now(now: datetime) -> bool:
     return et_now.minute % 15 == 0
 
 
+def next_due(now: datetime) -> datetime:
+    """The next instant after `now` at which `due_now` is true (the `/status` "next scan" time)."""
+    cursor = now.replace(second=0, microsecond=0) + timedelta(minutes=15 - now.minute % 15)
+    for _ in range(8 * 24 * 4):  # eight days of quarter hours covers any weekend or holiday run
+        if due_now(cursor):
+            return cursor
+        cursor += timedelta(minutes=15)
+    raise ValueError("no refresh slot within eight days")
+
+
 def run(session_: Session, data_sources: DataSources, *, now: datetime) -> JobResult:
-    """Fetches today's 1-minute bars for every distinct stock watchlist symbol directly from
-    `data_sources.bars` and `upsert_bars`s them, then runs `engine.tick.tick` for the live
-    cadences (quality stays `delayed-15m`: this job supplies fresher delayed bars, never realtime
-    ones).
+    """Fetches the newest 1-minute bars for the watchlist symbols (and, with the universe kind, the screener
+    survivors) directly from `data_sources.bars` and `upsert_bars`s them from each symbol's last stored bar, so a
+    later same-day call always stores whatever new minutes have closed since the previous one. The data feed's
+    health is recorded for the staleness guard, then `tick` runs for the live cadences (quality stays
+    `delayed-15m`: this job supplies fresher delayed bars, never realtime ones).
 
-    Integration fix: no longer routed through `ai_trading.data.backfill.backfill`.
-    `backfill()`'s own `missing_sessions` check only ever reports a whole day as "missing" when
-    *no* bar at all is stored for it yet (Phase 2a's own contract, built for filling
-    session-level gaps, not for continuously extending an already-started day) -- so once today's
-    first 1-minute bar landed, a later same-day `backfill()` call found nothing new to fetch
-    (REPORT-L3.md's own flagged limitation). Calling `data_sources.bars.bars()` directly every
-    time and letting `upsert_bars` (idempotent, closed-bars-only) do the merge means a later
-    same-day call always stores whatever new minutes have closed since the previous call.
+    Integration fix: no longer routed through `ai_trading.data.backfill.backfill` for today. `backfill()`'s own
+    `missing_sessions` check only ever reports a whole day as "missing" when *no* bar at all is stored for it yet,
+    so once today's first 1-minute bar landed, a later same-day `backfill()` found nothing new to fetch.
     """
-    today = now.astimezone(ET).date()
-    found = session("stock", today)
-    if found is None:
-        tick(session_, now=now, live_cadences=_LIVE_CADENCES)
-        return JobResult(NAME, ok=True)
-
-    symbols = (
-        session_.execute(select(WatchlistItem.symbol).where(WatchlistItem.asset_type == "stock").distinct())
-        .scalars()
-        .all()
-    )
-    for symbol in symbols:
-        bars = data_sources.bars.bars(symbol, "1m", found.extended_open, found.extended_close, now=now)
-        upsert_bars(session_, symbol, "1m", bars.frame, bars.source, "stock", now=now)
-
+    refresher.intraday_pass(session_, data_sources, now=now)
     tick(session_, now=now, live_cadences=_LIVE_CADENCES)
     return JobResult(NAME, ok=True)
 
 
-__all__ = ("NAME", "due_now", "run")
+__all__ = ("NAME", "due_now", "next_due", "run")

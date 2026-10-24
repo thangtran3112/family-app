@@ -39,7 +39,9 @@ from ai_trading_common.sources import (
     FundamentalsSource,
     MacroSource,
     NewsSource,
+    QuoteSource,
     TargetsSource,
+    UniverseSource,
 )
 
 __all__ = ("Kind", "Provider", "REGISTRY", "DEFAULT_CHAINS", "DataSources", "KIND_PROTOCOLS")
@@ -54,10 +56,12 @@ Kind = Literal[
     "consensus",
     "earnings",
     "targets",
+    "universe",
+    "quotes",
 ]
 
 #: Every kind, in `DataSources`' own field order. Fixed, not derived from `DEFAULT_CHAINS`, so
-#: `DataSources` is always built with all nine fields regardless of how small a custom
+#: `DataSources` is always built with all eleven fields regardless of how small a custom
 #: `registry=`/`defaults=` override is (a test overriding one kind still needs the rest).
 _KINDS: tuple[Kind, ...] = (
     "bars",
@@ -69,6 +73,8 @@ _KINDS: tuple[Kind, ...] = (
     "consensus",
     "earnings",
     "targets",
+    "universe",
+    "quotes",
 )
 
 
@@ -170,6 +176,28 @@ class _TargetsChain:
         return _chain_call(self.providers, "analyst_targets", symbol, now=now)
 
 
+@dataclass(frozen=True)
+class _UniverseChain:
+    providers: tuple[UniverseSource, ...]
+
+    def assets(self):
+        return _chain_call(self.providers, "assets")
+
+    def most_actives(self, by, top):
+        return _chain_call(self.providers, "most_actives", by, top)
+
+    def movers(self, top):
+        return _chain_call(self.providers, "movers", top)
+
+
+@dataclass(frozen=True)
+class _QuotesChain:
+    providers: tuple[QuoteSource, ...]
+
+    def latest(self, symbols, *, now):
+        return _chain_call(self.providers, "latest", symbols, now=now)
+
+
 #: Kind -> its chain class and its Protocol (the latter used by the conformance test to check
 #: each registered provider's adapter against every kind it claims to serve).
 _CHAIN_CLASSES: dict[Kind, type] = {
@@ -182,6 +210,8 @@ _CHAIN_CLASSES: dict[Kind, type] = {
     "consensus": _ConsensusChain,
     "earnings": _EarningsChain,
     "targets": _TargetsChain,
+    "universe": _UniverseChain,
+    "quotes": _QuotesChain,
 }
 
 KIND_PROTOCOLS: dict[Kind, type] = {
@@ -194,6 +224,8 @@ KIND_PROTOCOLS: dict[Kind, type] = {
     "consensus": ConsensusSource,
     "earnings": EarningsSource,
     "targets": TargetsSource,
+    "universe": UniverseSource,
+    "quotes": QuoteSource,
 }
 
 
@@ -219,7 +251,9 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
     "fundamentals": ("sec_edgar",),
     "macro": ("fred",),
     "news": ("finnhub",),
+    "quotes": ("alpaca",),
     "targets": ("eulerpool", "finnhub"),
+    "universe": ("alpaca",),
 }
 
 
@@ -237,6 +271,8 @@ class DataSources:
     consensus: ConsensusSource
     earnings: EarningsSource
     targets: TargetsSource
+    universe: UniverseSource
+    quotes: QuoteSource
 
     @staticmethod
     def from_env(

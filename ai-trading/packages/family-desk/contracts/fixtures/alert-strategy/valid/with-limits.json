@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "name": "Momentum alert with limits",
+  "watch": {
+    "universe": {
+      "watchlist": "Day movers"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "macd",
+      "line": "histogram",
+      "fast": 12,
+      "slow": 26,
+      "signal": 9
+    },
+    "right": {
+      "value": 0
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ],
+      "severity": "info"
+    }
+  },
+  "limits": {
+    "cooldownMinutes": 15,
+    "maxTradesPerDay": 4
+  }
+}

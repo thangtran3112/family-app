@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "draftId": "draft-config-target-filter-config-for-alert-target",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Tell me in the inbox when a watched name trades at 3x its usual volume on a 15-minute bar.",
+  "rationale": "A 3x RVOL alert on the Day movers list fires once per bar close, so it stays quiet between bars.",
+  "status": "proposed",
+  "target": "alert",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "name": "Volume leaders",
+    "watch": {
+      "universe": {
+        "market": "us_equities"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "liquidity": {
+      "minPrice": 5,
+      "minAvgVolume": 500000
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "rank": {
+      "by": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "order": "desc"
+    },
+    "maxResults": 25
+  },
+  "edits": []
+}

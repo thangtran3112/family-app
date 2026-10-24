@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "draftId": "final-alert-edits",
+  "createdAt": "2026-10-23T14:30:00Z",
+  "request": "Tell me in the inbox when a watched name trades at 3x its usual volume on a 15-minute bar.",
+  "rationale": "A 3x RVOL alert on the Day movers list fires once per bar close, so it stays quiet between bars.",
+  "status": "final",
+  "target": "alert",
+  "draftConfig": {
+    "schemaVersion": 1,
+    "name": "Volume spike alert",
+    "watch": {
+      "universe": {
+        "watchlist": "Day movers"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "then": {
+      "alert": {
+        "channels": [
+          "inbox",
+          "telegram"
+        ],
+        "severity": "info"
+      }
+    }
+  },
+  "edits": [
+    {
+      "op": "replace",
+      "path": "/then/alert/channels",
+      "value": [
+        "inbox",
+        "slack"
+      ]
+    },
+    {
+      "op": "remove",
+      "path": "/then/alert/severity"
+    }
+  ],
+  "finalConfig": {
+    "schemaVersion": 1,
+    "name": "Volume spike alert",
+    "watch": {
+      "universe": {
+        "watchlist": "Day movers"
+      },
+      "session": "regular",
+      "runOn": "bar_close_15m"
+    },
+    "when": {
+      "op": "gte",
+      "left": {
+        "series": "rvol",
+        "lookbackDays": 10
+      },
+      "right": {
+        "value": 3
+      }
+    },
+    "then": {
+      "alert": {
+        "channels": [
+          "inbox",
+          "slack"
+        ]
+      }
+    }
+  }
+}

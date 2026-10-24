@@ -50,7 +50,9 @@ def test_run_due_skips_jobs_that_are_not_due(monkeypatch):
 def test_run_due_runs_jobs_in_order_with_watchdog_last(monkeypatch):
     calls = []
     monkeypatch.setattr(scheduler, "_DUE_NOW", dict.fromkeys(scheduler._ORDER, lambda now: True))
-    monkeypatch.setattr(premarket, "run", lambda s, c, *, now: calls.append("premarket_0830") or JobResult("x", True))
+    monkeypatch.setattr(
+        premarket, "run", lambda s, c, *, now, data_sources: calls.append("premarket_0830") or JobResult("x", True)
+    )
     monkeypatch.setattr(daily_close, "run", lambda s, d, c, *, now: calls.append("daily_close") or JobResult("x", True))
     monkeypatch.setattr(weekly, "run", lambda s, c, *, now: calls.append("weekly") or JobResult("x", True))
     monkeypatch.setattr(
@@ -105,7 +107,9 @@ def test_a_late_wakeup_still_catches_up_premarket_exactly_once_this_call(monkeyp
     calls = []
     monkeypatch.setattr(scheduler, "_DUE_NOW", {**dict.fromkeys(scheduler._ORDER, lambda now: False)})
     monkeypatch.setitem(scheduler._DUE_NOW, "premarket_0830", lambda now: True)
-    monkeypatch.setattr(premarket, "run", lambda s, c, *, now: calls.append(now) or JobResult("premarket_0830", True))
+    monkeypatch.setattr(
+        premarket, "run", lambda s, c, *, now, data_sources: calls.append(now) or JobResult("premarket_0830", True)
+    )
 
     late_now = datetime(2026, 10, 6, 15, 0, tzinfo=UTC)  # long after the 08:30 ET slot
     results = scheduler.run_due(object(), _FakeSources(), JobClock(), now=late_now)
@@ -265,3 +269,19 @@ def test_healthcheck_main_exit_code_follows_heartbeat_freshness(tmp_path, monkey
 
     healthcheck.touch(path)
     assert healthcheck.main() == 0
+
+
+def test_run_due_hands_premarket_the_data_sources_the_refresher_needs(monkeypatch):
+    seen = []
+    monkeypatch.setattr(scheduler, "_DUE_NOW", {**dict.fromkeys(scheduler._ORDER, lambda now: False)})
+    monkeypatch.setitem(scheduler._DUE_NOW, "premarket_0830", lambda now: True)
+    monkeypatch.setattr(
+        premarket,
+        "run",
+        lambda s, c, *, now, data_sources: seen.append(data_sources) or JobResult("premarket_0830", True),
+    )
+    sources = _FakeSources()
+
+    scheduler.run_due(object(), sources, JobClock(), now=datetime(2026, 10, 6, 13, 30, tzinfo=UTC))
+
+    assert seen == [sources]

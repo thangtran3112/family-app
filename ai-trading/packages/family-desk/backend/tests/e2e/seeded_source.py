@@ -49,4 +49,6 @@ def data_sources(factory: sessionmaker[Session]) -> DataSources:
         consensus=unused,
         earnings=unused,
         targets=unused,
+        universe=unused,
+        quotes=unused,
     )

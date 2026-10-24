@@ -1,6 +1,6 @@
 # Release 2 Addendum A: Family Desk v1 (Strategies, Alerts, Paper Trading)
 
-Status: approved in conversation on 2026-10-10, section by section. The phased plan is [02c](02c-desk-v1-implementation-plan.md). [02](02-release-2-desk-design.md) keeps only the base sections this design still cites.
+Status: approved in conversation on 2026-10-10, section by section. The phased plan is [02c](02c-desk-v1-implementation-plan.md). Sequencing changed 2026-10-24: [02l](02l-desk-desktop-first-mvp.md) puts the desktop Technical-lane MVP (alerts, filters, recommendations; no orders, no backtests, no mobile) first, and paper trading, backtests, and mobile follow it. This design's scope is otherwise unchanged. [02](02-release-2-desk-design.md) keeps only the base sections this design still cites.
 
 Related:
 - [02b-desk-market-data-options.md](02b-desk-market-data-options.md): data research and the IBKR decision

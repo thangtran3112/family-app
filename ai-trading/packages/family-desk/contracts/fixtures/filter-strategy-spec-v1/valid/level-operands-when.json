@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "name": "Level breaks",
+  "watch": {
+    "universe": {
+      "market": "us_equities"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "any": [
+      {
+        "op": "crosses_above",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "level": "prior_day_high"
+        }
+      },
+      {
+        "op": "gt",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "level": "session_high"
+        }
+      },
+      {
+        "op": "lt",
+        "left": {
+          "series": "close"
+        },
+        "right": {
+          "level": "pivot",
+          "method": "classic",
+          "period": "session",
+          "point": "S1"
+        }
+      }
+    ]
+  },
+  "maxResults": 20
+}

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "bar_close_5m"
+  },
+  "when": {
+    "all": [
+      {
+        "op": "pattern",
+        "pattern": "bullish_engulfing",
+        "trend": "after_downtrend",
+        "trendBars": 10,
+        "withinBars": 2
+      },
+      {
+        "op": "gte",
+        "left": {
+          "series": "rvol",
+          "lookbackDays": 20
+        },
+        "right": {
+          "value": 1.5
+        }
+      },
+      {
+        "op": "time_between",
+        "start": "09:35",
+        "end": "11:30"
+      }
+    ]
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "telegram",
+        "inbox"
+      ],
+      "severity": "opportunity",
+      "frequency": "once_per_bar"
+    },
+    "paperOrder": {
+      "side": "buy",
+      "size": {
+        "riskUsd": 150
+      },
+      "stop": {
+        "atrMultiple": 1.5
+      },
+      "target": {
+        "r": 2
+      }
+    }
+  },
+  "limits": {
+    "maxTradesPerDay": 2,
+    "maxOpenPositions": 1,
+    "maxPositionUsd": 5000,
+    "flatBy": "15:45",
+    "pauseAfterDailyLossUsd": 300,
+    "cooldownMinutes": 30
+  }
+}

@@ -1,10 +1,17 @@
 import type { Quality } from "./labels.ts";
 
+export type QuoteFreshness = "live" | "delayed" | "closed" | "paused" | "unavailable";
+export type QuoteSession = "pre" | "regular" | "after" | "closed";
+
 export interface Quote {
   symbol: string;
   close: number;
   quality: Quality;
   as_of: string;
+  /** Added by the 02m contract; absent from older servers. */
+  freshness?: QuoteFreshness;
+  source?: string;
+  session?: QuoteSession;
 }
 
 type Subscriber = { onQuote: (quote: Quote) => void; onError?: (error: Error) => void };
@@ -17,6 +24,8 @@ type Stream = {
 
 const streams = new Map<string, Stream>();
 const qualities = new Set<Quality>(["realtime", "delayed-15m", "eod", "fallback", "unavailable"]);
+const freshnesses = new Set<string>(["live", "delayed", "closed", "paused", "unavailable"]);
+const sessions = new Set<string>(["pre", "regular", "after", "closed"]);
 let nextSubscriberId = 0;
 
 function parseQuote(data: string, symbol: string): Quote | undefined {
@@ -41,6 +50,9 @@ function parseQuote(data: string, symbol: string): Quote | undefined {
       close: quote.close,
       quality: quote.quality as Quality,
       as_of: quote.as_of,
+      ...(typeof quote.freshness === "string" && freshnesses.has(quote.freshness) ? { freshness: quote.freshness as QuoteFreshness } : {}),
+      ...(typeof quote.source === "string" ? { source: quote.source } : {}),
+      ...(typeof quote.session === "string" && sessions.has(quote.session) ? { session: quote.session as QuoteSession } : {}),
     };
   } catch {
     return;

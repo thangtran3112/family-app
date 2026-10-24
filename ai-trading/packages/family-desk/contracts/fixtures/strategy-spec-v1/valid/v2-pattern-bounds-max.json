@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture",
+  "watch": {
+    "universe": {
+      "watchlist": "Swing"
+    },
+    "session": "regular",
+    "runOn": "daily_close"
+  },
+  "when": {
+    "op": "pattern",
+    "pattern": "morning_star",
+    "trend": "after_downtrend",
+    "trendBars": 50,
+    "withinBars": 5
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox"
+      ]
+    }
+  }
+}

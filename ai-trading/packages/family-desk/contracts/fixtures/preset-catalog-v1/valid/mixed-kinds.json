@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "gap-up",
+      "file": "filters/gap-up.json",
+      "kind": "filter",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "Gap up",
+      "summary": "Stocks gapping up through the prior day high."
+    },
+    {
+      "id": "hod-break",
+      "file": "setups/hod-break.json",
+      "kind": "strategy",
+      "lane": "technical",
+      "category": "breakout",
+      "bias": "bullish",
+      "label": "High of day break",
+      "summary": "Alerts when price breaks above the high of the day."
+    }
+  ]
+}

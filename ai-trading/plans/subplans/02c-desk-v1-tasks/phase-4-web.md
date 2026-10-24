@@ -2,7 +2,7 @@
 
 Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints, Review Focus, and Shared Interfaces first. Builds on [Phase 3](phase-3-runtime-and-alerts.md), which is live in production: the Desk API runs, and Caddy already routes `/api/desk/*` behind the Clerk gate.
 
-**Status: defaults approved 2026-10-16; implementation in progress.** All eight defaults below are approved. IBKR remains blocked while waiting for the data user; this phase requires no broker login. Paths are from the repository root.
+**Status: done and live (2026-10-20).** All eight defaults below were approved 2026-10-16. Tasks 1–12 are merged and the Task 11 acceptance landed in PR #151. The hostname cutover shipped as release #155 and was rolled back on 2026-10-20 for a hub login return-flow defect; release #156 fixed that, and its recutover passed public acceptance (anonymous and forged-identity requests 401, signed-in routes 200, hub `/apps/desk` 404). This phase needed no broker login, and IBKR stays unconnected until Phase 2b. Paths are from the repository root.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Subagents work in a `.worktrees/` worktree on their own `feature/*` branch; the main session merges that branch into `feature/toby` (root `AGENTS.md`).
 

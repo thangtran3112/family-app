@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "name": "Gap up alert",
+  "watch": {
+    "universe": {
+      "watchlist": "Gappers"
+    },
+    "session": "extended",
+    "runOn": "premarket_0830"
+  },
+  "when": {
+    "op": "gt",
+    "left": {
+      "series": "gap_pct"
+    },
+    "right": {
+      "value": 5
+    }
+  },
+  "then": {
+    "alert": {
+      "channels": [
+        "inbox",
+        "telegram"
+      ],
+      "severity": "opportunity"
+    }
+  }
+}

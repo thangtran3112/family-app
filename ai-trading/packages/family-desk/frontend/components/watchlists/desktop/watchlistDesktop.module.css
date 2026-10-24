@@ -1,0 +1,53 @@
+/* Watchlists desktop (02l §b2, 02m §a3.5, D7): header, dense table, manage mode, strategies rail. */
+
+.root { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.header { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
+.titleGroup, .actions, .row, .links { display: flex; min-width: 0; align-items: center; gap: var(--space-2); }
+.title { margin: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); text-overflow: ellipsis; white-space: nowrap; }
+.body { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.caption, .muted, .feedback { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.muted { font-size: var(--text-label); }
+.feedback { color: var(--color-text); }
+.error { margin: 0; color: var(--color-down); font-size: var(--text-label); }
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.flat { color: var(--color-muted); }
+
+.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--color-raised); }
+.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+.button[aria-pressed="true"], .primary { border-color: var(--color-amber); color: var(--color-amber); }
+.danger { border-color: var(--color-down); color: var(--color-down); }
+.small { min-height: 24px; padding: 0 var(--space-2); }
+.iconButton { display: inline-flex; width: 24px; height: 24px; flex: 0 0 auto; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0; color: var(--color-muted); font-size: var(--text-micro); cursor: pointer; }
+.iconButton:hover:not(:disabled) { background: var(--color-raised); color: var(--color-text); }
+.iconButton:disabled { opacity: 0.35; cursor: default; }
+.button:focus-visible, .iconButton:focus-visible, .field input:focus-visible, .field select:focus-visible, .link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+.link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
+.link:hover { text-decoration: underline; }
+
+/* Table cells (DenseTable 28 px rows) */
+.symbol { display: block; font-weight: var(--weight-bold); }
+.name { display: block; max-width: 180px; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-regular); text-overflow: ellipsis; }
+.chip, .armedChip { display: inline-flex; min-height: 20px; align-items: center; margin-right: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-text); font-size: var(--text-micro); }
+.armedChip { border-color: var(--color-amber); color: var(--color-amber); }
+
+/* Manage mode */
+.section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding-bottom: var(--space-3); }
+.sectionTitle, .heading { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--color-muted); font-size: var(--text-micro); }
+.field input, .field select { min-height: 32px; min-width: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); }
+.field select { cursor: pointer; }
+.field input:hover, .field select:hover { background: var(--color-raised); }
+.grow { flex: 1; }
+.rows { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
+.symbolRow, .strategyRow { display: flex; min-height: 28px; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); }
+.pending { color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
+.confirm { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
+.ellipsis { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Right rail: strategies on this list */
+.strategies { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.strategyRow { font-size: var(--text-label); }
+.slots { color: var(--color-muted); font-size: 12px; white-space: nowrap; }
