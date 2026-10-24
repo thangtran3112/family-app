@@ -52,7 +52,7 @@ test("Settings shows the Technical default, channels, quiet hours, data sources 
   await expect(page.getByRole("region", { name: "Market data" }).getByRole("listitem")).toHaveText([
     "Quotes: Alpaca · Delayed 15 min",
     "Scans: Alpaca · Delayed 15 min",
-    "IBKR gateway: not connected",
+    "Live IBKR quotes: not turned on · using delayed quotes",
     "Quote slots: 0 of 70",
     COPY.alertsNotStarted,
   ]);
