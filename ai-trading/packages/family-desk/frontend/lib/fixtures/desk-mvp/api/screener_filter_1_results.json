@@ -1,0 +1,270 @@
+{
+ "evaluation_point": "2026-10-23T19:45:00Z",
+ "filter_id": 1,
+ "liquidity": {
+  "avgVolumeDays": null,
+  "minAvgVolume": 500000,
+  "minPrice": 5.0
+ },
+ "matches": [
+  {
+   "columns": {
+    "atr_pct_14": 9.2672,
+    "avg_volume_20d": 666063.0,
+    "change_pct": 49.642,
+    "dist_to_252d_high_pct": -19.41,
+    "gap_pct_open": 66.587,
+    "high_252d": 7.78,
+    "last": 6.27,
+    "prev_close": 4.19,
+    "rsi_14": 79.7286,
+    "rvol_10d": 461.779,
+    "rvol_intraday_10d_at_close": null,
+    "volume": 12883312.0,
+    "vs_vwap_pct": -9.939,
+    "vwap_close": 6.962
+   },
+   "matched_since": "2026-10-23T18:00:00Z",
+   "operands": {
+    "rvol(10)": 472.720678
+   },
+   "rank_value": 472.720678,
+   "symbol": "BOLT"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 5.8646,
+    "avg_volume_20d": 4256419.0,
+    "change_pct": -22.474,
+    "dist_to_252d_high_pct": -51.5,
+    "gap_pct_open": -19.181,
+    "high_252d": 35.92,
+    "last": 17.42,
+    "prev_close": 22.47,
+    "rsi_14": 22.3154,
+    "rvol_10d": 6.6826,
+    "rvol_intraday_10d_at_close": 7.677,
+    "volume": 23405884.0,
+    "vs_vwap_pct": -1.828,
+    "vwap_close": 17.7444
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 7.677417
+   },
+   "rank_value": 7.677417,
+   "symbol": "LKQ"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 0.4015,
+    "avg_volume_20d": 6023454.0,
+    "change_pct": -0.108,
+    "dist_to_252d_high_pct": -3.02,
+    "gap_pct_open": 0.036,
+    "high_252d": 28.49,
+    "last": 27.63,
+    "prev_close": 27.66,
+    "rsi_14": 62.5186,
+    "rvol_10d": 14.1121,
+    "rvol_intraday_10d_at_close": 6.641,
+    "volume": 48137034.0,
+    "vs_vwap_pct": -0.016,
+    "vwap_close": 27.6345
+   },
+   "matched_since": "2026-10-23T14:30:00Z",
+   "operands": {
+    "rvol(10)": 6.640691
+   },
+   "rank_value": 6.640691,
+   "symbol": "SPTI"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 4.6924,
+    "avg_volume_20d": 2013901.0,
+    "change_pct": 21.736,
+    "dist_to_252d_high_pct": -2.69,
+    "gap_pct_open": 11.319,
+    "high_252d": 47.14,
+    "last": 45.87,
+    "prev_close": 37.68,
+    "rsi_14": 76.1427,
+    "rvol_10d": 3.9891,
+    "rvol_intraday_10d_at_close": 5.237,
+    "volume": 6899155.0,
+    "vs_vwap_pct": 1.012,
+    "vwap_close": 45.4106
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 5.237476
+   },
+   "rank_value": 5.237476,
+   "symbol": "RHI"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 8.2845,
+    "avg_volume_20d": 4476183.0,
+    "change_pct": -16.434,
+    "dist_to_252d_high_pct": -32.13,
+    "gap_pct_open": -8.557,
+    "high_252d": 34.39,
+    "last": 23.34,
+    "prev_close": 27.93,
+    "rsi_14": 47.7222,
+    "rvol_10d": 3.8029,
+    "rvol_intraday_10d_at_close": 4.387,
+    "volume": 15853262.0,
+    "vs_vwap_pct": -2.146,
+    "vwap_close": 23.8518
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 4.387339
+   },
+   "rank_value": 4.387339,
+   "symbol": "TNGX"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 3.3735,
+    "avg_volume_20d": 7096908.0,
+    "change_pct": -9.266,
+    "dist_to_252d_high_pct": -32.73,
+    "gap_pct_open": -7.78,
+    "high_252d": 15.43,
+    "last": 10.38,
+    "prev_close": 11.44,
+    "rsi_14": 25.3174,
+    "rvol_10d": 4.0475,
+    "rvol_intraday_10d_at_close": 4.323,
+    "volume": 24247166.0,
+    "vs_vwap_pct": -0.845,
+    "vwap_close": 10.4684
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 4.323052
+   },
+   "rank_value": 4.323052,
+   "symbol": "FLG"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 28.9155,
+    "avg_volume_20d": 3120218.0,
+    "change_pct": -22.411,
+    "dist_to_252d_high_pct": -80.86,
+    "gap_pct_open": -12.947,
+    "high_252d": 86.12,
+    "last": 16.48,
+    "prev_close": 21.24,
+    "rsi_14": 32.8764,
+    "rvol_10d": 3.8878,
+    "rvol_intraday_10d_at_close": 4.144,
+    "volume": 10554669.0,
+    "vs_vwap_pct": -0.522,
+    "vwap_close": 16.5665
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 4.144345
+   },
+   "rank_value": 4.144345,
+   "symbol": "BEX"
+  },
+  {
+   "columns": {
+    "atr_pct_14": 3.9517,
+    "avg_volume_20d": 5685220.0,
+    "change_pct": 9.057,
+    "dist_to_252d_high_pct": -10.05,
+    "gap_pct_open": 15.464,
+    "high_252d": 95.58,
+    "last": 85.97,
+    "prev_close": 78.83,
+    "rsi_14": 72.1565,
+    "rvol_10d": 2.6701,
+    "rvol_intraday_10d_at_close": 2.913,
+    "volume": 17325799.0,
+    "vs_vwap_pct": -1.452,
+    "vwap_close": 87.2363
+   },
+   "matched_since": "2026-10-23T13:30:00Z",
+   "operands": {
+    "rvol(10)": 2.912699
+   },
+   "rank_value": 2.912699,
+   "symbol": "CCI"
+  }
+ ],
+ "matches_returned": 8,
+ "matches_total": 9,
+ "name": "Abnormal volume",
+ "no_data_on_eval_day": 0,
+ "rank": {
+  "by": {
+   "lookbackDays": 10,
+   "series": "rvol"
+  },
+  "order": "desc"
+ },
+ "run_on": "bar_close_15m",
+ "scanned": 131,
+ "session": "regular",
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "table_columns": [
+  {
+   "format": "price",
+   "key": "last",
+   "label": "Last"
+  },
+  {
+   "format": "ratio",
+   "key": "rvol_10d",
+   "label": "RVOL"
+  },
+  {
+   "format": "pct_signed",
+   "key": "change_pct",
+   "label": "Change %"
+  },
+  {
+   "format": "compact",
+   "key": "volume",
+   "label": "Volume"
+  },
+  {
+   "format": "pct",
+   "key": "atr_pct_14",
+   "label": "ATR %"
+  },
+  {
+   "format": "pct_signed",
+   "key": "gap_pct_open",
+   "label": "Gap %"
+  },
+  {
+   "format": "number",
+   "key": "rsi_14",
+   "label": "RSI"
+  },
+  {
+   "format": "pct_signed",
+   "key": "vs_vwap_pct",
+   "label": "vs VWAP %"
+  },
+  {
+   "format": "time",
+   "key": "matched_since",
+   "label": "Since"
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "detail": {
+  "problems": [
+   {
+    "message": "the first alert channel must be inbox",
+    "path": "then.alert.channels"
+   }
+  ]
+ }
+}

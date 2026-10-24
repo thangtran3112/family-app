@@ -1,0 +1,10 @@
+{
+ "problems": [
+  {
+   "message": "the first alert channel must be inbox",
+   "path": "then.alert.channels"
+  }
+ ],
+ "resolved_symbols": [],
+ "run_on": null
+}
