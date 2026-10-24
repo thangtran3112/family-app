@@ -494,6 +494,24 @@ print("\n".join(service for services in data["apps"].values() for service in ser
 ' "$CONTROL_SCRATCH_DIR/control/catalog.json"
 }
 
+# migrate_desk_db: run the Desk's Alembic migrations from the NEW image
+# against the shared Postgres BEFORE the new api containers start, so the
+# database schema always matches the code being deployed (the api container
+# itself only runs uvicorn; CI and the local stack run this same upgrade in
+# their own harnesses). One-off `compose run --rm --no-deps api`, so it uses
+# the api service's own env_file/networks and never starts a second server.
+# A failure dies the deploy before any container swap, leaving the running
+# (old) stack untouched for the rollback path. No-op when the Desk api
+# service is not in this run's selected list.
+migrate_desk_db() {
+  local selected_text
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$(mirofish_ready_flag)")" \
+    || die "control: failed to compute the selected service list"
+  [[ $'\n'"$selected_text"$'\n' == *$'\napi\n'* ]] || return 0
+  compose run --rm --no-deps api python -c "import os; from alembic import command; from alembic.config import Config; c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', os.environ['DESK_RUNTIME_DATABASE_URL']); command.upgrade(c, 'head')" \
+    || die "desk db migration failed (alembic upgrade head) -- schema left at its previous revision and no container was swapped"
+}
+
 # apply_selected_services: explicit, catalog-driven service selection --
 # task-5-brief's own snippet, verbatim in spirit: never a blanket
 # `compose up` that could silently revive an intentionally disabled group.
@@ -1190,6 +1208,9 @@ deploy_tag() {
     # sets the switch flag only just before Compose first mutates services.
     verify_vibe_gate_before_switch || return 1
   fi
+  # Desk database migrations: after the new image is pulled but BEFORE any
+  # container is swapped (see migrate_desk_db above).
+  migrate_desk_db
   # Task 5 (app-controls): explicit, catalog-driven selection -- never a
   # blanket `up` (which would silently revive an intentionally disabled
   # group) and never `--remove-orphans` (this phase defines no removed
