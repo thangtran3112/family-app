@@ -170,6 +170,7 @@ jobs:
   desk-e2e-services:
     name: Desk E2E services (Part A)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -213,6 +214,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
           pnpm exec playwright install --with-deps chromium
+      # The proxy tests, the Playwright suite (the legacy specs, then one spec per board family at 1440x900 and
+      # 1180x820 on the Technical seed) and the real-HTTP and frozen-clock alert-path checks (02m d5).
       - name: Run isolated real-HTTP, proxy, and Chromium E2E
         working-directory: ai-trading/packages/family-desk/backend
         env:
@@ -220,6 +223,14 @@ jobs:
         run: |
           uv sync --locked
           uv run python tests/e2e/run.py
+      - name: Keep Playwright traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk-e2e-traces
+          path: ai-trading/packages/family-desk/frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   scripts:
     name: Scripts and compose
