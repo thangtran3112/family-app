@@ -6086,6 +6086,7 @@
     },
     "/api/desk/screener/filters/{filter_id}/results": {
       "get": {
+        "description": "The filter's newest stored run. Before its first run it answers 200 with no matches and an\n`unavailable` stamp (no `as_of`), so the screen can say \"Waiting for the first scan\" without an error.",
         "operationId": "get_results_api_desk_screener_filters__filter_id__results_get",
         "parameters": [
           {
@@ -6148,6 +6149,7 @@
     },
     "/api/desk/screener/preview": {
       "post": {
+        "description": "Evaluate an unsaved spec over the stored universe, never a provider, within `PREVIEW_BUDGET_SECONDS`.\nOver budget it answers `matches_total: null` and no `top` (a partial ranking would mislead).",
         "operationId": "preview_api_desk_screener_preview_post",
         "requestBody": {
           "content": {

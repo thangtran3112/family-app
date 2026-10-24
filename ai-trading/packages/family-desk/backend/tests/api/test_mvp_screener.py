@@ -1,4 +1,5 @@
-"""`/api/desk/screener*` in stub mode (02m §a3.4): response shapes, the 409/404/422 rules, and 503 with the flag off."""
+"""`/api/desk/screener*` in stub mode (02m §a3.4): response shapes and the 409/404/422 rules. The real path is
+`test_screener_real.py`."""
 
 import pytest
 from conftest import auth_headers
@@ -162,26 +163,9 @@ def test_universe_gives_the_scan_basis_and_counts(client, stub_on):
     assert body["liquidity_floor"] == {"minPrice": 5, "minAvgVolume": 500000, "avgVolumeDays": 20}
 
 
-@pytest.mark.parametrize(
-    ("method", "path", "body"),
-    [
-        ("GET", "/filters", None),
-        ("GET", "/filters/1", None),
-        ("GET", "/filters/1/results", None),
-        ("GET", "/universe", None),
-        ("POST", "/filters", {"copy_of": 1}),
-        ("PUT", "/filters/1", {"spec": ABNORMAL_VOLUME}),
-        ("DELETE", "/filters/1", None),
-    ],
-)
-def test_stub_only_routes_answer_503_with_the_flag_off(client, method, path, body):
-    response = client.request(method, f"{BASE}{path}", json=body, headers=auth_headers())
-    assert response.status_code == 503
-
-
 def test_validation_is_real_with_the_flag_off(client):
     valid = client.post(f"{BASE}/preview", json={"spec": ABNORMAL_VOLUME}, headers=auth_headers()).json()
-    assert valid == {"problems": [], "matches_total": None, "scanned": 0, "top": []}
+    assert valid == {"problems": [], "matches_total": 0, "scanned": 0, "top": []}  # an empty store: nothing to scan
     bad = {**ABNORMAL_VOLUME, "watch": {**ABNORMAL_VOLUME["watch"], "runOn": "monthly"}}
     invalid = client.post(f"{BASE}/preview", json={"spec": bad}, headers=auth_headers()).json()
     assert invalid["problems"][0]["path"] == "watch.runOn"

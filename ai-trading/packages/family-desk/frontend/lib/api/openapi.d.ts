@@ -393,7 +393,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Results */
+        /**
+         * Get Results
+         * @description The filter's newest stored run. Before its first run it answers 200 with no matches and an
+         *     `unavailable` stamp (no `as_of`), so the screen can say "Waiting for the first scan" without an error.
+         */
         get: operations["get_results_api_desk_screener_filters__filter_id__results_get"];
         put?: never;
         post?: never;
@@ -412,7 +416,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Preview */
+        /**
+         * Preview
+         * @description Evaluate an unsaved spec over the stored universe, never a provider, within `PREVIEW_BUDGET_SECONDS`.
+         *     Over budget it answers `matches_total: null` and no `top` (a partial ranking would mislead).
+         */
         post: operations["preview_api_desk_screener_preview_post"];
         delete?: never;
         options?: never;
