@@ -13,6 +13,7 @@ from ai_trading.api.schemas.platform import StatusAlertsOut, StatusMarketOut, St
 from ai_trading.api.stamp import feed_last_ok, make_stamp
 from ai_trading.core.freshness import market_state
 from ai_trading.db.models import Alert
+from ai_trading.jobs.refresh_15m import next_due
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
 
@@ -67,7 +68,8 @@ def status(
     return StatusOut(
         market=StatusMarketOut(session=market.session, next_open=market.next_open, last_close=market.last_close),
         quotes=quotes,
-        scans=StatusScansOut(**scans.model_dump(), next_run_at=None),
+        # A scheduler that never ran has no next scan to promise.
+        scans=StatusScansOut(**scans.model_dump(), next_run_at=None if scans.as_of is None else next_due(now)),
         alerts=StatusAlertsOut(state=alert_state(session, user.id, now), unread=unread),
         gateway="not_configured",
         data_sources="alpaca" if quotes.as_of is not None else "unknown",

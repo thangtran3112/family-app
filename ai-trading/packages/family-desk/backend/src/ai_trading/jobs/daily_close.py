@@ -1,7 +1,9 @@
 """`daily_close`: appends every watchlist symbol's closed daily bar, then evaluates `daily_close`
-strategies (Lane L3). Only the day's bars and the daily evaluation -- IV and consensus-snapshot
-collection are Phase 5's job, which actually consumes them (PROTO-BRIEF §5/§9, following the
-brief's explicit L5 table over 02c's own older one-liner, per the brief's §9 ruling)."""
+strategies (Lane L3). With a `DataSources` that has the universe kind it also refreshes the screener's daily
+numbers and runs the `daily_close` filters (`data.refresher.daily_pass`, 02m §b3). Only the day's bars and the
+daily evaluation -- IV and consensus-snapshot collection are Phase 5's job, which actually consumes them
+(PROTO-BRIEF §5/§9, following the brief's explicit L5 table over 02c's own older one-liner, per the brief's
+§9 ruling)."""
 
 from datetime import datetime, time
 
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ai_trading.alerts.runtime import tick
 from ai_trading.core.calendar import ET, session
+from ai_trading.data import refresher
 from ai_trading.data.backfill import backfill
 from ai_trading.db.models import WatchlistItem
 from ai_trading.jobs import JobResult
@@ -47,12 +50,17 @@ def run(session_: Session, data_sources: DataSources, clock: JobClock, *, now: d
     here rather than attempted and failed; `evaluate()` still runs for it against whatever daily
     bars happen to exist (none, today), producing zero candidates rather than an error.
     """
-    today = now.astimezone(ET).date()
-    symbols = session_.execute(select(WatchlistItem.symbol, WatchlistItem.asset_type).distinct()).all()
-    for symbol, asset_type in symbols:
-        if asset_type != "stock":
-            continue
-        backfill(session_, symbol, "1d", asset_type, today, today, bars_source=data_sources.bars, now=now)
+    if refresher.scan_enabled(data_sources):
+        report = refresher.daily_pass(session_, data_sources, now=now)  # the watchlists' bars and the screener's
+        if report.state == "down":  # the provider answered nothing: stay unmarked so the next tick retries
+            return JobResult(NAME, ok=False, error="market data unavailable")
+    else:
+        today = now.astimezone(ET).date()
+        symbols = session_.execute(select(WatchlistItem.symbol, WatchlistItem.asset_type).distinct()).all()
+        for symbol, asset_type in symbols:
+            if asset_type != "stock":
+                continue
+            backfill(session_, symbol, "1d", asset_type, today, today, bars_source=data_sources.bars, now=now)
 
     tick(session_, now=now, live_cadences=frozenset({NAME}))
     clock.mark(NAME, now.date())
