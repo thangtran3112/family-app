@@ -631,6 +631,24 @@ stops reporting for five minutes is started again by the next open. No scheduler
 `universe_days` read path (v1 lists use today's Desk set, capped at 250 by today's dollar volume, and say so); the firstDay
 post-ship default; day-ordered prep readiness; day-scope `maxLoss` and `maxTrades` across sessions.
 
+**02o-b2 built (2026-10-25, `feature/desk-o-b2`).** The switch protocol on the shared day clock and `maxSymbols` (commit
+3d33db18; migration `0008`), then the two read paths below. Still deferred: the block page and per-day schedule, and
+day-ordered prep readiness.
+- **Re-scan at the playhead.** `POST /replay/day-lists/{id}/rescan` runs the day's filters again at the day clock with the
+  filter versions the list used, the list's universe, and every input cut `LIST_DATA_LAG` before the clock (the same
+  `build_list`). A scan is a row in `replay_day_scans` (`seq`, `as_of` = the clock it ran at, `data_through`); the frozen list,
+  its stars and its review are never touched. A second scan at the same clock returns the first; a 409 before the first
+  name is practised (no clock), before the list time, and after the day ends. `DayListOut.rescan` carries the latest scan,
+  and a name the list did not hold is `new_since_list`: it is for reading, never starred or practised (the list is the day's
+  universe). Web: "Re-scan at the day clock" section under the table, "Scan 2 · run at 10:00 AM ET · data through 9:45 AM",
+  a stale note once the clock moves past the scan, and the scan stays readable after End day.
+- **`universe_days` read path.** `GET /replay/universe-days[?day=]` returns the recording's coverage, the plan form's
+  `first_day_default` (the first recorded day once 20 finished days since it exist, else null with the reason in
+  `first_day_note`), and with `day` that morning's names. A day with a recorded morning scans those names (cut to the plan's
+  prepared set, and says how many it left out); a day before the recording says in its footnote that it scans today's Desk set,
+  which may hold names that were not on the Desk then (`ListUniverseOut.membership`, stored on the list). The footnote still
+  never names the day. Web: the plan form defaults the first day to the server's pick unless she chose one, and prints the note.
+
 **Moved to 02r (owner, 2026-10-25).** The PLAN/risk fields (Shares, Stop on every entry, Trade only on a signal, Max loss,
 Max trades, Plan note) leave the daily-list setup form and become thread-level settings on a practice thread with a paper
 balance (defect D-006); arming as a thread/session concern is re-examined there too. See
