@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canRequest, initialPlayer, playerReducer, statusLine, type PlayerAction, type PlayerState } from "./player.ts";
+import { canRequest, initialPlayer, playerPillText, playerReducer, statusLine, type PlayerAction, type PlayerState } from "./player.ts";
 
 const run = (actions: PlayerAction[], start: PlayerState = initialPlayer()) => actions.reduce(playerReducer, start);
 
@@ -57,4 +57,11 @@ test("the status line reads ready at the open, then paused, playing and window e
   assert.equal(statusLine("playing", 5, "2026-04-07T14:07:12Z", start), "Playing at 5x");
   assert.equal(statusLine("at_end", 1, "2026-04-07T20:00:00Z", start), "Window end · 4:00 PM");
   assert.equal(statusLine("loading", 1, start, start), "Preparing the replay…");
+});
+
+test("the header pill names the player's state and the speed it plays at", () => {
+  assert.equal(playerPillText("playing", 5), "Playing · 5x");
+  assert.equal(playerPillText("paused", 1), "Paused");
+  assert.equal(playerPillText("at_end", 1), "Window end");
+  assert.equal(playerPillText("loading", 1), "Loading");
 });

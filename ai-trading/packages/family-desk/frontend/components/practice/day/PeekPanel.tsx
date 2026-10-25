@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { changeTone, EMPTY_VALUE, formatPrice, formatSignedPct } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import type { Peek } from "@/lib/replay/daily";
+import type { Candidate, Peek } from "@/lib/replay/daily";
 import { peekDailyBars } from "@/lib/replay/dayView";
 import styles from "./day.module.css";
 
@@ -30,6 +31,7 @@ function levelLines(peek: Peek, view: "daily" | "today"): MarketChartLevel[] {
  */
 export function PeekPanel({
   symbol,
+  row,
   peek,
   loading,
   failed,
@@ -37,6 +39,8 @@ export function PeekPanel({
   hideDates,
 }: {
   symbol: string | null;
+  /** The list row of the peeked name: its prev close, list-price change and earnings flag (P7's facts under the chart). */
+  row: Candidate | null;
   peek: Peek | null;
   loading: boolean;
   failed: boolean;
@@ -56,6 +60,7 @@ export function PeekPanel({
     <div className={styles.peek}>
       <div className={styles.peekHead}>
         <h3 className={styles.peekTitle}>{peek.symbol}</h3>
+        {hideDates && <span className={styles.chip}>Dates hidden</span>}
         <div role="tablist" aria-label="Peek view" className={styles.tabs}>
           {(["today", "daily"] as const).map((tab) => (
             <button key={tab} type="button" role="tab" aria-selected={view === tab} className={styles.tab} onClick={() => setView(tab)}>
@@ -93,7 +98,23 @@ export function PeekPanel({
           height={260}
         />
       )}
-      <p className={styles.muted}>{view === "daily" || !showToday ? PRACTICE_COPY.dayPeekDaily : "Premarket bars through the list's data time"}</p>
+      <p className={styles.muted}>{view === "daily" || !showToday ? PRACTICE_COPY.dayPeekDaily : PRACTICE_COPY.dayPeekMinutes}</p>
+      {row && <PeekFacts row={row} />}
     </div>
+  );
+}
+
+/** Prev close, the list price against it, and the earnings flag: dashes where the payload has no value (the flag is a positive claim only). */
+function PeekFacts({ row }: { row: Candidate }) {
+  const change = row.metrics.list_change_pct ?? null;
+  return (
+    <dl className={styles.peekFacts}>
+      <div><dt>{PRACTICE_COPY.dayPeekPrevClose}</dt><dd>{row.prior_close === null ? EMPTY_VALUE : formatPrice(row.prior_close)}</dd></div>
+      <div>
+        <dt>{PRACTICE_COPY.dayPeekVsPrev}</dt>
+        <dd className={change === null ? undefined : styles[changeTone(change)]}>{change === null ? EMPTY_VALUE : formatSignedPct(change, 2)}</dd>
+      </div>
+      <div><dt>{PRACTICE_COPY.dayPeekEarnings}</dt><dd>{row.reported_before_open ? PRACTICE_COPY.dayPeekEarningsFlagged : PRACTICE_COPY.dayPeekEarningsNone}</dd></div>
+    </dl>
   );
 }

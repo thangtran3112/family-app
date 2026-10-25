@@ -179,8 +179,10 @@ def test_a_new_plan_archives_the_old_one_and_only_one_is_live(db_session, user_i
     assert plan_mod.hub(db_session, user_id)["plan"]["id"] == second.id
 
 
-def test_the_practice_universe_is_the_desk_set_without_non_plain_tickers(db_session, user_id) -> None:
+def test_the_practice_universe_is_the_desk_set_without_non_plain_tickers(db_session, user_id, monkeypatch) -> None:
     from ai_trading.db.models import UniverseSymbol
+
+    monkeypatch.undo()  # the real universe, not the three synthetic names
 
     for symbol, reason in (
         ("ZZZ", None),
@@ -223,7 +225,10 @@ class _ListedUniverse:
         return []
 
 
-def test_the_first_plan_on_a_fresh_install_freezes_a_full_universe_not_the_seeds(db_session, user_id, svc) -> None:
+def test_the_first_plan_on_a_fresh_install_freezes_a_full_universe_not_the_seeds(
+    db_session, user_id, svc, monkeypatch
+) -> None:
+    monkeypatch.undo()  # the real universe, not the three synthetic names
     listed = [f"A{chr(65 + i)}{chr(65 + j)}" for i in range(10) for j in range(13)]  # 130 plain tickers
     universe = _ListedUniverse(listed)
     svc.sources = replace(svc.sources, universe=universe)
@@ -239,7 +244,10 @@ def test_the_first_plan_on_a_fresh_install_freezes_a_full_universe_not_the_seeds
     assert universe.calls == calls
 
 
-def test_a_plan_still_saves_on_the_seeds_when_the_universe_cannot_be_built(db_session, user_id, svc) -> None:
+def test_a_plan_still_saves_on_the_seeds_when_the_universe_cannot_be_built(
+    db_session, user_id, svc, monkeypatch
+) -> None:
+    monkeypatch.undo()  # the real universe, not the three synthetic names
     plan = plan_mod.create_plan(
         db_session, user_id, _block(db_session, user_id), svc, _thread(db_session, user_id)
     )  # the fake source has no lists
@@ -355,7 +363,7 @@ def test_a_list_saved_before_the_server_refused_an_early_cadence_filter_says_so(
     row.screen = {**row.screen, "listAt": "08:30"}  # the plan as it stood before D-001: a 15-minute filter at 8:30
     assert plan_mod.day_list_out(db_session, user_id, row.id, svc)["warnings"] == [
         "Abnormal volume reads bars of the day itself, and none had closed by 8:30 AM · only the previous session was "
-        "visible. Start a new plan with a list time of 10:00 AM or later"
+        "visible. Re-list at 10:00 AM or later to read the day's own bars"
     ]
 
 

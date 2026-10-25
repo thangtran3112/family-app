@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 
-# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 and 02r rows 70-75.
+# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 (plus the D-012 relist route) and
+# 02r rows 70-75.
 # Path parameters are normalised to `{}`.
 INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/me"),
@@ -82,6 +83,7 @@ INVENTORY: list[tuple[str, str]] = [
     ("POST", "/api/desk/replay/daily/next"),
     ("GET", "/api/desk/replay/day-lists/{}"),
     ("PATCH", "/api/desk/replay/day-lists/{}"),
+    ("POST", "/api/desk/replay/day-lists/{}/relist"),
     ("POST", "/api/desk/replay/day-lists/{}/sessions"),
     ("POST", "/api/desk/replay/day-lists/{}/end"),
     # Rows 70-75: practice threads, 02r.
@@ -113,7 +115,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 75
+    assert len(INVENTORY) == 76
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

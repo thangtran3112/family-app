@@ -107,3 +107,6 @@ export function isPracticePath(pathname: string): boolean {
 
 /** The replay workspace puts its Session panel in the left rail instead of the watchlists. */
 export const isReplayWorkspacePath = (pathname: string): boolean => normalize(pathname) === "/practice/replay";
+
+/** The replay, the day list and the thread journal fill the left rail themselves (D-013, D-039) instead of showing the watchlists. */
+export const hasPracticeLeftRail = (pathname: string): boolean => ["/practice/replay", "/practice/day", "/practice/journal"].includes(normalize(pathname));

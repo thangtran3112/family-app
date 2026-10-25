@@ -31,6 +31,7 @@ from ai_trading.api.schemas.replay import (
     DailyOut,
     DayListOut,
     DayListPatch,
+    DayRelistIn,
     DaySessionIn,
     FeedOut,
     Interval,
@@ -430,6 +431,27 @@ def patch_day_list(
         rating=body.rating,
         fields=set(body.model_fields_set),
     )
+    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
+
+
+@router.post("/day-lists/{day_list_id}/relist", response_model=DayListOut)
+def relist_day_list(
+    day_list_id: int,
+    body: DayRelistIn,
+    request: Request,
+    background: BackgroundTasks,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Re-list a day she has not started at a later list time: moves the open plan's list time (the practice window
+    follows when it would start before the list) and rebuilds this day's list on today's Desk universe. The plan's
+    list-time rules answer 422; a day under way or on a replaced plan is a 409. When the universe grew and its bars
+    are not ready the list stays as it was while the data prepares: re-list again then."""
+    opened = _call(plan_mod.relist, db, user.id, day_list_id, body.listAt, services)
+    if opened.restart_prep:
+        db.commit()  # see `open_next`: the task runs on its own session
+        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
     return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 

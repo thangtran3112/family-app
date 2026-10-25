@@ -115,3 +115,15 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
   },
   { title: "Help", rows: [{ keys: ["?"], label: "Show or hide this list" }, { keys: ["Esc"], label: "Close" }] },
 ];
+
+/** The one-line key legend under the timeline (D-026), a short form of the `?` overlay. */
+export const KEY_LEGEND: ReadonlyArray<{ keys: string; label: string }> = [
+  { keys: "Space", label: "Play / Pause" },
+  { keys: "B", label: "Long" },
+  { keys: "S", label: "Short" },
+  { keys: "X", label: "Exit" },
+  { keys: "T", label: "Stop" },
+  { keys: "N", label: "Note" },
+  { keys: "⌘Z", label: "undo" },
+  { keys: "?", label: "all shortcuts" },
+];

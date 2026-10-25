@@ -122,3 +122,24 @@ against the regenerated OpenAPI with `satisfies`. Gates: backend `ruff` clean an
 unit tests, lint, build, export checks, and the desktop Playwright suite (214 passed at 1440 and 1180; the production auth spec
 skips without its credentials). Not built: the sizing hint from `maxLossUsd`, the switch protocol and re-scan at the playhead
 (02o-b2), swing mode (02p), Paper boards for the thread screens.
+
+## Hardened note (walkthrough fixes, 2026-10-25)
+
+The owner's live walkthrough found 38 defects after the threads phase (`ai-trading/DEFECTS.md`, D-008..D-045); the fix wave is on
+`feature/desk-fix-integration` (STATUS row 5M). What it changed in the thread rules:
+
+- **One open day.** Replacing the daily plan while its day is half practiced now ends that day (`create_plan`, commit `8ad60310`):
+  an open trade exits at the last price, the ledger keeps the realized P/L, and the day's review and journal are stored. The new
+  plan's Day 1 is then the only open day, so TODAY, the day card and the balance agree. A replaced plan's day that was only
+  listed holds nothing and is left alone. `open_day` still serves a half-practiced day on an archived plan, for a day stored
+  before this rule.
+- **Cent-exact money.** A practice fill is a whole cent and every P/L, balance and stat is computed in Decimal, so (exit - entry)
+  x shares matches the ledger. Every screen shows dollars and cents except an axis tick and an amount she chose (starting balance,
+  max loss).
+- **The form and the card.** The New thread form is always on screen (disabled while another day thread is active) with an
+  editable starting balance; the session form no longer carries a risk plan; TODAY reads "Last day" until the open day has
+  practice.
+- **Journal copy.** The WORST DAY tile is the lowest day result and says "no losing day" when every day won.
+- **Still partial** (the payload lacks the data): the Improvement week table before two weeks have practice days (D-041), the
+  Shares row on the plan recap (D-042, `PracticeThreadV1` has no `shares`), the previous-session RVOL and change columns on a
+  list built after the open (D-018), and the "End and score" label on the replay (D-025).

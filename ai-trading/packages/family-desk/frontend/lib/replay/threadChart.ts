@@ -39,7 +39,7 @@ export type CurveLayout = {
   /** The line closed down to the starting-balance line; clip it to y >= startY to shade only below the start. */
   area: string;
   plot: { x: number; y: number; width: number; height: number };
-  /** The lowest practised point when it is below the start, for the "Lowest $49,753" label. */
+  /** The lowest practiced point when it is below the start, for the "Lowest $49,753" label. */
   lowest: { x: number; y: number; balance: number } | null;
   /** The newest point, for the "Now $50,123" label. */
   now: { x: number; y: number; balance: number } | null;
@@ -69,8 +69,8 @@ export function curveLayout(curve: readonly CurvePoint[], daily: readonly Thread
   const first = points[0];
   const end = points[points.length - 1];
   const area = first && end ? `${line} L${end.x.toFixed(1)} ${startY.toFixed(1)} L${first.x.toFixed(1)} ${startY.toFixed(1)} Z` : "";
-  const practised = points.filter((point) => point.n > 0 && !point.skipped);
-  const bottom = practised.reduce<(typeof practised)[number] | null>((low, point) => (low === null || point.balance < low.balance ? point : low), null);
+  const practiced = points.filter((point) => point.n > 0 && !point.skipped);
+  const bottom = practiced.reduce<(typeof practiced)[number] | null>((low, point) => (low === null || point.balance < low.balance ? point : low), null);
   return {
     ticks: ticks.map((value) => ({ value, y: yOf(value) })),
     startY,
