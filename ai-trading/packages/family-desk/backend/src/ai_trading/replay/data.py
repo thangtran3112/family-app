@@ -181,21 +181,42 @@ class History:
         payload = store.get(key)
         if payload is not None:
             return decode_daily(payload)
-        close = session("stock", day)
-        assert close is not None
-        start = close.regular_open - timedelta(days=_DAILY_LOOKBACK_DAYS)
+        return self.preload_daily(store, symbol, [day])[day]
+
+    def preload_daily(self, store: BlobStore, symbol: str, days: list[date]) -> dict[date, pd.DataFrame]:
+        """The 300-bar daily frame of each day. Missing ones come from one request covering the whole range (the
+        prep CLI preloads a month of days in a single call), sliced per day and stored per day."""
+        out: dict[date, pd.DataFrame] = {}
+        missing = []
+        for day in days:
+            payload = store.get(BlobKey("bars1d", symbol, day, "", _BARS_FEED))
+            if payload is not None:
+                out[day] = decode_daily(payload)
+            else:
+                missing.append(day)
+        if not missing:
+            return out
+        first, last = session("stock", missing[0]), session("stock", missing[-1])
+        assert first is not None and last is not None
         try:
             frame = self._sources.bars.bars(
-                symbol, "1d", start, close.extended_close, now=self._now(), adjustment="raw"
+                symbol,
+                "1d",
+                first.regular_open - timedelta(days=_DAILY_LOOKBACK_DAYS),
+                last.extended_close,
+                now=self._now(),
+                adjustment="raw",
             ).frame
         except NoData:
             frame = pd.DataFrame({c: [] for c in ("open", "high", "low", "close", "volume")}, index=pd.Index([]))
         self.fetches += 1
-        frame = frame.tail(DAILY_BARS)
-        if len(frame):
-            payload, raw = encode_daily(frame)
-            store.put(key, payload, len(frame), raw)
-        return frame
+        for day in missing:
+            part = frame[[d <= day for d in frame.index]].tail(DAILY_BARS)
+            out[day] = part
+            if len(part):
+                payload, raw = encode_daily(part)
+                store.put(BlobKey("bars1d", symbol, day, "", _BARS_FEED), payload, len(part), raw)
+        return out
 
     # -- internals -------------------------------------------------------------------------------------------
 

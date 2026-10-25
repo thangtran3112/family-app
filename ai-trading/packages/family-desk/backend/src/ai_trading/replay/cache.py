@@ -144,9 +144,10 @@ def _delta(values: np.ndarray) -> np.ndarray:
 
 def encode_bars(frame: pd.DataFrame) -> tuple[bytes, int]:
     """A 1-minute bar frame (UTC index; open/high/low/close/volume) to `(blob, raw byte count)`."""
-    index = frame.index.tz_convert("UTC") if len(frame) else frame.index
+    # pandas 3 keeps the unit the data arrived in (often microseconds): ask for nanoseconds explicitly.
+    nanos = frame.index.tz_convert("UTC").as_unit("ns").asi8 if len(frame) else np.array([], dtype="int64")
     arrays = {
-        "t": _delta(index.asi8 if len(frame) else np.array([], dtype="int64")),
+        "t": _delta(nanos),
         "o": _delta(_micro(frame["open"].to_numpy())),
         "h": _micro(frame["high"].to_numpy()),
         "l": _micro(frame["low"].to_numpy()),
