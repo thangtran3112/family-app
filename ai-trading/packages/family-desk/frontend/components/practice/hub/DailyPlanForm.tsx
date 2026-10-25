@@ -8,6 +8,8 @@ import { openNextDay } from "@/lib/desk/replay";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { OpenNext } from "@/lib/replay/daily";
+import type { PracticeThread } from "@/lib/replay/threads";
+import { withThreadPlan } from "@/lib/replay/threadSetup";
 import {
   EARLIEST_LIST_DAY,
   LIST_TIMES,
@@ -26,14 +28,14 @@ import {
 } from "@/lib/replay/planSetup";
 import { INTERVALS } from "@/lib/replay/setup";
 import { ArmStrategiesField } from "./ArmStrategiesField";
-import { PlanFields } from "./PlanFields";
 import styles from "./hub.module.css";
 
 /** The daily-list plan (02o-b v1): her filters, when the list is built, how many days, and the practice setup that
  *  every day shares. "Start day" saves it (replacing a current plan), starts preparing the data and, when that is ready,
- *  opens Day 1. A filter she picks is armed for the practice days; the list time moves up for a cadence filter. */
-export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNext) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<PlanDraft>(() => defaultPlanDraft(new Date()));
+ *  opens Day 1. A filter she picks is armed for the practice days; the list time moves up for a cadence filter. The
+ *  risk plan (stop, signal, max loss, max trades, note) is the thread's (02r, D-007) and is not asked here. */
+export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeThread; onSaved: (result: OpenNext) => void; onCancel?: () => void }) {
+  const [draft, setDraft] = useState<PlanDraft>(() => withThreadPlan(defaultPlanDraft(new Date()), thread.plan));
   const [problems, setProblems] = useState<PlanProblems>({});
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -42,6 +44,7 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
   // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
   const need = listTimeNeed(draft.filterIds, timings);
   const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
+  const hiddenPlanProblem = [problems.stopRequired, problems.maxLossUsd, problems.maxTrades, problems.note, problems.shares].find(Boolean);
 
   async function save() {
     const result = validatePlanDraft(draft);
@@ -53,7 +56,7 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
     setFailed(false);
     setSubmitting(true);
     try {
-      onSaved(await openNextDay(result.spec));
+      onSaved(await openNextDay(result.spec, { threadId: thread.id }));
     } catch (error) {
       if (error instanceof DeskApiError && error.status === 422 && error.problems.length > 0) setProblems(planProblems(error.problems));
       else setFailed(true);
@@ -217,11 +220,13 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
       </fieldset>
 
       <ArmStrategiesField armed={setup.armed} onChange={(armed) => patchSetup({ ...setup, armed })} error={problems.armed} />
-      <PlanFields draft={setup} onDraft={patchSetup} problems={problems} />
 
+      {/* The thread's plan fields have no input here any more; a server problem about one of them still shows. */}
+      {hiddenPlanProblem && <p role="alert" className={styles.fieldError}>{hiddenPlanProblem}</p>}
       {problems.form && <p role="alert" className={styles.fieldError}>{problems.form}</p>}
       {failed && <ErrorBlock message={PRACTICE_COPY.planStartError} onRetry={() => void save()} />}
       <div className={styles.actions}>
+        <span className={`${styles.hint} ${styles.actionNote}`}>{PRACTICE_COPY.threadPlanFrom}</span>
         {onCancel && <button type="button" className={styles.button} onClick={onCancel}>Cancel</button>}
         <button type="submit" className={styles.primary} disabled={submitting}>{PRACTICE_COPY.planSubmit}</button>
       </div>
