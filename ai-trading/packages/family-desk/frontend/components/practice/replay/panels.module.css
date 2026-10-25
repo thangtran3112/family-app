@@ -1,0 +1,91 @@
+/* Replay workspace panels (02o §a3): tape, Session rail (plan, armed strategies, signals), marks, levels,
+   the shortcuts overlay and the end prompt. Tokens only; every row and target is at least 24 px tall. */
+
+.muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.heading { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.legend { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.same { color: var(--color-muted); }
+
+/* Generic rows and lists */
+.list { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
+.row { display: flex; min-width: 0; min-height: 24px; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding-block: 2px; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.wrap { flex-wrap: wrap; }
+.between { justify-content: space-between; }
+.label { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.detail { flex: 0 0 auto; margin-left: auto; color: var(--color-muted); text-align: right; white-space: nowrap; }
+.chip { display: inline-flex; min-height: 20px; flex: 0 0 auto; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
+.chip[data-tone="up"] { border-color: var(--color-up); color: var(--color-up); }
+.chip[data-tone="down"] { border-color: var(--color-down); color: var(--color-down); }
+
+/* Buttons and chips */
+.button { display: inline-flex; min-height: 28px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--color-raised); }
+.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+.primary { border-color: var(--color-amber); color: var(--color-amber); }
+.quiet { border-color: transparent; color: var(--color-muted); }
+.quiet:hover:not(:disabled) { color: var(--color-text); }
+.button:focus-visible,
+.filter:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+/* Tape */
+.tape { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: var(--space-2); }
+.tapeHeader { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.tapeTable { min-height: 0; flex: 1 1 auto; overflow: auto; transition: opacity 150ms ease; }
+.tapeTable[aria-busy="true"] { opacity: 0.6; }
+.bigTime { display: block; margin-inline: -6px; padding-inline: 6px; box-shadow: inset 2px 0 0 var(--color-amber); }
+.bigPrice { color: var(--color-amber); font-weight: var(--weight-semibold); }
+.feed { display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.feedIex { box-sizing: border-box; min-height: 20px; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: 2px var(--space-2); color: var(--color-amber); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
+.filters { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.filter { min-height: 24px; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); background: transparent; padding: 0 var(--space-2); color: var(--color-muted); font: inherit; font-size: var(--text-micro); font-variant-numeric: tabular-nums; cursor: pointer; }
+.filter:hover { background: var(--color-raised); color: var(--color-text); }
+.filter[aria-pressed="true"] { border-color: var(--color-amber); color: var(--color-text); }
+.pace { display: flex; flex-direction: column; gap: 4px; }
+.meter { height: 4px; overflow: hidden; border-radius: 2px; background: var(--color-hairline); }
+.meterFill { display: block; height: 100%; background: var(--color-amber); transition: width 300ms ease; }
+.paceText { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+
+/* Session rail: plan checklist */
+.mark { display: inline-flex; width: 14px; flex: 0 0 14px; justify-content: center; font-weight: var(--weight-bold); }
+.mark[data-state="ok"] { color: var(--color-up); }
+.mark[data-state="warn"] { color: var(--color-amber); }
+.mark[data-state="pending"] { color: var(--color-muted); }
+
+/* Session rail: armed strategies */
+.armedName { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; font-weight: var(--weight-semibold); }
+
+/* Session rail: signals (the whole row is one button) */
+.signalList { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
+.signal { display: flex; width: 100%; min-height: 24px; align-items: center; border: 0; border-bottom: 1px solid var(--color-hairline); background: transparent; padding: 2px var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
+.signal:hover { background: var(--color-raised); }
+.signal[aria-current="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.signal:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.signalText { min-width: 0; overflow-wrap: anywhere; line-height: 16px; padding: 3px 0; }
+
+/* Marks and levels */
+.markTime { flex: 0 0 auto; color: var(--color-muted); white-space: nowrap; }
+.markLabel { flex: 0 0 auto; font-weight: var(--weight-semibold); }
+.markNote { min-width: 0; flex: 1 1 120px; overflow-wrap: anywhere; color: var(--color-muted); }
+
+/* Shortcuts overlay */
+.backdrop { position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.6); }
+.dialog { position: fixed; top: 50%; left: 50%; z-index: 30; display: flex; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; transform: translate(-50%, -50%); flex-direction: column; gap: var(--space-3); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: var(--space-4); color: var(--color-text); }
+.dialogTitle { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.group { display: flex; flex-direction: column; gap: 2px; }
+.keys { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.kbd { display: inline-flex; min-width: 24px; min-height: 22px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--color-raised); padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.dialogFooter { display: flex; justify-content: flex-end; }
+
+/* End prompt */
+.endBlock { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.endText { margin: 0; font-size: var(--text-label); line-height: var(--line-label); }
+.confirm { display: flex; width: 100%; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
+.confirmActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .meterFill,
+  .tapeTable { transition: none; }
+}
