@@ -1,8 +1,7 @@
 # 02r — Desk practice threads: the persistent paper account across practice days
 
-Status: **PLANNED — immediate next practice phase** (owner directive, 2026-10-25). Design-level
-decisions below are owner-stated; implementation detail is ours. Starts after the current
-defect batch lands; mock-board updates ride with it.
+Status: **BACKEND BUILT 2026-10-25** (`feature/desk-threads-backend`, notes at the end); web stream and
+mock boards follow. Design-level decisions below are owner-stated; implementation detail is ours.
 
 ## The concept (owner's words, condensed)
 
@@ -70,3 +69,41 @@ differing only in session cadence.
 - D-006 (PLAN fields in the daily filter form) is fixed BY this phase.
 - D-002 (arming vs filtering confusion) is re-examined here: arming is a thread/session
   concern shown at thread creation and in the workspace rail, not a filter-form concern.
+
+## Backend notes (built 2026-10-25)
+
+**Contracts** (`contracts/src/practice-thread-v1.ts`, Zod to Pydantic parity, four fixture families): `PracticeThreadCreateV1`
+(`mode` `day|swing`, `startingBalance` 1000 to 10,000,000 defaulting to 50,000, `plan`), `PracticeThreadPatchV1` (`plan`),
+`PracticeThreadV1` (the read model: `id`, `mode`, `startingBalance`, `status`, `plan`, `createdAt`, `closedAt` present exactly
+when closed, and `stats`) and `PracticeLedgerEntryV1`. The plan is `stopNoteOnEntry` and `tradeOnlyOnSignal` (yes/no),
+`maxLossUsd`, `maxTrades`, `planNote`. `stats` carries `balance`, `daysPracticed`, `daysSkipped`, `wins`, `losses`, `winRate`
+(0..1), `avgWinUsd`, `avgLossUsd` (negative), `bestDayUsd`, `worstDayUsd`, `adherenceFirstPct` and `adherenceLastPct`; a figure
+with no value is absent, never null. `PracticeBlockV1` lost `setup.plan` and `setup.shares` (D-007).
+
+**Routes** (six, all under `/api/desk/replay`, 75 `/api/desk` routes in all): `POST /threads`, `GET /threads` (active first),
+`GET /threads/{id}` (the thread, `today`, `daily` series, balance `curve`), `PATCH /threads/{id}` (replaces the plan while
+active), `POST /threads/{id}/close`, `GET /threads/{id}/ledger`. Additive fields elsewhere: `thread_id` on plans, sessions and
+session rows; a `thread` header (`id`, `mode`, `status`, `balance`, `today_pnl_usd`, `label`) on sessions, marks, undo and day
+lists; `thread` (the full summary) on `GET /daily`; `watch_check` on day lists; `POST /daily/next` accepts `threadId`.
+
+**Rules the screens need to know.**
+- **One active thread per mode.** A second `day` thread is a 409; `swing` is a 422 until 02p. A daily plan binds to `threadId`
+  or the active day thread; with none it is a 409 "Start a practice thread first", with only a closed one "Your practice thread is
+  closed". `setup.plan` and `setup.shares` from an old client are dropped before validation, and a stored plan is served without
+  them.
+- **The plan is the thread's, snapshotted per session.** A day session copies the thread's plan when it starts (editing the thread
+  applies from the next session) and enters at 100 shares unless the mark names `shares`. The maxLoss-based sizing hint is not built.
+- **The ledger is the balance.** An exit mark (hers, or the day's auto-exit) books one row, once per mark; undoing the exit
+  removes it. Balance, stats, the day series and the curve are read back from the ledger and the ended day lists, never stored.
+  `today_pnl_usd` is realized only. A practised day is an ended day with a session; a skipped one ended with none.
+- **Closing** archives the daily plan and waits for an open practice day (409). Standalone sessions carry no thread and book nothing.
+- **Day rules.** `maxLossUsd` and `maxTrades` count every session of a day list (checks say "across the day" once a second
+  session exists); `watch_check` gives `starred`, `traded`, `off_watch` and a `verdict` for "traded only names on your watch".
+  Not built: the switch protocol and re-scan at the playhead (02o-b2).
+- Every money-bearing payload has a `label` saying the money is simulated.
+
+**Web stream breaks after `pnpm gen:api`** (the frontend was left untouched): `components/practice/day/DayListScreen.tsx`
+reads `setup.shares` and `setup.plan`; the response schemas in `lib/replay/daily.ts` and `lib/replay/schemas.ts` lack the new
+required fields (`thread_id`, `thread`, `watch_check`); three tests (`lib/replay/dayView.test.ts`, two in
+`lib/replay/planSetup.test.ts`) build a block with the old fields. Run on this branch: `pnpm typecheck` 12 errors, `pnpm test`
+393 of 396 passing, all from these.
