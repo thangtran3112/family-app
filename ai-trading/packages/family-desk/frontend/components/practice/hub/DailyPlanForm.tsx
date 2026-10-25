@@ -74,7 +74,7 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
         {filters.loading ? (
           <LoadingBlock label="Loading your filters…" height={64} />
         ) : filters.data === null ? (
-          <ErrorBlock subject="filters" onRetry={filters.refresh} />
+          <ErrorBlock subject="filter list" onRetry={filters.refresh} />
         ) : filters.data.length === 0 ? (
           <p className={styles.hint}>{PRACTICE_COPY.planFiltersEmpty}</p>
         ) : (

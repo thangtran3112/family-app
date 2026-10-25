@@ -3,7 +3,7 @@ import "./globals.css";
 import { Shell } from "@/components/shell/Shell";
 
 export const metadata: Metadata = {
-  title: "Family Desk",
+  title: { default: "Family Desk", template: "%s - Family Desk" },
   description: "Private family trading desk.",
 };
 

@@ -15,7 +15,7 @@ export function QuietHours({ value, disabled, validationError, onChange, onCommi
     <div className={styles.block}>
       <h3 className={styles.rowTitle}>Quiet hours</h3>
       <p className={styles.helper}>Alerts are held overnight and sent when quiet hours end. Risk alerts still arrive.</p>
-      <p className={styles.note} id="quiet-hours-note">Times save as 24-hour HH:MM in America/New_York, including daylight-saving changes. Equal start and end means no quiet period.</p>
+      <p className={styles.note} id="quiet-hours-note">Times are Eastern time (New York) and follow daylight-saving changes. Equal start and end means no quiet period.</p>
       <div className={styles.timeFields}>
         <label className={styles.timeField}>
           <span>Quiet hours start</span>

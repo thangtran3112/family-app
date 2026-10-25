@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { divergingBars, scalePercent } from "../../lib/fixtures/chart-geometry.ts";
@@ -14,12 +15,14 @@ import {
   stockVoting,
 } from "../../lib/fixtures/stocks.ts";
 
+export const metadata: Metadata = { title: "Stocks" };
+
 export default function StocksPage() {
   const targetRange = stockLongTerm.priceTargetComparison;
   const earningsBars = divergingBars(stockEarningsReaction.quarters.map((quarter) => ({ label: quarter.quarter, value: quarter.excess })));
 
   return (
-    <FixtureScreen phase={5} title={`${stockLongTerm.symbol} · ${stockLongTerm.company}`}>
+    <FixtureScreen title={`${stockLongTerm.symbol} · ${stockLongTerm.company}`}>
       <div className={styles.content}>
         <section className={styles.section} aria-label="Sample stock overview">
           <div className={styles.sectionHeading}>
@@ -109,7 +112,7 @@ export default function StocksPage() {
             ))}
           </section>
           <fieldset className={`${styles.panel} ${styles.panelStack}`} disabled aria-describedby="stock-alert-note">
-            <legend className={styles.recordTitle}>Alert settings · Phase 5</legend>
+            <legend className={styles.recordTitle}>Alert settings · not available yet</legend>
             <span className={styles.fixtureTag}>SAMPLE PREFERENCES · DISABLED</span>
             {stockAlertSettings.map((setting) => (
               <label className={styles.spread} key={setting.label}>

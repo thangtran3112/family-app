@@ -127,7 +127,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
       {settingsQuery.data === null && (
         settingsQuery.error === null
           ? <LoadingBlock label="Loading settings…" />
-          : <ErrorBlock subject="settings" onRetry={settingsQuery.refresh} />
+          : <ErrorBlock subject="settings page" onRetry={settingsQuery.refresh} />
       )}
 
       <div className={styles.stack} aria-busy={disabled}>

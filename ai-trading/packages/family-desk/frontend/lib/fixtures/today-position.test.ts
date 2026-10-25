@@ -6,8 +6,8 @@ import { todayPositionPreview } from "./today-position.ts";
 test("Today fixture exposes three labelled sample levels and no live/order provenance", () => {
   const preview = todayPositionPreview();
 
-  assert.equal(preview.phase, 6);
-  assert.equal(preview.fixtureLabel, "Fixture — wired in Phase 6");
+  assert.equal(preview.actionNote, "needs broker setup");
+  assert.equal(preview.fixtureLabel, "Preview · not connected yet");
   assert.equal(preview.connected, false);
   assert.equal(preview.controlsEnabled, false);
   assert.equal(preview.notice, "Illustrative only; not a connected position, not tied to this chart, and not an order.");

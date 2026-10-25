@@ -4,22 +4,22 @@ const fixtures = {
   offSwitch: {
     title: "Strategy off switch",
     detail: "Runtime pause controls are not available yet.",
-    phase: 6,
+    needs: "Needs broker setup",
   },
   dailyCap: {
     title: "Daily order cap",
     detail: "Order limits are not enforced by this screen.",
-    phase: 6,
+    needs: "Needs broker setup",
   },
   paperGuard: {
     title: "Paper guard",
     detail: "Paper-order safety checks are not active here.",
-    phase: 6,
+    needs: "Needs broker setup",
   },
   askBudget: {
     title: "Ask budget",
     detail: "Usage limits are not shown or enforced yet.",
-    phase: 7,
+    needs: "Not available yet",
   },
 } as const;
 
@@ -43,10 +43,10 @@ export function Fixtures({ items = ["offSwitch", "dailyCap", "paperGuard", "askB
             <article className={styles.fixtureRow} key={key}>
               <div>
                 <h3 className={styles.rowTitle}>{fixture.title}</h3>
-                <p className={styles.helper} id={noteId}>{fixture.detail} Phase {fixture.phase}.</p>
+                <p className={styles.helper} id={noteId}>{fixture.detail}</p>
               </div>
               <button className={styles.fixtureButton} type="button" disabled aria-describedby={noteId}>
-                Disabled · Phase {fixture.phase}
+                {fixture.needs}
               </button>
             </article>
           );

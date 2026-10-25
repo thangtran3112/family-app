@@ -1,10 +1,10 @@
-import { fixtureBannerText } from "./banner.ts";
+import { fixtureBannerText, NEEDS_BROKER } from "./banner.ts";
 import { todayPositionFixture } from "./paper.ts";
 
 export function todayPositionPreview() {
   return {
-    phase: 6,
-    fixtureLabel: fixtureBannerText(6),
+    actionNote: NEEDS_BROKER,
+    fixtureLabel: fixtureBannerText(),
     connected: false,
     controlsEnabled: false,
     notice: "Illustrative only; not a connected position, not tied to this chart, and not an order.",

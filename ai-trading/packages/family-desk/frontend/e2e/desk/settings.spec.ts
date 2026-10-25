@@ -43,6 +43,12 @@ test("Settings shows the Technical default, channels, quiet hours, data sources 
   const alerts = page.getByRole("region", { name: "Alerts" });
   await expect(alerts.getByText("Always on")).toBeVisible();
   await expect(alerts.getByText("Not set up yet")).toHaveCount(2);
+  // A channel that cannot deliver never shows its box ticked, whatever was saved before.
+  for (const name of ["Telegram", "Slack"]) {
+    const box = alerts.getByRole("checkbox", { name: `Send alerts to ${name}` });
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeDisabled();
+  }
 
   // Quiet hours default to 22:00 to 07:00 when nothing is stored.
   await expect(quietStart(page)).toHaveValue("22:00");
