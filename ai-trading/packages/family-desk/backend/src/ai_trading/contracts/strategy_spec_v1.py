@@ -216,6 +216,14 @@ class PatternCondition(SpecModel):
     withinBars: Annotated[int | None, Field(ge=1, le=5)] = None
 
 
+class PracticeArmedV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: Annotated[int, Field(ge=1, le=9007199254740991)]
+    source: Literal["alert_strategy", "filter"]
+
+
 class PracticeMarkV11(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -262,6 +270,43 @@ class PracticeMarkV14(SpecModel):
 
 class PracticeMarkV1(RootModel[PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV13 | PracticeMarkV14]):
     root: PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV13 | PracticeMarkV14
+
+
+class PracticePlanV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    maxLossUsd: Annotated[int | None, Field(ge=1, le=100000)] = None
+    maxTrades: Annotated[int | None, Field(ge=1, le=50)] = None
+    note: Annotated[
+        str | None, Field(max_length=500, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
+    ] = None
+    signalOnly: Literal["yes", "no"]
+    stopRequired: Literal["yes", "no"]
+
+
+class Filter(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: Annotated[int, Field(ge=1, le=9007199254740991)]
+
+
+class PracticeScreenV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filters: Annotated[list[Filter], Field(max_length=3, min_length=1)]
+    listAt: Annotated[str, Field(pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+    maxList: Annotated[int, Field(ge=20, le=50)]
+
+
+class PracticeWindowV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    from_: Annotated[str, Field(alias="from", pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+    to: Annotated[str, Field(pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
 
 
 class Entry(SpecModel):
@@ -485,6 +530,18 @@ class Rank(SpecModel):
     order: Literal["desc", "asc"]
 
 
+class PracticeSetupV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    armed: Annotated[list[PracticeArmedV1], Field(max_length=5)]
+    interval: Literal["1m", "5m", "15m"]
+    plan: PracticePlanV1
+    session: Literal["regular", "extended"]
+    shares: Annotated[int, Field(ge=1, le=10000)]
+    window: PracticeWindowV1
+
+
 class WithinPctCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -502,6 +559,18 @@ class CompareCondition(SpecModel):
     left: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
     op: Literal["gt", "gte", "lt", "lte", "crosses_above", "crosses_below"]
     right: ValueOperand | SeriesOperand1 | SeriesOperand2 | SeriesOperand3 | SeriesOperand4 | SeriesOperand5 | SeriesOperand6 | SeriesOperand7 | SeriesOperand8 | SeriesOperand9 | SeriesOperand10 | SeriesOperand11 | SeriesOperand12 | SeriesOperand13 | LevelOperand1 | LevelOperand2 | LevelOperand3 | LevelOperand4 | LevelOperand5
+
+
+class PracticeBlockV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    firstDay: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
+    hideDates: Literal["yes", "no"]
+    schemaVersion: Literal[1]
+    screen: PracticeScreenV1
+    sessions: Annotated[int, Field(ge=5, le=30)]
+    setup: PracticeSetupV1
 
 
 class StrategySpecV1(SpecModel):

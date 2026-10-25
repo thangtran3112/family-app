@@ -23,7 +23,7 @@ export function RightRailDrawer({ title, onClose, children }: { title: string; o
   }, []);
 
   return (
-    <div ref={panel} className={styles.drawer} role="dialog" aria-label={title} tabIndex={-1}>
+    <div ref={panel} id="rail-drawer" className={styles.drawer} role="dialog" aria-label={title} tabIndex={-1}>
       {children}
     </div>
   );

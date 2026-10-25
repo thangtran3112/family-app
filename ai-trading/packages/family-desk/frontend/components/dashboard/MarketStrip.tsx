@@ -16,10 +16,10 @@ function Tile({ tile }: { tile: StripTile }) {
   return tile.readOnly ? <div className={styles.tile}>{content}</div> : <a className={styles.tile} href={symbolHref(tile.symbol)}>{content}</a>;
 }
 
-export function MarketStrip({ strip, dim }: { strip: Dashboard["market_strip"]; dim: boolean }) {
+export function MarketStrip({ strip, nextUpdateAt, dim }: { strip: Dashboard["market_strip"]; nextUpdateAt: string | null; dim: boolean }) {
   return (
     <ul className={`${styles.strip} ${dim ? styles.dim : ""}`} aria-label="Market strip">
-      {stripTiles(strip).map((tile) => (
+      {stripTiles(strip, nextUpdateAt).map((tile) => (
         <li key={tile.symbol}>
           <Tile tile={tile} />
         </li>

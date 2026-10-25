@@ -63,7 +63,7 @@ export function BiasGauge({
       {desktop ? (
         <div className={styles.voteCounts}>{unavailable ? "Vote counts unavailable" : countsLine(counts)}</div>
       ) : (
-      <div className={styles.voteCounts} aria-label={counts ? "Backend vote counts" : "Vote counts unavailable"}>
+      <div className={styles.voteCounts} aria-label={counts ? "Vote counts" : "Vote counts unavailable"}>
         {counts && !unavailable ? <>
           <span><strong className={styles.toneSell}>{counts.sell}</strong> Sell</span>
           <span><strong>{counts.neutral}</strong> Neutral</span>

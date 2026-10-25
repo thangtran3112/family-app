@@ -28,7 +28,7 @@ from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import ET, annotate
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.evaluate import _resample
-from ai_trading.db.models import PracticeMark, ReplaySession
+from ai_trading.db.models import PracticeMark, ReplayDayList, ReplaySession
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import signals as signals_mod
 from ai_trading.replay.cache import BlobStore, DbBlobStore
@@ -52,6 +52,8 @@ FEED_PRINTS = 200
 LOOKBACK_BARS_MAX = 6000  # the feed's warm-up bars (1-minute interval would otherwise carry about 9,600)
 RATING_RANGE = (1, 5)
 STAMP_SOURCE = "alpaca"
+STALE_PRINT_S = 30  # a mark priced off a print older than this carries a warning
+QUIET_PRINT_S = 60  # no eligible print for this long marks the tape quiet (a halt looks the same from here)
 
 
 class ReplayProblem(Exception):
@@ -74,6 +76,7 @@ class Services:
     tape: Tape
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     store_factory: Callable[[Session], BlobStore] = DbBlobStore
+    sources: Any = None  # the `DataSources` behind `history` (the day list's earnings flag reads `earnings` from it)
 
 
 @dataclass
@@ -300,6 +303,11 @@ def last_price(ctx: Ctx, through: pd.Timestamp) -> tuple[float, pd.Timestamp] | 
     return float(closed["close"].iloc[-1]), closed.index[-1] + MINUTE
 
 
+def _age_s(found: tuple[float, pd.Timestamp] | None, through: pd.Timestamp) -> int | None:
+    """Seconds from the last eligible print to the playhead (never negative)."""
+    return None if found is None else max(0, int((through - found[1]).total_seconds()))
+
+
 def _open_trade(ctx: Ctx, price: float | None) -> dict[str, Any] | None:
     _, open_ = journal_mod.assemble(ctx.marks)
     return journal_mod.open_trade_out(open_, price)
@@ -335,6 +343,7 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
     journal = row.journal if ended and row.journal is not None else _journal(ctx, price, final=False)
     return {
         "id": row.id,
+        "day_list_id": row.day_list_id,
         "attempt": row.attempt,
         "status": row.status,
         "spec": ReplaySessionV1.model_validate(row.spec),
@@ -366,6 +375,7 @@ def summary_out(db: Session, row: ReplaySession) -> dict[str, Any]:
         adherence = None
     return {
         "id": row.id,
+        "day_list_id": row.day_list_id,
         "symbol": row.symbol,
         "day": row.day,
         "attempt": row.attempt,
@@ -391,8 +401,13 @@ def list_sessions(db: Session, user_id: int, *, status: str | None, limit: int) 
 # -- create --------------------------------------------------------------------------------------------------
 
 
-def create(db: Session, user_id: int, spec: ReplaySessionV1, svc: Services) -> ReplaySession:
-    """A new active session at the window start (idempotent per active symbol and day), or the existing one."""
+def create(
+    db: Session, user_id: int, spec: ReplaySessionV1, svc: Services, day_list: ReplayDayList | None = None
+) -> ReplaySession:
+    """A new active session at the window start (idempotent per active symbol and day), or the existing one.
+
+    With a `day_list` the session belongs to that day: it starts at the day clock when the clock is past the window
+    start (the shared clock never goes backward), and a standalone session on the same symbol and day is a 409."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     symbol, day = dumped["symbol"], date.fromisoformat(dumped["day"])
     now = svc.now()
@@ -414,6 +429,16 @@ def create(db: Session, user_id: int, spec: ReplaySessionV1, svc: Services) -> R
         )
     ).scalar_one_or_none()
     if existing is not None:
+        if day_list is not None and existing.day_list_id != day_list.id:
+            raise ReplayProblem(
+                f"You already have an open {symbol} practice session for this day · end it first",
+                path="symbol",
+                status=409,
+            )
+        if day_list is None and existing.day_list_id is not None:
+            raise ReplayProblem(
+                "This day is part of your daily list · open it from the list", path="symbol", status=409
+            )
         return existing
 
     store = svc.store_factory(db)
@@ -456,7 +481,11 @@ def create(db: Session, user_id: int, spec: ReplaySessionV1, svc: Services) -> R
         signals=signals_mod.dump_fires(fires),
         window_start=start.to_pydatetime(),
         window_end=end.to_pydatetime(),
-        revealed_through=start.to_pydatetime(),
+        revealed_through=(
+            min(max(start, _ts(day_list.revealed_through)), end)
+            if day_list is not None and day_list.revealed_through
+            else start
+        ).to_pydatetime(),
         tape_feed=feed,
         status="active",
         journal=None,
@@ -465,6 +494,7 @@ def create(db: Session, user_id: int, spec: ReplaySessionV1, svc: Services) -> R
         created_at=now,
         updated_at=now,
         ended_at=None,
+        day_list_id=day_list.id if day_list is not None else None,
     )
     db.add(row)
     try:
@@ -483,6 +513,17 @@ def create(db: Session, user_id: int, spec: ReplaySessionV1, svc: Services) -> R
 
 
 # -- advance and feed ----------------------------------------------------------------------------------------
+
+
+def _lock_day_list(db: Session, session_id: int) -> ReplayDayList | None:
+    """The session's day list, locked, or None for a standalone session. Every writer of a day-list session takes
+    this lock before the session row, so two advances of one day cannot deadlock."""
+    day_list_id = db.execute(
+        select(ReplaySession.day_list_id).where(ReplaySession.id == session_id)
+    ).scalar_one_or_none()
+    if day_list_id is None:
+        return None
+    return db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
 
 
 def _next_bar_boundary(ctx: Ctx, after: pd.Timestamp, minutes: int) -> pd.Timestamp:
@@ -563,7 +604,8 @@ def _frame(
             for f in signals
         ],
         "levels": _levels(ctx, minutes, through),
-        "last": None if price is None else {"price": price[0], "at": price[1]},
+        "last": None if price is None else {"price": price[0], "at": price[1], "age_s": _age_s(price, through)},
+        "quiet_s": (age if (age := _age_s(price, through)) is not None and age >= QUIET_PRINT_S else None),
         "open_trade": _open_trade(ctx, None if price is None else price[0]),
         "stamp": stamp(through),
     }
@@ -584,6 +626,7 @@ def advance(
 ) -> dict[str, Any]:
     if (to is None) == (step is None):
         raise ReplayProblem("Send exactly one of to and step", path="to")
+    day_list = _lock_day_list(db, session_id)  # the day list row first, then the session row: one lock order
     row = get_row(db, user_id, session_id, lock=True)
     ctx = context(db, svc, row)
     width = INTERVAL_MINUTES[interval or ctx.interval]
@@ -602,6 +645,12 @@ def advance(
             raise ReplayProblem("No more signals in this session", path="step")
         target = upcoming.bar_close
     target = min(max(target, previous), ctx.window_end)  # forward only; clamped to the window end
+    if day_list is not None and row.status != "ended":
+        if day_list.revealed_through is not None:
+            # A session behind the shared day clock catches up to it: what lies between is revealed, not markable.
+            target = min(max(target, _ts(day_list.revealed_through)), ctx.window_end)
+        if day_list.revealed_through is None or target > _ts(day_list.revealed_through):
+            day_list.revealed_through = target.to_pydatetime()
 
     if target > previous:
         row.revealed_through = target.to_pydatetime()
@@ -665,18 +714,27 @@ def feed(
 
 def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: dict[str, Any]) -> dict[str, Any]:
     """Stamp a practice mark at the playhead. State rules answer 422 with `path: "kind"` or `"stopPrice"`."""
+    day_list = _lock_day_list(db, session_id)
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
         raise ReplayProblem("This session is over · start a new attempt", path="kind")
     ctx = context(db, svc, row)
+    if day_list is not None and day_list.revealed_through is not None and ctx.through < _ts(day_list.revealed_through):
+        # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
+        # stamped at a time the day has already passed. `advance` catches the name up first.
+        raise ReplayProblem("This name is behind the day clock · advance to catch up before you mark", path="kind")
     kind = body["kind"]
     closed, open_ = journal_mod.assemble(ctx.marks)
     price = None
+    warning = None
     if kind != "note":
         found = last_price(ctx, ctx.through)
         if found is None:
             raise ReplayProblem("No price yet · advance the replay first", path="kind")
         price = found[0]
+        age = _age_s(found, ctx.through)
+        if age is not None and age >= STALE_PRINT_S:
+            warning = f"Priced off a print {age} s old · the tape has been quiet"
 
     stop_price = body.get("stopPrice")
     shares = None
@@ -721,6 +779,7 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
         "mark": mark_out(placed),
         "open_trade": _open_trade(ctx, price if price is not None else _price_or_none(ctx)),
         "journal": _journal(ctx, price if price is not None else _price_or_none(ctx), final=False),
+        "warning": warning,
     }
 
 
@@ -762,12 +821,17 @@ def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Ser
 # -- end and patch -------------------------------------------------------------------------------------------
 
 
-def end(db: Session, user_id: int, session_id: int, svc: Services) -> dict[str, Any]:
-    """Auto-exit an open trade at the last price, reveal the whole window, store the final journal. Idempotent."""
+def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: bool = False) -> dict[str, Any]:
+    """Auto-exit an open trade at the last price, reveal the whole window, store the final journal. Idempotent.
+
+    A day-list session ends only with its day (`via_day`): unsealing one name's window would show the market's
+    direction to every other name practised that day."""
     row = get_row(db, user_id, session_id, lock=True)
     ctx = context(db, svc, row)
     if row.status == "ended":
         return session_out(ctx)
+    if row.day_list_id is not None and not via_day:
+        raise ReplayProblem("End the day to score this session", path="kind", status=409)
     ctx.through = ctx.window_end
     row.revealed_through = ctx.window_end.to_pydatetime()
     found = last_price(ctx, ctx.window_end)

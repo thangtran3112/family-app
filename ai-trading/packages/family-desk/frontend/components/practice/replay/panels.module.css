@@ -89,3 +89,6 @@
   .meterFill,
   .tapeTable { transition: none; }
 }
+
+/* The tape has been silent for over a minute: a halt looks exactly like this from here. */
+.warn { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--color-amber); font-size: var(--text-micro); line-height: var(--line-micro); }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   alertsBanner,
+  asOfLine,
   BANNED_TERMS,
   containsBannedTerm,
   COPY,
@@ -45,6 +46,23 @@ test("every 02l §c3 freshness state resolves to its exact wording", () => {
   assert.deepEqual(rows.map(([state]) => state).sort(), Object.keys(COPY).filter((key) => ["live", "delayed", "updating", "reconnecting", "paused", "backup", "closed", "pre_market", "after_hours", "unavailable"].includes(key)).sort());
 });
 
+test("the as-of line is dated and names its source", () => {
+  assert.equal(asOfLine({ freshness: "closed", quality: "eod", as_of: "2026-10-15T20:00:00Z", source: "alpaca" }), "As of last close · Thu 2026-10-15 · 4:00 PM ET · Alpaca");
+  assert.equal(asOfLine({ freshness: "delayed", quality: "delayed-15m", as_of: "2026-10-15T19:45:00Z", source: "alpaca" }), "As of 3:45 PM ET · Delayed 15 min · Alpaca");
+  assert.equal(asOfLine({ freshness: "delayed", quality: "eod", as_of: "2026-10-15", source: null }), "As of Thu 2026-10-15 · End of day");
+  assert.equal(asOfLine({ freshness: "unavailable", quality: "unavailable", as_of: null, source: null }), "No update yet");
+  assert.equal(asOfLine(null), "No update yet");
+});
+
+test("a closed market with no quotes yet reads as closed, never as a red retry", () => {
+  const none = { ...stamp("unavailable", "unavailable", null), source: null };
+  const view = resolveFreshness({ stamp: none, session: "closed", feed: true, now });
+  assert.deepEqual([view.state, view.label, view.tone, view.dim], ["closed", "Market closed · showing last close", "muted", false]);
+  assert.equal(statusBarText({ stamp: none, session: "closed", feed: true, now }), "Market closed · showing last close");
+  assert.equal(resolveFreshness({ stamp: none, session: "pre", feed: true, now }).state, "unavailable"); // an open session retries
+  assert.equal(resolveFreshness({ stamp: none, session: "closed", now }).state, "unavailable"); // one symbol the Desk cannot read
+});
+
 test("precedence: a dropped connection beats everything, a missing stamp reads as updating", () => {
   assert.equal(resolveFreshness({ stamp: stamp("unavailable", "unavailable", null), connection: "reconnecting" }).state, "reconnecting");
   assert.equal(resolveFreshness({ stamp: null }).state, "updating");
@@ -71,6 +89,9 @@ test("status bar, market data rows and the market pill use plain wording", () =>
   assert.equal(marketDataLine("Quotes", { source: "alpaca", quality: "delayed-15m" }), "Quotes: Alpaca · Delayed 15 min");
   assert.equal(marketDataLine("Scans", { source: "ibkr", quality: "realtime" }), "Scans: IBKR · Live");
   assert.equal(marketDataLine("Quotes", null), "Quotes: Unavailable");
+  assert.equal(marketDataLine("Quotes", { source: null, quality: "unavailable" }), "Quotes: Not updated yet");
+  assert.equal(marketDataLine("Scans", { source: null, quality: "unavailable" }), "Scans: Not run yet");
+  assert.equal(marketDataLine("Quotes", { source: "alpaca", quality: "eod" }), "Quotes: Alpaca · End of day");
   assert.equal(marketPillText("regular", null), "Market open");
   assert.equal(marketPillText("pre", null), "Pre-market");
   assert.equal(marketPillText("after", null), "After hours");

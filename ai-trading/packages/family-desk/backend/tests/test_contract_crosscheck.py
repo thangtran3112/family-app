@@ -15,6 +15,7 @@ import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
+from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import PracticeMarkV1, ReplaySessionV1
 from ai_trading.contracts.strategy_draft import StrategyDraft
 from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1, PresetCatalogV1, StrategySpecV1
@@ -39,6 +40,7 @@ FAMILIES: dict[str, tuple[type[BaseModel], list[str], list[str]]] = {
     "catalog": (PresetCatalogV1, ["fixtures/preset-catalog-v1/valid"], ["fixtures/preset-catalog-v1/invalid"]),
     "replay": (ReplaySessionV1, ["fixtures/replay-session-v1/valid"], ["fixtures/replay-session-v1/invalid"]),
     "mark": (PracticeMarkV1, ["fixtures/practice-mark-v1/valid"], ["fixtures/practice-mark-v1/invalid"]),
+    "block": (PracticeBlockV1, ["fixtures/practice-block-v1/valid"], ["fixtures/practice-block-v1/invalid"]),
 }
 
 needs_zod = pytest.mark.skipif(
@@ -62,7 +64,7 @@ _id = lambda pair: f"{pair[0]}:{_rel(pair[1])}"  # noqa: E731
 
 
 def test_every_family_has_fixtures():
-    assert len(VALID) >= 110 and len(INVALID) >= 200
+    assert len(VALID) >= 118 and len(INVALID) >= 240
 
 
 @pytest.mark.parametrize("pair", VALID, ids=_id)

@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
+import { formatEtDay } from "../../lib/desk/format.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
+import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 
 // The Practice lane (02o §i, step 5): hub to start, play, step, B, T, S/X, end, the journal, and a resumed session.
@@ -242,6 +244,111 @@ test.describe("Practice", () => {
     await page.getByRole("button", { name: PRACTICE_COPY.endAndScore }).click();
     await page.waitForURL(JOURNAL_URL);
     await expect(page.getByText(PRACTICE_COPY.noTradesJournal).first()).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  // Daily-list practice (02o-b v1): the plan, the day list before the open, Peek, stars, one practice session, the end of
+  // the day and its review, then the next day. The stub holds TSLA on Fri 2026-09-25 only, so Day 1 lists TSLA through her
+  // own always-matching daily filter and Day 2 lists nothing; the plan's data is fetched in the background first.
+  test("a daily plan opens a hidden-date day list with Peek and stars, ends into the review, and Continue opens Day 2", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const answers = watchReplayAnswers(page);
+    const api = watchApi(page);
+    const anyClose = {
+      schemaVersion: 1,
+      name: "Any close",
+      watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
+      liquidity: { minPrice: 1, minAvgVolume: 1 },
+      when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
+      maxResults: 50,
+    };
+    const created = await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: anyClose } });
+    expect(created.ok()).toBeTruthy();
+
+    // The hub: the plan form, since there is no plan yet.
+    await openDesk(page, "/practice");
+    const daily = page.locator("#daily-list");
+    await expect(daily.getByRole("form", { name: "Daily list plan" })).toBeVisible();
+    await daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
+    await daily.locator('input[type="date"]').fill(DAY);
+    await daily.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
+    await daily.getByLabel("To", { exact: true }).fill("09:40");
+    await daily.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "1m", exact: true }).click();
+    await expectCleanScreen(page);
+    await daily.getByRole("button", { name: "Save plan" }).click();
+
+    // Prep runs once in the background; Day 1 opens when the data is ready.
+    await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
+    await expect(daily).toContainText("Day 1 of 5 · next: Fri");
+    await expect(daily).not.toContainText(DAY);
+    await expectCleanScreen(page);
+    await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    const dayUrl = page.url();
+
+    // The day list: dates hidden, the candidate, the universe line, and the footnote.
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
+    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true));
+    await expect(page.getByText(/^List at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
+    await expect(page.getByText(/Practice universe · \d+ symbols the Desk has scanned/).first()).toBeVisible();
+    const table = page.getByRole("table", { name: "Candidates" });
+    await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(DAY);
+    await expectCleanScreen(page);
+
+    // Peek: the chart before the open; a star keeps the name in view.
+    await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
+    await page.getByRole("button", { name: "Star TSLA" }).click();
+    await expect(page.getByRole("button", { name: "Unstar TSLA" })).toBeVisible();
+    await expectCleanScreen(page);
+
+    // Practise the name: the workspace opens at the window start, with a way back to the list.
+    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).not.toContainText("9:30:00");
+    await expectCleanScreen(page);
+
+    // End the day from the workspace: it asks first, then opens the list with its review.
+    await page.getByRole("button", { name: "End day…" }).click();
+    await expect(page.getByText(PRACTICE_COPY.dayEndWarning)).toBeVisible();
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.waitForURL(dayUrl);
+    const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
+    await expect(review).toBeVisible();
+    await expect(review).toContainText("Your names moved");
+    await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("row")).toHaveCount(2); // header + TSLA
+    await expect(review).toContainText("Practice universe");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(`Day 1 of 5 · ${formatEtDay(DAY)}`); // nothing left to spoil
+    await expectCleanScreen(page);
+
+    // Before it ended, the list carried nothing later than its data time, and no review.
+    const lists = answers.filter(({ path }) => /\/day-lists\/\d+$/.test(path));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const { body } of lists) {
+      if (body.status === "ended") continue;
+      const through = Date.parse(body.data_through as string);
+      expect(body.review ?? null).toBeNull();
+      for (const candidate of (body.candidates as Array<{ price_at: string; matched_since: string }>) ?? []) {
+        expect(Date.parse(candidate.price_at)).toBeLessThanOrEqual(through);
+        expect(Date.parse(candidate.matched_since)).toBeLessThanOrEqual(Date.parse(body.list_at as string));
+      }
+      const peek = body.peek as { minutes: Array<{ t: string }>; daily: Array<{ t: string }> } | null;
+      for (const bar of peek?.minutes ?? []) expect(Date.parse(bar.t) + 60_000).toBeLessThanOrEqual(through);
+      for (const bar of peek?.daily ?? []) expect(bar.t < DAY, "a daily bar of the day itself").toBe(true);
+    }
+    expect(api.paths().filter((path) => LIVE_DATA.test(path)), "the day screens never read the live store").toEqual([]);
+
+    // Continue: Day 2 has no stored TSLA bars, so its list is empty and says so.
+    await openDesk(page, "/practice");
+    await expect(page.locator("#daily-list")).toContainText("Day 2 of 5 · next: Mon");
+    await page.locator("#daily-list").getByRole("button", { name: PRACTICE_COPY.planContinue }).click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
+    await expect(page.getByText(PRACTICE_COPY.dayNoNames).first()).toBeVisible();
     await expectCleanScreen(page);
   });
 });

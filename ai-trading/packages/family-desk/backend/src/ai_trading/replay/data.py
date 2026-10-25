@@ -218,6 +218,25 @@ class History:
                 store.put(BlobKey("bars1d", symbol, day, "", _BARS_FEED), payload, len(part), raw)
         return out
 
+    def split_daily(self, symbol: str, first: date, last: date) -> pd.DataFrame:
+        """Split-adjusted daily bars (dividends left alone) from 460 calendar days before `first` through `last`, in
+        one request. The day list rebases it to a day's own share basis (`screen.rebase_split`)."""
+        first_s, last_s = session("stock", first), session("stock", last)
+        assert first_s is not None and last_s is not None
+        try:
+            frame = self._sources.bars.bars(
+                symbol,
+                "1d",
+                first_s.regular_open - timedelta(days=_DAILY_LOOKBACK_DAYS),
+                last_s.extended_close,
+                now=self._now(),
+                adjustment="split",
+            ).frame
+        except NoData:
+            frame = pd.DataFrame({c: [] for c in ("open", "high", "low", "close", "volume")}, index=pd.Index([]))
+        self.fetches += 1
+        return frame
+
     # -- internals -------------------------------------------------------------------------------------------
 
     def _fetch_run(self, store: BlobStore, symbol: str, run: list[date]) -> dict[date, pd.DataFrame]:

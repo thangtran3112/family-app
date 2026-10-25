@@ -467,6 +467,10 @@ class ReplaySession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Alembic 0006 (02o-b v1): the day list this session practises, null for a standalone session.
+    day_list_id: Mapped[int | None] = mapped_column(
+        ForeignKey("replay_day_lists.id", ondelete="CASCADE"), index=True, nullable=True
+    )
 
 
 class PracticeMark(Base):
@@ -524,4 +528,78 @@ class ReplayBlob(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False)
     raw_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# -- Daily-list practice (Alembic 0006, 02o-b v1): the plan and cursor, the frozen day lists, the universe snapshot --
+
+
+class PracticePlan(Base):
+    """The saved daily-list setup and its cursor. One active plan per user; `day_cursor` is the newest opened day."""
+
+    __tablename__ = "practice_plans"
+    __table_args__ = (
+        Index(
+            "uq_practice_plans_owner_user_id_active",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_practice_plans_status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    first_day: Mapped[date] = mapped_column(Date, nullable=False)
+    universe: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    prep: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    day_cursor: Mapped[date | None] = mapped_column(Date)
+    days_opened: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "active" | "archived"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReplayDayList(Base):
+    """One practice day: the frozen candidate list, her stars, the day clock, and (once ended) the review."""
+
+    __tablename__ = "replay_day_lists"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "day", name="uq_replay_day_lists_plan_id_day"),
+        Index("ix_replay_day_lists_owner_user_id_day", "owner_user_id", "day"),
+        CheckConstraint("status IN ('listed', 'practicing', 'ended')", name="ck_replay_day_lists_status"),
+        CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_replay_day_lists_rating"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("practice_plans.id", ondelete="CASCADE"), nullable=False)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    day_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    screen: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    list_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    data_through: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    universe: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    columns: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    candidates: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    watch: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    revealed_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # the shared day clock
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "listed" | "practicing" | "ended"
+    journal: Mapped[Any | None] = mapped_column(JSONB)
+    review: Mapped[Any | None] = mapped_column(JSONB)  # only ever served once the day has ended
+    notes: Mapped[str | None] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(SmallInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UniverseDay(Base):
+    """The symbols the live premarket pass scanned on a morning (write-only in 02o-b v1; the read path is 02o-b2)."""
+
+    __tablename__ = "universe_days"
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    symbols: Mapped[Any] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

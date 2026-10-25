@@ -11,6 +11,7 @@ from ai_trading_common.registry import DataSources
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ai_trading.data import refresher
 from ai_trading.jobs import (
     JobResult,
     consensus_snapshot,
@@ -103,6 +104,17 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
     return results
 
 
+def seed_strip(session: Session, data_sources: DataSources, *, now: datetime) -> bool:
+    """Gives the dashboard's market strip its first rows without waiting for a slotted job (a weekend deploy has no
+    session until Monday). A failure is logged and rolled back to a savepoint; it never stops a tick."""
+    try:
+        with session.begin_nested():
+            return refresher.ensure_market_strip(session, data_sources, now=now)
+    except Exception:  # noqa: BLE001 -- see the docstring
+        logger.exception("market strip seed failed")
+        return False
+
+
 def _wait_for_database(
     engine,
     *,
@@ -136,7 +148,9 @@ def main() -> None:  # pragma: no cover -- the real loop; exercised through `run
     heartbeat = healthcheck.heartbeat_path()
     while True:
         with factory() as session:
-            run_due(session, sources, clock, now=datetime.now(UTC))
+            now = datetime.now(UTC)
+            seed_strip(session, sources, now=now)
+            run_due(session, sources, clock, now=now)
             session.commit()
         healthcheck.touch(heartbeat)  # F4b: proves this loop iteration to ai_trading.jobs.healthcheck
         _time.sleep(60)
@@ -146,4 +160,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ("due_now", "run_due", "main")
+__all__ = ("due_now", "run_due", "seed_strip", "main")

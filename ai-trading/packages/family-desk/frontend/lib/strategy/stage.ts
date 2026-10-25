@@ -13,7 +13,7 @@ export function stageOptions(implementedPhase: number): StageOption[] {
       stage: "paper",
       label: "Paper",
       enabled: paperEnabled,
-      ...(paperEnabled ? {} : { reason: "Phase 6" }),
+      ...(paperEnabled ? {} : { reason: "Needs broker setup" }),
     },
     { label: "Live", enabled: false, reason: "Not in v1" },
   ];

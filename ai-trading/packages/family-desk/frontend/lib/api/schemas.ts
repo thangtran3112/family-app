@@ -292,7 +292,7 @@ export const SymbolSearchResponseSchema = z.array(z.object({
 
 export const DashboardSchema = z.object({
   stamp: StampSchema,
-  market: z.object({ session: marketSession, next_open: utcTimestamp }),
+  market: z.object({ session: marketSession, next_open: utcTimestamp, next_update_at: utcTimestamp.nullable().optional() }),
   market_strip: z.array(z.object({
     symbol: z.string(),
     last: finiteNumber.nullable(),

@@ -37,6 +37,8 @@ class SymbolSearchOut(BaseModel):
 class DashboardMarketOut(BaseModel):
     session: MarketSession
     next_open: datetime
+    #: When the scheduler's next scan runs: the first update of a market strip that has no data yet.
+    next_update_at: datetime | None = None
 
 
 class MarketStripTileOut(BaseModel):

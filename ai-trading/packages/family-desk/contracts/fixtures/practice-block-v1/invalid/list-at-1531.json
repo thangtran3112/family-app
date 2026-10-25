@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "firstDay": "2026-03-02",
+  "sessions": 20,
+  "hideDates": "yes",
+  "screen": {
+    "filters": [
+      {
+        "id": 1
+      }
+    ],
+    "listAt": "15:31",
+    "maxList": 30
+  },
+  "setup": {
+    "window": {
+      "from": "15:31",
+      "to": "16:00"
+    },
+    "session": "regular",
+    "interval": "5m",
+    "shares": 100,
+    "armed": [],
+    "plan": {
+      "stopRequired": "yes",
+      "signalOnly": "no"
+    }
+  }
+}

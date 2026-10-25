@@ -42,6 +42,12 @@ test("chart workspace shows the NVDA header, toolbar, chart legend and bottom pa
   await expect(panels.getByRole("tab", { name: "Technicals", selected: true })).toBeVisible();
 });
 
+test("the chart carries a dated as-of line with its source", async ({ page }) => {
+  await openDesk(page, "/technicals?symbol=NVDA#chart");
+  await expect(page.locator("#main-content").getByText("As of last close · Thu 2026-10-15 · 3:45 PM ET · Alpaca", { exact: true })).toBeVisible();
+  await expectCleanScreen(page);
+});
+
 test("the 1D timeframe requests its bars and technicals, presses 1D and relabels the legend", async ({ page }) => {
   const api = watchApi(page);
   await openDesk(page, "/technicals?symbol=NVDA#chart");
@@ -73,7 +79,7 @@ test("the Indicators menu lists the overlays and panes and adds SMA 50 to the le
   await expect(menu).toHaveCount(0);
 
   // The overlay appears as a legend line with its value.
-  await expect(page.locator("#main-content").getByText("SMA 50", { exact: true })).toBeVisible();
+  await expect(page.locator("#main-content span").filter({ hasText: /^SMA 50$/ })).toBeVisible();
   await expectCleanScreen(page);
 });
 

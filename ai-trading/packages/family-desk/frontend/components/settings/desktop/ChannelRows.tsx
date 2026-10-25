@@ -95,8 +95,9 @@ function ChannelRow({ row, preferences, disabled, onPreference, onChannelsChange
           <input
             className={styles.check}
             type="checkbox"
-            checked={preferences[channel]}
-            disabled={disabled || (row.status !== "connected" && !preferences[channel])}
+            // A channel that is not connected cannot deliver, so its box reads unchecked whatever was saved before.
+            checked={row.status === "connected" && preferences[channel]}
+            disabled={disabled || row.status !== "connected"}
             onChange={(event) => onPreference(channel, event.currentTarget.checked)}
           />
           <span>Send alerts to {row.title}</span>

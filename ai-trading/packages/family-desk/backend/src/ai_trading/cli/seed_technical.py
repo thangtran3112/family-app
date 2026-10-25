@@ -19,18 +19,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
-from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1
 from ai_trading.db.engine import make_engine, make_session_factory, session_scope
 from ai_trading.db.models import (
-    FilterStrategy,
-    FilterStrategyVersion,
     Strategy,
     StrategyVersion,
     User,
     Watchlist,
     WatchlistItem,
 )
-from ai_trading.library.catalog import alert_only_spec, load_catalog, load_template
+from ai_trading.library.catalog import alert_only_spec, load_template
+from ai_trading.screener.service import ensure_seed_filters
 
 DATABASE_URL_VAR = "DESK_RUNTIME_DATABASE_URL"
 
@@ -111,33 +109,7 @@ def _seed_watchlists(session: Session, user_id: int, report: SeedReport) -> None
 
 
 def _seed_filters(session: Session, user_id: int, now: datetime, report: SeedReport) -> None:
-    have = set(
-        session.execute(
-            select(FilterStrategy.seed_key).where(
-                FilterStrategy.owner_user_id == user_id, FilterStrategy.origin == "seed"
-            )
-        ).scalars()
-    )
-    for entry in load_catalog().entries:
-        if entry.kind != "filter" or entry.id in have:
-            continue
-        spec = FilterStrategySpecV1.model_validate(load_template(entry.file))
-        row = FilterStrategy(owner_user_id=user_id, name=spec.name, origin="seed", seed_key=entry.id, created_at=now)
-        session.add(row)
-        session.flush()
-        version = FilterStrategyVersion(
-            filter_strategy_id=row.id,
-            version=1,
-            schema_version=spec.schemaVersion,
-            spec=_dump(spec),
-            change_note="seeded",
-            created_by=user_id,
-            created_at=now,
-        )
-        session.add(version)
-        session.flush()
-        row.current_version_id = version.id
-        report.filters += 1
+    report.filters += ensure_seed_filters(session, user_id, now=now)
 
 
 def _seed_alert_strategies(session: Session, user_id: int, now: datetime, report: SeedReport) -> None:

@@ -1,8 +1,9 @@
 """`/api/desk/dashboard` (02m §a3.2): one aggregate read for the dashboard, composed from the stored results of the
 scheduler's passes; it adds no storage.
 
-- `market_strip`: SPY, QQQ and IWM from the stored metric rows; `/ES` and `/NQ` stay `unavailable` until the IBKR slot
-  is live (no fabricated values).
+- `market_strip`: SPY, QQQ and IWM from the stored metric rows (every scheduler pass refreshes them, and a seed fills
+  them before the first pass); a tile with no row reads `unavailable`, and `market.next_update_at` says when the
+  next scan will fill it. `/ES` and `/NQ` stay `unavailable` until the IBKR slot is live (no fabricated values).
 - `signals`: the newest session's signals of her strategies, newest first, at most 20.
 - `screener_matches`: one card per active filter from its last run (a filter that never ran reads `unavailable`).
 - `watchlist`: the chosen list's rows (metrics plus the stored 15-minute bias label), in her order.
@@ -43,7 +44,10 @@ from ai_trading.api.stamp import SCAN_INTERVAL, feed_last_ok, make_stamp, no_run
 from ai_trading.core.calendar import ET
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.freshness import market_state
+from ai_trading.data.refresher import STRIP_FEED
+from ai_trading.data.universe import MARKET_STRIP
 from ai_trading.db.models import Signal, Strategy, StrategyVersion, SymbolMetrics, Watchlist, WatchlistItem
+from ai_trading.jobs.refresh_15m import next_due
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
 from ai_trading.screener import runner, service
@@ -52,7 +56,6 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/desk/dashboard", tags=["dashboard"], dependencies=[Depends(get_current_user)])
 
-MARKET_STRIP = ("SPY", "QQQ", "IWM")
 UNAVAILABLE_TILES = ("/ES", "/NQ")  # until the IBKR slot is live (02m §b4)
 SIGNALS_MAX = 20
 TOP_MATCHES = 3
@@ -239,11 +242,12 @@ def dashboard(
     chosen = _chosen_watchlist(session, user, requested)
     listed = [symbol for symbol, _ in (watchlist_symbols(session, user.id, chosen.name) if chosen else None) or []]
     stored = _metrics(session, [*MARKET_STRIP, *listed])
-    last_ok_at = feed_last_ok(session, "scan")
+    # The strip's seed writes metric rows before any scan has run: its own feed vouches for them until one does.
+    last_ok_at = max(filter(None, (feed_last_ok(session, "scan"), feed_last_ok(session, STRIP_FEED))), default=None)
     market = market_state(now)
     return DashboardOut(
         stamp=_stamp(max(stored.values(), key=lambda row: row.as_of, default=None), last_ok_at, now),
-        market=DashboardMarketOut(session=market.session, next_open=market.next_open),
+        market=DashboardMarketOut(session=market.session, next_open=market.next_open, next_update_at=next_due(now)),
         market_strip=_market_strip(stored, last_ok_at, now),
         signals=_signals(session, user.id, session_start(now)),
         screener_matches=_screener_matches(session, user.id, now),

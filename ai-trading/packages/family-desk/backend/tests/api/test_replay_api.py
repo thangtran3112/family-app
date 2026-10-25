@@ -417,6 +417,7 @@ def test_sessions_list_has_the_resume_and_recent_fields(replay: TestClient) -> N
     assert len(rows) == 1
     assert rows[0] | {"updated_at": None} == {
         "id": sid,
+        "day_list_id": None,
         "symbol": "TSLA",
         "day": "2026-09-25",
         "attempt": 1,

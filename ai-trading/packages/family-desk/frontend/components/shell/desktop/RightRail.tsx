@@ -72,7 +72,8 @@ export function RightRail({
             role="tab"
             className={styles.stripTab}
             aria-selected={current === section.id}
-            aria-controls={current === section.id ? "rail-drawer" : undefined}
+            aria-expanded={current === section.id}
+            aria-controls="rail-drawer"
             onClick={() => setOpen(toggleRailTab(current, section.id))}
           >
             {section.label}

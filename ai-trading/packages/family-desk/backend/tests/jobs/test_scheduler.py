@@ -300,3 +300,25 @@ def test_run_due_hands_premarket_the_data_sources_the_refresher_needs(monkeypatc
     scheduler.run_due(object(), sources, JobClock(), now=datetime(2026, 10, 6, 13, 30, tzinfo=UTC))
 
     assert seen == [sources]
+
+
+def test_seed_strip_never_stops_a_tick(monkeypatch):
+    class _Savepoint:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    class _Session:
+        def begin_nested(self):
+            return _Savepoint()
+
+    def boom(session, sources, *, now):
+        raise RuntimeError("provider exploded")
+
+    monkeypatch.setattr(scheduler.refresher, "ensure_market_strip", boom)
+    assert scheduler.seed_strip(_Session(), _FakeSources(), now=datetime(2026, 10, 24, 15, 0, tzinfo=UTC)) is False
+
+    monkeypatch.setattr(scheduler.refresher, "ensure_market_strip", lambda session, sources, *, now: True)
+    assert scheduler.seed_strip(_Session(), _FakeSources(), now=datetime(2026, 10, 24, 15, 0, tzinfo=UTC)) is True

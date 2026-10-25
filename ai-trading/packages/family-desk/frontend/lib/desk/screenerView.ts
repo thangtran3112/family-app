@@ -71,3 +71,17 @@ export function resultsState(input: { loading: boolean; hasResults: boolean; fai
 
 /** Delayed scans say so (02l D5): the scan stamp is delayed while the market is open. */
 export const scanIsDelayed = (stamp: { freshness: string }): boolean => stamp.freshness === "delayed";
+
+/** A filter that no scan has run yet: the API answers 200 with no matches and a stamp without an as-of time. */
+export const neverScanned = (stamp: { as_of: string | null; freshness: string }): boolean => stamp.as_of === null && stamp.freshness === "unavailable";
+
+/** The new-filter form starts from the first default's rule, under a name of its own. */
+export const NEW_FILTER_SPEC = {
+  schemaVersion: 1,
+  name: "New filter",
+  watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
+  liquidity: { minPrice: 5, minAvgVolume: 500000 },
+  when: { op: "gte", left: { series: "rvol", lookbackDays: 10 }, right: { value: 2 } },
+  rank: { by: { series: "rvol", lookbackDays: 10 }, order: "desc" },
+  maxResults: 50,
+} as const;

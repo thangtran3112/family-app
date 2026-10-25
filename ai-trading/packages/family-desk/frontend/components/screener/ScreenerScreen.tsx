@@ -8,8 +8,9 @@ import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY, emptyScanText } from "@/lib/desk/freshness";
 import { loadFilterDetail, loadFilterResults, loadFilters, type ScreenerSession } from "@/lib/desk/screener";
-import { filterIdFromParam, pickFilter, resultsState, scanIsDelayed } from "@/lib/desk/screenerView";
+import { filterIdFromParam, neverScanned, pickFilter, resultsState, scanIsDelayed } from "@/lib/desk/screenerView";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { FilterChips } from "./FilterChips";
 import { FilterHeader } from "./FilterHeader";
 import { PreviewPane } from "./PreviewPane";
 import { ResultsTable } from "./ResultsTable";
@@ -35,6 +36,7 @@ export function ScreenerScreen() {
   });
   const data = results.data;
   const delayed = data !== null && scanIsDelayed(data.stamp);
+  const waiting = data !== null && neverScanned(data.stamp);
 
   const [picked, setPicked] = useState<string | null>(null);
   const firstSymbol = data?.matches[0]?.symbol ?? null;
@@ -50,11 +52,16 @@ export function ScreenerScreen() {
   if (filters.data === null) {
     body = filters.error === null ? <LoadingBlock label="Loading filters…" height={240} /> : <ErrorBlock subject="filter list" onRetry={filters.refresh} />;
   } else if (filter === null) {
-    body = <EmptyBlock title="No screener filters yet" />;
+    body = (
+      <EmptyBlock title={COPY.noFilters}>
+        <a href="/screener/filters" className={styles.link}>{COPY.newFilter}</a>
+      </EmptyBlock>
+    );
   } else {
     let table: ReactNode;
-    if (state === "scanning") table = <LoadingBlock label={COPY.scanning} height={240} />;
-    else if (state === "error") table = <ErrorBlock subject="scan results" onRetry={results.refresh} />;
+    if (waiting) table = <EmptyBlock title={COPY.firstScan} />;
+    else if (state === "scanning") table = <LoadingBlock label={COPY.scanning} height={240} />;
+    else if (state === "error") table = <ErrorBlock subject="scan table" onRetry={results.refresh} />;
     else if (state === "empty") table = <EmptyBlock title={emptyScanText(status?.scans.next_run_at ?? null)} />;
     else if (data) {
       table = (
@@ -64,6 +71,7 @@ export function ScreenerScreen() {
 
     body = (
       <>
+        <FilterChips filters={filters.data} activeId={filter.id} />
         <FilterHeader key={filter.id}
           filter={filter}
           detail={detail.data}
@@ -74,7 +82,7 @@ export function ScreenerScreen() {
         <div className={styles.meta}>
           <UniverseLine />
           {/* A delayed scan shows its pill by the title instead; the badge still shows if the connection is in trouble. */}
-          {data && (!delayed || results.connection !== "ok") && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
+          {data && !waiting && (!delayed || results.connection !== "ok") && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
         </div>
         {table}
         <RightRail sections={[{ id: "preview", label: "Preview", node: <PreviewPane symbol={selectedSymbol} runOn={filter.run_on} /> }]} label="Chart preview" />
