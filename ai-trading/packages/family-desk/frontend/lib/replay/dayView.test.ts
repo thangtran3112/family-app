@@ -24,8 +24,8 @@ import {
 test("the daily payloads parse, and the contract's required fields are required", () => {
   assert.equal(DayListSchema.parse(dayList).candidates.length, 2);
   assert.equal(DayListSchema.parse(endedDayList).review?.rows[0]?.picked, "traded");
-  assert.equal(DailySchema.parse({ plan }).plan?.next_weekday, "Tue");
-  assert.equal(DailySchema.parse({ plan: null }).plan, null);
+  assert.equal(DailySchema.parse({ plan, thread: null }).plan?.next_weekday, "Tue");
+  assert.equal(DailySchema.parse({ plan: null, thread: null }).plan, null);
   assert.equal(OpenNextSchema.parse({ plan, day_list_id: null }).day_list_id, null);
   assert.equal(DayListSchema.safeParse({ ...dayList, universe: undefined }).success, false);
   assert.equal(DayListSchema.safeParse({ ...dayList, status: "open" }).success, false);

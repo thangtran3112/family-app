@@ -2,6 +2,7 @@ import { z } from "zod";
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { components } from "../api/openapi.js";
 import { ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
+import { ThreadBriefSchema, ThreadSummarySchema } from "./threads.ts";
 
 // Response shapes of the daily-list practice endpoints (02o-b v1), checked against the generated OpenAPI the way
 // lib/replay/schemas.ts does: a field the backend adds, drops or retypes breaks `pnpm typecheck` here.
@@ -33,6 +34,8 @@ const PlanPrepSchema = z.object({
 
 export const PracticePlanSchema = z.object({
   id: finite.int(),
+  /** The practice thread this plan's days book into (02r). */
+  thread_id: finite.int().nullable(),
   spec: PracticeBlockV1Schema,
   sessions: finite.int(),
   days_opened: finite.int(),
@@ -45,7 +48,8 @@ export const PracticePlanSchema = z.object({
   prep: PlanPrepSchema,
 }) satisfies z.ZodType<components["schemas"]["PracticePlanOut"]>;
 
-export const DailySchema = z.object({ plan: PracticePlanSchema.nullable() }) satisfies z.ZodType<components["schemas"]["DailyOut"]>;
+/** The hub card: her plan and cursor, and her active day thread with its SIMULATED balance and stats (02r). */
+export const DailySchema = z.object({ plan: PracticePlanSchema.nullable(), thread: ThreadSummarySchema.nullable() }) satisfies z.ZodType<components["schemas"]["DailyOut"]>;
 
 export const OpenNextSchema = z.object({
   plan: PracticePlanSchema,
@@ -198,6 +202,8 @@ export const DayListSchema = z.object({
   watch: z.array(StarSchema),
   clock: timestamp.nullable(),
   sessions: z.array(DaySessionSchema),
+  /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
+  thread: ThreadBriefSchema.nullable(),
   warnings: z.array(z.string()),
   peek: PeekSchema.nullable(),
   journal: DayJournalSchema.nullable(),
