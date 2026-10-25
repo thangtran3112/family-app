@@ -1,17 +1,18 @@
 import {
   EMPTY_VALUE,
   changeTone,
+  formatPrice,
   formatEtDay,
   formatEtTime,
   formatEtTimeZone,
   formatMetric,
   formatSignedPct,
-  formatPct,
   type MetricFormat,
   type Tone,
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayList, DayReview, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import { formatUsd } from "./journalView.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
@@ -130,13 +131,14 @@ export function ordinal(value: number): string {
 
 const joinAnd = (parts: readonly string[]): string => (parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
-/** "Your names moved +3.1% and −0.4% · list median 1.8% · ranked 4th and 11th of 30"; null when she picked none. */
+/** "Your names moved +3.1% and −0.4% · list median +1.8% · ranked 4th and 11th of 30"; null when she picked none.
+ *  The median is of the signed moves, like the ranking (D-031). */
 export function selectionText(review: Pick<DayReview, "of" | "selection">): string | null {
-  const { picks, median_abs_move_pct: median } = review.selection;
+  const { picks, median_move_pct: median } = review.selection;
   if (picks.length === 0) return null;
   return practiceText("reviewSelection", {
     moves: joinAnd(picks.map((pick) => formatSignedPct(pick.move_pct, 1))),
-    median: formatPct(median, 1),
+    median: formatSignedPct(median, 1),
     ranks: joinAnd(picks.map((pick) => ordinal(pick.rank))),
     of: review.of,
   });
@@ -146,12 +148,45 @@ export const moveText = (value: number | null): string => (value === null ? EMPT
 
 export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practised" : row.picked === "starred" ? "Starred" : "");
 
-/** "Your day: 1 practice trade · +$63.00". */
-export function journalLine(journal: NonNullable<DayList["journal"]>): string {
+/** "Day finished · date shown below" when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
+export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);
+
+/** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */
+export function journalLine(journal: Pick<DayJournal, "trades" | "pnl_usd">): string {
   const trades = journal.trades === 1 ? "1 practice trade" : `${journal.trades} practice trades`;
-  const pnl = journal.pnl_usd;
-  const sign = pnl > 0 ? "+" : pnl < 0 ? "−" : "";
-  return `${trades} · ${sign}$${Math.abs(pnl).toFixed(2)}`;
+  return `${trades} · ${formatUsd(journal.pnl_usd)}`;
+}
+
+/** "1 win · 0 losses" (a scratch is neither, and is counted only when there is one). */
+export function dayRecordText(journal: Pick<DayJournal, "wins" | "losses" | "scratches">): string {
+  const part = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  const text = `${part(journal.wins, "win", "wins")} · ${part(journal.losses, "loss", "losses")}`;
+  return journal.scratches > 0 ? `${text} · ${part(journal.scratches, "scratch", "scratches")}` : text;
+}
+
+const money = (value: number): string => `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** "Balance $50,000.00 → $51,565.00" (SIMULATED), or null for a day with no thread. */
+export function dayBalanceText(journal: Pick<DayJournal, "balance_before" | "balance_after">): string | null {
+  const { balance_before: before, balance_after: after } = journal;
+  if (before === null || after === null) return null;
+  return practiceText("reviewBalance", { before: money(before), after: money(after) });
+}
+
+export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; exit: string; pnl: string; tone: Tone };
+
+/** One row per closed trade: the entry and exit price with the ET time, the shares, and the P/L to the cent. */
+export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[] {
+  return journal.lines.map((line: DayTradeLine) => ({
+    key: `${line.symbol}-${line.no}-${line.entry_at}`,
+    symbol: line.symbol,
+    side: line.side === "long" ? "Long" : "Short",
+    shares: line.shares.toLocaleString("en-US"),
+    entry: `${formatPrice(line.entry_price)} · ${formatEtTime(line.entry_at)}`,
+    exit: `${formatPrice(line.exit_price)} · ${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    pnl: formatUsd(line.pnl_usd),
+    tone: changeTone(line.pnl_usd),
+  }));
 }
 
 // ---- Peek ----------------------------------------------------------------------------------------------------

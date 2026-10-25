@@ -381,6 +381,10 @@ test.describe("Practice", () => {
     const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
     await expect(review).toBeVisible();
     await expect(review).toContainText("Your names moved");
+    await expect(review).toContainText(PRACTICE_COPY.reviewDayFinished); // D-029: the finished day shows its date, and says so
+    await expect(review).toContainText(PRACTICE_COPY.reviewRankNote); // D-031: signed, biggest gain first
+    await expect(review.getByRole("table", { name: "Your practice trades" })).toBeVisible(); // D-032: a line per trade
+    await expect(review).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("row")).toHaveCount(2); // header + TSLA
     await expect(review).toContainText("Practice universe");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(`Day 1 of 5 · ${formatEtDay(DAY)}`); // nothing left to spoil

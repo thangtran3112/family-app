@@ -441,6 +441,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/day-lists/{day_list_id}/relist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relist Day List
+         * @description Re-list a day she has not started at a later list time: moves the open plan's list time (the practice window
+         *     follows when it would start before the list) and rebuilds this day's list on today's Desk universe. The plan's
+         *     list-time rules answer 422; a day under way or on a replaced plan is a 409. When the universe grew and its bars
+         *     are not ready the list stays as it was while the data prepares: re-list again then.
+         */
+        post: operations["relist_day_list_api_desk_replay_day_lists__day_list_id__relist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
         parameters: {
             query?: never;
@@ -1844,14 +1867,30 @@ export interface components {
             /** Version Id */
             version_id: number;
         };
-        /** DayJournalOut */
+        /**
+         * DayJournalOut
+         * @description The day's practice result, SIMULATED dollars to the cent: one line per closed trade, the win and loss counts
+         *     (a scratch is neither), and the thread's balance before and after the day (null for a day with no thread).
+         */
         DayJournalOut: {
+            /** Balance After */
+            balance_after: number | null;
+            /** Balance Before */
+            balance_before: number | null;
+            /** Lines */
+            lines: components["schemas"]["DayTradeLineOut"][];
+            /** Losses */
+            losses: number;
             /** Pnl Usd */
             pnl_usd: number;
+            /** Scratches */
+            scratches: number;
             /** Sessions */
             sessions: components["schemas"]["DayJournalSessionOut"][];
             /** Trades */
             trades: number;
+            /** Wins */
+            wins: number;
         };
         /** DayJournalSessionOut */
         DayJournalSessionOut: {
@@ -1913,6 +1952,7 @@ export interface components {
             plan: components["schemas"]["PracticePlanOut"];
             /** Rating */
             rating: number | null;
+            relist: components["schemas"]["RelistOfferOut"] | null;
             review: components["schemas"]["ReviewOut"] | null;
             screen: components["schemas"]["DayScreenOut"];
             /** Sessions */
@@ -1949,6 +1989,14 @@ export interface components {
             /** Watch */
             watch?: string[] | null;
         };
+        /**
+         * DayRelistIn
+         * @description POST body: the list time to re-list at, "HH:MM" ET. The plan's rules apply (422).
+         */
+        DayRelistIn: {
+            /** Listat */
+            listAt: string;
+        };
         /** DayScreenOut */
         DayScreenOut: {
             /** Filters */
@@ -1972,6 +2020,50 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "ended";
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * DayTradeLineOut
+         * @description One closed practice trade of the day, with the name it was on.
+         */
+        DayTradeLineOut: {
+            /**
+             * Entry At
+             * Format: date-time
+             */
+            entry_at: string;
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Exit At
+             * Format: date-time
+             */
+            exit_at: string;
+            /** Exit Price */
+            exit_price: number;
+            /**
+             * Exit Source
+             * @enum {string}
+             */
+            exit_source: "her" | "auto";
+            /** No */
+            no: number;
+            /** On Signal */
+            on_signal: boolean;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** R */
+            r: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Stop Price */
+            stop_price: number | null;
             /** Symbol */
             symbol: string;
         };
@@ -2992,6 +3084,19 @@ export interface components {
             /** Path */
             path: string;
         };
+        /**
+         * RelistOfferOut
+         * @description The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which
+         *     moves the plan's list time, and the practice window's start with it when `window_from` is set.
+         */
+        RelistOfferOut: {
+            /** Label */
+            label: string;
+            /** List At */
+            list_at: string;
+            /** Window From */
+            window_from: string | null;
+        };
         /** ReplayBarOut */
         ReplayBarOut: {
             /** C */
@@ -3247,9 +3352,18 @@ export interface components {
         };
         /**
          * ReviewOut
-         * @description Every candidate's move from its list price to the window end and the close. Only present once the day ended.
+         * @description Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
+         *     window end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen
+         *     hid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029).
          */
         ReviewOut: {
+            /** Dates Hidden */
+            dates_hidden: boolean;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
             /** Of */
             of: number;
             /** Rows */
@@ -3496,14 +3610,17 @@ export interface components {
             scanned: number;
             stamp: components["schemas"]["Stamp"];
         };
-        /** SelectionOut */
+        /**
+         * SelectionOut
+         * @description Signed: a loss pulls the median and the average down (D-031 ranked and averaged by size before).
+         */
         SelectionOut: {
-            /** Median Abs Move Pct */
-            median_abs_move_pct: number | null;
+            /** Median Move Pct */
+            median_move_pct: number | null;
             /** Picks */
             picks: components["schemas"]["SelectionPickOut"][];
-            /** Picks Avg Abs Move Pct */
-            picks_avg_abs_move_pct: number | null;
+            /** Picks Avg Move Pct */
+            picks_avg_move_pct: number | null;
         };
         /** SelectionPickOut */
         SelectionPickOut: {
@@ -5015,6 +5132,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    relist_day_list_api_desk_replay_day_lists__day_list_id__relist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DayRelistIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm, practiceText } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { DailySchema, DayListSchema, OpenNextSchema } from "./daily.ts";
 import { dayList, endedDayList, plan } from "./dailyFixtures.ts";
 import {
   cellText,
   cellTone,
+  dayBalanceText,
+  dayFinishedLine,
+  dayRecordText,
   dayTitle,
   filtersText,
   journalLine,
@@ -19,6 +22,7 @@ import {
   selectionText,
   syntheticDays,
   toggledStars,
+  tradeLineRows,
 } from "./dayView.ts";
 
 test("the daily payloads parse, and the contract's required fields are required", () => {
@@ -107,14 +111,47 @@ test("the review reads the picks' moves, the list median and their ranks", () =>
   assert.equal(ordinal(12), "12th");
   assert.equal(ordinal(23), "23rd");
   const review = endedDayList.review!;
-  assert.equal(selectionText(review), "Your names moved +3.1% · list median 1.7% · ranked 1st of 2");
+  assert.equal(selectionText(review), "Your names moved +3.1% · list median +1.4% · ranked 1st of 2");
   const two = { ...review, of: 30, selection: { ...review.selection, picks: [{ symbol: "A", kind: "traded" as const, move_pct: 3.1, rank: 4 }, { symbol: "B", kind: "starred" as const, move_pct: -0.4, rank: 11 }] } };
-  assert.equal(selectionText(two), "Your names moved +3.1% and −0.4% · list median 1.7% · ranked 4th and 11th of 30");
+  assert.equal(selectionText(two), "Your names moved +3.1% and −0.4% · list median +1.4% · ranked 4th and 11th of 30");
+  const down = { ...review, selection: { ...review.selection, median_move_pct: -0.4 } };
+  assert.equal(selectionText(down), "Your names moved +3.1% · list median −0.4% · ranked 1st of 2", "the median is signed: a losing list reads as one");
   assert.equal(selectionText({ ...review, selection: { ...review.selection, picks: [] } }), null);
   assert.equal(moveText(null), "—");
   assert.equal(moveText(-0.31), "−0.31%");
   assert.equal(journalLine(endedDayList.journal!), "1 practice trade · +$63.00");
-  assert.equal(journalLine({ sessions: [], trades: 0, pnl_usd: 0 }), "0 practice trades · $0.00");
+  assert.equal(journalLine({ trades: 0, pnl_usd: 0 }), "0 practice trades · $0.00");
+});
+
+// The recorded day (D-032, D-034): META long 100 shares, 610.83 to 626.48, +$1,565.00 on a $50,000.00 balance.
+const meta = {
+  ...endedDayList.journal!,
+  pnl_usd: 1565,
+  lines: [
+    { no: 1, symbol: "META", side: "long" as const, entry_at: "2026-07-01T14:15:00Z", entry_price: 610.83, exit_at: "2026-07-01T15:10:00Z", exit_price: 626.48, shares: 100, pnl_usd: 1565, r: null, stop_price: null, on_signal: false, exit_source: "her" as const },
+  ],
+  balance_before: 50000,
+  balance_after: 51565,
+};
+
+test("the review's day block shows each trade's prices, times and P/L to the cent, with the record and the balance", () => {
+  assert.equal(journalLine(meta), "1 practice trade · +$1,565.00", "thousands separator and cents, like the replay header");
+  assert.equal(dayRecordText(meta), "1 win · 0 losses");
+  assert.equal(dayRecordText({ wins: 2, losses: 1, scratches: 1 }), "2 wins · 1 loss · 1 scratch");
+  assert.equal(dayBalanceText(meta), "Balance $50,000.00 → $51,565.00");
+  assert.equal(dayBalanceText({ balance_before: null, balance_after: null }), null);
+  assert.deepEqual(tradeLineRows(meta), [
+    { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83 · 10:15 AM", exit: "626.48 · 11:10 AM", pnl: "+$1,565.00", tone: "up" },
+  ]);
+  const auto = { ...meta, lines: [{ ...meta.lines[0]!, side: "short" as const, exit_source: "auto" as const, pnl_usd: -12.5 }] };
+  assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exit, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "626.48 · 11:10 AM (auto, window end)", "−$12.50", "down"]);
+  assert.deepEqual(tradeLineRows({ lines: [] }), []);
+});
+
+test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
+  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished · date shown below");
+  assert.equal(dayFinishedLine({ dates_hidden: false }), null);
+  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to window end, biggest gain first");
 });
 
 test("the strings the day screens build contain no banned term", () => {
@@ -127,6 +164,13 @@ test("the strings the day screens build contain no banned term", () => {
     dayTitle(dayList, true),
     selectionText(endedDayList.review!)!,
     journalLine(endedDayList.journal!),
+    dayRecordText(meta),
+    dayBalanceText(meta)!,
+    PRACTICE_COPY.reviewRankNote,
+    PRACTICE_COPY.reviewDayFinished,
+    PRACTICE_COPY.reviewDayHint,
+    PRACTICE_COPY.reviewDayNone,
+    ...tradeLineRows(meta).flatMap((row) => [row.entry, row.exit, row.pnl]),
     ...dayList.warnings,
     dayList.universe.footnote,
   ];
