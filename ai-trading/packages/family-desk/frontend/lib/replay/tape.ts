@@ -55,6 +55,13 @@ export function fastTapeText(meta: { shown: number; count: number } | null): str
   return practiceText("fastTape", { shown: formatNumber(meta.shown, 0), count: formatNumber(meta.count, 0) });
 }
 
+/** "No prints for 95 s · the stock may be halted", or "2 min 14 s" past two minutes; null while prints flow. */
+export function haltedTapeText(quietS: number | null): string | null {
+  if (quietS === null) return null;
+  const time = quietS < 120 ? `${quietS} s` : `${Math.floor(quietS / 60)} min ${String(quietS % 60).padStart(2, "0")} s`;
+  return practiceText("haltedTape", { time });
+}
+
 const BAND_LABEL = { quiet: "Quiet", steady: "Steady", busy: "Busy", frantic: "Frantic" } as const;
 
 /** "12 prints/s · 3,400 sh/s · Busy · 1.8x avg". */

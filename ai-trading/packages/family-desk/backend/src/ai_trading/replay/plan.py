@@ -195,6 +195,7 @@ def run_prep(db: Session, svc: Services, plan_id: int) -> dict[str, Any]:
     `prep.preload_bars`; the as-of daily frames are built beside them. A symbol that fails is recorded, never fatal."""
     plan = db.get(PracticePlan, plan_id)
     if plan is None:
+        log.warning("daily-list prep: plan %s is not visible", plan_id)
         return {}
     days = plan_days(plan.first_day, plan.spec["sessions"])
     store = svc.store_factory(db)

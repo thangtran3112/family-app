@@ -145,6 +145,8 @@ const ArmedSchema = z.object({
 
 export const ReplaySessionSchema = z.object({
   id: finite.int(),
+  /** The day list this session practises (daily-list practice); null for a standalone session. */
+  day_list_id: finite.int().nullable(),
   attempt: finite.int(),
   status: SessionStatusSchema,
   spec: ReplaySessionV1Schema,
@@ -165,6 +167,7 @@ export const ReplaySessionSchema = z.object({
 
 export const ReplaySessionSummarySchema = z.object({
   id: finite.int(),
+  day_list_id: finite.int().nullable(),
   symbol: z.string(),
   day: z.iso.date(),
   attempt: finite.int(),
@@ -237,7 +240,7 @@ const LevelsSchema = z.object({
   opening_range_low: finite.nullable().optional(),
 }) satisfies z.ZodType<components["schemas"]["ReplayLevelsOut"]>;
 
-const LastSchema = z.object({ price: finite, at: timestamp }) satisfies z.ZodType<components["schemas"]["LastPrintOut"]>;
+const LastSchema = z.object({ price: finite, at: timestamp, age_s: finite.int() }) satisfies z.ZodType<components["schemas"]["LastPrintOut"]>;
 
 /** What `advance` returns for `(previous, revealed_through]`; `feed` returns the same object for everything revealed so far. */
 export const ReplayDeltaSchema = z.object({
@@ -249,6 +252,8 @@ export const ReplayDeltaSchema = z.object({
   signals: z.array(ReplaySignalSchema),
   levels: LevelsSchema,
   last: LastSchema.nullable(),
+  /** Seconds with no eligible print, once that passes a minute (the tape marker); null otherwise. */
+  quiet_s: finite.int().nullable(),
   open_trade: OpenTradeSchema.nullable(),
   stamp: ReplayStampSchema,
 }) satisfies z.ZodType<components["schemas"]["AdvanceOut"]>;
@@ -264,6 +269,8 @@ export const MarkResultSchema = z.object({
   mark: MarkSchema,
   open_trade: OpenTradeSchema.nullable(),
   journal: JournalSchema,
+  /** Set when the mark was priced off a print older than 30 seconds. */
+  warning: z.string().nullable(),
 }) satisfies z.ZodType<components["schemas"]["MarkResultOut"]>;
 
 /** Undo answers the new book: the removed mark, the open trade and the journal. */

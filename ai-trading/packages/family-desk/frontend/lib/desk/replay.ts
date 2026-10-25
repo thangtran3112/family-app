@@ -9,6 +9,7 @@ import {
   ReplaySessionsSchema,
   type ReplayInterval,
 } from "../replay/schemas.ts";
+import { DailySchema, DayListSchema, OpenNextSchema } from "../replay/daily.ts";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
 
 // Loaders for the Practice endpoints (02o §b1): one function per route. Replay screens use only these; they never
@@ -61,3 +62,28 @@ export const undoMark = (id: number, markId: number, options?: RequestOptions) =
 
 export const endReplay = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/sessions/${id}/end`), ReplaySessionSchema, jsonInit("POST", {}, options));
+
+// ---- daily-list practice (02o-b v1) -----------------------------------------------------------------------------
+
+/** The hub card: her plan and its cursor, or `{ plan: null }`. */
+export const loadDaily = (options?: RequestOptions) => clientOf(options)(deskPath("/replay/daily"), DailySchema, readInit(options));
+
+/** Opens the next day's list or continues the current one. With `plan` (a `PracticeBlockV1`) it first saves that plan. */
+export const openNextDay = (plan?: unknown, options?: RequestOptions) =>
+  clientOf(options)(deskPath("/replay/daily/next"), OpenNextSchema, jsonInit("POST", plan === undefined ? {} : { plan }, options));
+
+/** One practice day. `peek` adds the pre-open chart data of one candidate (cut at the list's data time). */
+export const loadDayList = (id: number, params: { peek?: string } = {}, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}`, { peek: params.peek }), DayListSchema, readInit(options));
+
+/** Stars (at most five names from the list), notes and the 1 to 5 self-rating; a key left out is left alone. */
+export const patchDayList = (id: number, body: { watch?: string[]; notes?: string | null; rating?: number | null }, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}`), DayListSchema, jsonInit("PATCH", body, options));
+
+/** Starts the day's practice session on a name from the list (the plan's setup, from the day clock). */
+export const startDaySession = (id: number, symbol: string, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}/sessions`), ReplaySessionSchema, jsonInit("POST", { symbol }, options));
+
+/** Ends the day: the open practice trade exits at the last price and the list review unseals. Idempotent. */
+export const endDay = (id: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}/end`), DayListSchema, jsonInit("POST", {}, options));

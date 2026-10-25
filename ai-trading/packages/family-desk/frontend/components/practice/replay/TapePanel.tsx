@@ -4,7 +4,7 @@ import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { isQuietTape, paceOf, type ReplayView } from "@/lib/replay/feedState";
 import { etTapeClock } from "@/lib/replay/time";
-import { fastTapeText, tapeRows, type SizeFilterId, type TapeDisplayRow } from "@/lib/replay/tape";
+import { fastTapeText, haltedTapeText, tapeRows, type SizeFilterId, type TapeDisplayRow } from "@/lib/replay/tape";
 import { FeedLabel } from "./FeedLabel";
 import { TapeFilters } from "./TapeFilters";
 import { TapePace } from "./TapePace";
@@ -14,7 +14,7 @@ import styles from "./panels.module.css";
 // the pace meter and the honest labels. The table scrolls inside the panel; the panel never grows the page.
 
 export type TapePanelProps = {
-  view: Pick<ReplayView, "tape" | "tapeMeta" | "revealedThrough" | "windowStart" | "paceSamples">;
+  view: Pick<ReplayView, "tape" | "tapeMeta" | "revealedThrough" | "windowStart" | "paceSamples" | "quietS">;
   filterId: SizeFilterId;
   onFilter: (id: SizeFilterId) => void;
   refreshing?: boolean;
@@ -36,7 +36,8 @@ const COLUMNS: DenseColumn<TapeDisplayRow>[] = [
 export function TapePanel({ view, filterId, onFilter, refreshing = false }: TapePanelProps) {
   const rows = tapeRows(view);
   const fast = fastTapeText(view.tapeMeta);
-  const quiet = view.tape.length > 0 && isQuietTape(view);
+  const halted = haltedTapeText(view.quietS);
+  const quiet = halted === null && view.tape.length > 0 && isQuietTape(view);
 
   return (
     <section className={styles.tape}>
@@ -47,6 +48,7 @@ export function TapePanel({ view, filterId, onFilter, refreshing = false }: Tape
       <TapePace pace={paceOf(view)} />
       {fast && <p className={styles.muted}>{fast}</p>}
       {quiet && <p className={styles.muted}>{PRACTICE_COPY.quietTape}</p>}
+      {halted && <p className={styles.warn} role="status">{halted}</p>}
       <div className={styles.tapeTable} aria-busy={refreshing || undefined}>
         <DenseTable
           caption="Time and sales"

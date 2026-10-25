@@ -351,6 +351,9 @@ def open_next(
         _call(plan_mod.create_plan, db, user.id, _validated(PracticeBlockV1, raw["plan"]), services)
     opened = _call(plan_mod.open_next, db, user.id, services)
     if started or opened.restart_prep:
+        # The task runs on its own session while this request's one is still open (FastAPI closes a yield dependency
+        # after the response and its background tasks), so the plan must be committed before the task can see it.
+        db.commit()
         background.add_task(_prep_in_background, request.app, services, opened.plan.id)
     return {
         "plan": plan_mod.plan_out(db, opened.plan),
