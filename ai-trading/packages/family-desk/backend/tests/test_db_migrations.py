@@ -35,6 +35,8 @@ NEW_0003_TABLES = {
     "symbol_metrics",
     "feed_health",
 }
+# Alembic 0004 (consensus history, 02n §d).
+NEW_0004_TABLES = {"consensus_snapshots", "earnings_results", "analyst_targets"}
 NEW_0003_COLUMNS = {
     "strategies": {"lane", "origin", "archived_at"},
     "watchlist_items": {"position"},
@@ -51,7 +53,7 @@ def _alembic_config(url: str) -> Config:
 
 
 def test_head_matches_models(db_engine: Engine) -> None:
-    assert NEW_0003_TABLES <= set(Base.metadata.tables)
+    assert (NEW_0003_TABLES | NEW_0004_TABLES) <= set(Base.metadata.tables)
     with db_engine.connect() as conn:
         context = MigrationContext.configure(conn)
         diff = compare_metadata(context, Base.metadata)
@@ -60,17 +62,29 @@ def test_head_matches_models(db_engine: Engine) -> None:
 
 def test_tables_exist(db_engine: Engine) -> None:
     tables = set(inspect(db_engine).get_table_names())
-    assert (PHASE_2A_TABLES | PHASE_3_TABLES | NEW_0003_TABLES) <= tables
+    assert (PHASE_2A_TABLES | PHASE_3_TABLES | NEW_0003_TABLES | NEW_0004_TABLES) <= tables
 
 
-def test_downgrade_minus_one_reverts_only_0003(db_engine: Engine) -> None:
+def test_downgrade_minus_one_reverts_only_0004(db_engine: Engine) -> None:
     url = db_engine.url.render_as_string(hide_password=False)
     try:
         command.downgrade(_alembic_config(url), "-1")
+        tables = set(inspect(db_engine).get_table_names())
+        assert tables.isdisjoint(NEW_0004_TABLES)
+        assert (PHASE_2A_TABLES | PHASE_3_TABLES | NEW_0003_TABLES) <= tables
+    finally:
+        # Every other test in this module/package expects `db_engine` at head.
+        command.upgrade(_alembic_config(url), "head")
+
+
+def test_downgrade_to_0002_reverts_0003_too(db_engine: Engine) -> None:
+    url = db_engine.url.render_as_string(hide_password=False)
+    try:
+        command.downgrade(_alembic_config(url), "0002")
         with db_engine.connect() as conn:
             inspector = inspect(db_engine)
             tables = set(inspector.get_table_names())
-            assert tables.isdisjoint(NEW_0003_TABLES)
+            assert tables.isdisjoint(NEW_0003_TABLES | NEW_0004_TABLES)
             assert (PHASE_2A_TABLES | PHASE_3_TABLES) <= tables
             for table, columns in NEW_0003_COLUMNS.items():
                 names = {column["name"] for column in inspector.get_columns(table)}
@@ -90,7 +104,7 @@ def test_downgrade_to_0001_drops_phase_3_tables_and_keeps_phase_2a(db_engine: En
         command.downgrade(_alembic_config(url), "0001")
         with db_engine.connect() as conn:
             tables = set(inspect(db_engine).get_table_names())
-            assert tables.isdisjoint(PHASE_3_TABLES | NEW_0003_TABLES)
+            assert tables.isdisjoint(PHASE_3_TABLES | NEW_0003_TABLES | NEW_0004_TABLES)
             assert PHASE_2A_TABLES <= tables
             # Confirm the server is still the same database, not a reconnect artifact.
             conn.execute(text("SELECT 1"))

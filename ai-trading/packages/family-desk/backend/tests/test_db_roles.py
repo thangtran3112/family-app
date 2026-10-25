@@ -121,6 +121,9 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "universe_symbols",
         "symbol_metrics",
         "feed_health",
+        "consensus_snapshots",
+        "earnings_results",
+        "analyst_targets",
     }
 
 
@@ -166,6 +169,24 @@ def test_desk_runtime_can_select_insert_update_delete_technical_mvp_tables(role_
                 )
             ).scalar_one()
             assert remaining == 0
+    finally:
+        runtime_engine.dispose()
+
+
+def test_desk_runtime_can_write_the_consensus_history_tables(role_split_urls: RoleSplitUrls) -> None:
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO analyst_targets (symbol, snapshot_date, provider, quality, as_of, captured_at) "
+                    "VALUES ('ROLES', '2026-10-06', 'fake', 'eod', now(), now())"
+                )
+            )
+            conn.execute(text("UPDATE analyst_targets SET target_mean = 1.5 WHERE symbol = 'ROLES'"))
+            mean = conn.execute(text("SELECT target_mean FROM analyst_targets WHERE symbol = 'ROLES'")).scalar_one()
+            assert mean == 1.5
+            conn.execute(text("DELETE FROM analyst_targets WHERE symbol = 'ROLES'"))
     finally:
         runtime_engine.dispose()
 
