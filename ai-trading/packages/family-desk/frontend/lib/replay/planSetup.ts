@@ -56,6 +56,11 @@ export function listTimeNeed(filterIds: readonly number[], timings: FilterTiming
   return { time, ids };
 }
 
+/** True when `time` is earlier than the chosen filters need: that list time is off and the server would answer 422. A time
+ *  at or after the need holds, so nothing is said about it (D-017: the "needs a list time" line used to show whenever a
+ *  cadence filter was picked, even with a good time selected). */
+export const listTimeHeld = (time: string, need: { time: string; ids: readonly number[] }): boolean => need.ids.length > 0 && time < need.time;
+
 export type PlanDraft = {
   firstDay: string;
   sessions: string;
@@ -155,12 +160,7 @@ const FIELD_MESSAGE: Record<PlanField, string> = {
   day: "",
   window: "Pick a window that starts at or after the list time and ends after it starts",
   interval: "Pick 1m, 5m or 15m",
-  shares: "Shares: a whole number from 1 to 10,000",
   armed: "Arm up to 5 strategies",
-  stopRequired: "Pick yes or no",
-  maxLossUsd: "Max loss: whole dollars from 1 to 100,000",
-  maxTrades: "Max trades: a whole number from 1 to 50",
-  note: "Plan note: up to 500 plain characters",
   form: "Check the plan and try again",
   firstDay: "Pick a weekday from Jan 3, 2017",
   sessions: "Days: a whole number from 5 to 30",
@@ -169,7 +169,7 @@ const FIELD_MESSAGE: Record<PlanField, string> = {
   maxList: "List size: a whole number from 20 to 50",
 };
 
-/** Maps a contract or server path (`screen.listAt`, `setup.plan.maxLossUsd`, `firstDay`) to the form field that shows it. */
+/** Maps a contract or server path (`screen.listAt`, `setup.window.from`, `firstDay`) to the form field that shows it. */
 export function planFieldOfPath(path: string): PlanField {
   const [first, second] = path.split(".");
   switch (first) {
@@ -177,7 +177,7 @@ export function planFieldOfPath(path: string): PlanField {
     case "screen": return second === "filters" ? "filters" : second === "listAt" ? "listAt" : second === "maxList" ? "maxList" : "form";
     case "setup": return fieldOfPath(path.split(".").slice(1).join("."));
     case "window": return "window";
-    case "plan": case "armed": case "shares": case "interval": return fieldOfPath(path);
+    case "armed": case "interval": return fieldOfPath(path);
     default: return "form";
   }
 }

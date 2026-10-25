@@ -1,6 +1,6 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { formatEtDay } from "../../lib/desk/format.ts";
-import { formatBalance } from "../../lib/replay/threadView.ts";
+import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
@@ -39,14 +39,13 @@ async function railSection(page: Page, rail: string, section: string) {
 }
 
 /** Fill the hub with the stub day and start. `from`/`to` default to the stub's ten minutes of tape. */
-async function startStubSession(page: Page, setup: { stopRequired?: boolean } = {}) {
+async function startStubSession(page: Page) {
   await openDesk(page, "/practice");
   const form = page.locator("#start-practice");
   await form.getByRole("combobox").fill("TSLA");
   await form.locator('input[type="date"]').fill(DAY);
   await form.getByLabel("To", { exact: true }).fill("09:40");
   await form.getByRole("button", { name: "1m", exact: true }).click();
-  if (setup.stopRequired === false) await form.getByRole("button", { name: "No", exact: true }).first().click();
   await form.getByRole("button", { name: "Start practice" }).click();
   await page.waitForURL(SESSION_URL);
   await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
@@ -54,16 +53,17 @@ async function startStubSession(page: Page, setup: { stopRequired?: boolean } = 
 }
 
 /** Start a practice thread from the hub (02r, D-007): the risk plan lives on the thread, not on the daily-list form. */
-async function startThread(page: Page, plan: { maxLoss?: string; maxTrades?: string; note?: string } = {}) {
+async function startThread(page: Page, plan: { balance?: string; maxLoss?: string; maxTrades?: string; note?: string } = {}) {
   await openDesk(page, "/practice");
   const threads = page.locator("#threads");
   const form = threads.getByRole("form", { name: "New thread" });
   await expect(form.getByLabel("Starting balance")).toHaveValue("50000");
+  if (plan.balance) await form.getByLabel("Starting balance").fill(plan.balance);
   if (plan.maxLoss) await form.getByLabel("Max loss ($)").fill(plan.maxLoss);
   if (plan.maxTrades) await form.getByLabel("Max trades").fill(plan.maxTrades);
   if (plan.note) await form.getByLabel(/^Plan note/).fill(plan.note);
   await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
-  await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
+  await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText(plan.balance ? formatBalance(Number(plan.balance)) : "$50,000");
   return threads;
 }
 
@@ -89,10 +89,24 @@ test.describe("Practice", () => {
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(null));
     await expect(page.getByRole("heading", { name: "Start a practice session" })).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.notableHeader)).toBeVisible();
+    // D-008: the session form keeps its session-scope controls; the risk plan is the thread's and is not asked again here.
+    const session = page.locator("#start-practice");
+    for (const label of ["Max loss ($)", "Max trades", "Plan note", "Shares", "Stop on every entry", "Trade only on a signal"]) {
+      await expect(session.getByLabel(label)).toHaveCount(0);
+      await expect(session.getByText(label, { exact: true })).toHaveCount(0);
+    }
+    await expect(session.getByRole("group", { name: "Plan", exact: true })).toHaveCount(0);
+    await expect(session.getByRole("group", { name: "Window (ET)" })).toBeVisible();
     // Practice threads (02r): the band sits above the daily list; without a thread the daily list waits for one.
     await expect(page.getByRole("heading", { name: PRACTICE_COPY.threadsTitle })).toBeVisible();
     const newThread = page.locator("#threads").getByRole("form", { name: "New thread" });
     await expect(newThread.getByLabel("Starting balance")).toHaveValue("50000");
+    // D-016: the starting balance is a real number field with the contract's bounds, live while no thread is active.
+    await expect(newThread.getByLabel("Starting balance")).toHaveAttribute("type", "number");
+    await expect(newThread.getByLabel("Starting balance")).toHaveAttribute("min", "1000");
+    await expect(newThread.getByLabel("Starting balance")).toHaveAttribute("max", "10000000");
+    await expect(newThread.getByLabel("Starting balance")).toBeEnabled();
+    await expect(newThread.getByRole("button", { name: PRACTICE_COPY.threadSubmit })).toBeEnabled();
     await expect(newThread.getByRole("button", { name: "Day trading" })).toHaveAttribute("aria-pressed", "true");
     await expect(newThread.getByRole("button", { name: PRACTICE_COPY.threadModeSwing })).toBeDisabled();
     await expect(page.locator("#daily-list").getByText(PRACTICE_COPY.threadNeeded)).toBeVisible();
@@ -194,7 +208,7 @@ test.describe("Practice", () => {
   });
 
   test("B, T and X place practice marks; undo removes the last one; End and score opens the journal with the trade", async ({ page }) => {
-    await startStubSession(page, { stopRequired: false });
+    await startStubSession(page);
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
     await expect(playhead(page)).not.toContainText("9:30:00");
@@ -410,6 +424,16 @@ test.describe("Practice", () => {
     // Continue: Day 2 has no stored TSLA bars, so its list is empty and says so.
     await openDesk(page, "/practice");
     await expect(page.locator("#daily-list")).toContainText("Day 2 of 5 · next: Mon");
+    // D-035: the day that ended reads done on the hub, never "in progress".
+    await expect(page.locator("#daily-list")).toContainText("Day 1 done");
+    await expect(page.locator("#daily-list")).not.toContainText("in progress");
+    // D-030: with no day open the thread card's row is the last ended day, the same ledger figure as the balance.
+    const [firstThread] = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { id: number } }>;
+    const afterDayOne = await readThread(context, firstThread!.thread.id);
+    const activeCard = threads.getByRole("article", { name: "Active practice thread" });
+    await expect(activeCard).toContainText("Last day");
+    await expect(activeCard).toContainText(`${formatDayResult(afterDayOne.daily[0]!.pnl_usd)} realized · 1 practice trade`);
+    await expect(activeCard).toContainText(formatBalance(afterDayOne.thread.stats.balance));
     await page.locator("#daily-list").getByRole("button", { name: PRACTICE_COPY.planContinue }).click();
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
@@ -503,6 +527,107 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 
+  // D-009, D-016: the New thread form is always on screen. It is live with no thread and disabled, with the one-thread note and
+  // a way to the journal, while one is active; the starting balance is a real number field and the typed value is kept.
+  test("the New thread form stays on screen, disabled while a thread is active, and a custom starting balance is kept", async ({ page, context }) => {
+    await openDesk(page, "/practice");
+    const form = page.locator("#threads").getByRole("form", { name: "New thread" });
+    await form.getByLabel("Starting balance").fill("500");
+    await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
+    await expect(form.getByRole("alert")).toContainText("1,000");
+    await expect(form.getByRole("alert")).toContainText("10,000,000");
+
+    const threads = await startThread(page, { balance: "25000" });
+    await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("Started with $25,000");
+    const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { startingBalance: number; stats: { balance: number } } }>;
+    expect([listed[0]!.thread.startingBalance, listed[0]!.thread.stats.balance]).toEqual([25000, 25000]);
+
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel("Starting balance")).toBeDisabled();
+    await expect(form.getByLabel("Max loss ($)")).toBeDisabled();
+    await expect(form.getByRole("button", { name: PRACTICE_COPY.threadSubmit })).toBeDisabled();
+    await expect(form).toContainText(/One active thread at a time · close .+ thread in its journal to start another/);
+    await expectCleanScreen(page);
+    await form.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    await page.waitForURL(/\/practice\/journal\?thread=\d+/);
+  });
+
+  // D-030, D-035: replacing the plan while a day is half practised leaves two open days. Ending the practised one must leave
+  // the hub in agreement with the balance and the review: the new plan's Day 1 reads "list ready" (not "in progress"), the
+  // thread's row is the day just ended (not a $0 for the unstarted one), and Continue and the review's Next day meet.
+  test("after the practised day ends, the hub card and the thread row agree with the balance and the review", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const anyClose = {
+      schemaVersion: 1,
+      name: "Any close",
+      watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
+      liquidity: { minPrice: 1, minAvgVolume: 1 },
+      when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
+      maxResults: 50,
+    };
+    expect((await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: anyClose } })).ok()).toBeTruthy();
+    const threads = await startThread(page);
+    const daily = page.locator("#daily-list");
+    const savePlan = async () => {
+      await daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
+      await daily.locator('input[type="date"]').fill(DAY);
+      await daily.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
+      await daily.getByLabel("To", { exact: true }).fill("09:40");
+      await daily.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "1m", exact: true }).click();
+      await daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true }).click();
+    };
+    await savePlan();
+    await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
+    await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    const practised = page.url();
+
+    // Practise the name and take a trade; the day stays open.
+    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).not.toContainText("9:30:00");
+    await page.keyboard.press("b");
+    await marksTab(page).click();
+    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("x");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
+
+    // Replace the plan while that day is half practised: its new Day 1 opens as a second, unstarted day.
+    await openDesk(page, "/practice");
+    await daily.getByRole("button", { name: PRACTICE_COPY.planNew }).click();
+    await savePlan();
+    await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== practised, { timeout: 60_000 });
+    const fresh = page.url();
+
+    // End the practised day from its own screen: the review offers the next day.
+    await page.goto(practised);
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+
+    const [only] = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { id: number } }>;
+    const read = await readThread(context, only!.thread.id);
+    const ended = read.daily.at(-1)!;
+    const card = threads.getByRole("article", { name: "Active practice thread" });
+    await openDesk(page, "/practice");
+    await expect(card).toContainText(formatBalance(read.thread.stats.balance));
+    await expect(card).toContainText("Last day");
+    await expect(card).toContainText(`${formatDayResult(ended.pnl_usd)} realized · 1 practice trade`);
+    await expect(card).not.toContainText("0 practice trades");
+    await expect(daily).toContainText("Day 1 of 5 · list ready");
+    await expect(daily).not.toContainText("in progress");
+
+    // The hub's Continue and the review's Next day open the same day.
+    await daily.getByRole("button", { name: PRACTICE_COPY.planContinue }).click();
+    await page.waitForURL(fresh);
+    await page.goto(practised);
+    await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
+    await page.waitForURL(fresh);
+  });
+
   // D-001: a filter that reads bars of the list day itself cannot be listed before its first bar has closed.
   test("the plan form moves the list time for a 15-minute filter, disables earlier times and says why", async ({ page }) => {
     await startThread(page);
@@ -519,13 +644,20 @@ test.describe("Practice", () => {
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
     await expect(tenOclock).toHaveAttribute("aria-pressed", "true"); // the default suggestion for an intraday filter
     await expect(premarket).toBeDisabled();
-    await expect(daily.getByText("Abnormal volume needs a list time of 10:00 AM or later")).toBeVisible();
+    // D-017: 10:00 satisfies the filter, so no line says otherwise; the reason sits on the disabled earlier time, and Start day is ready.
+    await expect(daily.getByText(/needs a list time of/)).toHaveCount(0);
+    await expect(daily.getByRole("alert")).toHaveCount(0);
+    await expect(premarket).toHaveAttribute("title", "Abnormal volume needs a list time of 10:00 AM or later · before then none of its bars of the day has closed");
+    await expect(daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true })).toBeEnabled();
     await expect(daily.getByText("Arm up to 5 strategies · 2 armed")).toBeVisible();
     await expect(daily.getByLabel("From", { exact: true })).toHaveValue("10:00"); // the window starts at the list
 
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).uncheck();
     await expect(premarket).toBeEnabled();
     await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible(); // dropping a filter disarms it
+    await tenOclock.click(); // Gap up needs 8:30: 10:00 holds, and nothing says it needs 8:30
+    await expect(daily.getByText(/needs a list time of/)).toHaveCount(0);
+    await expect(daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true })).toBeEnabled();
     await expectCleanScreen(page);
   });
 

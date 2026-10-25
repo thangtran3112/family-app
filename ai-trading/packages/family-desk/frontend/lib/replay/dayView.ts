@@ -65,8 +65,9 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   if (plan.finished) return { headline: practiceText("planDone", { of: plan.sessions }), detail: failed, action: "new" };
   const current = plan.current;
   if (current !== null && current.status !== "ended") {
+    // A listed day has not been practised yet; only a practising one is "in progress" (D-035).
     return {
-      headline: practiceText("planInProgress", { day: current.day_no, of: plan.sessions }),
+      headline: practiceText(current.status === "practicing" ? "planInProgress" : "planListed", { day: current.day_no, of: plan.sessions }),
       detail: failed,
       action: "continue",
     };
@@ -79,9 +80,11 @@ export function planCard(plan: PracticePlan | null): PlanCard {
     };
   }
   const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day, hidden) })}`;
+  // The day just ended is said as done, and Continue opens the next one: the same list the review's "Next day" opens.
+  const done = current === null ? null : practiceText("planDayDone", { day: current.day_no });
   return {
     headline: `${practiceText("planDay", { day: plan.next_day_no ?? plan.days_opened + 1, of: plan.sessions })}${next}`,
-    detail: failed,
+    detail: [done, failed].filter(Boolean).join(" · ") || null,
     action: plan.days_opened === 0 ? "start" : "continue",
   };
 }

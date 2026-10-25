@@ -19,9 +19,9 @@ import {
 
 // Sat 2026-10-24, 11:00 AM ET.
 const SATURDAY = new Date("2026-10-24T15:00:00Z");
-const valid = (): SetupDraft => ({ ...defaultDraft(), symbol: "nvda", day: "2026-10-23", armed: [{ source: "alert_strategy", id: 7 }], maxLossUsd: "200" });
+const valid = (): SetupDraft => ({ ...defaultDraft(), symbol: "nvda", day: "2026-10-23", armed: [{ source: "alert_strategy", id: 7 }] });
 
-test("a filled draft validates against the contract and becomes the contract JSON", () => {
+test("a filled draft validates against the contract and becomes the contract JSON; the session has no risk plan of its own (D-008)", () => {
   const result = validateDraft(valid(), SATURDAY);
   assert.equal(result.ok, true);
   assert.deepEqual(draftToSpec(valid()), {
@@ -33,9 +33,13 @@ test("a filled draft validates against the contract and becomes the contract JSO
     interval: "5m",
     shares: 100,
     armed: [{ source: "alert_strategy", id: 7 }],
-    plan: { stopRequired: "yes", signalOnly: "no", maxLossUsd: 200 },
+    plan: { stopRequired: "no", signalOnly: "no" },
     hideDate: "no",
   });
+});
+
+test("the session draft holds only session-scope fields: no shares, stop, signal, loss, trades or note (D-008)", () => {
+  assert.deepEqual(Object.keys(defaultDraft()).sort(), ["armed", "day", "dayHidden", "from", "interval", "session", "symbol", "to"]);
 });
 
 test("an empty draft reports a message per field, never a raw Zod message", () => {
@@ -48,15 +52,9 @@ test("an empty draft reports a message per field, never a raw Zod message", () =
 
 test("bad numbers and windows land on the field that shows them", () => {
   const cases: Array<[Partial<SetupDraft>, string, RegExp]> = [
-    [{ shares: "0" }, "shares", /1 to 10,000/],
-    [{ shares: "1.5" }, "shares", /whole number/],
-    [{ shares: "" }, "shares", /whole number/],
-    [{ maxLossUsd: "-5" }, "maxLossUsd", /whole dollars/],
-    [{ maxTrades: "51" }, "maxTrades", /1 to 50/],
     [{ from: "11:00", to: "10:00" }, "window", /before/],
     [{ from: "08:00" }, "window", /09:30-16:00/],
     [{ symbol: "/ES" }, "symbol", /stock or ETF/],
-    [{ note: "x".repeat(501) }, "note", /500/],
   ];
   for (const [patch, field, message] of cases) {
     const result = validateDraft({ ...valid(), ...patch }, SATURDAY);
@@ -83,7 +81,7 @@ test("no more than 5 strategies arm, and toggling twice removes one", () => {
 test("a hidden notable day stays masked and is stored hidden; a typed date is shown", () => {
   const picked = withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" }, true);
   assert.equal(picked.dayHidden, true);
-  assert.equal((draftToSpec({ ...picked, shares: "100" }) as { hideDate: string }).hideDate, "yes");
+  assert.equal((draftToSpec(picked) as { hideDate: string }).hideDate, "yes");
   const typed = withTypedDay(picked, "2026-04-08");
   assert.equal(typed.dayHidden, false);
   assert.equal(withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" }, false).dayHidden, false);
@@ -107,8 +105,7 @@ test("the latest day opens at 4:15 PM ET on a weekday, else it is the previous w
 });
 
 test("server problems map to fields and keep the server's plain message", () => {
-  assert.equal(fieldOfPath("plan.maxLossUsd"), "maxLossUsd");
-  assert.equal(fieldOfPath("plan.stopRequired"), "stopRequired");
+  assert.equal(fieldOfPath("plan.maxLossUsd"), "form");
   assert.equal(fieldOfPath("window.from"), "window");
   assert.equal(fieldOfPath("armed.2.id"), "armed");
   assert.equal(fieldOfPath("other"), "form");
