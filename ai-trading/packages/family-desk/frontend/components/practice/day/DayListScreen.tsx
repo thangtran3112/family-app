@@ -10,10 +10,10 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { withPriorities } from "@/lib/desk/columns";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import type { Candidate, DayList } from "@/lib/replay/daily";
-import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, nameCap, namesTodayText, starsFullText, stripRows, toggledStars } from "@/lib/replay/dayView";
+import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
+import { canRescan, cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, nameCap, namesTodayText, rescanCounts, rescanLabel, rescanStaleText, starsFullText, stripRows, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
@@ -126,6 +126,12 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayLoadError);
 
+  const rescan = () =>
+    run(async () => {
+      await rescanDay(list.id);
+      onChanged();
+    }, PRACTICE_COPY.dayRescanError);
+
   const next = () =>
     run(async () => {
       const result = await openNextDay();
@@ -196,6 +202,35 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           />
           <UniverseFootnote text={list.universe.footnote} />
         </section>
+
+        {(!ended || list.rescan !== null) && (
+          <section className={styles.section} aria-label="Re-scan">
+            <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
+            {!ended && (
+              <div className={styles.actions}>
+                <button type="button" className={styles.button} disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{PRACTICE_COPY.dayRescan}</button>
+                <span className={styles.muted}>{canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
+              </div>
+            )}
+            {list.rescan && (
+              <>
+                <p className={styles.line} data-testid="rescan-label">{rescanLabel(list.rescan)}</p>
+                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list.rescan)}</p>
+                {!ended && rescanStaleText(list) && <p className={styles.muted} role="status" data-testid="rescan-stale">{rescanStaleText(list)}</p>}
+                <DenseTable
+                  caption="Re-scan"
+                  columns={withPriorities(rescanColumnsOf(list.rescan), "practiceList")}
+                  rows={list.rescan.candidates}
+                  rowKey={(row) => row.symbol}
+                  scrollX
+                  empty={<EmptyBlock title={PRACTICE_COPY.dayNoNames} />}
+                />
+                <UniverseFootnote text={list.rescan.universe.footnote} />
+                {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayRescanReadOnly}</p>}
+              </>
+            )}
+          </section>
+        )}
 
         {!ended && (
           <section className={styles.section} aria-label="Peek">
@@ -295,6 +330,33 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       />
     </div>
   );
+}
+
+/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no star, no practise. */
+function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]>[] {
+  return [
+    {
+      key: "symbol",
+      label: "Symbol",
+      render: (row) => (
+        <span>
+          <span className={styles.symbol}>{row.symbol}</span>
+          {row.new_since_list && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</span>}
+          {row.reported_before_open && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</span>}
+        </span>
+      ),
+    },
+    { key: "filters", label: "Filters", render: (row) => filtersText(row) },
+    ...scan.columns.map((column): DenseColumn<Rescan["candidates"][number]> => ({
+      key: column.key,
+      label: column.label,
+      align: column.format === "time" ? "left" : "right",
+      render: (row) => {
+        const tone = cellTone(column, row);
+        return <span className={tone ? styles[tone] : undefined}>{cellText(column, row)}</span>;
+      },
+    })),
+  ];
 }
 
 function columnsOf(

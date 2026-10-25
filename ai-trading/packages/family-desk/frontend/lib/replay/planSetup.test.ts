@@ -6,6 +6,7 @@ import {
   clock12,
   defaultFirstDay,
   defaultPlanDraft,
+  effectiveFirstDay,
   earliestListAt,
   listTimeFrom,
   listTimeNeed,
@@ -29,6 +30,14 @@ test("the default start is the first weekday of the month three months back", ()
   assert.equal(defaultFirstDay(new Date("2026-10-04T12:00:00Z")), "2026-07-01");
   assert.equal(defaultFirstDay(new Date("2026-04-10T12:00:00Z")), "2026-01-02"); // New Year's Day rolls on
   assert.equal(defaultFirstDay(new Date("2026-06-15T12:00:00Z")), "2026-03-02"); // March 1 is a Sunday
+});
+
+test("the first day is her pick, else the recorded-universe default when the server has one, else three months back", () => {
+  const draft = defaultPlanDraft(NOW).firstDay;
+  assert.equal(draft, "2026-07-01");
+  assert.equal(effectiveFirstDay(draft, false, null), "2026-07-01");
+  assert.equal(effectiveFirstDay(draft, false, "2026-09-28"), "2026-09-28");
+  assert.equal(effectiveFirstDay("2026-08-03", true, "2026-09-28"), "2026-08-03");
 });
 
 test("a draft becomes the contract's JSON: yes/no words, no null, no shares and no risk plan (the thread's, D-007)", () => {

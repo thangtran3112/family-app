@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { openNextDay } from "@/lib/desk/replay";
+import { loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { OpenNext } from "@/lib/replay/daily";
@@ -17,6 +17,7 @@ import {
   SESSION_CHOICES,
   clock12,
   defaultPlanDraft,
+  effectiveFirstDay,
   listTimeNeed,
   planProblems,
   validatePlanDraft,
@@ -40,13 +41,17 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const filters = useDeskQuery("practice:plan-filters", (signal) => loadFilters({ signal }));
+  // Once the Desk has recorded 20 finished days of its universe, a new plan starts on the first one (02o-b2) unless she has picked a day.
+  const recorded = useDeskQuery("practice:universe-days", (signal) => loadUniverseDays({}, { signal }));
+  const [dayPicked, setDayPicked] = useState(false);
+  const firstDay = effectiveFirstDay(draft.firstDay, dayPicked, recorded.data?.first_day_default ?? null);
   const timings: FilterTimings = useMemo(() => new Map((filters.data ?? []).map((filter) => [filter.id, { run_on: filter.run_on, session: filter.session }])), [filters.data]);
   // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
   const need = listTimeNeed(draft.filterIds, timings);
   const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
 
   async function save() {
-    const result = validatePlanDraft(draft);
+    const result = validatePlanDraft({ ...draft, firstDay });
     if (!result.ok) {
       setProblems(result.problems);
       return;
@@ -121,11 +126,15 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
           <input
             type="date"
             className={styles.control}
-            value={draft.firstDay}
+            value={firstDay}
             min={EARLIEST_LIST_DAY}
             aria-invalid={problems.firstDay ? true : undefined}
-            onChange={(event) => setDraft({ ...draft, firstDay: event.target.value })}
+            onChange={(event) => {
+              setDayPicked(true);
+              setDraft({ ...draft, firstDay: event.target.value });
+            }}
           />
+          {recorded.data && <span className={styles.hint} data-testid="first-day-note">{recorded.data.first_day_note}</span>}
           {problems.firstDay && <span role="alert" className={styles.fieldError}>{problems.firstDay}</span>}
         </label>
         <div className={styles.field}>

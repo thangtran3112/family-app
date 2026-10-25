@@ -441,6 +441,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/day-lists/{day_list_id}/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rescan Day
+         * @description Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,
+         *     labelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is
+         *     practised (no clock yet) and after the day ends. A second scan at the same clock returns the first.
+         */
+        post: operations["rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
         parameters: {
             query?: never;
@@ -701,6 +723,28 @@ export interface paths {
          * @description The thread's realized practice trades (`PracticeLedgerEntryV1`), newest first: the rows its balance is of.
          */
         get: operations["get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/universe-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Universe Days
+         * @description The recorded universe (02o-b2): which mornings the Desk recorded the names it scanned, the first day a new plan
+         *     defaults to once 20 finished days are recorded, and with `day` that morning's membership. A day without a recording
+         *     scans today's Desk set, and says so.
+         */
+        get: operations["get_universe_days_api_desk_replay_universe_days_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1917,6 +1961,7 @@ export interface components {
             plan: components["schemas"]["PracticePlanOut"];
             /** Rating */
             rating: number | null;
+            rescan: components["schemas"]["RescanOut"] | null;
             review: components["schemas"]["ReviewOut"] | null;
             screen: components["schemas"]["DayScreenOut"];
             /** Sessions */
@@ -2437,6 +2482,7 @@ export interface components {
             label: string;
             /** Matches Total */
             matches_total: number;
+            membership?: components["schemas"]["UniverseMembershipOut"] | null;
             /** No Data */
             no_data: number;
             /** Prev Basis */
@@ -3276,6 +3322,77 @@ export interface components {
             source: "alert_strategy" | "filter";
         };
         /**
+         * RescanCandidateOut
+         * @description A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised).
+         */
+        RescanCandidateOut: {
+            /** Filters */
+            filters: string[];
+            /** List Price */
+            list_price: number;
+            /**
+             * Matched Since
+             * Format: date-time
+             */
+            matched_since: string;
+            /** Metrics */
+            metrics: {
+                [key: string]: number | null;
+            };
+            /** New Since List */
+            new_since_list: boolean;
+            /** Operands */
+            operands: {
+                [key: string]: number | null;
+            };
+            /**
+             * Price At
+             * Format: date-time
+             */
+            price_at: string;
+            /** Prior Close */
+            prior_close: number | null;
+            /** Rank */
+            rank: number;
+            /** Rank Value */
+            rank_value: number | null;
+            /** Reported Before Open */
+            reported_before_open: boolean;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * RescanOut
+         * @description The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.
+         *     It is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans.
+         */
+        RescanOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Candidates */
+            candidates: components["schemas"]["RescanCandidateOut"][];
+            /** Columns */
+            columns: components["schemas"]["ListColumnOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Data Through
+             * Format: date-time
+             */
+            data_through: string;
+            /** New Count */
+            new_count: number;
+            /** Seq */
+            seq: number;
+            universe: components["schemas"]["ListUniverseOut"];
+        };
+        /**
          * ReviewOut
          * @description Every candidate's move from its list price to the window end and the close. Only present once the day ended.
          */
@@ -4029,6 +4146,65 @@ export interface components {
              * @enum {string}
              */
             weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /** UniverseCoverageOut */
+        UniverseCoverageOut: {
+            /** Days */
+            days: number;
+            /** First Day */
+            first_day: string | null;
+            /** Last Day */
+            last_day: string | null;
+        };
+        /**
+         * UniverseDayOut
+         * @description One morning's recorded membership. `recorded` false: no pass wrote it, so that day's list scans today's set.
+         */
+        UniverseDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Note */
+            note: string;
+            /** Recorded */
+            recorded: boolean;
+            /** Size */
+            size: number | null;
+            /** Symbols */
+            symbols: string[];
+        };
+        /**
+         * UniverseDaysOut
+         * @description The `universe_days` read path: its coverage, the first day a new plan should default to (null until 20 finished
+         *     days have been recorded), and with `?day=` that morning's membership.
+         */
+        UniverseDaysOut: {
+            coverage: components["schemas"]["UniverseCoverageOut"];
+            day: components["schemas"]["UniverseDayOut"] | null;
+            /** First Day Default */
+            first_day_default: string | null;
+            /** First Day Note */
+            first_day_note: string;
+        };
+        /**
+         * UniverseMembershipOut
+         * @description Where the scanned names came from (02o-b2): the symbols the Desk recorded for that morning (`universe_days`), or
+         *     today's Desk set for a day before the recording began. `note` says so in plain words.
+         */
+        UniverseMembershipOut: {
+            /** Note */
+            note: string;
+            /** Recorded Size */
+            recorded_size: number | null;
+            /** Scanned Size */
+            scanned_size: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "universe_days" | "today";
         };
         /** ValidationError */
         ValidationError: {
@@ -5066,6 +5242,37 @@ export interface operations {
             };
         };
     };
+    rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post: {
         parameters: {
             query?: never;
@@ -5584,6 +5791,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadLedgerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_universe_days_api_desk_replay_universe_days_get: {
+        parameters: {
+            query?: {
+                day?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniverseDaysOut"];
                 };
             };
             /** @description Validation Error */

@@ -11,7 +11,7 @@ import {
   type Tone,
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayList, DayReview, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import type { Candidate, DayList, DayReview, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
@@ -154,6 +154,26 @@ export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { sy
   const open = new Set(opened.map((row) => row.symbol));
   const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
   return [...opened, ...rest];
+}
+
+// ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
+
+/** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */
+export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): boolean =>
+  list.status !== "ended" && list.clock !== null && Date.parse(list.clock) >= Date.parse(list.list_at);
+
+/** "Scan 2 · run at 10:00 AM ET · data through 9:45 AM": the clock it ran at and the time its data stops. */
+export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
+  practiceText("dayRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
+
+/** "2 of 2 matched · 1 new since your list". */
+export const rescanCounts = (scan: Pick<Rescan, "universe" | "new_count">): string =>
+  practiceText("dayRescanCounts", { shown: scan.universe.shown, matched: scan.universe.matches_total, fresh: scan.new_count });
+
+/** The day clock has moved since the scan ran: the scan is older than the screen's clock. */
+export function rescanStaleText(list: Pick<DayList, "clock" | "rescan">): string | null {
+  if (list.rescan === null || list.clock === null || Date.parse(list.clock) <= Date.parse(list.rescan.as_of)) return null;
+  return practiceText("dayRescanStale", { clock: formatEtTimeZone(list.clock) });
 }
 
 export function listWarning(list: Pick<DayList, "warnings" | "candidates">): string | null {

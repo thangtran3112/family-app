@@ -28,6 +28,11 @@ async function namesPanel(page: Page) {
   return drawer;
 }
 
+/** The Desk "recorded" these mornings' universes (`universe_days`); the e2e server writes the rows the premarket pass would. */
+async function recordUniverse(context: BrowserContext, days: { day: string; symbols: string[] }[]) {
+  expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days } })).ok()).toBeTruthy();
+}
+
 /** A filter that lists every name the stub has bars for, a thread, and a two-name plan saved through the hub form. */
 async function startTwoNamePlan(page: Page, context: BrowserContext) {
   const all = {
@@ -152,6 +157,90 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  test("a re-scan runs at the day clock, says when and on what data, and leaves the list as it was", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    // The Desk recorded that morning with two of the stub's four names: the list scans those, and says so.
+    await recordUniverse(context, [{ day: DAY, symbols: ["TSLA", "LRCX"] }]);
+    await startTwoNamePlan(page, context);
+    const dayUrl = page.url();
+    const list = page.getByRole("table", { name: "Candidates" });
+    await expect(list.getByRole("row", { name: /TSLA/ })).toBeVisible();
+    await expect(list.getByRole("row", { name: /LRCX/ })).toBeVisible();
+    await expect(list.getByRole("row", { name: /PANW|XOM/ })).toHaveCount(0);
+    await expect(page.getByText(/the 2 symbols the Desk scanned that morning, as recorded/)).toBeVisible();
+
+    // No name practised yet, so no day clock: the button waits and says why.
+    const rescan = page.getByRole("button", { name: PRACTICE_COPY.dayRescan });
+    await expect(rescan).toBeDisabled();
+    await expect(page.getByText(PRACTICE_COPY.dayRescanNeedsClock)).toBeVisible();
+
+    // Practise TSLA five bars in (the clock reads 9:35), come back, and scan.
+    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    for (let bar = 0; bar < 5; bar += 1) await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:35");
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await expect(rescan).toBeEnabled();
+    await rescan.click();
+    const label = page.getByTestId("rescan-label");
+    await expect(label).toHaveText("Scan 1 · run at 9:35 AM ET · data through 9:20 AM");
+    await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new since your list");
+    await expect(label).not.toContainText("2026"); // dates stay hidden
+    const scanned = page.getByRole("table", { name: "Re-scan" });
+    await expect(scanned.getByRole("row", { name: /TSLA/ })).toBeVisible();
+    await expect(scanned.getByRole("row", { name: /LRCX/ })).toBeVisible();
+    await expect(list.getByRole("row")).toHaveCount(3); // the frozen list is unchanged: header and its two names
+    await expect(page.getByTestId("rescan-stale")).toHaveCount(0);
+    await expectCleanScreen(page);
+
+    // The clock moves on: the old scan says it is older, and a new scan is its own.
+    await page.getByRole("button", { name: "Practise TSLA" }).first().click(); // the name in hand: its button reads Resume
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:37");
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await expect(page.getByTestId("rescan-stale")).toContainText("The day clock is now 9:37 AM ET · this scan is older");
+    await rescan.click();
+    await expect(label).toHaveText("Scan 2 · run at 9:37 AM ET · data through 9:22 AM");
+    await expect(page.getByTestId("rescan-stale")).toHaveCount(0);
+
+    // Ending the day closes scanning and keeps the last scan on screen.
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan })).toHaveCount(0);
+    await expect(label).toHaveText("Scan 2 · run at 9:37 AM ET · data through 9:22 AM");
+    await expectCleanScreen(page);
+  });
+
+  test("the plan form starts on the first recorded morning once 20 finished days are recorded, and says why", async ({ page, context }) => {
+    await openDesk(page, "/practice");
+    const threads = page.locator("#threads");
+    await threads.getByRole("form", { name: "New thread" }).getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
+    await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
+    const daily = page.locator("#daily-list");
+    const firstDay = daily.locator('input[type="date"]');
+    const note = daily.getByTestId("first-day-note");
+
+    // Nothing recorded yet: the usual start, three months back.
+    await expect(note).toHaveText("The Desk has not recorded a morning's universe yet · the default start is three months back");
+    await expect(firstDay).not.toHaveValue(DAY);
+
+    // The Desk has recorded 20 finished days since Fri 2026-09-25: a new plan starts on it, unless she picks a day.
+    await recordUniverse(context, [{ day: DAY, symbols: ["TSLA"] }]);
+    await openDesk(page, "/practice");
+    await expect(note).toHaveText(/^The first day the Desk recorded its universe · \d+ finished days of it exist$/);
+    await expect(firstDay).toHaveValue(DAY);
+    await firstDay.fill("2026-09-28");
+    await expect(firstDay).toHaveValue("2026-09-28");
     await expectCleanScreen(page);
   });
 });

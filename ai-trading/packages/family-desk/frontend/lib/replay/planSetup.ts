@@ -91,6 +91,11 @@ export function defaultFirstDay(now: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** The first day the form shows: the day she picked, else the server's default once the Desk has recorded 20 finished days of
+ *  its universe (`GET /replay/universe-days`), else the draft's own (the first weekday three months back). */
+export const effectiveFirstDay = (draftDay: string, picked: boolean, recorded: string | null): string =>
+  picked || recorded === null ? draftDay : recorded;
+
 export function defaultPlanDraft(now: Date): PlanDraft {
   const listAt = LIST_TIMES[0].value;
   return {
