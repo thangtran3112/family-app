@@ -47,7 +47,7 @@ from ai_trading.api import (
     watchlists,
 )
 from ai_trading.db.engine import make_engine, make_health_check_engine, make_session_factory, session_scope
-from ai_trading.notify.channel import Channel
+from ai_trading.notify.channel import Channel, RuntimeGated
 from ai_trading.notify.dispatch import dispatch_pending
 from ai_trading.notify.slack import SlackChannel
 from ai_trading.notify.telegram import TelegramChannel
@@ -63,14 +63,15 @@ _DATABASE_URL_VAR = "DESK_RUNTIME_DATABASE_URL"
 def _build_channels(env: dict[str, str]) -> dict[str, Channel]:
     """Only a channel with real credentials present gets wired (D-a) -- `inbox` needs none
     (`dispatch_pending` handles it directly). A `telegram`/`slack` delivery with no entry here
-    stays "pending" forever, never a crash, until the owner sets these keys."""
+    is recorded `no_channel`, never a crash, until the owner sets these keys. The values come from the
+    Firestore `family-config` profile rendered into the container env at deploy time. Telegram needs the bot
+    token only: each user's chat is the one she links (`PUT /settings/channels/telegram`); `TELEGRAM_CHAT_ID`
+    is an optional fallback chat. Both wired channels send nothing while the alert runtime is off."""
     channels: dict[str, Channel] = {}
-    bot_token, chat_id = env.get("TELEGRAM_BOT_TOKEN"), env.get("TELEGRAM_CHAT_ID")
-    if bot_token and chat_id:
-        channels["telegram"] = TelegramChannel(bot_token, chat_id)
-    webhook_url = env.get("SLACK_WEBHOOK_URL_OWNER")
-    if webhook_url:
-        channels["slack"] = SlackChannel(webhook_url)
+    if bot_token := env.get("TELEGRAM_BOT_TOKEN"):
+        channels["telegram"] = RuntimeGated(TelegramChannel(bot_token, env.get("TELEGRAM_CHAT_ID")))
+    if webhook_url := env.get("SLACK_WEBHOOK_URL_OWNER"):
+        channels["slack"] = RuntimeGated(SlackChannel(webhook_url))
     return channels
 
 
@@ -84,11 +85,16 @@ async def _background_loop(
 ) -> None:
     """Runs `work` against a fresh `Session` every `interval` seconds, forever, until the task is
     cancelled. One exception from `work` is logged and never kills the loop -- a single bad
-    tick/dispatch cycle must not take the whole background loop down."""
+    tick/dispatch cycle must not take the whole background loop down. `work` runs in a worker thread,
+    so a slow or retrying channel send (`time.sleep` backoff) never stalls the API, inbox reads included."""
+
+    def run() -> None:
+        with session_scope(session_factory) as session:
+            work(session, clock())
+
     while True:
         try:
-            with session_scope(session_factory) as session:
-                work(session, clock())
+            await asyncio.to_thread(run)
         except Exception:
             logger.exception("background loop iteration failed")
         await sleep(interval)
