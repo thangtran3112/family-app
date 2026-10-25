@@ -109,6 +109,11 @@ DESK="$WORKDIR/desk"; mkdir -p "$DESK/_next/static/chunks" "$DESK/strategies/new
 for route in index 404 strategies strategies/new; do
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
+# The MVP route set: every desktop page must pass the desk allowlist.
+for route in today screener screener/filters strategies/library alerts alerts/new watchlists technicals futures futures/specs settings more paper holdings ask covered-calls stocks backtests; do
+  mkdir -p "$DESK/$(dirname "$route")"
+  printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
+done
 printf 'chunk\n' >"$DESK/_next/static/chunks/desk.js"
 printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
 "$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
