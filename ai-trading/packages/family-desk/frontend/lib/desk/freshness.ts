@@ -1,5 +1,5 @@
 import type { Stamp } from "../api/schemas.ts";
-import { formatAgo, formatEtClock, formatEtTime, formatEtTimeZone, formatEtWeekdayTime } from "./format.ts";
+import { formatAgo, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
 // never write these strings; they call the functions below. `{x}` marks a value filled at render time.
@@ -198,4 +198,85 @@ export function wrongLaneText(lane: string): string {
 
 export function notEnoughHistoryText(timeframe: string): string {
   return fill(COPY.notEnoughHistory, { timeframe });
+}
+
+// ---- Practice (replay) lane copy (02o §a5). Same rules as COPY; the banned lists below cover it. ----
+
+export const PRACTICE_COPY = {
+  band: "Practice · replay of {day} · nothing here reaches IBKR",
+  bandHub: "Practice · replay of past days · nothing here reaches IBKR",
+  bandHidden: "Practice · replay of a hidden day · nothing here reaches IBKR",
+  badge: "Replay · {day} · {time}",
+  badgeHidden: "Replay · hidden day · {time}",
+  hiddenDay: "Hidden day",
+  feedSip: "Consolidated tape · all US exchanges",
+  feedIex: "IEX prints only · about 4% of volume · bar volume is consolidated",
+  fastTape: "Fast tape · showing the latest {shown} of {count} prints",
+  quietTape: "No prints in the last 30 s",
+  noTrading: "No trading on {day} · pick a weekday",
+  notFinished: "This session isn't finished yet · replay opens at 4:15 PM ET",
+  beforeFloor: "Replay goes back to Jan 4, 2016",
+  noTradesFor: "No trades for {symbol} on {day}",
+  loadingReplay: "Preparing the replay…",
+  loadingDays: "Loading practice days…",
+  ready: "Paused at {time} · press Space to play",
+  playing: "Playing at {speed}x",
+  paused: "Paused at {time}",
+  sessionOver: "Session over · {trades} · See journal",
+  endAndScore: "End and score",
+  endEarlyWarning: "Ending now shows the rest of the day in the journal.",
+  advanceError: "Couldn't load the next minute · Try again",
+  markError: "Couldn't place that mark · Try again",
+  markRejected: "That mark wasn't accepted",
+  noOpenTrade: "No open practice trade to exit",
+  tradeAlreadyOpen: "A practice trade is already open · exit it first",
+  maxLoss: "Max loss reached · your plan says stop for the day",
+  undone: "Practice mark removed",
+  undoTooLate: "Can't undo · the playhead has moved",
+  nothingToUndo: "No practice mark to undo",
+  stopNeedsTrade: "Open a practice trade before setting a stop",
+  priceFootnote: "Practice prices are replayed last prices · no spread, slippage, or fees",
+  notableHeader: "Most volatile sessions of the last year for your watchlists · we never show how a day ended",
+  notableCustomHint: "Notable days are listed for your watchlist symbols",
+  noNotableDays: "No notable days for {symbol} yet",
+  noSessions: "No practice sessions yet · pick a day to start",
+  noSignalsYet: "No signals yet · your armed strategies are watching",
+  noArmed: "No strategies armed · the chart shows only your marks",
+  noTradesJournal: "No practice trades this session",
+  noTradesJournalSignals: "No practice trades this session · {signals} would have fired",
+  adherenceHint: "Add a plan to get an adherence score",
+  sessionOpen: "Session still open · Resume",
+  loadError: "Couldn't load this session · Try again",
+  startError: "Couldn't start the session · Try again",
+  savingNotes: "Saving notes…",
+  notesSaved: "Notes saved",
+} as const;
+
+/** Words that must not appear in Practice copy: there is no order, position, fill or broker in this lane (02o §a5). */
+export const PRACTICE_BANNED_TERMS: readonly RegExp[] = [
+  /\border(?:s|ed|ing)?\b/i,
+  /\bpositions?\b/i,
+  /\bfill(?:s|ed)?\b/i,
+  /\bbrokers?\b|\bbrokerage\b/i,
+  /\bexecut(?:e|es|ed|ing|ion)\b/i,
+];
+
+export function containsPracticeBannedTerm(text: string): boolean {
+  return containsBannedTerm(text) || PRACTICE_BANNED_TERMS.some((pattern) => pattern.test(text));
+}
+
+type PracticeKey = keyof typeof PRACTICE_COPY;
+export const practiceText = (key: PracticeKey, values: Record<string, string | number> = {}): string =>
+  fill(PRACTICE_COPY[key], Object.fromEntries(Object.entries(values).map(([name, value]) => [name, String(value)])));
+
+/** "Practice · replay of Fri 2026-10-23 · nothing here reaches IBKR"; `day` null on the hub, `hidden` while the date is masked. */
+export function practiceBandText(day: string | null, hidden = false): string {
+  if (hidden) return PRACTICE_COPY.bandHidden;
+  return day ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
+}
+
+/** The top-bar badge during a replay: "Replay · Fri 2026-10-23 · 10:07 AM ET" or "Replay · hidden day · 10:07 AM ET". */
+export function replayBadgeText(day: string, playhead: string | null, hidden: boolean): string {
+  const time = formatEtTimeZone(playhead);
+  return hidden ? practiceText("badgeHidden", { time }) : practiceText("badge", { day: formatEtDay(day), time });
 }

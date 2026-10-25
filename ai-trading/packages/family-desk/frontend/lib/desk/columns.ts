@@ -7,6 +7,9 @@ export const BOARD_PRIORITIES = {
   dashboard: { vs_vwap_pct: 1, rvol_10d: 2 },
   screener: { matched_since: 1, atr_pct_14: 2, volume: 3 },
   watchlist: { rvol_10d: 1, bias_label: 2 },
+  // Practice (02o §a2, §a4): the notable-days table drops weekday, then attempts; signals versus trades drops the 15-minute change.
+  practiceDays: { weekday: 1, attempts: 2 },
+  practiceSignals: { chg_15m: 1 },
 } as const satisfies Record<string, Record<string, number>>;
 
 export type Board = keyof typeof BOARD_PRIORITIES;
