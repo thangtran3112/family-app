@@ -455,3 +455,99 @@ def test_history_is_fetched_once_and_then_served_from_the_blob_cache(replay: Tes
     app.dependency_overrides[get_services] = lambda: services2
     replay.post(f"{BASE}/sessions", json=SPEC, headers=OTHER)
     assert services2.history.fetches == 0 and services2.tape.fetches == 0
+
+
+# -- armed strategies: signals released by the playhead -------------------------------------------------------
+
+
+def arm_vwap_reclaim(db: Session, email: str = "owner@example.com") -> int:
+    from sqlalchemy import select as _select
+
+    from ai_trading.alerts import service
+    from ai_trading.db.models import User
+    from ai_trading.library.catalog import alert_only_spec, load_catalog, load_template
+
+    user = db.execute(_select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None:
+        user = User(email=email, settings={})
+        db.add(user)
+        db.flush()
+    entry = next(e for e in load_catalog().entries if e.id == "vwap-reclaim")
+    spec = alert_only_spec(load_template(entry.file), name=entry.label).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    spec["then"]["alert"]["frequency"] = "every_time"
+    return service.create_strategy(db, user.id, spec, save_as="draft", now=NOW).row.id
+
+
+def test_armed_signals_are_released_as_the_playhead_passes_each_bar_close(
+    replay: TestClient, db_session: Session
+) -> None:
+    from ai_trading.db.models import Bar1m
+
+    strategy_id = arm_vwap_reclaim(db_session)
+    tables = (Signal, Alert, Delivery, Bar1m)
+    before = [db_session.execute(select(func.count()).select_from(t)).scalar_one() for t in tables]
+    full_day = {"window": {"from": "09:30", "to": "16:00"}}
+    session = start(replay, armed=[{"source": "alert_strategy", "id": strategy_id}], **full_day)
+    sid = session["id"]
+    assert session["armed"] == [
+        {
+            "source": "alert_strategy",
+            "id": strategy_id,
+            "version_id": session["armed"][0]["version_id"],
+            "name": "VWAP reclaim",
+            "bias": "bullish",
+            "fires_so_far": 0,
+        }
+    ]
+    seen: list[dict[str, Any]] = []
+    for _ in range(40):
+        response = replay.post(f"{BASE}/sessions/{sid}/advance", json={"step": "next_signal"}, headers=OWNER)
+        if response.status_code == 422:
+            assert response.json()["detail"]["problems"][0]["message"] == "No more signals in this session"
+            break
+        delta = response.json()
+        assert [s["bar_close"] for s in delta["signals"]] == [delta["revealed_through"]]  # released exactly at close
+        seen += delta["signals"]
+        state = replay.get(f"{BASE}/sessions/{sid}", headers=OWNER).json()
+        assert state["armed"][0]["fires_so_far"] == len(seen)
+        assert "signals" not in state
+    assert len(seen) >= 3 and all(s["name"] == "VWAP reclaim" and s["source"] == "alert_strategy" for s in seen)
+    ended = replay.post(f"{BASE}/sessions/{sid}/end", headers=OWNER).json()
+    assert [row["name"] for row in ended["journal"]["signals_vs_trades"]] == ["VWAP reclaim"] * len(seen)
+    assert ended["journal"]["signals_vs_trades"][0]["her"] == "no trade"
+    # read-only evaluation: no signal, alert, delivery, and no stored 1-minute bar (02o §i side effects)
+    assert before == [db_session.execute(select(func.count()).select_from(t)).scalar_one() for t in tables]
+
+
+def test_a_signal_entry_is_scored_on_signal_and_the_strategy_snapshot_survives_edits(
+    replay: TestClient, db_session: Session
+) -> None:
+    strategy_id = arm_vwap_reclaim(db_session)
+    spec = {
+        "armed": [{"source": "alert_strategy", "id": strategy_id}],
+        "window": {"from": "09:30", "to": "16:00"},
+        "plan": {"stopRequired": "no", "signalOnly": "yes"},
+    }
+    sid = start(replay, **spec)["id"]
+    first = replay.post(f"{BASE}/sessions/{sid}/advance", json={"step": "next_signal"}, headers=OWNER).json()
+    assert mark(replay, sid, {"kind": "long_entry"}).status_code == 200
+    replay.post(
+        f"{BASE}/sessions/{sid}/advance",
+        json={"to": (pd.Timestamp(first["revealed_through"]) + pd.Timedelta(minutes=4)).isoformat()},
+        headers=OWNER,
+    )
+    result = mark(replay, sid, {"kind": "long_exit"}).json()
+    assert result["journal"]["trades"][0]["on_signal"] is True
+    check = next(c for c in result["journal"]["adherence"]["checks"] if c["id"] == "on_signal")
+    assert check["applicable"] and check["passed"] and check["detail"] == "1 of 1"
+    assert result["journal"]["adherence"]["score_pct"] == 100
+
+
+def test_arming_someone_elses_strategy_is_a_plain_422(replay: TestClient, db_session: Session) -> None:
+    other_id = arm_vwap_reclaim(db_session, "spouse@example.com")
+    response = replay.post(
+        f"{BASE}/sessions", json={**SPEC, "armed": [{"source": "alert_strategy", "id": other_id}]}, headers=OWNER
+    )
+    assert response.status_code == 422 and response.json()["detail"]["problems"][0]["path"] == "armed.0.id"

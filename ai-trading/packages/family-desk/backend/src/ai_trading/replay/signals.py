@@ -29,7 +29,10 @@ from ai_trading.contracts.strategy_spec_v1 import StrategySpecV1
 from ai_trading.core.calendar import ET
 from ai_trading.core.evaluate import INTRADAY_CADENCES, check, evaluate
 from ai_trading.db.models import FilterStrategy, FilterStrategyVersion
-from ai_trading.library.catalog import load_catalog
+from ai_trading.library.catalog import load_catalog, load_template
+from ai_trading.mvp_stub import alerts as mvp_alerts
+from ai_trading.mvp_stub import stub_enabled as mvp_stub_enabled
+from ai_trading.mvp_stub import world as mvp_world
 from ai_trading.replay.model import Fire
 
 log = logging.getLogger(__name__)
@@ -109,9 +112,12 @@ def resolve(db: Session, user_id: int, refs: list[dict[str, Any]], symbol: str) 
         if ref["source"] == "alert_strategy":
             try:
                 view = get_strategy(db, user_id, ref["id"])
+                name, version_id, raw = view.row.name, view.version.id, view.spec
             except StrategyNotFound:
-                raise ArmProblem(index, "Strategy not found") from None
-            name, version_id, raw = view.row.name, view.version.id, view.spec
+                found_stub = mvp_alerts.find_strategy(ref["id"]) if mvp_stub_enabled() else None
+                if found_stub is None:
+                    raise ArmProblem(index, "Strategy not found") from None
+                name, version_id, raw = found_stub["spec"]["name"], ref["id"], found_stub["spec"]
         else:
             found = db.execute(
                 select(FilterStrategy, FilterStrategyVersion)
@@ -122,10 +128,18 @@ def resolve(db: Session, user_id: int, refs: list[dict[str, Any]], symbol: str) 
                     FilterStrategy.archived_at.is_(None),
                 )
             ).first()
-            if found is None:
-                raise ArmProblem(index, "Filter not found")
-            name, version_id = found[0].name, found[1].id
-            raw = _filter_as_spec(name, found[1].spec)
+            if found is not None:
+                name, version_id = found[0].name, found[1].id
+                raw = _filter_as_spec(name, found[1].spec)
+            else:  # the MVP stub's seed filters live in the fixture world, not in the database
+                stub_row = (
+                    next((r for r in mvp_world.filters() if r["id"] == ref["id"]), None) if mvp_stub_enabled() else None
+                )
+                if stub_row is None:
+                    raise ArmProblem(index, "Filter not found")
+                entry = next(e for e in load_catalog().entries if e.kind == "filter" and e.id == stub_row["key"])
+                name, version_id = stub_row["name"], ref["id"]
+                raw = _filter_as_spec(name, load_template(entry.file))
         try:
             problems = check(_replay_spec(raw, symbol))
         except ValueError as exc:
