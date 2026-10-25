@@ -25,13 +25,7 @@ export type SetupDraft = {
   from: string;
   to: string;
   interval: ReplayInterval;
-  shares: string;
   armed: ArmedRef[];
-  stopRequired: boolean;
-  signalOnly: boolean;
-  maxLossUsd: string;
-  maxTrades: string;
-  note: string;
 };
 
 export const defaultDraft = (): SetupDraft => ({
@@ -41,13 +35,7 @@ export const defaultDraft = (): SetupDraft => ({
   session: "regular",
   ...REGULAR_WINDOW,
   interval: "5m",
-  shares: "100",
   armed: [],
-  stopRequired: true,
-  signalOnly: false,
-  maxLossUsd: "",
-  maxTrades: "",
-  note: "",
 });
 
 /** Switching session resets the window to that session's default bounds. */
@@ -69,17 +57,13 @@ export function toggleArmed(armed: readonly ArmedRef[], ref: ArmedRef): ArmedRef
   return armed.length >= MAX_ARMED ? [...armed] : [...armed, ref];
 }
 
-const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text));
+/** A practice session carries no risk plan of its own: the plan is the thread's (D-007, D-008), and the contract still
+ *  wants a block, so a session is stored with the neutral one (no rule she did not choose) and the default lot size. */
+const SESSION_SHARES = 100;
+const NEUTRAL_PLAN = { stopRequired: "no", signalOnly: "no" } as const;
 
-/** The draft as the contract's JSON. Optional plan fields are left out when empty; nothing is null or boolean. */
+/** The draft as the contract's JSON. Nothing is null or boolean. */
 export function draftToSpec(draft: SetupDraft): unknown {
-  const plan: Record<string, unknown> = {
-    stopRequired: draft.stopRequired ? "yes" : "no",
-    signalOnly: draft.signalOnly ? "yes" : "no",
-  };
-  if (draft.maxLossUsd.trim() !== "") plan.maxLossUsd = numberOrNaN(draft.maxLossUsd);
-  if (draft.maxTrades.trim() !== "") plan.maxTrades = numberOrNaN(draft.maxTrades);
-  if (draft.note.trim() !== "") plan.note = draft.note.trim();
   return {
     schemaVersion: 1,
     symbol: draft.symbol.trim().toUpperCase(),
@@ -87,14 +71,14 @@ export function draftToSpec(draft: SetupDraft): unknown {
     window: { from: draft.from, to: draft.to },
     session: draft.session,
     interval: draft.interval,
-    shares: numberOrNaN(draft.shares),
+    shares: SESSION_SHARES,
     armed: draft.armed.map(({ source, id }) => ({ source, id })),
-    plan,
+    plan: NEUTRAL_PLAN,
     hideDate: draft.dayHidden ? "yes" : "no",
   };
 }
 
-export type SetupField = "symbol" | "day" | "window" | "interval" | "shares" | "armed" | "stopRequired" | "maxLossUsd" | "maxTrades" | "note" | "form";
+export type SetupField = "symbol" | "day" | "window" | "interval" | "armed" | "form";
 export type FieldProblems = Partial<Record<SetupField, string>>;
 
 const FIELD_MESSAGE: Record<SetupField, string> = {
@@ -102,23 +86,15 @@ const FIELD_MESSAGE: Record<SetupField, string> = {
   day: "Pick a day",
   window: "Pick a window that starts before it ends",
   interval: "Pick 1m, 5m or 15m",
-  shares: "Shares: a whole number from 1 to 10,000",
   armed: "Arm up to 5 strategies",
-  stopRequired: "Pick yes or no",
-  maxLossUsd: "Max loss: whole dollars from 1 to 100,000",
-  maxTrades: "Max trades: a whole number from 1 to 50",
-  note: "Plan note: up to 500 plain characters",
   form: "Check the setup and try again",
 };
 
-/** Maps a contract or server path (`plan.maxLossUsd`, `window.from`, `armed.0.id`) to the form field that shows it. */
+/** Maps a contract or server path (`window.from`, `armed.0.id`) to the form field that shows it. */
 export function fieldOfPath(path: string): SetupField {
-  const [first, second] = path.split(".");
-  if (first === "plan") {
-    return second === "maxLossUsd" ? "maxLossUsd" : second === "maxTrades" ? "maxTrades" : second === "note" ? "note" : "stopRequired";
-  }
+  const first = path.split(".")[0];
   switch (first) {
-    case "symbol": case "day": case "window": case "interval": case "shares": case "armed": return first;
+    case "symbol": case "day": case "window": case "interval": case "armed": return first;
     case "session": return "window";
     case "hideDate": return "day";
     default: return "form";

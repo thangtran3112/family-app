@@ -18,7 +18,6 @@ import {
   type SetupDraft,
 } from "@/lib/replay/setup";
 import { ArmStrategiesField } from "./ArmStrategiesField";
-import { PlanFields } from "./PlanFields";
 import { SymbolField } from "./SymbolField";
 import styles from "./hub.module.css";
 
@@ -114,7 +113,6 @@ export function SessionSetup({ draft, onDraft }: { draft: SetupDraft; onDraft: (
       </div>
 
       <ArmStrategiesField armed={draft.armed} onChange={(armed) => onDraft({ ...draft, armed })} error={problems.armed} />
-      <PlanFields draft={draft} onDraft={onDraft} problems={problems} />
 
       {problems.form && <p role="alert" className={styles.fieldError}>{problems.form}</p>}
       {startFailed && <ErrorBlock message={PRACTICE_COPY.startError} onRetry={() => void start()} />}

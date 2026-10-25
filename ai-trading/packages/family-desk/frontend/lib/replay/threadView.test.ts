@@ -15,6 +15,7 @@ import {
   threadStartedText,
   threadTiles,
   todayLine,
+  todayView,
   weeksInText,
   weeksOf,
   winRateText,
@@ -116,4 +117,25 @@ test("the plan recap reads yes, no and none in plain words, and no thread copy t
     })(),
   ];
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
+});
+
+// D-030: after a realized +$1,565 day the card read "$0 realized so far · 0 practice trades" beside a balance of $51,565.
+test("the TODAY row agrees with the balance: a day with nothing realized yet defers to the last ended day", () => {
+  const ended = { n: 1, day_list_id: 2, day: "2026-07-01", weekday: "Wed", kind: "practiced", trades: 1, pnl_usd: 1564.5, adherence_pct: null, balance: 51564.5 } as const;
+  const listed = { day_list_id: 3, day: "2026-07-01", weekday: "Wed", day_no: 1, status: "listed", trades: 0, pnl_usd: 0 } as const;
+  // The day just ended, nothing open: its ledger result, not "no day open".
+  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,565 realized · 1 practice trade", pnl: 1564.5 });
+  // A new day listed but not started: still the last ended day's result, never the new day's $0.
+  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,565 realized · 1 practice trade", pnl: 1564.5 });
+  // The day under way: its own realized figure and count, "so far".
+  const practicing = { ...listed, status: "practicing", trades: 2, pnl_usd: 112 } as const;
+  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112 realized so far · 2 practice trades", pnl: 112 });
+  assert.equal(todayView({ ...listed, status: "practicing" }, ended).label, "Today", "a practising day with no exit yet is still today");
+  // A skipped last day carries the balance; nothing is claimed.
+  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Skipped · the balance carried over", pnl: null });
+  // First day of a fresh thread: nothing earlier to show, so the open day's own line stands.
+  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0 realized so far · 0 practice trades", pnl: 0 });
+  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null });
+  // The shown figure is the ledger's: it matches the balance change of that day.
+  assert.equal(Math.round(ended.balance - 50000), Math.round(ended.pnl_usd));
 });

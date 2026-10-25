@@ -7,7 +7,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { openNextDay } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
-import type { PracticeThread, ThreadSummary, ThreadToday } from "@/lib/replay/threads";
+import type { PracticeThread, ThreadDay, ThreadSummary, ThreadToday } from "@/lib/replay/threads";
 import {
   adherenceTrendText,
   dayResultTone,
@@ -16,15 +16,16 @@ import {
   startedWithText,
   threadModeLabel,
   threadName,
-  todayLine,
+  todayView,
   winRateText,
 } from "@/lib/replay/threadView";
 import styles from "./hub.module.css";
 
-/** The active thread's card (02r): balance with SIMULATED, the stats, today's open day and the resume control. */
-export function ThreadCard({ summary, planOpen, onChanged }: { summary: ThreadSummary; planOpen: boolean; onChanged: () => void }) {
+/** The active thread's card (02r): balance with SIMULATED, the stats, today's open day (or the last ended day) and the resume control. */
+export function ThreadCard({ summary, lastDay, planOpen, onChanged }: { summary: ThreadSummary; lastDay: ThreadDay | null; planOpen: boolean; onChanged: () => void }) {
   const { thread, today } = summary;
   const { stats } = thread;
+  const view = todayView(today, lastDay);
   return (
     <article className={styles.threadCard} aria-label="Active practice thread">
       <div className={styles.threadHead}>
@@ -66,9 +67,9 @@ export function ThreadCard({ summary, planOpen, onChanged }: { summary: ThreadSu
           </dd>
         </div>
         <div className={styles.threadRow}>
-          <dt className={styles.cap}>{PRACTICE_COPY.threadToday}</dt>
+          <dt className={styles.cap}>{view.label}</dt>
           <dd>
-            <TodayLine today={today} />
+            <TodayLine view={view} />
           </dd>
         </div>
       </dl>
@@ -107,18 +108,17 @@ export function ClosedThreadCard({ thread, canStartNew, onStartNew }: { thread: 
   );
 }
 
-/** Today's realized result, its signed amount colored; the rest of the line stays muted text. */
-function TodayLine({ today }: { today: ThreadToday | null }) {
-  const line = todayLine(today);
-  if (today === null) return <>{line}</>;
-  const amount = formatDayResult(today.pnl_usd);
-  const at = line.indexOf(amount);
-  if (at < 0) return <>{line}</>;
+/** The realized result, its signed amount colored; the rest of the line stays muted text. */
+function TodayLine({ view }: { view: ReturnType<typeof todayView> }) {
+  if (view.pnl === null) return <>{view.line}</>;
+  const amount = formatDayResult(view.pnl);
+  const at = view.line.indexOf(amount);
+  if (at < 0) return <>{view.line}</>;
   return (
     <>
-      {line.slice(0, at)}
-      <span className={styles[dayResultTone(today.pnl_usd)]}>{amount}</span>
-      {line.slice(at + amount.length)}
+      {view.line.slice(0, at)}
+      <span className={styles[dayResultTone(view.pnl)]}>{amount}</span>
+      {view.line.slice(at + amount.length)}
     </>
   );
 }

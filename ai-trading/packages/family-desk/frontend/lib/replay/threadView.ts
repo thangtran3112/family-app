@@ -68,6 +68,26 @@ export function todayLine(today: ThreadToday | null): string {
   return practiceText("threadTodayLine", { pnl: formatDayResult(today.pnl_usd), trades: tradesCountText(today.trades) });
 }
 
+/** "+$1,565 realized · 1 practice trade", or the skipped-day line: the last ended day, read from the ledger's day series. */
+export function lastDayLine(day: Pick<ThreadDay, "kind" | "pnl_usd" | "trades">): string {
+  if (day.kind === "skipped") return PRACTICE_COPY.threadLastDaySkipped;
+  return practiceText("threadLastDayLine", { pnl: formatDayResult(day.pnl_usd), trades: tradesCountText(day.trades) });
+}
+
+/** What the thread card's TODAY row says: its label, the line, and the signed amount to color (null for none).
+ *  The practice day under way reads "so far" once practice has started or booked a trade. A day that is only listed has
+ *  nothing realized, so the row shows the last ended day instead of a $0 beside a balance that already moved (D-030): the
+ *  same ledger rows as the balance and the journal. */
+export function todayView(today: ThreadToday | null, lastDay: ThreadDay | null): { label: string; line: string; pnl: number | null } {
+  if (today !== null && (today.status === "practicing" || today.trades > 0 || lastDay === null)) {
+    return { label: PRACTICE_COPY.threadToday, line: todayLine(today), pnl: today.pnl_usd };
+  }
+  if (lastDay !== null) {
+    return { label: PRACTICE_COPY.threadLastDay, line: lastDayLine(lastDay), pnl: lastDay.kind === "practiced" ? lastDay.pnl_usd : null };
+  }
+  return { label: PRACTICE_COPY.threadToday, line: todayLine(null), pnl: null };
+}
+
 /** The header strip of a day screen or the workspace: "Thread balance $50,123 · today +$112". */
 export function briefLine(brief: Pick<ThreadBrief, "balance" | "today_pnl_usd">): string {
   const balance = practiceText("threadBalanceLine", { balance: formatBalance(brief.balance) });

@@ -48,11 +48,18 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   const next = planCard(plan);
   assert.equal(next.headline, "Day 7 of 20 · next: Tue");
   assert.equal(next.action, "continue");
-  assert.equal(next.detail, "2 symbols could not be loaded and read as no data");
+  assert.equal(next.detail, "Day 6 done · 2 symbols could not be loaded and read as no data");
+  assert.equal(planCard({ ...plan, prep: { ...plan.prep, failed: 0 } }).detail, "Day 6 done", "an ended day reads done, and Continue opens the next");
   const shown = planCard({ ...plan, spec: { ...plan.spec, hideDates: "no" } });
   assert.equal(shown.headline, "Day 7 of 20 · next: Tue 2026-03-10");
   const open = planCard({ ...plan, current: { id: 42, day_no: 7, status: "practicing" } });
   assert.deepEqual([open.headline, open.action], ["Day 7 of 20 · in progress", "continue"]);
+  // D-035: a day that is only listed is not "in progress", and an ended day is never shown as open.
+  const listed = planCard({ ...plan, current: { id: 42, day_no: 7, status: "listed" } });
+  assert.deepEqual([listed.headline, listed.action], ["Day 7 of 20 · list ready", "continue"]);
+  const ended = planCard({ ...plan, current: { id: 41, day_no: 6, status: "ended" } });
+  assert.doesNotMatch(ended.headline, /in progress|list ready/);
+  assert.equal(ended.headline, "Day 7 of 20 · next: Tue");
   const first = planCard({ ...plan, days_opened: 0, current: null, next_day_no: 1, next_weekday: "Mon", next_day: "2026-03-02", prep: { state: "done", done: 3, total: 3, failed: 0 } });
   assert.deepEqual([first.headline, first.action], ["Day 1 of 20 · next: Mon", "start"]);
   const preparing = planCard({ ...plan, days_opened: 0, current: null, prep: { state: "running", done: 12, total: 131, failed: 0 } });
