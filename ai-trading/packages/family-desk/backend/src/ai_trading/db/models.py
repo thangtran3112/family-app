@@ -2,9 +2,10 @@
 (`bars_1d`, `bars_1h`, `bars_1m`, `futures_rolls`, Phase 2a), and Phase 3's strategy/alert tables
 (02 §7, 02a §9: `users`, `watchlists`, `watchlist_items`, `strategies`, `strategy_versions`,
 `signals`, `alerts`, `deliveries` -- Alembic `0002`), and the technical desktop MVP's screener, universe,
-metrics, and feed-health tables (02m §b2 -- Alembic `0003`). Still out of scope: `iv_daily`,
-`consensus_snapshots`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase
-2a's own D3 ruling -- "a table arrives with the phase that first needs it").
+metrics, and feed-health tables (02m §b2 -- Alembic `0003`), and the consensus-history tables
+(`consensus_snapshots`, `earnings_results`, `analyst_targets` -- 02n §d, Alembic `0004`). Still out of
+scope: `iv_daily`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase 2a's own
+D3 ruling -- "a table arrives with the phase that first needs it").
 
 Every bar table's primary key matches how `ai_trading.data.bars`/`rolls` upsert into it (`symbol`
 plus the bar's own time column; `product` plus `contract_month`), so `INSERT ... ON CONFLICT DO
@@ -341,3 +342,71 @@ class FeedHealth(Base):
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detail: Mapped[str | None] = mapped_column(String)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ConsensusSnapshot(Base):
+    """One day's consensus EPS for one fiscal period of one symbol (02f §4). The Desk's own daily rows are where
+    the 7/30/90-day revisions come from, so a row is never rewritten by a later day; a re-run on the same
+    `snapshot_date` (an ET trading day) replaces that day's row."""
+
+    __tablename__ = "consensus_snapshots"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    period_kind: Mapped[str] = mapped_column(String, primary_key=True)  # "quarter" | "annual"
+    period_end: Mapped[date] = mapped_column(Date, primary_key=True)
+    snapshot_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer)
+    eps_mean: Mapped[float | None] = mapped_column(Float)
+    eps_high: Mapped[float | None] = mapped_column(Float)
+    eps_low: Mapped[float | None] = mapped_column(Float)
+    analyst_count: Mapped[int | None] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    quality: Mapped[str] = mapped_column(String, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EarningsResult(Base):
+    """Reported-vs-estimated EPS of one fiscal period, latest provider answer (a restated figure replaces the old
+    one). A period is keyed by its end date, so a calendar row the provider never joined to a period is not stored."""
+
+    __tablename__ = "earnings_results"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    period_end: Mapped[date] = mapped_column(Date, primary_key=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer)
+    report_date: Mapped[date | None] = mapped_column(Date)
+    report_time: Mapped[str | None] = mapped_column(String)
+    eps_estimate: Mapped[float | None] = mapped_column(Float)
+    eps_actual: Mapped[float | None] = mapped_column(Float)
+    surprise: Mapped[float | None] = mapped_column(Float)
+    surprise_percent: Mapped[float | None] = mapped_column(Float)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    quality: Mapped[str] = mapped_column(String, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnalystTarget(Base):
+    """One day's analyst rating counts and price targets for a symbol (a target is null when the provider has none)."""
+
+    __tablename__ = "analyst_targets"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    snapshot_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    target_mean: Mapped[float | None] = mapped_column(Float)
+    target_median: Mapped[float | None] = mapped_column(Float)
+    target_high: Mapped[float | None] = mapped_column(Float)
+    target_low: Mapped[float | None] = mapped_column(Float)
+    strong_buy: Mapped[int | None] = mapped_column(Integer)
+    buy: Mapped[int | None] = mapped_column(Integer)
+    hold: Mapped[int | None] = mapped_column(Integer)
+    sell: Mapped[int | None] = mapped_column(Integer)
+    strong_sell: Mapped[int | None] = mapped_column(Integer)
+    period: Mapped[date | None] = mapped_column(Date)  # the provider's recommendation month
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    quality: Mapped[str] = mapped_column(String, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

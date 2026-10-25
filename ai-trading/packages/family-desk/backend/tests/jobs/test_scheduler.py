@@ -4,6 +4,7 @@ import pytest
 
 from ai_trading.jobs import (
     JobResult,
+    consensus_snapshot,
     daily_close,
     healthcheck,
     premarket,
@@ -26,6 +27,7 @@ def test_due_now_lists_only_jobs_that_are_due(monkeypatch):
     due = {
         "premarket_0830": True,
         "daily_close": False,
+        "consensus_snapshot": False,
         "weekly": False,
         "relogin_reminder": False,
         "refresh_15m": True,
@@ -54,6 +56,9 @@ def test_run_due_runs_jobs_in_order_with_watchdog_last(monkeypatch):
         premarket, "run", lambda s, c, *, now, data_sources: calls.append("premarket_0830") or JobResult("x", True)
     )
     monkeypatch.setattr(daily_close, "run", lambda s, d, c, *, now: calls.append("daily_close") or JobResult("x", True))
+    monkeypatch.setattr(
+        consensus_snapshot, "run", lambda s, d, c, *, now: calls.append("consensus_snapshot") or JobResult("x", True)
+    )
     monkeypatch.setattr(weekly, "run", lambda s, c, *, now: calls.append("weekly") or JobResult("x", True))
     monkeypatch.setattr(
         relogin_reminder, "run", lambda s, c, *, now: calls.append("relogin_reminder") or JobResult("x", True)
@@ -63,7 +68,15 @@ def test_run_due_runs_jobs_in_order_with_watchdog_last(monkeypatch):
 
     scheduler.run_due(object(), _FakeSources(), JobClock(), now=datetime(2026, 10, 6, 13, 30, tzinfo=UTC))
 
-    assert calls == ["premarket_0830", "daily_close", "weekly", "relogin_reminder", "refresh_15m", "watchdog"]
+    assert calls == [
+        "premarket_0830",
+        "daily_close",
+        "consensus_snapshot",
+        "weekly",
+        "relogin_reminder",
+        "refresh_15m",
+        "watchdog",
+    ]
 
 
 def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
@@ -74,6 +87,7 @@ def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
 
     monkeypatch.setattr(premarket, "run", _boom)
     monkeypatch.setattr(daily_close, "run", lambda s, d, c, *, now: JobResult("daily_close", True))
+    monkeypatch.setattr(consensus_snapshot, "run", lambda s, d, c, *, now: JobResult("consensus_snapshot", True))
     monkeypatch.setattr(weekly, "run", lambda s, c, *, now: JobResult("weekly", True))
     monkeypatch.setattr(relogin_reminder, "run", lambda s, c, *, now: JobResult("relogin_reminder", True))
     monkeypatch.setattr(refresh_15m, "run", lambda s, d, *, now: JobResult("refresh_15m", True))
@@ -85,6 +99,7 @@ def test_run_due_a_failing_job_does_not_stop_the_others(monkeypatch):
     assert by_name["premarket_0830"].ok is False
     assert "boom" in by_name["premarket_0830"].error
     assert by_name["daily_close"].ok is True
+    assert by_name["consensus_snapshot"].ok is True
     assert by_name["weekly"].ok is True
     assert by_name["relogin_reminder"].ok is True
     assert by_name["refresh_15m"].ok is True
