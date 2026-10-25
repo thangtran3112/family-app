@@ -2,7 +2,8 @@
 (`bars_1d`, `bars_1h`, `bars_1m`, `futures_rolls`, Phase 2a), and Phase 3's strategy/alert tables
 (02 §7, 02a §9: `users`, `watchlists`, `watchlist_items`, `strategies`, `strategy_versions`,
 `signals`, `alerts`, `deliveries` -- Alembic `0002`), and the technical desktop MVP's screener, universe,
-metrics, and feed-health tables (02m §b2 -- Alembic `0003`). Still out of scope: `iv_daily`,
+metrics, and feed-health tables (02m §b2 -- Alembic `0003`), and the replay practice tables
+(02o c3 -- Alembic `0004`). Still out of scope: `iv_daily`,
 `consensus_snapshots`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase
 2a's own D3 ruling -- "a table arrives with the phase that first needs it").
 
@@ -19,17 +20,23 @@ app/foundry schemas.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
+    Numeric,
+    SmallInteger,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -341,3 +348,111 @@ class FeedHealth(Base):
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detail: Mapped[str | None] = mapped_column(String)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# -- Replay practice (Alembic 0004, 02o c3): replay sessions, practice marks, notable days, blob cache --
+
+
+class ReplaySession(Base):
+    """One practice attempt at one symbol-day. A new attempt is a new row; only one may be `active`."""
+
+    __tablename__ = "replay_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_user_id", "symbol", "day", "attempt", name="uq_replay_sessions_owner_user_id_symbol_day_attempt"
+        ),
+        Index("ix_replay_sessions_owner_user_id_updated_at", "owner_user_id", text("updated_at DESC")),
+        # One active session per symbol and day per user; ended attempts are unconstrained.
+        Index(
+            "uq_replay_sessions_owner_user_id_symbol_day_active",
+            "owner_user_id",
+            "symbol",
+            "day",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+        CheckConstraint("status IN ('active', 'ended')", name="ck_replay_sessions_status"),
+        CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_replay_sessions_rating"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # CASCADE (02o c3): deleting a user deletes their replay sessions.
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Resolved strategy refs (`version_id`, `name`, `bias`) and the would-fire list. The list is never
+    # served past `revealed_through`.
+    armed: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    signals: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revealed_through: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tape_feed: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "active" | "ended"
+    journal: Mapped[Any | None] = mapped_column(JSONB)  # final journal, written when the session ends
+    notes: Mapped[str | None] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(SmallInteger)  # 1..5 self-rating, or null
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PracticeMark(Base):
+    """A her-or-auto mark on a session's chart. `seq` orders marks within their session."""
+
+    __tablename__ = "practice_marks"
+    __table_args__ = (
+        UniqueConstraint("session_id", "seq", name="uq_practice_marks_session_id_seq"),
+        CheckConstraint(
+            "kind IN ('long_entry', 'short_entry', 'long_exit', 'short_exit', 'stop', 'note')",
+            name="ck_practice_marks_kind",
+        ),
+        CheckConstraint("source IN ('her', 'auto')", name="ck_practice_marks_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # CASCADE (02o c3): deleting a session deletes its marks.
+    session_id: Mapped[int] = mapped_column(ForeignKey("replay_sessions.id", ondelete="CASCADE"), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))  # null for a note
+    shares: Mapped[int | None] = mapped_column(Integer)
+    stop_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    note: Mapped[str | None] = mapped_column(Text)
+    trade_no: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String, nullable=False)  # "her" | "auto"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReplayNotableDay(Base):
+    """A scanned symbol-day the replay picker can offer. Keyed by (symbol, day), no attempts."""
+
+    __tablename__ = "replay_notable_days"
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    rv: Mapped[float] = mapped_column(Float, nullable=False)
+    rv_pct_rank: Mapped[float] = mapped_column(Float, nullable=False)
+    gap_pct: Mapped[float | None] = mapped_column(Float)
+    rvol: Mapped[float | None] = mapped_column(Float)
+    tags: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReplayBlob(Base):
+    """A compressed history payload cached per (kind, symbol, day, part, feed)."""
+
+    __tablename__ = "replay_blobs"
+    kind: Mapped[str] = mapped_column(String, primary_key=True)  # "bars1m" | "bars1d" | "tape"
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    # '' except for tape chunks: the 30-minute chunk start as ET 'HHMM'.
+    part: Mapped[str] = mapped_column(String, primary_key=True, default="", server_default=text("''"))
+    feed: Mapped[str] = mapped_column(String, primary_key=True)  # "sip" | "iex"
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
