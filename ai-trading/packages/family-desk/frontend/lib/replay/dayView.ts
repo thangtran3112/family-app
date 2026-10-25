@@ -118,7 +118,7 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   if (plan.finished) return { headline: practiceText("planDone", { of: plan.sessions }), detail: failed, action: "new" };
   const current = plan.current;
   if (current !== null && current.status !== "ended") {
-    // A listed day has not been practised yet; only a practising one is "in progress" (D-035).
+    // A listed day has not been practiced yet; only a practicing one is "in progress" (D-035).
     return {
       headline: practiceText(current.status === "practicing" ? "planInProgress" : "planListed", { day: current.day_no, of: plan.sessions }),
       detail: failed,
@@ -271,7 +271,7 @@ export function selectionText(review: Pick<DayReview, "of" | "selection">): stri
 
 export const moveText = (value: number | null): string => (value === null ? EMPTY_VALUE : formatSignedPct(value, 2));
 
-export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practised" : row.picked === "starred" ? "Starred" : "");
+export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practiced" : row.picked === "starred" ? "Starred" : "");
 
 /** "Day finished · date shown below" when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
 export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);

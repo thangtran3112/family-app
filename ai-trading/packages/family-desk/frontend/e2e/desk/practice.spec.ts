@@ -150,7 +150,7 @@ test.describe("Practice", () => {
   test("a hidden notable day keeps its date off the screen", async ({ page }) => {
     await openDesk(page, "/practice");
     const notable = page.locator("#notable-days");
-    await notable.getByRole("button", { name: /^Practise TSLA$/ }).first().click();
+    await notable.getByRole("button", { name: /^Practice TSLA$/ }).first().click();
     await expect(page.locator("#start-practice")).toContainText(PRACTICE_COPY.hiddenDay);
     await expect(page.locator("#start-practice").locator('input[type="date"]')).toHaveCount(0);
     await expectCleanScreen(page);
@@ -401,8 +401,8 @@ test.describe("Practice", () => {
     await expect(page.getByRole("button", { name: "Unstar TSLA" })).toBeVisible();
     await expectCleanScreen(page);
 
-    // Practise the name: the workspace opens at the window start, with a way back to the list.
-    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    // Practice the name: the workspace opens at the window start, with a way back to the list.
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
@@ -499,7 +499,7 @@ test.describe("Practice", () => {
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayAfter })).toBeVisible();
 
-    // The thread reads back from the ledger: one practised day, one skipped day, and the balance is the starting
+    // The thread reads back from the ledger: one practiced day, one skipped day, and the balance is the starting
     // balance plus the ledger rows (nothing stored twice).
     const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { id: number } }>;
     expect(listed).toHaveLength(1);
@@ -540,7 +540,7 @@ test.describe("Practice", () => {
     await expect(page.getByLabel("Status")).not.toContainText("Quotes:");
     await expectCleanScreen(page);
 
-    // One practised day is too few for a trend, and the journal says so instead of guessing.
+    // One practiced day is too few for a trend, and the journal says so instead of guessing.
     const improvement = await railSection(page, "Thread details", PRACTICE_COPY.improvementTitle);
     await expect(improvement.getByText(PRACTICE_COPY.improvementTooFew)).toBeVisible();
     await expect(improvement.getByText(/^Reason: week 2 has no practice days so far/)).toBeVisible();
@@ -621,10 +621,10 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
   });
 
-  // D-030, D-035: replacing the plan while a day is half practised leaves two open days. Ending the practised one must leave
+  // D-030, D-035: replacing the plan while a day is half practiced leaves two open days. Ending the practiced one must leave
   // the hub in agreement with the balance and the review: the new plan's Day 1 reads "list ready" (not "in progress"), the
   // thread's row is the day just ended (not a $0 for the unstarted one), and Continue and the review's Next day meet.
-  test("after the practised day ends, the hub card and the thread row agree with the balance and the review", async ({ page, context }) => {
+  test("after the practiced day ends, the hub card and the thread row agree with the balance and the review", async ({ page, context }) => {
     test.setTimeout(180_000);
     const anyClose = {
       schemaVersion: 1,
@@ -649,10 +649,10 @@ test.describe("Practice", () => {
     await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
     await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
     await page.waitForURL(/\/practice\/day\?id=\d+/);
-    const practised = page.url();
+    const practiced = page.url();
 
-    // Practise the name and take a trade; the day stays open.
-    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    // Practice the name and take a trade; the day stays open.
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await page.keyboard.press("ArrowRight");
@@ -664,15 +664,15 @@ test.describe("Practice", () => {
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
 
-    // Replace the plan while that day is half practised: its new Day 1 opens as a second, unstarted day.
+    // Replace the plan while that day is half practiced: its new Day 1 opens as a second, unstarted day.
     await openDesk(page, "/practice");
     await daily.getByRole("button", { name: PRACTICE_COPY.planNew }).click();
     await savePlan();
-    await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== practised, { timeout: 60_000 });
+    await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== practiced, { timeout: 60_000 });
     const fresh = page.url();
 
-    // End the practised day from its own screen: the review offers the next day.
-    await page.goto(practised);
+    // End the practiced day from its own screen: the review offers the next day.
+    await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
@@ -692,7 +692,7 @@ test.describe("Practice", () => {
     // The hub's Continue and the review's Next day open the same day.
     await daily.getByRole("button", { name: PRACTICE_COPY.planContinue }).click();
     await page.waitForURL(fresh);
-    await page.goto(practised);
+    await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
     await page.waitForURL(fresh);
   });

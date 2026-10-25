@@ -13,10 +13,10 @@ export function DayBars({ thread }: { thread: Thread }) {
   const layout = barsLayout(thread.daily, weeksOf(thread.daily), BOX);
   const { plot, zeroY, slots, weeks } = layout;
   const bottom = plot.y + plot.height;
-  const practised = thread.daily.filter((day) => day.kind === "practiced");
-  const won = practised.filter((day) => day.pnl_usd > 0).length;
-  const lost = practised.filter((day) => day.pnl_usd < 0).length;
-  const skipped = thread.daily.length - practised.length;
+  const practiced = thread.daily.filter((day) => day.kind === "practiced");
+  const won = practiced.filter((day) => day.pnl_usd > 0).length;
+  const lost = practiced.filter((day) => day.pnl_usd < 0).length;
+  const skipped = thread.daily.length - practiced.length;
   const summary = `${PRACTICE_COPY.barsTitle}: ${won} won, ${lost} lost, ${skipped} skipped.`;
 
   return (

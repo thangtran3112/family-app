@@ -117,7 +117,7 @@ test("warnings: the server's reason is shown as it is; a list it had no reason f
 test("the hub card says what is armed on the practice days: the picked filters by name, other strategies by count", () => {
   const armed = (refs: Array<{ source: "filter" | "alert_strategy"; id: number }>) =>
     ({ ...plan, spec: { ...plan.spec, setup: { ...plan.spec.setup, armed: refs } } });
-  assert.equal(planArmedText(plan), "Nothing armed · no would-fire signals while you practise");
+  assert.equal(planArmedText(plan), "Nothing armed · no would-fire signals while you practice");
   assert.equal(planArmedText(armed([{ source: "filter", id: 9 }, { source: "filter", id: 4 }])), "Armed on practice days: Abnormal volume · Gap up");
   assert.equal(planArmedText(armed([{ source: "filter", id: 4 }, { source: "alert_strategy", id: 1 }, { source: "alert_strategy", id: 2 }])), "Armed on practice days: Gap up · 2 alert strategies");
   assert.equal(planArmedText(armed([{ source: "filter", id: 77 }])), "Armed on practice days: A filter");

@@ -15,16 +15,16 @@ export type DayLeftPanelProps = {
   thread: Thread | null;
   selected: string | null;
   onPeek: (symbol: string) => void;
-  onPractise: (symbol: string) => void;
+  onPractice: (symbol: string) => void;
   onUnstar: (symbol: string) => void;
   busy: boolean;
-  /** The name already being practised today: v1 practises one name a day. */
-  practising: string | null;
+  /** The name already being practiced today: v1 practices one name a day. */
+  practicing: string | null;
   ended: boolean;
 };
 
 /** The day list's left rail (P7): the block's days, the thread box with its risk plan, and the starred names. */
-export function DayLeftPanel({ list, thread, selected, onPeek, onPractise, onUnstar, busy, practising, ended }: DayLeftPanelProps) {
+export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUnstar, busy, practicing, ended }: DayLeftPanelProps) {
   const brief = list.thread;
   return (
     <LeftRailPortal>
@@ -76,8 +76,8 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractise, onUns
                   </button>
                   {!ended && (
                     <span className={styles.actions}>
-                      <button type="button" className={styles.small} disabled={busy || (practising !== null && practising !== entry.symbol)} aria-label={practiceText("dayPractise", { symbol: entry.symbol })} onClick={() => onPractise(entry.symbol)}>
-                        {practising === entry.symbol ? "Resume" : "Practise"}
+                      <button type="button" className={styles.small} disabled={busy || (practicing !== null && practicing !== entry.symbol)} aria-label={practiceText("dayPractice", { symbol: entry.symbol })} onClick={() => onPractice(entry.symbol)}>
+                        {practicing === entry.symbol ? "Resume" : "Practice"}
                       </button>
                       <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => onUnstar(entry.symbol)}>Unstar</button>
                     </span>
@@ -86,7 +86,7 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractise, onUns
               ))}
             </ul>
           )}
-          {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayPractiseHint}</p>}
+          {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayPracticeHint}</p>}
         </section>
       </div>
     </LeftRailPortal>

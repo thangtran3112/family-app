@@ -9,7 +9,7 @@ import styles from "./threadJournal.module.css";
 
 const BOX: Box = { width: 760, height: 240, left: 64, right: 24, top: 16, bottom: 32 };
 
-/** The balance at the end of each day (02r board P8). Practised days are solid dots, skipped days open circles, the newest
+/** The balance at the end of each day (02r board P8). Practiced days are solid dots, skipped days open circles, the newest
  *  point amber; the red shading is the part of the line below the starting balance. Colours come from the CSS classes. */
 export function BalanceCurve({ thread }: { thread: Thread }) {
   const clipId = `below-start-${useId().replace(/\W/g, "")}`;

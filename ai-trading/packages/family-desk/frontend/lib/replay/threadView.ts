@@ -114,7 +114,7 @@ export const weeksInText = (count: number): string => (count <= 1 ? "first week"
 // ---- weeks -----------------------------------------------------------------------------------------------------------
 
 export type Week = {
-  /** 1-based, in the order she practised. */
+  /** 1-based, in the order she practiced. */
   n: number;
   label: string;
   /** "2 days practiced" or "1 day practiced · 1 skipped". */
@@ -124,7 +124,7 @@ export type Week = {
   skipped: number;
   /** Sum of the days' results. */
   pnl: number;
-  /** Days that won (a practised day with a positive result). */
+  /** Days that won (a practiced day with a positive result). */
   won: number;
   /** Mean of the days' scores; null when no day was scored. */
   adherencePct: number | null;
@@ -141,7 +141,7 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
 /** "2 practice days", "1 practice day", "no practice days". */
 const practiceDays = (count: number) => (count === 0 ? "no practice days" : plural(count, "practice day"));
 
-/** The ended days grouped by calendar week of the replayed day, in the order she practised them. */
+/** The ended days grouped by calendar week of the replayed day, in the order she practiced them. */
 export function weeksOf(daily: readonly ThreadDay[]): Week[] {
   const groups: ThreadDay[][] = [];
   let key = "";

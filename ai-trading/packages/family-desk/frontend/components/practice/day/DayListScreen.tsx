@@ -103,7 +103,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
 
-  const practising = list.sessions[0] ?? null;
+  const practicing = list.sessions[0] ?? null;
   const columns = columnsOf(list, {
     starred: (symbol) => isStarred(list.watch, symbol),
     onStar: (symbol) => void star(symbol),
@@ -134,7 +134,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     }, PRACTICE_COPY.dayLoadError);
   }
 
-  const practise = (symbol: string) =>
+  const practice = (symbol: string) =>
     run(async () => {
       const session = await startDaySession(list.id, symbol);
       router.push(`/practice/replay?id=${session.id}`);
@@ -172,8 +172,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           {hidden && <span className={styles.chip}>{PRACTICE_COPY.dayDateHidden}</span>}
         </div>
         <div className={styles.actions}>
-          {practising && !ended && (
-            <Link href={`/practice/replay?id=${practising.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practising.symbol}</Link>
+          {practicing && !ended && (
+            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practicing.symbol}</Link>
           )}
           {ended ? (
             <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{PRACTICE_COPY.dayAfter}</button>
@@ -214,7 +214,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
             <div className={styles.actions}>
               <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.dayEnd}</button>
-              <button type="button" className={styles.button} onClick={() => setConfirmEnd(false)}>Keep practising</button>
+              <button type="button" className={styles.button} onClick={() => setConfirmEnd(false)}>Keep practicing</button>
             </div>
           </div>
         )}
@@ -240,11 +240,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               <button
                 type="button"
                 className={styles.small}
-                disabled={busy || (practising !== null && practising.symbol !== row.symbol)}
-                aria-label={practiceText("dayPractise", { symbol: row.symbol })}
-                onClick={() => void practise(row.symbol)}
+                disabled={busy || (practicing !== null && practicing.symbol !== row.symbol)}
+                aria-label={practiceText("dayPractice", { symbol: row.symbol })}
+                onClick={() => void practice(row.symbol)}
               >
-                {practising?.symbol === row.symbol ? "Resume" : "Practise"}
+                {practicing?.symbol === row.symbol ? "Resume" : "Practice"}
               </button>
             )}
           />
@@ -263,10 +263,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           setSelected(symbol);
           if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
         }}
-        onPractise={(symbol) => void practise(symbol)}
+        onPractice={(symbol) => void practice(symbol)}
         onUnstar={(symbol) => void star(symbol)}
         busy={busy}
-        practising={practising?.symbol ?? null}
+        practicing={practicing?.symbol ?? null}
         ended={ended}
       />
       <RightRail
