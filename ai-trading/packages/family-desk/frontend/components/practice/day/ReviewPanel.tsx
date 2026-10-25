@@ -54,6 +54,7 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
         columns={withPriorities(COLUMNS, "practiceReview")}
         rows={review.rows}
         rowKey={(row) => row.symbol}
+        scrollX
         empty={<EmptyBlock title={PRACTICE_COPY.reviewEmpty} />}
       />
     </section>

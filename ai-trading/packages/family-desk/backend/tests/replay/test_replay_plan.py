@@ -196,7 +196,7 @@ def test_the_first_list_has_the_gapper_priced_at_the_0814_bar_and_counts_what_it
     assert candidate["filters"] == ["Gap up"] and candidate["reported_before_open"] is False
     assert out["data_through"] == et(DAYS[0], "08:15") and out["universe"]["size"] == 3
     assert "Practice universe · 3 symbols the Desk has scanned" in out["universe"]["label"]
-    assert out["warnings"] == ["Only 1 names matched · add a filter or lower its threshold"]
+    assert out["warnings"] == ["Only 1 name matched · add a filter or lower its threshold"]
     assert out["review"] is None and out["journal"] is None and out["clock"] is None
 
 

@@ -527,7 +527,8 @@ def day_list_out(
     universe = row.universe
     warnings = []
     if len(row.candidates) < FEW_NAMES:
-        warnings.append(f"Only {len(row.candidates)} names matched · add a filter or lower its threshold")
+        noun = "name" if len(row.candidates) == 1 else "names"
+        warnings.append(f"Only {len(row.candidates)} {noun} matched · add a filter or lower its threshold")
     return {
         "id": row.id,
         "plan": plan_out(db, plan),
