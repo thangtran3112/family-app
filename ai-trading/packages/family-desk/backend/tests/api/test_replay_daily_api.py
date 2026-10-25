@@ -19,6 +19,7 @@ from ai_trading.db.models import FilterStrategy, PracticePlan, User
 from ai_trading.replay import plan as plan_mod
 
 BASE = "/api/desk/replay"
+THREAD_BODY = {"schemaVersion": 1, "mode": "day", "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no"}}
 
 
 @pytest.fixture
@@ -29,6 +30,8 @@ def daily(client: TestClient, db_session):
     user_id = db_session.execute(select(User.id).where(User.email == OWNER_EMAIL)).scalar_one()
     seed_user(db_session, user_id, now=NOW)
     db_session.commit()
+    created = client.post(f"{BASE}/threads", json=THREAD_BODY, headers=auth_headers())
+    assert created.status_code == 200, created.text
     return client, services, user_id
 
 
@@ -73,7 +76,8 @@ def _start_plan(daily, db_session) -> dict[str, Any]:
 
 def test_no_plan_yet_is_null(daily) -> None:
     client, _, _ = daily
-    assert client.get(f"{BASE}/daily", headers=auth_headers()).json() == {"plan": None}
+    daily_card = client.get(f"{BASE}/daily", headers=auth_headers()).json()
+    assert daily_card["plan"] is None and daily_card["thread"]["thread"]["status"] == "active"
     assert client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).status_code == 409
 
 
@@ -195,7 +199,7 @@ def test_a_non_owner_gets_not_found_everywhere(daily, db_session) -> None:
     plan_mod.run_prep(db_session, services, plan_id)
     list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
     other = auth_headers(OTHER_EMAIL)
-    assert client.get(f"{BASE}/daily", headers=other).json() == {"plan": None}
+    assert client.get(f"{BASE}/daily", headers=other).json() == {"plan": None, "thread": None}
     assert client.get(f"{BASE}/day-lists/{list_id}", headers=other).status_code == 404
     assert client.patch(f"{BASE}/day-lists/{list_id}", json={"notes": "x"}, headers=other).status_code == 404
     assert (

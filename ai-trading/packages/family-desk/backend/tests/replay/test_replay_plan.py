@@ -9,10 +9,9 @@ from datetime import datetime
 import pandas as pd
 import pytest
 from ai_trading_common.types import ActiveSymbol
-from daily_world import DAYS, NOW, SYMBOLS, SyntheticBars, _build_world, make_services
+from daily_world import DAYS, NOW, SYMBOLS, make_thread
 from sqlalchemy import select
 
-from ai_trading.cli.seed_technical import seed_user
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.core.calendar import et
 from ai_trading.data.universe import SEED_SYMBOLS
@@ -20,34 +19,20 @@ from ai_trading.db.models import FilterStrategy, PracticePlan, ReplayDayList, Us
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import screen
 from ai_trading.replay import session as session_mod
+from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.cache import BlobKey, decode_bars
-from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound
-
-
-@pytest.fixture
-def world() -> SyntheticBars:
-    return _build_world()
-
-
-@pytest.fixture
-def svc(world) -> Services:
-    return make_services(world)
-
-
-@pytest.fixture
-def user_id(db_session) -> int:
-    user = User(email="owner@example.com", settings={})
-    db_session.add(user)
-    db_session.flush()
-    seed_user(db_session, user.id, now=NOW)
-    db_session.commit()
-    return user.id
+from ai_trading.replay.session import ReplayProblem, SessionNotFound
 
 
 def _filter_id(db_session, user_id: int, name: str) -> int:
     return db_session.execute(
         select(FilterStrategy.id).where(FilterStrategy.owner_user_id == user_id, FilterStrategy.name == name)
     ).scalar_one()
+
+
+def _thread(db_session, user_id: int):
+    """The owner's active day thread, made on first use."""
+    return threads_mod.active_thread(db_session, user_id) or make_thread(db_session, user_id)
 
 
 def _block(db_session, user_id: int, **changes) -> PracticeBlockV1:
@@ -80,7 +65,9 @@ def _block(db_session, user_id: int, **changes) -> PracticeBlockV1:
 
 def _plan(db_session, user_id, svc, **changes) -> PracticePlan:
     """A saved plan over just the three synthetic symbols (the real universe would add the seed symbols)."""
-    plan = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, **changes), svc)
+    plan = plan_mod.create_plan(
+        db_session, user_id, _block(db_session, user_id, **changes), svc, _thread(db_session, user_id)
+    )
     plan.universe = {**plan.universe, "symbols": SYMBOLS}
     plan.prep = {**plan.prep, "total": len(SYMBOLS)}
     db_session.commit()
@@ -117,7 +104,9 @@ def _ready(db_session, user_id, svc) -> PracticePlan:
 )
 def test_create_plan_rejections_are_plain_problems(db_session, user_id, svc, changes, path, message) -> None:
     with pytest.raises(ReplayProblem) as caught:
-        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, **changes), svc)
+        plan_mod.create_plan(
+            db_session, user_id, _block(db_session, user_id, **changes), svc, _thread(db_session, user_id)
+        )
     assert (caught.value.path, caught.value.message) == (path, message)
 
 
@@ -127,7 +116,9 @@ def test_a_premarket_filter_needs_a_list_time_of_0830_or_later(db_session, user_
         "setup": {"session": "extended", "window": {"from": "08:00", "to": "10:00"}},
     }
     with pytest.raises(ReplayProblem) as caught:
-        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, **changes), svc)
+        plan_mod.create_plan(
+            db_session, user_id, _block(db_session, user_id, **changes), svc, _thread(db_session, user_id)
+        )
     assert caught.value.path == "screen.listAt"
     assert caught.value.message == "Premarket filters need a list time of 8:30 AM or later"
 
@@ -154,18 +145,29 @@ def test_a_cadence_filter_before_its_first_bar_of_the_day_is_a_422_naming_the_li
 ) -> None:
     changes = {"screen": {"filters": [{"id": _filter_id(db_session, user_id, name)}], "listAt": list_at}}
     with pytest.raises(ReplayProblem) as caught:
-        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, **changes), svc)
+        plan_mod.create_plan(
+            db_session, user_id, _block(db_session, user_id, **changes), svc, _thread(db_session, user_id)
+        )
     assert (caught.value.path, caught.value.message, caught.value.status) == ("screen.listAt", message, 422)
 
 
 def test_a_mixed_plan_is_held_to_its_latest_filter_and_saves_from_that_time(db_session, user_id, svc) -> None:
     filters = [{"id": _filter_id(db_session, user_id, n)} for n in ("Gap up", "Abnormal volume", "High volatility")]
     with pytest.raises(ReplayProblem) as caught:
-        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, screen={"filters": filters}), svc)
+        plan_mod.create_plan(
+            db_session,
+            user_id,
+            _block(db_session, user_id, screen={"filters": filters}),
+            svc,
+            _thread(db_session, user_id),
+        )
     assert caught.value.message.startswith("Abnormal volume needs a list time of 10:00 AM")
     window = {"window": {"from": "10:00", "to": "12:00"}}
     ok = _block(db_session, user_id, screen={"filters": filters, "listAt": "10:00"}, setup=window)
-    assert plan_mod.create_plan(db_session, user_id, ok, svc).spec["screen"]["listAt"] == "10:00"
+    assert (
+        plan_mod.create_plan(db_session, user_id, ok, svc, _thread(db_session, user_id)).spec["screen"]["listAt"]
+        == "10:00"
+    )
     assert db_session.execute(select(PracticePlan.status).where(PracticePlan.status == "active")).scalars().all() == [
         "active"
     ]  # the refused attempt archived nothing
@@ -227,18 +229,22 @@ def test_the_first_plan_on_a_fresh_install_freezes_a_full_universe_not_the_seeds
     listed = [f"A{chr(65 + i)}{chr(65 + j)}" for i in range(10) for j in range(13)]  # 130 plain tickers
     universe = _ListedUniverse(listed)
     svc.sources = replace(svc.sources, universe=universe)
-    first = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)
+    first = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc, _thread(db_session, user_id))
     db_session.commit()
     assert len(first.universe["symbols"]) == len(SEED_SYMBOLS) + len(listed) >= 130
     assert set(SEED_SYMBOLS) <= set(first.universe["symbols"]) and first.prep["total"] == len(first.universe["symbols"])
 
     calls = universe.calls
-    plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)  # a later plan reuses the stored set
+    plan_mod.create_plan(
+        db_session, user_id, _block(db_session, user_id), svc, _thread(db_session, user_id)
+    )  # a later plan reuses the stored set
     assert universe.calls == calls
 
 
 def test_a_plan_still_saves_on_the_seeds_when_the_universe_cannot_be_built(db_session, user_id, svc) -> None:
-    plan = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)  # the fake source has no lists
+    plan = plan_mod.create_plan(
+        db_session, user_id, _block(db_session, user_id), svc, _thread(db_session, user_id)
+    )  # the fake source has no lists
     assert set(plan.universe["symbols"]) == set(SEED_SYMBOLS)
 
 
@@ -472,7 +478,7 @@ def test_a_second_name_is_refused_in_v1_and_a_standalone_session_cannot_share_th
     with pytest.raises(ReplayProblem) as caught:
         plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
     assert caught.value.status == 409 and caught.value.message.startswith("Your day is on GAPPER")
-    standalone = plan_mod._session_spec(plan, DAYS[0], "GAPPER")
+    standalone = plan_mod._session_spec(plan, DAYS[0], "GAPPER", _thread(db_session, user_id))
     with pytest.raises(ReplayProblem) as other:
         session_mod.create(db_session, user_id, standalone, svc)
     assert other.value.status == 409 and other.value.message.startswith("This day is part of your daily list")

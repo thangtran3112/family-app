@@ -198,7 +198,7 @@ def test_default_thread_links_owner_rows_and_backfills_the_ledger_like_the_journ
     closed, open_ = journal_mod.assemble(journal_marks)
     assert open_ is not None and len(closed) == len(rows) == 2  # the open long is not booked
     for trade, row in zip(closed, rows, strict=True):
-        assert float(row["pnl_usd"]) == journal_mod._pnl(trade)
+        assert float(row["pnl_usd"]) == journal_mod.trade_pnl(trade)
         assert (row["side"], row["shares"], row["symbol"], row["day"]) == (trade.side, trade.shares, "TSLA", DAY)
         expected_r = trade.r_of(trade.exit_price)
         assert (row["r"] is None) == (expected_r is None)
