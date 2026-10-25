@@ -1,6 +1,6 @@
 # 02m: Family Desk desktop MVP implementation spec (interface contract for the services and frontend streams)
 
-Status: written 2026-10-24. Docs only: it changes no code and activates nothing. Implements [02l](02l-desk-desktop-first-mvp.md) §e on top of
+Status: written 2026-10-24; implemented, released, and deployed the same day (phase PR #163, release #164; STATUS 5F). The spec itself is docs only: it changes no code and activates nothing. The IBKR slot (§b4 item 3) and the browser e2e (§d5) are in flight (STATUS 5G). Implements [02l](02l-desk-desktop-first-mvp.md) §e on top of
 the merged contracts ([02k](02k-desk-strategy-config-contracts.md)) and the provider registry ([02j](02j-common-data-providers-design.md)).
 The public Desk stays dark, IBKR stays disabled, and orders stay off throughout; every item below is built behind those states.
 
@@ -477,7 +477,7 @@ The only common-code changes. Each is one adapter method plus one registry line,
 3. **IBKR slot, after the Monday 2026-10-26 09:30 ET probe (02e).** If the probe passes: add `providers/ibkr.py` (`ib_async`), register it, and set `DATA_PROVIDERS_BARS=ibkr,alpaca` and `DATA_PROVIDERS_QUOTES=ibkr,alpaca` in the Desk's Firestore profile (02j §8 steps,
    no code change in the Desk). The slot allocator (`data/slots.py`, 70-line cap in `/status`) takes demands `intraday_strategy` (watchlist symbols), `open_chart` (symbols with an open SSE connection, written to a small `slot_demands` table by the API
    process at that time, with a 30-second expiry), and `covered_call_scan` is unused in the MVP. If the probe fails or is late: nothing in this spec changes; quotes stay `delayed`/`closed` and the product ships delayed. **Until then:** `/status.gateway` is `not_configured`, ES and NQ are `unavailable`, and the live-evaluation
-   promotion in §b3 does not happen. Gateway sign-in stays a human step on the owner's phone.
+   promotion in §b3 does not happen. Gateway sign-in stays a human step on the owner's phone. **In flight (STATUS 5G):** the client is built behind a flag, ready to enable only after the Monday probe; the owner-gated cron `caae82600785` owns the probe sequence.
 
 ### b5. Alert runtime rules (extends `engine/tick.py`, `engine/outbox.py`, `notify/dispatch.py`)
 
@@ -569,7 +569,7 @@ All new components are under `frontend/components/`. "Data" lists the loaders in
    `strategies/votes.py`; `alerts/runtime.py` and notify changes; `data/refresher.py` and job hooks; `api/dashboard.py`; status and settings extensions. Real handlers replace stub branches; the stub setting is removed at the end.
 4. **F, in parallel from step 2:** shell and `DenseTable`/`freshness` copy (D1, D12); chart workspace and technical summary (D3, D4, the template for everything); dashboard (D2); screener and editor (D5, D6); watchlists (D7); library, alerts, and alert setup (D8, D9, D10); settings (D11).
    Owner-approved mock order is the order: D1–D4 first.
-5. **Integration:** F points at real services (stubs off); `e2e` suite (§d5); IBKR slot after the probe (§b4 item 3); the live-data acceptance of 02l §e5.
+5. **Integration:** F points at real services (stubs off; done, PR #163); `e2e` suite (§d5; in flight); IBKR slot after the probe (§b4 item 3; client being built flag-gated); the live-data acceptance of 02l §e5 (after the probe).
 
 Each step is a stack of commits on the lane branch, pull requests only when a phase finishes (repository rule: conserve CI minutes): proposal is one pull request after step 2 plus F's D1–D4 (the first reviewable slice), one after the rest of S, one after the rest of F.
 
@@ -591,7 +591,7 @@ In `ai-trading/packages/family-desk/frontend`: `pnpm typecheck`, `pnpm lint`, `p
 The frontend has no component-test runner, so anything with logic goes into a `lib/` module with a node test: `lib/desk/freshness` (every §c3 state, banned-term check), `lib/desk/format` (ET formatting, signed percent, compact numbers), the loaders and zod schemas (parse the fixtures; reject a malformed payload), `lib/desk/columns` (priority drop per board per band), `lib/lanes`, the extended `describe.ts` (filter
 specs), and `calcVWAP`. Every new route is covered by `export-layout.test.mjs` (static export contains the page).
 
-### d5. E2E (after both streams reach step 5)
+### d5. E2E (after both streams reach step 5; both did, 2026-10-24: the browser side is in flight, STATUS 5G)
 
 - **Backend side:** the existing `tests/e2e` harness (`seeded_source`, `clock`, `tick`, `safety`) gains a Technical seed (§b6 plus snapshot-derived bars) and runs the whole alert path against a frozen clock: seed strategy, delayed bar arrives, signal, inbox alert, log row, a quiet-hours hold, a stale-data pause, and the safety check that no order
   object is ever built.

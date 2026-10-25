@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 import ai_trading.api.settings as settings_module
 from ai_trading.db.models import User
-from ai_trading.notify.channel import ChannelError
+from ai_trading.notify.channel import ChannelError, RuntimeGated
 from ai_trading.notify.dispatch import RETRY_DELAYS_SECONDS
 
 CHAT_ID = "123456789"
@@ -22,9 +22,11 @@ class FakeChannel:
         self.fail_times = fail_times
         self.error_text = error_text
         self.titles: list[str] = []
+        self.chat_ids: list[str | None] = []
 
-    def send(self, *, title: str, body: str, severity: str) -> None:
+    def send(self, *, title: str, body: str, severity: str, chat_id: str | None = None) -> None:
         self.titles.append(title)
+        self.chat_ids.append(chat_id)
         if len(self.titles) <= self.fail_times:
             raise ChannelError(self.error_text)
 
@@ -207,6 +209,29 @@ def test_test_telegram_sends_the_test_message_through_the_channel(client, channe
     assert response.json() == {"status": "sent"}
     assert fake.titles == ["Test from Family Desk"]
     assert sleeps == []
+
+
+def test_test_telegram_goes_to_her_linked_chat(client, channels, sleeps):
+    fake = channels["telegram"] = FakeChannel("telegram")
+    _link_telegram(client)
+
+    assert _test(client, "telegram").json() == {"status": "sent"}
+    assert fake.chat_ids == [CHAT_ID]
+
+
+def test_test_telegram_is_not_connected_while_the_alert_runtime_is_off(client, channels, sleeps, monkeypatch):
+    monkeypatch.delenv("DESK_ALERTS_RUNTIME_ENABLED", raising=False)
+    fake = FakeChannel("telegram")
+    channels["telegram"] = RuntimeGated(fake)
+    _link_telegram(client)
+
+    assert _test(client, "telegram").json() == {"status": "not_connected"}
+    assert fake.titles == [] and sleeps == []  # nothing left, and the refusal was not retried
+
+    monkeypatch.setenv("DESK_ALERTS_RUNTIME_ENABLED", "1")
+
+    assert _test(client, "telegram").json() == {"status": "sent"}
+    assert fake.titles == ["Test from Family Desk"]
 
 
 def test_test_telegram_retries_with_the_dispatch_schedule_then_reports_sent(client, channels, sleeps):

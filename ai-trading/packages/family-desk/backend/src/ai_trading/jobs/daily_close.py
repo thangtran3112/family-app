@@ -5,6 +5,7 @@ daily evaluation -- IV and consensus-snapshot collection are Phase 5's job, whic
 (PROTO-BRIEF §5/§9, following the brief's explicit L5 table over 02c's own older one-liner, per the brief's
 §9 ruling)."""
 
+import logging
 from datetime import datetime, time
 
 from ai_trading_common.registry import DataSources
@@ -18,6 +19,9 @@ from ai_trading.data.backfill import backfill
 from ai_trading.db.models import WatchlistItem
 from ai_trading.jobs import JobResult
 from ai_trading.jobs.clock import JobClock
+from ai_trading.replay import days as replay_days
+
+log = logging.getLogger(__name__)
 
 NAME = "daily_close"
 _SCHEDULED_ET = time(16, 30)
@@ -63,8 +67,19 @@ def run(session_: Session, data_sources: DataSources, clock: JobClock, *, now: d
             backfill(session_, symbol, "1d", asset_type, today, today, bars_source=data_sources.bars, now=now)
 
     tick(session_, now=now, live_cadences=frozenset({NAME}))
+    _refresh_notable_days(session_, data_sources, now)
     clock.mark(NAME, now.date())
     return JobResult(NAME, ok=True)
+
+
+def _refresh_notable_days(session_: Session, data_sources: DataSources, now: datetime) -> None:
+    """The Practice lane's notable days (02o §c1): fill the sessions the table lacks (one day in steady state). A
+    failure is logged and rolled back to a savepoint; it never fails the daily close."""
+    try:
+        with session_.begin_nested():
+            replay_days.refresh(session_, data_sources, now=now)
+    except Exception:
+        log.exception("notable-days refresh failed")
 
 
 __all__ = ("NAME", "due_now", "run")

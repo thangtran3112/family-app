@@ -1,22 +1,25 @@
 """`DataSources.from_env` (02j §5, §9 "Registry" and "Swap").
 
-Uses a small, synthetic registry/defaults covering all eleven kinds with fake adapters -- not the
+Uses a small, synthetic registry/defaults covering all twelve kinds with fake adapters -- not the
 real six vendors -- so these tests pin the registry *machinery* (defaults, env override, startup
 failures, whitespace, build-once, swapping a provider) independently of any real provider's
 shape. `test_conformance.py` and `test_chains.py` cover the real `REGISTRY`.
 """
 
+from dataclasses import fields
+from typing import get_args
+
 import pandas as pd
 import pytest
 
 from ai_trading_common.errors import Unavailable
-from ai_trading_common.registry import DataSources, Provider
+from ai_trading_common.registry import DEFAULT_CHAINS, KIND_PROTOCOLS, DataSources, Kind, Provider
 
 NOW = pd.Timestamp("2026-10-11T00:00:00Z")
 
 
 class FakeAdapter:
-    """Implements every Protocol method across all eleven kinds with trivial canned values, so one
+    """Implements every Protocol method across all twelve kinds with trivial canned values, so one
     fake can serve as the provider for any kind in a test's custom `registry=`/`defaults=`."""
 
     def __init__(self, label: str, *, raises: Exception | None = None) -> None:
@@ -71,6 +74,9 @@ class FakeAdapter:
     def latest(self, symbols, *, now):
         return [self._value()]
 
+    def trades(self, symbol, start, end, *, feed, now=None):
+        return self._value()
+
 
 _ALL_KINDS = (
     "bars",
@@ -84,6 +90,7 @@ _ALL_KINDS = (
     "targets",
     "universe",
     "quotes",
+    "trades",
 )
 
 
@@ -96,7 +103,7 @@ def _provider(name: str, adapter: FakeAdapter, kinds: tuple[str, ...] = _ALL_KIN
 
 
 def _full_setup(*, extra: dict[str, Provider] | None = None) -> tuple[dict[str, Provider], dict[str, tuple[str, ...]]]:
-    """A complete registry/defaults pair covering all eleven kinds with one shared fake provider
+    """A complete registry/defaults pair covering all twelve kinds with one shared fake provider
     named "fake", so a test only has to override the one kind (or provider) it cares about."""
     fake = FakeAdapter("fake")
     registry = {"fake": _provider("fake", fake)}
@@ -111,6 +118,34 @@ class TestDefaults:
         registry, defaults = _full_setup()
         sources = DataSources.from_env(env={}, registry=registry, defaults=defaults)
         assert sources.bars.bars("AAPL", "1d", None, None, now=NOW) == "fake"
+
+    def test_every_kind_is_registered_in_each_table(self):
+        assert set(KIND_PROTOCOLS) == set(get_args(Kind)) == set(DEFAULT_CHAINS)
+
+    def test_trades_defaults_to_alpaca(self):
+        assert DEFAULT_CHAINS["trades"] == ("alpaca",)
+
+
+class TestTradesKind:
+    def test_data_sources_has_a_trades_field_last(self):
+        assert [f.name for f in fields(DataSources)][-2:] == ["quotes", "trades"]
+
+    def test_a_trades_provider_is_served_through_the_chain(self):
+        fake = FakeAdapter("trades-fake")
+        registry, defaults = _full_setup(extra={"custom": _provider("custom", fake, kinds=("trades",))})
+        sources = DataSources.from_env(env={"DATA_PROVIDERS_TRADES": "custom"}, registry=registry, defaults=defaults)
+        assert sources.trades.trades("AAPL", NOW, NOW, feed="sip") == "trades-fake"
+
+    def test_an_unknown_provider_for_trades_raises_value_error(self):
+        registry, defaults = _full_setup()
+        with pytest.raises(ValueError, match="DATA_PROVIDERS_TRADES names unknown provider 'nope'"):
+            DataSources.from_env(env={"DATA_PROVIDERS_TRADES": "nope"}, registry=registry, defaults=defaults)
+
+    def test_a_provider_that_does_not_serve_trades_raises_value_error(self):
+        only_bars = FakeAdapter("only_bars")
+        registry, defaults = _full_setup(extra={"only_bars": _provider("only_bars", only_bars, kinds=("bars",))})
+        with pytest.raises(ValueError, match="does not serve 'trades'"):
+            DataSources.from_env(env={"DATA_PROVIDERS_TRADES": "only_bars"}, registry=registry, defaults=defaults)
 
 
 class TestEnvOverride:

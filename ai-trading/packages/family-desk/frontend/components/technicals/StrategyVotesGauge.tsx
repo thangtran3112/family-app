@@ -1,6 +1,6 @@
 import type { Technicals } from "@/lib/api/schemas";
 import { STRATEGY_GAUGE_EMPTY } from "@/lib/desk/summary";
-import { qualityLabel } from "@/lib/labels";
+import { qualityPhrase } from "@/lib/desk/freshness";
 import { BiasGauge } from "./Gauges";
 import styles from "./summary.module.css";
 
@@ -22,7 +22,7 @@ export function StrategyVotesGauge({
       <section className={styles.card} aria-label="Her strategies gauge">
         <header className={styles.header}>
           <h2>Her strategies</h2>
-          <span className={styles.meta}>{qualityLabel(quality)}</span>
+          <span className={styles.meta}>{qualityPhrase(quality)}</span>
         </header>
         <p className={styles.empty}>{STRATEGY_GAUGE_EMPTY}</p>
       </section>

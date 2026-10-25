@@ -6,3 +6,6 @@ next-env.d.ts
 
 # The repository root ignores lib/ (Python build output); this app's lib/ is source.
 !/lib/
+
+/test-results/
+/playwright-report/

@@ -293,6 +293,16 @@ a:focus-visible {
 .dk-center:focus { outline: none; }
 .dk-right { grid-area: right; position: relative; overflow-y: auto; border-left: 1px solid var(--color-hairline); background: var(--color-ground); }
 .dk-status { grid-area: status; z-index: 8; }
+.dk-band { grid-area: band; z-index: 7; }
+/* Practice pages (02o §a1): a 28 px band row under the top bar. */
+.dk-shell[data-practice="true"] {
+  grid-template-rows: 48px 28px minmax(0, 1fr) 24px;
+  grid-template-areas:
+    "top top top"
+    "band band band"
+    "left center right"
+    "status status status";
+}
 
 .dk-shell[data-left="collapsed"] { grid-template-columns: 48px minmax(0, 1fr) 320px; }
 .dk-shell:has(.dk-right:empty) { grid-template-columns: 280px minmax(0, 1fr) 0; }

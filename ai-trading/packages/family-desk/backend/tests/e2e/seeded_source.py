@@ -1,8 +1,11 @@
 """Network-free provider adapter backed by the E2E database's actual stored bars."""
 
+from datetime import date
+
 import pandas as pd
 from ai_trading_common.bars import Bars
 from ai_trading_common.registry import DataSources
+from ai_trading_common.types import EarningsEvent
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -37,6 +40,32 @@ class SeededBars:
         return Bars(frame=frame, source="alpaca", quality=quality)
 
 
+class SeededEarningsCalendar:
+    """One invented, network-free earnings date so the dashboard's Events panel has a row to show."""
+
+    EVENTS = {"MSFT": date(2026, 10, 28)}
+
+    def earnings_calendar(self, symbol, start, end):
+        report_date = self.EVENTS.get(symbol)
+        if report_date is None or not start <= report_date <= end:
+            return []
+        return [
+            EarningsEvent(
+                symbol=symbol,
+                report_date=report_date,
+                timing="after_close",
+                fiscal_year=None,
+                fiscal_quarter=None,
+                eps_estimate=None,
+                eps_actual=None,
+                revenue_estimate=None,
+                revenue_actual=None,
+                provider="seeded",
+                quality="eod",
+            )
+        ]
+
+
 def data_sources(factory: sessionmaker[Session]) -> DataSources:
     unused = object()
     return DataSources(
@@ -45,10 +74,11 @@ def data_sources(factory: sessionmaker[Session]) -> DataSources:
         earnings_announcements=unused,
         macro=unused,
         news=unused,
-        earnings_calendar=unused,
+        earnings_calendar=SeededEarningsCalendar(),
         consensus=unused,
         earnings=unused,
         targets=unused,
         universe=unused,
         quotes=unused,
+        trades=unused,
     )

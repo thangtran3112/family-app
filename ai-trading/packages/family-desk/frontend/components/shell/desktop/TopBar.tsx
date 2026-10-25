@@ -7,6 +7,7 @@ import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { AlertsBell } from "./AlertsBell";
 import { AvatarMenu } from "./AvatarMenu";
+import { useReplayBadge } from "./PracticeChrome";
 import { LaneSwitch } from "./LaneSwitch";
 import { MarketStatusPill } from "./MarketStatusPill";
 import { PrimaryNav } from "./PrimaryNav";
@@ -15,6 +16,7 @@ import styles from "./topbar.module.css";
 
 export function TopBar({ band }: { band: ShellBand }) {
   const { status, connection, failed } = useDeskStatus();
+  const replayBadge = useReplayBadge();
   return (
     <header className={styles.bar} role="banner" data-band={band}>
       <a className={styles.wordmark} href="/">
@@ -31,8 +33,11 @@ export function TopBar({ band }: { band: ShellBand }) {
       <PrimaryNav />
       <span className={styles.spacer} />
       <SymbolSearch compact={band === "1180"} />
-      <MarketStatusPill band={band} />
-      {failed ? (
+      {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs. */}
+      {!replayBadge && <MarketStatusPill band={band} />}
+      {replayBadge ? (
+        <span className={`${styles.pill} ${styles.topBadge} ${styles.replayBadge}`} role="status" title={replayBadge}>{replayBadge}</span>
+      ) : failed ? (
         <span className={`${styles.pill} ${styles.topBadge}`} role="status">{COPY.statusUnavailable}</span>
       ) : (
         <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} />

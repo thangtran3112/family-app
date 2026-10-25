@@ -216,6 +216,54 @@ class PatternCondition(SpecModel):
     withinBars: Annotated[int | None, Field(ge=1, le=5)] = None
 
 
+class PracticeMarkV11(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["long_entry", "short_entry"]
+    note: Annotated[
+        str | None, Field(max_length=280, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
+    ] = None
+    schemaVersion: Literal[1]
+    shares: Annotated[int | None, Field(ge=1, le=10000)] = None
+    stopPrice: Annotated[float | None, Field(gt=0.0, le=1000000.0)] = None
+
+
+class PracticeMarkV12(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["long_exit", "short_exit"]
+    note: Annotated[
+        str | None, Field(max_length=280, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
+    ] = None
+    schemaVersion: Literal[1]
+
+
+class PracticeMarkV13(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["stop"]
+    schemaVersion: Literal[1]
+    stopPrice: Annotated[float, Field(gt=0.0, le=1000000.0)]
+
+
+class PracticeMarkV14(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["note"]
+    note: Annotated[
+        str, Field(max_length=280, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
+    ]
+    schemaVersion: Literal[1]
+
+
+class PracticeMarkV1(RootModel[PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV13 | PracticeMarkV14]):
+    root: PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV13 | PracticeMarkV14
+
+
 class Entry(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -236,6 +284,51 @@ class PresetCatalogV1(SpecModel):
     )
     entries: Annotated[list[Entry], Field(max_length=200, min_length=1)]
     schemaVersion: Literal[1]
+
+
+class ArmedItem(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: Annotated[int, Field(ge=1, le=9007199254740991)]
+    source: Literal["alert_strategy", "filter"]
+
+
+class Plan(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    maxLossUsd: Annotated[int | None, Field(ge=1, le=100000)] = None
+    maxTrades: Annotated[int | None, Field(ge=1, le=50)] = None
+    note: Annotated[
+        str | None, Field(max_length=500, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
+    ] = None
+    signalOnly: Literal["yes", "no"]
+    stopRequired: Literal["yes", "no"]
+
+
+class Window(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    from_: Annotated[str, Field(alias="from", pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+    to: Annotated[str, Field(pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+
+
+class ReplaySessionV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    armed: Annotated[list[ArmedItem], Field(max_length=5)]
+    day: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
+    hideDate: Literal["yes", "no"]
+    interval: Literal["1m", "5m", "15m"]
+    plan: Plan
+    schemaVersion: Literal[1]
+    session: Literal["regular", "extended"]
+    shares: Annotated[int, Field(ge=1, le=10000)]
+    symbol: Annotated[str, Field(pattern="^[A-Z][A-Z0-9.]{0,9}$")]
+    window: Window
 
 
 class SeriesOperand1(SpecModel):

@@ -1,58 +1,5 @@
 export type GateState = "loading" | "signed-out" | "ready";
 
-export type PendingReturnStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-const PENDING_RETURN_TO_KEY = "trading-hub.pending-navigation.return-to";
-
-export function getLoginReturnTo(search: string): string {
-  return safeReturnTo(new URLSearchParams(search).get("returnTo"));
-}
-
-export function getPendingReturnStorage(
-  getStorage: () => PendingReturnStorage = () => window.sessionStorage,
-): PendingReturnStorage | null {
-  try {
-    return getStorage();
-  } catch {
-    return null;
-  }
-}
-
-export function capturePendingReturn(
-  pathname: string,
-  search: string,
-  storage: PendingReturnStorage | null,
-): void {
-  if (pathname !== "/login" || !storage) return;
-  const target = getLoginReturnTo(search);
-  try {
-    if (target === HUB_FALLBACK) storage.removeItem(PENDING_RETURN_TO_KEY);
-    else storage.setItem(PENDING_RETURN_TO_KEY, target);
-  } catch {}
-}
-
-export function consumePendingReturnWhenReady(
-  gateState: GateState,
-  exchangeStatus: ExchangeStatus,
-  storage: PendingReturnStorage | null,
-): string | null {
-  if (gateState !== "ready" || exchangeStatus !== "ok" || !storage) return null;
-  let raw: string | null;
-  try {
-    raw = storage.getItem(PENDING_RETURN_TO_KEY);
-    storage.removeItem(PENDING_RETURN_TO_KEY);
-  } catch {
-    return null;
-  }
-  const target = safeReturnTo(raw);
-  return target === HUB_FALLBACK ? null : target;
-}
-
-export function clearPendingReturn(storage: PendingReturnStorage | null): void {
-  try {
-    storage?.removeItem(PENDING_RETURN_TO_KEY);
-  } catch {}
-}
-
 export function getGateState(input: { isLoaded: boolean; isSignedIn: boolean | undefined }): GateState {
   if (!input.isLoaded) return "loading";
   if (!input.isSignedIn) return "signed-out";
