@@ -14,7 +14,8 @@
     "test:export": "node --test export-layout.test.mjs",
     "test:e2e": "bash ../backend/scripts/e2e.sh",
     "test:e2e:desktop": "bash ../backend/scripts/e2e.sh --browser -- --project=desktop-1440 --project=desktop-1180",
-    "test:e2e:playwright": "playwright test"
+    "test:e2e:playwright": "playwright test",
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts"
   },
   "dependencies": {
     "@ai-trading/contracts": "link:../contracts",

@@ -30,6 +30,7 @@ from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.evaluate import _resample
 from ai_trading.db.models import PracticeMark, ReplayDayList, ReplaySession
 from ai_trading.replay import journal as journal_mod
+from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import signals as signals_mod
 from ai_trading.replay.cache import BlobStore, DbBlobStore
 from ai_trading.replay.data import (
@@ -94,6 +95,7 @@ class Ctx:
     window_start: pd.Timestamp
     window_end: pd.Timestamp
     through: pd.Timestamp
+    day_trades: list[journal_mod.Trade] = field(default_factory=list)  # the day list's other sessions, for day rules
     _cache: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -190,6 +192,21 @@ def get_row(db: Session, user_id: int, session_id: int, *, lock: bool = False) -
     return row
 
 
+def _day_trades(db: Session, row: ReplaySession) -> list[journal_mod.Trade]:
+    """The closed trades of the other sessions of this session's day list: the max loss and the trade limit count
+    every name practised that day (02o-b2)."""
+    if row.day_list_id is None:
+        return []
+    others = db.execute(
+        select(ReplaySession.id).where(ReplaySession.day_list_id == row.day_list_id, ReplaySession.id != row.id)
+    ).scalars()
+    trades: list[journal_mod.Trade] = []
+    for session_id in list(others):
+        closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, session_id)))
+        trades.extend(closed)
+    return trades
+
+
 def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
     store = svc.store_factory(db)
     inputs = svc.history.day_inputs(store, row.symbol, row.day)
@@ -205,6 +222,7 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         window_start=_ts(row.window_start),
         window_end=_ts(row.window_end),
         through=_ts(row.revealed_through),
+        day_trades=_day_trades(db, row),
     )
 
 
@@ -326,6 +344,7 @@ def _journal(ctx: Ctx, price: float | None, *, final: bool) -> dict[str, Any]:
         as_of=ctx.through,
         last_price=price,
         final=final,
+        day_trades=ctx.day_trades,
     )
 
 
@@ -344,6 +363,7 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
     return {
         "id": row.id,
         "day_list_id": row.day_list_id,
+        "thread_id": row.thread_id,
         "attempt": row.attempt,
         "status": row.status,
         "spec": ReplaySessionV1.model_validate(row.spec),
@@ -376,6 +396,7 @@ def summary_out(db: Session, row: ReplaySession) -> dict[str, Any]:
     return {
         "id": row.id,
         "day_list_id": row.day_list_id,
+        "thread_id": row.thread_id,
         "symbol": row.symbol,
         "day": row.day,
         "attempt": row.attempt,
@@ -402,7 +423,12 @@ def list_sessions(db: Session, user_id: int, *, status: str | None, limit: int) 
 
 
 def create(
-    db: Session, user_id: int, spec: ReplaySessionV1, svc: Services, day_list: ReplayDayList | None = None
+    db: Session,
+    user_id: int,
+    spec: ReplaySessionV1,
+    svc: Services,
+    day_list: ReplayDayList | None = None,
+    thread_id: int | None = None,
 ) -> ReplaySession:
     """A new active session at the window start (idempotent per active symbol and day), or the existing one.
 
@@ -495,6 +521,7 @@ def create(
         updated_at=now,
         ended_at=None,
         day_list_id=day_list.id if day_list is not None else None,
+        thread_id=thread_id if day_list is not None else None,  # only a day-list session books into a thread
     )
     db.add(row)
     try:
@@ -774,6 +801,9 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
     row.updated_at = svc.now()
     db.flush()
     ctx.marks = _marks_of(_load_marks(db, row.id))
+    if kind in EXIT_KINDS:
+        closed, _ = journal_mod.assemble(ctx.marks)
+        ledger_mod.book(db, row, closed, svc.now())
     placed = next(m for m in ctx.marks if m.seq == mark.seq)
     return {
         "mark": mark_out(placed),
@@ -851,12 +881,26 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
         )
         db.flush()
         ctx.marks = _marks_of(_load_marks(db, row.id))
+    ledger_mod.book(db, row, journal_mod.assemble(ctx.marks)[0], svc.now())
     price = None if found is None else found[0]
     row.journal = jsonable(_journal(ctx, price, final=True))
     row.status = "ended"
     row.ended_at = row.updated_at = svc.now()
     db.flush()
     return session_out(ctx)
+
+
+def refresh_journal(db: Session, user_id: int, session_id: int, svc: Services) -> None:
+    """Rescore an ended session's final journal. Ending a day ends its sessions one after another, so a session ended
+    first scored the day rules (max loss, trade limit) before its siblings' last exits existed; the day does this
+    once they have all ended."""
+    row = get_row(db, user_id, session_id, lock=True)
+    if row.status != "ended":
+        return
+    ctx = context(db, svc, row)
+    ctx.through = ctx.window_end
+    row.journal = jsonable(_journal(ctx, None, final=True))
+    db.flush()
 
 
 def patch(

@@ -1692,7 +1692,40 @@
         "title": "CardBackOut",
         "type": "object"
       },
+      "CurvePointOut": {
+        "description": "A point of the balance curve: `n` 0 is the starting balance (no day), then one per ended day.",
+        "properties": {
+          "balance": {
+            "title": "Balance",
+            "type": "number"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "day",
+          "balance"
+        ],
+        "title": "CurvePointOut",
+        "type": "object"
+      },
       "DailyOut": {
+        "description": "The hub's daily-list card: her plan and cursor, and her active day thread (balance and stats).",
         "properties": {
           "plan": {
             "anyOf": [
@@ -1703,10 +1736,21 @@
                 "type": "null"
               }
             ]
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadSummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "plan"
+          "plan",
+          "thread"
         ],
         "title": "DailyOut",
         "type": "object"
@@ -2274,6 +2318,16 @@
             "title": "Status",
             "type": "string"
           },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "universe": {
             "$ref": "#/components/schemas/ListUniverseOut"
           },
@@ -2290,6 +2344,9 @@
             },
             "title": "Watch",
             "type": "array"
+          },
+          "watch_check": {
+            "$ref": "#/components/schemas/WatchCheckOut"
           },
           "weekday": {
             "enum": [
@@ -2320,6 +2377,8 @@
           "watch",
           "clock",
           "sessions",
+          "watch_check",
+          "thread",
           "warnings",
           "peek",
           "journal",
@@ -3829,6 +3888,16 @@
               }
             ]
           },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "warning": {
             "anyOf": [
               {
@@ -3868,6 +3937,16 @@
           "removed_mark_id": {
             "title": "Removed Mark Id",
             "type": "integer"
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4779,6 +4858,117 @@
         "title": "PracticeBlockV1",
         "type": "object"
       },
+      "PracticeLedgerEntryV1": {
+        "additionalProperties": false,
+        "properties": {
+          "day": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+            "title": "Day",
+            "type": "string"
+          },
+          "entryPrice": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000.0,
+            "title": "Entryprice",
+            "type": "number"
+          },
+          "exitPrice": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000.0,
+            "title": "Exitprice",
+            "type": "number"
+          },
+          "id": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "markId": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Markid",
+            "type": "integer"
+          },
+          "pnlUsd": {
+            "maximum": 1000000000.0,
+            "minimum": -1000000000.0,
+            "title": "Pnlusd",
+            "type": "number"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": -1000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "realizedAt": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+            "title": "Realizedat",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "sessionId": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Sessionid",
+            "type": "integer"
+          },
+          "shares": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "symbol": {
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Symbol",
+            "type": "string"
+          },
+          "threadId": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Threadid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "entryPrice",
+          "exitPrice",
+          "id",
+          "markId",
+          "pnlUsd",
+          "realizedAt",
+          "schemaVersion",
+          "sessionId",
+          "shares",
+          "side",
+          "symbol",
+          "threadId"
+        ],
+        "title": "PracticeLedgerEntryV1",
+        "type": "object"
+      },
       "PracticePlanOut": {
         "description": "The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is\nnot over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule.",
         "properties": {
@@ -4861,10 +5051,22 @@
           },
           "spec": {
             "$ref": "#/components/schemas/PracticeBlockV1"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
           }
         },
         "required": [
           "id",
+          "thread_id",
           "spec",
           "sessions",
           "days_opened",
@@ -4877,73 +5079,6 @@
           "prep"
         ],
         "title": "PracticePlanOut",
-        "type": "object"
-      },
-      "PracticePlanV1": {
-        "additionalProperties": false,
-        "properties": {
-          "maxLossUsd": {
-            "anyOf": [
-              {
-                "maximum": 100000.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Maxlossusd"
-          },
-          "maxTrades": {
-            "anyOf": [
-              {
-                "maximum": 50.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Maxtrades"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "minLength": 1,
-                "pattern": "^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          },
-          "signalOnly": {
-            "enum": [
-              "yes",
-              "no"
-            ],
-            "title": "Signalonly",
-            "type": "string"
-          },
-          "stopRequired": {
-            "enum": [
-              "yes",
-              "no"
-            ],
-            "title": "Stoprequired",
-            "type": "string"
-          }
-        },
-        "required": [
-          "signalOnly",
-          "stopRequired"
-        ],
-        "title": "PracticePlanV1",
         "type": "object"
       },
       "PracticeScreenV1": {
@@ -4998,9 +5133,6 @@
             "title": "Interval",
             "type": "string"
           },
-          "plan": {
-            "$ref": "#/components/schemas/PracticePlanV1"
-          },
           "session": {
             "enum": [
               "regular",
@@ -5009,12 +5141,6 @@
             "title": "Session",
             "type": "string"
           },
-          "shares": {
-            "maximum": 10000.0,
-            "minimum": 1.0,
-            "title": "Shares",
-            "type": "integer"
-          },
           "window": {
             "$ref": "#/components/schemas/PracticeWindowV1"
           }
@@ -5022,12 +5148,285 @@
         "required": [
           "armed",
           "interval",
-          "plan",
           "session",
-          "shares",
           "window"
         ],
         "title": "PracticeSetupV1",
+        "type": "object"
+      },
+      "PracticeThreadPlanV1": {
+        "additionalProperties": false,
+        "properties": {
+          "maxLossUsd": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxlossusd"
+          },
+          "maxTrades": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxtrades"
+          },
+          "planNote": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[ -~\u00a0-\ud7ff\ue000-\uffff]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plannote"
+          },
+          "stopNoteOnEntry": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Stopnoteonentry",
+            "type": "string"
+          },
+          "tradeOnlyOnSignal": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Tradeonlyonsignal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stopNoteOnEntry",
+          "tradeOnlyOnSignal"
+        ],
+        "title": "PracticeThreadPlanV1",
+        "type": "object"
+      },
+      "PracticeThreadStatsV1": {
+        "additionalProperties": false,
+        "properties": {
+          "adherenceFirstPct": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherencefirstpct"
+          },
+          "adherenceLastPct": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherencelastpct"
+          },
+          "avgLossUsd": {
+            "anyOf": [
+              {
+                "maximum": 1000000000.0,
+                "minimum": -1000000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avglossusd"
+          },
+          "avgWinUsd": {
+            "anyOf": [
+              {
+                "maximum": 1000000000.0,
+                "minimum": -1000000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avgwinusd"
+          },
+          "balance": {
+            "maximum": 1000000000.0,
+            "minimum": -1000000000.0,
+            "title": "Balance",
+            "type": "number"
+          },
+          "bestDayUsd": {
+            "anyOf": [
+              {
+                "maximum": 1000000000.0,
+                "minimum": -1000000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bestdayusd"
+          },
+          "daysPracticed": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Dayspracticed",
+            "type": "integer"
+          },
+          "daysSkipped": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Daysskipped",
+            "type": "integer"
+          },
+          "losses": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Losses",
+            "type": "integer"
+          },
+          "winRate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winrate"
+          },
+          "wins": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Wins",
+            "type": "integer"
+          },
+          "worstDayUsd": {
+            "anyOf": [
+              {
+                "maximum": 1000000000.0,
+                "minimum": -1000000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worstdayusd"
+          }
+        },
+        "required": [
+          "balance",
+          "daysPracticed",
+          "daysSkipped",
+          "losses",
+          "wins"
+        ],
+        "title": "PracticeThreadStatsV1",
+        "type": "object"
+      },
+      "PracticeThreadV1": {
+        "additionalProperties": false,
+        "properties": {
+          "closedAt": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedat"
+          },
+          "createdAt": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "day",
+              "swing"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PracticeThreadPlanV1"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "startingBalance": {
+            "maximum": 10000000.0,
+            "minimum": 1000.0,
+            "title": "Startingbalance",
+            "type": "integer"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/PracticeThreadStatsV1"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "mode",
+          "plan",
+          "schemaVersion",
+          "startingBalance",
+          "stats",
+          "status"
+        ],
+        "title": "PracticeThreadV1",
         "type": "object"
       },
       "PracticeWindowV1": {
@@ -5472,6 +5871,27 @@
             "title": "Tape Feed",
             "type": "string"
           },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
           "window_end": {
             "format": "date-time",
             "title": "Window End",
@@ -5486,6 +5906,7 @@
         "required": [
           "id",
           "day_list_id",
+          "thread_id",
           "attempt",
           "status",
           "spec",
@@ -5612,6 +6033,17 @@
             "title": "Symbol",
             "type": "string"
           },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
           "trades": {
             "title": "Trades",
             "type": "integer"
@@ -5630,6 +6062,7 @@
         "required": [
           "id",
           "day_list_id",
+          "thread_id",
           "symbol",
           "day",
           "attempt",
@@ -7577,6 +8010,294 @@
         "title": "TechnicalsOut",
         "type": "object"
       },
+      "ThreadBriefOut": {
+        "description": "The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no\npractice day is under way; an open trade is not realized).",
+        "properties": {
+          "balance": {
+            "title": "Balance",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "day",
+              "swing"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "today_pnl_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today Pnl Usd"
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "status",
+          "balance",
+          "today_pnl_usd",
+          "label"
+        ],
+        "title": "ThreadBriefOut",
+        "type": "object"
+      },
+      "ThreadDayOut": {
+        "description": "One ended practice day, in the order she practised. `balance` is the SIMULATED balance at the day's end.",
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "balance": {
+            "title": "Balance",
+            "type": "number"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "day_list_id": {
+            "title": "Day List Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "practiced",
+              "skipped"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "day_list_id",
+          "day",
+          "weekday",
+          "kind",
+          "trades",
+          "pnl_usd",
+          "adherence_pct",
+          "balance"
+        ],
+        "title": "ThreadDayOut",
+        "type": "object"
+      },
+      "ThreadLedgerOut": {
+        "description": "The newest ledger rows, newest first. `total` counts every row.",
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeLedgerEntryV1"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "total",
+          "entries",
+          "label"
+        ],
+        "title": "ThreadLedgerOut",
+        "type": "object"
+      },
+      "ThreadOut": {
+        "properties": {
+          "curve": {
+            "items": {
+              "$ref": "#/components/schemas/CurvePointOut"
+            },
+            "title": "Curve",
+            "type": "array"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadDayOut"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/PracticeThreadV1"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadTodayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "today",
+          "label",
+          "daily",
+          "curve"
+        ],
+        "title": "ThreadOut",
+        "type": "object"
+      },
+      "ThreadSummaryOut": {
+        "description": "A thread with its plan and stats (the contract), and today. A row of the hub's \"Your threads\" list.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/PracticeThreadV1"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadTodayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "today",
+          "label"
+        ],
+        "title": "ThreadSummaryOut",
+        "type": "object"
+      },
+      "ThreadTodayOut": {
+        "description": "The practice day under way and what it has realized so far.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "day_list_id": {
+            "title": "Day List Id",
+            "type": "integer"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "listed",
+              "practicing"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day_list_id",
+          "day",
+          "weekday",
+          "day_no",
+          "status",
+          "trades",
+          "pnl_usd"
+        ],
+        "title": "ThreadTodayOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -7727,6 +8448,54 @@
           "action"
         ],
         "title": "VoteOut",
+        "type": "object"
+      },
+      "WatchCheckOut": {
+        "description": "\"Traded only names on your watch\": data for the screen to render. `traded` is the names she entered a trade on;\n`off_watch` the ones she had not starred. Nothing scores it.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "off_watch": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Off Watch",
+            "type": "array"
+          },
+          "starred": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Starred",
+            "type": "array"
+          },
+          "traded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Traded",
+            "type": "array"
+          },
+          "verdict": {
+            "enum": [
+              "no_trades",
+              "on_watch",
+              "off_watch"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "starred",
+          "traded",
+          "off_watch",
+          "verdict",
+          "label"
+        ],
+        "title": "WatchCheckOut",
         "type": "object"
       },
       "WatchlistCreate": {
@@ -9371,7 +10140,7 @@
     },
     "/api/desk/replay/daily": {
       "get": {
-        "description": "The hub's daily-list card: her plan and where its cursor is, or `null` before she has one.",
+        "description": "The hub's daily-list card: her plan and where its cursor is, and her active day thread with its SIMULATED balance\nand stats; either is `null` before she has one.",
         "operationId": "get_daily_api_desk_replay_daily_get",
         "responses": {
           "200": {
@@ -9393,7 +10162,7 @@
     },
     "/api/desk/replay/daily/next": {
       "post": {
-        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.",
+        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.\n\nA new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409\nin plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an\nold client are ignored.",
         "operationId": "open_next_api_desk_replay_daily_next_post",
         "requestBody": {
           "content": {
@@ -9403,6 +10172,10 @@
                 "properties": {
                   "plan": {
                     "$ref": "#/components/schemas/PracticeBlockV1"
+                  },
+                  "threadId": {
+                    "minimum": 1.0,
+                    "type": "integer"
                   }
                 },
                 "type": "object"
@@ -10175,6 +10948,256 @@
           }
         },
         "summary": "Undo Mark",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads": {
+      "get": {
+        "description": "Her threads, the active ones first, each with its plan, stats and today (the hub's resume list).",
+        "operationId": "list_threads_api_desk_replay_threads_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ThreadSummaryOut"
+                  },
+                  "title": "Response List Threads Api Desk Replay Threads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Threads",
+        "tags": [
+          "replay"
+        ]
+      },
+      "post": {
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`; `swing` is not open yet). One active thread per mode: a second is a 409.",
+        "operationId": "create_thread_api_desk_replay_threads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "A PracticeThreadCreateV1",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}": {
+      "get": {
+        "description": "One thread: its plan, stats, today, the daily P/L series (one row per ended day) and the balance curve. Every\nfigure is read back from the ledger; nothing is stored twice.",
+        "operationId": "get_thread_api_desk_replay_threads__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread",
+        "tags": [
+          "replay"
+        ]
+      },
+      "patch": {
+        "description": "Replace the risk plan while the thread is active (a closed thread is a 409). It applies from the next session:\na session already started keeps the plan it began with.",
+        "operationId": "patch_thread_api_desk_replay_threads__thread_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "A PracticeThreadPatchV1",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/close": {
+      "post": {
+        "description": "Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end\nit first). Idempotent.",
+        "operationId": "close_thread_api_desk_replay_threads__thread_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/ledger": {
+      "get": {
+        "description": "The thread's realized practice trades (`PracticeLedgerEntryV1`), newest first: the rows its balance is of.",
+        "operationId": "get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadLedgerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Ledger",
         "tags": [
           "replay"
         ]

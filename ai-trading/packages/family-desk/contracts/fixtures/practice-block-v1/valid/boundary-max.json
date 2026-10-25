@@ -25,7 +25,6 @@
     },
     "session": "regular",
     "interval": "15m",
-    "shares": 10000,
     "armed": [
       {
         "source": "alert_strategy",
@@ -47,13 +46,6 @@
         "source": "filter",
         "id": 3
       }
-    ],
-    "plan": {
-      "stopRequired": "yes",
-      "signalOnly": "yes",
-      "maxLossUsd": 100000,
-      "maxTrades": 50,
-      "note": "Respect the stop."
-    }
+    ]
   }
 }

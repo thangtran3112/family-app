@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -89,6 +90,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
           {!ended && <Link href={`/practice/replay?id=${session.id}`} className={`${styles.button} ${styles.primary}`}>Resume</Link>}
         </div>
       </header>
+      {session.thread && <ThreadStrip thread={session.thread} />}
       <div className={styles.center}>
         {!ended && <p className={styles.banner} role="status">{PRACTICE_COPY.sessionOpen} · totals are live and the rest of the day stays hidden</p>}
         {ended && journal.totals.trades === 0 && <p className={styles.muted} role="status">{noTradesText(signalCount)}</p>}

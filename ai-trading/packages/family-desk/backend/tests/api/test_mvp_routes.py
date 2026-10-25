@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 
-# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63 and 02o-b v1 rows 64-69.
+# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 and 02r rows 70-75.
 # Path parameters are normalised to `{}`.
 INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/me"),
@@ -84,6 +84,13 @@ INVENTORY: list[tuple[str, str]] = [
     ("PATCH", "/api/desk/replay/day-lists/{}"),
     ("POST", "/api/desk/replay/day-lists/{}/sessions"),
     ("POST", "/api/desk/replay/day-lists/{}/end"),
+    # Rows 70-75: practice threads, 02r.
+    ("POST", "/api/desk/replay/threads"),
+    ("GET", "/api/desk/replay/threads"),
+    ("GET", "/api/desk/replay/threads/{}"),
+    ("PATCH", "/api/desk/replay/threads/{}"),
+    ("POST", "/api/desk/replay/threads/{}/close"),
+    ("GET", "/api/desk/replay/threads/{}/ledger"),
 ]
 
 #: `PUT /watchlists/{id}/order` reorders symbols (02m §a2 row 25). It is the one route whose path may
@@ -106,7 +113,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 69
+    assert len(INVENTORY) == 75
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

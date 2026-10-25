@@ -55,6 +55,8 @@ export const openTrade = { trade_no: 1, side: "long", shares: 100, entry_price: 
 export const session = {
   id: 12,
   day_list_id: null,
+  thread_id: null,
+  thread: null,
   attempt: 1,
   status: "active",
   spec,
@@ -76,6 +78,7 @@ export const session = {
 export const sessionSummary = {
   id: 12,
   day_list_id: null,
+  thread_id: null,
   symbol: "NVDA",
   day: "2026-04-07",
   attempt: 1,
@@ -113,4 +116,4 @@ export const delta = {
 
 export const feed = { ...delta, interval: "5m", window_start: "2026-04-07T13:30:00Z" };
 
-export const markResult = { mark, open_trade: openTrade, journal, warning: null };
+export const markResult = { mark, open_trade: openTrade, journal, warning: null, thread: null };

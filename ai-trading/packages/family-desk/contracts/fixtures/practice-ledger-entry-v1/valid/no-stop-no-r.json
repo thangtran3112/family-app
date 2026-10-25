@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": 14,
+  "threadId": 7,
+  "sessionId": 3,
+  "markId": 46,
+  "symbol": "MSFT",
+  "day": "2026-10-23",
+  "side": "long",
+  "shares": 20,
+  "entryPrice": 410,
+  "exitPrice": 408.5,
+  "pnlUsd": -30,
+  "realizedAt": "2026-10-23T16:30:00Z"
+}

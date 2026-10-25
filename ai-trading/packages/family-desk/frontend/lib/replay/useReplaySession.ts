@@ -230,7 +230,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         try {
           const result = await placeMark(id, built.mark);
           if (!alive.current) return false;
-          setSession((current) => (current ? { ...current, marks: [...current.marks, result.mark], open_trade: result.open_trade, journal: result.journal } : current));
+          setSession((current) => (current ? { ...current, marks: [...current.marks, result.mark], open_trade: result.open_trade, journal: result.journal, thread: result.thread ?? current.thread } : current));
           setView((current) => (current ? { ...current, openTrade: result.open_trade } : current));
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
           if (result.warning) say("info", result.warning); // priced off an old print: the price is accepted, the warning says so
@@ -268,7 +268,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const result = await undoMark(id, last.id);
         if (!alive.current) return;
         setSession((now) =>
-          now ? { ...now, marks: now.marks.filter((item) => item.id !== last.id), open_trade: result.open_trade, journal: result.journal } : now,
+          now ? { ...now, marks: now.marks.filter((item) => item.id !== last.id), open_trade: result.open_trade, journal: result.journal, thread: result.thread ?? now.thread } : now,
         );
         setView((now) => (now ? { ...now, openTrade: result.open_trade } : now));
         dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });

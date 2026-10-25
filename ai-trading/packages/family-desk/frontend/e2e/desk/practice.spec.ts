@@ -1,5 +1,6 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import { formatEtDay } from "../../lib/desk/format.ts";
+import { formatBalance } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
@@ -52,6 +53,31 @@ async function startStubSession(page: Page, setup: { stopRequired?: boolean } = 
   await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
 }
 
+/** Start a practice thread from the hub (02r, D-007): the risk plan lives on the thread, not on the daily-list form. */
+async function startThread(page: Page, plan: { maxLoss?: string; maxTrades?: string; note?: string } = {}) {
+  await openDesk(page, "/practice");
+  const threads = page.locator("#threads");
+  const form = threads.getByRole("form", { name: "New thread" });
+  await expect(form.getByLabel("Starting balance")).toHaveValue("50000");
+  if (plan.maxLoss) await form.getByLabel("Max loss ($)").fill(plan.maxLoss);
+  if (plan.maxTrades) await form.getByLabel("Max trades").fill(plan.maxTrades);
+  if (plan.note) await form.getByLabel(/^Plan note/).fill(plan.note);
+  await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
+  await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
+  return threads;
+}
+
+/** A thread answered by the API: the numbers the screens must agree with. */
+async function readThread(context: BrowserContext, id: number) {
+  const answer = await context.request.get(`${origin}/api/desk/replay/threads/${id}`);
+  expect(answer.ok()).toBeTruthy();
+  return (await answer.json()) as {
+    thread: { id: number; startingBalance: number; status: string; stats: { balance: number; daysPracticed: number; daysSkipped: number; wins: number; losses: number } };
+    daily: Array<{ n: number; kind: string; pnl_usd: number; balance: number }>;
+    curve: Array<{ n: number; balance: number }>;
+  };
+}
+
 test.describe("Practice", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
@@ -63,6 +89,14 @@ test.describe("Practice", () => {
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(null));
     await expect(page.getByRole("heading", { name: "Start a practice session" })).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.notableHeader)).toBeVisible();
+    // Practice threads (02r): the band sits above the daily list; without a thread the daily list waits for one.
+    await expect(page.getByRole("heading", { name: PRACTICE_COPY.threadsTitle })).toBeVisible();
+    const newThread = page.locator("#threads").getByRole("form", { name: "New thread" });
+    await expect(newThread.getByLabel("Starting balance")).toHaveValue("50000");
+    await expect(newThread.getByRole("button", { name: "Day trading" })).toHaveAttribute("aria-pressed", "true");
+    await expect(newThread.getByRole("button", { name: PRACTICE_COPY.threadModeSwing })).toBeDisabled();
+    await expect(page.locator("#daily-list").getByText(PRACTICE_COPY.threadNeeded)).toBeVisible();
+    await expect(page.locator("#daily-list").getByRole("form", { name: "Daily list plan" })).toHaveCount(0);
 
     // Dates stay masked until "Show dates" is on; the weekday is kept.
     const notable = page.locator("#notable-days");
@@ -251,7 +285,7 @@ test.describe("Practice", () => {
   // the day and its review, then the next day. The stub holds TSLA on Fri 2026-09-25 only, so Day 1 lists TSLA through her
   // own always-matching daily filter and Day 2 lists nothing; the plan's data is fetched in the background first.
   test("a daily plan opens a hidden-date day list with Peek and stars, ends into the review, and Continue opens Day 2", async ({ page, context }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const answers = watchReplayAnswers(page);
     const api = watchApi(page);
     const anyClose = {
@@ -265,10 +299,16 @@ test.describe("Practice", () => {
     const created = await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: anyClose } });
     expect(created.ok()).toBeTruthy();
 
-    // The hub: the plan form, since there is no plan yet.
-    await openDesk(page, "/practice");
+    // The hub: start a thread first (its risk plan: a $600 daily loss, at most 3 trades), then the plan form, since there is no plan yet.
+    const threads = await startThread(page, { maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks." });
     const daily = page.locator("#daily-list");
     await expect(daily.getByRole("form", { name: "Daily list plan" })).toBeVisible();
+    // D-007: the PLAN block left the daily form; the thread carries it.
+    await expect(daily.getByRole("group", { name: "Plan", exact: true })).toHaveCount(0);
+    for (const label of ["Max loss ($)", "Max trades", "Plan note", "Shares", "Stop on every entry", "Trade only on a signal"]) {
+      await expect(daily.getByLabel(label)).toHaveCount(0);
+    }
+    await expect(daily.getByText(PRACTICE_COPY.threadPlanFrom)).toBeVisible();
     await daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
     await daily.locator('input[type="date"]').fill(DAY);
     await daily.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
@@ -320,6 +360,19 @@ test.describe("Practice", () => {
     await expect(playhead(page)).not.toContainText("9:30:00");
     await expectCleanScreen(page);
 
+    // The workspace carries the thread: its balance and today's result (SIMULATED), and the thread plan in the rail.
+    const strip = page.getByRole("group", { name: "Practice thread" });
+    await expect(strip).toContainText("Thread balance $50,000");
+    await expect(strip).toContainText(PRACTICE_COPY.threadSimulated);
+    // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
+    await page.keyboard.press("b");
+    await marksTab(page).click();
+    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    await page.keyboard.press("x");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
+    await expect(strip).toContainText("today");
+    await expectCleanScreen(page);
+
     // End the day from the workspace: it asks first, then opens the list with its review.
     await page.getByRole("button", { name: "End day…" }).click();
     await expect(page.getByText(PRACTICE_COPY.dayEndWarning)).toBeVisible();
@@ -361,11 +414,94 @@ test.describe("Practice", () => {
     await expect(page.getByRole("status").filter({ hasText: "No symbol could be scanned" })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Only 0");
     await expectCleanScreen(page);
+
+    // End day 2 with no practice: a skipped day. The balance simply carries.
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayAfter })).toBeVisible();
+
+    // The thread reads back from the ledger: one practised day, one skipped day, and the balance is the starting
+    // balance plus the ledger rows (nothing stored twice).
+    const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { id: number } }>;
+    expect(listed).toHaveLength(1);
+    const threadId = listed[0]!.thread.id;
+    const ledger = (await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/ledger`)).json()) as { total: number; entries: Array<{ pnlUsd: number }> };
+    expect(ledger.total).toBe(1);
+    const read = await readThread(context, threadId);
+    expect(read.thread.stats.balance).toBeCloseTo(50000 + ledger.entries[0]!.pnlUsd, 2);
+    expect([read.thread.stats.daysPracticed, read.thread.stats.daysSkipped]).toEqual([1, 1]);
+    expect(read.daily.map((day) => day.kind)).toEqual(["practiced", "skipped"]);
+    expect(read.daily[1]!.balance, "a skipped day carries the balance").toBe(read.daily[0]!.balance);
+    const balance = formatBalance(read.thread.stats.balance);
+
+    // The hub card shows the balance; its journal opens from there.
+    await openDesk(page, "/practice");
+    const card = threads.getByRole("article", { name: "Active practice thread" });
+    await expect(card).toContainText(balance);
+    await expect(card).toContainText(PRACTICE_COPY.threadSimulated);
+    await card.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    await page.waitForURL(/\/practice\/journal\?thread=\d+/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
+    await expect(page.getByText(balance).first()).toBeVisible();
+    await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
+    await expect(page.getByRole("img", { name: /^Result of each day.*1 skipped\.$/ })).toBeVisible();
+    const tile = (label: string) => page.getByRole("listitem").filter({ hasText: new RegExp(`^${label}`) });
+    await expect(tile("Days practiced")).toContainText("of 2 days opened");
+    await expect(tile("Skipped")).toContainText("balance carried over");
+    await expect(tile("Wins")).toContainText(String(read.thread.stats.wins));
+    await expect(tile("Losses")).toContainText(String(read.thread.stats.losses));
+    await expect(page.locator("body")).not.toContainText(/20\d\d-\d\d-\d\d/); // dates stay hidden on the journal
+    await expectCleanScreen(page);
+
+    // One practised day is too few for a trend, and the journal says so instead of guessing.
+    const improvement = await railSection(page, "Thread details", PRACTICE_COPY.improvementTitle);
+    await expect(improvement.getByText(PRACTICE_COPY.improvementTooFew)).toBeVisible();
+    await expect(improvement.getByText(/^Reason: week 2 has no practice days so far/)).toBeVisible();
+
+    // Edit the plan on the journal, then close the thread; the closed thread keeps its journal.
+    const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
+    await expect(plan).toContainText("$600");
+    await plan.getByRole("button", { name: PRACTICE_COPY.threadEditPlan }).click();
+    await plan.getByLabel("Max loss ($)").fill("400");
+    await plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan }).click();
+    await expect(plan).toContainText("$400");
+    await expect(plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan })).toHaveCount(0);
+    await plan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
+    await plan.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
+    await expect(page.getByRole("status").filter({ hasText: "This thread is closed" })).toBeVisible();
+    await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
+    await expect((await readThread(context, threadId)).thread.status).toBe("closed");
+    await expectCleanScreen(page);
+
+    // Back on the hub: the closed state in plain words, a new thread can start, and the daily list waits for it.
+    await openDesk(page, "/practice");
+    await expect(threads.getByRole("article", { name: "Closed practice thread" })).toContainText(PRACTICE_COPY.threadClosedTitle);
+    await expect(threads.getByRole("button", { name: PRACTICE_COPY.threadStartNew })).toBeVisible();
+    await expect(threads.getByRole("form", { name: "New thread" })).toBeVisible();
+    await expect(page.locator("#daily-list").getByText(PRACTICE_COPY.threadNeeded)).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  test("a new thread's journal says there are no days yet, and a thread that does not exist says it could not load", async ({ page }) => {
+    const threads = await startThread(page);
+    const card = threads.getByRole("article", { name: "Active practice thread" });
+    await expect(card).toContainText(PRACTICE_COPY.threadResumeNeedsPlan); // no daily plan yet: nothing to resume
+    await card.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    await page.waitForURL(/\/practice\/journal\?thread=\d+/);
+    await expect(page.getByText("$50,000 · 0 days practiced")).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.journalThreadEmpty)).toBeVisible();
+    await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toHaveCount(0);
+    await expectCleanScreen(page);
+
+    await openDesk(page, "/practice/journal?thread=99999");
+    await expect(page.getByRole("alert").filter({ hasText: "Couldn't load this thread" })).toBeVisible();
+    await expectCleanScreen(page);
   });
 
   // D-001: a filter that reads bars of the list day itself cannot be listed before its first bar has closed.
   test("the plan form moves the list time for a 15-minute filter, disables earlier times and says why", async ({ page }) => {
-    await openDesk(page, "/practice");
+    await startThread(page);
     const daily = page.locator("#daily-list");
     const filters = daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
     const listTimes = daily.getByRole("group", { name: PRACTICE_COPY.planListAt, exact: true });
@@ -410,6 +546,18 @@ test.describe("Practice", () => {
         },
       },
     });
+    // Without a thread a new plan has nothing to book into: a plain 409 (02r), and nothing is saved.
+    const unthreaded = await context.request.post(`${origin}/api/desk/replay/daily/next`, { data: plan("10:00", "10:00") });
+    expect(unthreaded.status()).toBe(409);
+    expect((await unthreaded.json()).detail.problems).toEqual([{ path: "threadId", message: PRACTICE_COPY.threadNeeded }]);
+    const thread = await context.request.post(`${origin}/api/desk/replay/threads`, {
+      data: { schemaVersion: 1, mode: "day", startingBalance: 50000, plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" } },
+    });
+    expect(thread.ok()).toBeTruthy();
+    const second = await context.request.post(`${origin}/api/desk/replay/threads`, {
+      data: { schemaVersion: 1, mode: "day", startingBalance: 50000, plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" } },
+    });
+    expect(second.status(), "one active day thread at a time").toBe(409);
     const refused = await context.request.post(`${origin}/api/desk/replay/daily/next`, { data: plan("08:30", "09:30") });
     expect(refused.status()).toBe(422);
     const { detail } = await refused.json();

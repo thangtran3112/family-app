@@ -356,7 +356,8 @@ export interface paths {
         };
         /**
          * Get Daily
-         * @description The hub's daily-list card: her plan and where its cursor is, or `null` before she has one.
+         * @description The hub's daily-list card: her plan and where its cursor is, and her active day thread with its SIMULATED balance
+         *     and stats; either is `null` before she has one.
          */
         get: operations["get_daily_api_desk_replay_daily_get"];
         put?: never;
@@ -381,6 +382,10 @@ export interface paths {
          * @description Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves
          *     that plan, replacing hers, and starts preparing its data in the background. While the data is not ready the
          *     answer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.
+         *
+         *     A new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409
+         *     in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
+         *     old client are ignored.
          */
         post: operations["open_next_api_desk_replay_daily_next_post"];
         delete?: never;
@@ -607,6 +612,98 @@ export interface paths {
          * @description Undo the last mark, only while the playhead has not moved since it was placed (else 409).
          */
         delete: operations["undo_mark_api_desk_replay_sessions__session_id__marks__mark_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Threads
+         * @description Her threads, the active ones first, each with its plan, stats and today (the hub's resume list).
+         */
+        get: operations["list_threads_api_desk_replay_threads_get"];
+        put?: never;
+        /**
+         * Create Thread
+         * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
+         *     risk plan, and the mode (`day`; `swing` is not open yet). One active thread per mode: a second is a 409.
+         */
+        post: operations["create_thread_api_desk_replay_threads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread
+         * @description One thread: its plan, stats, today, the daily P/L series (one row per ended day) and the balance curve. Every
+         *     figure is read back from the ledger; nothing is stored twice.
+         */
+        get: operations["get_thread_api_desk_replay_threads__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Thread
+         * @description Replace the risk plan while the thread is active (a closed thread is a 409). It applies from the next session:
+         *     a session already started keeps the plan it began with.
+         */
+        patch: operations["patch_thread_api_desk_replay_threads__thread_id__patch"];
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close Thread
+         * @description Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end
+         *     it first). Idempotent.
+         */
+        post: operations["close_thread_api_desk_replay_threads__thread_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Ledger
+         * @description The thread's realized practice trades (`PracticeLedgerEntryV1`), newest first: the rows its balance is of.
+         */
+        get: operations["get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1600,9 +1697,25 @@ export interface components {
             /** Timeframe */
             timeframe: string;
         };
-        /** DailyOut */
+        /**
+         * CurvePointOut
+         * @description A point of the balance curve: `n` 0 is the starting balance (no day), then one per ended day.
+         */
+        CurvePointOut: {
+            /** Balance */
+            balance: number;
+            /** Day */
+            day: string | null;
+            /** N */
+            n: number;
+        };
+        /**
+         * DailyOut
+         * @description The hub's daily-list card: her plan and cursor, and her active day thread (balance and stats).
+         */
         DailyOut: {
             plan: components["schemas"]["PracticePlanOut"] | null;
+            thread: components["schemas"]["ThreadSummaryOut"] | null;
         };
         /** DashboardEventOut */
         DashboardEventOut: {
@@ -1810,11 +1923,13 @@ export interface components {
              * @enum {string}
              */
             status: "listed" | "practicing" | "ended";
+            thread: components["schemas"]["ThreadBriefOut"] | null;
             universe: components["schemas"]["ListUniverseOut"];
             /** Warnings */
             warnings: string[];
             /** Watch */
             watch: components["schemas"]["StarOut"][];
+            watch_check: components["schemas"]["WatchCheckOut"];
             /**
              * Weekday
              * @enum {string}
@@ -2364,6 +2479,7 @@ export interface components {
             journal: components["schemas"]["JournalOut"];
             mark: components["schemas"]["MarkOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            thread?: components["schemas"]["ThreadBriefOut"] | null;
             /** Warning */
             warning: string | null;
         };
@@ -2373,6 +2489,7 @@ export interface components {
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             /** Removed Mark Id */
             removed_mark_id: number;
+            thread?: components["schemas"]["ThreadBriefOut"] | null;
         };
         /** MarkersOut */
         MarkersOut: {
@@ -2673,6 +2790,43 @@ export interface components {
             sessions: number;
             setup: components["schemas"]["PracticeSetupV1"];
         };
+        /** PracticeLedgerEntryV1 */
+        PracticeLedgerEntryV1: {
+            /** Day */
+            day: string;
+            /** Entryprice */
+            entryPrice: number;
+            /** Exitprice */
+            exitPrice: number;
+            /** Id */
+            id: number;
+            /** Markid */
+            markId: number;
+            /** Pnlusd */
+            pnlUsd: number;
+            /** R */
+            r?: number | null;
+            /** Realizedat */
+            realizedAt: string;
+            /**
+             * Schemaversion
+             * @constant
+             */
+            schemaVersion: 1;
+            /** Sessionid */
+            sessionId: number;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Symbol */
+            symbol: string;
+            /** Threadid */
+            threadId: number;
+        };
         /**
          * PracticePlanOut
          * @description The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is
@@ -2698,25 +2852,8 @@ export interface components {
             /** Sessions */
             sessions: number;
             spec: components["schemas"]["PracticeBlockV1"];
-        };
-        /** PracticePlanV1 */
-        PracticePlanV1: {
-            /** Maxlossusd */
-            maxLossUsd?: number | null;
-            /** Maxtrades */
-            maxTrades?: number | null;
-            /** Note */
-            note?: string | null;
-            /**
-             * Signalonly
-             * @enum {string}
-             */
-            signalOnly: "yes" | "no";
-            /**
-             * Stoprequired
-             * @enum {string}
-             */
-            stopRequired: "yes" | "no";
+            /** Thread Id */
+            thread_id: number | null;
         };
         /** PracticeScreenV1 */
         PracticeScreenV1: {
@@ -2736,15 +2873,86 @@ export interface components {
              * @enum {string}
              */
             interval: "1m" | "5m" | "15m";
-            plan: components["schemas"]["PracticePlanV1"];
             /**
              * Session
              * @enum {string}
              */
             session: "regular" | "extended";
-            /** Shares */
-            shares: number;
             window: components["schemas"]["PracticeWindowV1"];
+        };
+        /** PracticeThreadPlanV1 */
+        PracticeThreadPlanV1: {
+            /** Maxlossusd */
+            maxLossUsd?: number | null;
+            /** Maxtrades */
+            maxTrades?: number | null;
+            /** Plannote */
+            planNote?: string | null;
+            /**
+             * Stopnoteonentry
+             * @enum {string}
+             */
+            stopNoteOnEntry: "yes" | "no";
+            /**
+             * Tradeonlyonsignal
+             * @enum {string}
+             */
+            tradeOnlyOnSignal: "yes" | "no";
+        };
+        /** PracticeThreadStatsV1 */
+        PracticeThreadStatsV1: {
+            /** Adherencefirstpct */
+            adherenceFirstPct?: number | null;
+            /** Adherencelastpct */
+            adherenceLastPct?: number | null;
+            /** Avglossusd */
+            avgLossUsd?: number | null;
+            /** Avgwinusd */
+            avgWinUsd?: number | null;
+            /** Balance */
+            balance: number;
+            /** Bestdayusd */
+            bestDayUsd?: number | null;
+            /** Dayspracticed */
+            daysPracticed: number;
+            /** Daysskipped */
+            daysSkipped: number;
+            /** Losses */
+            losses: number;
+            /** Winrate */
+            winRate?: number | null;
+            /** Wins */
+            wins: number;
+            /** Worstdayusd */
+            worstDayUsd?: number | null;
+        };
+        /** PracticeThreadV1 */
+        PracticeThreadV1: {
+            /** Closedat */
+            closedAt?: string | null;
+            /** Createdat */
+            createdAt: string;
+            /** Id */
+            id: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "day" | "swing";
+            plan: components["schemas"]["PracticeThreadPlanV1"];
+            /**
+             * Schemaversion
+             * @constant
+             */
+            schemaVersion: 1;
+            /** Startingbalance */
+            startingBalance: number;
+            stats: components["schemas"]["PracticeThreadStatsV1"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "closed";
         };
         /** PracticeWindowV1 */
         PracticeWindowV1: {
@@ -2898,6 +3106,9 @@ export interface components {
              * @enum {string}
              */
             tape_feed: "sip" | "iex";
+            thread?: components["schemas"]["ThreadBriefOut"] | null;
+            /** Thread Id */
+            thread_id: number | null;
             /**
              * Window End
              * Format: date-time
@@ -2956,6 +3167,8 @@ export interface components {
             status: "active" | "ended";
             /** Symbol */
             symbol: string;
+            /** Thread Id */
+            thread_id: number | null;
             /** Trades */
             trades: number;
             /**
@@ -3665,6 +3878,128 @@ export interface components {
             timeframe: string;
             volatility: components["schemas"]["VolatilityOut"];
         };
+        /**
+         * ThreadBriefOut
+         * @description The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no
+         *     practice day is under way; an open trade is not realized).
+         */
+        ThreadBriefOut: {
+            /** Balance */
+            balance: number;
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "day" | "swing";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "closed";
+            /** Today Pnl Usd */
+            today_pnl_usd: number | null;
+        };
+        /**
+         * ThreadDayOut
+         * @description One ended practice day, in the order she practised. `balance` is the SIMULATED balance at the day's end.
+         */
+        ThreadDayOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Balance */
+            balance: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Day List Id */
+            day_list_id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "practiced" | "skipped";
+            /** N */
+            n: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** Trades */
+            trades: number;
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /**
+         * ThreadLedgerOut
+         * @description The newest ledger rows, newest first. `total` counts every row.
+         */
+        ThreadLedgerOut: {
+            /** Entries */
+            entries: components["schemas"]["PracticeLedgerEntryV1"][];
+            /** Label */
+            label: string;
+            /** Thread Id */
+            thread_id: number;
+            /** Total */
+            total: number;
+        };
+        /** ThreadOut */
+        ThreadOut: {
+            /** Curve */
+            curve: components["schemas"]["CurvePointOut"][];
+            /** Daily */
+            daily: components["schemas"]["ThreadDayOut"][];
+            /** Label */
+            label: string;
+            thread: components["schemas"]["PracticeThreadV1"];
+            today: components["schemas"]["ThreadTodayOut"] | null;
+        };
+        /**
+         * ThreadSummaryOut
+         * @description A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list.
+         */
+        ThreadSummaryOut: {
+            /** Label */
+            label: string;
+            thread: components["schemas"]["PracticeThreadV1"];
+            today: components["schemas"]["ThreadTodayOut"] | null;
+        };
+        /**
+         * ThreadTodayOut
+         * @description The practice day under way and what it has realized so far.
+         */
+        ThreadTodayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Day List Id */
+            day_list_id: number;
+            /** Day No */
+            day_no: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "listed" | "practicing";
+            /** Trades */
+            trades: number;
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -3704,6 +4039,26 @@ export interface components {
             values: {
                 [key: string]: number | null;
             };
+        };
+        /**
+         * WatchCheckOut
+         * @description "Traded only names on your watch": data for the screen to render. `traded` is the names she entered a trade on;
+         *     `off_watch` the ones she had not starred. Nothing scores it.
+         */
+        WatchCheckOut: {
+            /** Label */
+            label: string;
+            /** Off Watch */
+            off_watch: string[];
+            /** Starred */
+            starred: string[];
+            /** Traded */
+            traded: string[];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "no_trades" | "on_watch" | "off_watch";
         };
         /** WatchlistCreate */
         WatchlistCreate: {
@@ -4566,6 +4921,7 @@ export interface operations {
             content: {
                 "application/json": {
                     plan?: components["schemas"]["PracticeBlockV1"];
+                    threadId?: number;
                 };
             };
         };
@@ -5024,6 +5380,180 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkUndoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_threads_api_desk_replay_threads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSummaryOut"][];
+                };
+            };
+        };
+    };
+    create_thread_api_desk_replay_threads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+        };
+    };
+    get_thread_api_desk_replay_threads__thread_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_thread_api_desk_replay_threads__thread_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_thread_api_desk_replay_threads__thread_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadLedgerOut"];
                 };
             };
             /** @description Validation Error */

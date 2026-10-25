@@ -4,20 +4,21 @@ import { SchemaVersionSchema } from "./strategy-common.ts";
 // PracticeBlockV1 (02o-b v1): the daily-list practice plan she authors once. Each practice day her
 // own filters build a candidate list for the past day she is about to replay (same screener code as
 // live, inputs cut at the time she would have looked); the setup below is the ReplaySessionV1 shape
-// minus symbol and day. Nothing is a boolean or null, every object is strict, and no field names an
-// order, account or broker, as in the other 02k-family contracts. The server rules that need a
-// database (the filters are hers and runnable, `listAt` of 08:30 or later for a premarket filter,
-// every day finished, `firstDay` from 2017-01-03) are not contract rules.
+// minus symbol, day, shares and risk plan. The risk plan (stop note, signal only, max loss, max
+// trades, note) belongs to the practice thread (practice-thread-v1.ts, 02r, D-007), and she sizes each
+// entry herself: a v1 block that still carries `setup.plan` or `setup.shares` is rejected here, and
+// the server drops those two keys from an old client's payload before it validates. Nothing is a
+// boolean or null, every object is strict, and no field names an order, account or broker, as in the
+// other 02k-family contracts. The server rules that need a database (the filters are hers and
+// runnable, `listAt` of 08:30 or later for a premarket filter, every day finished, `firstDay` from
+// 2017-01-03) are not contract rules.
 
 const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
 const IsoDaySchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);
-const SharesSchema = z.int().min(1).max(10_000);
 const YesNoSchema = z.enum(["yes", "no"]);
-const plainText = (min: number, max: number) =>
-  z.string().min(min).max(max).regex(/^[\u0020-\u007E\u00A0-\uD7FF\uE000-\uFFFF]+$/);
 
 // The nested objects carry ids so the generated Pydantic classes keep their own names; the unnamed
-// `Window`, `Plan` and `ArmedItem` stay ReplaySessionV1's.
+// `Window` and `ArmedItem` stay ReplaySessionV1's.
 const PracticeScreenSchema = z
   .strictObject({
     filters: z.array(z.strictObject({ id: z.int().min(1) })).min(1).max(3),
@@ -31,7 +32,6 @@ const PracticeSetupSchema = z
     window: z.strictObject({ from: HhMmSchema, to: HhMmSchema }).meta({ id: "PracticeWindowV1" }),
     session: z.enum(["regular", "extended"]),
     interval: z.enum(["1m", "5m", "15m"]),
-    shares: SharesSchema,
     armed: z
       .array(
         z
@@ -39,15 +39,6 @@ const PracticeSetupSchema = z
           .meta({ id: "PracticeArmedV1" }),
       )
       .max(5),
-    plan: z
-      .strictObject({
-        stopRequired: YesNoSchema,
-        signalOnly: YesNoSchema,
-        maxLossUsd: z.int().min(1).max(100_000).optional(),
-        maxTrades: z.int().min(1).max(50).optional(),
-        note: plainText(1, 500).optional(),
-      })
-      .meta({ id: "PracticePlanV1" }),
   })
   .meta({ id: "PracticeSetupV1" });
 

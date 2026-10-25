@@ -35,7 +35,9 @@ from ai_trading.data.universe import SEED_SYMBOLS, ensure_universe, split_plain
 from ai_trading.db.models import (
     FilterStrategy,
     FilterStrategyVersion,
+    PracticeMark,
     PracticePlan,
+    PracticeThread,
     ReplayDayList,
     ReplaySession,
     SymbolMetrics,
@@ -46,8 +48,10 @@ from ai_trading.replay import prep as prep_mod
 from ai_trading.replay import review as review_mod
 from ai_trading.replay import screen
 from ai_trading.replay import session as session_mod
+from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.cache import BlobKey, BlobStore
 from ai_trading.replay.data import ReplayDayError, check_day
+from ai_trading.replay.model import ENTRY_KINDS
 from ai_trading.replay.screen import ASOF_PART, EARLIEST_LIST_DAY, FilterInput, build_list, cut_frames
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound, jsonable
 from ai_trading.screener.evaluator import SymbolBars, check_filter
@@ -60,10 +64,25 @@ MAX_WATCH = 5
 PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
+DAY_SESSION_SHARES = 100  # a day session's default entry size; she sizes each entry herself (`PracticeMarkV1.shares`)
 FEW_NAMES = 20
 UNIVERSE_LABEL = (
     "Practice universe · {size} symbols the Desk has scanned · the live screener that morning may have scanned others"
 )
+
+
+# -- the legacy block ----------------------------------------------------------------------------------------
+
+LEGACY_SETUP_KEYS = ("plan", "shares")  # the risk plan and entry size left the block for the thread (02r, D-007)
+
+
+def without_legacy_plan_fields(block: Any) -> Any:
+    """A block with `setup.plan` and `setup.shares` taken out. An old client still sends them and a plan saved before
+    0007 still stores them: both are ignored, never an error, and the block is served without them."""
+    setup = block.get("setup") if isinstance(block, dict) else None
+    if not isinstance(setup, dict):
+        return block
+    return {**block, "setup": {key: value for key, value in setup.items() if key not in LEGACY_SETUP_KEYS}}
 
 
 # -- the schedule --------------------------------------------------------------------------------------------
@@ -167,9 +186,12 @@ def _ensure_desk_universe(db: Session, svc: Services, now: datetime) -> None:
         log.warning("universe build for a new plan: provider lists failed: %s", sorted(build.failed))
 
 
-def create_plan(db: Session, user_id: int, spec: PracticeBlockV1, svc: Services) -> PracticePlan:
+def create_plan(
+    db: Session, user_id: int, spec: PracticeBlockV1, svc: Services, thread: PracticeThread
+) -> PracticePlan:
     """Validate and save a plan, archive the one it replaces, freeze the universe, and mark prep as running (the
-    caller starts `run_prep`). Server rules that need a lookup: the day range, her filters, the premarket list time."""
+    caller starts `run_prep`). Server rules that need a lookup: the day range, her filters, the premarket list time.
+    The plan binds to `thread`, which carries the risk plan (D-007): the block's own plan fields are never read."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     first = date.fromisoformat(dumped["firstDay"])
     if first < EARLIEST_LIST_DAY:
@@ -210,6 +232,7 @@ def create_plan(db: Session, user_id: int, spec: PracticeBlockV1, svc: Services)
         status="active",
         created_at=now,
         updated_at=now,
+        thread_id=thread.id,
     )
     db.add(row)
     db.flush()
@@ -287,7 +310,7 @@ def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
 
 
 def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
-    spec = plan.spec
+    spec = without_legacy_plan_fields(plan.spec)
     days = plan_days(plan.first_day, spec["sessions"])
     latest = _latest(db, plan.id)
     finished = latest is not None and latest.status == "ended" and latest.day == days[-1]
@@ -306,6 +329,7 @@ def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
     prep = plan.prep
     return {
         "id": plan.id,
+        "thread_id": plan.thread_id,
         "sessions": spec["sessions"],
         "days_opened": plan.days_opened,
         "spec": spec,
@@ -587,6 +611,28 @@ def _few_names_reason(db: Session, row: ReplayDayList) -> str:
     )
 
 
+def watch_check(db: Session, row: ReplayDayList, sessions: list[ReplaySession]) -> dict[str, Any]:
+    """The "traded only names on your watch" data (02o-b2): the starred names, the names she entered a trade on, and
+    the entered names that were not starred. Data only: no plan field scores it, the screen renders it."""
+    starred = [w["symbol"] for w in row.watch]
+    entered = set(
+        db.execute(
+            select(PracticeMark.session_id).where(
+                PracticeMark.session_id.in_([s.id for s in sessions]), PracticeMark.kind.in_(ENTRY_KINDS)
+            )
+        ).scalars()
+    )
+    traded = list(dict.fromkeys(s.symbol for s in sessions if s.id in entered))
+    off = [symbol for symbol in traded if symbol not in starred]
+    if not traded:
+        verdict, label = "no_trades", "No trades yet · nothing to check against your watch"
+    elif off:
+        verdict, label = "off_watch", f"Traded {_join(off)}, not on your watch"
+    else:
+        verdict, label = "on_watch", "Traded only names on your watch"
+    return {"starred": starred, "traded": traded, "off_watch": off, "verdict": verdict, "label": label}
+
+
 def day_list_out(
     db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None
 ) -> dict[str, Any]:
@@ -618,6 +664,8 @@ def day_list_out(
         "watch": row.watch,
         "clock": row.revealed_through,
         "sessions": [{"id": s.id, "symbol": s.symbol, "status": s.status} for s in sessions],
+        "watch_check": watch_check(db, row, sessions),
+        "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
         "peek": None if peek is None else _peek(db, svc, row, peek),
         "journal": row.journal if ended else None,
@@ -674,7 +722,10 @@ def patch_day_list(
 # -- the day's session ------------------------------------------------------------------------------------------
 
 
-def _session_spec(plan: PracticePlan, day: date, symbol: str) -> ReplaySessionV1:
+def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeThread) -> ReplaySessionV1:
+    """The day's session from the plan's setup (window, interval, armed names) and the thread's risk plan. The plan is
+    snapshotted here: editing the thread later never rescores a session already started. A plan saved before 0007
+    still carries `setup.plan` and `setup.shares`; they are never read."""
     setup = plan.spec["setup"]
     return ReplaySessionV1.model_validate(
         {
@@ -684,9 +735,9 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str) -> ReplaySessionV1
             "window": setup["window"],
             "session": setup["session"],
             "interval": setup["interval"],
-            "shares": setup["shares"],
+            "shares": DAY_SESSION_SHARES,
             "armed": setup["armed"],
-            "plan": setup["plan"],
+            "plan": threads_mod.session_plan(thread),
             "hideDate": plan.spec["hideDates"],
         }
     )
@@ -710,7 +761,14 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         )
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
-    created = session_mod.create(db, user_id, _session_spec(plan, row.day, symbol), svc, day_list=row)
+    thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
+    if thread is None:
+        raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)
+    if thread.status == "closed":
+        raise ReplayProblem(threads_mod.CLOSED_THREAD, path="threadId", status=409)
+    created = session_mod.create(
+        db, user_id, _session_spec(plan, row.day, symbol, thread), svc, day_list=row, thread_id=thread.id
+    )
     if row.status == "listed":
         row.status = "practicing"
     row.updated_at = svc.now()
@@ -762,6 +820,10 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         if s.status == "active":
             session_mod.end(db, user_id, s.id, svc, via_day=True)
             db.refresh(s)
+    if len(sessions) > 1:  # the day rules count every name: rescore now that each one's last exit exists
+        for s in sessions:
+            session_mod.refresh_journal(db, user_id, s.id, svc)
+            db.refresh(s)
     window_end = _utc(sessions[0].window_end) if sessions else et(row.day, plan.spec["setup"]["window"]["to"])
     store = svc.store_factory(db)
     minutes: dict[str, pd.DataFrame | None] = {}
@@ -786,7 +848,11 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
 
 def hub(db: Session, user_id: int) -> dict[str, Any]:
     plan = active_plan(db, user_id)
-    return {"plan": None if plan is None else plan_out(db, plan)}
+    thread = threads_mod.active_thread(db, user_id)
+    return {
+        "plan": None if plan is None else plan_out(db, plan),
+        "thread": None if thread is None else threads_mod.summary(db, thread),
+    }
 
 
 __all__ = (
