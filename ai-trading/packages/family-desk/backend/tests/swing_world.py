@@ -35,8 +35,10 @@ from sqlalchemy.orm import Session
 
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1
+from ai_trading.core.calendar import et
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.db.models import User
+from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import swing
 
 NOW = datetime(2026, 10, 24, 16, 0, tzinfo=UTC)
@@ -224,3 +226,15 @@ def create_swing_thread(
     thread, row = swing.create_thread(db, user_id, swing_create(balance=balance, plan=plan, **overrides), svc)
     db.commit()
     return thread, row
+
+
+def ready_thread(db: Session, user_id: int, svc, **kwargs):
+    """`create_swing_thread` plus its prep run to the end, so every day of the plan can open: `(thread, plan)`."""
+    thread, row = create_swing_thread(db, user_id, svc, **kwargs)
+    plan_mod.run_prep(db, svc, row.id)
+    return thread, row
+
+
+def bar_close(world: SyntheticBars, symbol: str, day: date, hhmm: str) -> float:
+    """The RAW close of the one-minute bar that STARTS at `hhmm` ET on `day` (a hold's prices are raw)."""
+    return float(world.minutes[symbol].loc[et(day, hhmm), "close"])

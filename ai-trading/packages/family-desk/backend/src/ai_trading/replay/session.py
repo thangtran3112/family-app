@@ -28,7 +28,7 @@ from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import ET, annotate
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.evaluate import _resample
-from ai_trading.db.models import PracticeMark, ReplayDayList, ReplaySession
+from ai_trading.db.models import PracticeMark, PracticeThread, ReplayDayList, ReplaySession
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import signals as signals_mod
@@ -96,6 +96,9 @@ class Ctx:
     window_end: pd.Timestamp
     through: pd.Timestamp
     day_trades: list[journal_mod.Trade] = field(default_factory=list)  # the day list's other sessions, for day rules
+    swing: bool = (
+        False  # a session of a swing thread (02p): its holds carry overnight, so the day never auto-exits them
+    )
     _cache: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -223,6 +226,16 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         window_end=_ts(row.window_end),
         through=_ts(row.revealed_through),
         day_trades=_day_trades(db, row),
+        swing=_is_swing(db, row),
+    )
+
+
+def _is_swing(db: Session, row: ReplaySession) -> bool:
+    if row.thread_id is None:
+        return False
+    return (
+        db.execute(select(PracticeThread.mode).where(PracticeThread.id == row.thread_id)).scalar_one_or_none()
+        == "swing"
     )
 
 
@@ -429,11 +442,14 @@ def create(
     svc: Services,
     day_list: ReplayDayList | None = None,
     thread_id: int | None = None,
+    tape_feed: str | None = None,
 ) -> ReplaySession:
     """A new active session at the window start (idempotent per active symbol and day), or the existing one.
 
     With a `day_list` the session belongs to that day: it starts at the day clock when the clock is past the window
-    start (the shared clock never goes backward), and a standalone session on the same symbol and day is a 409."""
+    start (the shared clock never goes backward), and a standalone session on the same symbol and day is a 409.
+    `tape_feed` fixes the session's feed without asking the provider (`"off"`: a swing thread with the tape off, 02p
+    decision 4; the default probes SIP, then IEX)."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     symbol, day = dumped["symbol"], date.fromisoformat(dumped["day"])
     now = svc.now()
@@ -482,11 +498,13 @@ def create(
         window_start=start,
         window_end=end,
     )
-    try:
-        feed = svc.tape.probe_feed(store, symbol, start)
-    except ProviderError as exc:  # a tape outage must not block the chart; prints retry on advance
-        log.warning("tape probe failed for %s %s: %s", symbol, day, exc)
-        feed = "sip"
+    feed = tape_feed
+    if feed is None:
+        try:
+            feed = svc.tape.probe_feed(store, symbol, start)
+        except ProviderError as exc:  # a tape outage must not block the chart; prints retry on advance
+            log.warning("tape probe failed for %s %s: %s", symbol, day, exc)
+            feed = "sip"
 
     attempt = (
         db.execute(
@@ -864,7 +882,9 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
         raise ReplayProblem("End the day to score this session", path="kind", status=409)
     ctx.through = ctx.window_end
     row.revealed_through = ctx.window_end.to_pydatetime()
-    found = last_price(ctx, ctx.window_end)
+    # A swing day never auto-exits (a hold rides overnight) and books nothing here: the day's end credits the holds
+    # that exited on it (02p b3), and a swing session may have no tape to price an exit from.
+    found = None if ctx.swing else last_price(ctx, ctx.window_end)
     _, open_ = journal_mod.assemble(ctx.marks)
     if open_ is not None and found is not None:
         db.add(
@@ -881,7 +901,8 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
         )
         db.flush()
         ctx.marks = _marks_of(_load_marks(db, row.id))
-    ledger_mod.book(db, row, journal_mod.assemble(ctx.marks)[0], svc.now())
+    if not ctx.swing:
+        ledger_mod.book(db, row, journal_mod.assemble(ctx.marks)[0], svc.now())
     price = None if found is None else found[0]
     row.journal = jsonable(_journal(ctx, price, final=True))
     row.status = "ended"

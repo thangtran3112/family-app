@@ -119,6 +119,17 @@ def _weekday(day: date) -> str:
     return day.strftime("%a")
 
 
+def _is_swing(plan: PracticePlan) -> bool:
+    return plan.spec.get("mode") == "swing"
+
+
+def _swing() -> Any:
+    """The swing module, imported on first use: it imports this module."""
+    from ai_trading.replay import swing
+
+    return swing
+
+
 # -- the universe --------------------------------------------------------------------------------------------
 
 
@@ -263,10 +274,8 @@ def run_prep(db: Session, svc: Services, plan_id: int) -> dict[str, Any]:
     if plan is None:
         log.warning("daily-list prep: plan %s is not visible", plan_id)
         return {}
-    if plan.spec.get("mode") == "swing":  # a swing thread's plan: its universe is fixed and it loads SPY too
-        from ai_trading.replay import swing  # swing imports this module, so the import waits for the call
-
-        return swing.run_prep(db, svc, plan_id)
+    if _is_swing(plan):  # a swing thread's plan: its universe is fixed and it loads SPY too
+        return _swing().run_prep(db, svc, plan_id)
     days = plan_days(plan.first_day, plan.spec["sessions"])
     store = svc.store_factory(db)
     symbols = list(plan.universe["symbols"])
@@ -326,6 +335,8 @@ def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
 
 
 def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
+    if _is_swing(plan):
+        return _swing().plan_out(db, plan)
     spec = without_legacy_plan_fields(plan.spec)
     days = plan_days(plan.first_day, spec["sessions"])
     latest = _latest(db, plan.id)
@@ -428,9 +439,12 @@ def _universe_note(built_size: int, filters: list[FilterInput], capped: bool) ->
     return {"label": notes[0], "footnote": " · ".join(notes)}
 
 
-def open_next(db: Session, user_id: int, svc: Services) -> Opened:
+def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = None) -> Opened:
     """The current day list while it is not over; else the next day's list, built now. While the plan's data is not
-    ready the result carries no list and the plan's prep progress says why. Every day done: no list."""
+    ready the result carries no list and the plan's prep progress says why. Every day done: no list. A swing thread
+    (`thread_id`) continues its own calendar (`swing.open_next`)."""
+    if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
+        return _swing().open_next(db, user_id, svc, thread_id)
     plan = active_plan(db, user_id, lock=True)
     if plan is None:
         raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
@@ -655,6 +669,8 @@ def day_list_out(
     row = get_day_list(db, user_id, day_list_id)
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
+    if _is_swing(plan):
+        return _swing().day_list_out(db, user_id, day_list_id, svc, peek=peek)
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
     universe = row.universe
@@ -763,6 +779,10 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     """The day's practice session on a name from the list, built from the plan's setup. v1 practises one name a
     day: a second name is a 409 until the day ends (switching on the shared clock is 02o-b2)."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
+    if _is_swing(plan):
+        return _swing().start_session(db, user_id, day_list_id, symbol, svc)
     if row.status == "ended":
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
     if symbol not in {c["symbol"] for c in row.candidates}:
@@ -775,8 +795,6 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
             path="symbol",
             status=409,
         )
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
     thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
     if thread is None:
         raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)
@@ -831,6 +849,8 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         return row
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
+    if _is_swing(plan):
+        return _swing().end_day(db, user_id, day_list_id, svc)
     sessions = _sessions_of(db, row.id)
     for s in sessions:
         if s.status == "active":
