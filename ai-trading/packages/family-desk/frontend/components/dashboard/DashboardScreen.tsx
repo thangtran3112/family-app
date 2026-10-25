@@ -35,7 +35,7 @@ export function DashboardScreen() {
       {banner && <p role="status" className={styles.banner}>{banner}</p>}
       {data ? (
         <>
-          <MarketStrip strip={data.market_strip} dim={dim} />
+          <MarketStrip strip={data.market_strip} nextUpdateAt={data.market.next_update_at ?? null} dim={dim} />
           <div className={`${styles.columns} ${dim ? styles.dim : ""}`}>
             <SignalsPanel signals={data.signals} />
             <ScreenerMatchCards matches={data.screener_matches} />

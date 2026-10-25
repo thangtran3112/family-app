@@ -39,7 +39,7 @@ from ai_trading.core.evaluate import _resample
 from ai_trading.data.backfill import backfill
 from ai_trading.data.bars import read_bars, upsert_bars
 from ai_trading.data.metrics import refresh_metrics
-from ai_trading.data.universe import apply_floor, build_universe
+from ai_trading.data.universe import MARKET_STRIP, apply_floor, build_universe
 from ai_trading.db.models import (
     Bar1m,
     FeedHealth,
@@ -55,6 +55,10 @@ log = logging.getLogger(__name__)
 
 BARS_FEED = "bars_delayed"
 SCAN_FEED = "scan"
+#: The market strip's own feed: a seed must not mark `bars_delayed` or `scan` healthy, because the alert runtime
+#: and the watchdog read those two and no minute bar or screener run stands behind a seed.
+STRIP_FEED = "market_strip"
+STRIP_RETRY = timedelta(minutes=15)
 INTRADAY_FILTERS = frozenset({"bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h"})
 DAILY_FILTERS = frozenset({"daily_close"})
 PREMARKET_FILTERS = frozenset({"premarket_0830"})
@@ -245,7 +249,9 @@ def refresh_bias(session: Session, symbols: Iterable[str], *, now: datetime) -> 
 
 
 def _scan_symbols(session: Session) -> list[str]:
-    return sorted(set(watchlist_symbols(session)) | set(survivor_symbols(session)))
+    """The watchlists, the floor survivors and the market strip: the strip is refreshed by every pass, whether or
+    not a watchlist holds it and whether or not the universe was built or the floor passed it."""
+    return sorted({*watchlist_symbols(session), *survivor_symbols(session), *MARKET_STRIP})
 
 
 def _recompute(session: Session, symbols: Iterable[str], *, now: datetime) -> list[str]:
@@ -325,6 +331,35 @@ def daily_pass(session: Session, sources: DataSources, *, now: datetime) -> Pass
     run_filters(session, now=now, run_on=DAILY_FILTERS)
     record_health(session, SCAN_FEED, report.state, now=now, detail=_detail(report))
     return report
+
+
+def seed_market_strip(session: Session, sources: DataSources, *, now: datetime) -> PassReport:
+    """Daily bars and metrics for SPY, QQQ and IWM alone, so the dashboard strip has a last close before the first
+    scheduled pass (a deploy on a weekend waits until Monday 07:00 ET for it). Caller commits.
+
+    ponytail: daily bars only, so mid-session the seed shows the prior close; the next 15-minute pass replaces the
+    rows with the live partial day. Add minute bars here if a seed must be live."""
+    report = refresh_daily(session, sources, MARKET_STRIP, now=now)
+    stored = refresh_metrics(session, MARKET_STRIP, now=pd.Timestamp(now))
+    state = "ok" if len(stored) == len(MARKET_STRIP) else "degraded" if stored else "down"
+    record_health(session, STRIP_FEED, state, now=now, detail=_detail(report))
+    return report
+
+
+def ensure_market_strip(session: Session, sources: DataSources, *, now: datetime) -> bool:
+    """Seed the strip when a strip symbol has no metrics row; True when a seed ran. A seed that left rows missing
+    waits `STRIP_RETRY` before the next one (the row of `STRIP_FEED` survives a restart), so a provider that is
+    down or not configured is not asked every tick."""
+    if not scan_enabled(sources):
+        return False
+    have = set(session.execute(select(SymbolMetrics.symbol).where(SymbolMetrics.symbol.in_(MARKET_STRIP))).scalars())
+    if have.issuperset(MARKET_STRIP):
+        return False
+    tried = session.get(FeedHealth, STRIP_FEED)
+    if tried is not None and tried.state != "ok" and now - tried.updated_at < STRIP_RETRY:
+        return False
+    seed_market_strip(session, sources, now=now)
+    return True
 
 
 def _detail(report: PassReport) -> str | None:

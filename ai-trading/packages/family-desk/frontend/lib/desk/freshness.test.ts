@@ -45,6 +45,14 @@ test("every 02l §c3 freshness state resolves to its exact wording", () => {
   assert.deepEqual(rows.map(([state]) => state).sort(), Object.keys(COPY).filter((key) => ["live", "delayed", "updating", "reconnecting", "paused", "backup", "closed", "pre_market", "after_hours", "unavailable"].includes(key)).sort());
 });
 
+test("a closed market with no quotes yet reads as closed, never as a red retry", () => {
+  const none = { ...stamp("unavailable", "unavailable", null), source: null };
+  const view = resolveFreshness({ stamp: none, session: "closed", now });
+  assert.deepEqual([view.state, view.label, view.tone, view.dim], ["closed", "Market closed · showing last close", "muted", false]);
+  assert.equal(statusBarText({ stamp: none, session: "closed", now }), "Market closed · showing last close");
+  assert.equal(resolveFreshness({ stamp: none, session: "pre", now }).state, "unavailable");
+});
+
 test("precedence: a dropped connection beats everything, a missing stamp reads as updating", () => {
   assert.equal(resolveFreshness({ stamp: stamp("unavailable", "unavailable", null), connection: "reconnecting" }).state, "reconnecting");
   assert.equal(resolveFreshness({ stamp: null }).state, "updating");
@@ -71,6 +79,9 @@ test("status bar, market data rows and the market pill use plain wording", () =>
   assert.equal(marketDataLine("Quotes", { source: "alpaca", quality: "delayed-15m" }), "Quotes: Alpaca · Delayed 15 min");
   assert.equal(marketDataLine("Scans", { source: "ibkr", quality: "realtime" }), "Scans: IBKR · Live");
   assert.equal(marketDataLine("Quotes", null), "Quotes: Unavailable");
+  assert.equal(marketDataLine("Quotes", { source: null, quality: "unavailable" }), "Quotes: Not updated yet");
+  assert.equal(marketDataLine("Scans", { source: null, quality: "unavailable" }), "Scans: Not run yet");
+  assert.equal(marketDataLine("Quotes", { source: "alpaca", quality: "eod" }), "Quotes: Alpaca · End of day");
   assert.equal(marketPillText("regular", null), "Market open");
   assert.equal(marketPillText("pre", null), "Pre-market");
   assert.equal(marketPillText("after", null), "After hours");

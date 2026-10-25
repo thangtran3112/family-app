@@ -38,6 +38,11 @@ export const COPY = {
   noAlertStrategies: "No alert strategies yet",
   futuresNotConnected: "Waiting for IBKR · not connected yet",
   futuresReadOnly: "Futures · read only",
+  quotesNotYet: "Quotes: Not updated yet",
+  scansNotYet: "Scans: Not run yet",
+  stripFirstUpdate: "First market update {time}",
+  stripNoData: "No market data yet",
+  stripLastClose: "Last close · {time}",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -103,11 +108,13 @@ const TONE: Record<FreshnessState, FreshnessTone> = {
 
 const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
+export const fillCopy = fill;
 
 export function freshnessState({ stamp, session, connection = "ok" }: FreshnessInput): FreshnessState {
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
-  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return "unavailable";
+  // A closed market has nothing to retry: red "trying again" is for an open session whose quotes stopped.
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return session === "closed" ? "closed" : "unavailable";
   if (stamp.freshness === "paused") return "paused";
   if (connection === "updating") return "updating";
   if (stamp.quality === "fallback") return "backup";
@@ -140,7 +147,7 @@ export function statusBarText(input: FreshnessInput): string {
   const source = sourceLabel(input.stamp?.source);
   if (view.state === "live") return `Quotes live · ${source}`;
   if (view.state === "delayed") return `Quotes: ${source} · ${COPY.delayed}`;
-  if (view.state === "closed") return `Quotes: ${source} · Market closed`;
+  if (view.state === "closed") return input.stamp?.source ? `Quotes: ${source} · Market closed` : view.label;
   return view.label;
 }
 
@@ -157,6 +164,8 @@ export const qualityPhrase = (quality: Stamp["quality"]): string => QUALITY_PHRA
 /** D11 market-data rows: "Quotes: Alpaca · Delayed 15 min". */
 export function marketDataLine(kind: "Quotes" | "Scans", stamp: Pick<Stamp, "source" | "quality"> | null): string {
   if (!stamp) return `${kind}: Unavailable`;
+  // A feed that has not run yet has no source to name; "No source · Unavailable" read as broken beside live charts.
+  if (stamp.quality === "unavailable") return kind === "Quotes" ? COPY.quotesNotYet : COPY.scansNotYet;
   return `${kind}: ${sourceLabel(stamp.source)} · ${QUALITY_PHRASE[stamp.quality]}`;
 }
 

@@ -1748,6 +1748,18 @@
             "title": "Next Open",
             "type": "string"
           },
+          "next_update_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update At"
+          },
           "session": {
             "enum": [
               "pre",

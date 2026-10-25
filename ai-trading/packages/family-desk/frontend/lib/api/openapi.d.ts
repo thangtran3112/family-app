@@ -1628,6 +1628,8 @@ export interface components {
              * Format: date-time
              */
             next_open: string;
+            /** Next Update At */
+            next_update_at?: string | null;
             /**
              * Session
              * @enum {string}
