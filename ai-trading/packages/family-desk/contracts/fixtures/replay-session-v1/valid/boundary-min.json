@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "symbol": "A",
+  "day": "2026-10-23",
+  "window": {
+    "from": "09:30",
+    "to": "09:31"
+  },
+  "session": "regular",
+  "interval": "1m",
+  "shares": 1,
+  "armed": [],
+  "plan": {
+    "stopRequired": "yes",
+    "signalOnly": "yes"
+  },
+  "hideDate": "no"
+}

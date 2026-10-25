@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "symbol": "AMD",
+  "day": "2026-10-23",
+  "window": {
+    "from": "09:30",
+    "to": "16:00"
+  },
+  "session": "regular",
+  "interval": "5m",
+  "shares": 100,
+  "armed": [
+    {
+      "source": "alert_strategy",
+      "id": 5
+    }
+  ],
+  "plan": {
+    "stopRequired": "yes",
+    "signalOnly": "no",
+    "maxTrades": 10
+  },
+  "hideDate": "no"
+}
