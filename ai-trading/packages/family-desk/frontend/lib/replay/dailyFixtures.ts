@@ -98,6 +98,7 @@ export const dayList: DayList = {
     },
   ],
   watch: [{ symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
+  watch_check: { starred: ["SMCI"], traded: [], off_watch: [], verdict: "no_trades", label: "No practice trades yet" },
   clock: null,
   sessions: [],
   thread: threadBrief,

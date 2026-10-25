@@ -185,6 +185,15 @@ const ReviewSchema = z.object({
   selection: SelectionSchema,
 }) satisfies z.ZodType<components["schemas"]["ReviewOut"]>;
 
+/** "Traded only names on your watch": data for the screen to render; nothing scores it. */
+const WatchCheckSchema = z.object({
+  starred: z.array(z.string()),
+  traded: z.array(z.string()),
+  off_watch: z.array(z.string()),
+  verdict: z.enum(["no_trades", "on_watch", "off_watch"]),
+  label: z.string(),
+});
+
 export const DayListSchema = z.object({
   id: finite.int(),
   plan: PracticePlanSchema,
@@ -200,6 +209,7 @@ export const DayListSchema = z.object({
   columns: z.array(ListColumnSchema),
   candidates: z.array(CandidateSchema),
   watch: z.array(StarSchema),
+  watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
   sessions: z.array(DaySessionSchema),
   /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
