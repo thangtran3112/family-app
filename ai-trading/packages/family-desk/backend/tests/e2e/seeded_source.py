@@ -80,4 +80,5 @@ def data_sources(factory: sessionmaker[Session]) -> DataSources:
         targets=unused,
         universe=unused,
         quotes=unused,
+        trades=unused,
     )

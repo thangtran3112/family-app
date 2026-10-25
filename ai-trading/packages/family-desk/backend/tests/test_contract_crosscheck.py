@@ -15,6 +15,7 @@ import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
+from ai_trading.contracts.replay_session import PracticeMarkV1, ReplaySessionV1
 from ai_trading.contracts.strategy_draft import StrategyDraft
 from ai_trading.contracts.strategy_spec_v1 import FilterStrategySpecV1, PresetCatalogV1, StrategySpecV1
 
@@ -36,6 +37,8 @@ FAMILIES: dict[str, tuple[type[BaseModel], list[str], list[str]]] = {
     "alert": (AlertStrategySpecV1, ["fixtures/alert-strategy/valid"], ["fixtures/alert-strategy/invalid"]),
     "draft": (StrategyDraft, ["fixtures/strategy-draft/valid"], ["fixtures/strategy-draft/invalid"]),
     "catalog": (PresetCatalogV1, ["fixtures/preset-catalog-v1/valid"], ["fixtures/preset-catalog-v1/invalid"]),
+    "replay": (ReplaySessionV1, ["fixtures/replay-session-v1/valid"], ["fixtures/replay-session-v1/invalid"]),
+    "mark": (PracticeMarkV1, ["fixtures/practice-mark-v1/valid"], ["fixtures/practice-mark-v1/invalid"]),
 }
 
 needs_zod = pytest.mark.skipif(

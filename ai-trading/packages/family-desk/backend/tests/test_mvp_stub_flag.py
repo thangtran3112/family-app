@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from ai_trading.mvp_stub import STUB_FLAG, stub_enabled
+from ai_trading.replay import fixture
 
 _BACKEND = Path(__file__).resolve().parents[1]
 _AI_TRADING = _BACKEND.parents[2]
@@ -31,6 +32,19 @@ def test_only_exactly_one_turns_the_stub_on(monkeypatch: pytest.MonkeyPatch, val
     assert stub_enabled() is expected
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"), [("1", True), ("0", False), ("true", False), ("", False), (None, False)]
+)
+def test_only_exactly_one_turns_the_replay_stub_on(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: bool
+) -> None:
+    if value is None:
+        monkeypatch.delenv(fixture.STUB_FLAG, raising=False)
+    else:
+        monkeypatch.setenv(fixture.STUB_FLAG, value)
+    assert fixture.stub_enabled() is expected
+
+
 def test_no_deploy_file_sets_the_stub_flag() -> None:
     existing = [path for path in _DEPLOY_PATHS if path.exists()]
     assert existing, "deploy paths moved: update _DEPLOY_PATHS"
@@ -38,7 +52,7 @@ def test_no_deploy_file_sets_the_stub_flag() -> None:
     for root in existing:
         for path in [root] if root.is_file() else (p for p in root.rglob("*") if p.is_file()):
             try:
-                if STUB_FLAG in path.read_text(errors="ignore"):
+                if any(flag in path.read_text(errors="ignore") for flag in (STUB_FLAG, fixture.STUB_FLAG)):
                     offenders.append(str(path.relative_to(_REPO)))
             except OSError:
                 continue

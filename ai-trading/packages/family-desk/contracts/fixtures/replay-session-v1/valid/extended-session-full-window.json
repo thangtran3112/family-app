@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "symbol": "MSFT",
+  "day": "2026-10-20",
+  "window": {
+    "from": "04:00",
+    "to": "20:00"
+  },
+  "session": "extended",
+  "interval": "5m",
+  "shares": 50,
+  "armed": [],
+  "plan": {
+    "stopRequired": "no",
+    "signalOnly": "yes"
+  },
+  "hideDate": "no"
+}

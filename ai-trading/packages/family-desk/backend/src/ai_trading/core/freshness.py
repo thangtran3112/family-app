@@ -16,7 +16,8 @@ from ai_trading_common.quality import Quality
 
 from ai_trading.core.calendar import ET, previous_session, session
 
-Freshness = Literal["live", "delayed", "closed", "paused", "unavailable"]
+#: "replay" is never computed here: the Practice lane stamps it on its own responses (02o §b1).
+Freshness = Literal["live", "delayed", "closed", "paused", "unavailable", "replay"]
 MarketSession = Literal["pre", "regular", "after", "closed"]
 
 #: 02m §b3: no update past `max(120 s, 2 x bar interval)` is "paused".

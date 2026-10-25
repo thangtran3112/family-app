@@ -12,6 +12,7 @@ import inspect
 import pytest
 
 from ai_trading_common.registry import KIND_PROTOCOLS, REGISTRY
+from ai_trading_common.sources import TradesSource
 from ai_trading_common.testing import make_client
 
 
@@ -48,3 +49,9 @@ def test_every_kind_in_default_chains_is_served_by_every_provider_it_names():
     for kind, names in DEFAULT_CHAINS.items():
         for name in names:
             assert kind in REGISTRY[name].kinds, f"{name!r} is in DEFAULT_CHAINS[{kind!r}] but does not serve it"
+
+
+def test_alpaca_serves_trades_as_a_trades_source():
+    http, _, _ = make_client([])
+    assert "trades" in REGISTRY["alpaca"].kinds
+    assert isinstance(REGISTRY["alpaca"].build({}, http), TradesSource)

@@ -37,6 +37,7 @@ from ai_trading.api import (
     library,
     me,
     quotes,
+    replay,
     screener,
     settings,
     signals,
@@ -159,6 +160,7 @@ for _router_module in (
     screener,
     library,
     alert_strategies,
+    replay,
 ):
     app.include_router(_router_module.router)
 
