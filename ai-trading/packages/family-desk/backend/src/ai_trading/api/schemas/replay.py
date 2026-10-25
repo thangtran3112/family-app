@@ -219,7 +219,7 @@ class AdvanceIn(BaseModel):
     max_prints: int = Field(default=500, ge=1, le=2000)
 
 
-class BarOut(BaseModel):
+class ReplayBarOut(BaseModel):
     t: datetime  # the bar's start
     o: FiniteFloat
     h: FiniteFloat
@@ -261,7 +261,7 @@ class PrintsOut(BaseModel):
     pace: PaceOut | None
 
 
-class SignalOut(BaseModel):
+class ReplaySignalOut(BaseModel):
     source: ArmedSource
     id: int
     name: str
@@ -272,7 +272,7 @@ class SignalOut(BaseModel):
     evidence: dict[str, FiniteFloat]
 
 
-class LevelsOut(BaseModel):
+class ReplayLevelsOut(BaseModel):
     prior_close: FiniteFloat | None = None
     session_high: FiniteFloat | None = None
     session_low: FiniteFloat | None = None
@@ -292,11 +292,11 @@ class AdvanceOut(BaseModel):
 
     revealed_through: datetime
     at_end: bool
-    bars: list[BarOut]
+    bars: list[ReplayBarOut]
     forming: FormingBarOut | None
     prints: PrintsOut
-    signals: list[SignalOut]
-    levels: LevelsOut
+    signals: list[ReplaySignalOut]
+    levels: ReplayLevelsOut
     last: LastPrintOut | None
     open_trade: OpenTradeOut | None
     stamp: Stamp
