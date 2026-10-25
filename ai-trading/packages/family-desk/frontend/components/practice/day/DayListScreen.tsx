@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
@@ -10,7 +10,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { withPriorities } from "@/lib/desk/columns";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { endDay, loadDayList, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, toggledStars } from "@/lib/replay/dayView";
@@ -22,11 +22,26 @@ import styles from "./day.module.css";
 
 /** `/practice/day?id=`: the day's candidate list before the open, then the review after it (02o-b v1). Reads the URL, so the page wraps it in Suspense. */
 export function DayListScreen() {
+  const router = useRouter();
   const raw = useSearchParams().get("id");
   const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
   const list = useDeskQuery(`day-list:${id}`, (signal) => loadDayList(id ?? 0, {}, { signal }), { enabled: id !== null });
+  // No id: the day she has open, if any, is the one she means (a bookmark or the bare route).
+  const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { enabled: id === null });
+  const openDay = daily.data?.plan?.current ?? null;
+  const openDayId = openDay !== null && openDay.status !== "ended" ? openDay.id : null;
+  useEffect(() => {
+    if (id === null && openDayId !== null) router.replace(`/practice/day?id=${openDayId}`);
+  }, [id, openDayId, router]);
 
   if (id === null) {
+    if (daily.loading || openDayId !== null) {
+      return (
+        <div className={styles.body}>
+          <LoadingBlock label={PRACTICE_COPY.dayLoading} height={320} />
+        </div>
+      );
+    }
     return (
       <div className={styles.body}>
         <EmptyBlock title={PRACTICE_COPY.dayNoPlan}><Link href="/practice" className={styles.link}>Open Practice</Link></EmptyBlock>

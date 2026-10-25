@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, practiceText } from "../desk/freshness.ts";
 import { DailySchema, DayListSchema, OpenNextSchema } from "./daily.ts";
 import { dayList, endedDayList, plan } from "./dailyFixtures.ts";
 import {
@@ -14,6 +14,7 @@ import {
   moveText,
   ordinal,
   peekDailyBars,
+  planArmedText,
   planCard,
   selectionText,
   syntheticDays,
@@ -81,10 +82,22 @@ test("stars toggle, keep order, and refuse a sixth name", () => {
   assert.equal(toggledStars(["A", "B", "C", "D", "E"].map((symbol) => ({ symbol })), "F"), null);
 });
 
-test("warnings: a short list says so, an empty list says none matched", () => {
-  assert.equal(listWarning(dayList), "Only 2 names matched · add a filter or lower its threshold");
-  assert.equal(listWarning({ ...dayList, candidates: [] }), "No names matched this morning");
+test("warnings: the server's reason is shown as it is; the plain line stands in only when it gave none", () => {
+  assert.equal(listWarning(dayList), "Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists");
+  const why = "None of the 17 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
+  assert.equal(listWarning({ warnings: [why], candidates: [] }), why);
+  assert.equal(listWarning({ ...dayList, warnings: [], candidates: [] }), "No names matched this morning");
   assert.equal(listWarning({ warnings: [], candidates: dayList.candidates }), null);
+  assert.equal(why.includes("Only 0"), false);
+});
+
+test("the hub card says what is armed on the practice days: the picked filters by name, other strategies by count", () => {
+  const armed = (refs: Array<{ source: "filter" | "alert_strategy"; id: number }>) =>
+    ({ ...plan, spec: { ...plan.spec, setup: { ...plan.spec.setup, armed: refs } } });
+  assert.equal(planArmedText(plan), "Nothing armed · no would-fire signals while you practise");
+  assert.equal(planArmedText(armed([{ source: "filter", id: 9 }, { source: "filter", id: 4 }])), "Armed on practice days: Abnormal volume · Gap up");
+  assert.equal(planArmedText(armed([{ source: "filter", id: 4 }, { source: "alert_strategy", id: 1 }, { source: "alert_strategy", id: 2 }])), "Armed on practice days: Gap up · 2 alert strategies");
+  assert.equal(planArmedText(armed([{ source: "filter", id: 77 }])), "Armed on practice days: A filter");
 });
 
 test("the review reads the picks' moves, the list median and their ranks", () => {
@@ -108,6 +121,8 @@ test("the strings the day screens build contain no banned term", () => {
   const built = [
     planCard(plan).headline,
     planCard(null).headline,
+    planArmedText(plan),
+    practiceText("planListAtNeeds", { filters: "Abnormal volume", time: "10:00 AM" }),
     listHeaderText(dayList),
     dayTitle(dayList, true),
     selectionText(endedDayList.review!)!,

@@ -98,7 +98,7 @@ export const dayList: DayList = {
   watch: [{ symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
   clock: null,
   sessions: [],
-  warnings: ["Only 2 names matched · add a filter or lower its threshold"],
+  warnings: ["Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists"],
   peek: null,
   journal: null,
   review: null,

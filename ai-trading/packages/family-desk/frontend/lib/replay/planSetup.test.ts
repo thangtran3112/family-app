@@ -2,15 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import {
+  LIST_TIMES,
+  clock12,
   defaultFirstDay,
   defaultPlanDraft,
+  earliestListAt,
+  listTimeFrom,
+  listTimeNeed,
   planDraftToSpec,
   planFieldOfPath,
   planProblems,
   toggleFilter,
   validatePlanDraft,
   windowForList,
+  withFilterToggled,
   withListTime,
+  type FilterTimings,
   type PlanDraft,
 } from "./planSetup.ts";
 
@@ -82,4 +89,71 @@ test("filters toggle in order and stop at three; the window follows the list tim
   assert.deepEqual(windowForList("08:30"), { from: "09:30", to: "11:30" });
   assert.deepEqual(windowForList("10:45"), { from: "10:45", to: "12:45" });
   assert.deepEqual(windowForList("15:30"), { from: "15:30", to: "16:00" });
+});
+
+// The same rows as `tests/replay/test_replay_screen.py`: the form and the server must agree on the earliest list time.
+test("the earliest list time of a filter is the one the server enforces", () => {
+  const rows: Array<[string, "regular" | "extended", string]> = [
+    ["premarket_0830", "extended", "08:30"],
+    ["bar_close_15m", "regular", "10:00"],
+    ["bar_close_5m", "regular", "09:50"],
+    ["bar_close_1m", "regular", "09:46"],
+    ["bar_close_1h", "regular", "10:45"],
+    ["bar_close_15m", "extended", "04:30"],
+    ["daily_close", "regular", "04:30"],
+    ["weekly", "regular", "04:30"],
+  ];
+  for (const [run_on, session, expected] of rows) assert.equal(earliestListAt({ run_on, session }), expected, `${run_on} ${session}`);
+  assert.equal(clock12("10:00"), "10:00 AM");
+  assert.equal(clock12("12:05"), "12:05 PM");
+  assert.equal(clock12("08:30"), "8:30 AM");
+});
+
+const timings: FilterTimings = new Map([
+  [1, { run_on: "premarket_0830", session: "extended" }],
+  [2, { run_on: "bar_close_15m", session: "regular" }],
+  [3, { run_on: "daily_close", session: "regular" }],
+  [4, { run_on: "bar_close_1h", session: "regular" }],
+]);
+
+test("the list time follows the latest filter: the first offered time that works", () => {
+  assert.deepEqual(listTimeNeed([1, 3], timings), { time: "08:30", ids: [1] });
+  assert.deepEqual(listTimeNeed([1, 2], timings), { time: "10:00", ids: [2] });
+  assert.deepEqual(listTimeNeed([3], timings), { time: "04:30", ids: [] });
+  assert.deepEqual(listTimeNeed([], timings), { time: "04:30", ids: [] });
+  assert.deepEqual(listTimeNeed([2, 99], timings), { time: "10:00", ids: [2] }); // a filter not in the list is skipped
+  assert.deepEqual(LIST_TIMES.map((item) => listTimeFrom(item.value)), ["08:30", "10:00", "10:45"]);
+  assert.equal(listTimeFrom("09:50"), "10:00");
+  assert.equal(listTimeFrom("10:46"), "10:45"); // nothing later is offered
+});
+
+test("picking a filter arms it and moves an early list time up; dropping it disarms it", () => {
+  const start = defaultPlanDraft(NOW);
+  assert.equal(start.listAt, "08:30");
+  const gap = withFilterToggled(start, 1, timings);
+  assert.deepEqual([gap.filterIds, gap.listAt, gap.setup.armed], [[1], "08:30", [{ source: "filter", id: 1 }]]); // premarket stays at 8:30
+  const volume = withFilterToggled(gap, 2, timings);
+  assert.deepEqual([volume.filterIds, volume.listAt], [[1, 2], "10:00"]);
+  assert.deepEqual(volume.setup.armed, [{ source: "filter", id: 1 }, { source: "filter", id: 2 }]);
+  assert.deepEqual([volume.setup.from, volume.setup.to], ["10:00", "11:30"]); // the window follows the list time
+  assert.equal(validatePlanDraft({ ...volume, filterIds: [1, 2] }).ok, true);
+  const dropped = withFilterToggled(volume, 2, timings);
+  assert.deepEqual([dropped.filterIds, dropped.setup.armed], [[1], [{ source: "filter", id: 1 }]]);
+  assert.equal(dropped.listAt, "10:00"); // a time she can still use is left alone
+});
+
+test("arming keeps what she armed by hand, never doubles a filter, and stops at five", () => {
+  const alerts = [1, 2, 3, 4].map((id) => ({ source: "alert_strategy" as const, id }));
+  const draft = defaultPlanDraft(NOW);
+  const withAlerts = { ...draft, setup: { ...draft.setup, armed: alerts } };
+  const one = withFilterToggled(withAlerts, 1, timings);
+  assert.equal(one.setup.armed.length, 5);
+  const two = withFilterToggled(one, 3, timings); // the sixth is refused in the arm list, the filter is still picked
+  assert.deepEqual([two.filterIds, two.setup.armed.length], [[1, 3], 5]);
+  const back = withFilterToggled(two, 1, timings);
+  assert.deepEqual(back.setup.armed, alerts); // only the dropped filter leaves
+  const armedFirst = { ...draft, setup: { ...draft.setup, armed: [{ source: "filter" as const, id: 3 }] } };
+  assert.equal(withFilterToggled(armedFirst, 3, timings).setup.armed.length, 1); // already armed: one entry
+  const full = { ...draft, filterIds: [1, 2, 3] };
+  assert.equal(withFilterToggled(full, 4, timings), full); // the fourth filter is refused: nothing changes
 });
