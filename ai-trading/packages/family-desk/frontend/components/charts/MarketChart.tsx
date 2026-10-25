@@ -14,7 +14,10 @@ import type {
 import { qualityLabel } from "@/lib/labels";
 import {
   candlestickData,
+  chartTime,
   crosshairPoint,
+  formatChartClock,
+  replayTickLabel,
   currentValue,
   lineData,
   seriesMarkers,
@@ -80,7 +83,19 @@ export type MarketChartProps = {
   chrome?: "card" | "bare";
   /** Values stay visible but dimmed (the quote connection dropped). */
   dimmed?: boolean;
+  /** Replay (02o §d): keep the newest bar in view after an update unless she scrolled back. The first draw shows the latest bars, not the whole history. */
+  follow?: boolean;
+  /** Replay of a hidden day: axis, crosshair and data table show the time of day only, never the date. */
+  hideDates?: boolean;
+  /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed and hidden-date charts. */
+  clockTicks?: boolean;
+  /** Start time of a bar to bring into view with the crosshair on it (a click in the signals rail). `at` changes on every click, so the same bar can be asked for twice. */
+  focus?: { time: string; at: number } | null;
 };
+
+/** Bars shown on the first draw of a followed chart, and the room left of the right edge. */
+const FOLLOW_VISIBLE_BARS = 90;
+const FOLLOW_RIGHT_PAD = 6;
 
 type PaneSeriesApi =
   | { kind: "line"; series: ISeriesApi<"Line", Time> }
@@ -137,6 +152,10 @@ export function MarketChart({
   lastPricePill = true,
   chrome = "card",
   dimmed = false,
+  follow = false,
+  hideDates = false,
+  clockTicks = false,
+  focus = null,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
@@ -151,6 +170,7 @@ export function MarketChart({
   const markerPlugin = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const crosshairCallback = useRef(onCrosshair);
   const fitKey = useRef<string | null>(null);
+  const lastIndex = useRef(-1);
   const paneSignature = useRef("");
   const [ready, setReady] = useState(false);
 
@@ -230,6 +250,7 @@ export function MarketChart({
       shadeSeries.current = null;
       markerPlugin.current = null;
       fitKey.current = null;
+      lastIndex.current = -1;
       paneSignature.current = "";
       overlayMap.clear();
       paneMap.clear();
@@ -245,7 +266,15 @@ export function MarketChart({
     const candleSeries = candles.current;
     if (!ready || !currentChart || !chartLibrary || !candleSeries) return;
 
-    currentChart.applyOptions({ timeScale: { timeVisible: interval !== "1d" && interval !== "1w" } });
+    const timeLabel = hideDates ? formatChartClock : formatChartTime;
+    currentChart.applyOptions({
+      timeScale: {
+        timeVisible: interval !== "1d" && interval !== "1w",
+        tickMarkFormatter: follow || hideDates || clockTicks ? (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates) : (time: Time) => timeLabel(time),
+        rightOffset: follow ? FOLLOW_RIGHT_PAD : 0,
+      },
+      localization: { timeFormatter: timeLabel },
+    });
 
     const wantedOverlays = new Set(overlays.map(({ id }) => id));
     for (const [id, series] of overlaySeries.current) {
@@ -351,7 +380,11 @@ export function MarketChart({
     });
 
     candleSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
-    candleSeries.setData(candlestickData(bars));
+    // Before the data changes: was the view parked at the newest bar (within a bar or two)? Then it stays there.
+    const visible = currentChart.timeScale().getVisibleLogicalRange();
+    const atNewest = visible === null || visible.to >= lastIndex.current - 1.5;
+    const candleData = candlestickData(bars);
+    candleSeries.setData(candleData);
 
     if (volume && !volumeSeries.current) {
       volumeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
@@ -386,11 +419,35 @@ export function MarketChart({
 
     // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
     const key = `${symbol}:${interval}`;
+    const count = candleData.length;
     if (bars.length && fitKey.current !== key) {
-      currentChart.timeScale().fitContent();
+      if (follow) currentChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, count - FOLLOW_VISIBLE_BARS), to: count - 1 + FOLLOW_RIGHT_PAD });
+      else currentChart.timeScale().fitContent();
       fitKey.current = key;
+    } else if (follow && atNewest) {
+      currentChart.timeScale().scrollToRealTime();
     }
-  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill]);
+    lastIndex.current = count - 1;
+  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, hideDates, clockTicks]);
+
+  // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
+  useEffect(() => {
+    const currentChart = chart.current;
+    const candleSeries = candles.current;
+    if (!focus || !ready || !currentChart || !candleSeries) return;
+    const index = bars.findIndex((bar) => bar.t === focus.time);
+    const bar = bars[index];
+    if (!bar || bar.c === null) return;
+    const scale = currentChart.timeScale();
+    const range = scale.getVisibleLogicalRange();
+    if (range && (index < range.from || index > range.to)) {
+      const half = (range.to - range.from) / 2;
+      scale.setVisibleLogicalRange({ from: index - half, to: index + half });
+    }
+    currentChart.setCrosshairPosition(bar.c, chartTime(bar.t), candleSeries);
+  // Runs when a new focus is asked for, not when bars refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.at, ready]);
 
   const lastBar = bars.at(-1);
   const bare = chrome === "bare";
@@ -428,7 +485,7 @@ export function MarketChart({
           <table>
             <thead><tr><th scope="col">Source time</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
             <tbody>{bars.map((bar, index) => (
-              <tr key={`${bar.t}-${index}`}><th scope="row">{bar.t}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
+              <tr key={`${bar.t}-${index}`}><th scope="row">{hideDates ? formatChartClock(Math.floor(Date.parse(bar.t) / 1000) as UTCTimestamp) : bar.t}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
             ))}</tbody>
           </table>
         </div>

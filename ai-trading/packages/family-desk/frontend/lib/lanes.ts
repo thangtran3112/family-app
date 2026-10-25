@@ -12,6 +12,7 @@ const ROUTE_LANES: ReadonlyArray<readonly [string, Lane]> = [
   ["/watchlists", "technical"],
   ["/alerts", "technical"],
   ["/strategies", "technical"],
+  ["/practice", "technical"],
   ["/technicals", "technical"],
   ["/futures", "technical"],
   ["/settings", "technical"],
@@ -58,6 +59,7 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Watchlists", href: "/watchlists" },
     { label: "Alerts", href: "/alerts" },
     { label: "Strategies", href: "/strategies/library", match: "/strategies" },
+    { label: "Practice", href: "/practice" },
   ],
   fundamental: [
     { label: "Holdings", href: "/holdings" },
@@ -96,3 +98,12 @@ export function writeLanePreference(storage: LaneStorage | null, lane: Lane): vo
     // Private mode or a full quota: the lane just resets on reload.
   }
 }
+
+/** True on the Practice hub, the replay workspace and the journal: they get the Practice band (02o §a1). */
+export function isPracticePath(pathname: string): boolean {
+  const path = normalize(pathname);
+  return path === "/practice" || path.startsWith("/practice/");
+}
+
+/** The replay workspace puts its Session panel in the left rail instead of the watchlists. */
+export const isReplayWorkspacePath = (pathname: string): boolean => normalize(pathname) === "/practice/replay";
