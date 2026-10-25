@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": 12,
+  "threadId": 7,
+  "sessionId": 3,
+  "markId": 41,
+  "symbol": "TSLA",
+  "day": "2026-10-23",
+  "side": "long",
+  "shares": 0,
+  "entryPrice": 245.5,
+  "exitPrice": 251.25,
+  "pnlUsd": 575,
+  "r": 1.5,
+  "realizedAt": "2026-10-23T15:10:00Z"
+}

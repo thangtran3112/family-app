@@ -15,14 +15,15 @@ const POLL_MS = 4000;
 
 /** The hub's daily-list card (02o-b v1): "Day 7 of 20 · next: Tue" with Continue, the data-preparing line while the
  *  plan's bars are fetched, and the plan form. There is no block page: Continue opens the day. */
-export function DailyListCard() {
+export function DailyListCard({ revision }: { revision?: number }) {
   const router = useRouter();
-  const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }));
+  const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { revision });
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const plan = daily.data?.plan ?? null;
+  const thread = daily.data?.thread ?? null;
   const preparing = plan?.prep.state === "running";
   const { refresh } = daily;
   useEffect(() => {
@@ -51,8 +52,18 @@ export function DailyListCard() {
   if (daily.data === null) return <ErrorBlock message={PRACTICE_COPY.loadError} onRetry={daily.refresh} />;
 
   if (plan === null || editing) {
+    // The risk plan belongs to a practice thread (D-007): no thread, no daily plan form.
+    if (thread === null) {
+      return (
+        <div className={styles.threadEmpty}>
+          <p className={styles.muted}>{PRACTICE_COPY.threadNeeded}</p>
+          {plan !== null && <button type="button" className={styles.button} onClick={() => setEditing(false)}>Cancel</button>}
+        </div>
+      );
+    }
     return (
       <DailyPlanForm
+        thread={thread.thread}
         onCancel={plan === null ? undefined : () => setEditing(false)}
         onSaved={(result) => {
           setEditing(false);

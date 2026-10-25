@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": 3,
+  "mode": "day",
+  "startingBalance": 1000,
+  "status": "active",
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes"
+  },
+  "createdAt": "2026-10-23T13:30:00Z",
+  "stats": {
+    "balance": -500.25,
+    "daysPracticed": 4,
+    "daysSkipped": 0,
+    "wins": 1,
+    "losses": 4,
+    "winRate": 0.2,
+    "avgWinUsd": 299.75,
+    "avgLossUsd": -450,
+    "bestDayUsd": 299.75,
+    "worstDayUsd": -900.31,
+    "adherenceFirstPct": 70,
+    "adherenceLastPct": 30
+  }
+}

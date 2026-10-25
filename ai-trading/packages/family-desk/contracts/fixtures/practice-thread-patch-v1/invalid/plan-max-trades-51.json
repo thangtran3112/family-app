@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "no",
+    "maxLossUsd": 500,
+    "maxTrades": 51,
+    "planNote": "Stop at the first red candle."
+  }
+}

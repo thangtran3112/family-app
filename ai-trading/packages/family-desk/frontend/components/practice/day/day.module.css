@@ -52,6 +52,7 @@
 .facts { display: grid; margin: 0; grid-template-columns: 1fr 1fr; gap: var(--space-2); font-size: var(--text-label); }
 .facts dt { color: var(--color-muted); font-size: var(--text-micro); }
 .facts dd { margin: 0; }
+.factsNote { grid-column: 1 / -1; }
 
 /* Review */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }

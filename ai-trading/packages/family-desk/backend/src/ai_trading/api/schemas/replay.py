@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, FiniteFloat, field_serializer
 
 from ai_trading.api.schemas.common import Stamp
+from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
 
@@ -163,6 +164,8 @@ class ArmedOut(BaseModel):
 class ReplaySessionOut(BaseModel):
     id: int
     day_list_id: int | None  # the day list this session practises; null for a standalone session
+    thread_id: int | None  # the practice thread its realized trades book into; null for a standalone session
+    thread: ThreadBriefOut | None = None  # the workspace header: the SIMULATED balance and today's realized P/L
     attempt: int
     status: SessionStatus
     spec: ReplaySessionV1
@@ -194,6 +197,7 @@ class ReplaySessionSummaryOut(BaseModel):
 
     id: int
     day_list_id: int | None
+    thread_id: int | None
     symbol: str
     day: date
     attempt: int
@@ -332,12 +336,14 @@ class MarkResultOut(BaseModel):
     open_trade: OpenTradeOut | None
     journal: JournalOut
     warning: str | None  # set when the mark was priced off a print older than 30 seconds
+    thread: ThreadBriefOut | None = None  # an exit mark books its P/L: the balance after it
 
 
 class MarkUndoOut(BaseModel):
     removed_mark_id: int
     open_trade: OpenTradeOut | None
     journal: JournalOut
+    thread: ThreadBriefOut | None = None  # undoing an exit takes its P/L back out of the balance
 
 
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
@@ -370,6 +376,7 @@ class PracticePlanOut(BaseModel):
     not over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule."""
 
     id: int
+    thread_id: int | None  # the practice thread this plan's days book into
     spec: PracticeBlockV1
     sessions: int
     days_opened: int
@@ -387,7 +394,10 @@ class PracticePlanOut(BaseModel):
 
 
 class DailyOut(BaseModel):
+    """The hub's daily-list card: her plan and cursor, and her active day thread (balance and stats)."""
+
     plan: PracticePlanOut | None
+    thread: ThreadSummaryOut | None
 
 
 class OpenNextOut(BaseModel):
@@ -556,6 +566,17 @@ class ReviewOut(BaseModel):
     selection: SelectionOut
 
 
+class WatchCheckOut(BaseModel):
+    """ "Traded only names on your watch": data for the screen to render. `traded` is the names she entered a trade on;
+    `off_watch` the ones she had not starred. Nothing scores it."""
+
+    starred: list[str]
+    traded: list[str]
+    off_watch: list[str]
+    verdict: Literal["no_trades", "on_watch", "off_watch"]
+    label: str
+
+
 class DayListOut(BaseModel):
     """One practice day. Before `status` is `ended` nothing here is later than `data_through` (the list, the stars,
     Peek) or the day clock; `review` and `journal` are null until then."""
@@ -576,6 +597,8 @@ class DayListOut(BaseModel):
     watch: list[StarOut]
     clock: datetime | None
     sessions: list[DaySessionOut]
+    watch_check: WatchCheckOut
+    thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]
     peek: PeekOut | None
     journal: DayJournalOut | None

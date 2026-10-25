@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ReplaySessionV1Schema } from "@ai-trading/contracts/replay-session-v1";
 import type { components } from "../api/openapi.js";
+import { ThreadBriefSchema } from "./threads.ts";
 
 // Response shapes of the Practice (replay) endpoints (02o §b2, §c5), checked against the generated OpenAPI
 // (`lib/api/openapi.d.ts`) with `satisfies z.ZodType<components["schemas"][…]>` the way lib/api/schemas.ts does:
@@ -147,6 +148,10 @@ export const ReplaySessionSchema = z.object({
   id: finite.int(),
   /** The day list this session practises (daily-list practice); null for a standalone session. */
   day_list_id: finite.int().nullable(),
+  /** The practice thread its realized trades book into; null for a standalone session (02r). */
+  thread_id: finite.int().nullable(),
+  /** The SIMULATED thread balance and today's realized P/L; null for a standalone session. */
+  thread: ThreadBriefSchema.nullable(),
   attempt: finite.int(),
   status: SessionStatusSchema,
   spec: ReplaySessionV1Schema,
@@ -168,6 +173,7 @@ export const ReplaySessionSchema = z.object({
 export const ReplaySessionSummarySchema = z.object({
   id: finite.int(),
   day_list_id: finite.int().nullable(),
+  thread_id: finite.int().nullable(),
   symbol: z.string(),
   day: z.iso.date(),
   attempt: finite.int(),
@@ -271,6 +277,8 @@ export const MarkResultSchema = z.object({
   journal: JournalSchema,
   /** Set when the mark was priced off a print older than 30 seconds. */
   warning: z.string().nullable(),
+  /** An exit mark books its P/L: the thread balance after it. */
+  thread: ThreadBriefSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["MarkResultOut"]>;
 
 /** Undo answers the new book: the removed mark, the open trade and the journal. */
@@ -278,6 +286,8 @@ export const MarkUndoSchema = z.object({
   removed_mark_id: finite.int(),
   open_trade: OpenTradeSchema.nullable(),
   journal: JournalSchema,
+  /** Undoing an exit takes its P/L back out of the thread balance. */
+  thread: ThreadBriefSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["MarkUndoOut"]>;
 
 export type ReplayStamp = z.infer<typeof ReplayStampSchema>;

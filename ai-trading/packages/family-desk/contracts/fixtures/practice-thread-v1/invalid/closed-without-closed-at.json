@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": 7,
+  "mode": "day",
+  "startingBalance": 50000,
+  "status": "closed",
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes",
+    "maxLossUsd": 500,
+    "maxTrades": 10,
+    "planNote": "Stop at the first red candle."
+  },
+  "createdAt": "2026-10-20T13:30:00Z",
+  "stats": {
+    "balance": 50841,
+    "daysPracticed": 5,
+    "daysSkipped": 2,
+    "wins": 3,
+    "losses": 2,
+    "winRate": 0.6,
+    "avgWinUsd": 420.5,
+    "avgLossUsd": -210.25,
+    "bestDayUsd": 640,
+    "worstDayUsd": -300.75,
+    "adherenceFirstPct": 60,
+    "adherenceLastPct": 85
+  }
+}

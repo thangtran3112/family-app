@@ -33,6 +33,7 @@ class Trade:
     exit_at: pd.Timestamp | None = None
     exit_price: float | None = None
     exit_source: str = "her"
+    exit_mark_id: int | None = None  # the mark that realized it: the ledger's key
 
     @property
     def sign(self) -> int:
@@ -70,6 +71,7 @@ def assemble(marks: list[Mark]) -> tuple[list[Trade], Trade | None]:
         elif mark.kind in EXIT_KINDS and current is not None:
             assert mark.price is not None
             current.exit_at, current.exit_price, current.exit_source = mark.at, mark.price, mark.source
+            current.exit_mark_id = mark.id
             closed.append(current)
             current = None
     return closed, current
@@ -92,7 +94,7 @@ def open_trade_out(trade: Trade | None, last_price: float | None) -> dict[str, A
     }
 
 
-def _pnl(trade: Trade) -> float:
+def trade_pnl(trade: Trade) -> float:
     assert trade.exit_price is not None
     return round(trade.sign * (trade.exit_price - trade.entry_price) * trade.shares, 2)
 
@@ -112,10 +114,32 @@ def _stop_honored(trade: Trade, bars: pd.DataFrame) -> bool:
     return True
 
 
+def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
+    """Entries taken after the day's realized loss had already reached the max loss. A trade counts as realized
+    once its exit is at or before the next entry, so sequential trades behave as they always did."""
+    if max_loss_usd is None:
+        return 0
+    return sum(
+        1
+        for trade in book
+        if sum(trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at) <= -max_loss_usd
+    )
+
+
 def _checks(
-    trades: list[Trade], plan: Plan, fires: list[Fire], bars: pd.DataFrame, display_minutes: int
+    trades: list[Trade],
+    plan: Plan,
+    fires: list[Fire],
+    bars: pd.DataFrame,
+    display_minutes: int,
+    day_trades: list[Trade],
 ) -> list[dict[str, Any]]:
+    """`day_trades` are the closed trades of the other sessions of the same day list: the max loss and the trade
+    limit are day rules (02o-b2), so they count every name practised that day. The rest score this session alone."""
     n = len(trades)
+    book = sorted([*trades, *day_trades], key=lambda t: t.entry_at)
+    n_day = len(book)
+    across = " · across the day" if day_trades else ""
     window = pd.Timedelta(minutes=ON_SIGNAL_BARS * display_minutes)
     has_trades = n > 0
 
@@ -123,11 +147,7 @@ def _checks(
     stops = [t for t in trades if t.stop_price is not None]
     honored = sum(1 for t in stops if _stop_honored(t, bars))
     on_signal = sum(1 for t in trades if any(timedelta_ok(t.entry_at - f.bar_close, window) for f in fires))
-    realized, breaches = 0.0, 0
-    for trade in trades:
-        if plan.max_loss_usd is not None and realized <= -plan.max_loss_usd:
-            breaches += 1
-        realized += _pnl(trade)
+    breaches = _breaches(book, plan.max_loss_usd)
 
     return [
         {
@@ -153,17 +173,17 @@ def _checks(
         },
         {
             "id": "max_loss",
-            "label": "No entry after the max loss was reached",
-            "applicable": plan.max_loss_usd is not None and has_trades,
+            "label": f"No entry after the max loss was reached{across}",
+            "applicable": plan.max_loss_usd is not None and n_day > 0,
             "passed": breaches == 0,
-            "detail": f"{n - breaches} of {n}",
+            "detail": f"{n_day - breaches} of {n_day}",
         },
         {
             "id": "max_trades",
-            "label": "Stayed within the trade limit",
+            "label": f"Stayed within the trade limit{across}",
             "applicable": plan.max_trades is not None,
-            "passed": plan.max_trades is None or n <= plan.max_trades,
-            "detail": f"{n} of {plan.max_trades}" if plan.max_trades is not None else f"{n}",
+            "passed": plan.max_trades is None or n_day <= plan.max_trades,
+            "detail": f"{n_day} of {plan.max_trades}" if plan.max_trades is not None else f"{n_day}",
         },
     ]
 
@@ -173,7 +193,7 @@ def timedelta_ok(delta: pd.Timedelta, window: pd.Timedelta) -> bool:
 
 
 def _totals(trades: list[Trade]) -> dict[str, Any]:
-    pnls = [_pnl(t) for t in trades]
+    pnls = [trade_pnl(t) for t in trades]
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p < 0]
     rs = [t.r_of(t.exit_price) for t in trades if t.exit_price is not None]
@@ -228,7 +248,7 @@ def _pnl_series(
         pnl = 0.0
         for trade in book:
             if trade.exit_at is not None and t_close >= trade.exit_at:
-                pnl += _pnl(trade)
+                pnl += trade_pnl(trade)
             elif t_close >= trade.entry_at:
                 pnl += trade.unrealized(float(row["close"]))
         series.append({"t": t_close, "pnl_usd": round(pnl, 2)})
@@ -247,6 +267,7 @@ def compute_journal(
     as_of: pd.Timestamp,
     last_price: float | None,
     final: bool,
+    day_trades: list[Trade] | None = None,
 ) -> dict[str, Any]:
     """The `JournalOut` dict. `bars`: 1-minute OHLC indexed by UTC bar start (only rows closed by `as_of` are
     read). `fires`: the released signals (all of them when `final`). `final` fills `signals_vs_trades`, which
@@ -254,7 +275,7 @@ def compute_journal(
     but not in the totals."""
     trades, open_now = assemble(marks)
     visible = bars[bars.index + MINUTE <= as_of]
-    checks = _checks(trades, plan, fires, visible, display_minutes)
+    checks = _checks(trades, plan, fires, visible, display_minutes, day_trades or [])
     applicable = [c for c in checks if c["applicable"]]
     score = round(100 * sum(c["passed"] for c in applicable) / len(applicable)) if applicable else None
     hint = None if score is not None else (HINT_NO_PLAN if not plan.any else HINT_NO_TRADES)
@@ -269,7 +290,7 @@ def compute_journal(
                 "exit_at": t.exit_at,
                 "exit_price": t.exit_price,
                 "shares": t.shares,
-                "pnl_usd": _pnl(t),
+                "pnl_usd": trade_pnl(t),
                 "r": None if (r := t.r_of(t.exit_price)) is None else round(r, 2),  # type: ignore[arg-type]
                 "stop_price": t.stop_price,
                 "on_signal": any(

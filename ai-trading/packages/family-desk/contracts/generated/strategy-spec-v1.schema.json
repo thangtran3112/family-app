@@ -686,6 +686,95 @@
       ],
       "type": "object"
     },
+    "PracticeLedgerEntryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "day": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "type": "string"
+        },
+        "entryPrice": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000,
+          "type": "number"
+        },
+        "exitPrice": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000,
+          "type": "number"
+        },
+        "id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "markId": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pnlUsd": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        },
+        "r": {
+          "maximum": 1000,
+          "minimum": -1000,
+          "type": "number"
+        },
+        "realizedAt": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        },
+        "sessionId": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "shares": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "side": {
+          "enum": [
+            "long",
+            "short"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+          "type": "string"
+        },
+        "threadId": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "threadId",
+        "sessionId",
+        "markId",
+        "symbol",
+        "day",
+        "side",
+        "shares",
+        "entryPrice",
+        "exitPrice",
+        "pnlUsd",
+        "realizedAt"
+      ],
+      "type": "object"
+    },
     "PracticeMarkV1": {
       "oneOf": [
         {
@@ -803,46 +892,6 @@
         }
       ]
     },
-    "PracticePlanV1": {
-      "additionalProperties": false,
-      "properties": {
-        "maxLossUsd": {
-          "maximum": 100000,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "maxTrades": {
-          "maximum": 50,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "note": {
-          "maxLength": 500,
-          "minLength": 1,
-          "pattern": "^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$",
-          "type": "string"
-        },
-        "signalOnly": {
-          "enum": [
-            "yes",
-            "no"
-          ],
-          "type": "string"
-        },
-        "stopRequired": {
-          "enum": [
-            "yes",
-            "no"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "stopRequired",
-        "signalOnly"
-      ],
-      "type": "object"
-    },
     "PracticeScreenV1": {
       "additionalProperties": false,
       "properties": {
@@ -900,20 +949,12 @@
           ],
           "type": "string"
         },
-        "plan": {
-          "$ref": "#/$defs/PracticePlanV1"
-        },
         "session": {
           "enum": [
             "regular",
             "extended"
           ],
           "type": "string"
-        },
-        "shares": {
-          "maximum": 10000,
-          "minimum": 1,
-          "type": "integer"
         },
         "window": {
           "$ref": "#/$defs/PracticeWindowV1"
@@ -923,9 +964,226 @@
         "window",
         "session",
         "interval",
-        "shares",
-        "armed",
+        "armed"
+      ],
+      "type": "object"
+    },
+    "PracticeThreadCreateV1": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "day",
+            "swing"
+          ],
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/PracticeThreadPlanV1"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        },
+        "startingBalance": {
+          "default": 50000,
+          "maximum": 10000000,
+          "minimum": 1000,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "mode",
         "plan"
+      ],
+      "type": "object"
+    },
+    "PracticeThreadPatchV1": {
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/PracticeThreadPlanV1"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "plan"
+      ],
+      "type": "object"
+    },
+    "PracticeThreadPlanV1": {
+      "additionalProperties": false,
+      "properties": {
+        "maxLossUsd": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxTrades": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "planNote": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "^[ -~ -퟿-￿]+$",
+          "type": "string"
+        },
+        "stopNoteOnEntry": {
+          "enum": [
+            "yes",
+            "no"
+          ],
+          "type": "string"
+        },
+        "tradeOnlyOnSignal": {
+          "enum": [
+            "yes",
+            "no"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "stopNoteOnEntry",
+        "tradeOnlyOnSignal"
+      ],
+      "type": "object"
+    },
+    "PracticeThreadStatsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "adherenceFirstPct": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "adherenceLastPct": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "avgLossUsd": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        },
+        "avgWinUsd": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        },
+        "balance": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        },
+        "bestDayUsd": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        },
+        "daysPracticed": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "daysSkipped": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "losses": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "winRate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "wins": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "worstDayUsd": {
+          "maximum": 1000000000,
+          "minimum": -1000000000,
+          "type": "number"
+        }
+      },
+      "required": [
+        "balance",
+        "daysPracticed",
+        "daysSkipped",
+        "wins",
+        "losses"
+      ],
+      "type": "object"
+    },
+    "PracticeThreadV1": {
+      "additionalProperties": false,
+      "properties": {
+        "closedAt": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+          "type": "string"
+        },
+        "createdAt": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+          "type": "string"
+        },
+        "id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "day",
+            "swing"
+          ],
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/PracticeThreadPlanV1"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "type": "number"
+        },
+        "startingBalance": {
+          "maximum": 10000000,
+          "minimum": 1000,
+          "type": "integer"
+        },
+        "stats": {
+          "$ref": "#/$defs/PracticeThreadStatsV1"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "closed"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "mode",
+        "startingBalance",
+        "status",
+        "plan",
+        "createdAt",
+        "stats"
       ],
       "type": "object"
     },

@@ -63,7 +63,7 @@ export type PlanDraft = {
   filterIds: number[];
   listAt: string;
   maxList: string;
-  /** Window, session, interval, shares, armed and the plan fields; its symbol and day stay empty. */
+  /** Window, session, interval and armed; the symbol, day, shares and risk plan are not the daily plan's (D-007). */
   setup: SetupDraft;
 };
 
@@ -134,7 +134,7 @@ export function withFilterToggled(draft: PlanDraft, id: number, timings: FilterT
 
 const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text));
 
-/** The draft as the contract's JSON. Nothing is null or boolean; the optional plan fields are left out when empty. */
+/** The draft as the contract's JSON. Nothing is null or boolean. The block carries no shares and no risk plan: the thread has the plan (D-007). */
 export function planDraftToSpec(draft: PlanDraft): unknown {
   const setup = draftToSpec(draft.setup) as Record<string, unknown>;
   return {
@@ -143,7 +143,7 @@ export function planDraftToSpec(draft: PlanDraft): unknown {
     sessions: numberOrNaN(draft.sessions),
     hideDates: draft.hideDates ? "yes" : "no",
     screen: { filters: draft.filterIds.map((id) => ({ id })), listAt: draft.listAt, maxList: numberOrNaN(draft.maxList) },
-    setup: { window: setup.window, session: setup.session, interval: setup.interval, shares: setup.shares, armed: setup.armed, plan: setup.plan },
+    setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: setup.armed },
   };
 }
 
