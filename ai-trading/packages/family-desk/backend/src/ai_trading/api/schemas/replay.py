@@ -435,6 +435,16 @@ class ListFilterCountsOut(BaseModel):
     matches_total: int
 
 
+class UniverseMembershipOut(BaseModel):
+    """Where the scanned names came from (02o-b2): the symbols the Desk recorded for that morning (`universe_days`), or
+    today's Desk set for a day before the recording began. `note` says so in plain words."""
+
+    source: Literal["universe_days", "today"]
+    recorded_size: int | None  # symbols the Desk recorded that morning; null when no pass recorded it
+    scanned_size: int  # the ones the list scanned (the recorded names her plan prepared)
+    note: str
+
+
 class ListUniverseOut(BaseModel):
     """What was scanned. `label` and `footnote` state the universe plainly; show them beside any score."""
 
@@ -449,6 +459,7 @@ class ListUniverseOut(BaseModel):
     filters: list[ListFilterCountsOut]
     label: str
     footnote: str
+    membership: UniverseMembershipOut | None = None  # null for a list opened before 02o-b2
 
 
 class ListColumnOut(BaseModel):
@@ -471,6 +482,26 @@ class CandidateOut(BaseModel):
     prior_close: FiniteFloat | None
     reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
     metrics: dict[str, FiniteFloat | None]
+
+
+class RescanCandidateOut(CandidateOut):
+    """A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised)."""
+
+    new_since_list: bool
+
+
+class RescanOut(BaseModel):
+    """The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.
+    It is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans."""
+
+    seq: int
+    as_of: datetime
+    data_through: datetime
+    universe: ListUniverseOut
+    columns: list[ListColumnOut]
+    candidates: list[RescanCandidateOut]
+    new_count: int
+    created_at: datetime
 
 
 class StarOut(BaseModel):
@@ -611,6 +642,7 @@ class DayListOut(BaseModel):
     watch_check: WatchCheckOut
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]
+    rescan: RescanOut | None  # the latest re-scan at the day clock; null until she runs one
     peek: PeekOut | None
     journal: DayJournalOut | None
     review: ReviewOut | None
@@ -632,3 +664,32 @@ class DayListPatch(BaseModel):
 
 class DaySessionIn(BaseModel):
     symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")
+
+
+# -- the recorded universe (02o-b2) ----------------------------------------------------------------------------
+
+
+class UniverseCoverageOut(BaseModel):
+    first_day: date | None  # the first morning a premarket pass recorded the Desk's universe
+    last_day: date | None
+    days: int
+
+
+class UniverseDayOut(BaseModel):
+    """One morning's recorded membership. `recorded` false: no pass wrote it, so that day's list scans today's set."""
+
+    day: date
+    recorded: bool
+    size: int | None
+    symbols: list[str]
+    note: str
+
+
+class UniverseDaysOut(BaseModel):
+    """The `universe_days` read path: its coverage, the first day a new plan should default to (null until 20 finished
+    days have been recorded), and with `?day=` that morning's membership."""
+
+    coverage: UniverseCoverageOut
+    first_day_default: date | None
+    first_day_note: str
+    day: UniverseDayOut | None

@@ -287,3 +287,64 @@ def test_switching_names_over_the_routes_and_the_plans_cap(daily, db_session) ->
     )
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.status_code == 200 and ended.json()["journal"]["trades"] == 1
+
+
+def test_the_recorded_universe_route_reads_coverage_the_default_and_one_morning(daily, db_session) -> None:
+    client, _, _ = daily
+    empty = client.get(f"{BASE}/universe-days", headers=auth_headers())
+    assert empty.status_code == 200 and empty.headers["cache-control"] == "no-store"
+    assert empty.json()["coverage"] == {"first_day": None, "last_day": None, "days": 0}
+    assert empty.json()["first_day_default"] is None and empty.json()["day"] is None
+
+    from ai_trading.db.models import UniverseDay
+
+    for offset, day in enumerate(sorted({d for d in (DAYS[0], DAYS[1])})):
+        db_session.add(UniverseDay(day=day, symbols=["GAPPER", "FLAT"][: 2 - offset], created_at=NOW))
+    db_session.commit()
+    read = client.get(f"{BASE}/universe-days", params={"day": DAYS[0].isoformat()}, headers=auth_headers()).json()
+    assert read["coverage"] == {"first_day": DAYS[0].isoformat(), "last_day": DAYS[1].isoformat(), "days": 2}
+    assert read["day"] == {
+        "day": DAYS[0].isoformat(),
+        "recorded": True,
+        "size": 2,
+        "symbols": ["FLAT", "GAPPER"],  # read back sorted
+        "note": "Practice universe · the 2 symbols the Desk scanned that morning, as recorded",
+    }
+    gap = client.get(f"{BASE}/universe-days", params={"day": "2026-03-02"}, headers=auth_headers()).json()["day"]
+    assert gap["recorded"] is False and "before the Desk began recording" in gap["note"]
+    assert client.get(f"{BASE}/universe-days", params={"day": "not-a-day"}, headers=auth_headers()).status_code == 422
+
+
+def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alone(daily, db_session) -> None:
+    client, services, _ = daily
+    plan_id = _start_plan(daily, db_session)["plan"]["id"]
+    plan_mod.run_prep(db_session, services, plan_id)
+    list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan"] is None
+    early = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
+    assert early.status_code == 409
+    assert early.json()["detail"]["problems"][0]["message"].startswith("Practise a name first")
+
+    session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
+    to = et(DAYS[0], "10:00").tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+    client.post(f"{BASE}/sessions/{session.json()['id']}/advance", json={"to": to}, headers=auth_headers())
+    frozen = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
+    scanned = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
+    assert scanned.status_code == 200, scanned.text
+    body = scanned.json()
+    assert body["rescan"]["seq"] == 1 and body["rescan"]["as_of"] == to
+    assert body["rescan"]["data_through"] == "2026-09-28T13:45:00Z" and body["rescan"]["new_count"] == 0
+    assert [(c["symbol"], c["new_since_list"]) for c in body["rescan"]["candidates"]] == [("GAPPER", False)]
+    assert body["rescan"]["universe"]["footnote"] == body["universe"]["footnote"]
+    for key in ("candidates", "universe", "columns", "watch", "data_through", "list_at"):
+        assert body[key] == frozen[key]  # the frozen list is exactly what it was
+    again = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
+    assert again.json()["rescan"]["seq"] == 1  # the clock has not moved: the same scan
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan"]["seq"] == 1
+
+    other = auth_headers(OTHER_EMAIL)
+    assert client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=other).status_code == 404
+    assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).status_code == 200
+    closed = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
+    assert closed.status_code == 409
+    assert closed.json()["detail"]["problems"][0]["message"] == "The day is over · scans are closed"

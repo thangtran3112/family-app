@@ -11,6 +11,10 @@ up to five names, practises one of them, and ends the day to see how every candi
   until then. A day practises at most `maxSymbols` names (the plan's cap, default the star cap), one open trade at a
   time: she closes the trade on one name before she moves to another. What a name did while she was elsewhere is on
   the chart as history and is not scored (`replay_sessions.away`).
+- **Re-scan at the playhead (02o-b2).** `rescan` runs the day's filters again at the day clock, with the filter versions
+  the list used and every input cut 15 minutes before the clock. Each scan is its own row (`replay_day_scans`) labelled
+  with the clock it ran at; the frozen list, its stars and its review are never touched, and a name the scan shows that
+  the list did not hold is marked `new_since_list` (it cannot be starred or practised: the list is the day's universe).
 - **Nothing past the cut before the day ends.** The list, the stars and Peek carry nothing after `data_through` or
   the day clock; the review (moves from the list price) is stored on `end_day` and served only once the day ended.
 - **Prep** runs once at plan creation in the background (`run_prep`): bars for every day of the plan; a day's
@@ -41,6 +45,7 @@ from ai_trading.db.models import (
     PracticePlan,
     PracticeThread,
     ReplayDayList,
+    ReplayDayScan,
     ReplaySession,
     SymbolMetrics,
     UniverseSymbol,
@@ -51,6 +56,7 @@ from ai_trading.replay import review as review_mod
 from ai_trading.replay import screen
 from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
+from ai_trading.replay import universe_days as universe_mod
 from ai_trading.replay.cache import BlobKey, BlobStore
 from ai_trading.replay.data import ReplayDayError, check_day
 from ai_trading.replay.model import ENTRY_KINDS
@@ -371,15 +377,18 @@ class Opened:
     restart_prep: bool = False  # the prep died with its process: the caller starts it again
 
 
-def _filter_inputs(db: Session, plan: PracticePlan) -> list[FilterInput]:
-    """Her filters as they stand now, with the symbols each scans (the frozen Desk set for `market`)."""
-    universe = list(plan.universe["symbols"])
+def _filter_inputs(
+    db: Session, plan: PracticePlan, universe: list[str] | None = None, pinned: dict[int, int] | None = None
+) -> list[FilterInput]:
+    """Her filters as they stand now (or at the `pinned` versions, filter id to version id: the ones a list used), with
+    the symbols each scans (`universe` for `market`: the day's recorded Desk set when there is one, else the plan's)."""
+    universe = list(plan.universe["symbols"]) if universe is None else universe
     out = []
     for ref in plan.spec["screen"]["filters"]:
         row = db.get(FilterStrategy, ref["id"])
         if row is None or row.current_version_id is None:
             raise ReplayProblem("A filter of this plan was deleted · start a new plan", path="screen.filters")
-        version = db.get(FilterStrategyVersion, row.current_version_id)
+        version = db.get(FilterStrategyVersion, (pinned or {}).get(row.id, row.current_version_id))
         assert version is not None
         spec = version.spec
         watch = spec["watch"]["universe"]
@@ -414,13 +423,20 @@ def earnings_flags(sources: Any, symbols: list[str], day: date, now: datetime) -
     return flagged
 
 
-def _universe_note(built_size: int, filters: list[FilterInput], capped: bool) -> dict[str, str]:
-    notes = [UNIVERSE_LABEL.format(size=built_size)]
+def _universe_note(
+    built_size: int, filters: list[FilterInput], capped: bool, member: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """The universe line and its footnote. A day with a recorded morning says so (and what it left out); a day before
+    the recording began says it scans today's Desk set (`universe_days.membership`)."""
+    recorded = member is not None and member["source"] == "universe_days"
+    notes = [member["note"] if recorded else UNIVERSE_LABEL.format(size=built_size)]
+    if member is not None and not recorded:
+        notes.append(member["note"])
     for item in filters:
         scope = item.spec["watch"]["universe"]
         if "watchlist" in scope:
             notes.append(f"{item.name} scans your {scope['watchlist']} list as it is today")
-    if capped:
+    if capped and not recorded:
         notes.append(f"capped at {MAX_UNIVERSE} by dollar volume")
     return {"label": notes[0], "footnote": " · ".join(notes)}
 
@@ -449,7 +465,9 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
 
     spec = plan.spec
     list_at = et(day, spec["screen"]["listAt"])
-    filters = _filter_inputs(db, plan)
+    # The morning's recorded universe (when a premarket pass wrote one) is what the Desk scanned then, else today's set.
+    symbols, member = universe_mod.membership(list(plan.universe["symbols"]), universe_mod.symbols_on(db, day))
+    filters = _filter_inputs(db, plan, symbols)
     built = build_list(
         filters=filters,
         daily_of=screen.asof_loader(svc.history, store, day),
@@ -461,7 +479,7 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
     flagged = earnings_flags(svc.sources, [c["symbol"] for c in built.candidates], day, now)
     for candidate in built.candidates:
         candidate["reported_before_open"] = candidate["symbol"] in flagged
-    note = _universe_note(len(plan.universe["symbols"]), filters, bool(plan.universe.get("capped")))
+    note = _universe_note(len(symbols), filters, bool(plan.universe.get("capped")), member)
     row = ReplayDayList(
         plan_id=plan.id,
         owner_user_id=user_id,
@@ -482,6 +500,8 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
                 "shown": len(built.candidates),
                 "prev_basis": built.prev_basis,
                 "filters": built.filters,
+                "membership": {key: value for key, value in member.items() if key != "symbols"},
+                "symbols": symbols,
                 **note,
             }
         ),
@@ -671,6 +691,7 @@ def day_list_out(
     holding = {session_id for session_id, _ in session_mod.open_trades(db, row.id)}
     universe = row.universe
     warnings = [_few_names_reason(db, row)] if len(row.candidates) < FEW_NAMES else []
+    scan = _latest_scan(db, row.id)
     return {
         "id": row.id,
         "plan": plan_out(db, plan),
@@ -695,6 +716,7 @@ def day_list_out(
         "watch_check": watch_check(db, row, sessions),
         "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
+        "rescan": None if scan is None else _scan_out(scan),
         "peek": None if peek is None else _peek(db, svc, row, peek),
         "journal": row.journal if ended else None,
         "review": row.review if ended else None,
@@ -749,6 +771,107 @@ def patch_day_list(
     row.updated_at = svc.now()
     db.flush()
     return row
+
+
+# -- re-scan at the playhead ---------------------------------------------------------------------------------------
+
+
+def _latest_scan(db: Session, day_list_id: int) -> ReplayDayScan | None:
+    return db.execute(
+        select(ReplayDayScan)
+        .where(ReplayDayScan.day_list_id == day_list_id)
+        .order_by(ReplayDayScan.seq.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayScan:
+    """Run the day's filters again at the day clock (02o-b2). The scan sees what the Desk would have shown at that time:
+    the filter versions the list used, the list's universe, every input cut `LIST_DATA_LAG` before the clock. It is a
+    row of its own and labelled with the clock it ran at; the frozen list never changes. A second scan at the same
+    clock returns the first. Names the list did not hold are marked `new_since_list`."""
+    row = get_day_list(db, user_id, day_list_id, lock=True)
+    if row.status == "ended":
+        raise ReplayProblem("The day is over · scans are closed", path="rescan", status=409)
+    if row.revealed_through is None:
+        raise ReplayProblem(
+            "Practise a name first · a re-scan runs at the day clock, which starts with your first name",
+            path="rescan",
+            status=409,
+        )
+    clock = _utc(row.revealed_through)
+    if clock < _utc(row.list_at):
+        raise ReplayProblem(
+            f"The day clock is before your {clock12(row.screen['listAt'])} list time · nothing new to scan yet",
+            path="rescan",
+            status=409,
+        )
+    last = _latest_scan(db, row.id)
+    if last is not None and _utc(last.as_of) == clock:
+        return last
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
+    store = svc.store_factory(db)
+    filters = _filter_inputs(
+        db,
+        plan,
+        row.universe.get("symbols") or list(plan.universe["symbols"]),
+        {item["id"]: item["version_id"] for item in row.screen["filters"]},
+    )
+    built = build_list(
+        filters=filters,
+        daily_of=screen.asof_loader(svc.history, store, row.day),
+        minutes_of=screen.minutes_loader(svc.history, store, row.day),
+        day=row.day,
+        list_at=clock,
+        max_list=row.screen["maxList"],
+    )
+    listed = {c["symbol"]: c for c in row.candidates}
+    fresh = [c["symbol"] for c in built.candidates if c["symbol"] not in listed]
+    flagged = earnings_flags(svc.sources, fresh, row.day, svc.now())
+    for candidate in built.candidates:
+        seen = listed.get(candidate["symbol"])
+        candidate["new_since_list"] = seen is None
+        candidate["reported_before_open"] = (
+            candidate["symbol"] in flagged if seen is None else bool(seen.get("reported_before_open"))
+        )
+    now = svc.now()
+    scan = ReplayDayScan(
+        day_list_id=row.id,
+        seq=1 if last is None else last.seq + 1,
+        as_of=clock.to_pydatetime(),
+        data_through=built.data_through.to_pydatetime(),
+        universe=jsonable(
+            {
+                **row.universe,
+                **built.universe,
+                "matches_total": built.matches_total,
+                "shown": len(built.candidates),
+                "prev_basis": built.prev_basis,
+                "filters": built.filters,
+            }
+        ),
+        columns=built.columns,
+        candidates=jsonable(built.candidates),
+        created_at=now,
+    )
+    db.add(scan)
+    row.updated_at = now
+    db.flush()
+    return scan
+
+
+def _scan_out(scan: ReplayDayScan) -> dict[str, Any]:
+    return {
+        "seq": scan.seq,
+        "as_of": scan.as_of,
+        "data_through": scan.data_through,
+        "universe": scan.universe,
+        "columns": scan.columns,
+        "candidates": scan.candidates,
+        "new_count": sum(1 for c in scan.candidates if c["new_since_list"]),
+        "created_at": scan.created_at,
+    }
 
 
 # -- the day's session ------------------------------------------------------------------------------------------
@@ -910,6 +1033,7 @@ __all__ = (
     "plan_days",
     "plan_out",
     "practice_universe",
+    "rescan",
     "run_prep",
     "start_session",
 )

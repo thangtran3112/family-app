@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 
-# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 and 02r rows 70-75.
+# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69, 02r rows 70-75 and 02o-b2 rows 76-77
+# (the recorded universe, the re-scan).
 # Path parameters are normalised to `{}`.
 INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/me"),
@@ -68,6 +69,7 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/futures/specs"),
     # Rows 54-63: the Practice (replay) lane, 02o §b1.
     ("GET", "/api/desk/replay/days"),
+    ("GET", "/api/desk/replay/universe-days"),
     ("GET", "/api/desk/replay/sessions"),
     ("POST", "/api/desk/replay/sessions"),
     ("GET", "/api/desk/replay/sessions/{}"),
@@ -84,6 +86,7 @@ INVENTORY: list[tuple[str, str]] = [
     ("PATCH", "/api/desk/replay/day-lists/{}"),
     ("POST", "/api/desk/replay/day-lists/{}/sessions"),
     ("POST", "/api/desk/replay/day-lists/{}/end"),
+    ("POST", "/api/desk/replay/day-lists/{}/rescan"),  # 02o-b2
     # Rows 70-75: practice threads, 02r.
     ("POST", "/api/desk/replay/threads"),
     ("GET", "/api/desk/replay/threads"),
@@ -113,7 +116,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 75
+    assert len(INVENTORY) == 77
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:
