@@ -347,6 +347,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Days */
+        get: operations["list_days_api_desk_replay_days_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sessions */
+        get: operations["list_sessions_api_desk_replay_sessions_get"];
+        put?: never;
+        /**
+         * Create Session
+         * @description Start a practice session from a `ReplaySessionV1`: validates the day and its data, snapshots the armed
+         *     strategy versions, and computes the would-fire signals (held back until the playhead reaches them). One
+         *     active session per symbol and day: a second POST returns the existing one; after `end` it is attempt n + 1.
+         */
+        post: operations["create_session_api_desk_replay_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Session State */
+        get: operations["get_session_state_api_desk_replay_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Session
+         * @description Notes and the self-rating only; a key left out is left alone, `null` clears it.
+         */
+        patch: operations["patch_session_api_desk_replay_sessions__session_id__patch"];
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Session */
+        post: operations["advance_session_api_desk_replay_sessions__session_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End Session
+         * @description Auto-exit an open trade at the last price, reveal the whole window, and store the final journal. Idempotent.
+         */
+        post: operations["end_session_api_desk_replay_sessions__session_id__end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Feed */
+        get: operations["session_feed_api_desk_replay_sessions__session_id__feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Place Mark
+         * @description Place a practice mark at the playhead: the server stamps the time and the last print's price.
+         */
+        post: operations["place_mark_api_desk_replay_sessions__session_id__marks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/marks/{mark_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Undo Mark
+         * @description Undo the last mark, only while the playhead has not moved since it was placed (else 409).
+         */
+        delete: operations["undo_mark_api_desk_replay_sessions__session_id__marks__mark_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/screener/filters": {
         parameters: {
             query?: never;
@@ -765,6 +920,85 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdherenceCheckOut */
+        AdherenceCheckOut: {
+            /** Applicable */
+            applicable: boolean;
+            /** Detail */
+            detail: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "stop_set" | "stop_honored" | "on_signal" | "max_loss" | "max_trades";
+            /** Label */
+            label: string;
+            /** Passed */
+            passed: boolean;
+        };
+        /** AdherenceOut */
+        AdherenceOut: {
+            /** Checks */
+            checks: components["schemas"]["AdherenceCheckOut"][];
+            /** Hint */
+            hint: string | null;
+            /** Score Pct */
+            score_pct: number | null;
+        };
+        /**
+         * AdvanceIn
+         * @description Exactly one of `to` and `step`. `to` at or before `revealed_through` answers an empty delta; `to` past
+         *     the window end is clamped and `at_end` is true. `step: "next_signal"` reveals through the next would-fire bar
+         *     close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422.
+         */
+        AdvanceIn: {
+            /** Interval */
+            interval?: ("1m" | "5m" | "15m") | null;
+            /**
+             * Max Prints
+             * @default 500
+             */
+            max_prints: number;
+            /**
+             * Min Notional
+             * @default 0
+             */
+            min_notional: number;
+            /**
+             * Min Size
+             * @default 0
+             */
+            min_size: number;
+            /** Step */
+            step?: ("bar" | "next_signal") | null;
+            /** To */
+            to?: string | null;
+        };
+        /**
+         * AdvanceOut
+         * @description What the playhead revealed in `(previous, revealed_through]`: display-interval bars that closed inside
+         *     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
+         *     and the levels, last print and open trade at the new playhead.
+         */
+        AdvanceOut: {
+            /** At End */
+            at_end: boolean;
+            /** Bars */
+            bars: components["schemas"]["ReplayBarOut"][];
+            forming: components["schemas"]["FormingBarOut"] | null;
+            last: components["schemas"]["LastPrintOut"] | null;
+            levels: components["schemas"]["ReplayLevelsOut"];
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+            prints: components["schemas"]["PrintsOut"];
+            /**
+             * Revealed Through
+             * Format: date-time
+             */
+            revealed_through: string;
+            /** Signals */
+            signals: components["schemas"]["ReplaySignalOut"][];
+            stamp: components["schemas"]["Stamp"];
+        };
         /** AlertLogOut */
         AlertLogOut: {
             /** Alert Id */
@@ -1077,6 +1311,34 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** ArmedItem */
+        ArmedItem: {
+            /** Id */
+            id: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "alert_strategy" | "filter";
+        };
+        /** ArmedOut */
+        ArmedOut: {
+            /** Bias */
+            bias: ("bullish" | "bearish" | "neutral") | null;
+            /** Fires So Far */
+            fires_so_far: number;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "alert_strategy" | "filter";
+            /** Version Id */
+            version_id: number;
+        };
         /** BarOut */
         BarOut: {
             /** C */
@@ -1304,6 +1566,41 @@ export interface components {
             /** Vs Vwap Pct */
             vs_vwap_pct: number | null;
         };
+        /**
+         * FeedOut
+         * @description Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior
+         *     sessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);
+         *     `signals` is every released signal (the whole list after `end`).
+         */
+        FeedOut: {
+            /** At End */
+            at_end: boolean;
+            /** Bars */
+            bars: components["schemas"]["ReplayBarOut"][];
+            forming: components["schemas"]["FormingBarOut"] | null;
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "1m" | "5m" | "15m";
+            last: components["schemas"]["LastPrintOut"] | null;
+            levels: components["schemas"]["ReplayLevelsOut"];
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+            prints: components["schemas"]["PrintsOut"];
+            /**
+             * Revealed Through
+             * Format: date-time
+             */
+            revealed_through: string;
+            /** Signals */
+            signals: components["schemas"]["ReplaySignalOut"][];
+            stamp: components["schemas"]["Stamp"];
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+        };
         /** FireMarkerOut */
         FireMarkerOut: {
             /**
@@ -1315,6 +1612,27 @@ export interface components {
             signal_id: number;
             /** Strategy Name */
             strategy_name: string;
+        };
+        /**
+         * FormingBarOut
+         * @description The current display bar built from revealed closed 1-minute bars; it updates once a minute.
+         */
+        FormingBarOut: {
+            /** C */
+            c: number;
+            /** H */
+            h: number;
+            /** L */
+            l: number;
+            /** O */
+            o: number;
+            /**
+             * T
+             * Format: date-time
+             */
+            t: string;
+            /** V */
+            v: number;
         };
         /** FuturesSpecOut */
         FuturesSpecOut: {
@@ -1358,6 +1676,94 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * JournalOut
+         * @description Live while the session is active (realized plus the open trade marked at the playhead); final after
+         *     `end`. `signals_vs_trades` and the 15/30-minute changes look past the playhead, so they are empty until
+         *     the session has ended.
+         */
+        JournalOut: {
+            adherence: components["schemas"]["AdherenceOut"];
+            /** Pnl Series */
+            pnl_series: components["schemas"]["PnlPointOut"][];
+            /** Signals Vs Trades */
+            signals_vs_trades: components["schemas"]["SignalVsTradeOut"][];
+            totals: components["schemas"]["JournalTotalsOut"];
+            /** Trades */
+            trades: components["schemas"]["JournalTradeOut"][];
+        };
+        /** JournalTotalsOut */
+        JournalTotalsOut: {
+            /** Avg Loss Usd */
+            avg_loss_usd: number | null;
+            /** Avg Win Usd */
+            avg_win_usd: number | null;
+            /** Largest Loss Usd */
+            largest_loss_usd: number | null;
+            /** Losses */
+            losses: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** R Total */
+            r_total: number;
+            /** Scratches */
+            scratches: number;
+            /** Trades */
+            trades: number;
+            /** Win Rate */
+            win_rate: number | null;
+            /** Wins */
+            wins: number;
+        };
+        /** JournalTradeOut */
+        JournalTradeOut: {
+            /**
+             * Entry At
+             * Format: date-time
+             */
+            entry_at: string;
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Exit At
+             * Format: date-time
+             */
+            exit_at: string;
+            /** Exit Price */
+            exit_price: number;
+            /**
+             * Exit Source
+             * @enum {string}
+             */
+            exit_source: "her" | "auto";
+            /** No */
+            no: number;
+            /** On Signal */
+            on_signal: boolean;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** R */
+            r: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Stop Price */
+            stop_price: number | null;
+        };
+        /** LastPrintOut */
+        LastPrintOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Price */
+            price: number;
         };
         /** LevelsOut */
         LevelsOut: {
@@ -1563,6 +1969,51 @@ export interface components {
             /** Signal */
             signal: number | null;
         };
+        /** MarkOut */
+        MarkOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "long_entry" | "short_entry" | "long_exit" | "short_exit" | "stop" | "note";
+            /** Note */
+            note: string | null;
+            /** Price */
+            price: number | null;
+            /** Seq */
+            seq: number;
+            /** Shares */
+            shares: number | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "her" | "auto";
+            /** Stop Price */
+            stop_price: number | null;
+            /** Trade No */
+            trade_no: number | null;
+        };
+        /** MarkResultOut */
+        MarkResultOut: {
+            journal: components["schemas"]["JournalOut"];
+            mark: components["schemas"]["MarkOut"];
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+        };
+        /** MarkUndoOut */
+        MarkUndoOut: {
+            journal: components["schemas"]["JournalOut"];
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /** Removed Mark Id */
+            removed_mark_id: number;
+        };
         /** MarkersOut */
         MarkersOut: {
             /** Fires */
@@ -1619,6 +2070,44 @@ export interface components {
             /** Vwap Close */
             vwap_close?: number | null;
         };
+        /** OpenTradeOut */
+        OpenTradeOut: {
+            /** Entry Price */
+            entry_price: number;
+            /** Last Price */
+            last_price: number;
+            /** R */
+            r: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Stop Price */
+            stop_price: number | null;
+            /** Trade No */
+            trade_no: number;
+            /** Unrealized Usd */
+            unrealized_usd: number;
+        };
+        /**
+         * PaceOut
+         * @description Eligible prints and shares per market second over the last `window_s` seconds before the playhead.
+         */
+        PaceOut: {
+            /** Band */
+            band: ("quiet" | "steady" | "busy" | "frantic") | null;
+            /** Prints Per S */
+            prints_per_s: number;
+            /** Shares Per S */
+            shares_per_s: number;
+            /** Window S */
+            window_s: number;
+            /** X Of Avg */
+            x_of_avg: number | null;
+        };
         /** PatternMarkerOut */
         PatternMarkerOut: {
             /**
@@ -1653,12 +2142,309 @@ export interface components {
                 [key: string]: number | null;
             };
         };
+        /** Plan */
+        Plan: {
+            /** Maxlossusd */
+            maxLossUsd?: number | null;
+            /** Maxtrades */
+            maxTrades?: number | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Signalonly
+             * @enum {string}
+             */
+            signalOnly: "yes" | "no";
+            /**
+             * Stoprequired
+             * @enum {string}
+             */
+            stopRequired: "yes" | "no";
+        };
+        /** PnlPointOut */
+        PnlPointOut: {
+            /** Pnl Usd */
+            pnl_usd: number;
+            /**
+             * T
+             * Format: date-time
+             */
+            t: string;
+        };
+        /** PrintsOut */
+        PrintsOut: {
+            /** Big Print Usd */
+            big_print_usd: number;
+            /** Count */
+            count: number;
+            /**
+             * Feed
+             * @enum {string}
+             */
+            feed: "sip" | "iex";
+            pace: components["schemas"]["PaceOut"] | null;
+            /** Rows */
+            rows: [
+                string,
+                number,
+                number,
+                -1 | 0 | 1
+            ][];
+            /** Shown */
+            shown: number;
+            /** Volume */
+            volume: number;
+        };
         /** Problem */
         Problem: {
             /** Message */
             message: string;
             /** Path */
             path: string;
+        };
+        /** ReplayBarOut */
+        ReplayBarOut: {
+            /** C */
+            c: number;
+            /** Ext */
+            ext: boolean;
+            /** H */
+            h: number;
+            /** L */
+            l: number;
+            /** O */
+            o: number;
+            /**
+             * T
+             * Format: date-time
+             */
+            t: string;
+            /** V */
+            v: number;
+        };
+        /**
+         * ReplayDayOut
+         * @description One notable day. Spoiler-free: only what a trader knows at the open (the gap) plus non-directional heat
+         *     (volatility rank, heavy volume). Never the day's change, range, close, or close location.
+         */
+        ReplayDayOut: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Gap Pct */
+            gap_pct: number | null;
+            /** Rank */
+            rank: number;
+            /** Rv Pct Rank */
+            rv_pct_rank: number;
+            /** Symbol */
+            symbol: string;
+            /** Tags */
+            tags: ("gap_up" | "gap_down" | "heavy_volume" | "earnings")[];
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /** ReplayDaysOut */
+        ReplayDaysOut: {
+            /** Days */
+            days: components["schemas"]["ReplayDayOut"][];
+            /** Lookback Sessions */
+            lookback_sessions: number;
+            stamp: components["schemas"]["Stamp"];
+            /** Symbols */
+            symbols: string[];
+        };
+        /** ReplayLevelsOut */
+        ReplayLevelsOut: {
+            /** Opening Range High */
+            opening_range_high?: number | null;
+            /** Opening Range Low */
+            opening_range_low?: number | null;
+            /** Prior Close */
+            prior_close?: number | null;
+            /** Session High */
+            session_high?: number | null;
+            /** Session Low */
+            session_low?: number | null;
+        };
+        /** ReplaySessionOut */
+        ReplaySessionOut: {
+            /** Armed */
+            armed: components["schemas"]["ArmedOut"][];
+            /** Attempt */
+            attempt: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Id */
+            id: number;
+            journal: components["schemas"]["JournalOut"];
+            /** Marks */
+            marks: components["schemas"]["MarkOut"][];
+            /** Notes */
+            notes: string | null;
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /** Rating */
+            rating: number | null;
+            /**
+             * Revealed Through
+             * Format: date-time
+             */
+            revealed_through: string;
+            spec: components["schemas"]["ReplaySessionV1"];
+            stamp: components["schemas"]["Stamp"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "ended";
+            /**
+             * Tape Feed
+             * @enum {string}
+             */
+            tape_feed: "sip" | "iex";
+            /**
+             * Window End
+             * Format: date-time
+             */
+            window_end: string;
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+        };
+        /**
+         * ReplaySessionPatch
+         * @description PATCH body: notes and the self-rating only.
+         */
+        ReplaySessionPatch: {
+            /** Notes */
+            notes?: string | null;
+            /** Rating */
+            rating?: number | null;
+        };
+        /**
+         * ReplaySessionSummaryOut
+         * @description A row of the hub's Resume card and Recent sessions table.
+         */
+        ReplaySessionSummaryOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Attempt */
+            attempt: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Hide Date
+             * @enum {string}
+             */
+            hide_date: "yes" | "no";
+            /** Id */
+            id: number;
+            /** Pnl Usd */
+            pnl_usd: number | null;
+            /**
+             * Revealed Through
+             * Format: date-time
+             */
+            revealed_through: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "ended";
+            /** Symbol */
+            symbol: string;
+            /** Trades */
+            trades: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Window End
+             * Format: date-time
+             */
+            window_end: string;
+        };
+        /** ReplaySessionV1 */
+        ReplaySessionV1: {
+            /** Armed */
+            armed: components["schemas"]["ArmedItem"][];
+            /** Day */
+            day: string;
+            /**
+             * Hidedate
+             * @enum {string}
+             */
+            hideDate: "yes" | "no";
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "1m" | "5m" | "15m";
+            plan: components["schemas"]["Plan"];
+            /**
+             * Schemaversion
+             * @constant
+             */
+            schemaVersion: 1;
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "regular" | "extended";
+            /** Shares */
+            shares: number;
+            /** Symbol */
+            symbol: string;
+            window: components["schemas"]["Window"];
+        };
+        /** ReplaySignalOut */
+        ReplaySignalOut: {
+            /**
+             * Bar Close
+             * Format: date-time
+             */
+            bar_close: string;
+            /**
+             * Bar Time
+             * Format: date-time
+             */
+            bar_time: string;
+            /** Bias */
+            bias: ("bullish" | "bearish" | "neutral") | null;
+            /** Close */
+            close: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: number;
+            };
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "alert_strategy" | "filter";
         };
         /** ScreenerFilterCreate */
         ScreenerFilterCreate: {
@@ -1956,6 +2742,24 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /** SignalVsTradeOut */
+        SignalVsTradeOut: {
+            /** Chg 15M Pct */
+            chg_15m_pct: number | null;
+            /** Chg 30M Pct */
+            chg_30m_pct: number | null;
+            /** Close */
+            close: number;
+            /** Her */
+            her: string;
+            /** Name */
+            name: string;
+            /**
+             * Time
+             * Format: date-time
+             */
+            time: string;
+        };
         /** StageUpdate */
         StageUpdate: {
             /**
@@ -1977,7 +2781,7 @@ export interface components {
              * Freshness
              * @enum {string}
              */
-            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable" | "replay";
             /**
              * Quality
              * @enum {string}
@@ -2044,7 +2848,7 @@ export interface components {
              * Freshness
              * @enum {string}
              */
-            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable" | "replay";
             /** Next Run At */
             next_run_at: string | null;
             /**
@@ -2341,7 +3145,7 @@ export interface components {
              * Freshness
              * @enum {string}
              */
-            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable";
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable" | "replay";
             /** Last */
             last: number | null;
             /** Name */
@@ -2366,6 +3170,13 @@ export interface components {
             kind: "pattern" | "armed";
             /** Label */
             label: string;
+        };
+        /** Window */
+        Window: {
+            /** From */
+            from: string;
+            /** To */
+            to: string;
         };
     };
     responses: never;
@@ -3051,6 +3862,327 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_days_api_desk_replay_days_get: {
+        parameters: {
+            query?: {
+                symbol?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayDaysOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_api_desk_replay_sessions_get: {
+        parameters: {
+            query?: {
+                status?: ("active" | "ended") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionSummaryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_session_api_desk_replay_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaySessionV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionOut"];
+                };
+            };
+        };
+    };
+    get_session_state_api_desk_replay_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_session_api_desk_replay_sessions__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaySessionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    advance_session_api_desk_replay_sessions__session_id__advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdvanceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdvanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_session_api_desk_replay_sessions__session_id__end_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_feed_api_desk_replay_sessions__session_id__feed_get: {
+        parameters: {
+            query?: {
+                interval?: ("1m" | "5m" | "15m") | null;
+                min_size?: number;
+            };
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_mark_api_desk_replay_sessions__session_id__marks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_mark_api_desk_replay_sessions__session_id__marks__mark_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                mark_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkUndoOut"];
                 };
             };
             /** @description Validation Error */
