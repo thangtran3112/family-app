@@ -466,3 +466,7 @@
 .pill { min-width: 0; max-width: 240px; flex-shrink: 1; }
 .topBadge { min-width: 0; max-width: 230px; flex-shrink: 1; }
 .bar[data-band="1180"] .topBadge { max-width: 190px; }
+
+/* The top-bar badge during a replay (02o §a1): amber, never Live or Delayed. */
+.replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bar[data-band] .replayBadge { max-width: none; }
