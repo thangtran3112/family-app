@@ -16,6 +16,7 @@ import {
   SESSION_CHOICES,
   clock12,
   defaultPlanDraft,
+  listTimeHeld,
   listTimeNeed,
   planProblems,
   validatePlanDraft,
@@ -43,6 +44,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
   // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
   const need = listTimeNeed(draft.filterIds, timings);
   const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
+  const needText = practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: clock12(need.time) });
 
   async function save() {
     const result = validatePlanDraft(draft);
@@ -166,16 +168,15 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
                 type="button"
                 className={styles.segment}
                 aria-pressed={draft.listAt === item.value}
-                disabled={item.value < need.time}
+                disabled={listTimeHeld(item.value, need)}
+                title={listTimeHeld(item.value, need) ? needText : undefined}
                 onClick={() => setDraft(withListTime(draft, item.value))}
               >
                 {item.label}
               </button>
             ))}
           </div>
-          {need.ids.length > 0 && (
-            <span className={styles.hint}>{practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: clock12(need.time) })}</span>
-          )}
+          {listTimeHeld(draft.listAt, need) && <span role="alert" className={styles.fieldError}>{needText}</span>}
           {problems.listAt && <span role="alert" className={styles.fieldError}>{problems.listAt}</span>}
         </div>
         <label className={styles.field}>
@@ -224,7 +225,9 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
       <div className={styles.actions}>
         <span className={`${styles.hint} ${styles.actionNote}`}>{PRACTICE_COPY.threadPlanFrom}</span>
         {onCancel && <button type="button" className={styles.button} onClick={onCancel}>Cancel</button>}
-        <button type="submit" className={styles.primary} disabled={submitting}>{PRACTICE_COPY.planSubmit}</button>
+        <button type="submit" className={styles.primary} disabled={submitting} aria-busy={submitting || undefined}>
+          {submitting ? PRACTICE_COPY.planSubmitting : PRACTICE_COPY.planSubmit}
+        </button>
       </div>
     </form>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { changeTone, formatPrice } from "@/lib/desk/format";
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
 import { formatR, formatUsd } from "@/lib/replay/journalView";
@@ -19,6 +20,14 @@ export type PracticeControlsProps = {
   onDraft: (draft: MarkDraft) => void;
   /** The plan asks for a stop on every entry and the stop field is empty. */
   stopHint: boolean;
+  /** The open trade has no stop note although the plan asks for one: offer the one-click fix, never block (D-022). */
+  stopMissing: boolean;
+  /** When the open trade was entered (its entry mark); null when unknown. */
+  since: string | null;
+  /** Closed trades only: what is already banked. The header's Practice P/L adds the open trade to it. */
+  realized: number;
+  /** Closed trades plus the open trade at the last price. */
+  pnl: number;
   composer: Composer;
   onComposer: (composer: Composer) => void;
   onLong: () => void;
@@ -30,16 +39,29 @@ export type PracticeControlsProps = {
   disabled: boolean;
 };
 
-function OpenTradeCard({ trade }: { trade: OpenTrade | null }) {
+function OpenTradeCard({ trade, since, realized, pnl }: { trade: OpenTrade | null; since: string | null; realized: number; pnl: number }) {
   if (!trade) return <p className={styles.muted}>No open practice trade</p>;
   return (
-    <dl className={styles.tradeCard} aria-label="Open practice trade">
-      <div><dt>Side</dt><dd>{trade.side === "long" ? "Long" : "Short"} {trade.shares}</dd></div>
-      <div><dt>Practice price</dt><dd>{formatPrice(trade.entry_price)}</dd></div>
-      <div><dt>Unrealized</dt><dd data-tone={changeTone(trade.unrealized_usd)}>{formatUsd(trade.unrealized_usd)}</dd></div>
-      <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
-      {trade.r != null && <div><dt>R</dt><dd data-tone={changeTone(trade.r)}>{formatR(trade.r)}</dd></div>}
-    </dl>
+    <div className={styles.openTrade}>
+      <div className={styles.tradeHead}>
+        <h3 className={styles.tradeTitle}>Open practice trade</h3>
+        <SimulatedBadge />
+      </div>
+      <p className={styles.tradeLine}>
+        {`${trade.side === "long" ? "Practice long" : "Practice short"} · ${trade.shares} shares`}
+        {since && <span className={styles.muted}>{` · since ${formatEtClock(since)}`}</span>}
+      </p>
+      <dl className={styles.tradeCard} aria-label="Open practice trade">
+        <div><dt>Entry</dt><dd>{formatPrice(trade.entry_price)}</dd></div>
+        <div><dt>Stop note</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
+        <div><dt>Last</dt><dd>{formatPrice(trade.last_price)}</dd></div>
+        <div>
+          <dt>Unrealized</dt>
+          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatUsd(trade.unrealized_usd)}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
+        </div>
+      </dl>
+      <p className={styles.muted}>{`Realized so far ${formatUsd(realized)} · practice P/L ${formatUsd(pnl)}`}</p>
+    </div>
   );
 }
 
@@ -80,7 +102,13 @@ export function PracticeControls(props: PracticeControlsProps) {
   const entering = side === "flat";
   return (
     <div className={styles.controls}>
-      <OpenTradeCard trade={openTrade} />
+      <OpenTradeCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />
+      {props.stopMissing && (
+        <p className={styles.nudgeLine} role="status">
+          {"This entry has no stop note, and your plan asks for one. "}
+          <button type="button" className={styles.linkButton} onClick={() => onComposer("stop")}>Add a stop note for this entry</button>
+        </p>
+      )}
       <div className={styles.fields}>
         <label className={styles.field}>
           Shares
@@ -91,7 +119,7 @@ export function PracticeControls(props: PracticeControlsProps) {
           <input className={styles.control} inputMode="decimal" value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
         </label>
       </div>
-      {props.stopHint && entering && <p className={styles.hint}>Your plan asks for a stop on every entry.</p>}
+      {props.stopHint && entering && <p className={styles.hint}>Your plan asks for a stop on every entry. Type a stop price first, or add a stop note right after.</p>}
       <div className={styles.buttonRow}>
         <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled} title="Practice long (B)" onClick={props.onLong}>Long (B)</button>
         <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled} title="Practice short (S)" onClick={props.onShort}>Short (S)</button>

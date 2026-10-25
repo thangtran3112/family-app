@@ -2103,10 +2103,48 @@
         "type": "object"
       },
       "DayJournalOut": {
+        "description": "The day's practice result, SIMULATED dollars to the cent: one line per closed trade, the win and loss counts\n(a scratch is neither), and the thread's balance before and after the day (null for a day with no thread).",
         "properties": {
+          "balance_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance After"
+          },
+          "balance_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance Before"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/DayTradeLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "losses": {
+            "title": "Losses",
+            "type": "integer"
+          },
           "pnl_usd": {
             "title": "Pnl Usd",
             "type": "number"
+          },
+          "scratches": {
+            "title": "Scratches",
+            "type": "integer"
           },
           "sessions": {
             "items": {
@@ -2118,12 +2156,22 @@
           "trades": {
             "title": "Trades",
             "type": "integer"
+          },
+          "wins": {
+            "title": "Wins",
+            "type": "integer"
           }
         },
         "required": [
           "sessions",
           "trades",
-          "pnl_usd"
+          "pnl_usd",
+          "wins",
+          "losses",
+          "scratches",
+          "lines",
+          "balance_before",
+          "balance_after"
         ],
         "title": "DayJournalOut",
         "type": "object"
@@ -2286,6 +2334,16 @@
             ],
             "title": "Rating"
           },
+          "relist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RelistOfferOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review": {
             "anyOf": [
               {
@@ -2380,6 +2438,7 @@
           "watch_check",
           "thread",
           "warnings",
+          "relist",
           "peek",
           "journal",
           "review",
@@ -2437,6 +2496,21 @@
           }
         },
         "title": "DayListPatch",
+        "type": "object"
+      },
+      "DayRelistIn": {
+        "description": "POST body: the list time to re-list at, \"HH:MM\" ET. The plan's rules apply (422).",
+        "properties": {
+          "listAt": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "Listat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listAt"
+        ],
+        "title": "DayRelistIn",
         "type": "object"
       },
       "DayScreenOut": {
@@ -2504,6 +2578,104 @@
           "status"
         ],
         "title": "DaySessionOut",
+        "type": "object"
+      },
+      "DayTradeLineOut": {
+        "description": "One closed practice trade of the day, with the name it was on.",
+        "properties": {
+          "entry_at": {
+            "format": "date-time",
+            "title": "Entry At",
+            "type": "string"
+          },
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "exit_at": {
+            "format": "date-time",
+            "title": "Exit At",
+            "type": "string"
+          },
+          "exit_price": {
+            "title": "Exit Price",
+            "type": "number"
+          },
+          "exit_source": {
+            "enum": [
+              "her",
+              "auto"
+            ],
+            "title": "Exit Source",
+            "type": "string"
+          },
+          "no": {
+            "title": "No",
+            "type": "integer"
+          },
+          "on_signal": {
+            "title": "On Signal",
+            "type": "boolean"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "no",
+          "side",
+          "entry_at",
+          "entry_price",
+          "exit_at",
+          "exit_price",
+          "shares",
+          "pnl_usd",
+          "r",
+          "stop_price",
+          "on_signal",
+          "exit_source",
+          "symbol"
+        ],
+        "title": "DayTradeLineOut",
         "type": "object"
       },
       "FeedOut": {
@@ -5546,6 +5718,37 @@
         "title": "Problem",
         "type": "object"
       },
+      "RelistOfferOut": {
+        "description": "The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which\nmoves the plan's list time, and the practice window's start with it when `window_from` is set.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "list_at": {
+            "title": "List At",
+            "type": "string"
+          },
+          "window_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window From"
+          }
+        },
+        "required": [
+          "list_at",
+          "label",
+          "window_from"
+        ],
+        "title": "RelistOfferOut",
+        "type": "object"
+      },
       "ReplayBarOut": {
         "properties": {
           "c": {
@@ -6227,8 +6430,17 @@
         "type": "object"
       },
       "ReviewOut": {
-        "description": "Every candidate's move from its list price to the window end and the close. Only present once the day ended.",
+        "description": "Every candidate's move from its list price to the window end and the close, ranked by the signed move to the\nwindow end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen\nhid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029).",
         "properties": {
+          "dates_hidden": {
+            "title": "Dates Hidden",
+            "type": "boolean"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
           "of": {
             "title": "Of",
             "type": "integer"
@@ -6250,6 +6462,8 @@
           }
         },
         "required": [
+          "day",
+          "dates_hidden",
           "window_end",
           "of",
           "rows",
@@ -6983,8 +7197,9 @@
         "type": "object"
       },
       "SelectionOut": {
+        "description": "Signed: a loss pulls the median and the average down (D-031 ranked and averaged by size before).",
         "properties": {
-          "median_abs_move_pct": {
+          "median_move_pct": {
             "anyOf": [
               {
                 "type": "number"
@@ -6993,7 +7208,7 @@
                 "type": "null"
               }
             ],
-            "title": "Median Abs Move Pct"
+            "title": "Median Move Pct"
           },
           "picks": {
             "items": {
@@ -7002,7 +7217,7 @@
             "title": "Picks",
             "type": "array"
           },
-          "picks_avg_abs_move_pct": {
+          "picks_avg_move_pct": {
             "anyOf": [
               {
                 "type": "number"
@@ -7011,13 +7226,13 @@
                 "type": "null"
               }
             ],
-            "title": "Picks Avg Abs Move Pct"
+            "title": "Picks Avg Move Pct"
           }
         },
         "required": [
           "picks",
-          "median_abs_move_pct",
-          "picks_avg_abs_move_pct"
+          "median_move_pct",
+          "picks_avg_move_pct"
         ],
         "title": "SelectionOut",
         "type": "object"
@@ -10352,6 +10567,59 @@
           }
         },
         "summary": "End Day",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/day-lists/{day_list_id}/relist": {
+      "post": {
+        "description": "Re-list a day she has not started at a later list time: moves the open plan's list time (the practice window\nfollows when it would start before the list) and rebuilds this day's list on today's Desk universe. The plan's\nlist-time rules answer 422; a day under way or on a replaced plan is a 409. When the universe grew and its bars\nare not ready the list stays as it was while the data prepares: re-list again then.",
+        "operationId": "relist_day_list_api_desk_replay_day_lists__day_list_id__relist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DayRelistIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Relist Day List",
         "tags": [
           "replay"
         ]

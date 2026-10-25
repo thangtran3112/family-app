@@ -1,6 +1,6 @@
 import { timelineModel } from "@/lib/replay/timeline";
 import type { ReplayMark, ReplaySignal } from "@/lib/replay/schemas";
-import { formatEtTimeZone } from "@/lib/desk/format";
+import { formatEtTime, formatEtTimeZone } from "@/lib/desk/format";
 import styles from "./replay.module.css";
 
 export type ReplayTimelineProps = {
@@ -11,24 +11,34 @@ export type ReplayTimelineProps = {
   signals: readonly ReplaySignal[];
 };
 
-/** Forward-only timeline: the revealed part is filled and carries ticks for her marks and released signals; the future is empty. */
+/** Forward-only timeline: the revealed part is filled and carries ticks for her marks and released signals; the future is empty.
+ *  The end labels name the window's clock times and the legend names the two tick colours (D-026). */
 export function ReplayTimeline({ windowStart, windowEnd, revealedThrough, marks, signals }: ReplayTimelineProps) {
   const model = timelineModel(windowStart, windowEnd, revealedThrough, marks, signals);
   const percent = Math.round(model.revealed * 100);
   return (
-    <div
-      className={styles.timeline}
-      role="progressbar"
-      aria-label="Replay progress"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      aria-valuetext={`Revealed through ${formatEtTimeZone(revealedThrough)}`}
-    >
-      <div className={styles.timelineFill} style={{ width: `${model.revealed * 100}%` }} />
-      {model.ticks.map((tick, index) => (
-        <span key={`${tick.kind}-${index}`} className={styles.tick} data-kind={tick.kind} style={{ left: `${tick.at * 100}%` }} title={tick.label} />
-      ))}
+    <div className={styles.timelineWrap}>
+      <div
+        className={styles.timeline}
+        role="progressbar"
+        aria-label="Replay progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-valuetext={`Revealed through ${formatEtTimeZone(revealedThrough)}`}
+      >
+        <div className={styles.timelineFill} style={{ width: `${model.revealed * 100}%` }} />
+        {model.ticks.map((tick, index) => (
+          <span key={`${tick.kind}-${index}`} className={styles.tick} data-kind={tick.kind} style={{ left: `${tick.at * 100}%` }} title={tick.label} />
+        ))}
+      </div>
+      <div className={styles.timelineLabels}>
+        <span>{formatEtTime(windowStart)}</span>
+        <span className={styles.tickLegend}>
+          <i className={styles.tickKey} data-kind="signal" aria-hidden="true" /> signal released · <i className={styles.tickKey} data-kind="mark" aria-hidden="true" /> your mark
+        </span>
+        <span>{formatEtTime(windowEnd)}</span>
+      </div>
     </div>
   );
 }

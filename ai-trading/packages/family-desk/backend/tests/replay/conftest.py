@@ -9,13 +9,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 
 from daily_world import NOW as DAILY_NOW  # noqa: E402
-from daily_world import SyntheticBars, _build_world, make_services  # noqa: E402
+from daily_world import SYMBOLS, SyntheticBars, _build_world, make_services  # noqa: E402
 from fakes import fake_data_sources  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from ai_trading.cli.seed_technical import seed_user  # noqa: E402
 from ai_trading.db.models import User  # noqa: E402
 from ai_trading.replay import fixture  # noqa: E402
+from ai_trading.replay import plan as plan_mod  # noqa: E402
 from ai_trading.replay.cache import MemoryBlobStore  # noqa: E402
 from ai_trading.replay.data import DayInputs, History  # noqa: E402
 from ai_trading.replay.session import Services  # noqa: E402
@@ -46,6 +47,14 @@ def tape(sources) -> Tape:
 
 
 # -- the daily-list world (tests/daily_world.py): synthetic bars, the owner and the services over them --------
+
+
+@pytest.fixture(autouse=True)
+def desk_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The three synthetic names are the Desk universe here: a day's list reads today's universe (D-011), and the
+    real one adds the seed symbols the synthetic history has no bars for. Tests of the universe itself call
+    `monkeypatch.undo()` or set their own."""
+    monkeypatch.setattr(plan_mod, "practice_universe", lambda db, user_id: (list(SYMBOLS), False))
 
 
 @pytest.fixture

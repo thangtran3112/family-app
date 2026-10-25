@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_BIG_PRINT_USD, feedLabel, fastTapeText, filterById, haltedTapeText, isBigPrint, paceLevel, paceText, SIZE_FILTERS, tapeQuery, tapeRows, tickTone } from "./tape.ts";
+import { DEFAULT_BIG_PRINT_USD, feedLabel, fastTapeText, filterById, formatNotional, haltedTapeText, isBigPrint, paceHeading, paceLevel, paceRate, paceText, paceVerdict, SIZE_FILTERS, tapeQuery, tapeRows, tickTone } from "./tape.ts";
 import type { TapeRow } from "./feedState.ts";
 
 test("size chips send min size, and only Big only sends the big-print notional", () => {
@@ -31,9 +31,9 @@ test("tape rows read newest first, with the limit applied to the newest rows", (
   ];
   const view = { tape, tapeMeta: { feed: "sip" as const, count: 3, volume: 2600, shown: 3, bigPrintUsd: 200_000, pace: null } };
   assert.deepEqual(tapeRows(view), [
-    { key: "2026-04-07T14:07:11.900Z:2", t: "2026-04-07T14:07:11.900Z", price: "188.04", size: "1,000", tone: "down", big: false },
-    { key: "2026-04-07T14:07:11.000Z:1", t: "2026-04-07T14:07:11.000Z", price: "188.05", size: "1,500", tone: "up", big: true },
-    { key: "2026-04-07T14:07:10.000Z:0", t: "2026-04-07T14:07:10.000Z", price: "188.00", size: "100", tone: "same", big: false },
+    { key: "2026-04-07T14:07:11.900Z:2", t: "2026-04-07T14:07:11.900Z", price: "188.04", size: "1,000", tone: "down", big: false, bigText: "" },
+    { key: "2026-04-07T14:07:11.000Z:1", t: "2026-04-07T14:07:11.000Z", price: "188.05", size: "1,500", tone: "up", big: true, bigText: "$282K" },
+    { key: "2026-04-07T14:07:10.000Z:0", t: "2026-04-07T14:07:10.000Z", price: "188.00", size: "100", tone: "same", big: false, bigText: "" },
   ]);
   assert.deepEqual(tapeRows({ tape, tapeMeta: null }, 2).map((row) => row.price), ["188.04", "188.05"]);
 
@@ -54,25 +54,41 @@ test("feed labels and the fast-tape note are the exact Practice copy", () => {
 
 test("pace text names the prints, shares, band and average when the API gives them", () => {
   assert.equal(paceText(null), "Pace · waiting for prints");
-  assert.equal(paceText({ printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 }), "12 prints/s · 3,400 sh/s · Busy · 1.8x avg");
-  assert.equal(paceText({ printsPerSecond: 4.5, sharesPerSecond: 800, band: null, timesAverage: null }), "4.5 prints/s · 800 sh/s", "under 10 prints/s keeps one decimal");
-  assert.equal(paceText({ printsPerSecond: 15.4, sharesPerSecond: 2500, band: null, timesAverage: 2 }), "15 prints/s · 2,500 sh/s · 2x avg", "a whole multiple prints without a decimal");
-  assert.equal(paceText({ printsPerSecond: 0.5, sharesPerSecond: 0, band: "quiet", timesAverage: null }), "0.5 prints/s · 0 sh/s · Quiet");
+  assert.equal(paceText({ windowS: 10, printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 }), "12 prints/s · 3,400 sh/s · Busy · 1.8x usual");
+  assert.equal(paceText({ windowS: 10, printsPerSecond: 4.5, sharesPerSecond: 800, band: null, timesAverage: null }), "4.5 prints/s · 800 sh/s", "under 10 prints/s keeps one decimal");
+  assert.equal(paceText({ windowS: 10, printsPerSecond: 15.4, sharesPerSecond: 2500, band: null, timesAverage: 2 }), "15 prints/s · 2,500 sh/s · 2x usual", "a whole multiple prints without a decimal");
+  assert.equal(paceText({ windowS: 10, printsPerSecond: 0.5, sharesPerSecond: 0, band: "quiet", timesAverage: null }), "0.5 prints/s · 0 sh/s · Quiet");
 });
 
 test("pace level fills the meter from the band, else from a log scale of shares per second", () => {
   assert.equal(paceLevel(null), 0);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 99_999, band: "quiet", timesAverage: null }), 0.2);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 0, band: "steady", timesAverage: null }), 0.5);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 0, band: "busy", timesAverage: null }), 0.78);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 0, band: "frantic", timesAverage: null }), 1);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 0, band: null, timesAverage: null }), 0);
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 9, band: null, timesAverage: null }), 0.2, "log10(10) / 5");
-  assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 1e9, band: null, timesAverage: null }), 1, "capped at 1");
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 99_999, band: "quiet", timesAverage: null }), 0.2);
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 0, band: "steady", timesAverage: null }), 0.5);
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 0, band: "busy", timesAverage: null }), 0.78);
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 0, band: "frantic", timesAverage: null }), 1);
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 0, band: null, timesAverage: null }), 0);
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 9, band: null, timesAverage: null }), 0.2, "log10(10) / 5");
+  assert.equal(paceLevel({ windowS: 10, printsPerSecond: 1, sharesPerSecond: 1e9, band: null, timesAverage: null }), 1, "capped at 1");
 });
 
 test("a silent tape reads as a possible halt, in seconds then minutes", () => {
   assert.equal(haltedTapeText(null), null);
   assert.equal(haltedTapeText(95), "No prints for 95 s · the stock may be halted");
   assert.equal(haltedTapeText(134 + 60), "No prints for 3 min 14 s · the stock may be halted");
+});
+
+test("D-024: the BIG column shows a print's dollar notional, only for big prints", () => {
+  assert.equal(formatNotional(1_300_000), "$1.30M");
+  assert.equal(formatNotional(1_812_345), "$1.81M");
+  assert.equal(formatNotional(282_075), "$282K");
+  assert.equal(formatNotional(999), "$999");
+});
+
+test("D-024: the pace names its window and reads against the usual pace", () => {
+  const pace = { windowS: 10, printsPerSecond: 239.2, sharesPerSecond: 11117, band: "quiet" as const, timesAverage: 1.4 };
+  assert.equal(paceHeading(pace), "Pace · 10 seconds");
+  assert.equal(paceHeading(null), "Pace");
+  assert.equal(paceRate(pace), "239 prints/s · 11,117 sh/s");
+  assert.equal(paceVerdict(pace), "Quiet · 1.4x usual");
+  assert.equal(paceVerdict({ ...pace, band: null, timesAverage: null }), "");
 });

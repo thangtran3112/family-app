@@ -5,8 +5,10 @@ import { activeThread, freshThread, thread, threadBrief, threadDays } from "./th
 import {
   adherenceTrendText,
   briefLine,
+  formatAxisDollars,
   formatBalance,
   formatDayResult,
+  formatWhole,
   hasNoDays,
   improvementOf,
   planRows,
@@ -15,26 +17,32 @@ import {
   threadStartedText,
   threadTiles,
   todayLine,
+  todayView,
   weeksInText,
   weeksOf,
   winRateText,
 } from "./threadView.ts";
 
-test("money is whole dollars with the sign as the cue, and never prints NaN", () => {
-  assert.equal(formatBalance(50123.4), "$50,123");
-  assert.equal(formatBalance(-1200), "−$1,200");
+test("money is dollars and cents with the sign as the cue, and never prints NaN (D-044)", () => {
+  assert.equal(formatBalance(50123.4), "$50,123.40");
+  assert.equal(formatBalance(51565), "$51,565.00", "the recorded balance reads to the cent, like the trade lines");
+  assert.equal(formatBalance(-1200), "−$1,200.00");
+  assert.equal(formatBalance(-0.001), "$0.00");
   assert.equal(formatBalance(null), "—");
-  assert.equal(formatDayResult(112), "+$112");
-  assert.equal(formatDayResult(-246.6), "−$247");
-  assert.equal(formatDayResult(0.2), "$0");
-  assert.equal(formatDayResult(-0.2), "$0");
+  assert.equal(formatDayResult(112), "+$112.00");
+  assert.equal(formatDayResult(1565), "+$1,565.00");
+  assert.equal(formatDayResult(-246.6), "−$246.60");
+  assert.equal(formatDayResult(0.001), "$0.00");
+  assert.equal(formatDayResult(-0.001), "$0.00");
   assert.equal(formatDayResult(Number.NaN), "—");
+  assert.equal(formatWhole(50000), "$50,000", "an amount she chose stays whole dollars");
+  assert.deepEqual([formatAxisDollars(50123.4), formatAxisDollars(1565, true), formatAxisDollars(-246.6, true), formatAxisDollars(0.2)], ["$50,123", "+$1,565", "−$247", "$0"]);
 });
 
 test("the thread card reads in plain words", () => {
   assert.equal(threadName(activeThread.thread), "October thread");
   assert.equal(threadStartedText(activeThread.thread), "Started Oct 5");
-  assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123 so far");
+  assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123.00 so far");
   assert.equal(startedWithText(freshThread.thread), "Started with $50,000 · no change yet");
   assert.equal(winRateText(0.64), "64%");
   assert.equal(winRateText(undefined), "—");
@@ -42,14 +50,14 @@ test("the thread card reads in plain words", () => {
   assert.equal(adherenceTrendText({ adherenceFirstPct: 80, adherenceLastPct: 80 }), "80%");
   assert.equal(adherenceTrendText({}), "—");
   assert.equal(todayLine(null as never), "No practice day open · the next list opens when you resume");
-  assert.equal(todayLine(activeThread.today), "+$112 realized so far · 1 practice trade");
-  assert.equal(briefLine(threadBrief), "Thread balance $50,123 · today +$112");
-  assert.equal(briefLine({ ...threadBrief, today_pnl_usd: null }), "Thread balance $50,123");
+  assert.equal(todayLine(activeThread.today), "+$112.00 realized so far · 1 practice trade");
+  assert.equal(briefLine(threadBrief), "Thread balance $50,123.00 · today +$112.00");
+  assert.equal(briefLine({ ...threadBrief, today_pnl_usd: null }), "Thread balance $50,123.00");
   assert.equal(weeksInText(1), "first week");
   assert.equal(weeksInText(4), "4 weeks in");
 });
 
-test("weeks group the days by calendar week in the order she practised, with skipped days counted", () => {
+test("weeks group the days by calendar week in the order she practiced, with skipped days counted", () => {
   const weeks = weeksOf(threadDays);
   assert.deepEqual(weeks.map((week) => [week.label, week.detail, week.pnl]), [
     ["Week 1", "4 days practiced · 1 skipped", 33],
@@ -70,20 +78,21 @@ test("improvement stays a caveat until two weeks each have three practice days",
   assert.match(noneLatest.caveat?.reason ?? "", /week 2 has no practice days so far/);
   assert.match(noneLatest.compared?.intro ?? "", /week 2, no practice days so far/);
   assert.deepEqual(few.compared?.rows.map((row) => [row.label, row.first, row.latest]), [
-    ["Day results", "+$33", "+$90"],
+    ["Day results", "+$33.00", "+$90.00"],
     ["Days won", "2 of 4", "1 of 2"],
     ["Adherence", "75%", "92%"],
     ["Days practiced", "4", "2"],
   ]);
   const one = improvementOf(weeksOf(threadDays.slice(0, 3)));
   assert.equal(one.compared, null);
-  assert.match(one.caveat?.reason ?? "", /waits for at least 2 weeks/);
+  assert.match(one.caveat?.reason ?? "", /week 1 has 3 practice days so far\. A trend needs at least 2 weeks with 3 or more practice days each/, "one week alone still names its count and the threshold (D-041)");
+  assert.match(improvementOf([]).caveat?.reason ?? "", /waits for at least 2 weeks/);
 
   const day = (n: number, week: number, pnl: number) => ({ ...threadDays[0]!, n, day: `2026-0${week + 1}-0${((n - 1) % 3) + 2}`, pnl_usd: pnl, kind: "practiced" as const });
   const enough = improvementOf(weeksOf([day(1, 1, -30), day(2, 1, -30), day(3, 1, -30), day(4, 2, 30), day(5, 2, 30), day(6, 2, 30)]));
   assert.equal(enough.trend, true);
   assert.equal(enough.caveat, null);
-  assert.equal(enough.verdict, "Week 2 averaged +$30 a practice day; week 1 averaged −$30.");
+  assert.equal(enough.verdict, "Week 2 averaged +$30.00 a practice day; week 1 averaged −$30.00.");
 });
 
 test("the ten tiles carry the stats, and an empty thread has no days", () => {
@@ -92,9 +101,14 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
   const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
   assert.deepEqual([byId.practiced!.value, byId.practiced!.sub], ["6", "of 8 days opened"]);
   assert.deepEqual([byId.win_rate!.value, byId.win_rate!.sub], ["64%", "9 of 14 trades"]);
-  assert.deepEqual([byId.best!.value, byId.best!.sub, byId.best!.tone], ["+$240", "day 5", "up"]);
-  assert.deepEqual([byId.worst!.value, byId.worst!.sub, byId.worst!.tone], ["−$182", "day 1", "down"]);
+  assert.deepEqual([byId.best!.value, byId.best!.sub, byId.best!.tone], ["+$240.00", "day 5", "up"]);
+  assert.deepEqual([byId.worst!.value, byId.worst!.sub, byId.worst!.tone], ["−$182.00", "day 1", "down"]);
   assert.equal(byId.adherence!.value, "71% → 83%");
+  // D-045: when no day lost, the worst day is a gain and the tile says so; with a single day it equals the best day.
+  const oneWin = { ...thread, thread: { ...thread.thread, stats: { ...thread.thread.stats, bestDayUsd: 1565, worstDayUsd: 1565 } }, daily: [{ ...thread.daily[0]!, n: 1, kind: "practiced" as const, pnl_usd: 1565 }] };
+  const win = Object.fromEntries(threadTiles(oneWin).map((tile) => [tile.id, tile]));
+  assert.deepEqual([win.best!.value, win.best!.sub], ["+$1,565.00", "day 1"]);
+  assert.deepEqual([win.worst!.value, win.worst!.sub, win.worst!.tone], ["+$1,565.00", "day 1 · no losing day", "up"]);
   const fresh = Object.fromEntries(threadTiles(freshThread).map((tile) => [tile.id, tile]));
   assert.deepEqual([fresh.win_rate!.value, fresh.win_rate!.sub], ["—", "no wins or losses yet"]);
   assert.equal(hasNoDays(freshThread), true);
@@ -102,8 +116,9 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
 });
 
 test("the plan recap reads yes, no and none in plain words, and no thread copy trips the banned-term check", () => {
-  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["Yes", "Yes", "$600", "3"]);
-  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["No", "No", "None", "None"]);
+  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["You set it on each entry", "Yes", "Yes", "$600", "3"]);
+  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["You set it on each entry", "No", "No", "None", "None"]);
+  assert.equal(planRows(activeThread.thread.plan)[0]?.label, "Shares per trade", "D-042: the recap has a Shares row; the thread plan holds no count, so it says who sets it");
   const built = [
     briefLine(threadBrief),
     startedWithText(activeThread.thread),
@@ -116,4 +131,25 @@ test("the plan recap reads yes, no and none in plain words, and no thread copy t
     })(),
   ];
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
+});
+
+// D-030: after a realized +$1,565 day the card read "$0 realized so far · 0 practice trades" beside a balance of $51,565.
+test("the TODAY row agrees with the balance: a day with nothing realized yet defers to the last ended day", () => {
+  const ended = { n: 1, day_list_id: 2, day: "2026-07-01", weekday: "Wed", kind: "practiced", trades: 1, pnl_usd: 1564.5, adherence_pct: null, balance: 51564.5 } as const;
+  const listed = { day_list_id: 3, day: "2026-07-01", weekday: "Wed", day_no: 1, status: "listed", trades: 0, pnl_usd: 0 } as const;
+  // The day just ended, nothing open: its ledger result, not "no day open".
+  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  // A new day listed but not started: still the last ended day's result, never the new day's $0.
+  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  // The day under way: its own realized figure and count, "so far".
+  const practicing = { ...listed, status: "practicing", trades: 2, pnl_usd: 112 } as const;
+  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112.00 realized so far · 2 practice trades", pnl: 112 });
+  assert.equal(todayView({ ...listed, status: "practicing" }, ended).label, "Today", "a practicing day with no exit yet is still today");
+  // A skipped last day carries the balance; nothing is claimed.
+  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Skipped · the balance carried over", pnl: null });
+  // First day of a fresh thread: nothing earlier to show, so the open day's own line stands.
+  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0.00 realized so far · 0 practice trades", pnl: 0 });
+  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null });
+  // The shown figure is the ledger's: it matches the balance change of that day.
+  assert.equal(Math.round(ended.balance - 50000), Math.round(ended.pnl_usd));
 });

@@ -2,15 +2,19 @@
 signals versus trades and the P/L series. Pure: no database, no clock, no network.
 
 Money rules (02o decision 6): P/L per trade is `(exit - entry) * shares` for a long and `(entry - exit) * shares`
-for a short, in dollars rounded to the cent; no fees, spread or slippage. R is P/L per share divided by
+for a short, in dollars to the cent; no fees, spread or slippage. R is P/L per share divided by
 `|entry - stop|`, using the first stop set during the trade (a later stop note moves the line, never the R).
 Unrealized P/L is marked at the playhead's last price.
+
+Cent-exact (D-033): a practice fill is a print rounded to the cent (`fill_price`), so the price on screen is the price
+the P/L used, and P/L is computed in `Decimal`, never in float. Every dollar figure here goes through `pnl_usd`/
+`usd_sum`, so the order of the arithmetic cannot move a cent.
 """
 
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS, Fire, Mark, Plan
@@ -19,6 +23,38 @@ MINUTE = pd.Timedelta(minutes=1)
 ON_SIGNAL_BARS = 3  # an entry within this many display bars after an armed signal counts as "on a signal"
 HINT_NO_PLAN = "Add a plan to get an adherence score"
 HINT_NO_TRADES = "No practice trades yet"
+CENT = Decimal("0.01")
+
+
+def _dec(value: float) -> Decimal:
+    """The decimal a float prints as (`repr` is the shortest round-trip form), not its binary expansion."""
+    return Decimal(repr(float(value)))
+
+
+def fill_price(print_price: float) -> float:
+    """A tape print as a practice fill: the nearest cent, halves up. SIP prints can be sub-cent (a midpoint print at
+    626.475); a fill at that price displayed as 626.48 while the P/L ran on 626.475, so the screen and the ledger
+    disagreed by the half cent times the shares (D-033). A fill is always whole cents."""
+    return float(_dec(print_price).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+def pnl_usd(sign: int, entry: float, price: float, shares: int) -> float:
+    """`sign * (price - entry) * shares` in dollars, exact to the cent (halves up, only reachable from a legacy
+    sub-cent mark)."""
+    return float((sign * (_dec(price) - _dec(entry)) * shares).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+def usd_sum(values: list[float]) -> float:
+    """A sum of dollar figures with no float drift."""
+    return float(sum((_dec(v) for v in values), Decimal(0)).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+def usd_mean(values: list[float]) -> float | None:
+    """The mean of dollar figures to the cent (None when there are none)."""
+    if not values:
+        return None
+    total = sum((_dec(v) for v in values), Decimal(0))
+    return float((total / len(values)).quantize(CENT, rounding=ROUND_HALF_UP))
 
 
 @dataclass
@@ -40,7 +76,7 @@ class Trade:
         return 1 if self.side == "long" else -1
 
     def unrealized(self, price: float) -> float:
-        return self.sign * (price - self.entry_price) * self.shares
+        return pnl_usd(self.sign, self.entry_price, price, self.shares)
 
     def r_of(self, price: float) -> float | None:
         if self.stop_price is None or self.stop_price == self.entry_price:
@@ -89,14 +125,14 @@ def open_trade_out(trade: Trade | None, last_price: float | None) -> dict[str, A
         "entry_price": trade.entry_price,
         "stop_price": trade.stops[-1][1] if trade.stops else None,
         "last_price": last_price,
-        "unrealized_usd": round(trade.unrealized(last_price), 2),
+        "unrealized_usd": trade.unrealized(last_price),
         "r": None if r is None else round(r, 2),
     }
 
 
 def trade_pnl(trade: Trade) -> float:
     assert trade.exit_price is not None
-    return round(trade.sign * (trade.exit_price - trade.entry_price) * trade.shares, 2)
+    return pnl_usd(trade.sign, trade.entry_price, trade.exit_price, trade.shares)
 
 
 def _stop_honored(trade: Trade, bars: pd.DataFrame) -> bool:
@@ -122,7 +158,8 @@ def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
     return sum(
         1
         for trade in book
-        if sum(trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at) <= -max_loss_usd
+        if usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at])
+        <= -max_loss_usd
     )
 
 
@@ -199,15 +236,15 @@ def _totals(trades: list[Trade]) -> dict[str, Any]:
     rs = [t.r_of(t.exit_price) for t in trades if t.exit_price is not None]
     n = len(trades)
     return {
-        "pnl_usd": round(sum(pnls), 2),
+        "pnl_usd": usd_sum(pnls),
         "r_total": round(sum(r for r in rs if r is not None), 2),
         "trades": n,
         "wins": len(wins),
         "losses": len(losses),
         "scratches": n - len(wins) - len(losses),
         "win_rate": round(len(wins) / n, 3) if n else None,
-        "avg_win_usd": round(float(np.mean(wins)), 2) if wins else None,
-        "avg_loss_usd": round(float(np.mean(losses)), 2) if losses else None,
+        "avg_win_usd": usd_mean(wins),
+        "avg_loss_usd": usd_mean(losses),
         "largest_loss_usd": round(min(losses), 2) if losses else None,
     }
 
@@ -245,13 +282,13 @@ def _pnl_series(
     series = [{"t": start, "pnl_usd": 0.0}]
     for bar_start, row in bars[(bars.index >= start) & (bars.index + MINUTE <= as_of)].iterrows():
         t_close = bar_start + MINUTE
-        pnl = 0.0
+        parts = []
         for trade in book:
             if trade.exit_at is not None and t_close >= trade.exit_at:
-                pnl += trade_pnl(trade)
+                parts.append(trade_pnl(trade))
             elif t_close >= trade.entry_at:
-                pnl += trade.unrealized(float(row["close"]))
-        series.append({"t": t_close, "pnl_usd": round(pnl, 2)})
+                parts.append(trade.unrealized(float(row["close"])))
+        series.append({"t": t_close, "pnl_usd": usd_sum(parts)})
     return series
 
 

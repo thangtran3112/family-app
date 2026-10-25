@@ -56,7 +56,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false }: EndPr
           {endLabel}
         </button>
         <button type="button" className={styles.button} onClick={() => setConfirming(false)}>
-          Keep practising
+          Keep practicing
         </button>
       </div>
     </div>

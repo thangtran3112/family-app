@@ -50,8 +50,8 @@ export function NotableDaysTable({ days, loading, error, onRetry, symbol, symbol
         rows={orderDays(days, symbol)}
         rowKey={(row) => `${row.symbol}:${row.day}`}
         rowActions={(row) => (
-          <button type="button" className={styles.small} aria-label={`Practise ${row.symbol}`} onClick={() => onPick(row)}>
-            Practise
+          <button type="button" className={styles.small} aria-label={`Practice ${row.symbol}`} onClick={() => onPick(row)}>
+            Practice
           </button>
         )}
       />

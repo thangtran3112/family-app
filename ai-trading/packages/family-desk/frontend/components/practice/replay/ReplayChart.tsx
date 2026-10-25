@@ -4,18 +4,21 @@ import { useMemo, useState } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
 import { ChartLegend } from "@/components/workspace/ChartLegend";
 import type { CrosshairPoint } from "@/lib/chart-data";
-import { buildChartSeries, legendModel, type IndicatorId } from "@/lib/desk/workspace";
-import { chartBars, type ReplayView } from "@/lib/replay/feedState";
+import { legendModel, type ChartSeries, type IndicatorId } from "@/lib/desk/workspace";
+import type { ReplayView } from "@/lib/replay/feedState";
 import { levelLines, practiceMarkers, signalMarkers, stopLevel } from "@/lib/replay/marks";
-import type { ReplayMark } from "@/lib/replay/schemas";
+import type { ReplayBar, ReplayMark } from "@/lib/replay/schemas";
 import styles from "./replay.module.css";
 
 // Practice charts show a day's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
-const INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume"]);
+export const REPLAY_INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume"]);
 
 export type ReplayChartProps = {
   symbol: string;
   view: ReplayView;
+  /** The displayed bars and the series computed from them (the header reads VWAP from the same series). */
+  bars: ReplayBar[];
+  series: ChartSeries;
   marks: readonly ReplayMark[];
   hideDates: boolean;
   focus: { time: string; at: number } | null;
@@ -26,12 +29,13 @@ export type ReplayChartProps = {
  * The replay chart: `MarketChart` fed only with what the server revealed (closed bars plus the forming one), her Practice
  * marks, the would-fire bells of released signals, key levels and the practice stop. No bar is ever sliced here.
  */
-export function ReplayChart({ symbol, view, marks, hideDates, focus, dimmed }: ReplayChartProps) {
+export function ReplayChart({ symbol, view, bars, series, marks, hideDates, focus, dimmed }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
-  const bars = useMemo(() => chartBars(view), [view]);
-  const series = useMemo(() => buildChartSeries(bars, INDICATORS, view.interval), [bars, view.interval]);
   const markers = useMemo(() => [...practiceMarkers(marks, bars), ...signalMarkers(view.signals, bars)], [marks, bars, view.signals]);
   const levels = useMemo(() => [...levelLines(view.levels), ...stopLevel(view.openTrade)], [view.levels, view.openTrade]);
+  // The legend names VWAP and the EMAs. The chart's own series tags ("EMA 9") would sit over the newest bars, where a practice
+  // marker lands, so they are left off the chart (D-028).
+  const untagged = useMemo(() => series.overlays.map((overlay) => ({ ...overlay, label: "" })), [series.overlays]);
   const legend = legendModel(symbol, view.interval, bars, series.overlays, crosshair);
 
   return (
@@ -42,7 +46,7 @@ export function ReplayChart({ symbol, view, marks, hideDates, focus, dimmed }: R
         bars={bars}
         quality="delayed-15m"
         asOf={view.revealedThrough}
-        overlays={series.overlays}
+        overlays={untagged}
         panes={series.panes}
         levels={levels}
         markers={markers}

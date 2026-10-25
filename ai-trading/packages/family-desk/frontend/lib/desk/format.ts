@@ -64,6 +64,12 @@ export function formatAsOfText(value: string | null): string {
   return DATE_ONLY.test(value) ? formatEtDay(value) : formatEtTimeZone(value);
 }
 
+/** "10:00" as "10:00 AM" (a list or window time the API names as HH:MM ET). */
+export function formatClock(hhmm: string): string {
+  const [hours = 0, minutes = 0] = hhmm.split(":").map(Number);
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
+}
+
 /** "Mon 9:30 AM ET" */
 export function formatEtWeekdayTime(iso: string | null): string {
   if (!iso) return EMPTY_VALUE;

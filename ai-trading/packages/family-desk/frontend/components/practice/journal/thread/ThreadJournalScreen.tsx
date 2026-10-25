@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { useShellBand } from "@/lib/desk/useViewportBand";
+import { journalStatusLine } from "@/lib/replay/statusLine";
 import { formatBalance, hasNoDays, startedWithText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import { BalanceCurve } from "./BalanceCurve";
 import { DayBars } from "./DayBars";
 import { ImprovementPanel } from "./ImprovementPanel";
-import { ThreadPlanPanel } from "./ThreadPlanPanel";
+import { CloseThreadPanel, ThreadPlanPanel } from "./ThreadPlanPanel";
+import { ThreadPicker } from "./ThreadPicker";
 import { ThreadSidePanel } from "./ThreadSidePanel";
 import { ThreadTiles } from "./ThreadTiles";
 import styles from "./threadJournal.module.css";
@@ -24,15 +29,7 @@ export function ThreadJournalScreen() {
   const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
   const query = useDeskQuery(`replay-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
-  if (id === null) {
-    return (
-      <div className={styles.center}>
-        <EmptyBlock title={PRACTICE_COPY.journalThreadNone}>
-          <Link href="/practice" className={styles.link}>Open Practice</Link>
-        </EmptyBlock>
-      </div>
-    );
-  }
+  if (id === null) return <ThreadPicker />;
   if (query.data === null) {
     return (
       <div className={styles.center}>
@@ -50,16 +47,23 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
   const closed = status === "closed";
   const balance = formatBalance(stats.balance);
   const name = threadName(thread.thread).replace(" thread", "");
+  // At the 1180 band the right rail is a tab strip: each tab opens its own drawer, and the screen leaves room for them (D-038, D-040).
+  const band = useShellBand();
+  const [railOpen, setRailOpen] = useState<string[]>([]);
+  useReportPracticeChrome({ day: null, hidden: false, playhead: null, scope: "days", status: journalStatusLine(thread.daily) });
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
       <header className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{`Thread · ${name} · ${weeksInText(weeks.length)}`}</h1>
             <span className={styles.chip}>{threadModeLabel(mode)}</span>
           </div>
-          <p className={styles.sub}>{`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} skipped`}</p>
+          <p className={styles.sub}>
+            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} skipped `}
+            <SimulatedBadge />
+          </p>
         </div>
         <div className={styles.balance}>
           <span className={styles.balanceLabel}>{PRACTICE_COPY.balanceNow}</span>
@@ -67,8 +71,8 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
           <SimulatedBadge />
         </div>
       </header>
+      <ThreadSidePanel thread={thread} weeks={weeks} />
       <div className={styles.body}>
-        <ThreadSidePanel thread={thread} weeks={weeks} />
         <div className={styles.center}>
           {closed && (
             <p className={styles.banner} role="status">
@@ -115,9 +119,13 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
       </div>
       <RightRail
         label="Thread details"
+        multi
+        openIds={railOpen}
+        onOpenIdsChange={setRailOpen}
         sections={[
           { id: "improvement", label: PRACTICE_COPY.improvementTitle, node: <ImprovementPanel weeks={weeks} /> },
           { id: "plan", label: PRACTICE_COPY.threadPlanTitle, node: <ThreadPlanPanel thread={thread} onChanged={onChanged} /> },
+          { id: "close", label: PRACTICE_COPY.threadClose, node: <CloseThreadPanel thread={thread} onChanged={onChanged} /> },
         ]}
       />
     </div>

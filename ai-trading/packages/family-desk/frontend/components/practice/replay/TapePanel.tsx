@@ -4,7 +4,7 @@ import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { isQuietTape, paceOf, type ReplayView } from "@/lib/replay/feedState";
 import { etTapeClock } from "@/lib/replay/time";
-import { fastTapeText, haltedTapeText, tapeRows, type SizeFilterId, type TapeDisplayRow } from "@/lib/replay/tape";
+import { DEFAULT_BIG_PRINT_USD, fastTapeText, formatNotional, haltedTapeText, tapeRows, type SizeFilterId, type TapeDisplayRow } from "@/lib/replay/tape";
 import { FeedLabel } from "./FeedLabel";
 import { TapeFilters } from "./TapeFilters";
 import { TapePace } from "./TapePace";
@@ -31,6 +31,7 @@ const COLUMNS: DenseColumn<TapeDisplayRow>[] = [
     render: (row) => <span className={row.big ? styles.bigPrice : TONE_CLASS[row.tone]}>{row.price}</span>,
   },
   { key: "size", label: "Size", align: "right", render: (row) => row.size },
+  { key: "big", label: "Big", align: "right", render: (row) => (row.bigText ? <span className={styles.bigNotional}>{row.bigText}</span> : "") },
 ];
 
 export function TapePanel({ view, filterId, onFilter, refreshing = false }: TapePanelProps) {
@@ -60,6 +61,7 @@ export function TapePanel({ view, filterId, onFilter, refreshing = false }: Tape
         />
       </div>
       <p className={styles.legend}>Colours show the tick rule: up-tick green, down-tick red, same price grey</p>
+      <p className={styles.legend}>{`Amber row · ${formatNotional(view.tapeMeta?.bigPrintUsd ?? DEFAULT_BIG_PRINT_USD)} or more (price times size) · the tape has no bid or ask`}</p>
     </section>
   );
 }

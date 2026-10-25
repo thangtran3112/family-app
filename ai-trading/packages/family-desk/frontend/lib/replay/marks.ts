@@ -88,6 +88,13 @@ export function markRows(marks: readonly ReplayMark[]): MarkRow[] {
     }));
 }
 
+/** When the open trade was entered: the time of its entry mark. Null when no mark carries its trade number. */
+export function entrySince(marks: readonly ReplayMark[], trade: Pick<OpenTrade, "trade_no"> | null): string | null {
+  if (trade === null) return null;
+  const entry = [...marks].reverse().find((mark) => (mark.kind === "long_entry" || mark.kind === "short_entry") && mark.trade_no === trade.trade_no);
+  return entry?.at ?? null;
+}
+
 /** The side of the open trade, for the keyboard map and the controls. */
 export const openSide = (trade: Pick<OpenTrade, "side"> | null): "flat" | "long" | "short" => (trade ? trade.side : "flat");
 

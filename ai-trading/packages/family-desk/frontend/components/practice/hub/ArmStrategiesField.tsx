@@ -42,7 +42,7 @@ export function ArmStrategiesField({ armed, onChange, error }: { armed: readonly
   } else if (loading) {
     body = <LoadingBlock label="Loading your strategies…" height={64} />;
   } else if (rows.length === 0) {
-    body = <p className={styles.hint}>No alert strategies or filters yet · you can still practise without arming</p>;
+    body = <p className={styles.hint}>No alert strategies or filters yet · you can still practice without arming</p>;
   } else {
     body = (
       <ul className={styles.armList}>

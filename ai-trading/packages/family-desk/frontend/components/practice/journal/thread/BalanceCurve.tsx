@@ -3,13 +3,13 @@
 import { useId } from "react";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { curveLayout, type Box } from "@/lib/replay/threadChart";
-import { formatBalance } from "@/lib/replay/threadView";
+import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
 const BOX: Box = { width: 760, height: 240, left: 64, right: 24, top: 16, bottom: 32 };
 
-/** The balance at the end of each day (02r board P8). Practised days are solid dots, skipped days open circles, the newest
+/** The balance at the end of each day (02r board P8). Practiced days are solid dots, skipped days open circles, the newest
  *  point amber; the red shading is the part of the line below the starting balance. Colours come from the CSS classes. */
 export function BalanceCurve({ thread }: { thread: Thread }) {
   const clipId = `below-start-${useId().replace(/\W/g, "")}`;
@@ -22,6 +22,8 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   // ponytail: x labels thinned to about 20 at most; per-point labels crowd past that. Upgrade: a responsive axis.
   const every = Math.max(1, Math.ceil(points.length / 20));
   const lowRight = lowest !== null && lowest.x > plot.x + plot.width - 80;
+  // When the newest point is also the lowest, "Now" already says it: a second label on the same spot would print over it.
+  const lowIsNow = lowest !== null && now !== null && lowest.x === now.x && lowest.y === now.y;
   const lowText = lowest ? `lowest ${formatBalance(lowest.balance)}` : "never below the start";
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, now ${formatBalance(stats.balance)}, ${lowText}.`;
 
@@ -35,7 +37,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
       {layout.ticks.map((tick) => (
         <g key={tick.value}>
           <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatBalance(tick.value)}</text>
+          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value)}</text>
         </g>
       ))}
       <line x1={plot.x} x2={plot.x + plot.width} y1={startY} y2={startY} className={styles.startLine} />
@@ -62,7 +64,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
       {now && (
         <text x={now.x - 8} y={now.y - 8} textAnchor="end" className={styles.nowLabel}>{`Now ${formatBalance(now.balance)}`}</text>
       )}
-      {lowest && (
+      {lowest && !lowIsNow && (
         <text
           x={lowest.x}
           y={lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8}

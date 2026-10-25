@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { actionForKey, isActivatable, isTextField, type OpenSide } from "./keys.ts";
+import { actionForKey, isActivatable, isTextField, KEY_LEGEND, type OpenSide } from "./keys.ts";
 
 const press = (key: string, side: OpenSide = "flat", extra: Record<string, unknown> = {}, overlay = false) => actionForKey({ key, ...extra }, side, overlay);
 
@@ -67,4 +67,10 @@ test("with the shortcuts overlay open only ? and Escape count", () => {
   assert.deepEqual(press("Escape", "flat", {}, true), { type: "close" });
   for (const key of [" ", "b", "n", "ArrowRight", "1"]) assert.equal(press(key, "flat", {}, true), null);
   assert.equal(press("z", "long", { metaKey: true }, true), null);
+});
+
+test("every single-letter key in the legend under the timeline drives an action (D-026)", () => {
+  const letters = KEY_LEGEND.filter((item) => /^[A-Z]$/.test(item.keys));
+  assert.deepEqual(letters.map((item) => item.keys), ["B", "S", "X", "T", "N"]);
+  for (const item of letters) assert.notEqual(press(item.keys.toLowerCase(), "long"), null, item.keys);
 });

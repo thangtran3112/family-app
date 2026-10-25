@@ -46,13 +46,20 @@
 .pace { display: flex; flex-direction: column; gap: 4px; }
 .meter { height: 4px; overflow: hidden; border-radius: 2px; background: var(--color-hairline); }
 .meterFill { display: block; height: 100%; background: var(--color-amber); transition: width 300ms ease; }
+.paceHead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.paceVerdict { color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+.bigNotional { color: var(--color-amber); font-weight: var(--weight-semibold); }
 .paceText { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
 
 /* Session rail: plan checklist */
 .mark { display: inline-flex; width: 14px; flex: 0 0 14px; justify-content: center; font-weight: var(--weight-bold); }
 .mark[data-state="ok"] { color: var(--color-up); }
 .mark[data-state="warn"] { color: var(--color-amber); }
-.mark[data-state="pending"] { color: var(--color-muted); }
+.mark[data-state="pending"], .mark[data-state="off"] { color: var(--color-muted); }
+.row[data-state="off"] .label { color: var(--color-muted); }
+.nudge { min-height: 24px; flex: 1 0 100%; justify-content: flex-start; margin-block: 2px; border-color: var(--color-amber); padding-inline: var(--space-2); color: var(--color-amber); font-size: var(--text-micro); }
+.planNote { margin: var(--space-2) 0 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
+.planNoteLabel { color: var(--color-text); font-weight: var(--weight-semibold); }
 
 /* Session rail: armed strategies */
 .armedName { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; font-weight: var(--weight-semibold); }
