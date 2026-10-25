@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": 13,
+  "threadId": 7,
+  "sessionId": 3,
+  "markId": 44,
+  "symbol": "AAPL",
+  "day": "2026-10-23",
+  "side": "short",
+  "shares": 50,
+  "entryPrice": 180.1,
+  "exitPrice": 182.6,
+  "pnlUsd": -125,
+  "r": -1,
+  "realizedAt": "2026-10-23T16:02:00Z"
+}

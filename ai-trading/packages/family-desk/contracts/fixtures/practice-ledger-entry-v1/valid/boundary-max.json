@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": 9001,
+  "threadId": 7,
+  "sessionId": 42,
+  "markId": 9002,
+  "symbol": "NVDA",
+  "day": "2026-10-23",
+  "side": "short",
+  "shares": 10000,
+  "entryPrice": 1000000,
+  "exitPrice": 1000000,
+  "pnlUsd": 0,
+  "realizedAt": "2026-10-23T19:59:00Z"
+}

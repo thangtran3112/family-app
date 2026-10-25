@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "mode": "day",
+  "startingBalance": 10000000,
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes"
+  }
+}
