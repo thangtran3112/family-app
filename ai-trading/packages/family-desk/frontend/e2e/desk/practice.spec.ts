@@ -580,7 +580,7 @@ test.describe("Practice", () => {
     await expect(card).toContainText(PRACTICE_COPY.threadResumeNeedsPlan); // no daily plan yet: nothing to resume
     await card.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
-    await expect(page.getByText("$50,000 · 0 days practiced")).toBeVisible();
+    await expect(page.getByText("$50,000.00 · 0 days practiced")).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.journalThreadEmpty)).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toHaveCount(0);
     await expectCleanScreen(page);
