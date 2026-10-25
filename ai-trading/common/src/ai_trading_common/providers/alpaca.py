@@ -1,5 +1,5 @@
 """Alpaca bars: daily (eod), hourly and 1-minute (delayed-15m) history; plus the screener universe
-(assets, most-actives, movers) and latest quotes (02m §b4 items 1 and 2).
+(assets, most-actives, movers), latest quotes (02m §b4 items 1 and 2), and trade prints (`/trades`).
 
 Adapted from `ai-trading/market-data/alpaca.py` (ours; open-source lane) and
 moved here per the Phase 2 reuse map (02a §11, "move"). No attribution notice
@@ -28,6 +28,7 @@ from ai_trading_common.bars import Bars, Timeframe, drop_unclosed, to_utc, valid
 from ai_trading_common.errors import NoData, NotConfigured, ProviderError, Unavailable
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.quality import Quality
+from ai_trading_common.trades import Trades, empty_trades_frame
 from ai_trading_common.types import ActiveSymbol, Mover, Quote, UniverseAsset
 
 PROVIDER_NAME = "alpaca"
@@ -92,18 +93,7 @@ class AlpacaBars:
             "feed": "sip",
             "limit": "10000",
         }
-        rows: list[dict] = []
-        page_token: str | None = None
-        while True:
-            if page_token:
-                params["page_token"] = page_token
-            else:
-                params.pop("page_token", None)
-            body = self._get(symbol, params)
-            rows.extend(body.get("bars") or [])
-            page_token = body.get("next_page_token")
-            if not page_token:
-                break
+        rows = self._paged(symbol, "bars", params, "bars")
 
         if not rows:
             raise NoData(PROVIDER_NAME, f"no bars for {symbol!r} between {start_utc} and {capped_end}")
@@ -113,8 +103,45 @@ class AlpacaBars:
         frame = drop_unclosed(frame, timeframe, now_utc)
         return Bars(frame=frame, source=PROVIDER_NAME, quality=quality)
 
-    def _get(self, symbol: str, params: dict) -> dict:
-        url = f"{BASE}/{quote(symbol)}/bars"
+    def trades(
+        self,
+        symbol: str,
+        start: pd.Timestamp | datetime,
+        end: pd.Timestamp | datetime,
+        *,
+        feed: Literal["sip", "iex"] = "sip",
+        now: pd.Timestamp | datetime | None = None,
+    ) -> Trades:
+        """Every print between `start` and `end` on `feed`. The SIP end is capped to the embargo, as bars are;
+        an empty window is an empty `Trades`, not `NoData`."""
+        if not (self.key_id and self.secret):
+            raise NotConfigured(PROVIDER_NAME, "no API key configured")
+
+        start_utc, end_utc = to_utc(start), to_utc(end)
+        if feed == "sip":
+            now_utc = pd.Timestamp.now(tz="UTC") if now is None else to_utc(now)
+            end_utc = min(end_utc, now_utc - SIP_EMBARGO)
+        if end_utc < start_utc:
+            return Trades(frame=empty_trades_frame(), source=PROVIDER_NAME, feed=feed)
+
+        params = {"start": start_utc.isoformat(), "end": end_utc.isoformat(), "feed": feed, "limit": "10000"}
+        rows = self._paged(symbol, "trades", params, "trades")
+        return Trades(frame=_to_trades_frame(rows), source=PROVIDER_NAME, feed=feed)
+
+    def _paged(self, symbol: str, path: str, params: dict, key: str) -> list[dict]:
+        """Every page of `body[key]` from `/{symbol}/{path}`, following `next_page_token` until it runs out."""
+        rows: list[dict] = []
+        page_token: str | None = None
+        while True:
+            page = {**params, "page_token": page_token} if page_token else params
+            body = self._get_path(symbol, path, page)
+            rows.extend(body.get(key) or [])
+            page_token = body.get("next_page_token")
+            if not page_token:
+                return rows
+
+    def _get_path(self, symbol: str, path: str, params: dict) -> dict:
+        url = f"{BASE}/{quote(symbol)}/{path}"
         headers = {"APCA-API-KEY-ID": self.key_id, "APCA-API-SECRET-KEY": self.secret}
         response = self._http.get(
             url,
@@ -206,7 +233,7 @@ class AlpacaBars:
                 "limit": "1",
             }
             try:
-                body = self._get(symbol, params)
+                body = self._get_path(symbol, "bars", params)
             except NoData:
                 continue
             rows = body.get("bars") or []
@@ -285,6 +312,31 @@ def _to_frame(rows: list[dict], timeframe: Timeframe) -> pd.DataFrame:
     return raw
 
 
+def _to_trades_frame(rows: list[dict]) -> pd.DataFrame:
+    """Alpaca's `{t, x, p, s, c}` prints into the shared trades shape. `c` is a list of condition codes, joined
+    with no separator. A print with a non-positive price or size is dropped (the same bad-row rule as bars);
+    the rest sort by print time, stably, so prints at the same instant keep their order."""
+    if not rows:
+        return empty_trades_frame()
+    try:
+        frame = pd.DataFrame(
+            {
+                # pandas picks the resolution from the strings (`us` for whole seconds); the shared shape is ns.
+                "t": pd.to_datetime([r["t"] for r in rows], utc=True, format="ISO8601").astype("datetime64[ns, UTC]"),
+                "p": [float(r["p"]) for r in rows],
+                "s": [int(r["s"]) for r in rows],
+                "x": [str(r.get("x") or "") for r in rows],
+                "c": ["".join(r.get("c") or []) for r in rows],
+            }
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProviderError(PROVIDER_NAME, f"malformed trade: {exc}") from exc
+    if frame["t"].isna().any():
+        raise ProviderError(PROVIDER_NAME, "malformed trade: missing print time")
+    frame = frame[(frame["p"] > 0) & (frame["s"] > 0)]
+    return frame.sort_values("t", kind="stable").reset_index(drop=True)
+
+
 def _build(env: Mapping[str, str], http: ThrottledClient) -> AlpacaBars:
     return AlpacaBars(
         env.get("ALPACA_API_KEY_ID", ""),
@@ -294,4 +346,4 @@ def _build(env: Mapping[str, str], http: ThrottledClient) -> AlpacaBars:
     )
 
 
-PROVIDER = Provider(name=PROVIDER_NAME, kinds=("bars", "universe", "quotes"), build=_build)
+PROVIDER = Provider(name=PROVIDER_NAME, kinds=("bars", "universe", "quotes", "trades"), build=_build)

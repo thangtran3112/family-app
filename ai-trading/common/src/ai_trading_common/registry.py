@@ -43,6 +43,7 @@ from ai_trading_common.sources import (
     NewsSource,
     QuoteSource,
     TargetsSource,
+    TradesSource,
     UniverseSource,
 )
 from ai_trading_common.types import GatewayStatus
@@ -61,10 +62,11 @@ Kind = Literal[
     "targets",
     "universe",
     "quotes",
+    "trades",
 ]
 
 #: Every kind, in `DataSources`' own field order. Fixed, not derived from `DEFAULT_CHAINS`, so
-#: `DataSources` is always built with all eleven fields regardless of how small a custom
+#: `DataSources` is always built with all twelve fields regardless of how small a custom
 #: `registry=`/`defaults=` override is (a test overriding one kind still needs the rest).
 _KINDS: tuple[Kind, ...] = (
     "bars",
@@ -78,6 +80,7 @@ _KINDS: tuple[Kind, ...] = (
     "targets",
     "universe",
     "quotes",
+    "trades",
 )
 
 
@@ -108,8 +111,18 @@ def _chain_call(providers: Sequence[object], method: str, *args: object, **kwarg
 class _BarsChain:
     providers: tuple[BarsSource, ...]
 
-    def bars(self, symbol, timeframe, start, end, *, now):
-        return _chain_call(self.providers, "bars", symbol, timeframe, start, end, now=now)
+    def bars(self, symbol, timeframe, start, end, *, now, adjustment="all"):
+        # Only a non-default adjustment is forwarded, so a provider without the keyword still serves the default.
+        return _chain_call(
+            self.providers,
+            "bars",
+            symbol,
+            timeframe,
+            start,
+            end,
+            now=now,
+            **({} if adjustment == "all" else {"adjustment": adjustment}),
+        )
 
 
 @dataclass(frozen=True)
@@ -201,6 +214,14 @@ class _QuotesChain:
         return _chain_call(self.providers, "latest", symbols, now=now)
 
 
+@dataclass(frozen=True)
+class _TradesChain:
+    providers: tuple[TradesSource, ...]
+
+    def trades(self, symbol, start, end, *, feed, now=None):
+        return _chain_call(self.providers, "trades", symbol, start, end, feed=feed, now=now)
+
+
 #: Kind -> its chain class and its Protocol (the latter used by the conformance test to check
 #: each registered provider's adapter against every kind it claims to serve).
 _CHAIN_CLASSES: dict[Kind, type] = {
@@ -215,6 +236,7 @@ _CHAIN_CLASSES: dict[Kind, type] = {
     "targets": _TargetsChain,
     "universe": _UniverseChain,
     "quotes": _QuotesChain,
+    "trades": _TradesChain,
 }
 
 KIND_PROTOCOLS: dict[Kind, type] = {
@@ -229,6 +251,7 @@ KIND_PROTOCOLS: dict[Kind, type] = {
     "targets": TargetsSource,
     "universe": UniverseSource,
     "quotes": QuoteSource,
+    "trades": TradesSource,
 }
 
 
@@ -257,6 +280,7 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
     "news": ("finnhub",),
     "quotes": ("ibkr", "alpaca"),  # ibkr only joins while its switch is on (Provider.enabled)
     "targets": ("eulerpool", "finnhub"),
+    "trades": ("alpaca",),
     "universe": ("alpaca",),
 }
 
@@ -277,6 +301,7 @@ class DataSources:
     targets: TargetsSource
     universe: UniverseSource
     quotes: QuoteSource
+    trades: TradesSource
 
     def gateway_status(self) -> GatewayStatus:
         """How the live-quote gateway stands: the first quotes provider that holds one reports it, and

@@ -61,6 +61,7 @@ def _sources(universe) -> DataSources:
         targets=unused,
         universe=universe,
         quotes=unused,
+        trades=unused,
     )
 
 
