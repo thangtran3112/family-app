@@ -6,7 +6,7 @@ import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { planCard } from "@/lib/replay/dayView";
+import { planArmedText, planCard } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { DailyPlanForm } from "./DailyPlanForm";
 import styles from "./hub.module.css";
@@ -71,6 +71,7 @@ export function DailyListCard() {
         <span className={styles.muted}>{plan.filters.map((filter) => filter.name).join(" · ")}</span>
       </div>
       {card.detail && <p className={styles.muted}>{card.detail}</p>}
+      <p className={styles.muted}>{planArmedText(plan)}</p>
       {message && <p role="alert" className={styles.fieldError}>{message}</p>}
       <div className={styles.inline}>
         {(card.action === "continue" || card.action === "start") && (

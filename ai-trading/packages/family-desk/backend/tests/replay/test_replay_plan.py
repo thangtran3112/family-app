@@ -3,20 +3,24 @@ in order, the stars, the day's session on the shared clock, ending the day, and 
 list serves. Real Postgres (`scripts/test-db.sh`); the history comes from an in-memory source, not the network."""
 
 import json
+from dataclasses import replace
 from datetime import datetime
 
 import pandas as pd
 import pytest
+from ai_trading_common.types import ActiveSymbol
 from daily_world import DAYS, NOW, SYMBOLS, SyntheticBars, _build_world, make_services
 from sqlalchemy import select
 
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.core.calendar import et
+from ai_trading.data.universe import SEED_SYMBOLS
 from ai_trading.db.models import FilterStrategy, PracticePlan, ReplayDayList, User
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import screen
 from ai_trading.replay import session as session_mod
+from ai_trading.replay.cache import BlobKey, decode_bars
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound
 
 
@@ -128,6 +132,45 @@ def test_a_premarket_filter_needs_a_list_time_of_0830_or_later(db_session, user_
     assert caught.value.message == "Premarket filters need a list time of 8:30 AM or later"
 
 
+@pytest.mark.parametrize(
+    ("name", "list_at", "message"),
+    [
+        (
+            "Abnormal volume",
+            "08:30",
+            "Abnormal volume needs a list time of 10:00 AM or later"
+            " · before then none of its bars of the day has closed",
+        ),
+        (
+            "Above VWAP on volume",
+            "09:30",
+            "Above VWAP on volume needs a list time of 9:50 AM or later"
+            " · before then none of its bars of the day has closed",
+        ),
+    ],
+)
+def test_a_cadence_filter_before_its_first_bar_of_the_day_is_a_422_naming_the_list_time(
+    db_session, user_id, svc, name, list_at, message
+) -> None:
+    changes = {"screen": {"filters": [{"id": _filter_id(db_session, user_id, name)}], "listAt": list_at}}
+    with pytest.raises(ReplayProblem) as caught:
+        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, **changes), svc)
+    assert (caught.value.path, caught.value.message, caught.value.status) == ("screen.listAt", message, 422)
+
+
+def test_a_mixed_plan_is_held_to_its_latest_filter_and_saves_from_that_time(db_session, user_id, svc) -> None:
+    filters = [{"id": _filter_id(db_session, user_id, n)} for n in ("Gap up", "Abnormal volume", "High volatility")]
+    with pytest.raises(ReplayProblem) as caught:
+        plan_mod.create_plan(db_session, user_id, _block(db_session, user_id, screen={"filters": filters}), svc)
+    assert caught.value.message.startswith("Abnormal volume needs a list time of 10:00 AM")
+    window = {"window": {"from": "10:00", "to": "12:00"}}
+    ok = _block(db_session, user_id, screen={"filters": filters, "listAt": "10:00"}, setup=window)
+    assert plan_mod.create_plan(db_session, user_id, ok, svc).spec["screen"]["listAt"] == "10:00"
+    assert db_session.execute(select(PracticePlan.status).where(PracticePlan.status == "active")).scalars().all() == [
+        "active"
+    ]  # the refused attempt archived nothing
+
+
 def test_a_new_plan_archives_the_old_one_and_only_one_is_live(db_session, user_id, svc) -> None:
     first = _plan(db_session, user_id, svc)
     second = _plan(db_session, user_id, svc)
@@ -161,7 +204,58 @@ def test_the_practice_universe_is_the_desk_set_without_non_plain_tickers(db_sess
     assert {"ZZZ", "YYY", "SPY"} <= set(symbols) and "COPL.WS" not in symbols and capped is False
 
 
+class _ListedUniverse:
+    """The provider's most-actives list, as plain tickers (no movers, no asset names)."""
+
+    def __init__(self, symbols: list[str]) -> None:
+        self.symbols, self.calls = symbols, 0
+
+    def assets(self):
+        self.calls += 1
+        return []
+
+    def most_actives(self, by, top):
+        self.calls += 1
+        return [ActiveSymbol(s, 1.0, 1, "fake", "delayed-15m") for s in self.symbols]
+
+    def movers(self, top):
+        self.calls += 1
+        return []
+
+
+def test_the_first_plan_on_a_fresh_install_freezes_a_full_universe_not_the_seeds(db_session, user_id, svc) -> None:
+    listed = [f"A{chr(65 + i)}{chr(65 + j)}" for i in range(10) for j in range(13)]  # 130 plain tickers
+    universe = _ListedUniverse(listed)
+    svc.sources = replace(svc.sources, universe=universe)
+    first = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)
+    db_session.commit()
+    assert len(first.universe["symbols"]) == len(SEED_SYMBOLS) + len(listed) >= 130
+    assert set(SEED_SYMBOLS) <= set(first.universe["symbols"]) and first.prep["total"] == len(first.universe["symbols"])
+
+    calls = universe.calls
+    plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)  # a later plan reuses the stored set
+    assert universe.calls == calls
+
+
+def test_a_plan_still_saves_on_the_seeds_when_the_universe_cannot_be_built(db_session, user_id, svc) -> None:
+    plan = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc)  # the fake source has no lists
+    assert set(plan.universe["symbols"]) == set(SEED_SYMBOLS)
+
+
 # -- prep and opening days --------------------------------------------------------------------------
+
+
+def test_prep_stores_the_extended_hours_minutes_a_premarket_list_reads(db_session, user_id, svc) -> None:
+    plan = _plan(db_session, user_id, svc)
+    plan_mod.run_prep(db_session, svc, plan.id)
+    payload = svc.store_factory(db_session).get(BlobKey("bars1m", "GAPPER", DAYS[0], "", "sip"))
+    assert payload is not None
+    bars = decode_bars(payload)
+    local = bars.index.tz_convert("America/New_York")
+    minutes = local.hour * 60 + local.minute
+    assert minutes.min() == 4 * 60 and minutes.max() == 19 * 60 + 59  # 04:00 to 20:00, not the regular session
+    assert int((minutes < 9 * 60 + 30).sum()) == 330
+    assert (8 * 60 + 14) in set(minutes)  # the 08:14 bar a list at 08:30 reads
 
 
 def test_a_day_waits_for_prep_then_opens_and_a_second_open_continues_it(db_session, user_id, svc) -> None:
@@ -196,7 +290,10 @@ def test_the_first_list_has_the_gapper_priced_at_the_0814_bar_and_counts_what_it
     assert candidate["filters"] == ["Gap up"] and candidate["reported_before_open"] is False
     assert out["data_through"] == et(DAYS[0], "08:15") and out["universe"]["size"] == 3
     assert "Practice universe · 3 symbols the Desk has scanned" in out["universe"]["label"]
-    assert out["warnings"] == ["Only 1 name matched · add a filter or lower its threshold"]
+    assert out["warnings"] == [
+        "Only 1 of the 3 scanned symbols met Gap up and Gap down"
+        " · loosen a filter in the Screener to widen the next days' lists"
+    ]
     assert out["review"] is None and out["journal"] is None and out["clock"] is None
 
 
@@ -213,6 +310,49 @@ def test_days_open_in_order_one_at_a_time_and_a_split_makes_no_false_gap(db_sess
     assert seen == [["GAPPER"], [], ["GAPPER"], [], []]  # SPLITTER's 2-for-1 on day 4 is not a -50% gap down
     done = _open(db_session, user_id, svc)
     assert done.day_list is None and plan_mod.plan_out(db_session, done.plan)["finished"] is True
+
+
+def test_an_empty_list_says_why_in_the_words_of_the_cause(db_session, user_id, svc) -> None:
+    _ready(db_session, user_id, svc)
+    first = _open(db_session, user_id, svc).day_list
+    plan_mod.end_day(db_session, user_id, first.id, svc)
+    db_session.commit()
+    second = _open(db_session, user_id, svc).day_list  # a quiet morning: nothing gaps 3%
+    assert plan_mod.day_list_out(db_session, user_id, second.id, svc)["warnings"] == [
+        "None of the 3 scanned symbols met Gap up and Gap down"
+        " · loosen a filter in the Screener to widen the next days' lists"
+    ]
+
+    # no symbol scanned at all (nothing passed the floor): the floor is named, not the thresholds
+    second.universe = {**second.universe, "scanned": 0, "no_data": 1, "below_floor": 2}
+    assert plan_mod.day_list_out(db_session, user_id, second.id, svc)["warnings"] == [
+        "No symbol could be scanned · 1 had no price data and 2 fell below the $5 and 500,000-share floor"
+    ]
+    # symbols passed the floor but no filter found a bar to read: a data gap, not thresholds
+    second.universe = {
+        **second.universe,
+        "scanned": 3,
+        "filters": [{**item, "scanned": 0, "no_data": 3} for item in second.universe["filters"]],
+    }
+    assert plan_mod.day_list_out(db_session, user_id, second.id, svc)["warnings"] == [
+        "No bars to read at 8:30 AM for any of the 3 symbols that passed the floor"
+        " · the data for this day may be missing"
+    ]
+
+
+def test_a_list_saved_before_the_server_refused_an_early_cadence_filter_says_so(db_session, user_id, svc) -> None:
+    changes = {
+        "screen": {"filters": [{"id": _filter_id(db_session, user_id, "Abnormal volume")}], "listAt": "10:00"},
+        "setup": {"window": {"from": "10:00", "to": "12:00"}},
+    }
+    plan = _plan(db_session, user_id, svc, **changes)
+    plan_mod.run_prep(db_session, svc, plan.id)
+    row = _open(db_session, user_id, svc).day_list
+    row.screen = {**row.screen, "listAt": "08:30"}  # the plan as it stood before D-001: a 15-minute filter at 8:30
+    assert plan_mod.day_list_out(db_session, user_id, row.id, svc)["warnings"] == [
+        "Abnormal volume reads bars of the day itself, and none had closed by 8:30 AM · only the previous session was "
+        "visible. Start a new plan with a list time of 10:00 AM or later"
+    ]
 
 
 def test_the_list_is_the_one_the_live_runner_would_have_stored(db_session, user_id, svc) -> None:

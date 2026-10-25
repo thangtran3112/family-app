@@ -275,16 +275,24 @@ test.describe("Practice", () => {
     await daily.getByLabel("To", { exact: true }).fill("09:40");
     await daily.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "1m", exact: true }).click();
     await expectCleanScreen(page);
-    await daily.getByRole("button", { name: "Save plan" }).click();
+    await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible(); // D-002: the picked filter is armed for her
+    await expect(daily.getByRole("button", { name: "Save plan" })).toHaveCount(0); // D-003: the button says what it does
+    await daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true }).click();
 
     // Prep runs once in the background; Day 1 opens when the data is ready.
     await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
     await expect(daily).toContainText("Day 1 of 5 · next: Fri");
+    await expect(daily).toContainText("Armed on practice days: Any close"); // D-002: the card says what the rail armed
     await expect(daily).not.toContainText(DAY);
     await expectCleanScreen(page);
     await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     const dayUrl = page.url();
+
+    // D-004: the bare route finds the day she has open.
+    await openDesk(page, "/practice/day");
+    await page.waitForURL(dayUrl);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
 
     // The day list: dates hidden, the candidate, the universe line, and the footnote.
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
@@ -349,6 +357,76 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
     await expect(page.getByText(PRACTICE_COPY.dayNoNames).first()).toBeVisible();
+    // D-005: the banner names the cause (the stub holds no bars for this day), not "Only 0 names matched".
+    await expect(page.getByRole("status").filter({ hasText: "No symbol could be scanned" })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("Only 0");
+    await expectCleanScreen(page);
+  });
+
+  // D-001: a filter that reads bars of the list day itself cannot be listed before its first bar has closed.
+  test("the plan form moves the list time for a 15-minute filter, disables earlier times and says why", async ({ page }) => {
+    await openDesk(page, "/practice");
+    const daily = page.locator("#daily-list");
+    const filters = daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
+    const listTimes = daily.getByRole("group", { name: PRACTICE_COPY.planListAt, exact: true });
+    const premarket = listTimes.getByRole("button", { name: /^8:30/ });
+    const tenOclock = listTimes.getByRole("button", { name: /^10:00/ });
+
+    await filters.getByRole("checkbox", { name: "Gap up" }).check();
+    await expect(premarket).toHaveAttribute("aria-pressed", "true"); // a premarket filter lists at 8:30
+    await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible();
+
+    await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
+    await expect(tenOclock).toHaveAttribute("aria-pressed", "true"); // the default suggestion for an intraday filter
+    await expect(premarket).toBeDisabled();
+    await expect(daily.getByText("Abnormal volume needs a list time of 10:00 AM or later")).toBeVisible();
+    await expect(daily.getByText("Arm up to 5 strategies · 2 armed")).toBeVisible();
+    await expect(daily.getByLabel("From", { exact: true })).toHaveValue("10:00"); // the window starts at the list
+
+    await filters.getByRole("checkbox", { name: "Abnormal volume" }).uncheck();
+    await expect(premarket).toBeEnabled();
+    await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible(); // dropping a filter disarms it
+    await expectCleanScreen(page);
+  });
+
+  test("the server refuses a 15-minute filter at an 8:30 list with a 422 naming the list time", async ({ context }) => {
+    const listed = await (await context.request.get(`${origin}/api/desk/screener/filters`)).json();
+    const volume = (listed as Array<{ id: number; name: string }>).find((filter) => filter.name === "Abnormal volume");
+    expect(volume).toBeDefined();
+    const plan = (listAt: string, from: string) => ({
+      plan: {
+        schemaVersion: 1,
+        firstDay: DAY,
+        sessions: 5,
+        hideDates: "yes",
+        screen: { filters: [{ id: volume!.id }], listAt, maxList: 30 },
+        setup: {
+          window: { from, to: "11:30" },
+          session: "regular",
+          interval: "5m",
+          shares: 100,
+          armed: [],
+          plan: { stopRequired: "no", signalOnly: "no" },
+        },
+      },
+    });
+    const refused = await context.request.post(`${origin}/api/desk/replay/daily/next`, { data: plan("08:30", "09:30") });
+    expect(refused.status()).toBe(422);
+    const { detail } = await refused.json();
+    expect(detail.problems).toEqual([
+      {
+        path: "screen.listAt",
+        message: "Abnormal volume needs a list time of 10:00 AM or later · before then none of its bars of the day has closed",
+      },
+    ]);
+    expect((await context.request.get(`${origin}/api/desk/replay/daily`)).ok()).toBeTruthy();
+    expect((await (await context.request.get(`${origin}/api/desk/replay/daily`)).json()).plan).toBeNull(); // nothing was saved
+  });
+
+  test("the bare day route with no open day says so and links back to Practice", async ({ page }) => {
+    await openDesk(page, "/practice/day");
+    await expect(page.getByText(PRACTICE_COPY.dayNoPlan)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open Practice" })).toBeVisible();
     await expectCleanScreen(page);
   });
 });

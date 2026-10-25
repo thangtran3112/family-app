@@ -14,6 +14,7 @@ from ai_trading.data.universe import (
     apply_floor,
     build_universe,
     classify_asset_type,
+    ensure_universe,
     split_plain,
 )
 from ai_trading.db.models import UniverseSymbol
@@ -24,8 +25,10 @@ NOW = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 class FakeUniverse:
     def __init__(self, *, actives=(), movers=(), assets=(), fail=()):
         self._actives, self._movers, self._assets, self._fail = list(actives), list(movers), list(assets), set(fail)
+        self.calls_made = 0
 
     def _check(self, name: str) -> None:
+        self.calls_made += 1
         if name in self._fail:
             raise Unavailable("fake", f"{name} down")
 
@@ -162,3 +165,27 @@ def test_apply_floor_uses_stored_metrics_and_records_why_a_symbol_failed(db_sess
     assert rows["THIN"].passed_floor is False and rows["THIN"].floor_reason["reason"] == "below_floor"
     assert rows["NOBAR"].floor_reason == {"reason": "no_daily_data"}
     assert passed == 1 and failed == len(SEED_SYMBOLS) + 4 - 1  # seeds have no metrics here either
+
+
+def test_ensure_universe_builds_a_fresh_install_once_and_then_leaves_it_alone(db_session):
+    listed = [f"A{chr(65 + i)}{chr(65 + j)}" for i in range(10) for j in range(13)]  # 130 plain tickers
+    universe = FakeUniverse(actives=listed, movers=["WSX.WS"])
+    sources = _sources(universe)
+
+    first = ensure_universe(db_session, sources, now=NOW)
+    db_session.commit()
+    active = db_session.query(UniverseSymbol).filter(UniverseSymbol.active.is_(True)).count()
+    assert first is not None and active == len(SEED_SYMBOLS) + len(listed) >= 130  # the seeds plus the lists
+
+    calls = universe.calls_made
+    assert ensure_universe(db_session, sources, now=NOW) is None and universe.calls_made == calls  # no second build
+
+
+def test_ensure_universe_retries_while_only_the_seeds_are_stored(db_session):
+    down = ensure_universe(db_session, _sources(NotConfiguredUniverse()), now=NOW)
+    db_session.commit()
+    assert down is not None and len(down.failed) == 4
+    assert db_session.query(UniverseSymbol).filter(UniverseSymbol.active.is_(True)).count() == len(SEED_SYMBOLS)
+
+    later = ensure_universe(db_session, _sources(FakeUniverse(actives=["XYZ"])), now=NOW)  # the provider is back
+    assert later is not None and db_session.get(UniverseSymbol, "XYZ").active is True
