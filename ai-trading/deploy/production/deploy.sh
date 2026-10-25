@@ -500,15 +500,21 @@ print("\n".join(service for services in data["apps"].values() for service in ser
 # itself only runs uvicorn; CI and the local stack run this same upgrade in
 # their own harnesses). One-off `compose run --rm --no-deps api`, so it uses
 # the api service's own env_file/networks and never starts a second server.
-# A failure dies the deploy before any container swap, leaving the running
-# (old) stack untouched for the rollback path. No-op when the Desk api
-# service is not in this run's selected list.
+# Connects as the MIGRATOR role when DESK_MIGRATOR_DATABASE_URL is present:
+# production tables live in the `desk` schema owned by desk_migrator (the
+# roles script's migrator/runtime split), so the runtime role cannot ALTER
+# them -- the migrator URL carries the role's search_path (desk,
+# desk_migrations, pg_catalog) that resolves the version table. Falls back
+# to the runtime URL where the split does not exist (CI, local). A failure
+# dies the deploy before any container swap, leaving the running (old)
+# stack untouched for the rollback path. No-op when the Desk api service
+# is not in this run's selected list.
 migrate_desk_db() {
   local selected_text
   selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$(mirofish_ready_flag)")" \
     || die "control: failed to compute the selected service list"
   [[ $'\n'"$selected_text"$'\n' == *$'\napi\n'* ]] || return 0
-  compose run --rm --no-deps api python -c "import os; from alembic import command; from alembic.config import Config; c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', os.environ['DESK_RUNTIME_DATABASE_URL']); command.upgrade(c, 'head')" \
+  compose run --rm --no-deps api python -c "import os; from alembic import command; from alembic.config import Config; c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', os.environ.get('DESK_MIGRATOR_DATABASE_URL') or os.environ['DESK_RUNTIME_DATABASE_URL']); command.upgrade(c, 'head')" \
     || die "desk db migration failed (alembic upgrade head) -- schema left at its previous revision and no container was swapped"
 }
 
