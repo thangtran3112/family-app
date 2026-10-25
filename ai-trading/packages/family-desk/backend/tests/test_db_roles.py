@@ -128,6 +128,9 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "practice_marks",
         "replay_notable_days",
         "replay_blobs",
+        "practice_plans",
+        "replay_day_lists",
+        "universe_days",
     }
 
 
@@ -189,6 +192,53 @@ def test_desk_runtime_can_select_insert_update_delete_replay_tables(role_split_u
                     "+ (SELECT COUNT(*) FROM replay_blobs WHERE symbol = 'ROLES')"
                 ),
                 {"s": session_id},
+            ).scalar_one()
+            assert remaining == 0
+    finally:
+        runtime_engine.dispose()
+
+
+def test_desk_runtime_can_use_the_daily_list_tables(role_split_urls: RoleSplitUrls) -> None:
+    # 0006's tables, like 0005's, are reachable through the zz-20 script's default privileges.
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            user_id = conn.execute(
+                text("INSERT INTO users (email) VALUES (:email) RETURNING id"), {"email": "daily-roles@example.test"}
+            ).scalar_one()
+            plan_id = conn.execute(
+                text(
+                    "INSERT INTO practice_plans (owner_user_id, schema_version, spec, first_day, universe, prep, "
+                    "status, created_at, updated_at) VALUES (:u, 1, '{}'::jsonb, '2026-03-02', '{}'::jsonb, "
+                    "'{}'::jsonb, 'active', now(), now()) RETURNING id"
+                ),
+                {"u": user_id},
+            ).scalar_one()
+            list_id = conn.execute(
+                text(
+                    "INSERT INTO replay_day_lists (plan_id, owner_user_id, day, day_no, screen, list_at, "
+                    "data_through, universe, columns, candidates, watch, status, created_at, updated_at) "
+                    "VALUES (:p, :u, '2026-03-02', 1, '{}'::jsonb, now(), now(), '{}'::jsonb, '[]'::jsonb, "
+                    "'[]'::jsonb, '[]'::jsonb, 'listed', now(), now()) RETURNING id"
+                ),
+                {"p": plan_id, "u": user_id},
+            ).scalar_one()
+            conn.execute(
+                text("UPDATE replay_day_lists SET status = 'ended', ended_at = now(), rating = 3 WHERE id = :l"),
+                {"l": list_id},
+            )
+            conn.execute(
+                text("INSERT INTO universe_days (day, symbols, created_at) VALUES ('1999-01-04', '[]'::jsonb, now())")
+            )
+            conn.execute(text("DELETE FROM universe_days WHERE day = '1999-01-04'"))
+            # Deleting the user cascades through the plan to its day lists.
+            conn.execute(text("DELETE FROM users WHERE id = :u"), {"u": user_id})
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM practice_plans WHERE id = :p) "
+                    "+ (SELECT COUNT(*) FROM replay_day_lists WHERE id = :l)"
+                ),
+                {"p": plan_id, "l": list_id},
             ).scalar_one()
             assert remaining == 0
     finally:
