@@ -539,13 +539,14 @@ class ReplayBlob(Base):
 
 
 class PracticePlan(Base):
-    """The saved daily-list setup and its cursor. One active plan per user; `day_cursor` is the newest opened day."""
+    """The saved daily-list setup and its cursor. One active plan per thread (Alembic 0008 moved the index from the
+    owner to the thread, so a day thread and a swing thread run side by side); `day_cursor` is the newest opened day."""
 
     __tablename__ = "practice_plans"
     __table_args__ = (
         Index(
-            "uq_practice_plans_owner_user_id_active",
-            "owner_user_id",
+            "uq_practice_plans_thread_id_active",
+            "thread_id",
             unique=True,
             postgresql_where=text("status = 'active'"),
         ),
@@ -660,21 +661,30 @@ class PracticeThread(Base):
 
 class PracticeLedger(Base):
     """One realized practice trade, keyed by its exit mark (so booking twice is a no-op). Undoing the exit mark
-    deletes the row with it."""
+    deletes the row with it. A swing row is keyed by its hold (Alembic 0008) and may have no session or mark: a hold
+    that auto-exits at a close was never marked."""
 
     __tablename__ = "practice_ledger"
     __table_args__ = (
         UniqueConstraint("mark_id", name="uq_practice_ledger_mark_id"),
         Index("ix_practice_ledger_thread_id_day", "thread_id", "day"),
+        Index("uq_practice_ledger_hold_id", "hold_id", unique=True, postgresql_where=text("hold_id IS NOT NULL")),
         CheckConstraint("side IN ('long', 'short')", name="ck_practice_ledger_side"),
+        CheckConstraint(
+            "hold_id IS NOT NULL OR (session_id IS NOT NULL AND mark_id IS NOT NULL)", name="ck_practice_ledger_source"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     thread_id: Mapped[int] = mapped_column(ForeignKey("practice_threads.id", ondelete="CASCADE"), nullable=False)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("replay_sessions.id", ondelete="CASCADE"), index=True, nullable=False
+    # Null for a swing row that auto-exited at a close; `hold_id` then names the source.
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("replay_sessions.id", ondelete="CASCADE"), index=True, nullable=True
     )
-    mark_id: Mapped[int] = mapped_column(ForeignKey("practice_marks.id", ondelete="CASCADE"), nullable=False)
+    mark_id: Mapped[int | None] = mapped_column(ForeignKey("practice_marks.id", ondelete="CASCADE"), nullable=True)
+    hold_id: Mapped[int | None] = mapped_column(
+        ForeignKey("practice_holds.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     day: Mapped[date] = mapped_column(Date, nullable=False)
     symbol: Mapped[str] = mapped_column(String, nullable=False)
     side: Mapped[str] = mapped_column(String, nullable=False)  # "long" | "short"
@@ -685,3 +695,85 @@ class PracticeLedger(Base):
     r: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # null when no stop was set
     realized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# -- Swing practice (Alembic 0008, 02p): multi-day practice holds and the weekly review --
+
+
+class PracticeHold(Base):
+    """A swing practice hold: open from the day she enters until she exits it (or a close does). A stop never exits
+    it (it only flags `stop_hit_at`); the exit session and mark are null for an auto exit at a close. At most one open
+    hold per symbol in a thread."""
+
+    __tablename__ = "practice_holds"
+    __table_args__ = (
+        Index(
+            "uq_practice_holds_thread_id_symbol_open",
+            "thread_id",
+            "symbol",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_practice_holds_thread_id_status", "thread_id", "status"),
+        CheckConstraint("side IN ('long', 'short')", name="ck_practice_holds_side"),
+        CheckConstraint("status IN ('open', 'closed')", name="ck_practice_holds_status"),
+        CheckConstraint("exit_source IS NULL OR exit_source IN ('her', 'auto')", name="ck_practice_holds_exit_source"),
+        CheckConstraint("shares >= 1", name="ck_practice_holds_shares"),
+        CheckConstraint(
+            "(status = 'closed') = (exit_day IS NOT NULL AND exit_price IS NOT NULL AND exit_source IS NOT NULL)",
+            name="ck_practice_holds_closed_fields",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("practice_threads.id", ondelete="CASCADE"), nullable=False)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    side: Mapped[str] = mapped_column(String, nullable=False)  # "long" | "short"
+    shares: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_day: Mapped[date] = mapped_column(Date, nullable=False)
+    entry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    # SET NULL: the hold outlives the session and mark it began on.
+    entry_session_id: Mapped[int | None] = mapped_column(ForeignKey("replay_sessions.id", ondelete="SET NULL"))
+    entry_mark_id: Mapped[int | None] = mapped_column(ForeignKey("practice_marks.id", ondelete="SET NULL"))
+    stop_at_entry: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    stop_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    stop_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "open" | "closed"
+    exit_day: Mapped[date | None] = mapped_column(Date)
+    exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    exit_session_id: Mapped[int | None] = mapped_column(ForeignKey("replay_sessions.id", ondelete="SET NULL"))
+    exit_mark_id: Mapped[int | None] = mapped_column(ForeignKey("practice_marks.id", ondelete="SET NULL"))
+    exit_source: Mapped[str | None] = mapped_column(String)  # "her" | "auto"
+    # The latest official close the hold was valued at, restated to the day's share basis (R7).
+    last_close: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    last_close_day: Mapped[date | None] = mapped_column(Date)
+    splits: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PracticeWeek(Base):
+    """One trading week of a swing thread: opens with its first day, closes with its last, and then carries the review
+    the server built and her notes and rating. Keyed by (thread, week number)."""
+
+    __tablename__ = "practice_weeks"
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'closed')", name="ck_practice_weeks_status"),
+        CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_practice_weeks_rating"),
+        CheckConstraint("(status = 'closed') = (closed_at IS NOT NULL)", name="ck_practice_weeks_closed_at"),
+    )
+
+    thread_id: Mapped[int] = mapped_column(ForeignKey("practice_threads.id", ondelete="CASCADE"), primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    week_no: Mapped[int] = mapped_column(Integer, primary_key=True)
+    first_day: Mapped[date] = mapped_column(Date, nullable=False)
+    last_day: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "open" | "closed"
+    review: Mapped[Any | None] = mapped_column(JSONB)
+    notes: Mapped[str | None] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(SmallInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
