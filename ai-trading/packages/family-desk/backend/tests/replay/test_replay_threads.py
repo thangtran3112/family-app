@@ -539,3 +539,34 @@ def test_the_day_screen_carries_the_thread_header(db_session, user_id, svc) -> N
         "today_pnl_usd": 40.0,
         "label": threads_mod.SIMULATED_LABEL,
     }
+
+
+# -- D-007: the old plan fields in a block are ignored, never read, never an error ----------------------------------
+
+
+LEGACY_SETUP = {"shares": 500, "plan": {"stopRequired": "yes", "signalOnly": "yes", "maxLossUsd": 1, "maxTrades": 1}}
+
+
+def test_without_legacy_plan_fields_drops_exactly_the_two_keys_and_nothing_else() -> None:
+    block = {"firstDay": "2026-09-28", "setup": {"interval": "5m", "armed": [], **LEGACY_SETUP}}
+    assert plan_mod.without_legacy_plan_fields(block) == {
+        "firstDay": "2026-09-28",
+        "setup": {"interval": "5m", "armed": []},
+    }
+    for odd in (None, [], "x", {"setup": None}, {"firstDay": "2026-09-28"}):
+        assert plan_mod.without_legacy_plan_fields(odd) == odd  # not a block: left for the validator to refuse
+
+
+def test_a_plan_saved_before_0007_is_served_without_the_old_fields_and_scores_with_the_thread(
+    db_session, user_id, svc
+) -> None:
+    thread = make_thread(db_session, user_id, maxTrades=7)
+    plan = _ready(db_session, user_id, svc)
+    plan.spec = {**plan.spec, "setup": {**plan.spec["setup"], **LEGACY_SETUP}}  # the row as 0006 stored it
+    db_session.commit()
+    served = plan_mod.plan_out(db_session, plan)["spec"]
+    assert "plan" not in served["setup"] and "shares" not in served["setup"]
+    row = _open(db_session, user_id, svc).day_list
+    session = plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
+    assert session.spec["plan"] == {"stopRequired": "no", "signalOnly": "no", "maxTrades": 7}  # not the legacy plan
+    assert session.spec["shares"] == plan_mod.DAY_SESSION_SHARES and session.thread_id == thread.id

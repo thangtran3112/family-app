@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
-from daily_world import DAYS, NOW, make_services
+from daily_world import DAYS, NOW, SYMBOLS, make_services
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from test_replay_daily_api import _plan_body, _start_plan
@@ -17,7 +17,7 @@ from ai_trading.api.replay import get_services
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1, PracticeThreadV1
 from ai_trading.core.calendar import et
-from ai_trading.db.models import User
+from ai_trading.db.models import PracticePlan, User
 from ai_trading.replay import plan as plan_mod
 
 BASE = "/api/desk/replay"
@@ -281,3 +281,32 @@ def test_a_standalone_session_has_no_thread_header(world) -> None:
     made = client.post(f"{BASE}/sessions", json=spec, headers=auth_headers())
     assert made.status_code == 200, made.text
     assert made.json()["thread_id"] is None and made.json()["thread"] is None
+
+
+def test_an_old_client_that_still_sends_the_plan_fields_is_ignored_not_refused(world, db_session) -> None:
+    client, services, user_id = world
+    assert _create(client, plan={**PLAN, "maxTrades": 5}).status_code == 200
+    block = _plan_body(db_session, user_id)
+    old = {
+        **block,
+        "setup": {
+            **block["setup"],
+            "shares": 9999,
+            "plan": {"stopRequired": "yes", "signalOnly": "yes", "maxLossUsd": 1},
+        },
+    }
+    started = client.post(f"{BASE}/daily/next", json={"plan": old}, headers=auth_headers())
+    assert started.status_code == 200, started.text
+    assert set(started.json()["plan"]["spec"]["setup"]) == {"window", "session", "interval", "armed"}
+    plan = db_session.execute(select(PracticePlan).where(PracticePlan.owner_user_id == user_id)).scalar_one()
+    plan.universe = {**plan.universe, "symbols": SYMBOLS}  # the three synthetic names, not the seed universe
+    db_session.commit()
+    plan_mod.run_prep(db_session, services, started.json()["plan"]["id"])
+    list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
+    assert session.json()["spec"]["plan"] == {"stopRequired": "no", "signalOnly": "no", "maxTrades": 5}
+    assert session.json()["spec"]["shares"] == 100
+    junk = {**block, "setup": {**block["setup"], "shares": "lots", "plan": 7}}  # whatever it was, it is dropped
+    assert client.post(f"{BASE}/daily/next", json={"plan": junk}, headers=auth_headers()).status_code == 200
+    extra = {**block, "setup": {**block["setup"], "stray": 1}}  # any other unknown key is still refused
+    assert client.post(f"{BASE}/daily/next", json={"plan": extra}, headers=auth_headers()).status_code == 422

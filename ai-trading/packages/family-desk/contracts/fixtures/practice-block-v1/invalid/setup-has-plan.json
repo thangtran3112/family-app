@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "firstDay": "2026-03-02",
-  "sessions": 20,
-  "hideDates": "yes",
+  "sessions": 5,
+  "hideDates": "no",
   "screen": {
     "filters": [
       {
@@ -10,7 +10,7 @@
       }
     ],
     "listAt": "08:30",
-    "maxList": 30
+    "maxList": 20
   },
   "setup": {
     "window": {
@@ -19,14 +19,10 @@
     },
     "session": "regular",
     "interval": "5m",
-    "shares": 100,
     "armed": [],
     "plan": {
       "stopRequired": "no",
-      "signalOnly": "no",
-      "maxLossUsd": 200,
-      "maxTrades": 4,
-      "note": "Trade the first hour only."
+      "signalOnly": "no"
     }
   }
 }

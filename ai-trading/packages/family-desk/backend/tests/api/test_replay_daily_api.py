@@ -57,9 +57,7 @@ def _plan_body(db_session, user_id: int, **screen: Any) -> dict[str, Any]:
             "window": {"from": "09:30", "to": "11:30"},
             "session": "regular",
             "interval": "5m",
-            "shares": 100,
             "armed": [],
-            "plan": {"stopRequired": "no", "signalOnly": "no"},
         },
     }
 

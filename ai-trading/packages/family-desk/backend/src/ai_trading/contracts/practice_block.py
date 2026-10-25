@@ -1,5 +1,9 @@
 """PracticeBlockV1 (mirror of contracts/src/practice-block-v1.ts): the daily-list practice plan (02o-b v1).
 
+The risk plan and the entry size are not part of it (02r, D-007): they belong to the practice thread
+(`contracts/practice_thread.py`), and `replay/plan.py` drops `setup.plan` and `setup.shares` from an old client's block
+before it is validated here.
+
 The shape is generated (strategy_spec_v1.py); the window and list-time rules live in Zod `superRefine`, which JSON
 Schema cannot carry, so they are hand-written here on top of it. The rules that need a database (the filters are
 hers and runnable, `listAt` of 08:30 or later for a premarket filter, every day finished, `firstDay` from

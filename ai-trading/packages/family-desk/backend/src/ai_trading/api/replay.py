@@ -366,7 +366,8 @@ def open_next(
     answer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.
 
     A new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409
-    in plain words). The thread, not the plan, carries the risk plan (D-007)."""
+    in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
+    old client are ignored."""
     if not isinstance(raw, dict) or set(raw) - {"plan", "threadId"}:
         raise _problem('Send {} to continue, or {"plan": ..., "threadId": ...} to start a plan', "")
     started = raw.get("plan") is not None
@@ -374,7 +375,7 @@ def open_next(
     if thread_id is not None and (not started or isinstance(thread_id, bool) or not isinstance(thread_id, int)):
         raise _problem("Send threadId, a whole number, together with a plan", "threadId")
     if started:
-        block = _validated(PracticeBlockV1, raw["plan"])
+        block = _validated(PracticeBlockV1, plan_mod.without_legacy_plan_fields(raw["plan"]))
         thread = _call(threads_mod.resolve_for_plan, db, user.id, thread_id)
         _call(plan_mod.create_plan, db, user.id, block, services, thread)
     opened = _call(plan_mod.open_next, db, user.id, services)

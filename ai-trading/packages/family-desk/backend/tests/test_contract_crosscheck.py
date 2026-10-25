@@ -86,7 +86,7 @@ _id = lambda pair: f"{pair[0]}:{_rel(pair[1])}"  # noqa: E731
 
 
 def test_every_family_has_fixtures():
-    assert len(VALID) >= 165 and len(INVALID) >= 400
+    assert len(VALID) >= 164 and len(INVALID) >= 396
 
 
 @pytest.mark.parametrize("pair", VALID, ids=_id)

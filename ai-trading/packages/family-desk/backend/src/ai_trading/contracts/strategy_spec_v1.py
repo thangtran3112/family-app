@@ -295,19 +295,6 @@ class PracticeMarkV1(RootModel[PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV
     root: PracticeMarkV11 | PracticeMarkV12 | PracticeMarkV13 | PracticeMarkV14
 
 
-class PracticePlanV1(SpecModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    maxLossUsd: Annotated[int | None, Field(ge=1, le=100000)] = None
-    maxTrades: Annotated[int | None, Field(ge=1, le=50)] = None
-    note: Annotated[
-        str | None, Field(max_length=500, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
-    ] = None
-    signalOnly: Literal["yes", "no"]
-    stopRequired: Literal["yes", "no"]
-
-
 class Filter(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -611,9 +598,7 @@ class PracticeSetupV1(SpecModel):
     )
     armed: Annotated[list[PracticeArmedV1], Field(max_length=5)]
     interval: Literal["1m", "5m", "15m"]
-    plan: PracticePlanV1
     session: Literal["regular", "extended"]
-    shares: Annotated[int, Field(ge=1, le=10000)]
     window: PracticeWindowV1
 
 

@@ -892,46 +892,6 @@
         }
       ]
     },
-    "PracticePlanV1": {
-      "additionalProperties": false,
-      "properties": {
-        "maxLossUsd": {
-          "maximum": 100000,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "maxTrades": {
-          "maximum": 50,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "note": {
-          "maxLength": 500,
-          "minLength": 1,
-          "pattern": "^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$",
-          "type": "string"
-        },
-        "signalOnly": {
-          "enum": [
-            "yes",
-            "no"
-          ],
-          "type": "string"
-        },
-        "stopRequired": {
-          "enum": [
-            "yes",
-            "no"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "stopRequired",
-        "signalOnly"
-      ],
-      "type": "object"
-    },
     "PracticeScreenV1": {
       "additionalProperties": false,
       "properties": {
@@ -989,20 +949,12 @@
           ],
           "type": "string"
         },
-        "plan": {
-          "$ref": "#/$defs/PracticePlanV1"
-        },
         "session": {
           "enum": [
             "regular",
             "extended"
           ],
           "type": "string"
-        },
-        "shares": {
-          "maximum": 10000,
-          "minimum": 1,
-          "type": "integer"
         },
         "window": {
           "$ref": "#/$defs/PracticeWindowV1"
@@ -1012,9 +964,7 @@
         "window",
         "session",
         "interval",
-        "shares",
-        "armed",
-        "plan"
+        "armed"
       ],
       "type": "object"
     },

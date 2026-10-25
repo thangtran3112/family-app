@@ -71,6 +71,20 @@ UNIVERSE_LABEL = (
 )
 
 
+# -- the legacy block ----------------------------------------------------------------------------------------
+
+LEGACY_SETUP_KEYS = ("plan", "shares")  # the risk plan and entry size left the block for the thread (02r, D-007)
+
+
+def without_legacy_plan_fields(block: Any) -> Any:
+    """A block with `setup.plan` and `setup.shares` taken out. An old client still sends them and a plan saved before
+    0007 still stores them: both are ignored, never an error, and the block is served without them."""
+    setup = block.get("setup") if isinstance(block, dict) else None
+    if not isinstance(setup, dict):
+        return block
+    return {**block, "setup": {key: value for key, value in setup.items() if key not in LEGACY_SETUP_KEYS}}
+
+
 # -- the schedule --------------------------------------------------------------------------------------------
 
 
@@ -296,7 +310,7 @@ def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
 
 
 def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
-    spec = plan.spec
+    spec = without_legacy_plan_fields(plan.spec)
     days = plan_days(plan.first_day, spec["sessions"])
     latest = _latest(db, plan.id)
     finished = latest is not None and latest.status == "ended" and latest.day == days[-1]

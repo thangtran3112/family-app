@@ -53,9 +53,7 @@ def _block(db_session, user_id: int, **changes) -> PracticeBlockV1:
             "window": {"from": "09:30", "to": "11:30"},
             "session": "regular",
             "interval": "5m",
-            "shares": 100,
             "armed": [],
-            "plan": {"stopRequired": "no", "signalOnly": "no"},
         },
     }
     for key, value in changes.items():

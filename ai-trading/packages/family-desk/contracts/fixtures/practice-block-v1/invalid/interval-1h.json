@@ -19,11 +19,6 @@
     },
     "session": "regular",
     "interval": "1h",
-    "shares": 100,
-    "armed": [],
-    "plan": {
-      "stopRequired": "yes",
-      "signalOnly": "no"
-    }
+    "armed": []
   }
 }
