@@ -7,6 +7,7 @@ import pytest
 from bars import daily_bars, trading_days
 from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.core.calendar import session as trading_session
@@ -100,6 +101,34 @@ def test_list_has_the_ten_seeds_in_catalog_order_then_hers_by_name(client, db_se
     assert all(r["read_only"] and r["origin"] == "seed" for r in rows[:10])
     assert all(not r["read_only"] and r["origin"] == "user" and r["seed_key"] is None for r in rows[10:])
     assert rows[0]["last_run"] is None  # nothing has run yet
+
+
+def test_a_first_visit_finds_the_ten_defaults_and_a_second_adds_nothing(client, db_session):
+    _user_id(client, db_session)  # a user the operator never seeded: the shape of production
+    first = client.get(f"{BASE}/filters", headers=auth_headers()).json()
+    catalog = [e.id for e in load_catalog().entries if e.kind == "filter"]
+    assert [r["seed_key"] for r in first] == catalog and all(r["read_only"] and r["last_run"] is None for r in first)
+    again = client.get(f"{BASE}/filters", headers=auth_headers()).json()
+    assert [r["id"] for r in again] == [r["id"] for r in first]
+    # What the scheduler's first pass needs: a run waits for it, and the results say so without an error.
+    results = client.get(f"{BASE}/filters/{first[0]['id']}/results", headers=auth_headers()).json()
+    assert (results["matches"], results["stamp"]["as_of"], results["stamp"]["freshness"]) == ([], None, "unavailable")
+
+
+def test_a_default_whose_name_she_already_uses_is_skipped_and_a_lost_race_adds_nothing(client, db_session, monkeypatch):
+    user_id = _user_id(client, db_session)
+    assert _create(client, {**ABOVE_100, "name": "Abnormal volume"}).status_code == 201
+    assert service.ensure_seed_filters(db_session, user_id, now=NOW) == 9
+    assert service.ensure_seed_filters(db_session, user_id, now=NOW) == 0  # nothing missing, nothing added
+
+    other = _user_id(client, db_session, OTHER_EMAIL)
+
+    def lose(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("a parallel request seeded first"))
+
+    monkeypatch.setattr(service, "_insert", lose)
+    assert service.ensure_seed_filters(db_session, other, now=NOW) == 0
+    db_session.rollback()
 
 
 def test_detail_of_a_seed_is_read_only_and_a_copy_knows_the_seed_it_came_from(client, db_session):

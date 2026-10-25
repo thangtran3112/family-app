@@ -62,6 +62,43 @@ def seed_order() -> dict[str, int]:
     return {entry.id: index for index, entry in enumerate(entries)}
 
 
+def ensure_seed_filters(session: Session, user_id: int, *, now: datetime) -> int:
+    """Give the user the catalog's default filters she does not have yet; returns how many were added.
+
+    Nothing else seeds a real user (`cli/seed_technical.py` is an operator step), so the screener lists this first.
+    A name she already uses for her own filter keeps its place and that default is skipped. A parallel request that
+    seeded first wins the unique index: the savepoint rolls back and this one adds nothing."""
+    have = set(
+        session.execute(
+            select(FilterStrategy.seed_key).where(
+                FilterStrategy.owner_user_id == user_id, FilterStrategy.origin == "seed"
+            )
+        ).scalars()
+    )
+    added = 0
+    try:
+        with session.begin_nested():
+            for entry in load_catalog().entries:
+                if entry.kind != "filter" or entry.id in have:
+                    continue
+                try:
+                    _insert(
+                        session,
+                        user_id,
+                        seed_spec(entry.id) or {},
+                        seed_key=entry.id,
+                        origin="seed",
+                        note="seeded",
+                        now=now,
+                    )
+                except NameTaken:
+                    continue
+                added += 1
+    except IntegrityError:
+        return 0
+    return added
+
+
 def seed_spec(seed_key: str) -> dict[str, Any] | None:
     """The shipped template a seed or a copy of one started from (the editor's "Reset to default")."""
     entry = next((e for e in load_catalog().entries if e.kind == "filter" and e.id == seed_key), None)
