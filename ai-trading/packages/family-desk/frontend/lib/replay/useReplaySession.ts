@@ -233,6 +233,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           setSession((current) => (current ? { ...current, marks: [...current.marks, result.mark], open_trade: result.open_trade, journal: result.journal } : current));
           setView((current) => (current ? { ...current, openTrade: result.open_trade } : current));
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
+          if (result.warning) say("info", result.warning); // priced off an old print: the price is accepted, the warning says so
           return true;
         } catch (error) {
           if (!alive.current) return false;

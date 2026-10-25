@@ -1,10 +1,13 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { assignmentHistory, coveredCallCandidates, coveredCallOverview, coveredCallPayoff, monthlyPremiums, rollCandidates, shortCallRisks, weeklyDigest } from "../../lib/fixtures/covered-calls.ts";
 
+export const metadata: Metadata = { title: "Covered calls" };
+
 export default function CoveredCallsPage() {
   return (
-    <FixtureScreen phase={5} title="Covered calls">
+    <FixtureScreen title="Covered calls">
       <div className={styles.content}>
         <nav className={styles.navPills} aria-label="Covered-call views">
           <a href="#scan">Daily scan</a>
@@ -47,8 +50,8 @@ export default function CoveredCallsPage() {
               </article>
             ))}
           </div>
-          <div className={styles.warning}>Sample numbers do not come from quotes. The scanner and alerts are wired in Phase 5.</div>
-          <button className={styles.button} type="button" disabled aria-label="Run covered-call scan, available in Phase 5">Run scan · Phase 5</button>
+          <div className={styles.warning}>Sample numbers do not come from quotes. The scanner and alerts are not available yet.</div>
+          <button className={styles.button} type="button" disabled aria-label="Run covered-call scan, not available yet">Run scan · not available yet</button>
         </section>
 
         <section className={styles.section} id="short-calls" aria-labelledby="short-calls-title">
@@ -87,7 +90,7 @@ export default function CoveredCallsPage() {
             <p className={styles.footnote}>Rolling and alert delivery are not available from this fixture panel.</p>
             <div className={styles.buttonRow}>
               <button className={styles.button} type="button" disabled aria-label="Paper roll, available in a later phase">Paper roll · later phase</button>
-              <button className={styles.buttonSecondary} type="button" disabled aria-label="Create a short-call alert, available in Phase 5">Alert me · Phase 5</button>
+              <button className={styles.buttonSecondary} type="button" disabled aria-label="Create a short-call alert, not available yet">Alert me · not available yet</button>
             </div>
           </section>
         </section>

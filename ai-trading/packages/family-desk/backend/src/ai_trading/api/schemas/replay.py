@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, FiniteFloat, field_serializer
 
 from ai_trading.api.schemas.common import Stamp
+from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
 
 Interval = Literal["1m", "5m", "15m"]
@@ -161,6 +162,7 @@ class ArmedOut(BaseModel):
 
 class ReplaySessionOut(BaseModel):
     id: int
+    day_list_id: int | None  # the day list this session practises; null for a standalone session
     attempt: int
     status: SessionStatus
     spec: ReplaySessionV1
@@ -191,6 +193,7 @@ class ReplaySessionSummaryOut(BaseModel):
     """A row of the hub's Resume card and Recent sessions table."""
 
     id: int
+    day_list_id: int | None
     symbol: str
     day: date
     attempt: int
@@ -291,6 +294,7 @@ class ReplayLevelsOut(BaseModel):
 class LastPrintOut(BaseModel):
     price: FiniteFloat
     at: datetime
+    age_s: int  # seconds from this print to the playhead; a mark priced off an old print carries a warning
 
 
 class AdvanceOut(BaseModel):
@@ -306,6 +310,7 @@ class AdvanceOut(BaseModel):
     signals: list[ReplaySignalOut]
     levels: ReplayLevelsOut
     last: LastPrintOut | None
+    quiet_s: int | None  # seconds with no eligible print, once that passes a minute: a halt looks like this
     open_trade: OpenTradeOut | None
     stamp: Stamp
 
@@ -326,9 +331,270 @@ class MarkResultOut(BaseModel):
     mark: MarkOut
     open_trade: OpenTradeOut | None
     journal: JournalOut
+    warning: str | None  # set when the mark was priced off a print older than 30 seconds
 
 
 class MarkUndoOut(BaseModel):
     removed_mark_id: int
     open_trade: OpenTradeOut | None
     journal: JournalOut
+
+
+# -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
+
+
+DayListStatus = Literal["listed", "practicing", "ended"]
+StarKind = Literal["traded", "starred"]
+
+
+class PlanFilterOut(BaseModel):
+    id: int
+    name: str
+
+
+class PlanCurrentOut(BaseModel):
+    id: int
+    day_no: int
+    status: DayListStatus
+
+
+class PlanPrepOut(BaseModel):
+    state: Literal["running", "done"]
+    done: int
+    total: int
+    failed: int  # symbols whose bars could not be fetched; they read as no data on the lists
+
+
+class PracticePlanOut(BaseModel):
+    """The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is
+    not over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule."""
+
+    id: int
+    spec: PracticeBlockV1
+    sessions: int
+    days_opened: int
+    filters: list[PlanFilterOut]
+    current: PlanCurrentOut | None
+    next_day: date | None
+    next_weekday: Weekday | None
+    next_day_no: int | None
+    finished: bool
+    prep: PlanPrepOut
+
+    @field_serializer("spec")
+    def _spec_as_authored(self, spec: PracticeBlockV1):  # no return annotation: the schema stays `PracticeBlockV1`
+        return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+class DailyOut(BaseModel):
+    plan: PracticePlanOut | None
+
+
+class OpenNextOut(BaseModel):
+    """`day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every
+    day is done."""
+
+    plan: PracticePlanOut
+    day_list_id: int | None
+
+
+class DayFilterOut(BaseModel):
+    id: int
+    version_id: int  # frozen on the day: editing the filter later never rewrites an old list
+    name: str
+
+
+class DayScreenOut(BaseModel):
+    filters: list[DayFilterOut]
+    list_at: str  # "HH:MM" ET
+    max_list: int
+
+
+class ListFilterCountsOut(BaseModel):
+    id: int
+    version_id: int
+    name: str
+    scanned: int
+    no_data: int
+    matches_total: int
+
+
+class ListUniverseOut(BaseModel):
+    """What was scanned. `label` and `footnote` state the universe plainly; show them beside any score."""
+
+    source: Literal["desk"]
+    size: int
+    scanned: int
+    no_data: int
+    below_floor: int
+    matches_total: int
+    shown: int
+    prev_basis: bool  # no regular bar of the day exists at the cut: the metric columns are the previous session's
+    filters: list[ListFilterCountsOut]
+    label: str
+    footnote: str
+
+
+class ListColumnOut(BaseModel):
+    key: str
+    label: str
+    format: str
+
+
+class CandidateOut(BaseModel):
+    """One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut."""
+
+    rank: int
+    symbol: str
+    filters: list[str]
+    rank_value: FiniteFloat | None
+    matched_since: datetime
+    operands: dict[str, FiniteFloat | None]
+    list_price: FiniteFloat
+    price_at: datetime
+    prior_close: FiniteFloat | None
+    reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
+    metrics: dict[str, FiniteFloat | None]
+
+
+class StarOut(BaseModel):
+    symbol: str
+    starred_clock: datetime  # the day clock when she starred it (the list time before the day starts)
+
+
+class DaySessionOut(BaseModel):
+    id: int
+    symbol: str
+    status: SessionStatus
+
+
+class PeekDailyBarOut(BaseModel):
+    t: date
+    o: FiniteFloat
+    h: FiniteFloat
+    l: FiniteFloat  # noqa: E741 -- the wire name
+    c: FiniteFloat
+    v: FiniteFloat
+
+
+class PeekMinuteBarOut(BaseModel):
+    t: datetime
+    o: FiniteFloat
+    h: FiniteFloat
+    l: FiniteFloat  # noqa: E741
+    c: FiniteFloat
+    v: FiniteFloat
+
+
+class PeekLevelsOut(BaseModel):
+    prior_high: FiniteFloat | None = None
+    prior_low: FiniteFloat | None = None
+    prior_close: FiniteFloat | None = None
+    premarket_high: FiniteFloat | None = None
+    premarket_low: FiniteFloat | None = None
+
+
+class PeekOut(BaseModel):
+    """Pre-open chart data for one candidate, cut at `data_through`: the same rebased daily bars the list was
+    screened on, and the day's minutes through the cut."""
+
+    symbol: str
+    data_through: datetime
+    list_price: FiniteFloat | None = None
+    daily: list[PeekDailyBarOut]
+    minutes: list[PeekMinuteBarOut]
+    levels: PeekLevelsOut
+
+
+class DayJournalSessionOut(BaseModel):
+    id: int
+    symbol: str
+    trades: int
+    pnl_usd: FiniteFloat
+    adherence_pct: int | None
+
+
+class DayJournalOut(BaseModel):
+    sessions: list[DayJournalSessionOut]
+    trades: int
+    pnl_usd: FiniteFloat
+
+
+class ReviewRowOut(BaseModel):
+    symbol: str
+    list_price: FiniteFloat
+    window_end_price: FiniteFloat | None
+    move_pct: FiniteFloat | None
+    close_price: FiniteFloat | None
+    close_move_pct: FiniteFloat | None
+    high_pct: FiniteFloat | None
+    low_pct: FiniteFloat | None
+    range_pct: FiniteFloat | None
+    rank: int | None  # 1 = the biggest absolute move from the list price
+    picked: StarKind | None
+
+
+class SelectionPickOut(BaseModel):
+    symbol: str
+    kind: StarKind
+    move_pct: FiniteFloat
+    rank: int
+
+
+class SelectionOut(BaseModel):
+    picks: list[SelectionPickOut]
+    median_abs_move_pct: FiniteFloat | None
+    picks_avg_abs_move_pct: FiniteFloat | None
+
+
+class ReviewOut(BaseModel):
+    """Every candidate's move from its list price to the window end and the close. Only present once the day ended."""
+
+    window_end: datetime
+    of: int  # candidates with a move
+    rows: list[ReviewRowOut]
+    selection: SelectionOut
+
+
+class DayListOut(BaseModel):
+    """One practice day. Before `status` is `ended` nothing here is later than `data_through` (the list, the stars,
+    Peek) or the day clock; `review` and `journal` are null until then."""
+
+    id: int
+    plan: PracticePlanOut
+    day: date
+    weekday: Weekday
+    day_no: int
+    of: int
+    status: DayListStatus
+    list_at: datetime
+    data_through: datetime
+    screen: DayScreenOut
+    universe: ListUniverseOut
+    columns: list[ListColumnOut]
+    candidates: list[CandidateOut]
+    watch: list[StarOut]
+    clock: datetime | None
+    sessions: list[DaySessionOut]
+    warnings: list[str]
+    peek: PeekOut | None
+    journal: DayJournalOut | None
+    review: ReviewOut | None
+    notes: str | None
+    rating: int | None
+    created_at: datetime
+    ended_at: datetime | None
+    stamp: Stamp
+
+
+class DayListPatch(BaseModel):
+    """PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left
+    alone; `null` clears notes and rating."""
+
+    watch: list[str] | None = Field(default=None, max_length=5)
+    notes: str | None = Field(default=None, max_length=2000)
+    rating: int | None = Field(default=None, ge=1, le=5)
+
+
+class DaySessionIn(BaseModel):
+    symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")

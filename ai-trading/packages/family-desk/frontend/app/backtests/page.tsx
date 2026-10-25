@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { divergingBars, lineCoordinates } from "../../lib/fixtures/chart-geometry.ts";
@@ -10,6 +11,8 @@ import {
   backtestTrades,
   backtestYearlyReturns,
 } from "../../lib/fixtures/backtests.ts";
+
+export const metadata: Metadata = { title: "Backtests" };
 
 export default function BacktestsPage() {
   const strategyValues = backtestEquityCurve.points.map((point) => point.strategy);
@@ -24,7 +27,7 @@ export default function BacktestsPage() {
   const yearlyBars = divergingBars(backtestYearlyReturns);
 
   return (
-    <FixtureScreen phase="6b" title="Backtest">
+    <FixtureScreen title="Backtest">
       <div className={styles.content}>
         <section className={styles.section} aria-label="Backtest fixture details">
           <div className={styles.sectionHeading}>
@@ -43,7 +46,7 @@ export default function BacktestsPage() {
               {backtestSettings.map((setting) => <div key={setting.label}><dt>{setting.label}</dt><dd>{setting.value}</dd></div>)}
             </dl>
           </div>
-          <button className={styles.button} type="button" disabled aria-label="Run backtest, available in Phase 6b">Run backtest · Phase 6b</button>
+          <button className={styles.button} type="button" disabled aria-label="Run backtest, not available yet">Run backtest · not available yet</button>
           <p className={styles.footnote}>Backtesting is not wired yet. Every result below is synthetic fixture data, not a run of this strategy.</p>
         </section>
 

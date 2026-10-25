@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_BIG_PRINT_USD, feedLabel, fastTapeText, filterById, isBigPrint, paceLevel, paceText, SIZE_FILTERS, tapeQuery, tapeRows, tickTone } from "./tape.ts";
+import { DEFAULT_BIG_PRINT_USD, feedLabel, fastTapeText, filterById, haltedTapeText, isBigPrint, paceLevel, paceText, SIZE_FILTERS, tapeQuery, tapeRows, tickTone } from "./tape.ts";
 import type { TapeRow } from "./feedState.ts";
 
 test("size chips send min size, and only Big only sends the big-print notional", () => {
@@ -69,4 +69,10 @@ test("pace level fills the meter from the band, else from a log scale of shares 
   assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 0, band: null, timesAverage: null }), 0);
   assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 9, band: null, timesAverage: null }), 0.2, "log10(10) / 5");
   assert.equal(paceLevel({ printsPerSecond: 1, sharesPerSecond: 1e9, band: null, timesAverage: null }), 1, "capped at 1");
+});
+
+test("a silent tape reads as a possible halt, in seconds then minutes", () => {
+  assert.equal(haltedTapeText(null), null);
+  assert.equal(haltedTapeText(95), "No prints for 95 s · the stock may be halted");
+  assert.equal(haltedTapeText(134 + 60), "No prints for 3 min 14 s · the stock may be halted");
 });

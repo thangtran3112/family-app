@@ -7,6 +7,7 @@ import type { Signal, Technicals } from "@/lib/api/schemas";
 import { loadSignals } from "@/lib/desk/charts";
 import { formatEtStamp, formatNumber, formatPrice } from "@/lib/desk/format";
 import { COPY } from "@/lib/desk/freshness";
+import { indicatorName } from "@/lib/desk/labels";
 import { countsLine, historyBanner } from "@/lib/desk/summary";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { biasTone, keyLevelRows, signalKindLabel, type KeyLevel } from "@/lib/desk/workspace";
@@ -53,7 +54,7 @@ function GaugeItem({ title, gauge }: { title: string; gauge: Gauge }) {
 function VoteTable({ title, votes }: { title: string; votes: Votes }) {
   const rows: VoteRow[] = Object.entries(votes).map(([key, vote]) => ({
     key,
-    name: key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+    name: indicatorName(key),
     value: Object.values(vote.values).find((item) => item !== null) ?? null,
     action: vote.action,
   }));

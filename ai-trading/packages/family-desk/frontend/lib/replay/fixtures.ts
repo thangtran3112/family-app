@@ -54,6 +54,7 @@ export const openTrade = { trade_no: 1, side: "long", shares: 100, entry_price: 
 
 export const session = {
   id: 12,
+  day_list_id: null,
   attempt: 1,
   status: "active",
   spec,
@@ -74,6 +75,7 @@ export const session = {
 
 export const sessionSummary = {
   id: 12,
+  day_list_id: null,
   symbol: "NVDA",
   day: "2026-04-07",
   attempt: 1,
@@ -103,11 +105,12 @@ export const delta = {
   },
   signals: [{ source: "alert_strategy", id: 7, name: "ORB 15m", bias: "bullish", bar_time: "2026-04-07T13:30:00Z", bar_close: "2026-04-07T13:45:00Z", close: 187.1, evidence: { close: 187.1 } }],
   levels: { prior_close: 195.4, session_high: 188.6, session_low: 183.2, opening_range_high: 187.3, opening_range_low: 184.9 },
-  last: { price: 188.05, at: "2026-04-07T14:07:11.482Z" },
+  last: { price: 188.05, at: "2026-04-07T14:07:11.482Z", age_s: 1 },
+  quiet_s: null,
   open_trade: openTrade,
   stamp,
 };
 
 export const feed = { ...delta, interval: "5m", window_start: "2026-04-07T13:30:00Z" };
 
-export const markResult = { mark, open_trade: openTrade, journal };
+export const markResult = { mark, open_trade: openTrade, journal, warning: null };

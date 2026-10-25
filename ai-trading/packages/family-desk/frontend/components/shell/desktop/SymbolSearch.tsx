@@ -112,7 +112,7 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
   }
 
   return (
-    <div className={styles.anchor}>
+    <div className={`${styles.anchor} ${styles.searchAnchor}`}>
       <input
         ref={inputRef}
         type="text"

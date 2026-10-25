@@ -4,11 +4,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { nextStage, stageOptions } from "./stage.ts";
 
-test("Phase 4 exposes draft and alert-only, defers paper, and never offers live", () => {
+test("The first release exposes draft and alert-only, defers paper, and never offers live", () => {
   assert.deepEqual(stageOptions(4), [
     { stage: "draft", label: "Draft", enabled: true },
     { stage: "alert_only", label: "Alert only", enabled: true },
-    { stage: "paper", label: "Paper", enabled: false, reason: "Phase 6" },
+    { stage: "paper", label: "Paper", enabled: false, reason: "Needs broker setup" },
     { label: "Live", enabled: false, reason: "Not in v1" },
   ]);
   assert.equal(JSON.stringify(stageOptions(4)).includes("live_confirm"), false);

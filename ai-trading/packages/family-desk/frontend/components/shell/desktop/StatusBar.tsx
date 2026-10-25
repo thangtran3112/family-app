@@ -10,7 +10,7 @@ import styles from "./statusbar.module.css";
 export function StatusBar() {
   const { status, failed, connection } = useDeskStatus();
   const quotes = status?.quotes ?? null;
-  const quoteText = failed ? COPY.statusUnavailable : statusBarText({ stamp: quotes, session: status?.market.session, connection });
+  const quoteText = failed ? COPY.statusUnavailable : statusBarText({ stamp: quotes, session: status?.market.session, connection, feed: true });
   const replaying = useReplayBadge() !== null;
   const alertsText = status ? (alertsBanner(status.alerts.state) ?? COPY.alertsRunning) : null;
 

@@ -53,6 +53,33 @@ test("each primary nav link opens its route and keeps the top bar and left rail"
   }
 });
 
+test("each route has its own tab title, none scrolls sideways, and the top bar keeps its pill and badge whole", async ({ page }) => {
+  const routes: Array<[path: string, title: string]> = [
+    ["/", "Today"],
+    ["/screener", "Screener"],
+    ["/screener/filters", "Filter editor"],
+    ["/technicals?symbol=NVDA#chart", "Technicals"],
+    ["/watchlists", "Watchlists"],
+    ["/alerts", "Alerts"],
+    ["/alerts/new", "New alert"],
+    ["/futures", "Futures"],
+    ["/futures/specs", "Futures specs"],
+    ["/settings", "Settings"],
+  ];
+  for (const [path, title] of routes) {
+    await openDesk(page, path);
+    await expect(page).toHaveTitle(`${title} - Family Desk`);
+    expect(await page.evaluate(() => document.scrollingElement!.scrollWidth - window.innerWidth), `${path} scrolls sideways`).toBeLessThanOrEqual(0);
+    // Only the search box gives way when the bar is full: no other top-bar element may clip its text.
+    const clipped = await page.locator(".dk-top").evaluate((bar) =>
+      [...bar.querySelectorAll<HTMLElement>("*")]
+        .filter((el) => !(el instanceof HTMLInputElement) && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== "visible")
+        .map((el) => el.textContent),
+    );
+    expect(clipped, `${path} top bar clips`).toEqual([]);
+  }
+});
+
 test("an open market with a delayed feed says so, and before the open the pill reads pre-market", async ({ page, context }) => {
   await setScenario(context, { now: MIDDAY, feedAgeMinutes: 5 });
   await openDesk(page, "/", MIDDAY);
@@ -150,8 +177,13 @@ test("the chart's right rail: open at 1440, a collapsed strip with a drawer at 1
     await expect(page.getByRole("tablist", { name: "Symbol context" }).getByRole("tab")).toHaveText(["Summary", "Alerts", "Levels"]);
     await expect(page.getByRole("complementary", { name: "Symbol context" })).toHaveCount(0);
     await expect(page.getByText(COPY.ordersOff, { exact: true })).toHaveCount(0);
-    await page.getByRole("tab", { name: "Summary" }).click();
+    const tab = page.getByRole("tab", { name: "Summary" });
+    await expect(tab).toHaveAttribute("aria-expanded", "false");
+    await expect(tab).toHaveAttribute("aria-controls", "rail-drawer");
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-expanded", "true");
     const drawer = page.getByRole("dialog", { name: "Summary" });
+    await expect(drawer).toHaveAttribute("id", "rail-drawer");
     await expect(drawer.getByText(COPY.ordersOff, { exact: true })).toBeVisible();
     await expectCleanScreen(page);
     await page.keyboard.press("Escape");

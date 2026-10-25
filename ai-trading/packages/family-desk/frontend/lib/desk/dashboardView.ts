@@ -1,6 +1,6 @@
 import type { Dashboard } from "../api/schemas.ts";
-import { changeTone, formatEtDay, formatPrice, formatSignedPct, type Tone } from "./format.ts";
-import { COPY } from "./freshness.ts";
+import { changeTone, formatEtDay, formatEtWeekdayTime, formatPrice, formatSignedPct, type Tone } from "./format.ts";
+import { COPY, fillCopy } from "./freshness.ts";
 import { runOnLabel, timingLabel } from "./labels.ts";
 
 // View models for the dashboard (D2): the API rows turned into display text once, in lib, so the
@@ -17,7 +17,14 @@ export type StripTile = {
   note: string | null;
 };
 
-export function stripTiles(strip: Dashboard["market_strip"]): StripTile[] {
+/** The note under a strip tile: why an empty tile is empty and when it fills, or the as-of of a last close. */
+function tileNote(tile: Dashboard["market_strip"][number], unavailable: boolean, readOnly: boolean, nextUpdateAt: string | null): string | null {
+  if (readOnly) return unavailable ? COPY.futuresNotConnected : COPY.futuresReadOnly;
+  if (unavailable) return nextUpdateAt ? fillCopy(COPY.stripFirstUpdate, { time: formatEtWeekdayTime(nextUpdateAt) }) : COPY.stripNoData;
+  return tile.stamp.freshness === "closed" && tile.stamp.as_of ? fillCopy(COPY.stripLastClose, { time: formatEtWeekdayTime(tile.stamp.as_of) }) : null;
+}
+
+export function stripTiles(strip: Dashboard["market_strip"], nextUpdateAt: string | null = null): StripTile[] {
   return strip.map((tile) => {
     const readOnly = tile.symbol.startsWith("/");
     const unavailable = tile.stamp.freshness === "unavailable" || tile.last === null;
@@ -28,7 +35,7 @@ export function stripTiles(strip: Dashboard["market_strip"]): StripTile[] {
       tone: unavailable ? "flat" : changeTone(tile.change_pct),
       unavailable,
       readOnly,
-      note: unavailable && readOnly ? COPY.futuresNotConnected : readOnly ? COPY.futuresReadOnly : null,
+      note: tileNote(tile, unavailable, readOnly, nextUpdateAt),
     };
   });
 }

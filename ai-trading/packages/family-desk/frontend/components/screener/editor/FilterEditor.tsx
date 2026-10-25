@@ -12,6 +12,8 @@ import type { Problem, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { formToSpec, isDirty, problemsFor, specToForm, unplacedProblems, type FilterForm } from "@/lib/desk/filterForm";
 import { createFilter, loadFilterDetail, previewFilter, updateFilter } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { COPY } from "@/lib/desk/freshness";
+import { NEW_FILTER_SPEC } from "@/lib/desk/screenerView";
 import { parseFilterSpec } from "@/lib/spec/parse";
 import { ConditionRows } from "./ConditionRows";
 import { JsonPanel } from "./JsonPanel";
@@ -24,13 +26,26 @@ import { UnsavedBar } from "./UnsavedBar";
 import styles from "./editor.module.css";
 
 export function FilterEditor() {
-  const id = Number(useSearchParams().get("id"));
+  const param = useSearchParams().get("id");
+  const id = Number(param);
   const valid = Number.isInteger(id) && id > 0;
   const [notice, setNotice] = useState("");
   const detail = useDeskQuery(`filter-edit:${id}`, (signal) => loadFilterDetail(id, { signal }), { enabled: valid });
 
+  // No `id` at all is the create path (the screener's "New filter"); a malformed one is a bad link.
+  if (param === null) {
+    return (
+      <div className={styles.editor}>
+        <header className={styles.header}>
+          <h1 className={styles.title}>{COPY.newFilter}</h1>
+          {notice && <p role="status" className={styles.notice}>{notice}</p>}
+        </header>
+        <EditorForm key="new" filter={null} spec={parseFilterSpec(NEW_FILTER_SPEC)!} refresh={() => undefined} onNotice={setNotice} />
+      </div>
+    );
+  }
   if (!valid) {
-    return <EmptyBlock title="Pick a filter to edit"><Link href="/screener">Go to the screener</Link></EmptyBlock>;
+    return <EmptyBlock title="That filter link isn't valid"><Link href="/screener">Go to the screener</Link></EmptyBlock>;
   }
   if (detail.loading) return <LoadingBlock label="Loading filter…" />;
   if (detail.data === null) return <ErrorBlock subject="filter" onRetry={detail.refresh} />;
@@ -56,8 +71,9 @@ export function FilterEditor() {
   );
 }
 
+/** `filter` is null while a new filter is being made: nothing is saved until Create filter. */
 function EditorForm({ filter, spec, refresh, onNotice }: {
-  filter: ScreenerFilterDetail;
+  filter: ScreenerFilterDetail | null;
   spec: FilterStrategySpecV1;
   refresh: () => void;
   onNotice: (text: string) => void;
@@ -76,8 +92,8 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   const preview = useDeskQuery(`filter-preview:${previewSpecJson}`, (signal) => previewFilter(JSON.parse(previewSpecJson), { signal }));
 
   const dirty = isDirty(original, form);
-  const readOnly = filter.read_only;
-  const defaultSpec = parseFilterSpec(filter.default_spec);
+  const readOnly = filter?.read_only ?? false;
+  const defaultSpec = parseFilterSpec(filter?.default_spec);
   const defaultForm = defaultSpec ? specToForm(defaultSpec) : null;
   // A save's 422 replaces the live check's problems until the next change.
   const problems = saveProblems.length > 0 ? saveProblems : (preview.data?.problems ?? []);
@@ -110,6 +126,12 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   async function save() {
     setSaving(true);
     try {
+      if (filter === null) {
+        const created = await createFilter({ spec: formToSpec(form) });
+        invalidate("filters");
+        router.replace(`/screener/filters?id=${created.id}`);
+        return;
+      }
       await updateFilter(filter.id, formToSpec(form));
       onNotice("Saved");
       invalidate("filters");
@@ -124,6 +146,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   }
 
   async function copy() {
+    if (filter === null) return;
     setCopying(true);
     setCopyFailed(false);
     try {
@@ -185,7 +208,15 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
           <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
         ))}
       </fieldset>
-      {dirty && <UnsavedBar onSave={save} onDiscard={() => change(original)} saving={saving} canSave={!saving} />}
+      {filter === null && (
+        <div className={styles.row}>
+          <button type="button" className={`${styles.button} ${styles.primary}`} onClick={save} disabled={saving}>
+            {saving ? "Creating…" : "Create filter"}
+          </button>
+          <Link href="/screener" className={styles.button}>Cancel</Link>
+        </div>
+      )}
+      {dirty && filter !== null && <UnsavedBar onSave={save} onDiscard={() => change(original)} saving={saving} canSave={!saving} />}
       <RightRail
         label="Filter preview"
         sections={[

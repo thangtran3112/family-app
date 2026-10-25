@@ -97,6 +97,21 @@ export type MarketChartProps = {
 const FOLLOW_VISIBLE_BARS = 90;
 const FOLLOW_RIGHT_PAD = 6;
 
+const DEFAULT_PANE_HEIGHT = 120;
+const MIN_PRICE_PANE = 160;
+
+/** Indicator panes keep their pixel height and the price pane takes the rest. `setHeight` on one pane rescales the
+ * others, so the second call shrank the first to about 30 px: set every pane's stretch factor from pixels instead,
+ * and again whenever the chart is resized (stretch factors are shares, so a resize would rescale them). */
+function layoutPanes(chart: IChartApi, panes: MarketChartPane[]): void {
+  const apis = chart.panes();
+  const total = apis.reduce((sum, pane) => sum + pane.getHeight(), 0);
+  if (panes.length === 0 || apis.length < panes.length + 1 || total <= 0) return;
+  const heights = panes.map((pane) => pane.height ?? DEFAULT_PANE_HEIGHT);
+  apis[0]?.setStretchFactor(Math.max(total - heights.reduce((sum, height) => sum + height, 0), MIN_PRICE_PANE));
+  heights.forEach((height, index) => apis[index + 1]?.setStretchFactor(height));
+}
+
 type PaneSeriesApi =
   | { kind: "line"; series: ISeriesApi<"Line", Time> }
   | { kind: "histogram"; series: ISeriesApi<"Histogram", Time> };
@@ -172,6 +187,7 @@ export function MarketChart({
   const fitKey = useRef<string | null>(null);
   const lastIndex = useRef(-1);
   const paneSignature = useRef("");
+  const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -179,10 +195,15 @@ export function MarketChart({
   }, [onCrosshair]);
 
   useEffect(() => {
+    paneLayout.current = panes;
+  }, [panes]);
+
+  useEffect(() => {
     let cancelled = false;
     const overlayMap = overlaySeries.current;
     const paneMap = paneSeries.current;
     const paneLinesMap = panePriceLines.current;
+    let resizeWatch: ResizeObserver | null = null;
     void import("lightweight-charts").then((module) => {
       if (cancelled || !container.current) return;
       library.current = module;
@@ -213,6 +234,8 @@ export function MarketChart({
         localization: { locale: "en-US", timeFormatter: formatChartTime },
       });
       chart.current = currentChart;
+      resizeWatch = new ResizeObserver(() => layoutPanes(currentChart, paneLayout.current));
+      resizeWatch.observe(container.current);
       candles.current = currentChart.addSeries(module.CandlestickSeries, {
         upColor: "#30D158",
         downColor: "#FF453A",
@@ -243,6 +266,7 @@ export function MarketChart({
     });
     return () => {
       cancelled = true;
+      resizeWatch?.disconnect();
       chart.current?.remove();
       chart.current = null;
       candles.current = null;
@@ -344,8 +368,6 @@ export function MarketChart({
           entry.series.applyOptions({ title: item.label, color: item.color });
         }
       }
-      const paneApi = currentChart.panes()[chartPaneIndex];
-      if (paneApi && pane.height) paneApi.setHeight(pane.height);
       if (pane.series[0]) {
         const firstId = `${pane.id}:${pane.series[0].id}`;
         const first = paneSeries.current.get(firstId)?.series;
@@ -365,6 +387,7 @@ export function MarketChart({
         panePriceLines.current.set(firstId, lines);
       }
     });
+    layoutPanes(currentChart, panes);
 
     for (const line of priceLines.current) candleSeries.removePriceLine(line);
     priceLines.current = levels.flatMap(({ label, price, color, style }) => {

@@ -202,6 +202,17 @@
           "prints": {
             "$ref": "#/components/schemas/PrintsOut"
           },
+          "quiet_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet S"
+          },
           "revealed_through": {
             "format": "date-time",
             "title": "Revealed Through",
@@ -227,6 +238,7 @@
           "signals",
           "levels",
           "last",
+          "quiet_s",
           "open_trade",
           "stamp"
         ],
@@ -1485,6 +1497,109 @@
         "title": "BiasHistoryOut",
         "type": "object"
       },
+      "CandidateOut": {
+        "description": "One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.",
+        "properties": {
+          "filters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "list_price": {
+            "title": "List Price",
+            "type": "number"
+          },
+          "matched_since": {
+            "format": "date-time",
+            "title": "Matched Since",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "operands": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Operands",
+            "type": "object"
+          },
+          "price_at": {
+            "format": "date-time",
+            "title": "Price At",
+            "type": "string"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rank_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Value"
+          },
+          "reported_before_open": {
+            "title": "Reported Before Open",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "symbol",
+          "filters",
+          "rank_value",
+          "matched_since",
+          "operands",
+          "list_price",
+          "price_at",
+          "prior_close",
+          "reported_before_open",
+          "metrics"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
       "CardBackOut": {
         "properties": {
           "atr_pct_label": {
@@ -1577,6 +1692,25 @@
         "title": "CardBackOut",
         "type": "object"
       },
+      "DailyOut": {
+        "properties": {
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PracticePlanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "title": "DailyOut",
+        "type": "object"
+      },
       "DashboardEventOut": {
         "properties": {
           "date": {
@@ -1613,6 +1747,18 @@
             "format": "date-time",
             "title": "Next Open",
             "type": "string"
+          },
+          "next_update_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Update At"
           },
           "session": {
             "enum": [
@@ -1889,6 +2035,418 @@
         "title": "DashboardWatchlistRowOut",
         "type": "object"
       },
+      "DayFilterOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_id",
+          "name"
+        ],
+        "title": "DayFilterOut",
+        "type": "object"
+      },
+      "DayJournalOut": {
+        "properties": {
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/DayJournalSessionOut"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions",
+          "trades",
+          "pnl_usd"
+        ],
+        "title": "DayJournalOut",
+        "type": "object"
+      },
+      "DayJournalSessionOut": {
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "trades",
+          "pnl_usd",
+          "adherence_pct"
+        ],
+        "title": "DayJournalSessionOut",
+        "type": "object"
+      },
+      "DayListOut": {
+        "description": "One practice day. Before `status` is `ended` nothing here is later than `data_through` (the list, the stars,\nPeek) or the day clock; `review` and `journal` are null until then.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ListColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DayJournalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "list_at": {
+            "format": "date-time",
+            "title": "List At",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "of": {
+            "title": "Of",
+            "type": "integer"
+          },
+          "peek": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeekOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PracticePlanOut"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "screen": {
+            "$ref": "#/components/schemas/DayScreenOut"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/DaySessionOut"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "status": {
+            "enum": [
+              "listed",
+              "practicing",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/ListUniverseOut"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "watch": {
+            "items": {
+              "$ref": "#/components/schemas/StarOut"
+            },
+            "title": "Watch",
+            "type": "array"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "plan",
+          "day",
+          "weekday",
+          "day_no",
+          "of",
+          "status",
+          "list_at",
+          "data_through",
+          "screen",
+          "universe",
+          "columns",
+          "candidates",
+          "watch",
+          "clock",
+          "sessions",
+          "warnings",
+          "peek",
+          "journal",
+          "review",
+          "notes",
+          "rating",
+          "created_at",
+          "ended_at",
+          "stamp"
+        ],
+        "title": "DayListOut",
+        "type": "object"
+      },
+      "DayListPatch": {
+        "description": "PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left\nalone; `null` clears notes and rating.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "watch": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch"
+          }
+        },
+        "title": "DayListPatch",
+        "type": "object"
+      },
+      "DayScreenOut": {
+        "properties": {
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/DayFilterOut"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "list_at": {
+            "title": "List At",
+            "type": "string"
+          },
+          "max_list": {
+            "title": "Max List",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filters",
+          "list_at",
+          "max_list"
+        ],
+        "title": "DayScreenOut",
+        "type": "object"
+      },
+      "DaySessionIn": {
+        "properties": {
+          "symbol": {
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "title": "DaySessionIn",
+        "type": "object"
+      },
+      "DaySessionOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "status"
+        ],
+        "title": "DaySessionOut",
+        "type": "object"
+      },
       "FeedOut": {
         "description": "Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior\nsessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);\n`signals` is every released signal (the whole list after `end`).",
         "properties": {
@@ -1948,6 +2506,17 @@
           "prints": {
             "$ref": "#/components/schemas/PrintsOut"
           },
+          "quiet_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet S"
+          },
           "revealed_through": {
             "format": "date-time",
             "title": "Revealed Through",
@@ -1978,12 +2547,29 @@
           "signals",
           "levels",
           "last",
+          "quiet_s",
           "open_trade",
           "stamp",
           "interval",
           "window_start"
         ],
         "title": "FeedOut",
+        "type": "object"
+      },
+      "Filter": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "Filter",
         "type": "object"
       },
       "FireMarkerOut": {
@@ -2430,6 +3016,10 @@
       },
       "LastPrintOut": {
         "properties": {
+          "age_s": {
+            "title": "Age S",
+            "type": "integer"
+          },
           "at": {
             "format": "date-time",
             "title": "At",
@@ -2442,7 +3032,8 @@
         },
         "required": [
           "price",
-          "at"
+          "at",
+          "age_s"
         ],
         "title": "LastPrintOut",
         "type": "object"
@@ -2941,6 +3532,135 @@
         "title": "LibraryItemOut",
         "type": "object"
       },
+      "ListColumnOut": {
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "format"
+        ],
+        "title": "ListColumnOut",
+        "type": "object"
+      },
+      "ListFilterCountsOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "matches_total": {
+            "title": "Matches Total",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "no_data": {
+            "title": "No Data",
+            "type": "integer"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_id",
+          "name",
+          "scanned",
+          "no_data",
+          "matches_total"
+        ],
+        "title": "ListFilterCountsOut",
+        "type": "object"
+      },
+      "ListUniverseOut": {
+        "description": "What was scanned. `label` and `footnote` state the universe plainly; show them beside any score.",
+        "properties": {
+          "below_floor": {
+            "title": "Below Floor",
+            "type": "integer"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/ListFilterCountsOut"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "footnote": {
+            "title": "Footnote",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "matches_total": {
+            "title": "Matches Total",
+            "type": "integer"
+          },
+          "no_data": {
+            "title": "No Data",
+            "type": "integer"
+          },
+          "prev_basis": {
+            "title": "Prev Basis",
+            "type": "boolean"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "source": {
+            "const": "desk",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "size",
+          "scanned",
+          "no_data",
+          "below_floor",
+          "matches_total",
+          "shown",
+          "prev_basis",
+          "filters",
+          "label",
+          "footnote"
+        ],
+        "title": "ListUniverseOut",
+        "type": "object"
+      },
       "MacdOut": {
         "properties": {
           "histogram": {
@@ -3108,12 +3828,24 @@
                 "type": "null"
               }
             ]
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
           }
         },
         "required": [
           "mark",
           "open_trade",
-          "journal"
+          "journal",
+          "warning"
         ],
         "title": "MarkResultOut",
         "type": "object"
@@ -3385,6 +4117,31 @@
         "title": "Metrics",
         "type": "object"
       },
+      "OpenNextOut": {
+        "description": "`day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every\nday is done.",
+        "properties": {
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PracticePlanOut"
+          }
+        },
+        "required": [
+          "plan",
+          "day_list_id"
+        ],
+        "title": "OpenNextOut",
+        "type": "object"
+      },
       "OpenTradeOut": {
         "properties": {
           "entry_price": {
@@ -3545,6 +4302,196 @@
         "title": "PatternMarkerOut",
         "type": "object"
       },
+      "PeekDailyBarOut": {
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "t": {
+            "format": "date",
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "title": "V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v"
+        ],
+        "title": "PeekDailyBarOut",
+        "type": "object"
+      },
+      "PeekLevelsOut": {
+        "properties": {
+          "premarket_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket High"
+          },
+          "premarket_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket Low"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "prior_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior High"
+          },
+          "prior_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Low"
+          }
+        },
+        "title": "PeekLevelsOut",
+        "type": "object"
+      },
+      "PeekMinuteBarOut": {
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "title": "V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v"
+        ],
+        "title": "PeekMinuteBarOut",
+        "type": "object"
+      },
+      "PeekOut": {
+        "description": "Pre-open chart data for one candidate, cut at `data_through`: the same rebased daily bars the list was\nscreened on, and the day's minutes through the cut.",
+        "properties": {
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/PeekDailyBarOut"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
+          "levels": {
+            "$ref": "#/components/schemas/PeekLevelsOut"
+          },
+          "list_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Price"
+          },
+          "minutes": {
+            "items": {
+              "$ref": "#/components/schemas/PeekMinuteBarOut"
+            },
+            "title": "Minutes",
+            "type": "array"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "data_through",
+          "daily",
+          "minutes",
+          "levels"
+        ],
+        "title": "PeekOut",
+        "type": "object"
+      },
       "PivotMethodsOut": {
         "properties": {
           "camarilla": {
@@ -3665,6 +4612,84 @@
         "title": "Plan",
         "type": "object"
       },
+      "PlanCurrentOut": {
+        "properties": {
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "listed",
+              "practicing",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "day_no",
+          "status"
+        ],
+        "title": "PlanCurrentOut",
+        "type": "object"
+      },
+      "PlanFilterOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PlanFilterOut",
+        "type": "object"
+      },
+      "PlanPrepOut": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "done"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "done",
+          "total",
+          "failed"
+        ],
+        "title": "PlanPrepOut",
+        "type": "object"
+      },
       "PnlPointOut": {
         "properties": {
           "pnl_usd": {
@@ -3682,6 +4707,348 @@
           "pnl_usd"
         ],
         "title": "PnlPointOut",
+        "type": "object"
+      },
+      "PracticeArmedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "alert_strategy",
+              "filter"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source"
+        ],
+        "title": "PracticeArmedV1",
+        "type": "object"
+      },
+      "PracticeBlockV1": {
+        "additionalProperties": false,
+        "properties": {
+          "firstDay": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+            "title": "Firstday",
+            "type": "string"
+          },
+          "hideDates": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Hidedates",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/PracticeScreenV1"
+          },
+          "sessions": {
+            "maximum": 30.0,
+            "minimum": 5.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "setup": {
+            "$ref": "#/components/schemas/PracticeSetupV1"
+          }
+        },
+        "required": [
+          "firstDay",
+          "hideDates",
+          "schemaVersion",
+          "screen",
+          "sessions",
+          "setup"
+        ],
+        "title": "PracticeBlockV1",
+        "type": "object"
+      },
+      "PracticePlanOut": {
+        "description": "The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is\nnot over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule.",
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanCurrentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days_opened": {
+            "title": "Days Opened",
+            "type": "integer"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/PlanFilterOut"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "finished": {
+            "title": "Finished",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Day"
+          },
+          "next_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Day No"
+          },
+          "next_weekday": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Mon",
+                  "Tue",
+                  "Wed",
+                  "Thu",
+                  "Fri"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Weekday"
+          },
+          "prep": {
+            "$ref": "#/components/schemas/PlanPrepOut"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PracticeBlockV1"
+          }
+        },
+        "required": [
+          "id",
+          "spec",
+          "sessions",
+          "days_opened",
+          "filters",
+          "current",
+          "next_day",
+          "next_weekday",
+          "next_day_no",
+          "finished",
+          "prep"
+        ],
+        "title": "PracticePlanOut",
+        "type": "object"
+      },
+      "PracticePlanV1": {
+        "additionalProperties": false,
+        "properties": {
+          "maxLossUsd": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxlossusd"
+          },
+          "maxTrades": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxtrades"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "signalOnly": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Signalonly",
+            "type": "string"
+          },
+          "stopRequired": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Stoprequired",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signalOnly",
+          "stopRequired"
+        ],
+        "title": "PracticePlanV1",
+        "type": "object"
+      },
+      "PracticeScreenV1": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Filters",
+            "type": "array"
+          },
+          "listAt": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "Listat",
+            "type": "string"
+          },
+          "maxList": {
+            "maximum": 50.0,
+            "minimum": 20.0,
+            "title": "Maxlist",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filters",
+          "listAt",
+          "maxList"
+        ],
+        "title": "PracticeScreenV1",
+        "type": "object"
+      },
+      "PracticeSetupV1": {
+        "additionalProperties": false,
+        "properties": {
+          "armed": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeArmedV1"
+            },
+            "maxItems": 5,
+            "title": "Armed",
+            "type": "array"
+          },
+          "interval": {
+            "enum": [
+              "1m",
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PracticePlanV1"
+          },
+          "session": {
+            "enum": [
+              "regular",
+              "extended"
+            ],
+            "title": "Session",
+            "type": "string"
+          },
+          "shares": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Shares",
+            "type": "integer"
+          },
+          "window": {
+            "$ref": "#/components/schemas/PracticeWindowV1"
+          }
+        },
+        "required": [
+          "armed",
+          "interval",
+          "plan",
+          "session",
+          "shares",
+          "window"
+        ],
+        "title": "PracticeSetupV1",
+        "type": "object"
+      },
+      "PracticeWindowV1": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "PracticeWindowV1",
         "type": "object"
       },
       "PrintsOut": {
@@ -4009,6 +5376,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
           "ended_at": {
             "anyOf": [
               {
@@ -4107,6 +5485,7 @@
         },
         "required": [
           "id",
+          "day_list_id",
           "attempt",
           "status",
           "spec",
@@ -4182,6 +5561,17 @@
             "title": "Day",
             "type": "string"
           },
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
           "hide_date": {
             "enum": [
               "yes",
@@ -4239,6 +5629,7 @@
         },
         "required": [
           "id",
+          "day_list_id",
           "symbol",
           "day",
           "attempt",
@@ -4400,6 +5791,168 @@
           "evidence"
         ],
         "title": "ReplaySignalOut",
+        "type": "object"
+      },
+      "ReviewOut": {
+        "description": "Every candidate's move from its list price to the window end and the close. Only present once the day ended.",
+        "properties": {
+          "of": {
+            "title": "Of",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/SelectionOut"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_end",
+          "of",
+          "rows",
+          "selection"
+        ],
+        "title": "ReviewOut",
+        "type": "object"
+      },
+      "ReviewRowOut": {
+        "properties": {
+          "close_move_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Move Pct"
+          },
+          "close_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Price"
+          },
+          "high_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Pct"
+          },
+          "list_price": {
+            "title": "List Price",
+            "type": "number"
+          },
+          "low_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Pct"
+          },
+          "move_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move Pct"
+          },
+          "picked": {
+            "anyOf": [
+              {
+                "enum": [
+                  "traded",
+                  "starred"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picked"
+          },
+          "range_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Pct"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "window_end_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End Price"
+          }
+        },
+        "required": [
+          "symbol",
+          "list_price",
+          "window_end_price",
+          "move_pct",
+          "close_price",
+          "close_move_pct",
+          "high_pct",
+          "low_pct",
+          "range_pct",
+          "rank",
+          "picked"
+        ],
+        "title": "ReviewRowOut",
         "type": "object"
       },
       "ScreenerFilterCreate": {
@@ -4996,6 +6549,78 @@
         "title": "ScreenerUniverseOut",
         "type": "object"
       },
+      "SelectionOut": {
+        "properties": {
+          "median_abs_move_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Abs Move Pct"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionPickOut"
+            },
+            "title": "Picks",
+            "type": "array"
+          },
+          "picks_avg_abs_move_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picks Avg Abs Move Pct"
+          }
+        },
+        "required": [
+          "picks",
+          "median_abs_move_pct",
+          "picks_avg_abs_move_pct"
+        ],
+        "title": "SelectionOut",
+        "type": "object"
+      },
+      "SelectionPickOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "traded",
+              "starred"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "move_pct": {
+            "title": "Move Pct",
+            "type": "number"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "kind",
+          "move_pct",
+          "rank"
+        ],
+        "title": "SelectionPickOut",
+        "type": "object"
+      },
       "SessionOut": {
         "properties": {
           "close_time": {
@@ -5290,6 +6915,25 @@
           "freshness"
         ],
         "title": "Stamp",
+        "type": "object"
+      },
+      "StarOut": {
+        "properties": {
+          "starred_clock": {
+            "format": "date-time",
+            "title": "Starred Clock",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "starred_clock"
+        ],
+        "title": "StarOut",
         "type": "object"
       },
       "StatusAlertsOut": {
@@ -7722,6 +9366,274 @@
         "summary": "Stream Quotes",
         "tags": [
           "quotes"
+        ]
+      }
+    },
+    "/api/desk/replay/daily": {
+      "get": {
+        "description": "The hub's daily-list card: her plan and where its cursor is, or `null` before she has one.",
+        "operationId": "get_daily_api_desk_replay_daily_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Daily",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/daily/next": {
+      "post": {
+        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.",
+        "operationId": "open_next_api_desk_replay_daily_next_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "plan": {
+                    "$ref": "#/components/schemas/PracticeBlockV1"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenNextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Open Next",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/day-lists/{day_list_id}": {
+      "get": {
+        "description": "One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's\nsession, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null\nuntil the day has ended.",
+        "operationId": "get_day_list_api_desk_replay_day_lists__day_list_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "peek",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "pattern": "^[A-Z][A-Z0-9.]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Peek"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Day List",
+        "tags": [
+          "replay"
+        ]
+      },
+      "patch": {
+        "description": "Stars (at most five names from the list, each stamped with the day clock), notes and the self-rating.",
+        "operationId": "patch_day_list_api_desk_replay_day_lists__day_list_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DayListPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Day List",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/day-lists/{day_list_id}/end": {
+      "post": {
+        "description": "End the day: the open practice trade exits at the last price, the window unseals, and the list review\n(every candidate's move from its list price) is stored and served. Idempotent.",
+        "operationId": "end_day_api_desk_replay_day_lists__day_list_id__end_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Day",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/day-lists/{day_list_id}/sessions": {
+      "post": {
+        "description": "Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in\nv1: another name is a 409 until the day ends.",
+        "operationId": "start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaySessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Day Session",
+        "tags": [
+          "replay"
         ]
       }
     },

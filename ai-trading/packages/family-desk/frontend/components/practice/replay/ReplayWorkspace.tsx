@@ -10,6 +10,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useShellBand } from "@/lib/desk/useViewportBand";
+import { endDay } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { actionForKey, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import type { MarkDraft } from "@/lib/replay/markInput";
@@ -67,6 +68,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
   const [focus, setFocus] = useState<{ time: string; at: number } | null>(null);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
+  const [dayBusy, setDayBusy] = useState(false);
+  const dayListId = session.day_list_id;
   const side = openSide(view.openTrade);
   const pnl = practicePnl(session.journal, view.openTrade);
   const trades = tradeCount(session.journal, view.openTrade);
@@ -248,6 +251,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         onJumpEnd={api.jumpToEnd}
         quick={quick}
       />
+      {dayListId !== null && (
+        <p className={styles.endLine}>
+          <Link href={`/practice/day?id=${dayListId}`} className={styles.link}>{PRACTICE_COPY.backToList}</Link>
+        </p>
+      )}
       {ended ? (
         <p className={styles.endLine}>
           {sessionOverText(trades)} · <Link href={`/practice/journal?id=${session.id}`} className={styles.link}>Open the journal</Link>
@@ -256,8 +264,22 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         <EndPrompt
           tradeCount={trades}
           atEnd={atEnd}
-          busy={api.player.busy}
-          onEnd={() => void api.end().then((done) => done && router.push(`/practice/journal?id=${done.id}`))}
+          busy={api.player.busy || dayBusy}
+          day={dayListId !== null}
+          onEnd={() => {
+            if (dayListId === null) {
+              void api.end().then((done) => done && router.push(`/practice/journal?id=${done.id}`));
+              return;
+            }
+            // A daily-list session ends with its day, which also unseals the list review.
+            setDayBusy(true);
+            endDay(dayListId)
+              .then(() => router.push(`/practice/day?id=${dayListId}`))
+              .catch(() => {
+                api.notify("error", PRACTICE_COPY.markError);
+                setDayBusy(false);
+              });
+          }}
         />
       )}
       <section className={styles.bottom} aria-label="Marks and levels" data-open={bottomShown ? "true" : "false"}>

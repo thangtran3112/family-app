@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { TechnicalsSchema } from "@/lib/api/schemas";
 import { formatAsOfText } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
+import { indicatorName } from "@/lib/desk/labels";
 import { qualityLabel } from "@/lib/labels";
 import styles from "./technicals.module.css";
 
@@ -31,7 +32,7 @@ function metaText(quality: Technicals["quality"], asOf: string | null, plain: bo
 }
 
 function titleFor(key: string): string {
-  return displayNames[key] ?? key.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return displayNames[key] ?? indicatorName(key);
 }
 
 function numberText(value: number | null): string {
@@ -73,7 +74,7 @@ function VoteTable({
       </header>
       <div className={styles.tableScroll}>
         <table className={styles.indicatorTable}>
-          <thead><tr><th scope="col">Indicator</th><th scope="col">Backend value</th><th scope="col">Backend action</th><th scope="col"><span className={styles.visuallyHidden}>Create strategy</span></th></tr></thead>
+          <thead><tr><th scope="col">Indicator</th><th scope="col">Value</th><th scope="col">Action</th><th scope="col"><span className={styles.visuallyHidden}>Create strategy</span></th></tr></thead>
           <tbody>
             {Object.entries(votes).map(([key, vote]) => (
               <tr key={key}>

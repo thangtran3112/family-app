@@ -14,7 +14,7 @@ from fakes import fake_data_sources
 from ai_trading.api.app import app
 from ai_trading.api.auth import get_data_sources
 from ai_trading.core.calendar import et
-from ai_trading.db.models import FeedHealth
+from ai_trading.db.models import FeedHealth, SymbolMetrics
 
 IN_SESSION = et(datetime(2026, 10, 26).date(), "11:00").to_pydatetime()  # Monday 11:00 ET
 TICK_AT = pd.Timestamp(IN_SESSION).tz_convert("UTC") - pd.Timedelta(seconds=3)
@@ -98,3 +98,24 @@ def test_a_quiet_gateway_pauses_and_a_closed_market_reads_closed(client, clock):
     assert _status(client)["quotes"]["freshness"] == "paused"  # no tick for ten minutes in session
     clock["value"] = et(datetime(2026, 10, 27).date(), "03:00").to_pydatetime()  # overnight
     assert _status(client)["quotes"]["freshness"] == "closed"
+
+
+def test_a_seeded_strip_gives_quotes_an_end_of_day_stamp_until_a_pass_has_run(client, db_session, clock):
+    assert _status(client)["quotes"]["quality"] == "unavailable"  # nothing stored at all: no source claimed
+    friday_close = datetime(2026, 10, 23, 20, 0, tzinfo=UTC)
+    db_session.add(SymbolMetrics(symbol="SPY", as_of=friday_close, source="alpaca", quality="eod", metrics={}))
+    db_session.merge(FeedHealth(feed="market_strip", state="ok", last_ok_at=IN_SESSION, updated_at=IN_SESSION))
+    db_session.commit()
+    body = _status(client)
+    assert body["quotes"] == {
+        "as_of": "2026-10-23T20:00:00Z",
+        "source": "alpaca",
+        "quality": "eod",
+        "freshness": "delayed",
+    }
+    assert body["data_sources"] == "alpaca"
+    assert body["scans"]["quality"] == "unavailable"  # no screener run stands behind a seed
+
+    db_session.merge(FeedHealth(feed="bars_delayed", state="ok", last_ok_at=IN_SESSION, updated_at=IN_SESSION))
+    db_session.commit()
+    assert _status(client)["quotes"]["quality"] == "delayed-15m"  # a real pass takes over

@@ -156,7 +156,11 @@ def _signal(db_session, version, symbol: str, bar_time: datetime, evidence: dict
 def test_a_new_user_with_nothing_stored_gets_an_empty_but_valid_dashboard(client, calendar):
     body = _get(client).json()
     assert body["stamp"] == UNAVAILABLE
-    assert body["market"] == {"session": "regular", "next_open": "2026-10-07T13:30:00Z"}
+    assert body["market"] == {
+        "session": "regular",
+        "next_open": "2026-10-07T13:30:00Z",
+        "next_update_at": "2026-10-06T15:15:00Z",  # the next quarter-hour slot: when an empty strip first fills
+    }
     assert [tile["symbol"] for tile in body["market_strip"]] == ["SPY", "QQQ", "IWM", "/ES", "/NQ"]
     assert all(
         t["last"] is None and t["change_pct"] is None and t["stamp"] == UNAVAILABLE for t in body["market_strip"]
@@ -195,6 +199,34 @@ def test_a_scan_feed_that_stopped_reads_paused_and_one_that_never_ran_reads_unav
     assert _get(client).json()["market_strip"][0]["stamp"]["freshness"] == "unavailable"  # no feed_health row
     _scan_ok(db_session, at=NOW - timedelta(hours=1))
     assert _get(client).json()["market_strip"][0]["stamp"]["freshness"] == "paused"
+
+
+def test_the_seed_feed_vouches_for_strip_rows_before_any_scan_ran(client, db_session, calendar):
+    _metrics(db_session, "SPY", last=678.12, change_pct=0.31)
+    db_session.add(FeedHealth(feed="market_strip", state="ok", last_ok_at=NOW, updated_at=NOW))
+    db_session.commit()
+    body = _get(client).json()
+    assert body["market_strip"][0]["stamp"]["freshness"] == "delayed"  # no `scan` row, yet not unavailable
+    assert body["stamp"]["freshness"] == "delayed"
+
+
+def test_a_weekend_seed_reads_closed_and_an_empty_strip_names_monday(client, db_session, calendar, monkeypatch):
+    class _Saturday(_Frozen):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 24, 15, 0, tzinfo=UTC).astimezone(tz or UTC)
+
+    monkeypatch.setattr(dashboard_module, "datetime", _Saturday)
+    empty = _get(client).json()
+    assert empty["market"]["session"] == "closed"
+    assert empty["market"]["next_update_at"] == "2026-10-26T11:00:00Z"  # Monday 07:00 ET, the first scan slot
+    assert empty["market_strip"][0]["stamp"] == UNAVAILABLE
+
+    _metrics(db_session, "SPY", as_of=datetime(2026, 10, 23, 20, 0, tzinfo=UTC), last=678.12, change_pct=0.31)
+    db_session.add(FeedHealth(feed="market_strip", state="ok", last_ok_at=NOW, updated_at=NOW))
+    db_session.commit()
+    seeded = _get(client).json()["market_strip"][0]
+    assert (seeded["last"], seeded["stamp"]["freshness"]) == (678.12, "closed")
 
 
 # -- signals -----------------------------------------------------------------------------------------------------

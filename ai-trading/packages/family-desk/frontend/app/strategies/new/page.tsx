@@ -265,7 +265,7 @@ function NewStrategyContent() {
               </label>
               <label aria-describedby="phase-six-note" className={`${styles.stageOption} ${styles.disabledOption}`}>
                 <input disabled name="stage" type="radio" value="alert_only" />
-                <span><strong>Alert + paper</strong><small id="phase-six-note">Available in Phase 6</small></span>
+                <span><strong>Alert + paper</strong><small id="phase-six-note">Needs broker setup</small></span>
               </label>
             </fieldset>
 

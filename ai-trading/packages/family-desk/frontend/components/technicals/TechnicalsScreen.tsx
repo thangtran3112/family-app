@@ -123,7 +123,7 @@ function TechnicalsContent({ symbol, timeframe }: { symbol: string; timeframe: T
         ))}
       </nav>
 
-      {loading && <p className={styles.feedback} role="status">Loading actual closed bars and backend technicals…</p>}
+      {loading && <p className={styles.feedback} role="status">Loading closed bars and technicals…</p>}
       {error && <div className={styles.error} role="alert">{error}<button type="button" onClick={retry}>Try again</button></div>}
       {!loading && !error && bars && technicals && <>
         <Gauges technicals={technicals} />

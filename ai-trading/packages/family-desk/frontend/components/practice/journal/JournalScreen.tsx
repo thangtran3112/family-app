@@ -126,7 +126,11 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
                 <AdherenceChecklist adherence={journal.adherence} />
                 <NotesAndRating notes={session.notes} rating={session.rating} saving={saving} saved={saved} onSave={save} />
                 <div className={styles.actions}>
-                  <button type="button" className={`${styles.button} ${styles.primary}`} disabled={again.busy} onClick={replayAgain}>Replay this day again</button>
+                  {session.day_list_id === null ? (
+                    <button type="button" className={`${styles.button} ${styles.primary}`} disabled={again.busy} onClick={replayAgain}>Replay this day again</button>
+                  ) : (
+                    <Link href={`/practice/day?id=${session.day_list_id}`} className={`${styles.button} ${styles.primary}`}>{PRACTICE_COPY.backToList}</Link>
+                  )}
                   <Link href="/practice" className={styles.button}>New session</Link>
                 </div>
                 {again.message && <p className={styles.muted} role="alert">{again.message}</p>}

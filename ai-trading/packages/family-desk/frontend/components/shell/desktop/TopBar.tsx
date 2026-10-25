@@ -40,7 +40,7 @@ export function TopBar({ band }: { band: ShellBand }) {
       ) : failed ? (
         <span className={`${styles.pill} ${styles.topBadge}`} role="status">{COPY.statusUnavailable}</span>
       ) : (
-        <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} />
+        <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
       )}
       <AlertsBell />
       <AvatarMenu />

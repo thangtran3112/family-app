@@ -126,6 +126,7 @@ def list_filters(
     if stub_enabled():
         return stub.filter_list()
     now = datetime.now(UTC)
+    service.ensure_seed_filters(session, user.id, now=now)  # a first visit finds the defaults, not an empty screener
     return [_list_row(session, view, now) for view in service.list_filters(session, user.id)]
 
 

@@ -3,7 +3,7 @@ import test from "node:test";
 import { ScreenerFiltersSchema, ScreenerResultsSchema, ScreenerUniverseSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
 import { columnsForBand, droppedKeys } from "./columns.ts";
-import { cellText, cellValue, filterIdFromParam, groupFilters, pickFilter, previewInterval, resultColumns, resultsState, universeDetails, universeLine } from "./screenerView.ts";
+import { NEW_FILTER_SPEC, cellText, cellValue, filterIdFromParam, groupFilters, neverScanned, pickFilter, previewInterval, resultColumns, resultsState, universeDetails, universeLine } from "./screenerView.ts";
 import { parseFilterSpec } from "../spec/parse.ts";
 import { describeSpec } from "../spec/describe.ts";
 import { ScreenerFilterDetailSchema } from "../api/schemas.ts";
@@ -72,4 +72,17 @@ test("the fixture filter's spec parses and describes in one sentence", () => {
   assert.ok(spec);
   assert.match(describeSpec(spec), /^At .+, find .+ where .+; up to \d+ matches?\.$/);
   assert.equal(parseFilterSpec({ nonsense: true }), null);
+});
+
+test("a filter no scan has run yet is told apart from one that ran and matched nothing", () => {
+  assert.equal(neverScanned({ as_of: null, freshness: "unavailable" }), true);
+  assert.equal(neverScanned(results.stamp), false);
+  assert.equal(neverScanned({ as_of: "2026-10-23T20:00:00Z", freshness: "unavailable" }), false);
+});
+
+test("the new-filter form starts from a spec the contract parses, with a name of its own", () => {
+  const spec = parseFilterSpec(NEW_FILTER_SPEC);
+  assert.ok(spec);
+  assert.equal(spec.name, "New filter");
+  assert.match(describeSpec(spec), /^At .+, find .+ where .+; up to \d+ matches?\.$/);
 });

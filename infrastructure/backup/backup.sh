@@ -119,8 +119,12 @@ dump_databases() {
   while IFS= read -r db; do
     [[ -n "$db" ]] || continue
     log "dumping database: $db"
+    # replay_blobs (Desk practice) is a re-fetchable history cache that grows with use (a month of daily-list
+    # practice can reach 1.8 GB): keep its schema, skip its rows. The pattern matches the table in any schema and
+    # nothing in the other databases. After a restore the cache is empty and refills from Alpaca.
     pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
       --format=custom \
+      --exclude-table-data='*.replay_blobs' \
       --file="$staging/dumps/$db.dump" "$db" \
       || die "pg_dump failed for database: $db"
     pg_restore --list "$staging/dumps/$db.dump" >/dev/null \

@@ -528,7 +528,7 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
                   : { paperOrder: undefined }),
               },
             })} type="checkbox" />
-            <span>Include paper action in spec (Phase 6)</span>
+            <span>Include paper action in spec (needs broker setup)</span>
           </label>
           {paperOrder && <PaperOrderEditor value={paperOrder} onChange={(value) => onChange({ ...form, then: { ...form.then, paperOrder: value } })} disabled={readOnly} />}
         </div>

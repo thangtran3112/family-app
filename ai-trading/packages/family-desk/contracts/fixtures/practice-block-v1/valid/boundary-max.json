@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "firstDay": "2026-03-02",
+  "sessions": 30,
+  "hideDates": "yes",
+  "screen": {
+    "filters": [
+      {
+        "id": 1
+      },
+      {
+        "id": 2
+      },
+      {
+        "id": 3
+      }
+    ],
+    "listAt": "15:30",
+    "maxList": 50
+  },
+  "setup": {
+    "window": {
+      "from": "15:30",
+      "to": "16:00"
+    },
+    "session": "regular",
+    "interval": "15m",
+    "shares": 10000,
+    "armed": [
+      {
+        "source": "alert_strategy",
+        "id": 1
+      },
+      {
+        "source": "filter",
+        "id": 1
+      },
+      {
+        "source": "alert_strategy",
+        "id": 2
+      },
+      {
+        "source": "filter",
+        "id": 2
+      },
+      {
+        "source": "filter",
+        "id": 3
+      }
+    ],
+    "plan": {
+      "stopRequired": "yes",
+      "signalOnly": "yes",
+      "maxLossUsd": 100000,
+      "maxTrades": 50,
+      "note": "Respect the stop."
+    }
+  }
+}
