@@ -12,7 +12,7 @@ import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type T
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
-/** The thread's risk plan (02r): read-only rows, an Edit plan form while active, and the Close thread confirmation. */
+/** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
   const { id, plan, startingBalance, status } = thread.thread;
   const closed = status === "closed";
@@ -20,10 +20,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
   const [problems, setProblems] = useState<ThreadProblems>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const [closeError, setCloseError] = useState<string | null>(null);
-  const busy = saving || closing;
+  const busy = saving;
 
   const edit = () => {
     setDraft(planToDraft(plan, startingBalance));
@@ -57,20 +54,6 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
       else setSaveError(mapped.form ?? problemMessage(error, PRACTICE_COPY.threadPlanSaveError));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const close = async () => {
-    setClosing(true);
-    setCloseError(null);
-    try {
-      await closeThread(id);
-      setConfirming(false);
-      onChanged();
-    } catch (error) {
-      setCloseError(problemMessage(error, PRACTICE_COPY.threadCloseError));
-    } finally {
-      setClosing(false);
     }
   };
 
@@ -112,24 +95,48 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
               </div>
             ))}
           </dl>
-          {plan.planNote && <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote}`}</p>}
+          <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote ?? PRACTICE_COPY.threadPlanNoteNone}`}</p>
         </>
       )}
 
-      {!closed && (
-        <div className={styles.closeBlock}>
-          <button type="button" className={styles.button} onClick={() => setConfirming(true)} disabled={busy}>{PRACTICE_COPY.threadClose}</button>
-          <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
-          <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
-          {confirming && (
-            <div role="group" aria-label="Confirm closing the thread" className={styles.confirm}>
-              <button type="button" className={`${styles.button} ${styles.primary}`} onClick={close} disabled={closing}>{PRACTICE_COPY.threadCloseConfirm}</button>
-              <button type="button" className={styles.button} onClick={() => setConfirming(false)} disabled={closing}>{PRACTICE_COPY.threadCloseKeep}</button>
-            </div>
-          )}
-          {closeError && <p role="alert" className={styles.alert}>{closeError}</p>}
+    </div>
+  );
+}
+
+/** Close thread (02r), in its own section of the rail (D-040): the caption, the reason and a confirmation before anything closes. */
+export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
+  const { id, status } = thread.thread;
+  const [confirming, setConfirming] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  if (status === "closed") return <p className={styles.muted}>{PRACTICE_COPY.threadClosedBody}</p>;
+
+  const close = async () => {
+    setClosing(true);
+    setCloseError(null);
+    try {
+      await closeThread(id);
+      setConfirming(false);
+      onChanged();
+    } catch (error) {
+      setCloseError(problemMessage(error, PRACTICE_COPY.threadCloseError));
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  return (
+    <div className={styles.stack}>
+      <button type="button" className={styles.button} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
+      <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
+      <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
+      {confirming && (
+        <div role="group" aria-label="Confirm closing the thread" className={styles.confirm}>
+          <button type="button" className={`${styles.button} ${styles.primary}`} onClick={close} disabled={closing}>{PRACTICE_COPY.threadCloseConfirm}</button>
+          <button type="button" className={styles.button} onClick={() => setConfirming(false)} disabled={closing}>{PRACTICE_COPY.threadCloseKeep}</button>
         </div>
       )}
+      {closeError && <p role="alert" className={styles.alert}>{closeError}</p>}
     </div>
   );
 }

@@ -174,9 +174,9 @@ export function improvementOf(weeks: readonly Week[]): Improvement {
         }
       : null;
   if (!trend) {
-    const reason = latest
-      ? practiceText("improvementReason", { n: latest.n, days: practiceDays(latest.practiced) })
-      : PRACTICE_COPY.improvementReasonOneWeek;
+    // One week alone still gets the plain count and the threshold; with no week at all, only the rule.
+    const newest = weeks[weeks.length - 1];
+    const reason = newest ? practiceText("improvementReason", { n: newest.n, days: practiceDays(newest.practiced) }) : PRACTICE_COPY.improvementReasonOneWeek;
     return { compared, trend, caveat: { title: PRACTICE_COPY.improvementTooFew, reason }, verdict: null };
   }
   const firstFull = full[0]!;
@@ -221,9 +221,10 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
 /** True while the thread has no ended day: nothing to chart yet. */
 export const hasNoDays = (thread: Pick<Thread, "daily">): boolean => thread.daily.length === 0;
 
-/** The plan as plain rows for the recap: label and value. A limit left unset is "None". */
+/** The plan as plain rows for the recap: label and value. A limit left unset is "None". The thread plan holds no share count (she sizes each entry), so that row says so. */
 export function planRows(plan: PracticeThread["plan"]): Array<{ id: string; label: string; value: string }> {
   return [
+    { id: "shares", label: PRACTICE_COPY.threadShares, value: PRACTICE_COPY.threadSharesPerEntry },
     { id: "stop", label: "Stop on every entry", value: plan.stopNoteOnEntry === "yes" ? "Yes" : "No" },
     { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
     { id: "max_loss", label: "Max loss, pretend dollars a day", value: plan.maxLossUsd === undefined ? "None" : formatBalance(plan.maxLossUsd) },

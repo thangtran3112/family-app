@@ -9,12 +9,12 @@ export function ImprovementPanel({ weeks }: { weeks: Week[] }) {
   const { compared, caveat, verdict } = improvementOf(weeks);
   return (
     <div className={styles.stack}>
+      <div className={styles.headRow}>
+        <p className={styles.muted}>{compared?.intro}</p>
+        <SimulatedBadge />
+      </div>
       {compared && (
         <>
-          <div className={styles.headRow}>
-            <p className={styles.muted}>{compared.intro}</p>
-            <SimulatedBadge />
-          </div>
           <table className={styles.table}>
             <thead>
               <tr>
