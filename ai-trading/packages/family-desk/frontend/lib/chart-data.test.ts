@@ -31,7 +31,7 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
   ]);
 });
 
-import { crosshairPoint, seriesMarkers, shadingData, volumeData } from "./chart-data.ts";
+import { crosshairPoint, formatChartClock, replayTickLabel, seriesMarkers, shadingData, volumeData } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -78,4 +78,62 @@ test("crosshair points carry candle, volume and series values with null for miss
   assert.deepEqual([point.open, point.high, point.low, point.close, point.volume], [1, 3, 0.5, 2, 900]);
   assert.deepEqual(point.values, { ema9: 1.5, vwap: null });
   assert.equal(crosshairPoint(chartTime("2026-10-23T13:30:00Z"), undefined, undefined, {}).close, null);
+});
+
+test("a Practice long entry is a green arrow below the bar, labelled", () => {
+  assert.deepEqual(seriesMarkers(intraday, [{ time: "2026-10-23T13:30:00Z", kind: "practice_long", label: "Practice long 100" }]), [
+    { time: chartTime("2026-10-23T13:30:00Z"), position: "belowBar", shape: "arrowUp", color: "#30D158", text: "Practice long 100" },
+  ]);
+});
+
+test("a Practice short entry is a red arrow above the bar; a Practice exit is a circle inside it", () => {
+  assert.deepEqual(
+    seriesMarkers(intraday, [
+      { time: "2026-10-23T13:45:00Z", kind: "practice_exit", label: "Practice exit" },
+      { time: "2026-10-23T13:30:00Z", kind: "practice_short", label: "Practice short 100" },
+    ]),
+    [
+      { time: chartTime("2026-10-23T13:30:00Z"), position: "aboveBar", shape: "arrowDown", color: "#FF453A", text: "Practice short 100" },
+      { time: chartTime("2026-10-23T13:45:00Z"), position: "inBar", shape: "circle", color: "#F2F2F4", text: "Practice exit" },
+    ],
+  );
+});
+
+test("a would-fire signal is an amber bell above the bar, labelled with the strategy name", () => {
+  assert.deepEqual(seriesMarkers(intraday, [{ time: "2026-10-23T13:45:00Z", kind: "would_fire", label: "ORB 15m" }]), [
+    { time: chartTime("2026-10-23T13:45:00Z"), position: "aboveBar", shape: "circle", color: "#FFB020", text: "\u{1F514} ORB 15m" },
+  ]);
+});
+
+test("pattern and fire markers keep their styles next to the Practice kinds", () => {
+  assert.deepEqual(
+    seriesMarkers(intraday, [
+      { time: "2026-10-23T13:45:00Z", kind: "fire", label: "ORB 15m" },
+      { time: "2026-10-23T13:30:00Z", kind: "pattern", label: "Hammer" },
+    ]),
+    [
+      { time: chartTime("2026-10-23T13:30:00Z"), position: "belowBar", shape: "arrowUp", color: "#F2F2F4", text: "Hammer" },
+      { time: chartTime("2026-10-23T13:45:00Z"), position: "aboveBar", shape: "circle", color: "#FFB020", text: "\u{1F514}" },
+    ],
+  );
+});
+
+test("Practice markers on a bar that is not loaded are dropped; the rest come out sorted by time", () => {
+  const markers = seriesMarkers(intraday, [
+    { time: "2026-10-23T13:45:00Z", kind: "would_fire", label: "ORB 15m" },
+    { time: "2026-10-23T13:40:00Z", kind: "practice_long", label: "Practice long 100" }, // no bar starts at 13:40
+    { time: "2026-10-23T13:30:00Z", kind: "practice_long", label: "Practice long 100" },
+  ]);
+  assert.deepEqual(markers.map((marker) => marker.time), [chartTime("2026-10-23T13:30:00Z"), chartTime("2026-10-23T13:45:00Z")]);
+});
+
+test("replay axes read as time of day, with the date only on day ticks and never when hidden", () => {
+  const time = chartTime("2026-10-23T14:07:00Z");
+  assert.equal(formatChartClock(time), "10:07 AM");
+  assert.equal(formatChartClock({ year: 2026, month: 10, day: 23 }), "");
+  assert.equal(replayTickLabel(time, 3, false), "10:07 AM");
+  assert.equal(replayTickLabel(time, 4, true), "10:07 AM");
+  assert.equal(replayTickLabel(time, 2, false), "Oct 23");
+  assert.equal(replayTickLabel(time, 2, true), "");
+  assert.equal(replayTickLabel({ year: 2026, month: 10, day: 23 }, 2, false), "");
 });

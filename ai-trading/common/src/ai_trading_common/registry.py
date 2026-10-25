@@ -28,6 +28,7 @@ from ai_trading_common.providers import (
     eulerpool,
     finnhub,
     fred,
+    ibkr,
     sec_edgar,
 )
 from ai_trading_common.sources import (
@@ -37,12 +38,15 @@ from ai_trading_common.sources import (
     EarningsCalendarSource,
     EarningsSource,
     FundamentalsSource,
+    GatewayStatusSource,
     MacroSource,
     NewsSource,
     QuoteSource,
     TargetsSource,
+    TradesSource,
     UniverseSource,
 )
+from ai_trading_common.types import GatewayStatus
 
 __all__ = ("Kind", "Provider", "REGISTRY", "DEFAULT_CHAINS", "DataSources", "KIND_PROTOCOLS")
 
@@ -58,10 +62,11 @@ Kind = Literal[
     "targets",
     "universe",
     "quotes",
+    "trades",
 ]
 
 #: Every kind, in `DataSources`' own field order. Fixed, not derived from `DEFAULT_CHAINS`, so
-#: `DataSources` is always built with all eleven fields regardless of how small a custom
+#: `DataSources` is always built with all twelve fields regardless of how small a custom
 #: `registry=`/`defaults=` override is (a test overriding one kind still needs the rest).
 _KINDS: tuple[Kind, ...] = (
     "bars",
@@ -75,6 +80,7 @@ _KINDS: tuple[Kind, ...] = (
     "targets",
     "universe",
     "quotes",
+    "trades",
 )
 
 
@@ -105,8 +111,18 @@ def _chain_call(providers: Sequence[object], method: str, *args: object, **kwarg
 class _BarsChain:
     providers: tuple[BarsSource, ...]
 
-    def bars(self, symbol, timeframe, start, end, *, now):
-        return _chain_call(self.providers, "bars", symbol, timeframe, start, end, now=now)
+    def bars(self, symbol, timeframe, start, end, *, now, adjustment="all"):
+        # Only a non-default adjustment is forwarded, so a provider without the keyword still serves the default.
+        return _chain_call(
+            self.providers,
+            "bars",
+            symbol,
+            timeframe,
+            start,
+            end,
+            now=now,
+            **({} if adjustment == "all" else {"adjustment": adjustment}),
+        )
 
 
 @dataclass(frozen=True)
@@ -198,6 +214,14 @@ class _QuotesChain:
         return _chain_call(self.providers, "latest", symbols, now=now)
 
 
+@dataclass(frozen=True)
+class _TradesChain:
+    providers: tuple[TradesSource, ...]
+
+    def trades(self, symbol, start, end, *, feed, now=None):
+        return _chain_call(self.providers, "trades", symbol, start, end, feed=feed, now=now)
+
+
 #: Kind -> its chain class and its Protocol (the latter used by the conformance test to check
 #: each registered provider's adapter against every kind it claims to serve).
 _CHAIN_CLASSES: dict[Kind, type] = {
@@ -212,6 +236,7 @@ _CHAIN_CLASSES: dict[Kind, type] = {
     "targets": _TargetsChain,
     "universe": _UniverseChain,
     "quotes": _QuotesChain,
+    "trades": _TradesChain,
 }
 
 KIND_PROTOCOLS: dict[Kind, type] = {
@@ -226,6 +251,7 @@ KIND_PROTOCOLS: dict[Kind, type] = {
     "targets": TargetsSource,
     "universe": UniverseSource,
     "quotes": QuoteSource,
+    "trades": TradesSource,
 }
 
 
@@ -237,6 +263,7 @@ REGISTRY: dict[str, Provider] = {
     "eulerpool": eulerpool.PROVIDER,
     "finnhub": finnhub.PROVIDER,
     "fred": fred.PROVIDER,
+    "ibkr": ibkr.PROVIDER,
     "sec_edgar": sec_edgar.PROVIDER,
 }
 
@@ -251,8 +278,9 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
     "fundamentals": ("sec_edgar",),
     "macro": ("fred",),
     "news": ("finnhub",),
-    "quotes": ("alpaca",),
+    "quotes": ("ibkr", "alpaca"),  # ibkr only joins while its switch is on (Provider.enabled)
     "targets": ("eulerpool", "finnhub"),
+    "trades": ("alpaca",),
     "universe": ("alpaca",),
 }
 
@@ -273,6 +301,15 @@ class DataSources:
     targets: TargetsSource
     universe: UniverseSource
     quotes: QuoteSource
+    trades: TradesSource
+
+    def gateway_status(self) -> GatewayStatus:
+        """How the live-quote gateway stands: the first quotes provider that holds one reports it, and
+        with none in the chain (switched off) the answer is `not_configured`."""
+        for provider in getattr(self.quotes, "providers", ()):
+            if isinstance(provider, GatewayStatusSource):
+                return provider.gateway_status()
+        return GatewayStatus("not_configured", None, None)
 
     @staticmethod
     def from_env(
@@ -286,7 +323,9 @@ class DataSources:
         to `defaults`. Fails fast (`ValueError`, naming the env var) when a list is empty, names
         an unknown provider, or names a provider that doesn't serve that kind -- a missing API
         key is never a startup error (the provider itself raises `NotConfigured` when called).
-        Each named provider is built at most once and shared across every kind it serves.
+        Each named provider is built at most once and shared across every kind it serves. A
+        provider whose `enabled(env)` is False is validated but left out of the chain (a chain with
+        nothing left is a `ValueError` too).
         """
         http = http or ThrottledClient()
         built: dict[str, object] = {}
@@ -309,7 +348,10 @@ class DataSources:
                     raise ValueError(f"{var} names unknown provider {name!r}")
                 if kind not in registry[name].kinds:
                     raise ValueError(f"{var}: provider {name!r} does not serve {kind!r}")
-                providers.append(adapter_for(name))
+                if registry[name].enabled(env):
+                    providers.append(adapter_for(name))
+            if not providers:
+                raise ValueError(f"{var}: every named provider is switched off")
             kinds[kind] = _CHAIN_CLASSES[kind](tuple(providers))
 
         return DataSources(**kinds)

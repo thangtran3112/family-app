@@ -95,6 +95,7 @@ def scanning(bars, universe: FakeUniverse | None = None) -> DataSources:
         targets=unused,
         universe=universe or FakeUniverse(),
         quotes=unused,
+        trades=unused,
     )
 
 

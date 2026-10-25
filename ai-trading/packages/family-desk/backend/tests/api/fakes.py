@@ -46,4 +46,5 @@ def fake_data_sources(bars: FakeBarsSource | None = None) -> DataSources:
         targets=unused,
         universe=unused,
         quotes=unused,
+        trades=unused,
     )

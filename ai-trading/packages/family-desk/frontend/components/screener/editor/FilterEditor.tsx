@@ -161,7 +161,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
       {saveNote && <p role="alert" className={styles.problem}>{saveNote}</p>}
       {!readOnly && defaultForm && (
         <div className={styles.row}>
-          <button type="button" className={styles.button} onClick={() => change(defaultForm)}>Reset to default</button>
+          <button type="button" className={styles.button} onClick={() => change({ ...defaultForm, name: form.name })}>Reset to default</button>
         </div>
       )}
       <fieldset className={styles.fields} disabled={readOnly}>

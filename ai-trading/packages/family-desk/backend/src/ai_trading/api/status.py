@@ -1,13 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from ai_trading_common.registry import DataSources
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ai_trading.alerts.runtime import alert_state
-from ai_trading.api.auth import AuthedUser, get_current_user, get_session
+from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
 from ai_trading.api.schemas.common import Stamp
 from ai_trading.api.schemas.platform import StatusAlertsOut, StatusMarketOut, StatusScansOut
 from ai_trading.api.stamp import feed_last_ok, make_stamp
@@ -20,6 +21,7 @@ from ai_trading.mvp_stub import stub_enabled
 router = APIRouter(prefix="/api/desk", tags=["status"], dependencies=[Depends(get_current_user)])
 
 _DELAYED_INTERVAL = timedelta(minutes=15)
+_LIVE_INTERVAL = timedelta(minutes=1)  # the pause limit for gateway ticks is its 120 s floor (core/freshness.py)
 
 
 class StreamingSlotsOut(BaseModel):
@@ -54,13 +56,28 @@ def _delayed_feed_stamp(session: Session, feed: str, now: datetime) -> Stamp:
 
 @router.get("/status", response_model=StatusOut)
 def status(
-    user: AuthedUser = Depends(get_current_user), session: Session = Depends(get_session)
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    data_sources: DataSources = Depends(get_data_sources),
 ) -> StatusOut | dict[str, Any]:
     if stub_enabled():
         return stub_platform.status()
     now = datetime.now(UTC)
     market = market_state(now)
+    gateway = data_sources.gateway_status()
     quotes = _delayed_feed_stamp(session, "bars_delayed", now)
+    live = gateway.state == "connected" and gateway.quality is not None and gateway.as_of is not None
+    if live:
+        # The gateway's own tick: its quality and time, so the stamp never claims more than IBKR said (02m §b4).
+        ticked_at = gateway.as_of.to_pydatetime()
+        quotes = make_stamp(
+            quality=gateway.quality,
+            source="ibkr",
+            as_of=ticked_at,
+            interval=_LIVE_INTERVAL,
+            last_ok_at=ticked_at,
+            now=now,
+        )
     scans = _delayed_feed_stamp(session, "scan", now)
     unread = session.execute(
         select(func.count(Alert.id)).where(Alert.user_id == user.id, Alert.read_at.is_(None))
@@ -71,9 +88,10 @@ def status(
         # A scheduler that never ran has no next scan to promise.
         scans=StatusScansOut(**scans.model_dump(), next_run_at=None if scans.as_of is None else next_due(now)),
         alerts=StatusAlertsOut(state=alert_state(session, user.id, now), unread=unread),
-        gateway="not_configured",
-        data_sources="alpaca" if quotes.as_of is not None else "unknown",
-        streaming_slots=StreamingSlotsOut(used=0, max=70),
+        gateway=gateway.state,
+        # Scans and backfill stay on Alpaca, so live IBKR quotes make the Desk "mixed".
+        data_sources="mixed" if live else "alpaca" if quotes.as_of is not None else "unknown",
+        streaming_slots=StreamingSlotsOut(used=gateway.lines_used, max=70),
         backups=None,
         reconciliation=None,
     )

@@ -200,6 +200,22 @@ class Quote:
     quality: Quality
 
 
+GatewayState = Literal["not_configured", "connected", "reconnecting", "down"]
+
+
+@dataclass(frozen=True)
+class GatewayStatus:
+    """Where a live-quote gateway stands, for a status surface. `not_configured`: switched off, or no
+    credentials. `down`: switched on but never reached. `reconnecting`: reached once, dropped since.
+    `quality` and `as_of` describe the newest tick and are None until one arrives. `lines_used` is how many
+    streaming market-data lines the session holds."""
+
+    state: GatewayState
+    quality: Quality | None
+    as_of: pd.Timestamp | None  # UTC
+    lines_used: int = 0
+
+
 def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:
     """Pure point-in-time selector: only facts filed on or before `as_of`.
 

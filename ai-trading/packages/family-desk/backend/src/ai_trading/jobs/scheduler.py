@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ai_trading.jobs import (
     JobResult,
+    consensus_snapshot,
     daily_close,
     healthcheck,
     premarket,
@@ -26,7 +27,15 @@ from ai_trading.jobs.clock import JobClock
 logger = logging.getLogger(__name__)
 
 #: `watchdog` last, so it sees this tick's own completions.
-_ORDER = ("premarket_0830", "daily_close", "weekly", "relogin_reminder", "refresh_15m", "watchdog")
+_ORDER = (
+    "premarket_0830",
+    "daily_close",
+    "consensus_snapshot",
+    "weekly",
+    "relogin_reminder",
+    "refresh_15m",
+    "watchdog",
+)
 
 #: These jobs each fire once per day (or once per week) but their own `due_now()` is an open
 #: window (true for the rest of the day/week once their slot starts), not a single exact minute --
@@ -35,11 +44,12 @@ _ORDER = ("premarket_0830", "daily_close", "weekly", "relogin_reminder", "refres
 #: clock only on success, so a failed run is still retried on the next tick. `refresh_15m` is
 #: meant to re-run every 15 minutes (not slotted this way) and `watchdog`'s own dedupe cooldown
 #: already gates its alerts, so neither belongs here.
-_SLOTTED = ("premarket_0830", "daily_close", "weekly", "relogin_reminder")
+_SLOTTED = ("premarket_0830", "daily_close", "consensus_snapshot", "weekly", "relogin_reminder")
 
 _DUE_NOW = {
     "premarket_0830": premarket.due_now,
     "daily_close": daily_close.due_now,
+    "consensus_snapshot": consensus_snapshot.due_now,
     "weekly": weekly.due_now,
     "relogin_reminder": relogin_reminder.due_now,
     "refresh_15m": refresh_15m.due_now,
@@ -77,6 +87,8 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
                 results.append(premarket.run(session, clock, now=now, data_sources=data_sources))
             elif name == "daily_close":
                 results.append(daily_close.run(session, data_sources, clock, now=now))
+            elif name == "consensus_snapshot":
+                results.append(consensus_snapshot.run(session, data_sources, clock, now=now))
             elif name == "weekly":
                 results.append(weekly.run(session, clock, now=now))
             elif name == "relogin_reminder":

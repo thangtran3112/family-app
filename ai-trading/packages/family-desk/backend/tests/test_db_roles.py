@@ -121,7 +121,78 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "universe_symbols",
         "symbol_metrics",
         "feed_health",
+        "consensus_snapshots",
+        "earnings_results",
+        "analyst_targets",
+        "replay_sessions",
+        "practice_marks",
+        "replay_notable_days",
+        "replay_blobs",
     }
+
+
+def test_desk_runtime_can_select_insert_update_delete_replay_tables(role_split_urls: RoleSplitUrls) -> None:
+    # 0005's tables get their grants from the zz-20 script's ALTER DEFAULT PRIVILEGES (migrator-created
+    # tables), not from a per-table GRANT, so this test is what proves they are actually reachable.
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            user_id = conn.execute(
+                text("INSERT INTO users (email) VALUES (:email) RETURNING id"), {"email": "replay-roles@example.test"}
+            ).scalar_one()
+            session_id = conn.execute(
+                text(
+                    "INSERT INTO replay_sessions (owner_user_id, symbol, day, attempt, schema_version, spec, armed, "
+                    "signals, window_start, window_end, revealed_through, tape_feed, status, created_at, updated_at) "
+                    "VALUES (:u, 'ROLES', '2026-10-23', 1, 1, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, now(), now(), "
+                    "now(), 'sip', 'active', now(), now()) RETURNING id"
+                ),
+                {"u": user_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO practice_marks (session_id, seq, kind, at, price, source, created_at) "
+                    "VALUES (:s, 1, 'long_entry', now(), 10.25, 'her', now())"
+                ),
+                {"s": session_id},
+            )
+            conn.execute(
+                text("UPDATE replay_sessions SET status = 'ended', ended_at = now(), rating = 4 WHERE id = :s"),
+                {"s": session_id},
+            )
+            status = conn.execute(
+                text("SELECT status FROM replay_sessions WHERE id = :s"), {"s": session_id}
+            ).scalar_one()
+            assert status == "ended"
+            conn.execute(
+                text(
+                    "INSERT INTO replay_notable_days (symbol, day, rv, rv_pct_rank, tags, computed_at) "
+                    "VALUES ('ROLES', '2026-10-23', 1.5, 0.9, '[]'::jsonb, now())"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO replay_blobs (kind, symbol, day, feed, payload, row_count, raw_bytes, created_at) "
+                    "VALUES ('bars1m', 'ROLES', '2026-10-23', 'sip', :payload, 0, 0, now())"
+                ),
+                {"payload": b"\x00\x01"},
+            )
+            # Deleting the user cascades through the sessions to their marks.
+            conn.execute(text("DELETE FROM users WHERE id = :u"), {"u": user_id})
+            conn.execute(text("DELETE FROM replay_notable_days WHERE symbol = 'ROLES'"))
+            conn.execute(text("DELETE FROM replay_blobs WHERE symbol = 'ROLES'"))
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM practice_marks WHERE session_id = :s) "
+                    "+ (SELECT COUNT(*) FROM replay_sessions WHERE id = :s) "
+                    "+ (SELECT COUNT(*) FROM replay_notable_days WHERE symbol = 'ROLES') "
+                    "+ (SELECT COUNT(*) FROM replay_blobs WHERE symbol = 'ROLES')"
+                ),
+                {"s": session_id},
+            ).scalar_one()
+            assert remaining == 0
+    finally:
+        runtime_engine.dispose()
 
 
 def test_desk_runtime_can_select_insert_update_delete_technical_mvp_tables(role_split_urls: RoleSplitUrls) -> None:
@@ -166,6 +237,24 @@ def test_desk_runtime_can_select_insert_update_delete_technical_mvp_tables(role_
                 )
             ).scalar_one()
             assert remaining == 0
+    finally:
+        runtime_engine.dispose()
+
+
+def test_desk_runtime_can_write_the_consensus_history_tables(role_split_urls: RoleSplitUrls) -> None:
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO analyst_targets (symbol, snapshot_date, provider, quality, as_of, captured_at) "
+                    "VALUES ('ROLES', '2026-10-06', 'fake', 'eod', now(), now())"
+                )
+            )
+            conn.execute(text("UPDATE analyst_targets SET target_mean = 1.5 WHERE symbol = 'ROLES'"))
+            mean = conn.execute(text("SELECT target_mean FROM analyst_targets WHERE symbol = 'ROLES'")).scalar_one()
+            assert mean == 1.5
+            conn.execute(text("DELETE FROM analyst_targets WHERE symbol = 'ROLES'"))
     finally:
         runtime_engine.dispose()
 

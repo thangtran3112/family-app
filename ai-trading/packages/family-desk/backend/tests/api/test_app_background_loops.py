@@ -3,6 +3,8 @@ its `work` callable against a fresh session every `interval` seconds, forever, w
 and a fake `sleep` -- no real waiting, no real database."""
 
 import asyncio
+import threading
+import time
 from datetime import UTC, datetime
 
 from ai_trading.api.app import DISPATCH_INTERVAL_SECONDS, TICK_INTERVAL_SECONDS, _background_loop
@@ -93,3 +95,37 @@ def test_background_loop_survives_one_failing_iteration_and_uses_its_own_interva
 
     assert calls == 2  # the first iteration's RuntimeError never killed the loop
     assert sleeps == [DISPATCH_INTERVAL_SECONDS] * 2
+
+
+def test_background_work_runs_off_the_event_loop_so_a_slow_send_never_stalls_the_api():
+    """A retrying channel send sleeps for seconds; the API (inbox reads included) shares this event loop."""
+    worker_threads: list[int] = []
+    served = 0
+
+    def slow_work(session, now: datetime) -> None:
+        worker_threads.append(threading.get_ident())
+        time.sleep(0.3)  # the channel's backoff
+
+    async def run() -> None:
+        nonlocal served
+        sleep, _ = _stop_after(1)
+
+        async def api_requests() -> None:
+            nonlocal served
+            while True:
+                served += 1
+                await asyncio.sleep(0.01)
+
+        api = asyncio.create_task(api_requests())
+        try:
+            await _background_loop(slow_work, _FakeSessionFactory(), interval=1, sleep=sleep, clock=lambda: _NOW)
+        finally:
+            api.cancel()
+
+    try:
+        asyncio.run(run())
+    except asyncio.CancelledError:
+        pass
+
+    assert worker_threads and worker_threads[0] != threading.get_ident()
+    assert served > 5  # the event loop kept serving while the work slept

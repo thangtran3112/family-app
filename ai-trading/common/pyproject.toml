@@ -9,6 +9,10 @@ dependencies = [
     "requests>=2.32",
 ]
 
+[project.optional-dependencies]
+# The IB Gateway wire client, needed only once DESK_IBKR_GATEWAY_ENABLED=1 (providers/ibkr.py imports it lazily).
+ibkr = ["ib_async==2.1.0"]  # the version the probe pins (tools/ibkr-probe)
+
 [dependency-groups]
 dev = [
     "pytest>=9.0",

@@ -4,6 +4,7 @@ import type {
   HistogramData,
   LineData,
   SeriesMarker,
+  SeriesMarkerBar,
   Time,
   UTCTimestamp,
   WhitespaceData,
@@ -87,17 +88,30 @@ export function shadingData(bars: ChartBar[]): Array<HistogramData<Time> | White
 }
 
 export type ChartMarkerInput = {
-  /** UTC bar start. Patterns use `bar_start`, fired alerts `bar_time`. */
+  /** UTC bar start. Patterns use `bar_start`, fired alerts `bar_time`; Practice marks are snapped to the bar they fall in. */
   time: string;
-  kind: "pattern" | "fire";
+  /** `practice_*` are her Practice marks (arrow up below a long entry, arrow down above a short entry, a circle for an exit);
+   *  `would_fire` is a replayed strategy signal and reuses the fire style (02o §d). */
+  kind: "pattern" | "fire" | "practice_long" | "practice_short" | "practice_exit" | "would_fire";
   label: string;
 };
 
 const etDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 
+function markerStyle(marker: ChartMarkerInput): Pick<SeriesMarkerBar<Time>, "position" | "shape" | "color" | "text"> {
+  switch (marker.kind) {
+    case "pattern": return { position: "belowBar", shape: "arrowUp", color: "#F2F2F4", text: marker.label };
+    case "fire": return { position: "aboveBar", shape: "circle", color: "#FFB020", text: "🔔" };
+    case "would_fire": return { position: "aboveBar", shape: "circle", color: "#FFB020", text: `🔔 ${marker.label}` };
+    case "practice_long": return { position: "belowBar", shape: "arrowUp", color: "#30D158", text: marker.label };
+    case "practice_short": return { position: "aboveBar", shape: "arrowDown", color: "#FF453A", text: marker.label };
+    case "practice_exit": return { position: "inBar", shape: "circle", color: "#F2F2F4", text: marker.label };
+  }
+}
+
 /**
- * Pattern labels below the bar, an amber bell above it for each fired alert (02l §b5). A marker that
- * matches no loaded bar is dropped; the library needs them sorted by time.
+ * Pattern labels below the bar, an amber bell above it for each fired alert (02l §b5), and Practice marks
+ * (02o §d). A marker that matches no loaded bar is dropped; the library needs them sorted by time.
  */
 export function seriesMarkers(bars: ChartBar[], markers: ChartMarkerInput[]): SeriesMarker<Time>[] {
   if (bars.length === 0) return [];
@@ -107,12 +121,7 @@ export function seriesMarkers(bars: ChartBar[], markers: ChartMarkerInput[]): Se
     const time = chartTime(daily ? etDay.format(new Date(marker.time)) : marker.time);
     const key = timeKey(time);
     if (!have.has(key)) return [];
-    return [{
-      key,
-      marker: marker.kind === "pattern"
-        ? { time, position: "belowBar", shape: "arrowUp", color: "#F2F2F4", text: marker.label }
-        : { time, position: "aboveBar", shape: "circle", color: "#FFB020", text: "🔔" },
-    }];
+    return [{ key, marker: { time, ...markerStyle(marker) } }];
   });
   return placed.sort((a, b) => a.key - b.key).map(({ marker }) => marker);
 }
@@ -147,4 +156,18 @@ export function crosshairPoint(
     volume: num(volume?.value),
     values: Object.fromEntries(Object.entries(values).map(([id, point]) => [id, num(point?.value)])),
   };
+}
+
+/** "10:05 AM" in New York; empty for a business-day time (daily bars have no clock). */
+export function formatChartClock(time: Time): string {
+  if (typeof time === "object") return "";
+  const date = new Date(typeof time === "number" ? time * 1000 : time);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+/** Replay axes: time of day on time ticks, "Oct 22" on day ticks, nothing for a day tick when dates are hidden. `tickType` is the library's TickMarkType (3 and up are time ticks). */
+export function replayTickLabel(time: Time, tickType: number, hideDates: boolean): string {
+  if (tickType >= 3) return formatChartClock(time);
+  if (hideDates || typeof time === "object") return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(new Date(typeof time === "number" ? time * 1000 : time));
 }

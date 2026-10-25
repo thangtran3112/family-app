@@ -18,7 +18,7 @@ import pandas as pd
 
 from ai_trading_common.errors import NotConfigured, Unavailable
 from ai_trading_common.registry import REGISTRY, DataSources, Provider
-from ai_trading_common.testing import FakeResponse, make_client
+from ai_trading_common.testing import FakeResponse, FakeTrades, make_client
 from ai_trading_common.types import (
     ActiveSymbol,
     AnalystTargets,
@@ -133,6 +133,7 @@ def _sources_with(**overrides) -> DataSources:
         "targets": ("eulerpool", "finnhub"),
         "universe": ("alpaca",),
         "quotes": ("alpaca",),
+        "trades": ("alpaca",),
     }
     for kind, (names, adapter) in overrides.items():
         names_tuple = tuple(names) if isinstance(names, list) else names
@@ -141,6 +142,52 @@ def _sources_with(**overrides) -> DataSources:
             registry[key] = Provider(name=key, kinds=(kind,), build=lambda env, http, a=adapter[i]: a)
         defaults[kind] = tuple(f"_fake_{kind}_{i}" for i in range(len(names_tuple)))
     return DataSources.from_env(env={}, registry=registry, defaults=defaults)
+
+
+class RecordingBars:
+    """Records the keyword arguments each `bars` call received, so a test can see what the chain forwards."""
+
+    def __init__(self):
+        self.kwargs: list[dict] = []
+
+    def bars(self, symbol, timeframe, start, end, **kwargs):
+        self.kwargs.append(kwargs)
+        return "bars"
+
+
+class TestBarsChain:
+    def test_adjustment_is_forwarded_only_when_it_is_not_the_default(self):
+        recorder = RecordingBars()
+        sources = _sources_with(bars=(["a"], [recorder]))
+        sources.bars.bars("AAPL", "1d", NOW, NOW, now=NOW)
+        sources.bars.bars("AAPL", "1d", NOW, NOW, now=NOW, adjustment="raw")
+        assert recorder.kwargs == [{"now": NOW}, {"now": NOW, "adjustment": "raw"}]
+
+
+def _prints(*times: str) -> pd.DataFrame:
+    n = len(times)
+    return pd.DataFrame(
+        {
+            "t": pd.to_datetime(list(times), utc=True),
+            "p": [10.0] * n,
+            "s": [100] * n,
+            "x": ["V"] * n,
+            "c": [""] * n,
+        }
+    )
+
+
+class TestTradesChain:
+    def test_a_refused_sip_feed_falls_through_to_the_next_provider(self):
+        primary = FakeTrades(refuse_sip=True)
+        secondary = FakeTrades({("AAPL", "sip"): _prints("2026-10-11T20:00:00Z", "2026-10-12T00:00:00Z")})
+        sources = _sources_with(trades=(["a", "b"], [primary, secondary]))
+        start, end = pd.Timestamp("2026-10-11T19:00:00Z"), pd.Timestamp("2026-10-11T23:00:00Z")
+        got = sources.trades.trades("AAPL", start, end, feed="sip", now=NOW)
+        assert got.source == "fake"
+        assert len(got.frame) == 1  # the 00:00 next-day print is outside the window
+        assert primary.calls == [("AAPL", start, end, "sip")]
+        assert secondary.calls == [("AAPL", start, end, "sip")]
 
 
 class TestConsensusChain:
