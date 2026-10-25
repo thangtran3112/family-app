@@ -21,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -160,12 +160,18 @@ def patch_thread(
 
 
 def open_day(db: Session, thread_id: int) -> ReplayDayList | None:
-    """The practice day under way: the unfinished day list of the thread's active daily plan."""
+    """The practice day under way: the unfinished day list of the thread's active daily plan, else a day a replaced
+    plan left half practised (it has a session whose trades still book, so it holds the thread open). A replaced
+    plan's day that was only listed holds nothing and is ignored."""
     return db.execute(
         select(ReplayDayList)
         .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
-        .where(PracticePlan.thread_id == thread_id, PracticePlan.status == "active", ReplayDayList.status != "ended")
-        .order_by(ReplayDayList.day.desc())
+        .where(
+            PracticePlan.thread_id == thread_id,
+            ReplayDayList.status != "ended",
+            or_(PracticePlan.status == "active", ReplayDayList.status == "practicing"),
+        )
+        .order_by((PracticePlan.status == "active").desc(), ReplayDayList.day.desc())
         .limit(1)
     ).scalar_one_or_none()
 
@@ -188,15 +194,16 @@ def close_thread(db: Session, user_id: int, thread_id: int, now: datetime) -> Pr
 
 def resolve_for_plan(db: Session, user_id: int, thread_id: int | None) -> PracticeThread:
     """The thread a new daily plan binds to: the one named, else her active day thread. A closed or missing thread is a
-    plain 409 (a thread that is not hers or does not exist is a 404)."""
+    plain 409 (a thread that is not hers or does not exist is a 404). The thread row is locked until the request
+    commits, so a close that arrives meanwhile waits and then archives the plan this request is creating."""
     if thread_id is not None:
-        thread = get_thread(db, user_id, thread_id)
+        thread = get_thread(db, user_id, thread_id, lock=True)
         if thread.status == "closed":
             raise ReplayProblem(CLOSED_THREAD, path="threadId", status=409)
         if thread.mode != "day":
             raise ReplayProblem("Daily lists run in a day thread", path="threadId")
         return thread
-    thread = active_thread(db, user_id, "day")
+    thread = active_thread(db, user_id, "day", lock=True)
     if thread is not None:
         return thread
     any_thread = db.execute(
@@ -389,12 +396,13 @@ def list_threads(db: Session, user_id: int) -> list[dict[str, Any]]:
 
 
 def ledger_page(db: Session, thread: PracticeThread, *, limit: int = LEDGER_LIMIT) -> dict[str, Any]:
-    """The newest `limit` ledger rows, newest first, with the total row count."""
+    """The `limit` most recently booked ledger rows, newest first (booking order, not the replayed market time: a later
+    plan in the same thread may replay an earlier month), with the total row count."""
     rows = list(
         db.execute(
             select(PracticeLedger)
             .where(PracticeLedger.thread_id == thread.id)
-            .order_by(PracticeLedger.realized_at.desc(), PracticeLedger.id.desc())
+            .order_by(PracticeLedger.id.desc())
             .limit(limit)
         ).scalars()
     )
@@ -407,8 +415,9 @@ def ledger_page(db: Session, thread: PracticeThread, *, limit: int = LEDGER_LIMI
     }
 
 
-def brief(db: Session, thread_id: int | None) -> dict[str, Any] | None:
-    """The header strip of a day screen or the workspace: balance and today's realized P/L. None without a thread."""
+def brief(db: Session, thread_id: int | None, day_list_id: int | None = None) -> dict[str, Any] | None:
+    """The header strip of a day screen or the workspace: balance and the realized P/L of the day being viewed
+    (`day_list_id`), else of the practice day under way. None without a thread."""
     if thread_id is None:
         return None
     thread = db.get(PracticeThread, thread_id)
@@ -417,13 +426,17 @@ def brief(db: Session, thread_id: int | None) -> dict[str, Any] | None:
     total = db.execute(
         select(func.coalesce(func.sum(PracticeLedger.pnl_usd), 0)).where(PracticeLedger.thread_id == thread.id)
     ).scalar_one()
-    today = _today(db, thread)
+    if day_list_id is not None:
+        today_pnl: float | None = _money(_realized(db, day_list_id)[1])
+    else:
+        today = _today(db, thread)
+        today_pnl = None if today is None else today["pnl_usd"]
     return {
         "id": thread.id,
         "mode": thread.mode,
         "status": thread.status,
         "balance": _money(thread.starting_balance + Decimal(total)),
-        "today_pnl_usd": None if today is None else today["pnl_usd"],
+        "today_pnl_usd": today_pnl,
         "label": SIMULATED_LABEL,
     }
 

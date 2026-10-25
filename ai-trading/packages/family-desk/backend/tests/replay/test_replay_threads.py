@@ -9,7 +9,7 @@ The world: GAPPER sits at 106 in the premarket and 110 from the open, so a long 
 import pytest
 from daily_world import DAYS, NOW, make_thread
 from sqlalchemy import select, update
-from test_replay_plan import _advance, _block, _first_list, _open, _ready, _thread
+from test_replay_plan import _advance, _block, _first_list, _open, _plan, _ready, _thread
 
 from ai_trading.contracts.practice_thread import (
     PracticeLedgerEntryV1,
@@ -166,6 +166,32 @@ def test_closing_waits_for_an_open_day_then_archives_the_plan_and_refuses_new_pl
     assert threads_mod.create_thread(db_session, user_id, _create(), NOW).status == "active"  # a new thread may start
     out = threads_mod.detail(db_session, closed)["thread"]
     assert out.status == "closed" and out.closedAt is not None
+
+
+def test_a_replaced_plans_half_practised_day_holds_the_thread_open_and_keeps_its_own_header(
+    db_session, user_id, svc
+) -> None:
+    row, session, thread = _day_one(db_session, user_id, svc)
+    _trade(db_session, user_id, svc, session.id, "long", shares=10)  # +40 booked, the day still open
+    _plan(db_session, user_id, svc)  # a new plan replaces the old one and leaves its day practicing
+    old = db_session.get(PracticePlan, row.plan_id)
+    assert old.status == "archived" and db_session.get(type(row), row.id).status == "practicing"
+    assert threads_mod.open_day(db_session, thread.id).id == row.id  # the new plan has no day yet
+    assert threads_mod.brief(db_session, thread.id, row.id)["today_pnl_usd"] == 40.0
+    with pytest.raises(ReplayProblem) as held:
+        threads_mod.close_thread(db_session, user_id, thread.id, NOW)
+    assert held.value.status == 409 and "End today's practice day" in held.value.message
+    plan_mod.end_day(db_session, user_id, row.id, svc)  # reachable by id: end it, then the thread can close
+    assert threads_mod.close_thread(db_session, user_id, thread.id, NOW).status == "closed"
+    assert _stats(db_session, thread).balance == 50_040.0
+
+
+def test_a_replaced_plans_day_that_was_only_listed_does_not_hold_the_thread(db_session, user_id, svc) -> None:
+    row = _first_list(db_session, user_id, svc)  # listed, no session
+    thread = threads_mod.active_thread(db_session, user_id)
+    _plan(db_session, user_id, svc)
+    assert db_session.get(type(row), row.id).status == "listed" and threads_mod.open_day(db_session, thread.id) is None
+    assert threads_mod.close_thread(db_session, user_id, thread.id, NOW).status == "closed"
 
 
 def test_a_day_left_open_on_an_archived_plan_cannot_start_a_session_in_a_closed_thread(
@@ -422,6 +448,19 @@ def test_the_ledger_page_is_newest_first_and_counts_every_row(db_session, user_i
     assert "Simulated" in page["label"]
     for entry in threads_mod.ledger_page(db_session, thread)["entries"]:
         PracticeLedgerEntryV1.model_validate(entry)
+
+
+def test_the_ledger_page_orders_by_booking_not_by_the_replayed_market_time(db_session, user_id, svc) -> None:
+    row, session, thread = _day_one(db_session, user_id, svc)
+    _trade(db_session, user_id, svc, session.id, "long", shares=10, leave="10:00")
+    _advance(db_session, user_id, svc, session.id, "10:05")
+    _mark(db_session, user_id, svc, session.id, "long_entry", shares=2)
+    _advance(db_session, user_id, svc, session.id, "10:10")
+    _mark(db_session, user_id, svc, session.id, "long_exit")
+    newest = _ledger(db_session)[-1]
+    newest.realized_at = et(DAYS[0], "04:00") - (NOW - NOW.replace(year=2024))  # a replay of a far older month
+    db_session.commit()
+    assert threads_mod.ledger_page(db_session, thread, limit=1)["entries"][0]["id"] == newest.id
 
 
 def test_a_thread_session_belongs_to_the_thread_row(db_session, user_id, svc) -> None:

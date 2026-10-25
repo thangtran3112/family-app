@@ -129,9 +129,9 @@ def _call[T](fn, *args, **kwargs) -> T:
         raise HTTPException(status_code=503, detail="Market data is unavailable right now · try again") from None
 
 
-def _with_thread(db: Session, out: dict[str, Any], thread_id: int | None) -> dict[str, Any]:
-    """Add the thread header strip (the SIMULATED balance and today's realized P/L) to a response dict."""
-    return {**out, "thread": threads_mod.brief(db, thread_id)}
+def _with_thread(db: Session, out: dict[str, Any], thread_id: int | None, day_list_id: int | None) -> dict[str, Any]:
+    """Add the thread header strip (the SIMULATED balance and the day's realized P/L) to a response dict."""
+    return {**out, "thread": threads_mod.brief(db, thread_id, day_list_id)}
 
 
 # -- notable days and the session list -----------------------------------------------------------------------
@@ -181,7 +181,9 @@ def create_session(
     active session per symbol and day: a second POST returns the existing one; after `end` it is attempt n + 1."""
     spec = _validated(ReplaySessionV1, raw)
     row = _call(svc_mod.create, db, user.id, spec, services)
-    return _with_thread(db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id)
+    return _with_thread(
+        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=ReplaySessionOut)
@@ -192,7 +194,9 @@ def get_session_state(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     row = _call(svc_mod.get_row, db, user.id, session_id)
-    return _with_thread(db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id)
+    return _with_thread(
+        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
+    )
 
 
 @router.patch("/sessions/{session_id}", response_model=ReplaySessionOut)
@@ -214,7 +218,7 @@ def patch_session(
         rating=body.rating,
         fields=set(body.model_fields_set),
     )
-    return _with_thread(db, out, out["thread_id"])
+    return _with_thread(db, out, out["thread_id"], out["day_list_id"])
 
 
 # -- the playhead -------------------------------------------------------------------------------------------
@@ -281,7 +285,8 @@ def place_mark(
     """Place a practice mark at the playhead: the server stamps the time and the last print's price."""
     mark = _validated(PracticeMarkV1, raw).root.model_dump(mode="json", by_alias=True, exclude_none=True)
     out = _call(svc_mod.place_mark, db, user.id, session_id, services, mark)
-    return _with_thread(db, out, svc_mod.get_row(db, user.id, session_id).thread_id)
+    row = svc_mod.get_row(db, user.id, session_id)
+    return _with_thread(db, out, row.thread_id, row.day_list_id)
 
 
 @router.delete("/sessions/{session_id}/marks/{mark_id}", response_model=MarkUndoOut)
@@ -294,7 +299,8 @@ def undo_mark(
 ) -> dict[str, Any]:
     """Undo the last mark, only while the playhead has not moved since it was placed (else 409)."""
     out = _call(svc_mod.undo_mark, db, user.id, session_id, mark_id, services)
-    return _with_thread(db, out, svc_mod.get_row(db, user.id, session_id).thread_id)
+    row = svc_mod.get_row(db, user.id, session_id)
+    return _with_thread(db, out, row.thread_id, row.day_list_id)
 
 
 @router.post("/sessions/{session_id}/end", response_model=ReplaySessionOut)
@@ -306,7 +312,7 @@ def end_session(
 ) -> dict[str, Any]:
     """Auto-exit an open trade at the last price, reveal the whole window, and store the final journal. Idempotent."""
     out = _call(svc_mod.end, db, user.id, session_id, services)
-    return _with_thread(db, out, out["thread_id"])
+    return _with_thread(db, out, out["thread_id"], out["day_list_id"])
 
 
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
@@ -438,7 +444,9 @@ def start_day_session(
     """Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in
     v1: another name is a 409 until the day ends."""
     row = _call(plan_mod.start_session, db, user.id, day_list_id, body.symbol, services)
-    return _with_thread(db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id)
+    return _with_thread(
+        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
+    )
 
 
 @router.post("/day-lists/{day_list_id}/end", response_model=DayListOut)

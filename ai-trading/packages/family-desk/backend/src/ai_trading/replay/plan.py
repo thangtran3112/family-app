@@ -665,7 +665,7 @@ def day_list_out(
         "clock": row.revealed_through,
         "sessions": [{"id": s.id, "symbol": s.symbol, "status": s.status} for s in sessions],
         "watch_check": watch_check(db, row, sessions),
-        "thread": threads_mod.brief(db, plan.thread_id),
+        "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
         "peek": None if peek is None else _peek(db, svc, row, peek),
         "journal": row.journal if ended else None,

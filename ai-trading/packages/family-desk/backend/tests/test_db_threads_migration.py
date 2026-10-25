@@ -219,3 +219,27 @@ def test_downgrade_then_upgrade_recreates_the_default_thread(at_0006) -> None:
     with engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM practice_threads")).scalar_one() == 1
         assert conn.execute(text("SELECT COUNT(*) FROM practice_ledger")).scalar_one() == 2
+
+
+def test_downgrade_writes_the_threads_plan_back_into_plans_saved_after_0007(at_0006) -> None:
+    engine, config = at_0006
+    with engine.begin() as conn:
+        ids = _seed(conn)
+    command.upgrade(config, "0007")
+    with engine.begin() as conn:  # a plan saved by the 0007 code: no setup.plan, no setup.shares
+        slim = {**OLD_SPEC, "setup": {k: v for k, v in OLD_SPEC["setup"].items() if k not in ("plan", "shares")}}
+        conn.execute(
+            text("UPDATE practice_plans SET spec = CAST(:spec AS jsonb) WHERE id = :id"),
+            {"spec": _jsonb(slim), "id": ids["plan"]},
+        )
+    command.downgrade(config, "0006")
+    with engine.connect() as conn:
+        setup = conn.execute(text("SELECT spec FROM practice_plans")).scalar_one()["setup"]
+    assert setup["shares"] == 100
+    assert setup["plan"] == {
+        "stopRequired": "yes",
+        "signalOnly": "no",
+        "maxLossUsd": 200,
+        "maxTrades": 4,
+        "note": "First hour.",
+    }

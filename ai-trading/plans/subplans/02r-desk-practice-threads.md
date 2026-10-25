@@ -96,7 +96,7 @@ lists; `thread` (the full summary) on `GET /daily`; `watch_check` on day lists; 
 - **The ledger is the balance.** An exit mark (hers, or the day's auto-exit) books one row, once per mark; undoing the exit
   removes it. Balance, stats, the day series and the curve are read back from the ledger and the ended day lists, never stored.
   `today_pnl_usd` is realized only. A practised day is an ended day with a session; a skipped one ended with none.
-- **Closing** archives the daily plan and waits for an open practice day (409). Standalone sessions carry no thread and book nothing.
+- **Closing** archives the daily plan and waits for an open practice day (409), including a day a replaced plan left half practised (it is reachable by its id). Standalone sessions carry no thread and book nothing. The `thread` header on a day screen shows that day's realized P/L as `today_pnl_usd`; the ledger lists rows in booking order, not replayed-market-time order.
 - **Day rules.** `maxLossUsd` and `maxTrades` count every session of a day list (checks say "across the day" once a second
   session exists); `watch_check` gives `starred`, `traded`, `off_watch` and a `verdict` for "traded only names on your watch".
   Not built: the switch protocol and re-scan at the playhead (02o-b2).

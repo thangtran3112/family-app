@@ -13,8 +13,11 @@ it. Standalone sessions (no day list) stay unlinked: they never touch a balance.
 realized trade of the linked sessions, paired from the marks the way `replay/journal.py` pairs them (same rounding), so
 the default thread's balance already agrees with the journals. `downgrade()` reverses the schema, children before
 parents; the default threads and ledger rows go with their tables and the data step recreates them on the next upgrade.
+Before the thread tables go, the thread's risk plan is written back into the `spec` of every plan saved after 0007
+(which has no `setup.plan` or `setup.shares`), so the code of 0006 can still read those plans.
 """
 
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -128,6 +131,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    _restore_plan_fields(op.get_bind())
     for table in ("practice_plans", "replay_sessions"):
         op.drop_index(f"ix_{table}_thread_id", table_name=table)
         op.drop_constraint(f"fk_{table}_thread_id_practice_threads", table, type_="foreignkey")
@@ -141,6 +145,30 @@ def downgrade() -> None:
 
 
 # -- the data step -------------------------------------------------------------------------------------------
+
+
+def _restore_plan_fields(bind: sa.Connection) -> None:
+    """Give every plan saved after 0007 the old `setup.plan` and `setup.shares` again, from its thread's plan (and the
+    default 100 shares), so a rollback to the 0006 code reads it. A plan that still carries them is left alone."""
+    rows = bind.execute(
+        sa.text(
+            "SELECT p.id, p.spec, t.stop_note_on_entry, t.trade_only_on_signal, t.max_loss_usd, t.max_trades, "
+            "t.plan_note FROM practice_plans p JOIN practice_threads t ON t.id = p.thread_id"
+        )
+    ).all()
+    for plan_id, spec, stop, signal, max_loss, max_trades, note in rows:
+        setup = spec.get("setup") or {}
+        if "plan" in setup and "shares" in setup:
+            continue
+        plan: dict[str, Any] = {"stopRequired": stop, "signalOnly": signal}
+        for key, value in (("maxLossUsd", max_loss), ("maxTrades", max_trades), ("note", note)):
+            if value is not None:
+                plan[key] = value
+        restored = {**spec, "setup": {**setup, "shares": setup.get("shares", 100), "plan": setup.get("plan", plan)}}
+        bind.execute(
+            sa.text("UPDATE practice_plans SET spec = CAST(:spec AS jsonb) WHERE id = :id"),
+            {"spec": json.dumps(restored), "id": plan_id},
+        )
 
 
 def _plan_fields(spec: dict[str, Any]) -> dict[str, Any]:
