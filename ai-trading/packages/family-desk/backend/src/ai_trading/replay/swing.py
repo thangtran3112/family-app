@@ -897,13 +897,11 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
 # -- ending a day (and Pass) -----------------------------------------------------------------------------------------
 
 
-def _freeze_week(db: Session, thread: PracticeThread, week_no: int, now: Any) -> None:
-    """Close the week row. A seam: the review is built here by a later step; until then the frozen row carries none."""
-    week = db.get(PracticeWeek, (thread.id, week_no))
-    if week is None or week.status == "closed":
-        return
-    week.status, week.closed_at, week.review = "closed", now, None
-    db.flush()
+def _freeze_week(db: Session, svc: Services | None, thread: PracticeThread, week_no: int, now: Any) -> None:
+    """Close the week row with its review (`swing_weeks.freeze`, which imports this module, so it is imported here)."""
+    from ai_trading.replay import swing_weeks
+
+    swing_weeks.freeze(db, svc, thread, _thread_plan(db, thread.id), week_no, now)
 
 
 def _max_open(rows: list[PracticeHold], day: date) -> int:
@@ -1049,10 +1047,6 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         minutes=minutes,
         stop_hits=stop_hits,
     )
-    if week_mod.is_last_day_of_week(days, day):
-        _freeze_week(db, thread, week_mod.span_for(days, day).week_no, now)
-    if last_day:
-        plan.status, plan.updated_at = "archived", now
     row.journal = jsonable(summary)
     row.status, row.revealed_through, row.ended_at, row.updated_at = (
         "ended",
@@ -1060,14 +1054,20 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         now,
         now,
     )
+    db.flush()  # the week review reads this day's summary
+    if week_mod.is_last_day_of_week(days, day):
+        _freeze_week(db, svc, thread, week_mod.span_for(days, day).week_no, now)
+    if last_day:
+        plan.status, plan.updated_at = "archived", now
     db.flush()
     return row
 
 
-def close_thread(db: Session, thread: PracticeThread, now: Any) -> None:
+def close_thread(db: Session, thread: PracticeThread, now: Any, svc: Services | None = None) -> None:
     """02r's early close for a swing thread (`threads.close_thread` has checked that no day is open): every open hold
     exits at its last official close (the last ended day's, b7), is credited, and the open week is frozen as the
-    partial week it was. The caller archives the plan and stamps the thread."""
+    partial week it was (with its review when `svc` is given; else `swing_weeks.week_out` builds it on read). The
+    caller archives the plan and stamps the thread."""
     for r in hold_rows.open_holds(db, thread.id, lock=True):
         hold = hold_rows.to_hold(r)
         day = hold.last_close_day or hold.entry_day
@@ -1088,7 +1088,7 @@ def close_thread(db: Session, thread: PracticeThread, now: Any) -> None:
         ).scalar_one()
         if last_ended is not None and last_ended < week.last_day:
             week.last_day = last_ended  # the week the thread actually played
-        _freeze_week(db, thread, week.week_no, now)
+        _freeze_week(db, svc, thread, week.week_no, now)
 
 
 # -- reading ---------------------------------------------------------------------------------------------------

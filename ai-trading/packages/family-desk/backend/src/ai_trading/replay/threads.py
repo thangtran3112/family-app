@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1, PracticeThreadV1
 from ai_trading.db.models import PracticeLedger, PracticePlan, PracticeThread, ReplayDayList, ReplaySession
 from ai_trading.replay.ledger import entry_out, utc_z
-from ai_trading.replay.session import ReplayProblem
+from ai_trading.replay.session import ReplayProblem, Services
 
 SIMULATED_LABEL = "Simulated money · practice only, never a real account"
 SWING_CLOSED = "Swing threads are not open yet · start a day thread"
@@ -198,16 +198,18 @@ def open_day(db: Session, thread_id: int) -> ReplayDayList | None:
     ).scalar_one_or_none()
 
 
-def close_thread(db: Session, user_id: int, thread_id: int, now: datetime) -> PracticeThread:
+def close_thread(
+    db: Session, user_id: int, thread_id: int, now: datetime, svc: Services | None = None
+) -> PracticeThread:
     """Freeze the thread: archive its daily plan, stamp `closed_at`. A swing thread's open holds exit at the last ended
-    close and its open week is frozen first. Idempotent."""
+    close and its open week is frozen first (with its review when `svc` is given). Idempotent."""
     row = get_thread(db, user_id, thread_id, lock=True)
     if row.status == "closed":
         return row
     if open_day(db, row.id) is not None:
         raise ReplayProblem(DAY_OPEN, path="status", status=409)
     if row.mode == "swing":
-        _swing().close_thread(db, row, now)
+        _swing().close_thread(db, row, now, svc)
     for plan in db.execute(
         select(PracticePlan).where(PracticePlan.thread_id == row.id, PracticePlan.status == "active")
     ).scalars():

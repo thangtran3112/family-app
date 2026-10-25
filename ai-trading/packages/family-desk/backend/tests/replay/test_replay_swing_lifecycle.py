@@ -781,7 +781,8 @@ def test_a_week_closes_once_on_its_last_day_and_a_partial_first_week_is_labelled
     assert (week.status, week.closed_at) == ("open", None)
     day3 = _end(db_session, owner, svc, _open(db_session, owner, svc, thread))  # Friday: the week's last day
     db_session.refresh(week)
-    assert week.status == "closed" and week.closed_at is not None and week.review is None
+    assert week.status == "closed" and week.closed_at is not None
+    assert week.review["week"] == {"week_no": 1, "label": "Week 1 · 3 days", "first_day_no": 1, "last_day_no": 3}
     closed_at = week.closed_at
     assert swing.state(db_session, thread)["next"] == "week_review"
     swing.end_day(db_session, owner, day3.id, svc)  # idempotent: the week is not re-closed
