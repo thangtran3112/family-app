@@ -18,7 +18,8 @@ export function niceTicks(min: number, max: number, target = 5): number[] {
   const raw = (high - low) / Math.max(target - 1, 1);
   const magnitude = 10 ** Math.floor(Math.log10(raw));
   const norm = raw / magnitude;
-  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * magnitude;
+  // Whole dollars at least: a finer step would print the same rounded figure twice.
+  const step = Math.max((norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * magnitude, 1);
   const first = Math.floor(low / step + 1e-9) * step;
   const last = Math.ceil(high / step - 1e-9) * step;
   const ticks: number[] = [];
@@ -96,7 +97,8 @@ export type BarsLayout = {
 export function barsLayout(daily: readonly ThreadDay[], weeks: readonly Week[], box: Box): BarsLayout {
   const plot = { x: box.left, y: box.top, width: box.width - box.left - box.right, height: box.height - box.top - box.bottom };
   const values = daily.map((day) => day.pnl_usd);
-  const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values));
+  // A thread whose days all ended flat still gets a readable axis: at least 50 dollars each way.
+  const ticks = niceTicks(Math.min(-50, ...values), Math.max(50, ...values));
   const lo = ticks[0]!;
   const hi = ticks[ticks.length - 1]!;
   const yOf = (value: number) => plot.y + plot.height - ((value - lo) / (hi - lo || 1)) * plot.height;

@@ -104,6 +104,8 @@ const mondayOf = (day: string): string => {
 };
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+/** "2 practice days", "1 practice day", "no practice days". */
+const practiceDays = (count: number) => (count === 0 ? "no practice days" : plural(count, "practice day"));
 
 /** The ended days grouped by calendar week of the replayed day, in the order she practised them. */
 export function weeksOf(daily: readonly ThreadDay[]): Week[] {
@@ -162,7 +164,7 @@ export function improvementOf(weeks: readonly Week[]): Improvement {
       ? {
           first,
           latest,
-          intro: practiceText("improvementIntro", { n: latest.n, days: plural(latest.practiced, "practice day") }),
+          intro: practiceText("improvementIntro", { n: latest.n, days: practiceDays(latest.practiced) }),
           rows: [
             { id: "result", label: "Day results", first: formatDayResult(first.pnl), latest: formatDayResult(latest.pnl) },
             { id: "won", label: "Days won", first: `${first.won} of ${first.practiced}`, latest: `${latest.won} of ${latest.practiced}` },
@@ -173,7 +175,7 @@ export function improvementOf(weeks: readonly Week[]): Improvement {
       : null;
   if (!trend) {
     const reason = latest
-      ? practiceText("improvementReason", { n: latest.n, days: plural(latest.practiced, "practice day") })
+      ? practiceText("improvementReason", { n: latest.n, days: practiceDays(latest.practiced) })
       : PRACTICE_COPY.improvementReasonOneWeek;
     return { compared, trend, caveat: { title: PRACTICE_COPY.improvementTooFew, reason }, verdict: null };
   }

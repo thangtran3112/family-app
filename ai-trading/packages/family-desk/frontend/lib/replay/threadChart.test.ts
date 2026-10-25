@@ -61,3 +61,14 @@ test("the day bars grow up from zero for a win and down for a loss, a skipped da
   assert.equal(layout.ticks.some((tick) => tick.value === 0), true);
   assert.equal(barsLayout(thread.daily.slice(0, 1), weeksOf(thread.daily.slice(0, 1)), box).slots.length, 1);
 });
+
+test("days that all ended flat still get a readable axis with no repeated figure", () => {
+  const flat = threadDays.map((day) => ({ ...day, pnl_usd: 0, kind: "practiced" as const }));
+  const layout = barsLayout(flat, weeksOf(flat), box);
+  const values = layout.ticks.map((tick) => tick.value);
+  assert.deepEqual(values, [-50, 0, 50]);
+  assert.equal(new Set(values.map((value) => Math.round(value))).size, values.length);
+  assert.ok(layout.slots.every((slot) => slot.barHeight === 0));
+  // A few dollars of spread never makes the step finer than a whole dollar.
+  assert.ok(niceTicks(0, 2).every((value) => Number.isInteger(value)));
+});

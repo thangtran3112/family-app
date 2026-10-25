@@ -66,6 +66,9 @@ test("improvement stays a caveat until two weeks each have three practice days",
   assert.equal(few.verdict, null);
   assert.equal(few.caveat?.title, "Too few days to call a trend yet");
   assert.match(few.caveat?.reason ?? "", /week 2 has 2 practice days so far/);
+  const noneLatest = improvementOf(weeksOf([...threadDays.slice(0, 5), threadDays[6]!]));
+  assert.match(noneLatest.caveat?.reason ?? "", /week 2 has no practice days so far/);
+  assert.match(noneLatest.compared?.intro ?? "", /week 2, no practice days so far/);
   assert.deepEqual(few.compared?.rows.map((row) => [row.label, row.first, row.latest]), [
     ["Day results", "+$33", "+$90"],
     ["Days won", "2 of 4", "1 of 2"],
@@ -93,7 +96,7 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
   assert.deepEqual([byId.worst!.value, byId.worst!.sub, byId.worst!.tone], ["−$182", "day 1", "down"]);
   assert.equal(byId.adherence!.value, "71% → 83%");
   const fresh = Object.fromEntries(threadTiles(freshThread).map((tile) => [tile.id, tile]));
-  assert.deepEqual([fresh.win_rate!.value, fresh.win_rate!.sub], ["—", "no closed trade yet"]);
+  assert.deepEqual([fresh.win_rate!.value, fresh.win_rate!.sub], ["—", "no wins or losses yet"]);
   assert.equal(hasNoDays(freshThread), true);
   assert.equal(hasNoDays(thread), false);
 });
