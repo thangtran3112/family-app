@@ -1,7 +1,7 @@
 # 02r — Desk practice threads: the persistent paper account across practice days
 
-Status: **BACKEND BUILT 2026-10-25** (`feature/desk-threads-backend`, notes at the end); web stream and
-mock boards follow. Design-level decisions below are owner-stated; implementation detail is ours.
+Status: **IMPLEMENTED AND INTEGRATED 2026-10-25** (`feature/desk-threads-integration`: backend and web, shipped
+note at the end; PR pending); mock boards were not part of this phase. Design-level decisions below are owner-stated; implementation detail is ours.
 
 ## The concept (owner's words, condensed)
 
@@ -107,3 +107,18 @@ reads `setup.shares` and `setup.plan`; the response schemas in `lib/replay/daily
 required fields (`thread_id`, `thread`, `watch_check`); three tests (`lib/replay/dayView.test.ts`, two in
 `lib/replay/planSetup.test.ts`) build a block with the old fields. Run on this branch: `pnpm typecheck` 12 errors, `pnpm test`
 393 of 396 passing, all from these.
+
+Resolved on the integration branch (see the shipped note below): the web stream was built against the older contract, and after the
+merge the drift reduced to five failing frontend tests (the typecheck was already clean) and one form that still sent the dropped keys.
+
+## Shipped note (integrated 2026-10-25)
+
+`feature/desk-threads-integration` merges the backend (`feature/desk-threads-backend`), the web stream (`feature/desk-threads-frontend`:
+the hub threads band with the New thread form, the thread journal at `/practice/journal?thread=`, the thread header on the day
+screens and the workspace, thread e2e), the 02r/02p docs and the test-user auth spec into one green tree. The one contract-drift
+fix (`05c5be66`): the daily plan form sends only `window`, `session`, `interval` and `armed` in `setup` (no `shares`, no risk plan,
+as `PracticeBlockV1` now requires), `withThreadPlan` is gone, and the thread response schemas in `lib/replay/threads.ts` are checked
+against the regenerated OpenAPI with `satisfies`. Gates: backend `ruff` clean and 3157 tests (Postgres), contracts 701, frontend 421
+unit tests, lint, build, export checks, and the desktop Playwright suite (214 passed at 1440 and 1180; the production auth spec
+skips without its credentials). Not built: the sizing hint from `maxLossUsd`, the switch protocol and re-scan at the playhead
+(02o-b2), swing mode (02p), Paper boards for the thread screens.
