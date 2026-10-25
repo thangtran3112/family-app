@@ -158,6 +158,10 @@ export const ReplaySessionSchema = z.object({
   window_start: timestamp,
   window_end: timestamp,
   revealed_through: timestamp,
+  /** The day list's shared clock; null for a standalone session (02o-b2). */
+  day_clock: timestamp.nullable(),
+  /** Behind the day clock: the next advance catches this name up, and it cannot be marked until then. */
+  behind_clock: z.boolean(),
   tape_feed: TapeFeedSchema,
   armed: z.array(ArmedSchema),
   marks: z.array(MarkSchema),
@@ -236,6 +240,8 @@ export const ReplaySignalSchema = z.object({
   bar_close: timestamp,
   close: finite,
   evidence: z.record(z.string(), finite),
+  /** False: it fired while she was on another name, so it is on the chart and not scored (02o-b2). */
+  seen: z.boolean(),
 }) satisfies z.ZodType<components["schemas"]["ReplaySignalOut"]>;
 
 const LevelsSchema = z.object({
@@ -251,6 +257,8 @@ const LastSchema = z.object({ price: finite, at: timestamp, age_s: finite.int() 
 /** What `advance` returns for `(previous, revealed_through]`; `feed` returns the same object for everything revealed so far. */
 export const ReplayDeltaSchema = z.object({
   revealed_through: timestamp,
+  day_clock: timestamp.nullable(),
+  behind_clock: z.boolean(),
   at_end: z.boolean(),
   bars: z.array(ReplayBarSchema),
   forming: FormingBarSchema.nullable(),

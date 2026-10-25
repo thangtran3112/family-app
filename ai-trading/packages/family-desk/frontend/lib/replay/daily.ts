@@ -38,6 +38,8 @@ export const PracticePlanSchema = z.object({
   thread_id: finite.int().nullable(),
   spec: PracticeBlockV1Schema,
   sessions: finite.int(),
+  /** The most names she can star and practise in a day (the plan's `maxSymbols`, else 5). */
+  max_symbols: finite.int(),
   days_opened: finite.int(),
   filters: z.array(PlanFilterSchema),
   current: PlanCurrentSchema.nullable(),
@@ -111,9 +113,17 @@ export const CandidateSchema = z.object({
 
 const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
 
-const DaySessionSchema = z.object({ id: finite.int(), symbol: z.string(), status: SessionStatusSchema }) satisfies z.ZodType<
-  components["schemas"]["DaySessionOut"]
->;
+/** A name she has practised today: the day strip's row (02o-b2). */
+const DaySessionSchema = z.object({
+  id: finite.int(),
+  symbol: z.string(),
+  status: SessionStatusSchema,
+  revealed_through: timestamp,
+  /** Behind the day clock: its next advance catches it up, and it cannot be marked until then. */
+  behind_clock: z.boolean(),
+  /** The day holds one open trade at a time: close it before moving to another name. */
+  has_open_trade: z.boolean(),
+}) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
 
 // -- peek -----------------------------------------------------------------------------------------------------
 

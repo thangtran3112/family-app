@@ -15,7 +15,7 @@ from ai_trading.api.app import app
 from ai_trading.api.replay import get_services
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.core.calendar import et
-from ai_trading.db.models import FilterStrategy, PracticePlan, User
+from ai_trading.db.models import FilterStrategy, PracticePlan, ReplayDayList, User
 from ai_trading.replay import plan as plan_mod
 
 BASE = "/api/desk/replay"
@@ -215,3 +215,75 @@ def test_the_hub_session_rows_say_which_day_list_they_belong_to(daily, db_sessio
     rows = client.get(f"{BASE}/sessions", headers=auth_headers()).json()
     assert [r["day_list_id"] for r in rows] == [list_id]
     assert isinstance(date.fromisoformat(rows[0]["day"]), date)
+
+
+def test_switching_names_over_the_routes_and_the_plans_cap(daily, db_session) -> None:
+    client, services, user_id = daily
+    body = _plan_body(db_session, user_id)
+    started = client.post(f"{BASE}/daily/next", json={"plan": {**body, "maxSymbols": 2}}, headers=auth_headers())
+    assert started.status_code == 200, started.text
+    assert started.json()["plan"]["max_symbols"] == 2 and started.json()["plan"]["spec"]["maxSymbols"] == 2
+    plan = db_session.execute(select(PracticePlan).where(PracticePlan.owner_user_id == user_id)).scalar_one()
+    plan.universe = {**plan.universe, "symbols": SYMBOLS}
+    db_session.commit()
+    plan_mod.run_prep(db_session, services, plan.id)
+    list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    row = db_session.get(ReplayDayList, list_id)
+    row.candidates = [
+        *row.candidates,
+        {**row.candidates[0], "symbol": "FLAT", "rank": 2},
+        {**row.candidates[0], "symbol": "SPLITTER", "rank": 3},
+    ]
+    db_session.commit()
+
+    def start(symbol):
+        return client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": symbol}, headers=auth_headers())
+
+    def at(hhmm):
+        return et(DAYS[0], hhmm).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    gapper = start("GAPPER").json()
+    assert gapper["behind_clock"] is False and gapper["day_clock"] == "2026-09-28T13:30:00Z"
+    client.post(f"{BASE}/sessions/{gapper['id']}/advance", json={"to": at("10:00")}, headers=auth_headers())
+    flat = start("FLAT")
+    assert flat.status_code == 200, flat.text
+    assert flat.json()["revealed_through"] == at("10:00") and flat.json()["day_clock"] == at("10:00")
+    third = start("SPLITTER")
+    assert third.status_code == 409
+    assert third.json()["detail"]["problems"][0]["message"].startswith("Your plan allows 2 names a day")
+    assert start("GAPPER").json()["id"] == gapper["id"]  # a name in hand resumes
+
+    client.post(f"{BASE}/sessions/{flat.json()['id']}/advance", json={"to": at("10:30")}, headers=auth_headers())
+    behind = client.get(f"{BASE}/sessions/{gapper['id']}", headers=auth_headers()).json()
+    assert behind["behind_clock"] is True and behind["revealed_through"] == at("10:00")
+    feed = client.get(f"{BASE}/sessions/{gapper['id']}/feed", headers=auth_headers()).json()
+    assert feed["behind_clock"] is True and feed["revealed_through"] == at("10:00")
+    refused = client.post(
+        f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
+    )
+    assert refused.status_code == 422
+    assert refused.json()["detail"]["problems"][0]["message"].startswith("This name is behind the day clock")
+    caught = client.post(f"{BASE}/sessions/{gapper['id']}/advance", json={"to": at("10:05")}, headers=auth_headers())
+    assert caught.json()["revealed_through"] == at("10:30") and caught.json()["behind_clock"] is False
+
+    entered = client.post(
+        f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
+    )
+    assert entered.status_code == 200
+    blocked = start("FLAT")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["problems"][0]["message"].startswith("Close your open GAPPER practice trade")
+    strip = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["sessions"]
+    assert [(s["symbol"], s["behind_clock"], s["has_open_trade"]) for s in strip] == [
+        ("GAPPER", False, True),
+        ("FLAT", False, False),
+    ]
+    stars = client.patch(
+        f"{BASE}/day-lists/{list_id}", json={"watch": ["GAPPER", "FLAT", "SPLITTER"]}, headers=auth_headers()
+    )
+    assert stars.status_code == 422
+    assert (
+        stars.json()["detail"]["problems"][0]["message"] == "Star at most 2 names · your plan limits a day to 2 names"
+    )
+    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    assert ended.status_code == 200 and ended.json()["journal"]["trades"] == 1

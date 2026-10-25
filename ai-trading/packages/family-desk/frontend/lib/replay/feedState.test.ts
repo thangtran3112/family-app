@@ -83,3 +83,11 @@ test("a quiet tape is 30 market seconds without a print", () => {
   assert.equal(isQuietTape({ tape: [], revealedThrough: "2026-04-07T13:30:10Z", windowStart: "2026-04-07T13:30:00Z" }), false);
   assert.equal(isQuietTape({ tape: [], revealedThrough: "2026-04-07T13:31:00Z", windowStart: "2026-04-07T13:30:00Z" }), true);
 });
+
+test("the view carries the day clock and whether this name is behind it, from a feed and from an advance", () => {
+  const behind = viewFromFeed(ReplayFeedSchema.parse({ ...feed, day_clock: "2026-04-07T14:30:00Z", behind_clock: true }), "5m");
+  assert.deepEqual([behind.dayClock, behind.behindClock], ["2026-04-07T14:30:00Z", true]);
+  const caught = applyAdvance(behind, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-04-07T14:30:00Z", day_clock: "2026-04-07T14:30:00Z", behind_clock: false }));
+  assert.deepEqual([caught.dayClock, caught.behindClock], ["2026-04-07T14:30:00Z", false]);
+  assert.equal(viewFromFeed(ReplayFeedSchema.parse(feed), "5m").dayClock, null);
+});

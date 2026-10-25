@@ -13,6 +13,7 @@ import {
   EARLIEST_LIST_DAY,
   LIST_TIMES,
   MAX_FILTERS,
+  NAME_CHOICES,
   SESSION_CHOICES,
   clock12,
   defaultPlanDraft,
@@ -143,6 +144,24 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
             ))}
           </div>
           {problems.sessions && <span role="alert" className={styles.fieldError}>{problems.sessions}</span>}
+        </div>
+        <div className={styles.field}>
+          <span id="plan-names-label" className={styles.label}>{PRACTICE_COPY.planMaxSymbols}</span>
+          <div role="group" aria-labelledby="plan-names-label" className={styles.segmented}>
+            {NAME_CHOICES.map((count) => (
+              <button
+                key={count}
+                type="button"
+                className={styles.segment}
+                aria-pressed={draft.maxSymbols === String(count)}
+                onClick={() => setDraft({ ...draft, maxSymbols: String(count) })}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <span className={styles.hint}>{PRACTICE_COPY.planMaxSymbolsHint}</span>
+          {problems.maxSymbols && <span role="alert" className={styles.fieldError}>{problems.maxSymbols}</span>}
         </div>
         <label className={styles.switch}>
           <input

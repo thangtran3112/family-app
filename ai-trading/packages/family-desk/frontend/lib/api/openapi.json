@@ -166,6 +166,22 @@
             "title": "Bars",
             "type": "array"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
+          },
           "forming": {
             "anyOf": [
               {
@@ -231,6 +247,8 @@
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -2480,10 +2498,24 @@
         "type": "object"
       },
       "DaySessionOut": {
+        "description": "A name she has practised today: the day strip's row.",
         "properties": {
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "has_open_trade": {
+            "title": "Has Open Trade",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -2501,7 +2533,10 @@
         "required": [
           "id",
           "symbol",
-          "status"
+          "status",
+          "revealed_through",
+          "behind_clock",
+          "has_open_trade"
         ],
         "title": "DaySessionOut",
         "type": "object"
@@ -2519,6 +2554,22 @@
             },
             "title": "Bars",
             "type": "array"
+          },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "forming": {
             "anyOf": [
@@ -2599,6 +2650,8 @@
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -4829,6 +4882,19 @@
             "title": "Hidedates",
             "type": "string"
           },
+          "maxSymbols": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxsymbols"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -5001,6 +5067,10 @@
             "title": "Id",
             "type": "integer"
           },
+          "max_symbols": {
+            "title": "Max Symbols",
+            "type": "integer"
+          },
           "next_day": {
             "anyOf": [
               {
@@ -5069,6 +5139,7 @@
           "thread_id",
           "spec",
           "sessions",
+          "max_symbols",
           "days_opened",
           "filters",
           "current",
@@ -5770,10 +5841,26 @@
             "title": "Attempt",
             "type": "integer"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "day_list_id": {
             "anyOf": [
@@ -5913,6 +6000,8 @@
           "window_start",
           "window_end",
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "tape_feed",
           "armed",
           "marks",
@@ -6204,6 +6293,10 @@
             "title": "Name",
             "type": "string"
           },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
           "source": {
             "enum": [
               "alert_strategy",
@@ -6221,7 +6314,8 @@
           "bar_time",
           "bar_close",
           "close",
-          "evidence"
+          "evidence",
+          "seen"
         ],
         "title": "ReplaySignalOut",
         "type": "object"

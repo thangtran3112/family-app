@@ -1192,6 +1192,10 @@ export interface components {
             at_end: boolean;
             /** Bars */
             bars: components["schemas"]["ReplayBarOut"][];
+            /** Behind Clock */
+            behind_clock: boolean;
+            /** Day Clock */
+            day_clock: string | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
@@ -1963,10 +1967,22 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
-        /** DaySessionOut */
+        /**
+         * DaySessionOut
+         * @description A name she has practised today: the day strip's row.
+         */
         DaySessionOut: {
+            /** Behind Clock */
+            behind_clock: boolean;
+            /** Has Open Trade */
+            has_open_trade: boolean;
             /** Id */
             id: number;
+            /**
+             * Revealed Through
+             * Format: date-time
+             */
+            revealed_through: string;
             /**
              * Status
              * @enum {string}
@@ -1986,6 +2002,10 @@ export interface components {
             at_end: boolean;
             /** Bars */
             bars: components["schemas"]["ReplayBarOut"][];
+            /** Behind Clock */
+            behind_clock: boolean;
+            /** Day Clock */
+            day_clock: string | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             /**
              * Interval
@@ -2780,6 +2800,8 @@ export interface components {
              * @enum {string}
              */
             hideDates: "yes" | "no";
+            /** Maxsymbols */
+            maxSymbols?: number | null;
             /**
              * Schemaversion
              * @constant
@@ -2842,6 +2864,8 @@ export interface components {
             finished: boolean;
             /** Id */
             id: number;
+            /** Max Symbols */
+            max_symbols: number;
             /** Next Day */
             next_day: string | null;
             /** Next Day No */
@@ -3070,11 +3094,15 @@ export interface components {
             armed: components["schemas"]["ArmedOut"][];
             /** Attempt */
             attempt: number;
+            /** Behind Clock */
+            behind_clock: boolean;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Day Clock */
+            day_clock: string | null;
             /** Day List Id */
             day_list_id: number | null;
             /** Ended At */
@@ -3239,6 +3267,8 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+            /** Seen */
+            seen: boolean;
             /**
              * Source
              * @enum {string}

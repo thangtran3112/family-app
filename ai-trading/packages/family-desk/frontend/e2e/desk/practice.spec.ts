@@ -292,7 +292,7 @@ test.describe("Practice", () => {
       schemaVersion: 1,
       name: "Any close",
       watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
-      liquidity: { minPrice: 1, minAvgVolume: 1 },
+      liquidity: { minPrice: 200, minAvgVolume: 1 }, // TSLA only: the fixture's stand-in names trade below $200
       when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
       maxResults: 50,
     };

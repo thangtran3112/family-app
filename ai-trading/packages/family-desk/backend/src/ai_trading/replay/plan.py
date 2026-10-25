@@ -6,9 +6,11 @@ up to five names, practises one of them, and ends the day to see how every candi
 
 - **Walk forward.** `practice_plans` is the saved setup plus a cursor. Days open in order, one list at a time; the
   next day opens only after the current one has ended. Dates are returned and hidden by a render rule.
-- **One name a day in v1, on a shared day clock.** `replay_day_lists.revealed_through` is the day clock: `advance`
-  moves it, a new session starts at it, and a name behind it cannot be marked. One session per day keeps
-  cross-symbol hindsight out; switching names is 02o-b2.
+- **Switching names on a shared day clock (02o-b2).** `replay_day_lists.revealed_through` is the day clock: `advance`
+  moves it, a new session starts at it, and a name behind it is caught up by its next advance and cannot be marked
+  until then. A day practises at most `maxSymbols` names (the plan's cap, default the star cap), one open trade at a
+  time: she closes the trade on one name before she moves to another. What a name did while she was elsewhere is on
+  the chart as history and is not scored (`replay_sessions.away`).
 - **Nothing past the cut before the day ends.** The list, the stars and Peek carry nothing after `data_through` or
   the day clock; the review (moves from the list price) is stored on `end_day` and served only once the day ended.
 - **Prep** runs once at plan creation in the background (`run_prep`): bars for every day of the plan; a day's
@@ -60,7 +62,7 @@ from ai_trading.screener.runner import source_symbols
 log = logging.getLogger(__name__)
 
 MAX_UNIVERSE = 250
-MAX_WATCH = 5
+MAX_WATCH = 5  # the most names she can star in a day, and the most `maxSymbols` can be
 PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
@@ -100,6 +102,16 @@ def plan_days(first_day: date, count: int) -> list[date]:
 
 def _weekday(day: date) -> str:
     return day.strftime("%a")
+
+
+def max_symbols(spec: dict[str, Any]) -> int:
+    """The plan's cap on the names she may star and practise in one day. A plan saved without `maxSymbols` allows the
+    star cap; the contract allows 1 to 5."""
+    return min(int(spec.get("maxSymbols") or MAX_WATCH), MAX_WATCH)
+
+
+def _names(count: int) -> str:
+    return f"{count} name{'' if count == 1 else 's'}"
 
 
 # -- the universe --------------------------------------------------------------------------------------------
@@ -331,6 +343,7 @@ def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
         "id": plan.id,
         "thread_id": plan.thread_id,
         "sessions": spec["sessions"],
+        "max_symbols": max_symbols(spec),
         "days_opened": plan.days_opened,
         "spec": spec,
         "filters": [{"id": f["id"], "name": names.get(f["id"], "Removed filter")} for f in spec["screen"]["filters"]],
@@ -516,6 +529,20 @@ def _sessions_of(db: Session, day_list_id: int) -> list[ReplaySession]:
     )
 
 
+def _session_brief(s: ReplaySession, row: ReplayDayList, holding: set[int]) -> dict[str, Any]:
+    """A name on the day strip: its status, how far it is revealed, whether it is behind the shared day clock (its next
+    advance catches it up), and whether it holds the day's one open trade."""
+    clock = None if row.revealed_through is None else _utc(row.revealed_through)
+    return {
+        "id": s.id,
+        "symbol": s.symbol,
+        "status": s.status,
+        "revealed_through": s.revealed_through,
+        "behind_clock": s.status == "active" and clock is not None and _utc(s.revealed_through) < clock,
+        "has_open_trade": s.id in holding,
+    }
+
+
 def _peek(db: Session, svc: Services, row: ReplayDayList, symbol: str) -> dict[str, Any]:
     """Pre-open chart data for one candidate, cut at `data_through`: the same rebased daily frame the list was
     screened on (never the raw one), the day's minutes through the cut, and the levels a trader reads at the open."""
@@ -641,6 +668,7 @@ def day_list_out(
     assert plan is not None
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
+    holding = {session_id for session_id, _ in session_mod.open_trades(db, row.id)}
     universe = row.universe
     warnings = [_few_names_reason(db, row)] if len(row.candidates) < FEW_NAMES else []
     return {
@@ -663,7 +691,7 @@ def day_list_out(
         "candidates": row.candidates,
         "watch": row.watch,
         "clock": row.revealed_through,
-        "sessions": [{"id": s.id, "symbol": s.symbol, "status": s.status} for s in sessions],
+        "sessions": [_session_brief(s, row, holding) for s in sessions],
         "watch_check": watch_check(db, row, sessions),
         "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
@@ -705,8 +733,12 @@ def patch_day_list(
         for index, symbol in enumerate(symbols):
             if symbol not in on_list:
                 raise ReplayProblem(f"{symbol} is not on today's list", path=f"watch.{index}")
-        if len(symbols) > MAX_WATCH:
-            raise ReplayProblem(f"Star at most {MAX_WATCH} names", path="watch")
+        plan = db.get(PracticePlan, row.plan_id)
+        assert plan is not None
+        cap = max_symbols(plan.spec)
+        if len(symbols) > cap:
+            limit = "" if cap == MAX_WATCH else f" · your plan limits a day to {_names(cap)}"
+            raise ReplayProblem(f"Star at most {_names(cap)}{limit}", path="watch")
         kept = {w["symbol"]: w["starred_clock"] for w in row.watch}
         clock = (row.revealed_through or row.list_at).isoformat()
         row.watch = [{"symbol": s, "starred_clock": kept.get(s, clock)} for s in symbols]
@@ -744,23 +776,33 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
 
 
 def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc: Services) -> ReplaySession:
-    """The day's practice session on a name from the list, built from the plan's setup. v1 practises one name a
-    day: a second name is a 409 until the day ends (switching on the shared clock is 02o-b2)."""
+    """The day's practice session on a name from the list, built from the plan's setup: a new name opens at the shared
+    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds at most
+    `maxSymbols` names and one open trade, so a switch with a trade open is a 409 (close it first)."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
     if row.status == "ended":
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
     if symbol not in {c["symbol"] for c in row.candidates}:
         raise ReplayProblem(f"{symbol} is not on today's list", path="symbol")
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
     existing = _sessions_of(db, row.id)
-    other = next((s for s in existing if s.symbol != symbol), None)
-    if other is not None:
+    held = next((name for _, name in session_mod.open_trades(db, row.id) if name != symbol), None)
+    if held is not None:
         raise ReplayProblem(
-            f"Your day is on {other.symbol} · end the day to score it, then pick the next name",
+            f"Close your open {held} practice trade before you switch to {symbol} · exit it at the price you see now",
             path="symbol",
             status=409,
         )
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
+    names = [s.symbol for s in existing]
+    cap = max_symbols(plan.spec)
+    if symbol not in names and len(names) >= cap:
+        raise ReplayProblem(
+            f"Your plan allows {_names(cap)} a day · you are on {_join(names)}. "
+            "End the day to score it, then start the next day",
+            path="symbol",
+            status=409,
+        )
     thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
     if thread is None:
         raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)

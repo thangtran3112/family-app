@@ -12,11 +12,15 @@ import {
   listHeaderText,
   listWarning,
   moveText,
+  nameCap,
+  namesTodayText,
   ordinal,
   peekDailyBars,
   planArmedText,
   planCard,
   selectionText,
+  starsFullText,
+  stripRows,
   syntheticDays,
   toggledStars,
 } from "./dayView.ts";
@@ -144,4 +148,55 @@ test("with dates hidden the Peek chart gets a stand-in timeline, never the real 
   assert.deepEqual(hidden.map((bar) => bar.c), [2, 3]);
   assert.equal(syntheticDays(6).at(-1), "2001-01-08"); // weekends are skipped
   assert.equal(JSON.stringify(hidden).includes("2026"), false);
+});
+
+// ---- the day's names (02o-b2) ---------------------------------------------------------------------------------
+
+const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["sessions"][number]> = {}) => ({
+  id,
+  symbol,
+  status: "active" as const,
+  revealed_through: "2026-03-10T14:00:00Z",
+  behind_clock: false,
+  has_open_trade: false,
+  ...changes,
+});
+
+test("the cap on stars is the plan's, never above five, and the refusal says which cap it was", () => {
+  const stars = ["SMCI", "ANET"].map((symbol) => ({ symbol, starred_clock: "2026-03-10T12:30:00Z" }));
+  assert.equal(nameCap({ max_symbols: 2 }), 2);
+  assert.equal(toggledStars(stars, "NVDA", 2), null);
+  assert.deepEqual(toggledStars(stars, "NVDA", 3), ["SMCI", "ANET", "NVDA"]);
+  assert.deepEqual(toggledStars(stars, "SMCI", 2), ["ANET"]);
+  assert.deepEqual(toggledStars(stars, "NVDA", 9), toggledStars(stars, "NVDA")); // past five is five
+  assert.equal(starsFullText(5), "You can star at most 5 names");
+  assert.equal(starsFullText(2), "Your plan limits a day to 2 names · unstar one first");
+  assert.equal(starsFullText(1), "Your plan limits a day to 1 name · unstar one first");
+});
+
+test("the day strip lists the names she opened, then the starred ones she has not", () => {
+  const list = {
+    sessions: [opened("SMCI", 12, { has_open_trade: true }), opened("ANET", 13, { behind_clock: true })],
+    watch: [{ symbol: "NVDA", starred_clock: "2026-03-10T12:30:00Z" }, { symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
+  };
+  assert.deepEqual(stripRows(list), [
+    { symbol: "SMCI", sessionId: 12, starred: true, behind: false, holding: true },
+    { symbol: "ANET", sessionId: 13, starred: false, behind: true, holding: false },
+    { symbol: "NVDA", sessionId: null, starred: true, behind: false, holding: false },
+  ]);
+  assert.deepEqual(stripRows({ sessions: [], watch: [] }), []);
+  // A name whose playhead is earlier than the one she is on is behind the clock, though the list read says it was not.
+  const lagging = { sessions: [opened("SMCI", 12, { revealed_through: "2026-03-10T14:00:00Z" }), opened("ANET", 13)], watch: [] };
+  const behindOf = (rows: ReturnType<typeof stripRows>) => rows.map((row) => [row.symbol, row.behind]);
+  assert.deepEqual(behindOf(stripRows(lagging, { symbol: "ANET", playhead: "2026-03-10T14:05:00Z" })), [["SMCI", true], ["ANET", false]]);
+  assert.deepEqual(behindOf(stripRows(lagging, { symbol: "SMCI", playhead: "2026-03-10T14:00:00Z" })), [["SMCI", false], ["ANET", false]]);
+});
+
+test("the names line counts the names opened against the plan's cap", () => {
+  const two = { plan: { ...dayList.plan, max_symbols: 3 }, sessions: [opened("SMCI", 12), opened("ANET", 13)] };
+  assert.equal(namesTodayText(two), "2 of 3 names practised today");
+  assert.equal(namesTodayText({ plan: { ...dayList.plan, max_symbols: 1 }, sessions: [opened("SMCI", 12)] }), "1 of 1 name practised today");
+  for (const text of [namesTodayText(two), starsFullText(2), practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
+    assert.equal(containsPracticeBannedTerm(text), false, text);
+  }
 });

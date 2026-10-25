@@ -172,6 +172,8 @@ class ReplaySessionOut(BaseModel):
     window_start: datetime
     window_end: datetime
     revealed_through: datetime
+    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    behind_clock: bool  # this name is behind the day clock: its next advance catches it up; no marks until then
     tape_feed: TapeFeed
     armed: list[ArmedOut]
     marks: list[MarkOut]
@@ -285,6 +287,7 @@ class ReplaySignalOut(BaseModel):
     bar_close: datetime
     close: FiniteFloat
     evidence: dict[str, FiniteFloat]
+    seen: bool  # false: it fired while she was on another name, so it is on the chart but not scored
 
 
 class ReplayLevelsOut(BaseModel):
@@ -307,6 +310,8 @@ class AdvanceOut(BaseModel):
     and the levels, last print and open trade at the new playhead."""
 
     revealed_through: datetime
+    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    behind_clock: bool  # this name's playhead is behind the day clock (the feed of a name she left)
     at_end: bool
     bars: list[ReplayBarOut]
     forming: FormingBarOut | None
@@ -379,6 +384,7 @@ class PracticePlanOut(BaseModel):
     thread_id: int | None  # the practice thread this plan's days book into
     spec: PracticeBlockV1
     sessions: int
+    max_symbols: int  # the most names she can star and practise in a day (the plan's `maxSymbols`, else 5)
     days_opened: int
     filters: list[PlanFilterOut]
     current: PlanCurrentOut | None
@@ -473,9 +479,14 @@ class StarOut(BaseModel):
 
 
 class DaySessionOut(BaseModel):
+    """A name she has practised today: the day strip's row."""
+
     id: int
     symbol: str
     status: SessionStatus
+    revealed_through: datetime
+    behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
+    has_open_trade: bool  # the day holds one open trade at a time: close it before moving to another name
 
 
 class PeekDailyBarOut(BaseModel):

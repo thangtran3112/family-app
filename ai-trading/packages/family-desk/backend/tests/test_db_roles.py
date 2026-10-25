@@ -133,6 +133,7 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "universe_days",
         "practice_threads",
         "practice_ledger",
+        "replay_day_scans",
     }
 
 

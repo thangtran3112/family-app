@@ -475,6 +475,8 @@ class ReplaySession(Base):
     thread_id: Mapped[int | None] = mapped_column(
         ForeignKey("practice_threads.id", ondelete="CASCADE"), index=True, nullable=True
     )
+    # Alembic 0008 (02o-b2): the spans `[from, to]` (ISO) in which she was not on this name; see `replay/model.py`.
+    away: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list)
 
 
 class PracticeMark(Base):
@@ -605,8 +607,26 @@ class ReplayDayList(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ReplayDayScan(Base):
+    """A re-scan of a day list's filters at the day clock (02o-b2). The frozen list stays as it was: a scan is a row."""
+
+    __tablename__ = "replay_day_scans"
+    __table_args__ = (UniqueConstraint("day_list_id", "seq", name="uq_replay_day_scans_day_list_id_seq"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day_list_id: Mapped[int] = mapped_column(ForeignKey("replay_day_lists.id", ondelete="CASCADE"), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # the day clock when she scanned
+    data_through: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    universe: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    columns: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    candidates: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class UniverseDay(Base):
-    """The symbols the live premarket pass scanned on a morning (write-only in 02o-b v1; the read path is 02o-b2)."""
+    """The symbols the live premarket pass scanned on a morning. Written by the premarket pass (02o-b v1); read by
+    the practice day lists and `GET /replay/universe-days` (02o-b2)."""
 
     __tablename__ = "universe_days"
     day: Mapped[date] = mapped_column(Date, primary_key=True)

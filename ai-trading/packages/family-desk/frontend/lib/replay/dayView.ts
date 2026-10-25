@@ -18,6 +18,18 @@ import type { Candidate, DayList, DayReview, ListColumn, PracticePlan, ReviewRow
 
 export const MAX_STARS = 5;
 
+/** "name" or "names" for a count. */
+export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
+
+/** The most names the plan lets her star and practise in a day (`maxSymbols`; the server sends the effective cap). */
+export const nameCap = (plan: Pick<PracticePlan, "max_symbols">): number => plan.max_symbols;
+
+/** "2 of 3 names practised today". */
+export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string {
+  const max = nameCap(list.plan);
+  return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
+}
+
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
 
@@ -105,11 +117,43 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a sixth name is refused. */
-export function toggledStars(watch: readonly { symbol: string }[], symbol: string): string[] | null {
+/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most five). */
+export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
   const symbols = watch.map((star) => star.symbol);
   if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
-  return symbols.length >= MAX_STARS ? null : [...symbols, symbol];
+  return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
+}
+
+/** The message for a refused star: the plain 5-name line, or the plan's own cap. */
+export function starsFullText(cap: number): string {
+  return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
+}
+
+export type StripRow = {
+  symbol: string;
+  /** The session to resume; null for a starred name she has not opened yet. */
+  sessionId: number | null;
+  starred: boolean;
+  behind: boolean;
+  holding: boolean;
+};
+
+/** The day's names: every one she has opened, then the starred ones she has not. `from` is the name she is on and its
+ *  playhead: another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { symbol: string; playhead: string }): StripRow[] {
+  const starred = new Set(list.watch.map((star) => star.symbol));
+  const opened = list.sessions.map((session): StripRow => ({
+    symbol: session.symbol,
+    sessionId: session.id,
+    starred: starred.has(session.symbol),
+    behind:
+      session.behind_clock ||
+      (from !== undefined && session.symbol !== from.symbol && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
+    holding: session.has_open_trade,
+  }));
+  const open = new Set(opened.map((row) => row.symbol));
+  const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
+  return [...opened, ...rest];
 }
 
 export function listWarning(list: Pick<DayList, "warnings" | "candidates">): string | null {

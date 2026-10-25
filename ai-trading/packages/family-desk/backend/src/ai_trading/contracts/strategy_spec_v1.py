@@ -645,6 +645,7 @@ class PracticeBlockV1(SpecModel):
     )
     firstDay: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
     hideDates: Literal["yes", "no"]
+    maxSymbols: Annotated[int | None, Field(ge=1, le=5)] = None
     schemaVersion: Literal[1]
     screen: PracticeScreenV1
     sessions: Annotated[int, Field(ge=5, le=30)]

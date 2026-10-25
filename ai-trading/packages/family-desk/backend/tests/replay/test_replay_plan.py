@@ -467,15 +467,10 @@ def test_the_session_follows_the_plan_and_the_clock_moves_with_it(db_session, us
     )  # forward only
 
 
-def test_a_second_name_is_refused_in_v1_and_a_standalone_session_cannot_share_the_day(db_session, user_id, svc) -> None:
+def test_a_standalone_session_cannot_share_the_days_name(db_session, user_id, svc) -> None:
     row = _first_list(db_session, user_id, svc)
     plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     plan = db_session.get(PracticePlan, row.plan_id)
-    row.candidates = [*row.candidates, {**row.candidates[0], "symbol": "FLAT", "rank": 2}]
-    db_session.commit()
-    with pytest.raises(ReplayProblem) as caught:
-        plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    assert caught.value.status == 409 and caught.value.message.startswith("Your day is on GAPPER")
     standalone = plan_mod._session_spec(plan, DAYS[0], "GAPPER", _thread(db_session, user_id))
     with pytest.raises(ReplayProblem) as other:
         session_mod.create(db_session, user_id, standalone, svc)
@@ -604,7 +599,7 @@ def test_end_day_unseals_the_review_and_ranks_the_candidates_by_move_from_the_li
     assert gapper["move_pct"] == 3.77 and gapper["rank"] == 1 and gapper["picked"] == "traded"
     assert review["selection"]["picks"] == [{"symbol": "GAPPER", "kind": "traded", "move_pct": 3.77, "rank": 1}]
     assert out["journal"]["sessions"][0]["symbol"] == "GAPPER" and out["journal"]["trades"] == 1
-    assert out["sessions"] == [{"id": started.id, "symbol": "GAPPER", "status": "ended"}]
+    assert [(s["id"], s["symbol"], s["status"]) for s in out["sessions"]] == [(started.id, "GAPPER", "ended")]
     assert plan_mod.end_day(db_session, user_id, row.id, svc).ended_at == ended.ended_at  # idempotent
     with pytest.raises(ReplayProblem):
         plan_mod.patch_day_list(db_session, user_id, row.id, svc, watch=[], notes=None, rating=None, fields={"watch"})

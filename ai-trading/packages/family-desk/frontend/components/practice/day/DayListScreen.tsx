@@ -13,7 +13,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { Candidate, DayList } from "@/lib/replay/daily";
-import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, toggledStars } from "@/lib/replay/dayView";
+import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, nameCap, namesTodayText, starsFullText, stripRows, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
@@ -79,7 +79,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The badge reads the day clock once practice has started, else the time the list's data stops.
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.data_through });
 
-  const practising = list.sessions[0] ?? null;
+  // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
+  const practising = list.sessions.at(-1) ?? null;
+  const opened = new Map(list.sessions.map((session) => [session.symbol, session]));
+  const cap = nameCap(list.plan);
   const columns = columnsOf(list, {
     starred: (symbol) => isStarred(list.watch, symbol),
     onStar: (symbol) => void star(symbol),
@@ -99,9 +102,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   }
 
   async function star(symbol: string) {
-    const next = toggledStars(list.watch, symbol);
+    const next = toggledStars(list.watch, symbol, cap);
     if (next === null) {
-      setMessage(PRACTICE_COPY.dayStarsFull);
+      setMessage(starsFullText(cap));
       return;
     }
     await run(async () => {
@@ -169,6 +172,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
         <section className={styles.section} aria-label="Candidates">
           <h2 className={styles.sectionTitle}>Candidates</h2>
+          {!ended && <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>}
           <DenseTable
             caption="Candidates"
             columns={withPriorities(columns, "practiceList")}
@@ -182,11 +186,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               <button
                 type="button"
                 className={styles.small}
-                disabled={busy || (practising !== null && practising.symbol !== row.symbol)}
+                disabled={busy}
                 aria-label={practiceText("dayPractise", { symbol: row.symbol })}
                 onClick={() => void practise(row.symbol)}
               >
-                {practising?.symbol === row.symbol ? "Resume" : "Practise"}
+                {opened.has(row.symbol) ? "Resume" : "Practise"}
               </button>
             )}
           />
@@ -227,8 +231,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                         <span className={styles.symbol}>{entry.symbol}</span>
                         {!ended && (
                           <span className={styles.actions}>
-                            <button type="button" className={styles.small} disabled={busy || (practising !== null && practising.symbol !== entry.symbol)} aria-label={practiceText("dayPractise", { symbol: entry.symbol })} onClick={() => void practise(entry.symbol)}>
-                              {practising?.symbol === entry.symbol ? "Resume" : "Practise"}
+                            <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayPractise", { symbol: entry.symbol })} onClick={() => void practise(entry.symbol)}>
+                              {opened.has(entry.symbol) ? "Resume" : "Practise"}
                             </button>
                             <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => void star(entry.symbol)}>Unstar</button>
                           </span>
@@ -238,9 +242,34 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   </ul>
                 )}
                 {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayPractiseHint}</p>}
+
               </div>
             ),
           },
+          ...(list.sessions.length > 0
+            ? [
+                {
+                  id: "names",
+                  label: PRACTICE_COPY.dayNamesTitle,
+                  node: (
+                    <ul className={styles.watchList} aria-label={PRACTICE_COPY.dayNamesTitle}>
+                      {stripRows(list).map((row) => (
+                        <li key={row.symbol} className={styles.watchRow} data-symbol={row.symbol}>
+                          <span className={styles.symbol}>{row.symbol}</span>
+                          <span className={styles.actions}>
+                            {row.holding && <span className={`${styles.chip} ${styles.chipAmber}`}>{PRACTICE_COPY.dayHolding}</span>}
+                            {row.behind && <span className={styles.chip}>{PRACTICE_COPY.dayBehind}</span>}
+                            {row.sessionId !== null && !ended && (
+                              <Link href={`/practice/replay?id=${row.sessionId}`} className={styles.small} aria-label={practiceText("daySwitch", { symbol: row.symbol })}>Open</Link>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+                },
+              ]
+            : []),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
