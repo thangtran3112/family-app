@@ -12,8 +12,10 @@ from ai_trading_common.trades import Trades
 from bars import daily_bars, minute_bars, trading_days
 from fakes import fake_data_sources
 
+from ai_trading.contracts.practice_thread import PracticeThreadCreateV1
 from ai_trading.core.calendar import et
 from ai_trading.replay import screen
+from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.cache import MemoryBlobStore
 from ai_trading.replay.data import History
 from ai_trading.replay.session import Services
@@ -99,3 +101,16 @@ def make_services(world: SyntheticBars | None = None) -> Services:
         store_factory=lambda _db: store,
         sources=sources,
     )
+
+
+def make_thread(db, user_id: int, *, starting_balance: int = 50_000, **plan):
+    """An active day thread for `user_id` (committed): the risk plan day sessions score against."""
+    body = {
+        "schemaVersion": 1,
+        "mode": "day",
+        "startingBalance": starting_balance,
+        "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", **plan},
+    }
+    thread = threads_mod.create_thread(db, user_id, PracticeThreadCreateV1.model_validate(body), NOW)
+    db.commit()
+    return thread

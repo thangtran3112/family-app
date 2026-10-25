@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
@@ -12,6 +14,7 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { endDay } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
+import { briefLine } from "@/lib/replay/threadView";
 import { actionForKey, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import type { MarkDraft } from "@/lib/replay/markInput";
 import { levelRows, markRows, openSide } from "@/lib/replay/marks";
@@ -221,6 +224,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         lastPrice={view.last?.price ?? null}
         pnl={pnl}
       />
+      {session.thread && <ThreadStrip thread={session.thread} />}
       {api.toast && (
         <p className={styles.toast} data-tone={api.toast.tone} role={api.toast.tone === "error" ? "alert" : "status"}>
           <span>{api.toast.text}</span>
@@ -310,8 +314,18 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} />}
       <LeftRailPortal>
         <div className={styles.session}>
-          <section className={styles.sessionSection} aria-label="Plan">
-            <h2 className={styles.railTitle}>Plan</h2>
+          <section className={styles.sessionSection} aria-label={session.thread ? PRACTICE_COPY.threadPlanTitle : "Plan"}>
+            {session.thread ? (
+              <>
+                <div className={styles.railHead}>
+                  <h2 className={styles.railTitle}>{PRACTICE_COPY.threadPlanTitle}</h2>
+                  <SimulatedBadge />
+                </div>
+                <p className={styles.threadBalance}>{briefLine(session.thread)}</p>
+              </>
+            ) : (
+              <h2 className={styles.railTitle}>Plan</h2>
+            )}
             <PlanChecklist items={planChecklist(spec.plan, session.journal, view.openTrade)} shares={spec.shares} />
           </section>
           <section className={styles.sessionSection} aria-label="Armed strategies">

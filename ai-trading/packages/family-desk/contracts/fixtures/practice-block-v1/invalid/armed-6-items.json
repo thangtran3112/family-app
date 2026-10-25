@@ -19,7 +19,6 @@
     },
     "session": "regular",
     "interval": "5m",
-    "shares": 100,
     "armed": [
       {
         "source": "filter",
@@ -45,10 +44,6 @@
         "source": "filter",
         "id": 6
       }
-    ],
-    "plan": {
-      "stopRequired": "yes",
-      "signalOnly": "no"
-    }
+    ]
   }
 }

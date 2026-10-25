@@ -19,16 +19,11 @@
     },
     "session": "regular",
     "interval": "5m",
-    "shares": 100,
     "armed": [
       {
         "source": "paper_order",
         "id": 1
       }
-    ],
-    "plan": {
-      "stopRequired": "yes",
-      "signalOnly": "no"
-    }
+    ]
   }
 }

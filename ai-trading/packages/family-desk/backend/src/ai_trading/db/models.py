@@ -471,6 +471,10 @@ class ReplaySession(Base):
     day_list_id: Mapped[int | None] = mapped_column(
         ForeignKey("replay_day_lists.id", ondelete="CASCADE"), index=True, nullable=True
     )
+    # Alembic 0007 (02r): the practice thread a day-list session books into; null for a standalone session.
+    thread_id: Mapped[int | None] = mapped_column(
+        ForeignKey("practice_threads.id", ondelete="CASCADE"), index=True, nullable=True
+    )
 
 
 class PracticeMark(Base):
@@ -560,6 +564,11 @@ class PracticePlan(Base):
     status: Mapped[str] = mapped_column(String, nullable=False)  # "active" | "archived"
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Alembic 0007 (02r): the thread this plan's days book into. Its `spec` still carries the old plan fields
+    # (`setup.plan`, `setup.shares`) on rows saved before 0007: deprecated, never read, never dropped.
+    thread_id: Mapped[int | None] = mapped_column(
+        ForeignKey("practice_threads.id", ondelete="CASCADE"), index=True, nullable=True
+    )
 
 
 class ReplayDayList(Base):
@@ -602,4 +611,77 @@ class UniverseDay(Base):
     __tablename__ = "universe_days"
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     symbols: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# -- Practice threads (Alembic 0007, 02r): the paper account across practice days, and its ledger --
+
+
+class PracticeThread(Base):
+    """A practice thread: the SIMULATED balance she practises in, with the risk plan that governs every day in it.
+    One active thread per owner and mode; the balance is never stored (`starting_balance` + the ledger)."""
+
+    __tablename__ = "practice_threads"
+    __table_args__ = (
+        Index(
+            "uq_practice_threads_owner_user_id_mode_active",
+            "owner_user_id",
+            "mode",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+        CheckConstraint("mode IN ('day', 'swing')", name="ck_practice_threads_mode"),
+        CheckConstraint("status IN ('active', 'closed')", name="ck_practice_threads_status"),
+        CheckConstraint("starting_balance BETWEEN 1000 AND 10000000", name="ck_practice_threads_starting_balance"),
+        CheckConstraint("stop_note_on_entry IN ('yes', 'no')", name="ck_practice_threads_stop_note_on_entry"),
+        CheckConstraint("trade_only_on_signal IN ('yes', 'no')", name="ck_practice_threads_trade_only_on_signal"),
+        CheckConstraint(
+            "max_loss_usd IS NULL OR max_loss_usd BETWEEN 1 AND 100000", name="ck_practice_threads_max_loss"
+        ),
+        CheckConstraint("max_trades IS NULL OR max_trades BETWEEN 1 AND 50", name="ck_practice_threads_max_trades"),
+        CheckConstraint("(status = 'closed') = (closed_at IS NOT NULL)", name="ck_practice_threads_closed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    mode: Mapped[str] = mapped_column(String, nullable=False)  # "day" | "swing" (swing is unused until 02p)
+    starting_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # The risk plan (PracticeThreadPlanV1): "yes" | "no" flags as the contract spells them.
+    stop_note_on_entry: Mapped[str] = mapped_column(String, nullable=False)
+    trade_only_on_signal: Mapped[str] = mapped_column(String, nullable=False)
+    max_loss_usd: Mapped[int | None] = mapped_column(Integer)
+    max_trades: Mapped[int | None] = mapped_column(Integer)
+    plan_note: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "active" | "closed"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PracticeLedger(Base):
+    """One realized practice trade, keyed by its exit mark (so booking twice is a no-op). Undoing the exit mark
+    deletes the row with it."""
+
+    __tablename__ = "practice_ledger"
+    __table_args__ = (
+        UniqueConstraint("mark_id", name="uq_practice_ledger_mark_id"),
+        Index("ix_practice_ledger_thread_id_day", "thread_id", "day"),
+        CheckConstraint("side IN ('long', 'short')", name="ck_practice_ledger_side"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("practice_threads.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("replay_sessions.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    mark_id: Mapped[int] = mapped_column(ForeignKey("practice_marks.id", ondelete="CASCADE"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    side: Mapped[str] = mapped_column(String, nullable=False)  # "long" | "short"
+    shares: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    exit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    pnl_usd: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # the journal's own figure
+    r: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # null when no stop was set
+    realized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

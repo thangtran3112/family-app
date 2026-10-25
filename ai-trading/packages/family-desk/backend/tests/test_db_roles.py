@@ -131,6 +131,8 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "practice_plans",
         "replay_day_lists",
         "universe_days",
+        "practice_threads",
+        "practice_ledger",
     }
 
 

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "mode": "day",
+  "startingBalance": 75000,
+  "plan": {
+    "stopNoteOnEntry": true,
+    "tradeOnlyOnSignal": "no",
+    "maxLossUsd": 500,
+    "maxTrades": 10,
+    "planNote": "Stop at the first red candle."
+  }
+}

@@ -10,6 +10,7 @@ import {
   type ReplayInterval,
 } from "../replay/schemas.ts";
 import { DailySchema, DayListSchema, OpenNextSchema } from "../replay/daily.ts";
+import { ThreadSchema, ThreadsSchema } from "../replay/threads.ts";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
 
 // Loaders for the Practice endpoints (02o §b1): one function per route. Replay screens use only these; they never
@@ -68,9 +69,14 @@ export const endReplay = (id: number, options?: RequestOptions) =>
 /** The hub card: her plan and its cursor, or `{ plan: null }`. */
 export const loadDaily = (options?: RequestOptions) => clientOf(options)(deskPath("/replay/daily"), DailySchema, readInit(options));
 
-/** Opens the next day's list or continues the current one. With `plan` (a `PracticeBlockV1`) it first saves that plan. */
-export const openNextDay = (plan?: unknown, options?: RequestOptions) =>
-  clientOf(options)(deskPath("/replay/daily/next"), OpenNextSchema, jsonInit("POST", plan === undefined ? {} : { plan }, options));
+/** Opens the next day's list or continues the current one. With `plan` (a `PracticeBlockV1`) it first saves that plan,
+ *  bound to `threadId` or else her active day thread (02r). */
+export const openNextDay = (plan?: unknown, options?: RequestOptions & { threadId?: number }) =>
+  clientOf(options)(
+    deskPath("/replay/daily/next"),
+    OpenNextSchema,
+    jsonInit("POST", plan === undefined ? {} : { plan, ...(options?.threadId === undefined ? {} : { threadId: options.threadId }) }, options),
+  );
 
 /** One practice day. `peek` adds the pre-open chart data of one candidate (cut at the list's data time). */
 export const loadDayList = (id: number, params: { peek?: string } = {}, options?: RequestOptions) =>
@@ -87,3 +93,23 @@ export const startDaySession = (id: number, symbol: string, options?: RequestOpt
 /** Ends the day: the open practice trade exits at the last price and the list review unseals. Idempotent. */
 export const endDay = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}/end`), DayListSchema, jsonInit("POST", {}, options));
+
+// ---- practice threads (02r) --------------------------------------------------------------------------------------
+
+/** Her threads, the active ones first, each with its plan, stats and today (the hub's "Your practice threads"). */
+export const loadThreads = (options?: RequestOptions) => clientOf(options)(deskPath("/replay/threads"), ThreadsSchema, readInit(options));
+
+/** One thread: plan, stats, the daily P/L rows (one per ended day) and the balance curve, all read back from the ledger. */
+export const loadThread = (id: number, options?: RequestOptions) => clientOf(options)(deskPath(`/replay/threads/${id}`), ThreadSchema, readInit(options));
+
+/** Body is a `PracticeThreadCreateV1`. One active thread per mode: a second is a 409 in plain words. */
+export const createThread = (spec: unknown, options?: RequestOptions) =>
+  clientOf(options)(deskPath("/replay/threads"), ThreadSchema, jsonInit("POST", spec, options));
+
+/** Body is a `PracticeThreadPatchV1`: the risk plan only, while the thread is active. It applies from the next session. */
+export const patchThread = (id: number, body: unknown, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/threads/${id}`), ThreadSchema, jsonInit("PATCH", body, options));
+
+/** Closes the thread: its journal and final balance stay, its plan and balance freeze. An open practice day is a 409. */
+export const closeThread = (id: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/threads/${id}/close`), ThreadSchema, jsonInit("POST", {}, options));

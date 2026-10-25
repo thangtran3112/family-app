@@ -31,15 +31,15 @@ test("the default start is the first weekday of the month three months back", ()
   assert.equal(defaultFirstDay(new Date("2026-06-15T12:00:00Z")), "2026-03-02"); // March 1 is a Sunday
 });
 
-test("a draft becomes the contract's JSON: yes/no words, no null, optional plan fields left out", () => {
+test("a draft becomes the contract's JSON: yes/no words, no null, no shares and no risk plan (the thread's, D-007)", () => {
   const spec = planDraftToSpec(ready()) as Record<string, unknown>;
   assert.deepEqual(spec.screen, { filters: [{ id: 4 }], listAt: "08:30", maxList: 30 });
   assert.equal(spec.hideDates, "yes");
   assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
-  assert.deepEqual((spec.setup as { plan: unknown }).plan, { stopRequired: "yes", signalOnly: "no" });
+  assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
   assert.equal(JSON.stringify(spec).includes("null"), false);
-  const withPlan = ready({ setup: { ...ready().setup, maxLossUsd: "200", note: "stay small" } });
-  assert.deepEqual((planDraftToSpec(withPlan) as { setup: { plan: unknown } }).setup.plan, { stopRequired: "yes", signalOnly: "no", maxLossUsd: 200, note: "stay small" });
+  const withPlan = ready({ setup: { ...ready().setup, shares: "250", maxLossUsd: "200", note: "stay small" } });
+  assert.deepEqual(Object.keys((planDraftToSpec(withPlan) as { setup: object }).setup), ["window", "session", "interval", "armed"]);
 });
 
 test("a good draft validates; the window may not begin before the list time", () => {
