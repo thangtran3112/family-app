@@ -18,7 +18,7 @@ All money here is SIMULATED and every sentence that mentions it says so.
 """
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import func, or_, select
@@ -220,7 +220,8 @@ def _weekday(day: Any) -> str:
 
 
 def _money(value: float | Decimal) -> float:
-    return round(float(value), 2)
+    """Dollars to the cent. Decimal all the way (D-033): a float round can land a half cent on the wrong side."""
+    return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _ledger(db: Session, thread_id: int) -> list[PracticeLedger]:

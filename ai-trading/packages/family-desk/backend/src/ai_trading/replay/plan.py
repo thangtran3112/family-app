@@ -44,6 +44,7 @@ from ai_trading.db.models import (
     UniverseSymbol,
 )
 from ai_trading.replay import days as days_mod
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import prep as prep_mod
 from ai_trading.replay import review as review_mod
 from ai_trading.replay import screen
@@ -803,7 +804,7 @@ def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
     return {
         "sessions": rows,
         "trades": sum(r["trades"] for r in rows),
-        "pnl_usd": round(sum(r["pnl_usd"] for r in rows), 2),
+        "pnl_usd": journal_mod.usd_sum([r["pnl_usd"] for r in rows]),
     }
 
 
