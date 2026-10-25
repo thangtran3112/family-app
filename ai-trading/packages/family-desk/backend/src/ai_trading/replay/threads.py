@@ -5,8 +5,8 @@ plan binds to one thread; every realized practice trade books a ledger row (`rep
 stored**: the balance is `starting_balance` plus the ledger, the day series and the stats are read back from the
 ledger and the ended day lists, so the numbers cannot drift from the trades (the reconciliation tests pin this).
 
-- **One active thread per owner and mode.** A second `day` thread is a 409 until the first is closed. Swing is in the
-  contract but not open yet (02p).
+- **One active thread per owner and mode.** A second `day` thread is a 409 until the first is closed. A swing thread is
+  created by `swing.create_thread` (02p), which shares the checks and the insert below.
 - **Plan edits apply from the next session.** A session snapshots the plan when it starts, so a day already under way
   is scored against the plan it began with. The starting balance and the mode never change.
 - **Closing** archives the daily plan and freezes the thread (no plan edits, no new days). It waits for an open
@@ -104,13 +104,27 @@ def _check_plan(plan: dict[str, Any], balance: int | Decimal) -> None:
 
 
 def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: datetime) -> PracticeThread:
+    """A DAY thread. A swing body is not served here: swing threads are created by `swing.create_thread`, which checks
+    the days, the universe and the arms first and then calls `check_new_thread` and `add_thread` below. The 422 stays
+    for a swing body that reaches this path."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     if dumped["mode"] != "day":
         raise ReplayProblem(SWING_CLOSED, path="mode")
-    plan = dumped["plan"]
-    _check_plan(plan, dumped["startingBalance"])
+    check_new_thread(db, user_id, dumped)
+    return add_thread(db, user_id, dumped, now)
+
+
+def check_new_thread(db: Session, user_id: int, dumped: dict[str, Any]) -> None:
+    """The create rules on top of the contract: the plan fits the balance, no other thread of the mode is active."""
+    _check_plan(dumped["plan"], dumped["startingBalance"])
     if active_thread(db, user_id, dumped["mode"], lock=True) is not None:
         raise _already_active(dumped["mode"])
+
+
+def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime) -> PracticeThread:
+    """Write the thread row (`dumped` passed `check_new_thread`). The unique index is the backstop for a concurrent
+    create of the same mode."""
+    plan = dumped["plan"]
     row = PracticeThread(
         owner_user_id=user_id,
         mode=dumped["mode"],
@@ -444,7 +458,9 @@ def brief(db: Session, thread_id: int | None, day_list_id: int | None = None) ->
 __all__ = (
     "ThreadNotFound",
     "active_thread",
+    "add_thread",
     "brief",
+    "check_new_thread",
     "close_thread",
     "create_thread",
     "detail",

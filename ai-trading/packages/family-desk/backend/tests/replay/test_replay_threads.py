@@ -87,12 +87,13 @@ def test_a_thread_starts_with_the_default_balance_and_the_contract_reads_back(db
     assert "Simulated" in out["label"]
 
 
-def test_one_active_day_thread_per_owner_and_swing_is_not_open(db_session, user_id) -> None:
+def test_one_active_day_thread_per_owner_and_a_swing_create_is_not_served_by_the_day_path(db_session, user_id) -> None:
     threads_mod.create_thread(db_session, user_id, _create(), NOW)
     with pytest.raises(ReplayProblem) as second:
         threads_mod.create_thread(db_session, user_id, _create(), NOW)
     assert (second.value.status, second.value.path) == (409, "mode")
     assert second.value.message == "You already have an active day thread · close it before starting another"
+    # A valid swing create (it carries its swing block) still belongs to `swing.create_thread`, not to this path.
     with pytest.raises(ReplayProblem) as swing:
         threads_mod.create_thread(db_session, user_id, _create(mode="swing"), NOW)
     assert (swing.value.status, swing.value.path) == (422, "mode")
