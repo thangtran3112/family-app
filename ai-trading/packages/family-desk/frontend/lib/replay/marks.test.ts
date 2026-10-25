@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { delta, mark, openTrade } from "./fixtures.ts";
-import { barStartFor, canUndoLast, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
+import { barStartFor, canUndoLast, entrySince, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
 import { ReplaySignalSchema, type ReplayBar, type ReplayMark } from "./schemas.ts";
 import { ms } from "./time.ts";
 
@@ -104,4 +104,13 @@ test("the journal chart starts at the first bar of the window, after the lookbac
   assert.equal(windowIndex(bars, "2026-04-07T13:40:00Z"), 2);
   assert.equal(windowIndex(bars, "2026-04-07T13:41:00Z"), 3);
   assert.equal(windowIndex(bars, "2026-04-07T23:00:00Z"), 0, "a window after every bar falls back to the start");
+});
+
+test("the open trade's 'since' is the time of its entry mark", () => {
+  const entry = withMark({ id: 9, seq: 7, kind: "long_entry", at: "2026-04-07T13:47:00Z", trade_no: 2 });
+  const earlier = withMark({ id: 3, seq: 1, kind: "long_entry", at: "2026-04-07T13:35:00Z", trade_no: 1 });
+  assert.equal(entrySince([earlier, entry], { trade_no: 2 }), "2026-04-07T13:47:00Z");
+  assert.equal(entrySince([earlier, entry], { trade_no: 1 }), "2026-04-07T13:35:00Z");
+  assert.equal(entrySince([earlier], { trade_no: 2 }), null, "no mark for that trade: no time is made up");
+  assert.equal(entrySince([entry], null), null);
 });

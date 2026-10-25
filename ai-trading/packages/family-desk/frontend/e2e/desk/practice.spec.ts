@@ -120,6 +120,8 @@ test.describe("Practice", () => {
     await expect(notable).toContainText(/20\d\d-\d\d-\d\d/);
     await expectCleanScreen(page);
 
+    expect((await page.request.get(`${origin}/favicon.ico`)).ok(), "D-010: the export ships a favicon").toBeTruthy();
+
     await startStubSession(page);
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
     await expectCleanScreen(page);
@@ -175,6 +177,10 @@ test.describe("Practice", () => {
     await page.keyboard.press("4");
     await page.keyboard.press("Space");
     await expect(page.getByText(practiceText("playing", { speed: 10 }))).toBeVisible();
+    await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill in the header
+    // D-024: the tape has its BIG column and names the pace window.
+    await expect(page.getByRole("columnheader", { name: "Big" })).toBeVisible();
+    await expect(page.getByText("Pace · 10 seconds")).toBeVisible();
     await expect(clock).not.toContainText("9:30:00", { timeout: 10_000 });
     await page.keyboard.press("Space");
     await expect(page.getByText(/^Paused at /)).toBeVisible();
@@ -182,6 +188,24 @@ test.describe("Practice", () => {
     const before = await clock.innerText();
     await page.keyboard.press("ArrowRight");
     await expect(clock).not.toHaveText(before);
+
+    // D-036, D-025: the header's Practice P/L reads with its SIMULATED unit, beside VWAP and the prior close.
+    await expect(page.getByTitle("Closed practice trades plus the open trade at the last price")).toContainText(PRACTICE_COPY.threadSimulated);
+    await expect(page.locator("dt", { hasText: "VWAP" })).toBeVisible();
+    await expect(page.locator("dt", { hasText: "Prior close" })).toBeVisible();
+    // D-023: this session shows its date, so the band has nothing to hide and no "Show date" (the hidden-day case is below).
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toHaveCount(0);
+    // D-043: the replay has its own status line, not the live-quotes one.
+    await expect(page.getByLabel("Status")).toContainText("Prices: Alpaca SIP · replay");
+    await expect(page.getByLabel("Status")).not.toContainText("Alerts start when live quotes are connected");
+    // D-020: at the 1180 band each tab opens its own drawer; one never closes another.
+    if (test.info().project.name === "desktop-1180") {
+      const tabs = page.getByRole("tablist", { name: "Replay context" });
+      await expect(tabs.getByRole("tab", { name: "Tape" })).toHaveAttribute("aria-selected", "true"); // opened by play
+      await tabs.getByRole("tab", { name: "Practice" }).click();
+      await expect(tabs.getByRole("tab", { name: "Tape" })).toHaveAttribute("aria-selected", "true");
+      await expect(tabs.getByRole("tab", { name: "Practice" })).toHaveAttribute("aria-selected", "true");
+    }
 
     await page.keyboard.press("?");
     await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
@@ -350,17 +374,29 @@ test.describe("Practice", () => {
 
     // The day list: dates hidden, the candidate, the universe line, and the footnote.
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
-    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true));
-    await expect(page.getByText(/^List at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
-    await expect(page.getByText(/Practice universe · \d+ symbols the Desk has scanned/).first()).toBeVisible();
+    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true, true));
+    await expect(page.getByText(/^List built at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
+    await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
     await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
+    // D-013, D-014, D-018: the P7 layout (the block, the thread and the stars on the left), the chips read as on, the P7 columns.
+    const left = page.getByRole("complementary", { name: "Practice side panel" });
+    await expect(left).toContainText("This block · 5 days");
+    await expect(left).toContainText("Risk plan comes from the thread: ");
+    await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
+    await expect(page.getByText("Chosen at setup")).toBeVisible();
+    for (const label of ["Prev close", "Prev RVOL", "Prev change %", "Earnings"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    // D-043: the day list's own status line.
+    await expect(page.getByLabel("Status")).toContainText("Day lists built before the open");
+    await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
 
     // Peek: the chart before the open; a star keeps the name in view.
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await expect(page.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
+    await expect(page.getByRole("tab", { name: PRACTICE_COPY.dayPeekToday })).toBeVisible(); // D-019: no "Today so far" on a replay day
+    await expect(page.getByText("Today so far")).toHaveCount(0);
     await page.getByRole("button", { name: "Star TSLA" }).click();
     await expect(page.getByRole("button", { name: "Unstar TSLA" })).toBeVisible();
     await expectCleanScreen(page);
@@ -370,6 +406,10 @@ test.describe("Practice", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
+    // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
+    await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(DAY);
     await page.keyboard.press("ArrowRight");
     await expect(playhead(page)).not.toContainText("9:30:00");
     await expectCleanScreen(page);
@@ -378,8 +418,19 @@ test.describe("Practice", () => {
     const strip = page.getByRole("group", { name: "Practice thread" });
     await expect(strip).toContainText("Thread balance $50,000");
     await expect(strip).toContainText(PRACTICE_COPY.threadSimulated);
+    // D-021: the THREAD PLAN rail lists every rule, the plan note and the SIMULATED pill.
+    const side = page.getByRole("complementary", { name: "Practice side panel" });
+    for (const label of ["Shares per trade", "Stop note on every entry", "Trade only on a signal", "Max loss $600.00", "Max trades 3"]) await expect(side).toContainText(label);
+    await expect(side).toContainText("Plan note: Trade only clean pullbacks.");
+    await expect(side.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
     // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
     await page.keyboard.press("b");
+    // D-022: the entry went in without a stop; the nudge is plain words with one click to the stop note, and nothing was blocked.
+    const nudge = side.getByRole("button", { name: "Add a stop note for this entry" });
+    await expect(nudge).toBeVisible();
+    await nudge.click();
+    await expect(page.getByRole("form", { name: "Stop note" })).toBeVisible();
+    await page.getByRole("form", { name: "Stop note" }).getByRole("button", { name: "Cancel" }).click();
     await marksTab(page).click();
     await expect(page.getByRole("tabpanel")).toContainText("Practice long");
     await page.keyboard.press("x");
@@ -480,23 +531,35 @@ test.describe("Practice", () => {
     await expect(tile("Wins")).toContainText(String(read.thread.stats.wins));
     await expect(tile("Losses")).toContainText(String(read.thread.stats.losses));
     await expect(page.locator("body")).not.toContainText(/20\d\d-\d\d-\d\d/); // dates stay hidden on the journal
+    // D-039: her threads and the weeks sit in the left rail; D-043: the journal's own status line.
+    const journalLeft = page.getByRole("complementary", { name: "Practice side panel" });
+    await expect(journalLeft).toContainText(PRACTICE_COPY.threadSwitcher);
+    await expect(journalLeft).toContainText(PRACTICE_COPY.weeksTitle);
+    await expect(page.getByLabel("Status")).toContainText("Journal updates when a day ends");
+    await expect(page.getByLabel("Status")).toContainText("Balance as of day 2");
+    await expect(page.getByLabel("Status")).not.toContainText("Quotes:");
     await expectCleanScreen(page);
 
     // One practised day is too few for a trend, and the journal says so instead of guessing.
     const improvement = await railSection(page, "Thread details", PRACTICE_COPY.improvementTitle);
     await expect(improvement.getByText(PRACTICE_COPY.improvementTooFew)).toBeVisible();
     await expect(improvement.getByText(/^Reason: week 2 has no practice days so far/)).toBeVisible();
+    await expect(improvement.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible(); // D-041
 
     // Edit the plan on the journal, then close the thread; the closed thread keeps its journal.
     const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
     await expect(plan).toContainText("$600");
+    await expect(plan).toContainText(PRACTICE_COPY.threadShares); // D-042: the full plan, Shares included
+    await expect(plan).toContainText(`${PRACTICE_COPY.threadPlanNote}: Trade only clean pullbacks.`);
     await plan.getByRole("button", { name: PRACTICE_COPY.threadEditPlan }).click();
     await plan.getByLabel("Max loss ($)").fill("400");
     await plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan }).click();
     await expect(plan).toContainText("$400");
     await expect(plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan })).toHaveCount(0);
-    await plan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
-    await plan.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
+    // D-040: Close thread is its own section of the rail (a tab of its own at 1180).
+    const closing = await railSection(page, "Thread details", PRACTICE_COPY.threadClose);
+    await closing.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
+    await closing.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
     await expect(page.getByRole("status").filter({ hasText: "This thread is closed" })).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
     await expect((await readThread(context, threadId)).thread.status).toBe("closed");
@@ -521,6 +584,12 @@ test.describe("Practice", () => {
     await expect(page.getByText(PRACTICE_COPY.journalThreadEmpty)).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toHaveCount(0);
     await expectCleanScreen(page);
+
+    // D-037: the bare journal route says no thread is picked and links to hers.
+    await openDesk(page, "/practice/journal");
+    await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toBeVisible();
+    await page.getByRole("link", { name: /thread/i }).first().click();
+    await page.waitForURL(/\/practice\/journal\?thread=\d+/);
 
     await openDesk(page, "/practice/journal?thread=99999");
     await expect(page.getByRole("alert").filter({ hasText: "Couldn't load this thread" })).toBeVisible();

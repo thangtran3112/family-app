@@ -22,6 +22,8 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   // ponytail: x labels thinned to about 20 at most; per-point labels crowd past that. Upgrade: a responsive axis.
   const every = Math.max(1, Math.ceil(points.length / 20));
   const lowRight = lowest !== null && lowest.x > plot.x + plot.width - 80;
+  // When the newest point is also the lowest, "Now" already says it: a second label on the same spot would print over it.
+  const lowIsNow = lowest !== null && now !== null && lowest.x === now.x && lowest.y === now.y;
   const lowText = lowest ? `lowest ${formatBalance(lowest.balance)}` : "never below the start";
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, now ${formatBalance(stats.balance)}, ${lowText}.`;
 
@@ -62,7 +64,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
       {now && (
         <text x={now.x - 8} y={now.y - 8} textAnchor="end" className={styles.nowLabel}>{`Now ${formatBalance(now.balance)}`}</text>
       )}
-      {lowest && (
+      {lowest && !lowIsNow && (
         <text
           x={lowest.x}
           y={lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8}

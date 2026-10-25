@@ -78,7 +78,8 @@ test("improvement stays a caveat until two weeks each have three practice days",
   ]);
   const one = improvementOf(weeksOf(threadDays.slice(0, 3)));
   assert.equal(one.compared, null);
-  assert.match(one.caveat?.reason ?? "", /waits for at least 2 weeks/);
+  assert.match(one.caveat?.reason ?? "", /week 1 has 3 practice days so far\. A trend needs at least 2 weeks with 3 or more practice days each/, "one week alone still names its count and the threshold (D-041)");
+  assert.match(improvementOf([]).caveat?.reason ?? "", /waits for at least 2 weeks/);
 
   const day = (n: number, week: number, pnl: number) => ({ ...threadDays[0]!, n, day: `2026-0${week + 1}-0${((n - 1) % 3) + 2}`, pnl_usd: pnl, kind: "practiced" as const });
   const enough = improvementOf(weeksOf([day(1, 1, -30), day(2, 1, -30), day(3, 1, -30), day(4, 2, 30), day(5, 2, 30), day(6, 2, 30)]));
@@ -103,8 +104,9 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
 });
 
 test("the plan recap reads yes, no and none in plain words, and no thread copy trips the banned-term check", () => {
-  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["Yes", "Yes", "$600", "3"]);
-  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["No", "No", "None", "None"]);
+  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["You set it on each entry", "Yes", "Yes", "$600", "3"]);
+  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["You set it on each entry", "No", "No", "None", "None"]);
+  assert.equal(planRows(activeThread.thread.plan)[0]?.label, "Shares per trade", "D-042: the recap has a Shares row; the thread plan holds no count, so it says who sets it");
   const built = [
     briefLine(threadBrief),
     startedWithText(activeThread.thread),

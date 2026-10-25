@@ -10,8 +10,8 @@ export const BOARD_PRIORITIES = {
   // Practice (02o §a2, §a4): the notable-days table drops weekday, then attempts; signals versus trades drops the 15-minute change.
   practiceDays: { weekday: 1, attempts: 2 },
   practiceSignals: { chg_15m: 1 },
-  // Daily-list practice (02o-b v1): the candidate table drops the time the match began, then the filter names, then volume.
-  practiceList: { matched_since: 1, filters: 2, volume: 3 },
+  // Daily-list practice (02o-b v1): the candidate table drops the time the match began, then the filter names, then volume, gap and vs VWAP (P7 keeps prev close, RVOL, change, ATR, RSI and earnings).
+  practiceList: { matched_since: 1, filters: 2, volume: 3, gap_pct_open: 4, vs_vwap_pct: 5 },
   practiceReview: { range_pct: 1, close_move_pct: 2 },
 } as const satisfies Record<string, Record<string, number>>;
 

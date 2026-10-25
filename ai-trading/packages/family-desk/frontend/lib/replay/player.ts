@@ -65,3 +65,13 @@ export function statusLine(status: PlayerStatus, speed: Speed, revealedThrough: 
   if (status === "loading") return PRACTICE_COPY.loadingReplay;
   return Date.parse(revealedThrough) === Date.parse(windowStart) ? practiceText("ready", { time }) : practiceText("paused", { time });
 }
+
+/** The pill beside the header readouts (P2): "Playing · 5x", "Paused", "Window end". */
+export function playerPillText(status: PlayerStatus, speed: Speed): string {
+  switch (status) {
+    case "playing": return `Playing · ${speed}x`;
+    case "at_end": return "Window end";
+    case "loading": return "Loading";
+    case "paused": return "Paused";
+  }
+}

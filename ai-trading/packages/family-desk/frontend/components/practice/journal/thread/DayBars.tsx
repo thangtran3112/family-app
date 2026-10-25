@@ -43,7 +43,7 @@ export function DayBars({ thread }: { thread: Thread }) {
             {tone !== "flat" && <rect x={slot.x} y={slot.barY} width={slot.width} height={slot.barHeight} className={styles[tone]} />}
             <text
               x={slot.center}
-              y={tone === "down" ? slot.barY + slot.barHeight + 12 : slot.barY - 4}
+              y={tone === "down" ? (slot.barY + slot.barHeight + 12 <= bottom ? slot.barY + slot.barHeight + 12 : zeroY - 4) : slot.barY - 4}
               textAnchor="middle"
               className={`${styles.valueLabel} ${styles[tone]}`}
             >

@@ -4,25 +4,36 @@ import { containsPracticeBannedTerm, PRACTICE_COPY, practiceText } from "../desk
 import { DailySchema, DayListSchema, OpenNextSchema } from "./daily.ts";
 import { dayList, endedDayList, plan } from "./dailyFixtures.ts";
 import {
+  blockLadder,
   cellText,
   cellTone,
   dayBalanceText,
   dayFinishedLine,
   dayRecordText,
+  dayCellText,
+  dayCellTone,
+  dayColumns,
   dayTitle,
+  filtersNote,
   filtersText,
   journalLine,
+  listBuiltText,
+  listCountsText,
   listHeaderText,
   listWarning,
   moveText,
+  noMatchText,
   ordinal,
   peekDailyBars,
   planArmedText,
   planCard,
+  riskPlanText,
   selectionText,
+  sourceNote,
   syntheticDays,
   toggledStars,
   tradeLineRows,
+  universeNote,
 } from "./dayView.ts";
 
 test("the daily payloads parse, and the contract's required fields are required", () => {
@@ -93,12 +104,13 @@ test("stars toggle, keep order, and refuse a sixth name", () => {
   assert.equal(toggledStars(["A", "B", "C", "D", "E"].map((symbol) => ({ symbol })), "F"), null);
 });
 
-test("warnings: the server's reason is shown as it is; the plain line stands in only when it gave none", () => {
+test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
   assert.equal(listWarning(dayList), "Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists");
   const why = "None of the 17 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
-  assert.equal(listWarning({ warnings: [why], candidates: [] }), why);
-  assert.equal(listWarning({ ...dayList, warnings: [], candidates: [] }), "No names matched this morning");
-  assert.equal(listWarning({ warnings: [], candidates: dayList.candidates }), null);
+  assert.equal(listWarning({ warnings: [why] }), why);
+  assert.equal(listWarning({ warnings: [] }), null);
+  assert.equal(noMatchText({ universe: { ...dayList.universe, matches_total: 0 } }), "0 of 131 matched");
+  assert.equal(PRACTICE_COPY.dayNoNames, "No name passed your filters on this day · widen a filter, or end the day to open the next");
   assert.equal(why.includes("Only 0"), false);
 });
 
@@ -168,6 +180,13 @@ test("the strings the day screens build contain no banned term", () => {
     planArmedText(plan),
     practiceText("planListAtNeeds", { filters: "Abnormal volume", time: "10:00 AM" }),
     listHeaderText(dayList),
+    listCountsText(dayList),
+    listBuiltText(dayList),
+    universeNote(dayList.universe),
+    sourceNote(dayList),
+    filtersNote(2),
+    PRACTICE_COPY.dayNoNames,
+    riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }),
     dayTitle(dayList, true),
     selectionText(endedDayList.review!)!,
     journalLine(endedDayList.journal!),
@@ -195,4 +214,75 @@ test("with dates hidden the Peek chart gets a stand-in timeline, never the real 
   assert.deepEqual(hidden.map((bar) => bar.c), [2, 3]);
   assert.equal(syntheticDays(6).at(-1), "2001-01-08"); // weekends are skipped
   assert.equal(JSON.stringify(hidden).includes("2026"), false);
+});
+
+test("the counts and the built line are two lines, as P7 has them", () => {
+  assert.equal(listCountsText(dayList), "118 of 131 scanned · 34 matched · showing 2");
+  assert.equal(listBuiltText(dayList), "List built at 8:30 AM ET from data through 8:15 AM");
+  assert.equal(filtersNote(2), "Chosen at setup · a name that passes either one is listed");
+  assert.equal(filtersNote(1), "Chosen at setup");
+  assert.equal(sourceNote(dayList), "Source: Alpaca SIP bars up to 8:15 AM ET · nothing after the list time is shown");
+});
+
+test("the universe note states the Desk set and its size, then what else the server said", () => {
+  const universe = { size: 131, label: "Practice universe · 131 symbols the Desk has scanned", footnote: "Practice universe · 131 symbols the Desk has scanned" };
+  assert.equal(universeNote(universe), "Universe: today's Desk set, up to 250 names by today's dollar volume (131 names here). It can differ from the names that traded on that day.");
+  const more = { ...universe, footnote: `${universe.label} · Gap up scans your Movers list as it is today · capped at 250 by dollar volume` };
+  assert.equal(universeNote(more).endsWith("Gap up scans your Movers list as it is today · capped at 250 by dollar volume."), true);
+});
+
+test("the risk plan reads as one sentence; no limits says so", () => {
+  assert.equal(riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day.");
+  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
+  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade a day.");
+});
+
+test("the block ladder: earlier days ended, this one open, the next waits for it, the rest are locked", () => {
+  const rows = blockLadder({ day_no: 2, of: 5, status: "listed", weekday: "Wed" });
+  assert.deepEqual(rows.map((row) => row.state), ["ended", "open", "opens_after", "locked", "locked"]);
+  assert.deepEqual(rows.map((row) => row.detail), ["Ended · review", "Open now", "Opens after day 2", "Locked", "Locked"]);
+  assert.equal(rows[1]!.weekday, "Wed");
+  assert.equal(rows[0]!.weekday, null);
+  assert.deepEqual(blockLadder({ day_no: 2, of: 5, status: "ended", weekday: "Wed" }).map((row) => row.state), ["ended", "ended", "opens_after", "locked", "locked"]);
+});
+
+test("D-018: a list built before the open fills Prev RVOL and Prev change % from the server's own previous-session columns", () => {
+  const columns = dayColumns(dayList);
+  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
+  const smci = dayList.candidates[0]!;
+  const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
+  assert.equal(dayCellText(byKey.prev_close!, smci), "37.90");
+  assert.equal(dayCellText(byKey.prev_rvol!, smci), "1.10×");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci), "+1.20%");
+  assert.equal(dayCellTone(byKey.prev_change_pct!, smci), "up");
+  assert.equal(dayCellText(byKey.prev_rvol!, dayList.candidates[1]!), "—");
+  assert.equal(byKey.prev_rvol!.missing, false);
+  assert.equal(dayCellText(byKey.earnings!, smci), "Reported before the open");
+  assert.equal(dayCellText(byKey.earnings!, dayList.candidates[1]!), "—");
+  assert.equal(dayCellText(byKey.matched_since!, smci), "8:30 AM");
+});
+
+test("D-018: a list built after the open has no previous-session RVOL or change, so those columns read a dash, never the live value", () => {
+  const live = {
+    ...dayList,
+    universe: { ...dayList.universe, prev_basis: false },
+    columns: [
+      { key: "list_price", label: "List price", format: "price" },
+      { key: "list_change_pct", label: "vs prev close %", format: "pct_signed" },
+      { key: "change_pct", label: "Change %", format: "pct_signed" },
+      { key: "rvol_10d", label: "RVOL", format: "ratio" },
+      { key: "atr_pct_14", label: "ATR %", format: "pct" },
+      { key: "rsi_14", label: "RSI", format: "number" },
+      { key: "matched_since", label: "Since", format: "time" },
+    ],
+  };
+  const columns = dayColumns(live);
+  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "ATR %", "RSI", "Earnings", "Change %", "RVOL", "Since"]);
+  const smci = { ...live.candidates[0]!, metrics: { ...live.candidates[0]!.metrics, rvol_10d: 2.5 } };
+  const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
+  assert.equal(dayCellText(byKey.prev_close!, smci), "37.90");
+  assert.equal(dayCellText(byKey.prev_rvol!, smci), "—");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci), "—");
+  assert.equal(byKey.prev_rvol!.missing, true);
+  assert.equal(dayCellText(byKey.rvol_10d!, smci), "2.50×");
 });

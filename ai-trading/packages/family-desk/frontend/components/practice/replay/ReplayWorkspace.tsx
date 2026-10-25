@@ -2,33 +2,37 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { currentValue } from "@/lib/chart-data";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
+import { buildChartSeries } from "@/lib/desk/workspace";
 import { endDay } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { briefLine } from "@/lib/replay/threadView";
 import { actionForKey, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import type { MarkDraft } from "@/lib/replay/markInput";
-import { levelRows, markRows, openSide } from "@/lib/replay/marks";
-import { maxLossReached, planChecklist, practicePnl, tradeCount } from "@/lib/replay/planView";
+import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
+import { maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, stopMissing, tradeCount } from "@/lib/replay/planView";
 import type { ReplaySession } from "@/lib/replay/schemas";
+import { replayStatusLine } from "@/lib/replay/statusLine";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
-import type { ReplayView } from "@/lib/replay/feedState";
+import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
 import { PlanChecklist } from "./PlanChecklist";
 import { PracticeControls, type Composer } from "./PracticeControls";
-import { ReplayChart } from "./ReplayChart";
+import { REPLAY_INDICATORS, ReplayChart } from "./ReplayChart";
 import { ReplayHeader } from "./ReplayHeader";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { SignalsRail, signalKey } from "./SignalsRail";
@@ -66,7 +70,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [draft, setDraft] = useState<MarkDraft>({ shares: String(spec.shares), stopPrice: "" });
   const [composer, setComposer] = useState<Composer>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [railOpen, setRailOpen] = useState<string | null>(null);
+  // At the 1180 band the right rail is a tab strip; each tab opens its own drawer and none closes another (D-020).
+  const [railOpen, setRailOpen] = useState<string[]>([]);
+  // "Show date" is the viewer's own choice for this view; the chart stays on clock ticks (D-023).
+  const [dateShown, setDateShown] = useState(false);
   const [bottomTab, setBottomTab] = useState<"marks" | "levels">("marks");
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
   const [focus, setFocus] = useState<{ time: string; at: number } | null>(null);
@@ -78,16 +85,22 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const trades = tradeCount(session.journal, view.openTrade);
   const atEnd = api.player.status === "at_end" || ended;
 
-  useReportPracticeChrome({ day: spec.day, hidden, playhead: view.revealedThrough });
+  const masked = hidden && !dateShown;
+  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: view.revealedThrough, status: replayStatusLine(session.tape_feed, view.revealedThrough), onShowDate: masked ? () => setDateShown(true) : null });
+
+  // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series.
+  const bars = useMemo(() => chartBars(view), [view]);
+  const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval), [bars, view.interval]);
+  const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
 
   // At the 1180 band the right rail is a drawer: the tape opens when play starts, the controls open for T and N.
   const toggle = () => {
-    if (api.player.status === "paused" && band === "1180" && railOpen === null) setRailOpen("tape");
+    if (api.player.status === "paused" && band === "1180" && railOpen.length === 0) setRailOpen(["tape"]);
     api.togglePlay();
   };
   const openComposer = (next: Composer) => {
     setComposer(next);
-    if (next && band === "1180") setRailOpen("practice");
+    if (next && band === "1180") setRailOpen((open) => openRailTab(open, "practice"));
   };
 
   const placeMark = (kind: Parameters<ReplaySessionApi["mark"]>[0]) => {
@@ -150,10 +163,23 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     bias: item.bias,
     fires: view.signals.filter((signal) => signal.source === item.source && signal.id === item.id).length,
   }));
-  const dayLabel = hidden ? PRACTICE_COPY.hiddenDay : formatEtDay(spec.day);
+  const dayLabel = masked ? PRACTICE_COPY.hiddenDay : formatEtDay(spec.day);
   const lossHit = maxLossReached(pnl, spec.plan);
   const stopHint = spec.plan.stopRequired === "yes" && (draft.stopPrice ?? "").trim() === "";
   const bottomShown = bottomOpen ?? band === "1440";
+  const needsStop = stopMissing(spec.plan, view.openTrade);
+  const realized = practicePnl(session.journal, null);
+
+  // A mark just placed shows in the Marks list without a click on Expand, unless she collapsed the panel herself (D-028).
+  const markCount = session.marks.length;
+  const seenMarks = useRef(markCount);
+  useEffect(() => {
+    if (markCount > seenMarks.current) {
+      setBottomTab("marks");
+      setBottomOpen((open) => open ?? true);
+    }
+    seenMarks.current = markCount;
+  }, [markCount]);
 
   const controls = (
     <PracticeControls
@@ -163,6 +189,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       draft={draft}
       onDraft={setDraft}
       stopHint={stopHint}
+      stopMissing={needsStop}
+      since={entrySince(session.marks, view.openTrade)}
+      realized={realized}
+      pnl={pnl}
       composer={composer}
       onComposer={openComposer}
       onLong={() => byLetter("b")}
@@ -205,6 +235,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     { id: "practice", label: "Practice", node: controls },
     ...(band === "1180" ? [{ id: "signals", label: "Signals", node: signalsRail }] : []),
   ];
+  const fires = armed.reduce((sum, item) => sum + item.fires, 0);
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
@@ -215,14 +246,18 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   ) : null;
 
   return (
-    <div className={styles.workspace} data-drawer={band === "1180" && railOpen ? "open" : undefined}>
+    <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
       <ReplayHeader
         symbol={spec.symbol}
         dayLabel={dayLabel}
         attempt={session.attempt}
         playhead={view.revealedThrough}
         lastPrice={view.last?.price ?? null}
+        vwap={vwap}
+        priorClose={view.levels.prior_close ?? null}
         pnl={pnl}
+        status={api.player.status}
+        speed={api.player.speed}
       />
       {session.thread && <ThreadStrip thread={session.thread} />}
       {api.toast && (
@@ -233,7 +268,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       )}
       {lossHit && <p className={styles.warning} role="status">{PRACTICE_COPY.maxLoss}</p>}
       <div className={styles.chartSlot}>
-        <ReplayChart symbol={spec.symbol} view={view} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} />
       </div>
       <TransportBar
         status={api.player.status}
@@ -314,6 +349,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} />}
       <LeftRailPortal>
         <div className={styles.session}>
+          <section className={styles.sessionSection} aria-label="Session">
+            <h2 className={styles.railTitle}>Session</h2>
+            <dl className={styles.sessionFacts}>
+              {sessionFacts(spec, session.attempt, session.tape_feed).map((row) => (
+                <div key={row.id}><dt>{row.label}</dt><dd>{row.value}</dd></div>
+              ))}
+            </dl>
+          </section>
           <section className={styles.sessionSection} aria-label={session.thread ? PRACTICE_COPY.threadPlanTitle : "Plan"}>
             {session.thread ? (
               <>
@@ -326,10 +369,18 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
             ) : (
               <h2 className={styles.railTitle}>Plan</h2>
             )}
-            <PlanChecklist items={planChecklist(spec.plan, session.journal, view.openTrade)} shares={spec.shares} />
+            <PlanChecklist
+              items={planChecklist(spec.plan, session.journal, view.openTrade)}
+              shares={spec.shares}
+              note={planNote(spec.plan)}
+              onAddStop={() => openComposer("stop")}
+            />
           </section>
           <section className={styles.sessionSection} aria-label="Armed strategies">
-            <h2 className={styles.railTitle}>Armed strategies</h2>
+            <div className={styles.railHead}>
+              <h2 className={styles.railTitle}>{`Armed strategies · ${armed.length}`}</h2>
+              <span className={styles.railHint}>{fires === 1 ? "1 fire so far" : `${fires} fires so far`}</span>
+            </div>
             <ArmedStrategiesList armed={armed} />
           </section>
           {band === "1440" && (
@@ -340,7 +391,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           )}
         </div>
       </LeftRailPortal>
-      <RightRail sections={sections} label="Replay context" openId={band === "1180" ? railOpen : undefined} onOpenChange={band === "1180" ? setRailOpen : undefined} />
+      <RightRail sections={sections} label="Replay context" multi openIds={railOpen} onOpenIdsChange={setRailOpen} />
     </div>
   );
 }
