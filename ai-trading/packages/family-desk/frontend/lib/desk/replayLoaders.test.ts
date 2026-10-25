@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import { createDeskApiClient, DeskApiError } from "../api/client.ts";
 import { daysResponse, delta, feed, markResult, session, sessionSummary, spec } from "../replay/fixtures.ts";
-import { advanceReplay, closeThread, createReplaySession, createThread, endReplay, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, loadThread, loadThreads, openNextDay, patchReplaySession, patchThread, placeMark, undoMark } from "./replay.ts";
+import { advanceReplay, closeThread, createReplaySession, createThread, endReplay, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, loadThread, loadThreads, openNextDay, patchReplaySession, relistDay, patchThread, placeMark, undoMark } from "./replay.ts";
 import { activeThread, closedThread, thread } from "../replay/threadFixtures.ts";
 
 type Call = { method: string; path: string; body: unknown };
@@ -150,4 +150,11 @@ test("a new daily plan names its thread; continuing sends an empty body", async 
   d = fakeDesk(answer);
   await openNextDay(undefined, { client: d.client });
   assert.deepEqual(d.calls[0]!.body, {});
+});
+
+test("re-listing a day posts the new list time to the day's relist route (D-012)", async () => {
+  const d = fakeDesk((await import("../replay/dailyFixtures.ts")).dayList);
+  const list = await relistDay(7, "10:00", { client: d.client });
+  assert.equal(list.relist, null);
+  assert.deepEqual(d.calls[0], { method: "POST", path: "/api/desk/replay/day-lists/7/relist", body: { listAt: "10:00" } });
 });

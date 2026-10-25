@@ -8,9 +8,9 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
-import { formatEtDay } from "@/lib/desk/format";
+import { formatClock, formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, relistDay, startDaySession } from "@/lib/desk/replay";
 import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -147,6 +147,13 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayLoadError);
 
+  const relist = (listAt: string) =>
+    run(async () => {
+      const result = await relistDay(list.id, listAt);
+      if (result.plan.prep.state === "running" && result.screen.list_at !== listAt) setMessage(PRACTICE_COPY.dayRelistPreparing);
+      onChanged();
+    }, PRACTICE_COPY.dayRelistError);
+
   const next = () =>
     run(async () => {
       const result = await openNextDay();
@@ -195,6 +202,12 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           <span className={styles.filterNote}>{filtersNote(list.screen.filters.length)}</span>
         </div>
         {warning && <p className={styles.banner} role="status">{warning}</p>}
+        {list.relist && (
+          <div className={styles.actions}>
+            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void relist(list.relist!.list_at)}>{list.relist.label}</button>
+            {list.relist.window_from && <span className={styles.muted}>{practiceText("dayRelistWindow", { time: formatClock(list.relist.window_from) })}</span>}
+          </div>
+        )}
         {message && <p className={styles.banner} role="alert">{message}</p>}
         {confirmEnd && !ended && (
           <div role="group" aria-label="Confirm ending the day" className={styles.confirm}>

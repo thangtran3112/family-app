@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { curveLayout, type Box } from "@/lib/replay/threadChart";
-import { formatBalance } from "@/lib/replay/threadView";
+import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
@@ -37,7 +37,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
       {layout.ticks.map((tick) => (
         <g key={tick.value}>
           <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatBalance(tick.value)}</text>
+          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value)}</text>
         </g>
       ))}
       <line x1={plot.x} x2={plot.x + plot.width} y1={startY} y2={startY} className={styles.startLine} />

@@ -17,7 +17,7 @@ import {
   type ThreadDraft,
   type ThreadProblems,
 } from "@/lib/replay/threadSetup";
-import { formatBalance, threadName } from "@/lib/replay/threadView";
+import { formatWhole, threadName } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import styles from "./hub.module.css";
 
@@ -118,7 +118,7 @@ export function NewThreadForm({ active, onCreated }: { active: PracticeThread | 
 
       <div className={styles.inline}>
         <button type="submit" className={styles.primary} disabled={submitting}>{PRACTICE_COPY.threadSubmit}</button>
-        <p className={styles.hint}>{practiceText("threadSubmitHint", { balance: formatBalance(shownBalance) })}</p>
+        <p className={styles.hint}>{practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) })}</p>
       </div>
       </fieldset>
       {formError && <p role="alert" className={styles.fieldError}>{formError}</p>}

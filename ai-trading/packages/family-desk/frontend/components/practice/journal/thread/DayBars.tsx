@@ -2,7 +2,7 @@
 
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { barsLayout, type Box } from "@/lib/replay/threadChart";
-import { dayResultTone, formatDayResult, weeksOf } from "@/lib/replay/threadView";
+import { dayResultTone, formatAxisDollars, formatDayResult, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
@@ -24,7 +24,7 @@ export function DayBars({ thread }: { thread: Thread }) {
       {layout.ticks.map((tick) => (
         <g key={tick.value}>
           <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatDayResult(tick.value)}</text>
+          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value, true)}</text>
         </g>
       ))}
       <line x1={plot.x} x2={plot.x + plot.width} y1={zeroY} y2={zeroY} className={styles.zeroLine} />

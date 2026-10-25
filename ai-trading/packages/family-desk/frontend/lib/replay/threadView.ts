@@ -13,23 +13,37 @@ const ET = "America/New_York";
 export const TREND_WEEKS = 2;
 export const TREND_DAYS_PER_WEEK = 3;
 
+const cents = (value: number) => Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const whole = (value: number) => Math.abs(Math.round(value)).toLocaleString("en-US");
 
-/** "$50,123": a balance, whole dollars. */
+// One money rule (D-044): every dollar figure is dollars and cents, so the journal, the hub and the trade lines
+// agree to the cent. Only an axis tick may drop the cents (`formatAxisDollars`).
+
+/** "$50,123.40": a balance, dollars and cents. */
 export function formatBalance(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return EMPTY_VALUE;
-  return `${Math.round(value) < 0 ? MINUS : ""}$${whole(value)}`;
+  const text = cents(value);
+  return `${value < 0 && Number(text.replaceAll(",", "")) !== 0 ? MINUS : ""}$${text}`;
 }
 
-/** "+$112" / "−$247" / "$0": a day's result or the change in a balance, whole dollars; the sign is the cue. */
+/** "+$1,565.00" / "−$246.60" / "$0.00": a day's result or the change in a balance; the sign is the cue. */
 export function formatDayResult(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return EMPTY_VALUE;
-  const rounded = Math.round(value);
-  if (rounded === 0) return "$0";
-  return `${rounded > 0 ? "+" : MINUS}$${whole(value)}`;
+  if (Number(cents(value).replaceAll(",", "")) === 0) return "$0.00";
+  return `${value > 0 ? "+" : MINUS}$${cents(value)}`;
 }
 
-export const dayResultTone = (value: number | null | undefined): Tone => moneyTone(value == null ? value : Math.round(value));
+/** "$50,000": an amount she chose (starting balance, max loss), whole dollars; a figure the ledger produced uses `formatBalance`. */
+export const formatWhole = (value: number): string => `${value < 0 ? MINUS : ""}$${whole(value)}`;
+
+/** "$50,123" / "+$1,565" / "−$247": an axis tick, whole dollars (a scale, not a figure to read to the cent). */
+export function formatAxisDollars(value: number, signed = false): string {
+  const rounded = Math.round(value);
+  if (rounded === 0) return "$0";
+  return `${rounded < 0 ? MINUS : signed ? "+" : ""}$${whole(value)}`;
+}
+
+export const dayResultTone = (value: number | null | undefined): Tone => moneyTone(value);
 
 export const threadModeLabel = (mode: PracticeThread["mode"]): string => (mode === "day" ? "Day trading" : "Swing");
 
@@ -45,7 +59,7 @@ export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): st
 /** "Started with $50,000 · +$123 so far". */
 export function startedWithText(thread: Pick<PracticeThread, "startingBalance" | "stats">): string {
   const change = thread.stats.balance - thread.startingBalance;
-  const start = formatBalance(thread.startingBalance);
+  const start = formatWhole(thread.startingBalance);
   return Math.round(change) === 0
     ? practiceText("threadStartedFlat", { start })
     : practiceText("threadStartedWith", { start, change: formatDayResult(change) });
@@ -220,6 +234,12 @@ const dayNumberOf = (daily: readonly ThreadDay[], result: number | undefined): s
   return row ? `day ${row.n}` : EMPTY_VALUE;
 };
 
+/** The worst day is the lowest result, which is a gain while no day has lost (D-045): the tile then says so. */
+const worstSub = (daily: readonly ThreadDay[], worst: number | undefined): string => {
+  const day = dayNumberOf(daily, worst);
+  return worst !== undefined && worst >= 0 ? `${day} · no losing day` : day;
+};
+
 /** The ten tiles of "Summary so far". Wins and losses count practice trades; today's day is still open and not counted. */
 export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTile[] {
   const { stats } = thread.thread;
@@ -233,7 +253,7 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
     { id: "avg_win", label: "Avg win", value: formatDayResult(stats.avgWinUsd), sub: PRACTICE_COPY.threadTilePerWin, tone: dayResultTone(stats.avgWinUsd) },
     { id: "avg_loss", label: "Avg loss", value: formatDayResult(stats.avgLossUsd), sub: PRACTICE_COPY.threadTilePerLoss, tone: dayResultTone(stats.avgLossUsd) },
     { id: "best", label: "Best day", value: formatDayResult(stats.bestDayUsd), sub: dayNumberOf(thread.daily, stats.bestDayUsd), tone: dayResultTone(stats.bestDayUsd) },
-    { id: "worst", label: "Worst day", value: formatDayResult(stats.worstDayUsd), sub: dayNumberOf(thread.daily, stats.worstDayUsd), tone: dayResultTone(stats.worstDayUsd) },
+    { id: "worst", label: "Worst day", value: formatDayResult(stats.worstDayUsd), sub: worstSub(thread.daily, stats.worstDayUsd), tone: dayResultTone(stats.worstDayUsd) },
     { id: "adherence", label: "Adherence trend", value: adherenceTrendText(stats), sub: PRACTICE_COPY.threadTileAdherenceBy, tone: "flat" },
   ];
 }
@@ -247,7 +267,7 @@ export function planRows(plan: PracticeThread["plan"]): Array<{ id: string; labe
     { id: "shares", label: PRACTICE_COPY.threadShares, value: PRACTICE_COPY.threadSharesPerEntry },
     { id: "stop", label: "Stop on every entry", value: plan.stopNoteOnEntry === "yes" ? "Yes" : "No" },
     { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
-    { id: "max_loss", label: "Max loss, pretend dollars a day", value: plan.maxLossUsd === undefined ? "None" : formatBalance(plan.maxLossUsd) },
+    { id: "max_loss", label: "Max loss, pretend dollars a day", value: plan.maxLossUsd === undefined ? "None" : formatWhole(plan.maxLossUsd) },
     { id: "max_trades", label: "Max trades a day", value: plan.maxTrades === undefined ? "None" : String(plan.maxTrades) },
   ];
 }

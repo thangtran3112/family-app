@@ -5,8 +5,10 @@ import { activeThread, freshThread, thread, threadBrief, threadDays } from "./th
 import {
   adherenceTrendText,
   briefLine,
+  formatAxisDollars,
   formatBalance,
   formatDayResult,
+  formatWhole,
   hasNoDays,
   improvementOf,
   planRows,
@@ -21,21 +23,26 @@ import {
   winRateText,
 } from "./threadView.ts";
 
-test("money is whole dollars with the sign as the cue, and never prints NaN", () => {
-  assert.equal(formatBalance(50123.4), "$50,123");
-  assert.equal(formatBalance(-1200), "−$1,200");
+test("money is dollars and cents with the sign as the cue, and never prints NaN (D-044)", () => {
+  assert.equal(formatBalance(50123.4), "$50,123.40");
+  assert.equal(formatBalance(51565), "$51,565.00", "the recorded balance reads to the cent, like the trade lines");
+  assert.equal(formatBalance(-1200), "−$1,200.00");
+  assert.equal(formatBalance(-0.001), "$0.00");
   assert.equal(formatBalance(null), "—");
-  assert.equal(formatDayResult(112), "+$112");
-  assert.equal(formatDayResult(-246.6), "−$247");
-  assert.equal(formatDayResult(0.2), "$0");
-  assert.equal(formatDayResult(-0.2), "$0");
+  assert.equal(formatDayResult(112), "+$112.00");
+  assert.equal(formatDayResult(1565), "+$1,565.00");
+  assert.equal(formatDayResult(-246.6), "−$246.60");
+  assert.equal(formatDayResult(0.001), "$0.00");
+  assert.equal(formatDayResult(-0.001), "$0.00");
   assert.equal(formatDayResult(Number.NaN), "—");
+  assert.equal(formatWhole(50000), "$50,000", "an amount she chose stays whole dollars");
+  assert.deepEqual([formatAxisDollars(50123.4), formatAxisDollars(1565, true), formatAxisDollars(-246.6, true), formatAxisDollars(0.2)], ["$50,123", "+$1,565", "−$247", "$0"]);
 });
 
 test("the thread card reads in plain words", () => {
   assert.equal(threadName(activeThread.thread), "October thread");
   assert.equal(threadStartedText(activeThread.thread), "Started Oct 5");
-  assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123 so far");
+  assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123.00 so far");
   assert.equal(startedWithText(freshThread.thread), "Started with $50,000 · no change yet");
   assert.equal(winRateText(0.64), "64%");
   assert.equal(winRateText(undefined), "—");
@@ -43,9 +50,9 @@ test("the thread card reads in plain words", () => {
   assert.equal(adherenceTrendText({ adherenceFirstPct: 80, adherenceLastPct: 80 }), "80%");
   assert.equal(adherenceTrendText({}), "—");
   assert.equal(todayLine(null as never), "No practice day open · the next list opens when you resume");
-  assert.equal(todayLine(activeThread.today), "+$112 realized so far · 1 practice trade");
-  assert.equal(briefLine(threadBrief), "Thread balance $50,123 · today +$112");
-  assert.equal(briefLine({ ...threadBrief, today_pnl_usd: null }), "Thread balance $50,123");
+  assert.equal(todayLine(activeThread.today), "+$112.00 realized so far · 1 practice trade");
+  assert.equal(briefLine(threadBrief), "Thread balance $50,123.00 · today +$112.00");
+  assert.equal(briefLine({ ...threadBrief, today_pnl_usd: null }), "Thread balance $50,123.00");
   assert.equal(weeksInText(1), "first week");
   assert.equal(weeksInText(4), "4 weeks in");
 });
@@ -71,7 +78,7 @@ test("improvement stays a caveat until two weeks each have three practice days",
   assert.match(noneLatest.caveat?.reason ?? "", /week 2 has no practice days so far/);
   assert.match(noneLatest.compared?.intro ?? "", /week 2, no practice days so far/);
   assert.deepEqual(few.compared?.rows.map((row) => [row.label, row.first, row.latest]), [
-    ["Day results", "+$33", "+$90"],
+    ["Day results", "+$33.00", "+$90.00"],
     ["Days won", "2 of 4", "1 of 2"],
     ["Adherence", "75%", "92%"],
     ["Days practiced", "4", "2"],
@@ -85,7 +92,7 @@ test("improvement stays a caveat until two weeks each have three practice days",
   const enough = improvementOf(weeksOf([day(1, 1, -30), day(2, 1, -30), day(3, 1, -30), day(4, 2, 30), day(5, 2, 30), day(6, 2, 30)]));
   assert.equal(enough.trend, true);
   assert.equal(enough.caveat, null);
-  assert.equal(enough.verdict, "Week 2 averaged +$30 a practice day; week 1 averaged −$30.");
+  assert.equal(enough.verdict, "Week 2 averaged +$30.00 a practice day; week 1 averaged −$30.00.");
 });
 
 test("the ten tiles carry the stats, and an empty thread has no days", () => {
@@ -94,9 +101,14 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
   const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
   assert.deepEqual([byId.practiced!.value, byId.practiced!.sub], ["6", "of 8 days opened"]);
   assert.deepEqual([byId.win_rate!.value, byId.win_rate!.sub], ["64%", "9 of 14 trades"]);
-  assert.deepEqual([byId.best!.value, byId.best!.sub, byId.best!.tone], ["+$240", "day 5", "up"]);
-  assert.deepEqual([byId.worst!.value, byId.worst!.sub, byId.worst!.tone], ["−$182", "day 1", "down"]);
+  assert.deepEqual([byId.best!.value, byId.best!.sub, byId.best!.tone], ["+$240.00", "day 5", "up"]);
+  assert.deepEqual([byId.worst!.value, byId.worst!.sub, byId.worst!.tone], ["−$182.00", "day 1", "down"]);
   assert.equal(byId.adherence!.value, "71% → 83%");
+  // D-045: when no day lost, the worst day is a gain and the tile says so; with a single day it equals the best day.
+  const oneWin = { ...thread, thread: { ...thread.thread, stats: { ...thread.thread.stats, bestDayUsd: 1565, worstDayUsd: 1565 } }, daily: [{ ...thread.daily[0]!, n: 1, kind: "practiced" as const, pnl_usd: 1565 }] };
+  const win = Object.fromEntries(threadTiles(oneWin).map((tile) => [tile.id, tile]));
+  assert.deepEqual([win.best!.value, win.best!.sub], ["+$1,565.00", "day 1"]);
+  assert.deepEqual([win.worst!.value, win.worst!.sub, win.worst!.tone], ["+$1,565.00", "day 1 · no losing day", "up"]);
   const fresh = Object.fromEntries(threadTiles(freshThread).map((tile) => [tile.id, tile]));
   assert.deepEqual([fresh.win_rate!.value, fresh.win_rate!.sub], ["—", "no wins or losses yet"]);
   assert.equal(hasNoDays(freshThread), true);
