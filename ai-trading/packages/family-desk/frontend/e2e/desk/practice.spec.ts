@@ -621,10 +621,11 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
   });
 
-  // D-030, D-035: replacing the plan while a day is half practiced leaves two open days. Ending the practiced one must leave
-  // the hub in agreement with the balance and the review: the new plan's Day 1 reads "list ready" (not "in progress"), the
-  // thread's row is the day just ended (not a $0 for the unstarted one), and Continue and the review's Next day meet.
-  test("after the practiced day ends, the hub card and the thread row agree with the balance and the review", async ({ page, context }) => {
+  // D-030, D-035: replacing the plan while a day is half practiced ends that day (its P/L stays in the ledger), so only the
+  // new plan's Day 1 is open. The hub must agree with the balance and the review: Day 1 reads "list ready" (not "in
+  // progress"), the thread's row is the day just ended (not a $0 for the unstarted one), and Continue and the review's
+  // Next day meet.
+  test("replacing the plan ends the half-practiced day; the hub card and the thread row agree with the balance and the review", async ({ page, context }) => {
     test.setTimeout(180_000);
     const anyClose = {
       schemaVersion: 1,
@@ -664,17 +665,15 @@ test.describe("Practice", () => {
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
 
-    // Replace the plan while that day is half practiced: its new Day 1 opens as a second, unstarted day.
+    // Replace the plan while that day is half practiced: the old day ends, and the new plan's Day 1 is the only open day.
     await openDesk(page, "/practice");
     await daily.getByRole("button", { name: PRACTICE_COPY.planNew }).click();
     await savePlan();
     await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== practiced, { timeout: 60_000 });
     const fresh = page.url();
 
-    // End the practiced day from its own screen: the review offers the next day.
+    // The old day is over without the owner ending it: its own screen is the review, and it offers the next day.
     await page.goto(practiced);
-    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
-    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
 
     const [only] = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { id: number } }>;

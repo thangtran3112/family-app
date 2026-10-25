@@ -161,8 +161,9 @@ def patch_thread(
 
 def open_day(db: Session, thread_id: int) -> ReplayDayList | None:
     """The practice day under way: the unfinished day list of the thread's active daily plan, else a day a replaced
-    plan left half practised (it has a session whose trades still book, so it holds the thread open). A replaced
-    plan's day that was only listed holds nothing and is ignored."""
+    plan left half practised (it has a session whose trades still book, so it holds the thread open). A new plan ends
+    the day it replaces (D-030), so that second case is a day stored before then. A replaced plan's day that was only
+    listed holds nothing and is ignored."""
     return db.execute(
         select(ReplayDayList)
         .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)

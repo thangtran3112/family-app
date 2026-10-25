@@ -191,8 +191,9 @@ def _ensure_desk_universe(db: Session, svc: Services, now: datetime) -> None:
 def create_plan(
     db: Session, user_id: int, spec: PracticeBlockV1, svc: Services, thread: PracticeThread
 ) -> PracticePlan:
-    """Validate and save a plan, archive the one it replaces, freeze the universe, and mark prep as running (the
-    caller starts `run_prep`). Server rules that need a lookup: the day range, her filters, the premarket list time.
+    """Validate and save a plan, archive the one it replaces (ending its half-practised day), freeze the universe, and
+    mark prep as running (the caller starts `run_prep`). Server rules that need a lookup: the day range, her filters,
+    the premarket list time.
     The plan binds to `thread`, which carries the risk plan (D-007): the block's own plan fields are never read."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     first = date.fromisoformat(dumped["firstDay"])
@@ -218,6 +219,12 @@ def create_plan(
     now = svc.now()
     old = active_plan(db, user_id, lock=True)
     if old is not None:
+        # One open day at a time (D-030): a day the old plan left half practised ends with the plan. Its trades are
+        # already booked in the thread's ledger, so ending it keeps its P/L, and the new plan's Day 1 is the only day
+        # open (TODAY then agrees with the balance). A day that was only listed has booked nothing and is left alone.
+        under_way = _latest(db, old.id)
+        if under_way is not None and under_way.status == "practicing":
+            end_day(db, user_id, under_way.id, svc)
         old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live at a time
         db.flush()
     _ensure_desk_universe(db, svc, now)
