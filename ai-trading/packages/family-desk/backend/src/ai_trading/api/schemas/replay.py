@@ -11,7 +11,7 @@ armed strategy). A tape row is `[time, price, size, tick]`, oldest first.
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, FiniteFloat
+from pydantic import BaseModel, Field, FiniteFloat, field_serializer
 
 from ai_trading.api.schemas.common import Stamp
 from ai_trading.contracts.replay_session import ReplaySessionV1
@@ -177,6 +177,14 @@ class ReplaySessionOut(BaseModel):
     created_at: datetime
     ended_at: datetime | None
     stamp: Stamp
+
+    @field_serializer("spec")
+    def _spec_as_authored(
+        self, spec: ReplaySessionV1
+    ):  # no return annotation: the OpenAPI schema stays `ReplaySessionV1`
+        """The spec goes out the way she authored it: an unset plan field is absent, never null (the Zod contract,
+        which the web app parses it with, does not accept null there)."""
+        return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 class ReplaySessionSummaryOut(BaseModel):

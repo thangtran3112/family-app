@@ -224,11 +224,14 @@ def session_feed(
     session_id: int,
     interval: Interval | None = None,
     min_size: int = Query(default=0, ge=0, le=1_000_000),
+    min_notional: int = Query(default=0, ge=0, le=1_000_000_000),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    return _call(svc_mod.feed, db, user.id, session_id, services, interval=interval, min_size=min_size)
+    return _call(
+        svc_mod.feed, db, user.id, session_id, services, interval=interval, min_size=min_size, min_notional=min_notional
+    )
 
 
 # -- practice marks -----------------------------------------------------------------------------------------

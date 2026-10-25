@@ -266,19 +266,10 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       try {
         const result = await undoMark(id, last.id);
         if (!alive.current) return;
-        // The server's answer carries the new book; without one, the session is read again.
-        const fresh = result?.journal ? null : await loadReplaySession(id);
-        setSession((now) => {
-          const base = fresh ?? now;
-          if (!base) return now;
-          return {
-            ...base,
-            marks: base.marks.filter((item) => item.id !== last.id),
-            open_trade: result ? result.open_trade : base.open_trade,
-            journal: result?.journal ?? base.journal,
-          };
-        });
-        setView((now) => (now && result ? { ...now, openTrade: result.open_trade } : now));
+        setSession((now) =>
+          now ? { ...now, marks: now.marks.filter((item) => item.id !== last.id), open_trade: result.open_trade, journal: result.journal } : now,
+        );
+        setView((now) => (now ? { ...now, openTrade: result.open_trade } : now));
         dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
         say("info", PRACTICE_COPY.undone);
       } catch (error) {

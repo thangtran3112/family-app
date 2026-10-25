@@ -238,6 +238,24 @@ def test_feed_returns_lookback_plus_window_and_switches_interval(replay: TestCli
     assert all(pd.Timestamp(row[0]) <= OPEN + pd.Timedelta(seconds=1230) for row in five["prints"]["rows"])
 
 
+def test_the_served_spec_leaves_unset_plan_fields_out(replay: TestClient) -> None:
+    session = start(replay)
+    assert session["spec"]["plan"] == {"stopRequired": "yes", "signalOnly": "no", "maxLossUsd": 500, "maxTrades": 3}
+    assert (
+        replay.get(f"{BASE}/sessions/{session['id']}", headers=OWNER).json()["spec"]["plan"] == session["spec"]["plan"]
+    )
+
+
+def test_feed_honors_the_big_print_filter(replay: TestClient) -> None:
+    sid = start(replay)["id"]
+    advance(replay, sid, 60)
+    everything = replay.get(f"{BASE}/sessions/{sid}/feed", headers=OWNER).json()["prints"]
+    big = replay.get(f"{BASE}/sessions/{sid}/feed?min_notional=1000000000", headers=OWNER).json()["prints"]
+    assert everything["rows"]
+    assert big["rows"] == [] and big["shown"] == 0
+    assert big["count"] == everything["count"] and big["volume"] == everything["volume"]
+
+
 def test_size_filter_and_cap_keep_count_and_volume_whole(replay: TestClient) -> None:
     results = []
     for n, body in enumerate(({"max_prints": 2000}, {"max_prints": 5}, {"min_size": 100})):

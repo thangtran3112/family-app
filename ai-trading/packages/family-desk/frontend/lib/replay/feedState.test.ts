@@ -16,8 +16,8 @@ test("a feed answer becomes the view without any cutting", () => {
 });
 
 test("advance merges bars by start time and the playhead only moves forward", () => {
-  const view = applyAdvance(base(), next({ bars: [{ t: "2026-04-07T14:00:00Z", o: 1, h: 2, l: 1, c: 2, v: 10 }] }));
-  const again = applyAdvance(view, next({ revealed_through: "2026-04-07T14:07:13Z", bars: [{ t: "2026-04-07T14:00:00Z", o: 1, h: 3, l: 1, c: 3, v: 20 }, { t: "2026-04-07T14:05:00Z", o: 3, h: 3, l: 3, c: 3, v: 5 }] }));
+  const view = applyAdvance(base(), next({ bars: [{ t: "2026-04-07T14:00:00Z", o: 1, h: 2, l: 1, c: 2, v: 10, ext: false }] }));
+  const again = applyAdvance(view, next({ revealed_through: "2026-04-07T14:07:13Z", bars: [{ t: "2026-04-07T14:00:00Z", o: 1, h: 3, l: 1, c: 3, v: 20, ext: false }, { t: "2026-04-07T14:05:00Z", o: 3, h: 3, l: 3, c: 3, v: 5, ext: false }] }));
   assert.deepEqual(again.bars.map((bar) => [bar.t, bar.h]), [["2026-04-07T14:00:00Z", 3], ["2026-04-07T14:05:00Z", 3]]);
   const late = applyAdvance(again, next({ revealed_through: "2026-04-07T14:07:05Z" }));
   assert.equal(late, again);
@@ -56,7 +56,7 @@ test("the chart gets closed bars plus the forming bar, replacing a closed bar wi
 });
 
 test("mergeBars returns the same array when nothing arrived", () => {
-  const bars = [{ t: "2026-04-07T14:00:00Z", o: 1, h: 1, l: 1, c: 1, v: 1 }];
+  const bars = [{ t: "2026-04-07T14:00:00Z", o: 1, h: 1, l: 1, c: 1, v: 1, ext: false }];
   assert.equal(mergeBars(bars, []), bars);
 });
 
@@ -64,8 +64,8 @@ test("pace prefers the API's numbers, else counts the last 10 market seconds acr
   const withApi = applyAdvance(base(), next({}));
   assert.deepEqual(paceOf(withApi), { printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 });
 
-  const noPace = (to: string, count: number, volume: number) => next({ revealed_through: to, prints: { feed: "sip", rows: [], count, volume, shown: 0 } });
-  let view = viewFromFeed(ReplayFeedSchema.parse({ ...feed, revealed_through: "2026-04-07T14:07:00Z", prints: { feed: "sip", rows: [], count: 0, volume: 0, shown: 0 } }), "5m");
+  const noPace = (to: string, count: number, volume: number) => next({ revealed_through: to, prints: { feed: "sip", rows: [], count, volume, shown: 0, big_print_usd: 200000, pace: null } });
+  let view = viewFromFeed(ReplayFeedSchema.parse({ ...feed, revealed_through: "2026-04-07T14:07:00Z", prints: { feed: "sip", rows: [], count: 0, volume: 0, shown: 0, big_print_usd: 200000, pace: null } }), "5m");
   view = applyAdvance(view, noPace("2026-04-07T14:07:05Z", 50, 5000));
   view = applyAdvance(view, noPace("2026-04-07T14:07:10Z", 100, 20000));
   const pace = paceOf(view);

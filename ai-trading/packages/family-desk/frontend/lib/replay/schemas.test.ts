@@ -10,6 +10,7 @@ import {
   ReplaySessionSchema,
   ReplaySessionsSchema,
 } from "./schemas.ts";
+import { StampSchema } from "../api/schemas.ts";
 
 test("the plan's payloads parse", () => {
   assert.equal(ReplayDaysSchema.parse(daysResponse).days.length, 3);
@@ -19,21 +20,27 @@ test("the plan's payloads parse", () => {
   assert.equal(MarkResultSchema.parse(markResult).mark.kind, "long_entry");
 });
 
-test("optional API extras may be absent: pace, big_print_usd, window_start", () => {
-  const bare = { ...delta, prints: { feed: "sip", rows: [], count: 0, volume: 0, shown: 0 } };
-  const parsed = ReplayDeltaSchema.parse(bare);
-  assert.equal(parsed.prints.pace, undefined);
-  assert.equal(ReplayFeedSchema.parse({ ...bare, interval: "1m" }).window_start, undefined);
+test("an idle tape parses: no pace, no big-print threshold crossed", () => {
+  const quiet = { ...delta, prints: { ...delta.prints, rows: [], count: 0, volume: 0, shown: 0, pace: null } };
+  const parsed = ReplayDeltaSchema.parse(quiet);
+  assert.equal(parsed.prints.pace, null);
+  assert.equal(parsed.prints.big_print_usd, 200000);
 });
 
-test("the session list reads as an array from either envelope", () => {
+test("the contract's required fields are required: the feed's interval and window_start, undo's journal", () => {
+  assert.equal(ReplayFeedSchema.safeParse({ ...feed, window_start: undefined }).success, false);
+  assert.equal(ReplayFeedSchema.safeParse({ ...feed, interval: "30m" }).success, false);
+  assert.equal(MarkUndoSchema.safeParse({ removed_mark_id: 3, open_trade: null }).success, false);
+  assert.equal(MarkUndoSchema.parse({ removed_mark_id: 3, open_trade: null, journal: markResult.journal }).open_trade, null);
+});
+
+test("the session list is a bare array", () => {
   assert.equal(ReplaySessionsSchema.parse([sessionSummary]).length, 1);
-  assert.equal(ReplaySessionsSchema.parse({ sessions: [sessionSummary] })[0]?.symbol, "NVDA");
+  assert.equal(ReplaySessionsSchema.safeParse({ sessions: [sessionSummary] }).success, false);
 });
 
-test("undo accepts the new book or an empty answer", () => {
-  assert.equal(MarkUndoSchema.parse(undefined), undefined);
-  assert.equal(MarkUndoSchema.parse({ removed_mark_id: 3, open_trade: null })?.open_trade, null);
+test("every Practice response may carry stamp.freshness replay, and the shared Stamp accepts it too", () => {
+  assert.equal(StampSchema.parse({ as_of: "2026-04-07T14:07:00Z", source: "alpaca", quality: "delayed-15m", freshness: "replay" }).freshness, "replay");
 });
 
 test("malformed payloads are rejected", () => {

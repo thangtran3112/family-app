@@ -93,6 +93,7 @@ def sources(consensus_=None, earnings=None, targets_=None) -> DataSources:
         targets=targets_ or FakeFeed(targets),
         universe=unused,
         quotes=unused,
+        trades=unused,
     )
 
 

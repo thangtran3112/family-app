@@ -19,6 +19,9 @@ from sqlalchemy.orm import Session
 
 from ai_trading.db.models import FeedHealth
 
+# The Practice specs replay the one fixture day (`replay/fixture.py`); only this test-only runtime turns that on.
+os.environ.setdefault("DESK_REPLAY_STUB", "1")
+
 # The control routes below are plain `def`, so FastAPI runs them in its thread pool. `reset_database` blocks on a
 # TRUNCATE until every other session is done; as `async def` it would hold the event loop, and a request whose
 # session closes through the loop (a page navigated away mid-request) could then never finish: a deadlock.

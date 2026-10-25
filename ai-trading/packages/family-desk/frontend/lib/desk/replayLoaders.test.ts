@@ -40,9 +40,6 @@ test("the read loaders GET their documented paths with the query they are given"
   d = fakeDesk([sessionSummary]);
   assert.equal((await loadReplaySessions({ status: "active", limit: 5 }, { client: d.client })).length, 1);
   assert.deepEqual(d.calls[0], { method: "GET", path: "/api/desk/replay/sessions?status=active&limit=5", body: undefined });
-  d = fakeDesk({ sessions: [sessionSummary] });
-  assert.equal((await loadReplaySessions({}, { client: d.client })).length, 1, "the wrapped list reads the same");
-  assert.equal(d.calls[0]!.path, "/api/desk/replay/sessions");
 
   d = fakeDesk(session);
   assert.equal((await loadReplaySession(12, { client: d.client })).id, 12);
@@ -95,12 +92,9 @@ test("feed sends its tape query; a mark posts the mark itself; undo deletes and 
   assert.equal((await placeMark(12, mark, { client: d.client })).mark.id, 3);
   assert.deepEqual(d.calls[0], { method: "POST", path: "/api/desk/replay/sessions/12/marks", body: mark });
 
-  d = fakeDesk(undefined, 204);
-  assert.equal(await undoMark(12, 3, { client: d.client }), undefined);
+  d = fakeDesk({ removed_mark_id: 3, open_trade: null, journal: markResult.journal });
+  assert.equal((await undoMark(12, 3, { client: d.client })).open_trade, null);
   assert.deepEqual(d.calls[0], { method: "DELETE", path: "/api/desk/replay/sessions/12/marks/3", body: undefined });
-
-  d = fakeDesk({ removed_mark_id: 3, open_trade: null });
-  assert.equal((await undoMark(12, 3, { client: d.client }))?.open_trade, null);
 });
 
 test("a payload that does not match the contract rejects as malformed", async () => {

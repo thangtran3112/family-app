@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { ReplaySessionV1Schema } from "@ai-trading/contracts/replay-session-v1";
+import type { components } from "../api/openapi.js";
 
-// Response shapes of the Practice (replay) endpoints (02o §b2, §c5). The generated OpenAPI file does not
-// carry these routes yet, so they are written by hand against the plan; once the backend stream
-// regenerates `openapi.*`, add `satisfies z.ZodType<components["schemas"][…]>` the way lib/api/schemas.ts
-// does. Fields the plan leaves open (`pace`, `big_print_usd`, `window_start`, the session list envelope)
-// are optional or accept both shapes, so a backend that follows the plan to the letter still parses.
+// Response shapes of the Practice (replay) endpoints (02o §b2, §c5), checked against the generated OpenAPI
+// (`lib/api/openapi.d.ts`) with `satisfies z.ZodType<components["schemas"][…]>` the way lib/api/schemas.ts does:
+// a field the backend adds, drops or retypes breaks `pnpm typecheck` here instead of a screen at run time.
 
 const finite = z.number().finite();
 const timestamp = z.iso.datetime({ offset: true });
@@ -24,27 +23,27 @@ export const ReplayStampSchema = z.object({
   source: z.string().nullable(),
   quality,
   freshness: z.literal("replay"),
-});
+}) satisfies z.ZodType<components["schemas"]["Stamp"]>;
 
 // -- days ---------------------------------------------------------------------------------------------------
 
 export const ReplayDaySchema = z.object({
   symbol: z.string(),
   day: z.iso.date(),
-  weekday: z.string(),
+  weekday: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri"]),
   rank: finite.int(),
   rv_pct_rank: finite,
   gap_pct: finite.nullable(),
-  tags: z.array(z.string()),
+  tags: z.array(z.enum(["gap_up", "gap_down", "heavy_volume", "earnings"])),
   attempts: finite.int(),
-});
+}) satisfies z.ZodType<components["schemas"]["ReplayDayOut"]>;
 
 export const ReplayDaysSchema = z.object({
   days: z.array(ReplayDaySchema),
   symbols: z.array(z.string()),
   lookback_sessions: finite.int(),
-  stamp: ReplayStampSchema.optional(),
-});
+  stamp: ReplayStampSchema,
+}) satisfies z.ZodType<components["schemas"]["ReplayDaysOut"]>;
 
 // -- marks, trades, journal -----------------------------------------------------------------------------------
 
@@ -59,7 +58,7 @@ export const MarkSchema = z.object({
   note: z.string().nullable(),
   trade_no: finite.int().nullable(),
   source: z.enum(["her", "auto"]),
-});
+}) satisfies z.ZodType<components["schemas"]["MarkOut"]>;
 
 export const OpenTradeSchema = z.object({
   trade_no: finite.int(),
@@ -70,7 +69,7 @@ export const OpenTradeSchema = z.object({
   last_price: finite,
   unrealized_usd: finite,
   r: finite.nullable(),
-});
+}) satisfies z.ZodType<components["schemas"]["OpenTradeOut"]>;
 
 const JournalTotalsSchema = z.object({
   pnl_usd: finite,
@@ -83,7 +82,7 @@ const JournalTotalsSchema = z.object({
   avg_win_usd: finite.nullable(),
   avg_loss_usd: finite.nullable(),
   largest_loss_usd: finite.nullable(),
-});
+}) satisfies z.ZodType<components["schemas"]["JournalTotalsOut"]>;
 
 const JournalTradeSchema = z.object({
   no: finite.int(),
@@ -98,21 +97,21 @@ const JournalTradeSchema = z.object({
   stop_price: finite.nullable(),
   on_signal: z.boolean(),
   exit_source: z.enum(["her", "auto"]),
-});
+}) satisfies z.ZodType<components["schemas"]["JournalTradeOut"]>;
 
 const AdherenceCheckSchema = z.object({
-  id: z.string(),
+  id: z.enum(["stop_set", "stop_honored", "on_signal", "max_loss", "max_trades"]),
   label: z.string(),
   applicable: z.boolean(),
   passed: z.boolean(),
   detail: z.string(),
-});
+}) satisfies z.ZodType<components["schemas"]["AdherenceCheckOut"]>;
 
 const AdherenceSchema = z.object({
   score_pct: finite.int().nullable(),
-  hint: z.string().nullable().optional(),
+  hint: z.string().nullable(),
   checks: z.array(AdherenceCheckSchema),
-});
+}) satisfies z.ZodType<components["schemas"]["AdherenceOut"]>;
 
 const SignalVsTradeSchema = z.object({
   time: timestamp,
@@ -121,9 +120,9 @@ const SignalVsTradeSchema = z.object({
   chg_15m_pct: finite.nullable(),
   chg_30m_pct: finite.nullable(),
   her: z.string(),
-});
+}) satisfies z.ZodType<components["schemas"]["SignalVsTradeOut"]>;
 
-const PnlPointSchema = z.object({ t: timestamp, pnl_usd: finite });
+const PnlPointSchema = z.object({ t: timestamp, pnl_usd: finite }) satisfies z.ZodType<components["schemas"]["PnlPointOut"]>;
 
 export const JournalSchema = z.object({
   totals: JournalTotalsSchema,
@@ -131,7 +130,7 @@ export const JournalSchema = z.object({
   adherence: AdherenceSchema,
   signals_vs_trades: z.array(SignalVsTradeSchema),
   pnl_series: z.array(PnlPointSchema),
-});
+}) satisfies z.ZodType<components["schemas"]["JournalOut"]>;
 
 // -- sessions -----------------------------------------------------------------------------------------------
 
@@ -140,9 +139,9 @@ const ArmedSchema = z.object({
   id: finite.int(),
   version_id: finite.int(),
   name: z.string(),
-  bias: z.enum(["bullish", "bearish", "neutral"]).nullable().optional(),
+  bias: z.enum(["bullish", "bearish", "neutral"]).nullable(),
   fires_so_far: finite.int(),
-});
+}) satisfies z.ZodType<components["schemas"]["ArmedOut"]>;
 
 export const ReplaySessionSchema = z.object({
   id: finite.int(),
@@ -159,9 +158,10 @@ export const ReplaySessionSchema = z.object({
   journal: JournalSchema,
   notes: z.string().nullable(),
   rating: finite.int().nullable(),
-  ended_at: timestamp.nullable().optional(),
+  created_at: timestamp,
+  ended_at: timestamp.nullable(),
   stamp: ReplayStampSchema,
-});
+}) satisfies z.ZodType<components["schemas"]["ReplaySessionOut"]>;
 
 export const ReplaySessionSummarySchema = z.object({
   id: finite.int(),
@@ -176,12 +176,10 @@ export const ReplaySessionSummarySchema = z.object({
   pnl_usd: finite.nullable(),
   adherence_pct: finite.int().nullable(),
   updated_at: timestamp,
-});
+}) satisfies z.ZodType<components["schemas"]["ReplaySessionSummaryOut"]>;
 
-/** The list route answers a bare array or `{ sessions: […] }`; both read as an array. */
-export const ReplaySessionsSchema = z
-  .union([z.array(ReplaySessionSummarySchema), z.object({ sessions: z.array(ReplaySessionSummarySchema) })])
-  .transform((value) => (Array.isArray(value) ? value : value.sessions));
+/** The list route answers a bare array. */
+export const ReplaySessionsSchema = z.array(ReplaySessionSummarySchema);
 
 // -- advance and feed ---------------------------------------------------------------------------------------
 
@@ -192,18 +190,20 @@ export const ReplayBarSchema = z.object({
   l: finite,
   c: finite,
   v: finite,
-  ext: z.boolean().optional(),
-});
+  ext: z.boolean(),
+}) satisfies z.ZodType<components["schemas"]["ReplayBarOut"]>;
 
-const FormingBarSchema = z.object({ t: timestamp, o: finite, h: finite, l: finite, c: finite, v: finite });
+const FormingBarSchema = z.object({ t: timestamp, o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
+  components["schemas"]["FormingBarOut"]
+>;
 
 const PaceSchema = z.object({
   window_s: finite,
   prints_per_s: finite,
   shares_per_s: finite,
-  x_of_avg: finite.nullable().optional(),
-  band: z.enum(["quiet", "steady", "busy", "frantic"]).nullable().optional(),
-});
+  x_of_avg: finite.nullable(),
+  band: z.enum(["quiet", "steady", "busy", "frantic"]).nullable(),
+}) satisfies z.ZodType<components["schemas"]["PaceOut"]>;
 
 const TickSchema = z.union([z.literal(-1), z.literal(0), z.literal(1)]);
 
@@ -214,20 +214,20 @@ const PrintsSchema = z.object({
   count: finite.int(),
   volume: finite,
   shown: finite.int(),
-  big_print_usd: finite.nullable().optional(),
-  pace: PaceSchema.nullable().optional(),
-});
+  big_print_usd: finite.int(),
+  pace: PaceSchema.nullable(),
+}) satisfies z.ZodType<components["schemas"]["PrintsOut"]>;
 
 export const ReplaySignalSchema = z.object({
   source: ArmedSourceSchema,
   id: finite.int(),
   name: z.string(),
-  bias: z.enum(["bullish", "bearish", "neutral"]).nullable().optional(),
+  bias: z.enum(["bullish", "bearish", "neutral"]).nullable(),
   bar_time: timestamp,
   bar_close: timestamp,
   close: finite,
-  evidence: z.record(z.string(), finite).optional(),
-});
+  evidence: z.record(z.string(), finite),
+}) satisfies z.ZodType<components["schemas"]["ReplaySignalOut"]>;
 
 const LevelsSchema = z.object({
   prior_close: finite.nullable().optional(),
@@ -235,9 +235,9 @@ const LevelsSchema = z.object({
   session_low: finite.nullable().optional(),
   opening_range_high: finite.nullable().optional(),
   opening_range_low: finite.nullable().optional(),
-});
+}) satisfies z.ZodType<components["schemas"]["ReplayLevelsOut"]>;
 
-const LastSchema = z.object({ price: finite, at: timestamp });
+const LastSchema = z.object({ price: finite, at: timestamp }) satisfies z.ZodType<components["schemas"]["LastPrintOut"]>;
 
 /** What `advance` returns for `(previous, revealed_through]`; `feed` returns the same object for everything revealed so far. */
 export const ReplayDeltaSchema = z.object({
@@ -251,12 +251,12 @@ export const ReplayDeltaSchema = z.object({
   last: LastSchema.nullable(),
   open_trade: OpenTradeSchema.nullable(),
   stamp: ReplayStampSchema,
-});
+}) satisfies z.ZodType<components["schemas"]["AdvanceOut"]>;
 
 export const ReplayFeedSchema = ReplayDeltaSchema.extend({
-  interval: ReplayIntervalSchema.optional(),
-  window_start: timestamp.optional(),
-});
+  interval: ReplayIntervalSchema,
+  window_start: timestamp,
+}) satisfies z.ZodType<components["schemas"]["FeedOut"]>;
 
 // -- marks --------------------------------------------------------------------------------------------------
 
@@ -264,13 +264,14 @@ export const MarkResultSchema = z.object({
   mark: MarkSchema,
   open_trade: OpenTradeSchema.nullable(),
   journal: JournalSchema,
-});
+}) satisfies z.ZodType<components["schemas"]["MarkResultOut"]>;
 
-/** Undo answers the new book (`removed_mark_id`, `open_trade`, `journal`); an empty 204 also reads as success. */
-export const MarkUndoSchema = z.union([
-  z.object({ removed_mark_id: finite.int().optional(), open_trade: OpenTradeSchema.nullable(), journal: JournalSchema.optional() }),
-  z.undefined(),
-]);
+/** Undo answers the new book: the removed mark, the open trade and the journal. */
+export const MarkUndoSchema = z.object({
+  removed_mark_id: finite.int(),
+  open_trade: OpenTradeSchema.nullable(),
+  journal: JournalSchema,
+}) satisfies z.ZodType<components["schemas"]["MarkUndoOut"]>;
 
 export type ReplayStamp = z.infer<typeof ReplayStampSchema>;
 export type ReplayInterval = z.infer<typeof ReplayIntervalSchema>;

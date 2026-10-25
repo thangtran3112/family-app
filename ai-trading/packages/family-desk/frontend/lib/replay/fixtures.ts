@@ -1,9 +1,11 @@
-// Illustrative Practice payloads in the shapes of 02o §b2 and §c5. The numbers are made up (they are not market data);
-// the node tests parse them with the real schemas, and the components can be developed against them.
+// Illustrative Practice payloads in the shapes of the generated contract (`lib/api/openapi.d.ts`). The numbers are
+// made up (they are not market data); the node tests parse them with the real schemas, and the components can be
+// developed against them.
+import type { ReplayDays } from "./schemas.ts";
 
 export const stamp = { as_of: "2026-04-07T14:07:00Z", source: "alpaca", quality: "delayed-15m", freshness: "replay" } as const;
 
-export const daysResponse = {
+export const daysResponse: ReplayDays = {
   days: [
     { symbol: "NVDA", day: "2026-04-07", weekday: "Tue", rank: 1, rv_pct_rank: 99.6, gap_pct: -6.2, tags: ["gap_down", "heavy_volume", "earnings"], attempts: 0 },
     { symbol: "NVDA", day: "2026-02-19", weekday: "Thu", rank: 2, rv_pct_rank: 99.2, gap_pct: 3.1, tags: ["gap_up"], attempts: 1 },
@@ -65,6 +67,8 @@ export const session = {
   journal,
   notes: null,
   rating: null,
+  created_at: "2026-04-07T13:29:40Z",
+  ended_at: null,
   stamp,
 } as const;
 

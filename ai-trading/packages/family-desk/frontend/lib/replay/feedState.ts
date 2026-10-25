@@ -114,9 +114,8 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
 }
 
 /** The chart's bars: closed bars plus the forming one (replacing a closed bar with the same start). */
-export function chartBars(view: Pick<ReplayView, "bars" | "forming">): Array<ReplayBar & { ext: boolean }> {
-  const bars = view.forming ? mergeBars(view.bars, [{ ...view.forming, ext: view.bars.at(-1)?.ext }]) : view.bars;
-  return bars.map((bar) => ({ ...bar, ext: bar.ext ?? false }));
+export function chartBars(view: Pick<ReplayView, "bars" | "forming">): ReplayBar[] {
+  return view.forming ? mergeBars(view.bars, [{ ...view.forming, ext: view.bars.at(-1)?.ext ?? false }]) : view.bars;
 }
 
 /**

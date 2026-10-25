@@ -12,7 +12,7 @@ test("the top bar, left rail and status bar show the Technical chrome at the see
   const top = page.locator(".dk-top");
   await expect(top.getByRole("link", { name: "Family Desk" })).toHaveAttribute("href", "/");
   await expect(top.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Technical" })).toBeChecked();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
+  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
   // At 1180 the search collapses to an icon button that opens the field.
   if (compact) await expect(top.getByRole("button", { name: "Search symbols, ⌘K" })).toBeVisible();
   else await expect(top.getByRole("combobox", { name: "Search symbols" })).toBeVisible();
@@ -40,6 +40,7 @@ test("each primary nav link opens its route and keeps the top bar and left rail"
     ["Watchlists", "/watchlists"],
     ["Alerts", "/alerts"],
     ["Strategies", "/strategies/library"],
+    ["Practice", "/practice"],
     ["Today", "/"],
   ];
   for (const [label, path] of routes) {
@@ -122,7 +123,7 @@ test("a Fundamental route shows the wrong-lane screen; Switch view and the lane 
   await expectCleanScreen(page);
 
   await top.getByRole("radio", { name: "Technical" }).click();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
+  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
   await expect(main.getByRole("heading", { name: "This screen belongs to the Fundamental view" })).toBeVisible();
   await main.getByRole("link", { name: "Back to Today" }).click();
   await expect(page).toHaveURL(/\/$/);

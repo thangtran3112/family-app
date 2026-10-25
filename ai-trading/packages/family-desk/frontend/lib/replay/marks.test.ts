@@ -5,7 +5,7 @@ import { barStartFor, canUndoLast, windowIndex, levelLines, levelRows, markLabel
 import { ReplaySignalSchema, type ReplayBar, type ReplayMark } from "./schemas.ts";
 import { ms } from "./time.ts";
 
-const bar = (t: string): ReplayBar => ({ t, o: 1, h: 1, l: 1, c: 1, v: 1 });
+const bar = (t: string): ReplayBar => ({ t, o: 1, h: 1, l: 1, c: 1, v: 1, ext: false });
 const bars = ["13:30", "13:35", "13:40", "13:45", "13:50"].map((hm) => bar(`2026-04-07T${hm}:00Z`));
 const withMark = (overrides: Partial<ReplayMark>): ReplayMark => ({ ...mark, ...overrides });
 

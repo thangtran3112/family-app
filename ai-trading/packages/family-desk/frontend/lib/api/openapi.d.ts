@@ -4100,6 +4100,7 @@ export interface operations {
             query?: {
                 interval?: ("1m" | "5m" | "15m") | null;
                 min_size?: number;
+                min_notional?: number;
             };
             header?: never;
             path: {

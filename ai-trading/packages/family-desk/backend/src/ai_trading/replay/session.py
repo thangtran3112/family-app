@@ -625,7 +625,14 @@ def advance(
 
 
 def feed(
-    db: Session, user_id: int, session_id: int, svc: Services, *, interval: str | None, min_size: int = 0
+    db: Session,
+    user_id: int,
+    session_id: int,
+    svc: Services,
+    *,
+    interval: str | None,
+    min_size: int = 0,
+    min_notional: int = 0,
 ) -> dict[str, Any]:
     """Everything revealed so far at `interval`: the lookback for warm-up, the revealed window, the last minute of
     prints, the released signals (all of them once the session has ended). Never past `revealed_through`."""
@@ -644,7 +651,7 @@ def feed(
         through - FEED_TAPE_WINDOW,
         through,
         min_size=min_size,
-        min_notional=0,
+        min_notional=min_notional,
         max_prints=FEED_PRINTS,
         pace_too=True,
     )
