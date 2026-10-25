@@ -62,7 +62,7 @@ validate_paths() {
 validate_desk_path() {
   local rel="$1" route prefix dotted
   case "$rel" in
-    index.html|index.txt|404.html|favicon.ico|_next/static/*) return 0 ;;
+    index.html|index.txt|404.html|favicon.ico|icon.svg|_next/static/*) return 0 ;;
   esac
   for route in '' _not-found today screener screener/filters strategies strategies/new strategies/library watchlists technicals alerts alerts/new futures futures/specs settings more paper holdings ask covered-calls stocks backtests practice practice/replay practice/journal practice/day; do
     prefix="${route:+$route/}"; dotted="${route//\//.}"
