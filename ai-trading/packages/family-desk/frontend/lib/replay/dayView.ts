@@ -41,6 +41,18 @@ export function listHeaderText(list: Pick<DayList, "list_at" | "data_through" | 
   });
 }
 
+/** What is armed on the plan's practice days: its picked filters by name, other strategies by count. */
+export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): string {
+  const armed = plan.spec.setup.armed;
+  if (armed.length === 0) return PRACTICE_COPY.planArmedNone;
+  const names = armed
+    .filter((ref) => ref.source === "filter")
+    .map((ref) => plan.filters.find((filter) => filter.id === ref.id)?.name ?? "A filter");
+  const alerts = armed.length - names.length;
+  if (alerts > 0) names.push(`${alerts} alert ${alerts === 1 ? "strategy" : "strategies"}`);
+  return practiceText("planArmed", { names: names.join(" · ") });
+}
+
 export type PlanCardAction = "new" | "start" | "continue" | "none";
 export type PlanCard = { headline: string; detail: string | null; action: PlanCardAction };
 
@@ -101,8 +113,8 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
 }
 
 export function listWarning(list: Pick<DayList, "warnings" | "candidates">): string | null {
-  if (list.candidates.length === 0) return PRACTICE_COPY.dayNoNames;
-  return list.warnings[0] ?? null;
+  // The server says why a list is short; the plain line stands in for a list it had no reason for.
+  return list.warnings[0] ?? (list.candidates.length === 0 ? PRACTICE_COPY.dayNoNames : null);
 }
 
 // ---- the review ----------------------------------------------------------------------------------------------

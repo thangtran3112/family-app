@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openNextDay } from "@/lib/desk/replay";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -13,11 +13,14 @@ import {
   LIST_TIMES,
   MAX_FILTERS,
   SESSION_CHOICES,
+  clock12,
   defaultPlanDraft,
+  listTimeNeed,
   planProblems,
-  toggleFilter,
   validatePlanDraft,
+  withFilterToggled,
   withListTime,
+  type FilterTimings,
   type PlanDraft,
   type PlanProblems,
 } from "@/lib/replay/planSetup";
@@ -27,13 +30,18 @@ import { PlanFields } from "./PlanFields";
 import styles from "./hub.module.css";
 
 /** The daily-list plan (02o-b v1): her filters, when the list is built, how many days, and the practice setup that
- *  every day shares. Saving it starts preparing the data and, when that is ready, opens Day 1. */
+ *  every day shares. "Start day" saves it (replacing a current plan), starts preparing the data and, when that is ready,
+ *  opens Day 1. A filter she picks is armed for the practice days; the list time moves up for a cadence filter. */
 export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNext) => void; onCancel?: () => void }) {
   const [draft, setDraft] = useState<PlanDraft>(() => defaultPlanDraft(new Date()));
   const [problems, setProblems] = useState<PlanProblems>({});
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const filters = useDeskQuery("practice:plan-filters", (signal) => loadFilters({ signal }));
+  const timings: FilterTimings = useMemo(() => new Map((filters.data ?? []).map((filter) => [filter.id, { run_on: filter.run_on, session: filter.session }])), [filters.data]);
+  // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
+  const need = listTimeNeed(draft.filterIds, timings);
+  const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
 
   async function save() {
     const result = validatePlanDraft(draft);
@@ -90,7 +98,7 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
                       className={styles.check}
                       checked={checked}
                       disabled={blocked}
-                      onChange={() => setDraft({ ...draft, filterIds: toggleFilter(draft.filterIds, filter.id) })}
+                      onChange={() => setDraft(withFilterToggled(draft, filter.id, timings))}
                     />
                     <span className={styles.armText}>
                       <span className={styles.armName}>{filter.name}</span>
@@ -157,12 +165,16 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
                 type="button"
                 className={styles.segment}
                 aria-pressed={draft.listAt === item.value}
+                disabled={item.value < need.time}
                 onClick={() => setDraft(withListTime(draft, item.value))}
               >
                 {item.label}
               </button>
             ))}
           </div>
+          {need.ids.length > 0 && (
+            <span className={styles.hint}>{practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: clock12(need.time) })}</span>
+          )}
           {problems.listAt && <span role="alert" className={styles.fieldError}>{problems.listAt}</span>}
         </div>
         <label className={styles.field}>
@@ -211,7 +223,7 @@ export function DailyPlanForm({ onSaved, onCancel }: { onSaved: (result: OpenNex
       {failed && <ErrorBlock message={PRACTICE_COPY.planStartError} onRetry={() => void save()} />}
       <div className={styles.actions}>
         {onCancel && <button type="button" className={styles.button} onClick={onCancel}>Cancel</button>}
-        <button type="submit" className={styles.primary} disabled={submitting}>Save plan</button>
+        <button type="submit" className={styles.primary} disabled={submitting}>{PRACTICE_COPY.planSubmit}</button>
       </div>
     </form>
   );

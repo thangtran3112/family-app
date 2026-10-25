@@ -18,7 +18,7 @@ from typing import Any
 
 from ai_trading_common.errors import NotConfigured, ProviderError
 from ai_trading_common.registry import DataSources
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -145,6 +145,17 @@ def build_universe(session: Session, sources: DataSources, *, now: datetime) -> 
             )
         build.deactivated = len(gone)
     return build
+
+
+def ensure_universe(session: Session, sources: DataSources, *, now: datetime) -> UniverseBuild | None:
+    """Build the universe when nothing beyond the seeds is stored: a fresh install, before its first weekday
+    premarket pass, would otherwise hand a practice plan the 17 seed symbols (the first walkthrough scanned 17 of
+    17). None when a built universe is already there. A build whose provider lists all failed leaves only the
+    seeds, so the next call tries again. Caller commits."""
+    active = session.execute(select(func.count()).select_from(UniverseSymbol).where(UniverseSymbol.active.is_(True)))
+    if active.scalar_one() > len(SEED_SYMBOLS):
+        return None
+    return build_universe(session, sources, now=now)
 
 
 def apply_floor(

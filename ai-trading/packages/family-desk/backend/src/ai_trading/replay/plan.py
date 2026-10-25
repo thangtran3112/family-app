@@ -31,7 +31,7 @@ from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import et
 from ai_trading.core.calendar import session as trading_session
-from ai_trading.data.universe import SEED_SYMBOLS, split_plain
+from ai_trading.data.universe import SEED_SYMBOLS, ensure_universe, split_plain
 from ai_trading.db.models import (
     FilterStrategy,
     FilterStrategyVersion,
@@ -118,6 +118,18 @@ def active_plan(db: Session, user_id: int, *, lock: bool = False) -> PracticePla
     return db.execute(query.with_for_update() if lock else query).scalar_one_or_none()
 
 
+def clock12(hhmm: str) -> str:
+    """ "10:00" as "10:00 AM"."""
+    hours, minutes = (int(part) for part in hhmm.split(":"))
+    return f"{hours % 12 or 12}:{minutes:02d} {'AM' if hours < 12 else 'PM'}"
+
+
+def _early_list_message(name: str, spec: dict[str, Any], need: str) -> str:
+    if spec["watch"]["runOn"] == "premarket_0830":
+        return f"Premarket filters need a list time of {clock12(need)} or later"
+    return f"{name} needs a list time of {clock12(need)} or later · before then none of its bars of the day has closed"
+
+
 def _resolve_filters(
     db: Session, user_id: int, refs: list[dict[str, int]]
 ) -> list[tuple[FilterStrategy, dict[str, Any], int]]:
@@ -139,6 +151,22 @@ def _resolve_filters(
     return out
 
 
+def _ensure_desk_universe(db: Session, svc: Services, now: datetime) -> None:
+    """A plan freezes the Desk universe, so a fresh install builds it now instead of waiting for the first weekday
+    premarket pass. Best effort: a provider outage or a source without the universe kind leaves the seeds, and
+    the plan still saves (the savepoint keeps a failed build out of the plan's transaction)."""
+    if svc.sources is None:
+        return
+    try:
+        with db.begin_nested():
+            build = ensure_universe(db, svc.sources, now=now)
+    except Exception:  # noqa: BLE001 -- see the docstring
+        log.exception("universe build for a new plan failed")
+        return
+    if build is not None and build.failed:
+        log.warning("universe build for a new plan: provider lists failed: %s", sorted(build.failed))
+
+
 def create_plan(db: Session, user_id: int, spec: PracticeBlockV1, svc: Services) -> PracticePlan:
     """Validate and save a plan, archive the one it replaces, freeze the universe, and mark prep as running (the
     caller starts `run_prep`). Server rules that need a lookup: the day range, her filters, the premarket list time."""
@@ -158,14 +186,17 @@ def create_plan(db: Session, user_id: int, spec: PracticeBlockV1, svc: Services)
             path="firstDay",
         ) from None
     resolved = _resolve_filters(db, user_id, dumped["screen"]["filters"])
-    if any(f["watch"]["runOn"] == "premarket_0830" for _, f, _ in resolved) and dumped["screen"]["listAt"] < "08:30":
-        raise ReplayProblem("Premarket filters need a list time of 8:30 AM or later", path="screen.listAt")
+    for row, spec, _ in resolved:
+        need = screen.earliest_list_at(spec)
+        if dumped["screen"]["listAt"] < need:
+            raise ReplayProblem(_early_list_message(row.name, spec, need), path="screen.listAt")
 
     now = svc.now()
     old = active_plan(db, user_id, lock=True)
     if old is not None:
         old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live at a time
         db.flush()
+    _ensure_desk_universe(db, svc, now)
     symbols, capped = practice_universe(db, user_id)
     row = PracticePlan(
         owner_user_id=user_id,
@@ -516,6 +547,46 @@ def _peek(db: Session, svc: Services, row: ReplayDayList, symbol: str) -> dict[s
     }
 
 
+def _join(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _few_names_reason(db: Session, row: ReplayDayList) -> str:
+    """Why a list is short, from what the list stored: no symbol could be scanned, a filter that could only read
+    the previous session at this list time (a plan saved before the server refused that), no bars to read, or
+    thresholds nothing met. Said once, with the one thing she can change."""
+    universe, count = row.universe, len(row.candidates)
+    list_at, filters = row.screen["listAt"], row.screen["filters"]
+    if universe["scanned"] == 0:
+        return (
+            f"No symbol could be scanned · {universe['no_data']} had no price data and {universe['below_floor']} fell "
+            "below the $5 and 500,000-share floor"
+        )
+    early: list[tuple[str, str]] = []
+    for item in filters:
+        version = db.get(FilterStrategyVersion, item["version_id"])
+        if version is not None and list_at < (need := screen.earliest_list_at(version.spec)):
+            early.append((item["name"], need))
+    if early:
+        verb = "reads" if len(early) == 1 else "read"
+        return (
+            f"{_join([name for name, _ in early])} {verb} bars of the day itself, and none had closed by "
+            f"{clock12(list_at)} · only the previous session was visible. Start a new plan with a list time of "
+            f"{clock12(max(need for _, need in early))} or later"
+        )
+    if all(item["scanned"] == 0 for item in universe["filters"]):
+        return (
+            f"No bars to read at {clock12(list_at)} for any of the {universe['scanned']} symbols that passed the "
+            "floor · the data for this day may be missing"
+        )
+    names = _join([item["name"] for item in filters])
+    met = f"Only {count}" if count else "None"
+    return (
+        f"{met} of the {universe['scanned']} scanned symbols met {names}"
+        " · loosen a filter in the Screener to widen the next days' lists"
+    )
+
+
 def day_list_out(
     db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None
 ) -> dict[str, Any]:
@@ -525,10 +596,7 @@ def day_list_out(
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
     universe = row.universe
-    warnings = []
-    if len(row.candidates) < FEW_NAMES:
-        noun = "name" if len(row.candidates) == 1 else "names"
-        warnings.append(f"Only {len(row.candidates)} {noun} matched · add a filter or lower its threshold")
+    warnings = [_few_names_reason(db, row)] if len(row.candidates) < FEW_NAMES else []
     return {
         "id": row.id,
         "plan": plan_out(db, plan),

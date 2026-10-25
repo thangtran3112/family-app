@@ -565,6 +565,8 @@ replay cursor) come from product knowledge. What Mobbin did supply:
 
 ## k. 02o-b v1: daily-list practice (built 2026-10-24)
 
+**Shipped 2026-10-25:** PR #174 to `dev` and PR #175 to `main`; deploy run 40167726238 succeeded.
+
 The owner's change: day-trade practice does not use a fixed symbol set. Each practice day, her own `FilterStrategySpecV1`
 filters build a candidate list (20 to 50 names) for the past day she is about to replay; she stars a few, practises one,
 ends the day, and sees how every candidate moved from its list price. The design (Opus, 2026-10-24) and its red team
@@ -628,6 +630,12 @@ stops reporting for five minutes is started again by the next open. No scheduler
 "traded only names on your watch"); the switch protocol and the watch strip on the shared clock; re-scan at the playhead; the
 `universe_days` read path (v1 lists use today's Desk set, capped at 250 by today's dollar volume, and say so); the firstDay
 post-ship default; day-ordered prep readiness; day-scope `maxLoss` and `maxTrades` across sessions.
+
+**Moved to 02r (owner, 2026-10-25).** The PLAN/risk fields (Shares, Stop on every entry, Trade only on a signal, Max loss,
+Max trades, Plan note) leave the daily-list setup form and become thread-level settings on a practice thread with a paper
+balance (defect D-006); arming as a thread/session concern is re-examined there too. See
+`02r-desk-practice-threads.md` — day-scope `maxLoss`/`maxTrades` above stay day-scope inside a thread.
+
 
 **Deviations from the design.** Six routes, not five (the hub card needs its own small plan read); the contract keeps the design's
 names (`PracticeBlockV1`, `PracticeScreenV1`) but the table is `practice_plans`; Peek is a query parameter on the day-list read,
