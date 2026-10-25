@@ -1,6 +1,6 @@
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { DeskApiProblem } from "../api/client.ts";
-import { defaultDraft, draftToSpec, fieldOfPath, type SetupDraft, type SetupField } from "./setup.ts";
+import { MAX_ARMED, defaultDraft, draftToSpec, fieldOfPath, type ArmedRef, type SetupDraft, type SetupField } from "./setup.ts";
 
 // The hub's daily-list plan form (02o-b v1): the draft the form edits, its conversion to a `PracticeBlockV1`, and live
 // validation against the contract's own Zod schema (the D6 pattern). The setup half reuses the single-session draft.
@@ -15,6 +15,46 @@ export const LIST_TIMES = [
   { value: "10:00", label: "10:00 After the first 15 minutes" },
   { value: "10:45", label: "10:45 After the first hour" },
 ] as const;
+
+/** What the filter list carries about a filter's cadence: enough to know when its first bar of the list day exists. */
+export type FilterTiming = { run_on: string; session: "regular" | "extended" };
+
+const CADENCE_MINUTES: Record<string, number> = { bar_close_1m: 1, bar_close_5m: 5, bar_close_15m: 15, bar_close_1h: 60 };
+/** The live SIP embargo the list's data lags by (backend `LIST_DATA_LAG`). */
+const LIST_LAG_MINUTES = 15;
+const EARLIEST_LIST_AT = "04:30";
+
+/** The earliest list time ("HH:MM" ET) at which the filter reads a bar of the list day itself; the server answers 422
+ *  below it. A mirror of `earliest_list_at` in `replay/screen.py`: the two tables are tested against the same values. */
+export function earliestListAt(filter: FilterTiming): string {
+  if (filter.run_on === "premarket_0830") return "08:30";
+  const cadence = CADENCE_MINUTES[filter.run_on];
+  if (cadence === undefined) return EARLIEST_LIST_AT; // daily_close and weekly read the sessions before the day
+  const minutes = (filter.session === "regular" ? 9 * 60 + 30 : 4 * 60) + cadence + LIST_LAG_MINUTES;
+  return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/** "10:00" as "10:00 AM". */
+export function clock12(hhmm: string): string {
+  const [hours, minutes] = hhmm.split(":").map(Number) as [number, number];
+  return `${hours % 12 || 12}:${pad(minutes)} ${hours < 12 ? "AM" : "PM"}`;
+}
+
+export type FilterTimings = ReadonlyMap<number, FilterTiming>;
+
+/** The latest of the chosen filters' earliest list times, and the filters that set it. */
+export function listTimeNeed(filterIds: readonly number[], timings: FilterTimings): { time: string; ids: number[] } {
+  let time = EARLIEST_LIST_AT;
+  let ids: number[] = [];
+  for (const id of filterIds) {
+    const timing = timings.get(id);
+    if (timing === undefined) continue;
+    const need = earliestListAt(timing);
+    if (need > time) [time, ids] = [need, [id]];
+    else if (need === time && need > EARLIEST_LIST_AT) ids.push(id);
+  }
+  return { time, ids };
+}
 
 export type PlanDraft = {
   firstDay: string;
@@ -68,6 +108,28 @@ export function withListTime(draft: PlanDraft, listAt: string): PlanDraft {
 export function toggleFilter(ids: readonly number[], id: number): number[] {
   if (ids.includes(id)) return ids.filter((item) => item !== id);
   return ids.length >= MAX_FILTERS ? [...ids] : [...ids, id];
+}
+
+/** The first offered list time at or after `need` (the last one when none is late enough). */
+export function listTimeFrom(need: string): string {
+  return (LIST_TIMES.find((item) => item.value >= need) ?? LIST_TIMES[LIST_TIMES.length - 1]).value;
+}
+
+/** Picks or drops a filter. A picked filter is armed for the practice days (arming is what releases its would-fire
+ *  signals while she replays), a dropped one is disarmed, and a list time too early for a cadence filter moves to the
+ *  first offered time that works (10:00 for a 15-minute filter). */
+export function withFilterToggled(draft: PlanDraft, id: number, timings: FilterTimings): PlanDraft {
+  const filterIds = toggleFilter(draft.filterIds, id);
+  if (filterIds.length === draft.filterIds.length && filterIds.every((item, index) => item === draft.filterIds[index])) return draft;
+  const ref: ArmedRef = { source: "filter", id };
+  const armed = filterIds.includes(id)
+    ? draft.setup.armed.some((item) => item.source === "filter" && item.id === id) || draft.setup.armed.length >= MAX_ARMED
+      ? draft.setup.armed
+      : [...draft.setup.armed, ref]
+    : draft.setup.armed.filter((item) => !(item.source === "filter" && item.id === id));
+  const next = { ...draft, filterIds, setup: { ...draft.setup, armed } };
+  const need = listTimeNeed(filterIds, timings).time;
+  return next.listAt < need ? withListTime(next, listTimeFrom(need)) : next;
 }
 
 const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text));

@@ -167,6 +167,20 @@ def test_plan_rejections_are_plain_problems(daily, db_session) -> None:
     early = post({**good, "screen": {**good["screen"], "listAt": "10:00"}})
     assert early.status_code == 422
     assert early.json()["detail"]["problems"][0]["message"] == "window.from must be at or after screen.listAt"
+    volume = db_session.execute(
+        select(FilterStrategy.id).where(
+            FilterStrategy.owner_user_id == user_id, FilterStrategy.name == "Abnormal volume"
+        )
+    ).scalar_one()
+    cadence = post({**good, "screen": {**good["screen"], "filters": [{"id": volume}]}})  # a 15-minute filter at 08:30
+    assert cadence.status_code == 422
+    assert cadence.json()["detail"]["problems"] == [
+        {
+            "path": "screen.listAt",
+            "message": "Abnormal volume needs a list time of 10:00 AM or later"
+            " · before then none of its bars of the day has closed",
+        }
+    ]
     wrong = post({**good, "extra": 1})
     assert wrong.status_code == 422
     missing = post({**good, "screen": {**good["screen"], "filters": [{"id": 999}]}})
