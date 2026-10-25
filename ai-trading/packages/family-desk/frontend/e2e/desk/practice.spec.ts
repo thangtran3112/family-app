@@ -337,8 +337,8 @@ test.describe("Practice", () => {
     // The day list: dates hidden, the candidate, the universe line, and the footnote.
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true));
-    await expect(page.getByText(/^List at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
-    await expect(page.getByText(/Practice universe · \d+ symbols the Desk has scanned/).first()).toBeVisible();
+    await expect(page.getByText(/^List built at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
+    await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
     await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(DAY);

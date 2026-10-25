@@ -12,6 +12,7 @@ import {
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayList, DayReview, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import type { ThreadPlan } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
@@ -28,7 +29,7 @@ export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"
   return `${practiceText("planDay", { day: list.day_no, of: list.of })} · ${dayName(list.weekday, list.day, hidden)}`;
 }
 
-/** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30". */
+/** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30" (kept whole for the plain-text reads). */
 export function listHeaderText(list: Pick<DayList, "list_at" | "data_through" | "universe">): string {
   const { universe } = list;
   return practiceText("dayHeader", {
@@ -38,6 +39,58 @@ export function listHeaderText(list: Pick<DayList, "list_at" | "data_through" | 
     size: universe.size,
     matched: universe.matches_total,
     shown: universe.shown,
+  });
+}
+
+/** "118 of 131 scanned · 34 matched · showing 30": the first line under the title (P7). */
+export function listCountsText(list: Pick<DayList, "universe">): string {
+  const { universe } = list;
+  return practiceText("dayCounts", { scanned: universe.scanned, size: universe.size, matched: universe.matches_total, shown: universe.shown });
+}
+
+/** "List built at 8:30 AM ET from data through 8:15 AM": the small line beside the counts. */
+export function listBuiltText(list: Pick<DayList, "list_at" | "data_through">): string {
+  return practiceText("dayListBuilt", { listAt: formatEtTimeZone(list.list_at), through: formatEtTime(list.data_through) });
+}
+
+/** The Desk universe is capped at this many names by dollar volume (the backend's `MAX_UNIVERSE`). */
+export const UNIVERSE_CAP = 250;
+
+/** P7's universe footnote with the list's own size, then whatever else the server said (a watchlist scope, a cap). */
+export function universeNote(universe: Pick<DayList["universe"], "size" | "label" | "footnote">): string {
+  const extra = (universe.footnote.startsWith(universe.label) ? universe.footnote.slice(universe.label.length) : "").replace(/^ · /, "").trim();
+  const base = practiceText("dayUniverse", { max: UNIVERSE_CAP, size: universe.size });
+  return extra ? `${base} ${extra.charAt(0).toUpperCase()}${extra.slice(1)}.` : base;
+}
+
+/** "Source: Alpaca SIP bars up to 8:15 AM ET · nothing after the list time is shown". */
+export const sourceNote = (list: Pick<DayList, "data_through">): string => practiceText("daySource", { through: formatEtTimeZone(list.data_through) });
+
+/** "Chosen at setup · a name that passes either one is listed", or just "Chosen at setup" for one filter. */
+export const filtersNote = (count: number): string => (count > 1 ? PRACTICE_COPY.dayFiltersNote : PRACTICE_COPY.dayFiltersNoteOne);
+
+/** The thread's risk plan in one sentence: "stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day". */
+export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades">): string {
+  const parts = [
+    plan.stopNoteOnEntry === "yes" ? "stop on every entry" : null,
+    plan.tradeOnlyOnSignal === "yes" ? "trade only on a signal" : null,
+    plan.maxLossUsd === undefined ? null : `max loss $${plan.maxLossUsd.toLocaleString("en-US")}`,
+    plan.maxTrades === undefined ? null : `up to ${plan.maxTrades} ${plan.maxTrades === 1 ? "trade" : "trades"} a day`,
+  ].filter((part): part is string => part !== null);
+  return parts.length === 0 ? PRACTICE_COPY.dayRiskNone : practiceText("dayRiskFrom", { plan: parts.join(", ") });
+}
+
+export type LadderRow = { n: number; weekday: string | null; state: "ended" | "open" | "opens_after" | "locked"; detail: string };
+
+/** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked. */
+export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">): LadderRow[] {
+  const ended = list.status === "ended";
+  return Array.from({ length: list.of }, (_, index): LadderRow => {
+    const n = index + 1;
+    if (n < list.day_no || (n === list.day_no && ended)) return { n, weekday: n === list.day_no ? list.weekday : null, state: "ended", detail: PRACTICE_COPY.dayLadderEnded };
+    if (n === list.day_no) return { n, weekday: list.weekday, state: "open", detail: PRACTICE_COPY.dayLadderOpen };
+    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no }) };
+    return { n, weekday: null, state: "locked", detail: PRACTICE_COPY.dayLadderLocked };
   });
 }
 
@@ -100,6 +153,71 @@ export function cellTone(column: Pick<ListColumn, "key" | "format">, row: Pick<C
   return column.format === "pct_signed" ? changeTone(row.metrics[column.key] ?? null) : null;
 }
 
+/** One column of the day list: the API's own metric columns, plus the P7 columns it only holds in part (D-018). */
+export type DayColumn = {
+  key: string;
+  label: string;
+  format: string;
+  /** The cell's value; null reads as a dash. */
+  value: (row: Candidate) => number | string | null;
+  /** The payload has no value for this column in this list: every cell is an honest dash, never a stand-in. */
+  missing?: boolean;
+};
+
+const EARNINGS_FORMAT = "earnings";
+
+/**
+ * The table's columns in the order of P7: list price, prev close, prev RVOL, prev change %, ATR %, RSI, the rest of the
+ * server's columns, earnings, then the time the match began. A list built before the open reads the previous session
+ * in the server's own columns (`prev_basis`), so those fill Prev RVOL and Prev change %. A list built after the open has
+ * no previous-session RVOL or change in its payload: those two columns stay and read a dash. Prev close is
+ * the candidate's `prior_close` either way.
+ */
+export function dayColumns(list: Pick<DayList, "columns" | "universe">): DayColumn[] {
+  const prevBasis = list.universe.prev_basis;
+  const have = new Map(list.columns.map((column) => [column.key, column]));
+  const used = new Set<string>(["matched_since"]);
+  const metric = (key: string) => (row: Candidate) => row.metrics[key] ?? null;
+  const plain = (key: string): DayColumn[] => {
+    const column = have.get(key);
+    if (!column || used.has(key)) return [];
+    used.add(key);
+    return [{ key, label: column.label, format: column.format, value: metric(key) }];
+  };
+  const previous = (key: string, label: string, format: string, source: string): DayColumn => {
+    if (prevBasis) used.add(source);
+    return { key, label, format, value: prevBasis ? metric(source) : () => null, missing: !prevBasis };
+  };
+  if (prevBasis) used.add("last");
+
+  const head = [...plain("list_price"), ...plain("list_change_pct")];
+  const prev: DayColumn[] = [
+    { key: "prev_close", label: "Prev close", format: "price", value: (row) => row.prior_close },
+    previous("prev_rvol", "Prev RVOL", "ratio", "rvol_10d"),
+    previous("prev_change_pct", "Prev change %", "pct_signed", "change_pct"),
+  ];
+  const core = [...plain("atr_pct_14"), ...plain("rsi_14")];
+  const rest = list.columns.flatMap((column) => plain(column.key));
+  const earnings: DayColumn = { key: "earnings", label: "Earnings", format: EARNINGS_FORMAT, value: (row) => (row.reported_before_open ? PRACTICE_COPY.dayReported : null) };
+  const since = have.get("matched_since");
+  const tail: DayColumn[] = since ? [{ key: "matched_since", label: since.label, format: since.format, value: (row) => row.matched_since }] : [];
+  return [...head, ...prev, ...core, ...rest, earnings, ...tail];
+}
+
+/** A cell's text: a dash for a value the payload does not hold. */
+export function dayCellText(column: DayColumn, row: Candidate): string {
+  const value = column.value(row);
+  if (column.format === EARNINGS_FORMAT) return value === null ? EMPTY_VALUE : String(value);
+  if (column.format === "time") return formatMetric("time", value);
+  const format = FORMATS.has(column.format) ? (column.format as MetricFormat) : "number";
+  return formatMetric(format, typeof value === "number" ? value : null);
+}
+
+export function dayCellTone(column: DayColumn, row: Candidate): Tone | null {
+  const value = column.value(row);
+  return column.format === "pct_signed" && typeof value === "number" ? changeTone(value) : null;
+}
+
 /** "Gap up · Abnormal volume" */
 export const filtersText = (row: Pick<Candidate, "filters">): string => row.filters.join(" · ");
 
@@ -112,10 +230,14 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
   return symbols.length >= MAX_STARS ? null : [...symbols, symbol];
 }
 
-export function listWarning(list: Pick<DayList, "warnings" | "candidates">): string | null {
-  // The server says why a list is short; the plain line stands in for a list it had no reason for.
-  return list.warnings[0] ?? (list.candidates.length === 0 ? PRACTICE_COPY.dayNoNames : null);
+export function listWarning(list: Pick<DayList, "warnings">): string | null {
+  // The server says why a list is short. A list it had no reason for shows the empty state under the table instead.
+  return list.warnings[0] ?? null;
 }
+
+/** "0 of 131 matched": the empty state's headline; the line under it says what to do (P7). */
+export const noMatchText = (list: Pick<DayList, "universe">): string =>
+  practiceText("dayNoneMatched", { matched: list.universe.matches_total, size: list.universe.size });
 
 // ---- the review ----------------------------------------------------------------------------------------------
 
