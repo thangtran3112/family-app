@@ -1,4 +1,4 @@
-import { formatEtTimeZone } from "../desk/format.ts";
+import { formatEtClock, formatEtTimeZone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 
 // The status bar's own line on a Practice route (D-043): where the prices come from, what the screen waits for, and the
@@ -20,5 +20,13 @@ export function journalStatusLine(daily: ReadonlyArray<{ n: number }>): Practice
   return {
     left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusJournalUpdates],
     right: [last ? practiceText("statusBalanceAsOf", { day: last.n }) : PRACTICE_COPY.statusBalanceStart, PRACTICE_COPY.statusSignals],
+  };
+}
+
+/** The replay workspace: "Prices: Alpaca SIP · replay | Consolidated tape ... Replay clock 10:07:00 AM ET | Would-fire signals only". The feed is the session's own. */
+export function replayStatusLine(feed: "sip" | "iex", playhead: string): PracticeStatusLine {
+  return {
+    left: [feed === "sip" ? PRACTICE_COPY.statusPricesReplay : PRACTICE_COPY.statusPricesReplayIex, feed === "sip" ? PRACTICE_COPY.feedSip : PRACTICE_COPY.feedIex],
+    right: [practiceText("statusReplayClock", { time: formatEtClock(playhead) }), PRACTICE_COPY.statusSignals],
   };
 }

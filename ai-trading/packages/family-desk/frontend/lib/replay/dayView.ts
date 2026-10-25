@@ -167,8 +167,8 @@ export type DayColumn = {
 const EARNINGS_FORMAT = "earnings";
 
 /**
- * The table's columns in the order of P7: list price, prev close, prev RVOL, prev change %, ATR %, RSI, the rest of the
- * server's columns, earnings, then the time the match began. A list built before the open reads the previous session
+ * The table's columns in the order of P7: list price, prev close, prev RVOL, prev change %, ATR %, RSI, earnings, then the rest of the
+ * server's columns and the time the match began. A list built before the open reads the previous session
  * in the server's own columns (`prev_basis`), so those fill Prev RVOL and Prev change %. A list built after the open has
  * no previous-session RVOL or change in its payload: those two columns stay and read a dash. Prev close is
  * the candidate's `prior_close` either way.
@@ -201,7 +201,7 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">): DayColu
   const earnings: DayColumn = { key: "earnings", label: "Earnings", format: EARNINGS_FORMAT, value: (row) => (row.reported_before_open ? PRACTICE_COPY.dayReported : null) };
   const since = have.get("matched_since");
   const tail: DayColumn[] = since ? [{ key: "matched_since", label: since.label, format: since.format, value: (row) => row.matched_since }] : [];
-  return [...head, ...prev, ...core, ...rest, earnings, ...tail];
+  return [...head, ...prev, ...core, earnings, ...rest, ...tail];
 }
 
 /** A cell's text: a dash for a value the payload does not hold. */

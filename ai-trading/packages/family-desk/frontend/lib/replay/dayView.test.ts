@@ -197,7 +197,7 @@ test("the block ladder: earlier days ended, this one open, the next waits for it
 
 test("D-018: a list built before the open fills Prev RVOL and Prev change % from the server's own previous-session columns", () => {
   const columns = dayColumns(dayList);
-  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "Prev volume", "Earnings", "Since"]);
+  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
   const smci = dayList.candidates[0]!;
   const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
   assert.equal(dayCellText(byKey.prev_close!, smci), "37.90");
@@ -226,7 +226,7 @@ test("D-018: a list built after the open has no previous-session RVOL or change,
     ],
   };
   const columns = dayColumns(live);
-  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "ATR %", "RSI", "Change %", "RVOL", "Earnings", "Since"]);
+  assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "ATR %", "RSI", "Earnings", "Change %", "RVOL", "Since"]);
   const smci = { ...live.candidates[0]!, metrics: { ...live.candidates[0]!.metrics, rvol_10d: 2.5 } };
   const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
   assert.equal(dayCellText(byKey.prev_close!, smci), "37.90");
