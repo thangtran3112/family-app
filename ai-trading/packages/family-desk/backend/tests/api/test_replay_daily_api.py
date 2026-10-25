@@ -148,7 +148,21 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     review = ended.json()["review"]
     assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == 3.77
     assert review["selection"]["picks"][0]["kind"] == "traded"
-    assert ended.json()["journal"]["trades"] == 1 and ended.json()["status"] == "ended"
+    assert review["selection"]["median_move_pct"] == 3.77 and review["selection"]["picks_avg_move_pct"] == 3.77
+    assert review["day"] == "2026-09-28" and review["dates_hidden"] is True  # the finished day shows its date (D-029)
+    journal = ended.json()["journal"]
+    assert journal["trades"] == 1 and ended.json()["status"] == "ended"
+    (line,) = journal["lines"]  # a scratch: entered and exited at 110.00 (D-032)
+    assert (line["symbol"], line["side"], line["shares"], line["entry_price"], line["exit_price"]) == (
+        "GAPPER",
+        "long",
+        100,
+        110.0,
+        110.0,
+    )
+    assert (journal["wins"], journal["losses"], journal["scratches"], journal["pnl_usd"]) == (0, 0, 1, 0.0)
+    assert (journal["balance_before"], journal["balance_after"]) == (50_000.0, 50_000.0)
+    assert ended.json()["relist"] is None
     assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).json()["review"] == review
     assert client.get(f"{BASE}/sessions/{sid}", headers=auth_headers()).json()["status"] == "ended"
     after = client.patch(f"{BASE}/day-lists/{list_id}", json={"watch": []}, headers=auth_headers())
@@ -189,6 +203,37 @@ def test_plan_rejections_are_plain_problems(daily, db_session) -> None:
     assert missing.json()["detail"]["problems"] == [{"path": "screen.filters.0.id", "message": "Filter not found"}]
     stray = client.post(f"{BASE}/daily/next", json={"plans": {}}, headers=auth_headers())
     assert stray.status_code == 422
+
+
+def test_relist_moves_the_plan_and_rebuilds_the_day_and_answers_the_plan_rules(daily, db_session) -> None:
+    client, services, _ = daily
+    plan_id = _start_plan(daily, db_session)["plan"]["id"]
+    plan_mod.run_prep(db_session, services, plan_id)
+    list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    url = f"{BASE}/day-lists/{list_id}/relist"
+
+    assert client.post(url, json={"listAt": "9:00"}, headers=auth_headers()).status_code == 422  # not HH:MM
+    early = client.post(url, json={"listAt": "08:00"}, headers=auth_headers())
+    assert early.status_code == 422
+    assert early.json()["detail"]["problems"] == [
+        {"path": "listAt", "message": "Premarket filters need a list time of 8:30 AM or later"}
+    ]
+    assert client.post(url, json={"listAt": "10:00"}, headers=auth_headers(OTHER_EMAIL)).status_code == 404
+
+    moved = client.post(url, json={"listAt": "10:00"}, headers=auth_headers())
+    assert moved.status_code == 200, moved.text
+    body = moved.json()
+    assert body["id"] == list_id and body["screen"]["list_at"] == "10:00" and body["status"] == "listed"
+    assert body["list_at"] == "2026-09-28T14:00:00Z" and body["data_through"] == "2026-09-28T13:45:00Z"
+    assert (
+        body["plan"]["spec"]["screen"]["listAt"] == "10:00"
+        and body["plan"]["spec"]["setup"]["window"]["from"] == "10:00"
+    )
+
+    session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
+    assert session.status_code == 200, session.text
+    under_way = client.post(url, json={"listAt": "10:30"}, headers=auth_headers())
+    assert under_way.status_code == 409 and under_way.json()["detail"]["problems"][0]["path"] == "listAt"
 
 
 def test_a_non_owner_gets_not_found_everywhere(daily, db_session) -> None:

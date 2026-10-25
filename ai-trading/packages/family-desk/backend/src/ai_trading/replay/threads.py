@@ -294,6 +294,15 @@ def _series(db: Session, thread: PracticeThread, ledger: list[PracticeLedger]) -
     return rows
 
 
+def day_balances(db: Session, thread: PracticeThread, day_list_id: int) -> tuple[float, float] | None:
+    """The SIMULATED balance before and after one ended day of the thread, from the same series the journal draws (None
+    for a day that has not ended or is not the thread's)."""
+    for row in _series(db, thread, _ledger(db, thread.id)):
+        if row["day_list_id"] == day_list_id:
+            return _money(Decimal(str(row["balance"])) - Decimal(str(row["pnl_usd"]))), row["balance"]
+    return None
+
+
 def _stats(thread: PracticeThread, ledger: list[PracticeLedger], series: list[dict[str, Any]]) -> dict[str, Any]:
     """`PracticeThreadStatsV1`: every figure from the ledger and the day series; an empty figure is absent."""
     pnls = [entry.pnl_usd for entry in ledger]
@@ -448,6 +457,7 @@ __all__ = (
     "brief",
     "close_thread",
     "create_thread",
+    "day_balances",
     "detail",
     "get_thread",
     "ledger_page",
