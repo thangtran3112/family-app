@@ -631,6 +631,12 @@ stops reporting for five minutes is started again by the next open. No scheduler
 `universe_days` read path (v1 lists use today's Desk set, capped at 250 by today's dollar volume, and say so); the firstDay
 post-ship default; day-ordered prep readiness; day-scope `maxLoss` and `maxTrades` across sessions.
 
+**Moved to 02r (owner, 2026-10-25).** The PLAN/risk fields (Shares, Stop on every entry, Trade only on a signal, Max loss,
+Max trades, Plan note) leave the daily-list setup form and become thread-level settings on a practice thread with a paper
+balance (defect D-006); arming as a thread/session concern is re-examined there too. See
+`02r-desk-practice-threads.md` — day-scope `maxLoss`/`maxTrades` above stay day-scope inside a thread.
+
+
 **Deviations from the design.** Six routes, not five (the hub card needs its own small plan read); the contract keeps the design's
 names (`PracticeBlockV1`, `PracticeScreenV1`) but the table is `practice_plans`; Peek is a query parameter on the day-list read,
 not a route; the rebase factor comes from the split-only series, not `all`.
