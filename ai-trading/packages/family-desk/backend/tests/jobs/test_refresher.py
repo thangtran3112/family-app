@@ -24,6 +24,7 @@ from ai_trading.db.models import (
     FeedHealth,
     FilterRun,
     SymbolMetrics,
+    UniverseDay,
     UniverseSymbol,
     Watchlist,
     WatchlistItem,
@@ -371,6 +372,33 @@ def test_the_premarket_pass_builds_the_universe_then_scans_it_once(db_session, s
 
     assert filter_runs(db_session, "premarket_0830") == runs
     assert db_session.execute(select(func.count()).select_from(UniverseSymbol)).scalar_one() == universe_size
+
+
+def test_the_premarket_pass_snapshots_the_universe_it_scanned_once_per_day(db_session, seeded):
+    sources = scanning(FakeBarsSource(), FakeUniverse(actives=["ZZZZ"]))
+    refresher.premarket_pass(db_session, sources, now=PREMARKET)
+    db_session.commit()
+    row = db_session.get(UniverseDay, DAY)
+    assert row.symbols == refresher.survivor_symbols(db_session) and "ZZZZ" in row.symbols
+    refresher.premarket_pass(db_session, sources, now=PREMARKET)  # a repeated run replaces the row, never doubles it
+    db_session.commit()
+    assert db_session.execute(select(func.count()).select_from(UniverseDay)).scalar_one() == 1
+
+
+def test_a_failing_snapshot_never_fails_the_live_pass(db_session, seeded, monkeypatch):
+    sources = scanning(FakeBarsSource(), FakeUniverse(actives=["ZZZZ"]))
+    real = refresher.pg_insert
+
+    def failing(model):
+        if model is UniverseDay:
+            raise RuntimeError("the snapshot table is gone")
+        return real(model)
+
+    monkeypatch.setattr(refresher, "pg_insert", failing)
+    report = refresher.premarket_pass(db_session, sources, now=PREMARKET)
+    db_session.commit()
+    assert report.state == "ok" and filter_runs(db_session, "premarket_0830") == 2  # the scan went ahead regardless
+    assert db_session.get(UniverseDay, DAY) is None
 
 
 def test_the_15_minute_pass_rebuilds_a_universe_the_premarket_pass_never_built(db_session, seeded):

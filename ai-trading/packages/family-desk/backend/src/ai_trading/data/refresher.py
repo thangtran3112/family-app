@@ -40,7 +40,15 @@ from ai_trading.data.backfill import backfill
 from ai_trading.data.bars import read_bars, upsert_bars
 from ai_trading.data.metrics import refresh_metrics
 from ai_trading.data.universe import apply_floor, build_universe
-from ai_trading.db.models import Bar1m, FeedHealth, SymbolMetrics, UniverseSymbol, Watchlist, WatchlistItem
+from ai_trading.db.models import (
+    Bar1m,
+    FeedHealth,
+    SymbolMetrics,
+    UniverseDay,
+    UniverseSymbol,
+    Watchlist,
+    WatchlistItem,
+)
 from ai_trading.screener.runner import run_filters
 
 log = logging.getLogger(__name__)
@@ -248,6 +256,19 @@ def _recompute(session: Session, symbols: Iterable[str], *, now: datetime) -> li
     return stored
 
 
+def record_universe_day(session: Session, *, now: datetime) -> None:
+    """Snapshot the symbols this morning's pass scans, so a later practice day can name its universe exactly
+    (02o-b v1: write-only, no reader yet). One row per ET day, replaced by a re-run the same day. It runs in a
+    savepoint and swallows any failure: a snapshot must never fail the live pass."""
+    try:
+        with session.begin_nested():
+            day = pd.Timestamp(now).tz_convert(ET).date()
+            stmt = pg_insert(UniverseDay).values(day=day, symbols=survivor_symbols(session), created_at=now)
+            session.execute(stmt.on_conflict_do_update(index_elements=["day"], set_={"symbols": stmt.excluded.symbols}))
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        log.warning("universe_days snapshot skipped (%s)", type(exc).__name__)
+
+
 def _refresh_universe(session: Session, sources: DataSources, *, now: datetime) -> PassReport:
     """Rebuild the universe, store the daily bars and metrics of its candidates, apply the floor."""
     build = build_universe(session, sources, now=now)
@@ -255,6 +276,7 @@ def _refresh_universe(session: Session, sources: DataSources, *, now: datetime) 
     daily = refresh_daily(session, sources, candidates, now=now)
     _recompute(session, candidates, now=now)
     apply_floor(session, now=now)
+    record_universe_day(session, now=now)
     # `build.failed` values carry provider messages: keep the error class only, like every other failure here.
     failed = {name: message.split(":", 1)[0] for name, message in build.failed.items()}
     return PassReport(fetched=daily.fetched, failed={**failed, **daily.failed}, stopped_early=daily.stopped_early)

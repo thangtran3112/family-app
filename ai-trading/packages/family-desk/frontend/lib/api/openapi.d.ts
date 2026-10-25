@@ -347,6 +347,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily
+         * @description The hub's daily-list card: her plan and where its cursor is, or `null` before she has one.
+         */
+        get: operations["get_daily_api_desk_replay_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/daily/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Next
+         * @description Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves
+         *     that plan, replacing hers, and starts preparing its data in the background. While the data is not ready the
+         *     answer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.
+         */
+        post: operations["open_next_api_desk_replay_daily_next_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/day-lists/{day_list_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Day List
+         * @description One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's
+         *     session, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null
+         *     until the day has ended.
+         */
+        get: operations["get_day_list_api_desk_replay_day_lists__day_list_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Day List
+         * @description Stars (at most five names from the list, each stamped with the day clock), notes and the self-rating.
+         */
+        patch: operations["patch_day_list_api_desk_replay_day_lists__day_list_id__patch"];
+        trace?: never;
+    };
+    "/api/desk/replay/day-lists/{day_list_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End Day
+         * @description End the day: the open practice trade exits at the last price, the window unseals, and the list review
+         *     (every candidate's move from its list price) is stored and served. Idempotent.
+         */
+        post: operations["end_day_api_desk_replay_day_lists__day_list_id__end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/day-lists/{day_list_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Day Session
+         * @description Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in
+         *     v1: another name is a 409 until the day ends.
+         */
+        post: operations["start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/days": {
         parameters: {
             query?: never;
@@ -990,6 +1100,8 @@ export interface components {
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             prints: components["schemas"]["PrintsOut"];
+            /** Quiet S */
+            quiet_s: number | null;
             /**
              * Revealed Through
              * Format: date-time
@@ -1425,6 +1537,44 @@ export interface components {
             history: components["schemas"]["BiasHistoryEntryOut"][];
             last_change_in_window: components["schemas"]["BiasChangeOut"] | null;
         };
+        /**
+         * CandidateOut
+         * @description One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.
+         */
+        CandidateOut: {
+            /** Filters */
+            filters: string[];
+            /** List Price */
+            list_price: number;
+            /**
+             * Matched Since
+             * Format: date-time
+             */
+            matched_since: string;
+            /** Metrics */
+            metrics: {
+                [key: string]: number | null;
+            };
+            /** Operands */
+            operands: {
+                [key: string]: number | null;
+            };
+            /**
+             * Price At
+             * Format: date-time
+             */
+            price_at: string;
+            /** Prior Close */
+            prior_close: number | null;
+            /** Rank */
+            rank: number;
+            /** Rank Value */
+            rank_value: number | null;
+            /** Reported Before Open */
+            reported_before_open: boolean;
+            /** Symbol */
+            symbol: string;
+        };
         /** CardBackOut */
         CardBackOut: {
             /** Atr Pct Label */
@@ -1449,6 +1599,10 @@ export interface components {
             symbol: string;
             /** Timeframe */
             timeframe: string;
+        };
+        /** DailyOut */
+        DailyOut: {
+            plan: components["schemas"]["PracticePlanOut"] | null;
         };
         /** DashboardEventOut */
         DashboardEventOut: {
@@ -1566,6 +1720,144 @@ export interface components {
             /** Vs Vwap Pct */
             vs_vwap_pct: number | null;
         };
+        /** DayFilterOut */
+        DayFilterOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Version Id */
+            version_id: number;
+        };
+        /** DayJournalOut */
+        DayJournalOut: {
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** Sessions */
+            sessions: components["schemas"]["DayJournalSessionOut"][];
+            /** Trades */
+            trades: number;
+        };
+        /** DayJournalSessionOut */
+        DayJournalSessionOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Id */
+            id: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** Symbol */
+            symbol: string;
+            /** Trades */
+            trades: number;
+        };
+        /**
+         * DayListOut
+         * @description One practice day. Before `status` is `ended` nothing here is later than `data_through` (the list, the stars,
+         *     Peek) or the day clock; `review` and `journal` are null until then.
+         */
+        DayListOut: {
+            /** Candidates */
+            candidates: components["schemas"]["CandidateOut"][];
+            /** Clock */
+            clock: string | null;
+            /** Columns */
+            columns: components["schemas"]["ListColumnOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Data Through
+             * Format: date-time
+             */
+            data_through: string;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Day No */
+            day_no: number;
+            /** Ended At */
+            ended_at: string | null;
+            /** Id */
+            id: number;
+            journal: components["schemas"]["DayJournalOut"] | null;
+            /**
+             * List At
+             * Format: date-time
+             */
+            list_at: string;
+            /** Notes */
+            notes: string | null;
+            /** Of */
+            of: number;
+            peek: components["schemas"]["PeekOut"] | null;
+            plan: components["schemas"]["PracticePlanOut"];
+            /** Rating */
+            rating: number | null;
+            review: components["schemas"]["ReviewOut"] | null;
+            screen: components["schemas"]["DayScreenOut"];
+            /** Sessions */
+            sessions: components["schemas"]["DaySessionOut"][];
+            stamp: components["schemas"]["Stamp"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "listed" | "practicing" | "ended";
+            universe: components["schemas"]["ListUniverseOut"];
+            /** Warnings */
+            warnings: string[];
+            /** Watch */
+            watch: components["schemas"]["StarOut"][];
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /**
+         * DayListPatch
+         * @description PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left
+         *     alone; `null` clears notes and rating.
+         */
+        DayListPatch: {
+            /** Notes */
+            notes?: string | null;
+            /** Rating */
+            rating?: number | null;
+            /** Watch */
+            watch?: string[] | null;
+        };
+        /** DayScreenOut */
+        DayScreenOut: {
+            /** Filters */
+            filters: components["schemas"]["DayFilterOut"][];
+            /** List At */
+            list_at: string;
+            /** Max List */
+            max_list: number;
+        };
+        /** DaySessionIn */
+        DaySessionIn: {
+            /** Symbol */
+            symbol: string;
+        };
+        /** DaySessionOut */
+        DaySessionOut: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "ended";
+            /** Symbol */
+            symbol: string;
+        };
         /**
          * FeedOut
          * @description Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior
@@ -1587,6 +1879,8 @@ export interface components {
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             prints: components["schemas"]["PrintsOut"];
+            /** Quiet S */
+            quiet_s: number | null;
             /**
              * Revealed Through
              * Format: date-time
@@ -1600,6 +1894,11 @@ export interface components {
              * Format: date-time
              */
             window_start: string;
+        };
+        /** Filter */
+        Filter: {
+            /** Id */
+            id: number;
         };
         /** FireMarkerOut */
         FireMarkerOut: {
@@ -1757,6 +2056,8 @@ export interface components {
         };
         /** LastPrintOut */
         LastPrintOut: {
+            /** Age S */
+            age_s: number;
             /**
              * At
              * Format: date-time
@@ -1960,6 +2261,61 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ListColumnOut */
+        ListColumnOut: {
+            /** Format */
+            format: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** ListFilterCountsOut */
+        ListFilterCountsOut: {
+            /** Id */
+            id: number;
+            /** Matches Total */
+            matches_total: number;
+            /** Name */
+            name: string;
+            /** No Data */
+            no_data: number;
+            /** Scanned */
+            scanned: number;
+            /** Version Id */
+            version_id: number;
+        };
+        /**
+         * ListUniverseOut
+         * @description What was scanned. `label` and `footnote` state the universe plainly; show them beside any score.
+         */
+        ListUniverseOut: {
+            /** Below Floor */
+            below_floor: number;
+            /** Filters */
+            filters: components["schemas"]["ListFilterCountsOut"][];
+            /** Footnote */
+            footnote: string;
+            /** Label */
+            label: string;
+            /** Matches Total */
+            matches_total: number;
+            /** No Data */
+            no_data: number;
+            /** Prev Basis */
+            prev_basis: boolean;
+            /** Scanned */
+            scanned: number;
+            /** Shown */
+            shown: number;
+            /** Size */
+            size: number;
+            /**
+             * Source
+             * @constant
+             */
+            source: "desk";
+        };
         /** MacdOut */
         MacdOut: {
             /** Histogram */
@@ -2006,6 +2362,8 @@ export interface components {
             journal: components["schemas"]["JournalOut"];
             mark: components["schemas"]["MarkOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /** Warning */
+            warning: string | null;
         };
         /** MarkUndoOut */
         MarkUndoOut: {
@@ -2070,6 +2428,16 @@ export interface components {
             /** Vwap Close */
             vwap_close?: number | null;
         };
+        /**
+         * OpenNextOut
+         * @description `day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every
+         *     day is done.
+         */
+        OpenNextOut: {
+            /** Day List Id */
+            day_list_id: number | null;
+            plan: components["schemas"]["PracticePlanOut"];
+        };
         /** OpenTradeOut */
         OpenTradeOut: {
             /** Entry Price */
@@ -2127,6 +2495,76 @@ export interface components {
             /** Template */
             template: string;
         };
+        /** PeekDailyBarOut */
+        PeekDailyBarOut: {
+            /** C */
+            c: number;
+            /** H */
+            h: number;
+            /** L */
+            l: number;
+            /** O */
+            o: number;
+            /**
+             * T
+             * Format: date
+             */
+            t: string;
+            /** V */
+            v: number;
+        };
+        /** PeekLevelsOut */
+        PeekLevelsOut: {
+            /** Premarket High */
+            premarket_high?: number | null;
+            /** Premarket Low */
+            premarket_low?: number | null;
+            /** Prior Close */
+            prior_close?: number | null;
+            /** Prior High */
+            prior_high?: number | null;
+            /** Prior Low */
+            prior_low?: number | null;
+        };
+        /** PeekMinuteBarOut */
+        PeekMinuteBarOut: {
+            /** C */
+            c: number;
+            /** H */
+            h: number;
+            /** L */
+            l: number;
+            /** O */
+            o: number;
+            /**
+             * T
+             * Format: date-time
+             */
+            t: string;
+            /** V */
+            v: number;
+        };
+        /**
+         * PeekOut
+         * @description Pre-open chart data for one candidate, cut at `data_through`: the same rebased daily bars the list was
+         *     screened on, and the day's minutes through the cut.
+         */
+        PeekOut: {
+            /** Daily */
+            daily: components["schemas"]["PeekDailyBarOut"][];
+            /**
+             * Data Through
+             * Format: date-time
+             */
+            data_through: string;
+            levels: components["schemas"]["PeekLevelsOut"];
+            /** List Price */
+            list_price?: number | null;
+            /** Minutes */
+            minutes: components["schemas"]["PeekMinuteBarOut"][];
+            /** Symbol */
+            symbol: string;
+        };
         /** PivotMethodsOut */
         PivotMethodsOut: {
             /** Camarilla */
@@ -2161,6 +2599,39 @@ export interface components {
              */
             stopRequired: "yes" | "no";
         };
+        /** PlanCurrentOut */
+        PlanCurrentOut: {
+            /** Day No */
+            day_no: number;
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "listed" | "practicing" | "ended";
+        };
+        /** PlanFilterOut */
+        PlanFilterOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** PlanPrepOut */
+        PlanPrepOut: {
+            /** Done */
+            done: number;
+            /** Failed */
+            failed: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "done";
+            /** Total */
+            total: number;
+        };
         /** PnlPointOut */
         PnlPointOut: {
             /** Pnl Usd */
@@ -2170,6 +2641,115 @@ export interface components {
              * Format: date-time
              */
             t: string;
+        };
+        /** PracticeArmedV1 */
+        PracticeArmedV1: {
+            /** Id */
+            id: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "alert_strategy" | "filter";
+        };
+        /** PracticeBlockV1 */
+        PracticeBlockV1: {
+            /** Firstday */
+            firstDay: string;
+            /**
+             * Hidedates
+             * @enum {string}
+             */
+            hideDates: "yes" | "no";
+            /**
+             * Schemaversion
+             * @constant
+             */
+            schemaVersion: 1;
+            screen: components["schemas"]["PracticeScreenV1"];
+            /** Sessions */
+            sessions: number;
+            setup: components["schemas"]["PracticeSetupV1"];
+        };
+        /**
+         * PracticePlanOut
+         * @description The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is
+         *     not over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule.
+         */
+        PracticePlanOut: {
+            current: components["schemas"]["PlanCurrentOut"] | null;
+            /** Days Opened */
+            days_opened: number;
+            /** Filters */
+            filters: components["schemas"]["PlanFilterOut"][];
+            /** Finished */
+            finished: boolean;
+            /** Id */
+            id: number;
+            /** Next Day */
+            next_day: string | null;
+            /** Next Day No */
+            next_day_no: number | null;
+            /** Next Weekday */
+            next_weekday: ("Mon" | "Tue" | "Wed" | "Thu" | "Fri") | null;
+            prep: components["schemas"]["PlanPrepOut"];
+            /** Sessions */
+            sessions: number;
+            spec: components["schemas"]["PracticeBlockV1"];
+        };
+        /** PracticePlanV1 */
+        PracticePlanV1: {
+            /** Maxlossusd */
+            maxLossUsd?: number | null;
+            /** Maxtrades */
+            maxTrades?: number | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Signalonly
+             * @enum {string}
+             */
+            signalOnly: "yes" | "no";
+            /**
+             * Stoprequired
+             * @enum {string}
+             */
+            stopRequired: "yes" | "no";
+        };
+        /** PracticeScreenV1 */
+        PracticeScreenV1: {
+            /** Filters */
+            filters: components["schemas"]["Filter"][];
+            /** Listat */
+            listAt: string;
+            /** Maxlist */
+            maxList: number;
+        };
+        /** PracticeSetupV1 */
+        PracticeSetupV1: {
+            /** Armed */
+            armed: components["schemas"]["PracticeArmedV1"][];
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "1m" | "5m" | "15m";
+            plan: components["schemas"]["PracticePlanV1"];
+            /**
+             * Session
+             * @enum {string}
+             */
+            session: "regular" | "extended";
+            /** Shares */
+            shares: number;
+            window: components["schemas"]["PracticeWindowV1"];
+        };
+        /** PracticeWindowV1 */
+        PracticeWindowV1: {
+            /** From */
+            from: string;
+            /** To */
+            to: string;
         };
         /** PrintsOut */
         PrintsOut: {
@@ -2285,6 +2865,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Day List Id */
+            day_list_id: number | null;
             /** Ended At */
             ended_at: string | null;
             /** Id */
@@ -2349,6 +2931,8 @@ export interface components {
              * Format: date
              */
             day: string;
+            /** Day List Id */
+            day_list_id: number | null;
             /**
              * Hide Date
              * @enum {string}
@@ -2445,6 +3029,47 @@ export interface components {
              * @enum {string}
              */
             source: "alert_strategy" | "filter";
+        };
+        /**
+         * ReviewOut
+         * @description Every candidate's move from its list price to the window end and the close. Only present once the day ended.
+         */
+        ReviewOut: {
+            /** Of */
+            of: number;
+            /** Rows */
+            rows: components["schemas"]["ReviewRowOut"][];
+            selection: components["schemas"]["SelectionOut"];
+            /**
+             * Window End
+             * Format: date-time
+             */
+            window_end: string;
+        };
+        /** ReviewRowOut */
+        ReviewRowOut: {
+            /** Close Move Pct */
+            close_move_pct: number | null;
+            /** Close Price */
+            close_price: number | null;
+            /** High Pct */
+            high_pct: number | null;
+            /** List Price */
+            list_price: number;
+            /** Low Pct */
+            low_pct: number | null;
+            /** Move Pct */
+            move_pct: number | null;
+            /** Picked */
+            picked: ("traded" | "starred") | null;
+            /** Range Pct */
+            range_pct: number | null;
+            /** Rank */
+            rank: number | null;
+            /** Symbol */
+            symbol: string;
+            /** Window End Price */
+            window_end_price: number | null;
         };
         /** ScreenerFilterCreate */
         ScreenerFilterCreate: {
@@ -2656,6 +3281,29 @@ export interface components {
             scanned: number;
             stamp: components["schemas"]["Stamp"];
         };
+        /** SelectionOut */
+        SelectionOut: {
+            /** Median Abs Move Pct */
+            median_abs_move_pct: number | null;
+            /** Picks */
+            picks: components["schemas"]["SelectionPickOut"][];
+            /** Picks Avg Abs Move Pct */
+            picks_avg_abs_move_pct: number | null;
+        };
+        /** SelectionPickOut */
+        SelectionPickOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "traded" | "starred";
+            /** Move Pct */
+            move_pct: number;
+            /** Rank */
+            rank: number;
+            /** Symbol */
+            symbol: string;
+        };
         /** SessionOut */
         SessionOut: {
             /** Close Time */
@@ -2789,6 +3437,16 @@ export interface components {
             quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
             /** Source */
             source: string | null;
+        };
+        /** StarOut */
+        StarOut: {
+            /**
+             * Starred Clock
+             * Format: date-time
+             */
+            starred_clock: string;
+            /** Symbol */
+            symbol: string;
         };
         /** StatusAlertsOut */
         StatusAlertsOut: {
@@ -3862,6 +4520,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_daily_api_desk_replay_daily_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyOut"];
+                };
+            };
+        };
+    };
+    open_next_api_desk_replay_daily_next_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    plan?: components["schemas"]["PracticeBlockV1"];
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenNextOut"];
+                };
+            };
+        };
+    };
+    get_day_list_api_desk_replay_day_lists__day_list_id__get: {
+        parameters: {
+            query?: {
+                peek?: string | null;
+            };
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_day_list_api_desk_replay_day_lists__day_list_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DayListPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_day_api_desk_replay_day_lists__day_list_id__end_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_list_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DaySessionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaySessionOut"];
                 };
             };
             /** @description Validation Error */
