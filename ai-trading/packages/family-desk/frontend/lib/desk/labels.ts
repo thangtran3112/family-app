@@ -43,3 +43,9 @@ export const FREQUENCY_LABEL: Record<string, string> = {
   once_per_bar: "Once per bar close",
   every_time: "Every time",
 };
+
+const ACRONYMS = new Set(["rsi", "cci", "adx", "sma", "ema", "macd", "vwma", "vwap", "atr", "obv", "mfi", "roc"]);
+
+/** "rsi" reads RSI, "awesome_oscillator" reads Awesome Oscillator: indicator acronyms stay capitalised. */
+export const indicatorName = (key: string): string =>
+  key.split("_").map((word) => (ACRONYMS.has(word) ? word.toUpperCase() : word.replace(/^\w/, (letter) => letter.toUpperCase()))).join(" ");

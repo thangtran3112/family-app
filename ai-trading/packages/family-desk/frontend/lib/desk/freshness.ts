@@ -1,5 +1,5 @@
 import type { Stamp } from "../api/schemas.ts";
-import { formatAgo, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime } from "./format.ts";
+import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
 // never write these strings; they call the functions below. `{x}` marks a value filled at render time.
@@ -38,6 +38,9 @@ export const COPY = {
   noAlertStrategies: "No alert strategies yet",
   futuresNotConnected: "Waiting for IBKR · not connected yet",
   futuresReadOnly: "Futures · read only",
+  firstScan: "Waiting for the first scan",
+  newFilter: "New filter",
+  noFilters: "No screener filters yet",
   quotesNotYet: "Quotes: Not updated yet",
   scansNotYet: "Scans: Not run yet",
   stripFirstUpdate: "First market update {time}",
@@ -80,6 +83,8 @@ export type FreshnessInput = {
   stamp: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null;
   session?: MarketSession;
   connection?: Connection;
+  /** The stamp covers the whole data feed (top bar, status bar, Today), not one symbol or one list. */
+  feed?: boolean;
   now?: Date;
 };
 
@@ -110,11 +115,12 @@ const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 export const fillCopy = fill;
 
-export function freshnessState({ stamp, session, connection = "ok" }: FreshnessInput): FreshnessState {
+export function freshnessState({ stamp, session, connection = "ok", feed = false }: FreshnessInput): FreshnessState {
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
-  // A closed market has nothing to retry: red "trying again" is for an open session whose quotes stopped.
-  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return session === "closed" ? "closed" : "unavailable";
+  // A whole feed with nothing stored while the market is closed has nothing to retry: red "trying again" is for an
+  // open session whose quotes stopped, or for one symbol the Desk cannot read.
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return feed && session === "closed" ? "closed" : "unavailable";
   if (stamp.freshness === "paused") return "paused";
   if (connection === "updating") return "updating";
   if (stamp.quality === "fallback") return "backup";
@@ -160,6 +166,14 @@ const QUALITY_PHRASE: Record<Stamp["quality"], string> = {
 };
 
 export const qualityPhrase = (quality: Stamp["quality"]): string => QUALITY_PHRASE[quality];
+
+/** The dated line under a technical board (02l §a: "As of last close · Fri 2026-10-23 · 4:00 PM ET · Alpaca"). */
+export function asOfLine(stamp: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null): string {
+  if (!stamp?.as_of) return "No update yet";
+  const source = stamp.source ? sourceLabel(stamp.source) : null;
+  if (stamp.freshness === "closed") return formatLastCloseLine(stamp.as_of, source);
+  return [`As of ${formatAsOfText(stamp.as_of)}`, QUALITY_PHRASE[stamp.quality], source].filter(Boolean).join(" · ");
+}
 
 /** D11 market-data rows: "Quotes: Alpaca · Delayed 15 min". */
 export function marketDataLine(kind: "Quotes" | "Scans", stamp: Pick<Stamp, "source" | "quality"> | null): string {

@@ -28,7 +28,7 @@ export function DashboardScreen() {
       <header className={styles.head}>
         <h1 className={styles.pageTitle}>Today</h1>
         {/* "Updating" shows in the caption below; the badge keeps showing the data's own state. */}
-        {data && <FreshnessBadge stamp={data.stamp} session={data.market.session} connection={dim ? "reconnecting" : "ok"} />}
+        {data && <FreshnessBadge stamp={data.stamp} session={data.market.session} connection={dim ? "reconnecting" : "ok"} feed />}
         {query.updating && <span className={styles.caption}>{COPY.updating}</span>}
         <button type="button" className={styles.button} onClick={query.refresh}>Refresh</button>
       </header>
