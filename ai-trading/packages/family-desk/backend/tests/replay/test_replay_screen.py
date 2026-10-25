@@ -370,3 +370,63 @@ def test_reported_before_the_open_flags_pre_and_prior_post_but_not_same_day_post
     assert screen.reported_before_open([(nxt, "post-market")], DAY) is True  # after-the-close report the day before
     assert screen.reported_before_open([(DAY, "post-market")], DAY) is False  # same-day after the close: next session
     assert screen.reported_before_open([(DAY, "")], DAY) is False  # no time of day: never guessed from the gap
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("gap-up", "08:30"),  # premarket_0830: its own 08:30 point
+        ("gap-down", "08:30"),
+        ("abnormal-volume", "10:00"),  # bar_close_15m, regular: the first bar closes at 09:45, plus the lag
+        ("above-vwap-on-volume", "09:50"),  # bar_close_5m, regular
+        ("top-movers", "10:00"),
+        ("high-volatility", "04:30"),  # daily_close: the sessions before the day, any list time
+        ("new-20-day-high", "04:30"),
+        ("overbought-rsi", "04:30"),
+    ],
+)
+def test_earliest_list_at_is_when_the_filter_first_reads_a_bar_of_the_day(name, expected) -> None:
+    spec = FilterStrategySpecV1.model_validate(load_template(f"filters/{name}.json")).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    assert screen.earliest_list_at(spec) == expected
+
+
+@pytest.mark.parametrize(
+    ("run_on", "watch_session", "expected"),
+    [
+        ("bar_close_1m", "regular", "09:46"),
+        ("bar_close_1h", "regular", "10:45"),
+        ("bar_close_15m", "extended", "04:30"),
+    ],
+)
+def test_earliest_list_at_follows_the_cadence_and_the_session(run_on, watch_session, expected) -> None:
+    assert screen.earliest_list_at({"watch": {"runOn": run_on, "session": watch_session}}) == expected
+
+
+def test_a_list_at_the_earliest_time_reads_a_bar_of_the_day_and_a_quarter_hour_earlier_does_not() -> None:
+    """The rule is the engine's behaviour, not a guess: the first 15-minute bar of the day is only a point once the
+    list's data reaches 09:45. Earlier, the newest point is still the previous session's last bar."""
+    spec = FilterStrategySpecV1.model_validate(load_template("filters/abnormal-volume.json")).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    spec["when"] = {"op": "gte", "left": {"series": "close"}, "right": {"value": 0}}  # true wherever it is read
+    days = trading_days("stock", DAY, 40)
+    daily = daily_bars(days[:-1], [50.0] * 39, volume=2_000_000)
+    minutes = pd.concat([minute_bars("stock", day, price=50.0) for day in days[-12:]])
+    filters = [FilterInput(1, 1, "Always", spec, ["AAA"])]
+
+    def points(hhmm: str):
+        built = build_list(
+            filters=filters,
+            daily_of=lambda _s: daily,
+            minutes_of=lambda _s: minutes,
+            day=DAY,
+            list_at=et(DAY, hhmm),
+            max_list=30,
+        )
+        return built.candidates[0]["matched_since"].date()
+
+    assert points("10:00") == DAY  # matched on the day's own first bar
+    # a quarter hour earlier its data stops at 09:30: the newest point is still the previous session's last bar
+    assert points("09:45") != DAY

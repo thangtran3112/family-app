@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 LIST_DATA_LAG = pd.Timedelta(EMBARGO)
 #: Prior sessions of minutes a list reads: more than the 18 calendar days the live metric row asks for.
 LIST_LOOKBACK_SESSIONS = 14
+LIST_AT_MIN = "04:30"  # the contract's earliest list time (`practice_block` `list-time-range`)
 ASOF_PART = "asof"
 EARLIEST_LIST_DAY = date(2017, 1, 3)  # 252 sessions after the 2016-01-04 SIP floor
 _PRICE_COLUMNS = ("open", "high", "low", "close")
@@ -108,6 +109,23 @@ def cut_frames(bars: SymbolBars, data_through: pd.Timestamp, lookback_days: int 
     else:
         minutes = None
     return SymbolBars(daily, minutes)
+
+
+def earliest_list_at(spec: dict[str, Any]) -> str:
+    """The earliest list time ("HH:MM" ET) at which `spec` reads a bar of the list day itself.
+
+    A daily filter reads the sessions before the day, so any list time works. `premarket_0830` needs its 08:30
+    point. A cadence filter needs its first bar of the day closed and past the data lag: a regular-session bar
+    opens at 09:30, an extended-session one at 04:00. Before then the scan would fall back to the previous
+    session's last bar and present it as the morning's list (an empty one, usually)."""
+    run_on = spec["watch"]["runOn"]
+    if run_on in DAILY_RUN_ON:
+        return LIST_AT_MIN
+    if run_on == "premarket_0830":
+        return "08:30"
+    opens = 9 * 60 + 30 if spec["watch"]["session"] == "regular" else 4 * 60
+    minutes = opens + engine.CADENCE_MINUTES[run_on] + int(LIST_DATA_LAG.total_seconds() // 60)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
 def passes_floor(daily: pd.DataFrame) -> bool:
