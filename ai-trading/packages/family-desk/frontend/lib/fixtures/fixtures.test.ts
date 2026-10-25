@@ -35,9 +35,8 @@ test("fixture exports contain no data-quality key at any depth", () => {
   fixtures.forEach((fixture) => assertNoQualityKey(fixture));
 });
 
-test("fixture banner names the phase when the screen will be wired", () => {
-  assert.equal(fixtureBannerText(6), "Fixture — wired in Phase 6");
-  assert.equal(fixtureBannerText("6b"), "Fixture — wired in Phase 6b");
+test("fixture banner says the screen is a preview, with no internal phase number", () => {
+  assert.equal(fixtureBannerText(), "Preview · not connected yet");
 });
 
 test("stocks fixtures include research, calibration, and earnings widgets", () => {

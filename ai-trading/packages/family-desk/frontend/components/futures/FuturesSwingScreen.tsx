@@ -6,7 +6,8 @@ import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketCh
 import { BiasGauge } from "@/components/technicals/Gauges";
 import { BarsSchema, FuturesSpecsSchema, TechnicalsSchema } from "@/lib/api/schemas";
 import { deskFetch } from "@/lib/api/client";
-import { qualityLabel } from "@/lib/labels";
+import { formatAsOfText } from "@/lib/desk/format";
+import { qualityPhrase } from "@/lib/desk/freshness";
 import { loadFuturesSnapshot, snapshotForContract, type FuturesSnapshot } from "@/lib/futures/load";
 import { sizeMicroFirst } from "@/lib/futures/specs";
 import styles from "./futures.module.css";
@@ -125,7 +126,7 @@ export function FuturesSwingScreen() {
         <div>
           <p className={styles.eyebrow}>FUTURES · SWING</p>
           <h1>Futures swing</h1>
-          <p className={styles.subtitle}>CME reference specs and backend technicals · no broker connected yet</p>
+          <p className={styles.subtitle}>CME contract specs and Desk technicals · no broker connected yet</p>
         </div>
         <Link className={styles.secondaryLink} href="/futures/specs">Specs &amp; roll calendar</Link>
       </header>
@@ -148,7 +149,7 @@ export function FuturesSwingScreen() {
             </button>
           ))}
         </div>
-        {specs?.length === 0 && <p className={styles.muted}>No futures contract specs were returned.</p>}
+        {specs?.length === 0 && <p className={styles.muted}>No futures contract specs are available.</p>}
         {pair && <div className={styles.contractToggle} aria-label="Contract size">
           {[pair.mini, pair.micro].map((contract) => (
             <button key={contract.root} type="button" aria-pressed={selectedContract === contract.root} onClick={() => chooseContract(contract)}>{contract.root}</button>
@@ -159,7 +160,7 @@ export function FuturesSwingScreen() {
 
       <section className={styles.marketSection} aria-label="Futures chart and bias">
         <div className={styles.marketHeader}>
-          <div><h2>{symbol} · daily chart</h2><p>{marketLoading ? "Loading backend data…" : bars ? `${qualityLabel(bars.quality)} · ${bars.as_of ?? "as of unavailable"}` : "Market data unavailable"}</p></div>
+          <div><h2>{symbol} · daily chart</h2><p>{marketLoading ? "Loading market data…" : bars ? (bars.as_of ? `${qualityPhrase(bars.quality)} · as of ${formatAsOfText(bars.as_of)}` : "Not available until a broker is connected") : "Market data unavailable"}</p></div>
           <span className={styles.connectionBadge}>no broker connected yet</span>
         </div>
         {marketError && <p className={styles.error} role="status">{marketError}</p>}
@@ -175,7 +176,7 @@ export function FuturesSwingScreen() {
         <p className={styles.muted}>
           {!daily || daily.quality === "unavailable" || daily.as_of === null
             ? "Weekly levels and overnight range unavailable."
-            : "Classic weekly pivots are from the backend; prior-week high/low/close and overnight range are unavailable."}
+            : "Classic weekly pivots come from the Desk's daily bars; prior-week high/low/close and overnight range are unavailable."}
         </p>
         <div className={styles.biasGrid}>
           {([ ["1D", daily], ["4h", fourHour] ] as const).map(([label, value]) => (
@@ -188,7 +189,7 @@ export function FuturesSwingScreen() {
 
       <section className={styles.sizerSection} aria-labelledby="futures-sizer-title">
         <header className={styles.blockHeading}><div><p className={styles.eyebrow}>REFERENCE ONLY · NO ORDERS</p><h2 id="futures-sizer-title">Micro-first risk sizing</h2></div><span>Margin · unavailable</span></header>
-        <p className={styles.muted}>Uses the selected contract&apos;s API multiplier. This does not submit an order or estimate margin.</p>
+        <p className={styles.muted}>Uses the selected contract&apos;s dollars per point. This does not submit an order or estimate margin.</p>
         <div className={styles.sizerInputs}>
           <label>Risk budget ($)<input inputMode="decimal" type="number" min="0" step="any" value={risk} onChange={(event) => setRisk(event.currentTarget.value)} /></label>
           <label>Entry<input inputMode="decimal" type="number" step="any" value={entry} onChange={(event) => setEntry(event.currentTarget.value)} /></label>
@@ -212,7 +213,7 @@ export function FuturesSwingScreen() {
       </section>
 
       <section className={styles.phaseSix} aria-labelledby="phase-six-title">
-        <p className={styles.phaseBadge}>PHASE 6 FIXTURE · NOT ACCOUNT DATA</p>
+        <p className={styles.phaseBadge}>EXAMPLE · NOT ACCOUNT DATA</p>
         <h2 id="phase-six-title">Positions, roll warnings &amp; weekend controls</h2>
         <p>Illustrative Paper examples only. They are not imported account positions, fills, or live P/L.</p>
         <div className={styles.fixturePositionGrid}>
@@ -233,8 +234,8 @@ export function FuturesSwingScreen() {
           <span>{activeSpec ? `CME session · ${activeSpec.session.close_time} ET close / ${activeSpec.session.open_time} ET reopen. A gap can skip a stop.` : "CME session hours unavailable."}</span>
         </div>
         <div className={styles.disabledControls}>
-          <button type="button" disabled>Hold (keep stops) · Phase 6</button>
-          <button type="button" disabled>Flatten before 16:55 · Phase 6</button>
+          <button type="button" disabled>Hold (keep stops) · needs broker setup</button>
+          <button type="button" disabled>Flatten before 16:55 · needs broker setup</button>
         </div>
       </section>
 

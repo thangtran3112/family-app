@@ -114,8 +114,8 @@ for route in today screener screener/filters strategies/library alerts alerts/ne
   mkdir -p "$DESK/$(dirname "$route")"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
-# The Practice routes from 02o.
-for route in practice practice/replay practice/journal; do
+# The Practice routes from 02o and the daily-list day screen from 02o-b.
+for route in practice practice/replay practice/journal practice/day; do
   mkdir -p "$DESK/$route"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done

@@ -24,7 +24,7 @@ export function PositionFixture() {
         ))}
       </dl>
       <button className={styles.fixturePositionAction} type="button" disabled={!preview.controlsEnabled}>
-        Position actions · Phase {preview.phase}
+        Position actions · {preview.actionNote}
       </button>
     </section>
   );

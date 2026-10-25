@@ -39,7 +39,7 @@ export function NotableDaysTable({ days, loading, error, onRetry, symbol, symbol
   const customSymbol = symbols.length > 0 && symbol !== "" && !symbols.includes(symbol);
   let body: ReactNode;
   if (loading) body = <LoadingBlock label={PRACTICE_COPY.loadingDays} height={120} />;
-  else if (error !== null) body = <ErrorBlock subject="practice days" onRetry={onRetry} />;
+  else if (error !== null) body = <ErrorBlock subject="practice day list" onRetry={onRetry} />;
   else if (days.length === 0) {
     body = <EmptyBlock title={symbol ? practiceText("noNotableDays", { symbol }) : "No notable days yet"} />;
   } else {

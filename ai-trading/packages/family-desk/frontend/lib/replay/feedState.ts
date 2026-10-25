@@ -37,6 +37,8 @@ export type ReplayView = {
   signals: ReplaySignal[];
   levels: ReplayLevels;
   last: { price: number; at: string } | null;
+  /** Seconds with no eligible print once that passes a minute (the server's tape marker); null while prints flow. */
+  quietS: number | null;
   openTrade: OpenTrade | null;
   revealedThrough: string;
   atEnd: boolean;
@@ -84,6 +86,7 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
     signals: mergeSignals([], feed.signals),
     levels: feed.levels,
     last: feed.last,
+    quietS: feed.quiet_s,
     openTrade: feed.open_trade,
     revealedThrough: feed.revealed_through,
     atEnd: feed.at_end,
@@ -107,6 +110,7 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
     signals: mergeSignals(view.signals, delta.signals),
     levels: delta.levels,
     last: delta.last ?? view.last,
+    quietS: delta.quiet_s,
     openTrade: delta.open_trade,
     revealedThrough: delta.revealed_through,
     atEnd: delta.at_end,

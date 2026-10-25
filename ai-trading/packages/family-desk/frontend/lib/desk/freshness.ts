@@ -1,5 +1,5 @@
 import type { Stamp } from "../api/schemas.ts";
-import { formatAgo, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime } from "./format.ts";
+import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
 // never write these strings; they call the functions below. `{x}` marks a value filled at render time.
@@ -38,6 +38,14 @@ export const COPY = {
   noAlertStrategies: "No alert strategies yet",
   futuresNotConnected: "Waiting for IBKR · not connected yet",
   futuresReadOnly: "Futures · read only",
+  firstScan: "Waiting for the first scan",
+  newFilter: "New filter",
+  noFilters: "No screener filters yet",
+  quotesNotYet: "Quotes: Not updated yet",
+  scansNotYet: "Scans: Not run yet",
+  stripFirstUpdate: "First market update {time}",
+  stripNoData: "No market data yet",
+  stripLastClose: "Last close · {time}",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -75,6 +83,8 @@ export type FreshnessInput = {
   stamp: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null;
   session?: MarketSession;
   connection?: Connection;
+  /** The stamp covers the whole data feed (top bar, status bar, Today), not one symbol or one list. */
+  feed?: boolean;
   now?: Date;
 };
 
@@ -103,11 +113,14 @@ const TONE: Record<FreshnessState, FreshnessTone> = {
 
 const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
+export const fillCopy = fill;
 
-export function freshnessState({ stamp, session, connection = "ok" }: FreshnessInput): FreshnessState {
+export function freshnessState({ stamp, session, connection = "ok", feed = false }: FreshnessInput): FreshnessState {
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
-  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return "unavailable";
+  // A whole feed with nothing stored while the market is closed has nothing to retry: red "trying again" is for an
+  // open session whose quotes stopped, or for one symbol the Desk cannot read.
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return feed && session === "closed" ? "closed" : "unavailable";
   if (stamp.freshness === "paused") return "paused";
   if (connection === "updating") return "updating";
   if (stamp.quality === "fallback") return "backup";
@@ -140,7 +153,7 @@ export function statusBarText(input: FreshnessInput): string {
   const source = sourceLabel(input.stamp?.source);
   if (view.state === "live") return `Quotes live · ${source}`;
   if (view.state === "delayed") return `Quotes: ${source} · ${COPY.delayed}`;
-  if (view.state === "closed") return `Quotes: ${source} · Market closed`;
+  if (view.state === "closed") return input.stamp?.source ? `Quotes: ${source} · Market closed` : view.label;
   return view.label;
 }
 
@@ -154,9 +167,19 @@ const QUALITY_PHRASE: Record<Stamp["quality"], string> = {
 
 export const qualityPhrase = (quality: Stamp["quality"]): string => QUALITY_PHRASE[quality];
 
+/** The dated line under a technical board (02l §a: "As of last close · Fri 2026-10-23 · 4:00 PM ET · Alpaca"). */
+export function asOfLine(stamp: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null): string {
+  if (!stamp?.as_of) return "No update yet";
+  const source = stamp.source ? sourceLabel(stamp.source) : null;
+  if (stamp.freshness === "closed") return formatLastCloseLine(stamp.as_of, source);
+  return [`As of ${formatAsOfText(stamp.as_of)}`, QUALITY_PHRASE[stamp.quality], source].filter(Boolean).join(" · ");
+}
+
 /** D11 market-data rows: "Quotes: Alpaca · Delayed 15 min". */
 export function marketDataLine(kind: "Quotes" | "Scans", stamp: Pick<Stamp, "source" | "quality"> | null): string {
   if (!stamp) return `${kind}: Unavailable`;
+  // A feed that has not run yet has no source to name; "No source · Unavailable" read as broken beside live charts.
+  if (stamp.quality === "unavailable") return kind === "Quotes" ? COPY.quotesNotYet : COPY.scansNotYet;
   return `${kind}: ${sourceLabel(stamp.source)} · ${QUALITY_PHRASE[stamp.quality]}`;
 }
 
@@ -213,6 +236,7 @@ export const PRACTICE_COPY = {
   feedIex: "IEX prints only · about 4% of volume · bar volume is consolidated",
   fastTape: "Fast tape · showing the latest {shown} of {count} prints",
   quietTape: "No prints in the last 30 s",
+  haltedTape: "No prints for {time} · the stock may be halted",
   noTrading: "No trading on {day} · pick a weekday",
   notFinished: "This session isn't finished yet · replay opens at 4:15 PM ET",
   beforeFloor: "Replay goes back to Jan 4, 2016",
@@ -250,6 +274,60 @@ export const PRACTICE_COPY = {
   startError: "Couldn't start the session · Try again",
   savingNotes: "Saving notes…",
   notesSaved: "Notes saved",
+  // Daily-list practice (02o-b v1)
+  planTitle: "Daily list practice",
+  planIntro: "Each day your own filters build a list for the past day you are about to replay. Pick a few names, practise one, then see how every name moved.",
+  planNone: "No daily plan yet · set one up to start Day 1",
+  planDay: "Day {day} of {of}",
+  planNext: "next: {weekday}",
+  planInProgress: "Day {day} of {of} · in progress",
+  planDone: "All {of} days done",
+  planPreparing: "Preparing data · {done} of {total}",
+  planPreparingHint: "The first list opens when the data is ready. You can leave this page.",
+  planFailedSome: "{failed} symbols could not be loaded and read as no data",
+  planContinue: "Continue",
+  planStart: "Start Day 1",
+  planNew: "New plan",
+  planReplace: "A new plan replaces this one. Your finished days stay in Recent sessions.",
+  planStartError: "Couldn't open the list · Try again",
+  planFilters: "Filters",
+  planFiltersEmpty: "No filters found · save one in the Screener first",
+  planFiltersMax: "Pick one to three filters",
+  planListAt: "List time",
+  planListSize: "List size",
+  planStartDay: "Start day",
+  planDays: "Days",
+  planHideDates: "Hide dates",
+  dayLoading: "Building the list…",
+  dayLoadError: "Couldn't load this day · Try again",
+  dayNoPlan: "No practice day selected",
+  dayHeader: "List at {listAt} from data through {through} · {scanned} of {size} scanned · {matched} matched, showing {shown}",
+    dayNoNames: "No names matched this morning",
+  dayStar: "Star {symbol}",
+  dayUnstar: "Unstar {symbol}",
+  dayRemove: "Remove {symbol} from your names",
+  dayStarsFull: "You can star at most 5 names",
+  dayWatch: "Your names",
+  dayWatchEmpty: "Star up to 5 names to keep them in view",
+  dayPractise: "Practise {symbol}",
+  dayPractiseHint: "One name a day for now · End day scores it",
+  dayEnd: "End day",
+  dayEndWarning: "Ending the day shows how every name moved after the list.",
+  dayEnded: "Day over",
+  dayPeek: "Peek",
+  dayPeekNone: "Pick a row to peek at its chart before the open",
+  dayPeekDaily: "Daily bars on the same share basis as the list",
+  dayPeekToday: "Today so far",
+  dayReported: "Reported before the open",
+  dayStartError: "Couldn't start the practice · Try again",
+  reviewTitle: "How the list moved",
+  reviewNote: "Moves are from each name's list price, not from the open",
+  reviewSelection: "Your names moved {moves} · list median {median} · ranked {ranks} of {of}",
+  reviewNoPicks: "You did not star or trade a name",
+  reviewEmpty: "No moves to show for this day",
+  backToList: "Back to the list",
+  dayAfter: "Next day",
+  dayFinished: "You have finished every day of this plan",
 } as const;
 
 /** Words that must not appear in Practice copy: there is no order, position, fill or broker in this lane (02o §a5). */

@@ -24,6 +24,7 @@ from ai_trading.db.models import (
     FeedHealth,
     FilterRun,
     SymbolMetrics,
+    UniverseDay,
     UniverseSymbol,
     Watchlist,
     WatchlistItem,
@@ -34,6 +35,7 @@ from ai_trading.jobs.clock import JobClock
 DAY = date(2026, 10, 6)  # a regular session, EDT
 SESSION = trading_session("stock", DAY)
 PREMARKET = datetime(2026, 10, 6, 12, 30, tzinfo=UTC)  # 08:30 ET
+SATURDAY = datetime(2026, 10, 24, 15, 0, tzinfo=UTC)  # the weekend the refresher shipped: no session until Monday
 TEN = datetime(2026, 10, 6, 14, 0, tzinfo=UTC)  # 10:00 ET
 TEN_FIFTEEN = TEN + timedelta(minutes=15)
 CLOSE_PASS = datetime(2026, 10, 6, 20, 30, tzinfo=UTC)  # 16:30 ET
@@ -156,6 +158,60 @@ def test_five_failures_in_a_row_stop_the_pass_but_a_success_resets_the_run():
     order = ["S1", "S2", "S3", "S4", "OK", "S5", "S6", "S7", "S8", "S9", "S10"]
     refresher._fetch_each(order, fetch)
     assert attempts == order[:10]  # the success at index 4 reset the run, so the pass stopped five failures later
+
+
+# -- the market strip ------------------------------------------------------------------------------------------
+
+
+def test_every_pass_scans_the_market_strip_without_a_watchlist_or_a_universe(db_session):
+    assert refresher._scan_symbols(db_session) == ["IWM", "QQQ", "SPY"]
+
+
+def test_the_seed_stores_the_strip_rows_on_a_weekend_and_vouches_through_its_own_feed(db_session):
+    bars = FakeBarsSource()
+
+    report = refresher.seed_market_strip(db_session, scanning(bars), now=SATURDAY)
+    db_session.commit()
+
+    assert report.state == "ok"
+    assert {call[0] for call in bars.calls} == {"SPY", "QQQ", "IWM"}
+    assert {call[1] for call in bars.calls} == {"1d"}  # daily bars only: no minute history for a seed
+    rows = {row.symbol: row for row in db_session.execute(select(SymbolMetrics)).scalars()}
+    assert set(rows) == {"SPY", "QQQ", "IWM"} and rows["SPY"].metrics["last"] == 100.0
+    assert rows["SPY"].quality == "eod" and rows["SPY"].as_of == datetime(2026, 10, 23, 20, 0, tzinfo=UTC)
+    assert health(db_session, refresher.STRIP_FEED).state == "ok"
+    # No minute bar or screener run stands behind a seed: the feeds the alerts and the watchdog read stay untouched.
+    assert health(db_session, "bars_delayed") is None and health(db_session, "scan") is None
+
+
+def test_ensure_seeds_once_a_strip_symbol_has_no_row_and_then_leaves_it_alone(db_session):
+    bars = FakeBarsSource()
+    assert refresher.ensure_market_strip(db_session, scanning(bars), now=SATURDAY) is True
+    db_session.commit()
+    seeded = len(bars.calls)
+
+    assert refresher.ensure_market_strip(db_session, scanning(bars), now=SATURDAY + INTERVAL) is False
+    assert len(bars.calls) == seeded  # every row exists: not one provider call
+
+
+def test_ensure_does_nothing_for_a_data_source_without_the_universe_kind(db_session):
+    bars = FakeBarsSource()
+    assert refresher.ensure_market_strip(db_session, WatchlistOnly(bars), now=SATURDAY) is False
+    assert bars.calls == []
+
+
+def test_a_seed_that_found_nothing_waits_before_asking_again(db_session):
+    down = DownBars(FakeBarsSource(), down={"*"})
+    assert refresher.ensure_market_strip(db_session, scanning(down), now=SATURDAY) is True
+    db_session.commit()
+    assert health(db_session, refresher.STRIP_FEED).state == "down"
+    assert db_session.execute(select(func.count()).select_from(SymbolMetrics)).scalar_one() == 0
+
+    assert refresher.ensure_market_strip(db_session, scanning(down), now=SATURDAY + timedelta(minutes=1)) is False
+    healed = FakeBarsSource()
+    assert refresher.ensure_market_strip(db_session, scanning(healed), now=SATURDAY + refresher.STRIP_RETRY) is True
+    db_session.commit()
+    assert health(db_session, refresher.STRIP_FEED).state == "ok"
 
 
 # -- feed health ----------------------------------------------------------------------------------------------
@@ -371,6 +427,33 @@ def test_the_premarket_pass_builds_the_universe_then_scans_it_once(db_session, s
 
     assert filter_runs(db_session, "premarket_0830") == runs
     assert db_session.execute(select(func.count()).select_from(UniverseSymbol)).scalar_one() == universe_size
+
+
+def test_the_premarket_pass_snapshots_the_universe_it_scanned_once_per_day(db_session, seeded):
+    sources = scanning(FakeBarsSource(), FakeUniverse(actives=["ZZZZ"]))
+    refresher.premarket_pass(db_session, sources, now=PREMARKET)
+    db_session.commit()
+    row = db_session.get(UniverseDay, DAY)
+    assert row.symbols == refresher.survivor_symbols(db_session) and "ZZZZ" in row.symbols
+    refresher.premarket_pass(db_session, sources, now=PREMARKET)  # a repeated run replaces the row, never doubles it
+    db_session.commit()
+    assert db_session.execute(select(func.count()).select_from(UniverseDay)).scalar_one() == 1
+
+
+def test_a_failing_snapshot_never_fails_the_live_pass(db_session, seeded, monkeypatch):
+    sources = scanning(FakeBarsSource(), FakeUniverse(actives=["ZZZZ"]))
+    real = refresher.pg_insert
+
+    def failing(model):
+        if model is UniverseDay:
+            raise RuntimeError("the snapshot table is gone")
+        return real(model)
+
+    monkeypatch.setattr(refresher, "pg_insert", failing)
+    report = refresher.premarket_pass(db_session, sources, now=PREMARKET)
+    db_session.commit()
+    assert report.state == "ok" and filter_runs(db_session, "premarket_0830") == 2  # the scan went ahead regardless
+    assert db_session.get(UniverseDay, DAY) is None
 
 
 def test_the_15_minute_pass_rebuilds_a_universe_the_premarket_pass_never_built(db_session, seeded):

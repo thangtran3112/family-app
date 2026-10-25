@@ -13,7 +13,9 @@ from ai_trading.api.schemas.common import Stamp
 from ai_trading.api.schemas.platform import StatusAlertsOut, StatusMarketOut, StatusScansOut
 from ai_trading.api.stamp import feed_last_ok, make_stamp
 from ai_trading.core.freshness import market_state
-from ai_trading.db.models import Alert
+from ai_trading.data.refresher import STRIP_FEED
+from ai_trading.data.universe import MARKET_STRIP
+from ai_trading.db.models import Alert, SymbolMetrics
 from ai_trading.jobs.refresh_15m import next_due
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
@@ -54,6 +56,21 @@ def _delayed_feed_stamp(session: Session, feed: str, now: datetime) -> Stamp:
     )
 
 
+def _seeded_quotes_stamp(session: Session, now: datetime) -> Stamp | None:
+    """Before the first 15-minute pass the Desk holds the market strip's daily bars and nothing newer (a deploy on a
+    weekend has no pass until Monday): an end-of-day stamp from the seed's own feed, so the status line does not claim
+    there is no quote source while the dashboard shows closing prices. None when nothing was seeded."""
+    last_ok = feed_last_ok(session, STRIP_FEED)
+    as_of = session.execute(
+        select(func.max(SymbolMetrics.as_of)).where(SymbolMetrics.symbol.in_(MARKET_STRIP))
+    ).scalar_one()
+    if last_ok is None or as_of is None:
+        return None
+    return make_stamp(
+        quality="eod", source="alpaca", as_of=as_of, interval=_DELAYED_INTERVAL, last_ok_at=last_ok, now=now
+    )
+
+
 @router.get("/status", response_model=StatusOut)
 def status(
     user: AuthedUser = Depends(get_current_user),
@@ -66,6 +83,8 @@ def status(
     market = market_state(now)
     gateway = data_sources.gateway_status()
     quotes = _delayed_feed_stamp(session, "bars_delayed", now)
+    if quotes.as_of is None:
+        quotes = _seeded_quotes_stamp(session, now) or quotes
     live = gateway.state == "connected" and gateway.quality is not None and gateway.as_of is not None
     if live:
         # The gateway's own tick: its quality and time, so the stamp never claims more than IBKR said (02m §b4).

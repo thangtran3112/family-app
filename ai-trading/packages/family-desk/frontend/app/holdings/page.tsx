@@ -1,16 +1,19 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { holdingCalls, holdings, holdingsSummary, taxLots } from "../../lib/fixtures/holdings.ts";
 
+export const metadata: Metadata = { title: "Holdings" };
+
 export default function HoldingsPage() {
   return (
-    <FixtureScreen phase={5} title="Holdings">
+    <FixtureScreen title="Holdings">
       <div className={styles.content}>
         <div className={styles.sectionHeading}>
           <p className={styles.muted}>Sample portfolio · account sources are not connected</p>
           <div className={styles.buttonRow}>
-            <button className={styles.buttonSecondary} type="button" disabled aria-describedby="holdings-action-note">Upload CSV · Phase 5</button>
-            <button className={styles.button} type="button" disabled aria-describedby="holdings-action-note">Import from broker · Phase 5</button>
+            <button className={styles.buttonSecondary} type="button" disabled aria-describedby="holdings-action-note">Upload CSV · not available yet</button>
+            <button className={styles.button} type="button" disabled aria-describedby="holdings-action-note">Import from broker · needs broker setup</button>
           </div>
         </div>
         <p className={styles.footnote} id="holdings-action-note">Imports are unavailable in this fixture screen; sample values are not account data.</p>

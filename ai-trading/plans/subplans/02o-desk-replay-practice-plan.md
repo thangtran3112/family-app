@@ -8,6 +8,8 @@ Implementation (2026-10-24): the backend stream (steps 3a–3d) and the frontend
 `feature/desk-beyond-mvp-2`, pending the integration gates and the pull request. The step 5 Playwright Practice specs pass at 1440 and
 1180 against the stub (`DESK_REPLAY_STUB=1`); the stub-off real-data run and the §i acceptance checks are still open.
 
+02o-b v1 (daily-list practice, 2026-10-24) is built on top of that tree on `feature/desk-replay-daily`; see §k.
+
 It extends the deployed Technical-lane desktop MVP ([02l](02l-desk-desktop-first-mvp.md), [02m](02m-desk-mvp-implementation-spec.md),
 STATUS 5D–5F) and reuses its shell, bands, `DenseTable`, `MarketChart` markers and panes, the copy table, `useDeskQuery`, the stub-first
 stream order, and the contracts pipeline ([02k](02k-desk-strategy-config-contracts.md)). Nothing here redesigns them.
@@ -560,3 +562,73 @@ replay cursor) come from product knowledge. What Mobbin did supply:
 - A persistent tinted test-mode band and a simulation clock you advance through time: [Stripe test clocks](https://mobbin.com/screens/94a95989-00e4-4070-a15b-38e9a0bbc429) (the Practice band); a "Demo trading" pill in the top bar: [OKX](https://mobbin.com/screens/a2bb80c5-27d1-4a5e-a87e-7c852a2d38f3).
 - Session-ended summary with a mastery dial, outcome rows, and per-item insights: [SchoolAI](https://mobbin.com/screens/1ba00325-1eb4-4bae-973c-249c2ff8ab8c) (the journal and adherence); ROI, win-rate, and win-count tiles: [Binance lead trader](https://mobbin.com/screens/b92a460e-23dc-40d5-8a9b-cd79d8eb9b7d).
 - Grouped keyboard-shortcut overlay with key chips: [Mercury](https://mobbin.com/screens/2f9852a0-c8d6-48b3-95c5-43c044bac813).
+
+## k. 02o-b v1: daily-list practice (built 2026-10-24)
+
+The owner's change: day-trade practice does not use a fixed symbol set. Each practice day, her own `FilterStrategySpecV1`
+filters build a candidate list (20 to 50 names) for the past day she is about to replay; she stars a few, practises one,
+ends the day, and sees how every candidate moved from its list price. The design (Opus, 2026-10-24) and its red team
+reconciled to this v1; the full 9-endpoint design is not built.
+
+**What v1 is.** The live screener fed from the replay blob cache, with every input cut at the time she would have looked
+(`replay/screen.py`: `scan` per filter with shared `Frames`, union in filter order then rank, cap at `maxList`, `metric_row`,
+the live `table_columns`). One saved plan (`PracticeBlockV1`: filters, `listAt`, `maxList`, start day, days, hide-dates, and the
+`ReplaySessionV1` setup minus symbol and day) and a cursor (`practice_plans`, one active per user). Days open in order, one list
+at a time, and the next day opens only after the current one ended (strict walk-forward); dates are returned and hidden by a
+render rule. Migration `0006_replay_daily_lists`: `practice_plans`, `replay_day_lists`, `replay_sessions.day_list_id`,
+`universe_days` (write-only: the premarket pass upserts it inside a savepoint, so it can never fail the live pass).
+
+**Endpoints (six, all under `/api/desk/replay`, 69 `/api/desk` routes in all).** `GET /daily` (the hub card's plan and cursor);
+`POST /daily/next` (open or advance the next day list; a body with a `plan` first saves it and starts the background prep);
+`GET /day-lists/{id}` (the whole day list; `?peek=SYM` adds one candidate's pre-open chart data); `PATCH /day-lists/{id}`
+(stars, at most five, notes, rating); `POST /day-lists/{id}/sessions` (the day's session from the plan's setup, starting at the
+day clock); `POST /day-lists/{id}/end` (ends the day and unseals the review). Additive fields on the 02o responses:
+`day_list_id`, the last print's `age_s`, `quiet_s` (the no-print marker) and the mark `warning`.
+
+**No lookahead (the review's required fixes).**
+- One `screen.cut_frames(bars, data_through)` feeds both the scan and `metric_row` (`metric_row`'s `_live_day` builds a partial
+  "today" from whatever minutes it is given, so an uncut frame leaks the day into `last`, `volume`, `rvol_10d` and the VWAP
+  fields). Tests: `test_metric_row_would_leak_the_whole_day_without_the_cut_and_no_field_equals_its_full_day_value`,
+  `test_a_list_is_identical_when_every_bar_after_the_cut_is_replaced`, `test_scan_and_metric_row_get_the_same_cut_inputs`,
+  `test_cut_frames_keeps_nothing_after_data_through`.
+- The list price is the evaluating filter's cut price (the 08:14 bar, the cadence bar close, or the rebased last daily close),
+  never `metric_row.last` (the previous close on a premarket list): `test_a_premarket_list_prices_at_the_0814_bar_not_at_metric_row_last`.
+  The same price is the base of the review's move.
+- The rebase uses Alpaca's split-only series (`adjustment=split`), so dividends are never applied and an ex-dividend morning
+  matches the live store; a split after the day leaves the list unchanged and a split before it makes no false gap:
+  `test_a_split_after_the_day_is_rebased...`, `test_a_split_before_the_day_makes_no_false_gap`,
+  `test_dividends_are_not_applied...`, `test_the_rebase_asks_alpaca_for_split_only_bars`,
+  `test_days_open_in_order_one_at_a_time_and_a_split_makes_no_false_gap`.
+- `LIST_DATA_LAG` is the existing SIP embargo constant (`replay.data.EMBARGO`), imported, never a second 15
+  (`test_the_list_lag_is_the_one_sip_embargo_not_a_second_15`).
+- `metric_row` gets the live 18-calendar-day minute lookback (the list loads 14 prior sessions; `test_metric_row_gets_the_wider_lookback_or_the_intraday_rvol_is_null`);
+  the scan reads the live runner's 16 days, so the list matches what the live store held. Live equivalence with `StoredBars`:
+  `test_the_list_is_the_one_the_live_runner_would_have_stored`.
+- The day list serves nothing later than `data_through` (candidates, Peek) or the list time (stars) before the day ends, and no
+  review or day journal: `test_nothing_the_list_serves_before_the_day_ends_is_later_than_the_cut`, and the Playwright network check.
+
+**Shared day clock, one name at a time.** `replay_day_lists.revealed_through` is the day clock: `advance` moves it (day list
+row locked before the session row), a new session starts at it, and `place_mark` refuses a name whose playhead is behind it
+(`test_a_name_behind_the_day_clock_cannot_be_marked_until_it_catches_up`). v1 practises one name a day: a second name is a 409, a
+standalone session on a day-list name is a 409, and a day-list session ends only with its day (unsealing one name's window would
+show the market's direction to the others).
+
+**Realism.** A before-the-open earnings flag on the candidate row (`days.reaction_days` over explicit report times only; a same-day
+after-the-close report is not flagged and an undated time is never guessed from the gap); the no-print marker on the tape and a
+warning when a mark prices off a print older than 30 s; Peek is fed the same rebased daily frame as the list (stand-in timeline
+while dates are hidden); candidate columns say "Prev close", "Prev change %" and so on where they are the previous session's
+(premarket lists), beside the list price and "vs prev close %"; the universe line and its footnote sit under the list and under
+the review's Selection tile. Backup: `infrastructure/backup/backup.sh` dumps with `--exclude-table-data='*.replay_blobs'`.
+
+**Prep.** `plan.run_prep` runs once at plan creation in the API process's background (`prep.preload_bars` with the wider
+lookback, plus the as-of frames), committing progress on the plan row; a day with missing blobs fetches them lazily; a prep that
+stops reporting for five minutes is started again by the next open. No scheduler slot, no per-tick budget.
+
+**Deferred to 02o-b2.** The block page and per-day schedule; `maxSymbols` and the watch checks ("picked before the open",
+"traded only names on your watch"); the switch protocol and the watch strip on the shared clock; re-scan at the playhead; the
+`universe_days` read path (v1 lists use today's Desk set, capped at 250 by today's dollar volume, and say so); the firstDay
+post-ship default; day-ordered prep readiness; day-scope `maxLoss` and `maxTrades` across sessions.
+
+**Deviations from the design.** Six routes, not five (the hub card needs its own small plan read); the contract keeps the design's
+names (`PracticeBlockV1`, `PracticeScreenV1`) but the table is `practice_plans`; Peek is a query parameter on the day-list read,
+not a route; the rebase factor comes from the split-only series, not `all`.

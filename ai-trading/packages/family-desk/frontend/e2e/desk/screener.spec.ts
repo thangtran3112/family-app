@@ -81,6 +81,24 @@ test("the rail lists the ten seed filters; the header, universe line and stamp r
   await expectCleanScreen(page);
 });
 
+test("the defaults show as chips above the table; New filter opens a blank filter that Create filter saves as hers", async ({ page }) => {
+  await openDesk(page, "/screener?filter=1");
+  const chips = page.getByRole("navigation", { name: "Screener filters" });
+  await expect(chips.getByRole("link")).toHaveCount(11); // ten defaults and New filter
+  await expect(chips.getByRole("link", { name: /^Abnormal volume/ })).toHaveAttribute("aria-current", "page");
+  await chips.getByRole("link", { name: /^Gap up/ }).click();
+  await expect(page).toHaveURL(/\/screener\?filter=3$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Gap up Read-only" })).toBeVisible();
+
+  await chips.getByRole("link", { name: "New filter" }).click();
+  await expect(page).toHaveURL(/\/screener\/filters$/);
+  await expect(page.getByRole("heading", { level: 1, name: "New filter" })).toBeVisible();
+  await page.getByRole("button", { name: "Create filter" }).click();
+  await expect(page).toHaveURL(/\/screener\/filters\?id=\d+$/);
+  await expect(page.getByRole("heading", { level: 1, name: "New filter" })).toBeVisible();
+  await expectCleanScreen(page);
+});
+
 test("the results table lists matches in rank order with the filter's columns; 1180 drops three of them", async ({ page }) => {
   await openDesk(page, "/screener?filter=1");
   await expectCleanScreen(page);

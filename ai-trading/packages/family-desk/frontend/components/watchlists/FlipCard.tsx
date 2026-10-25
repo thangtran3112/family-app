@@ -152,7 +152,7 @@ export function FlipCard({
 
       <div className={`${styles.cardFace} ${!flipped ? styles.cardFaceHidden : ""}`} aria-hidden={!flipped} inert={!flipped}>
         {technicals ? <>
-          <p className={styles.sourceLine}>Backend technicals · {timeframe} · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</p>
+          <p className={styles.sourceLine}>Desk technicals · {timeframe} · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</p>
           <BiasGauge
             asOf={technicals.as_of}
             gauge={technicals.gauges.summary}
@@ -163,13 +163,13 @@ export function FlipCard({
           <p className={styles.cardBackBias}>
             Card back · {technicals.card_back.bias_label ?? "not available"} · {cardBackValue(technicals.card_back.bias_score)}
           </p>
-          <section className={styles.metricBlock} aria-label="Backend oscillator values">
+          <section className={styles.metricBlock} aria-label="Oscillator values">
             <h3>Oscillators · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</h3>
             <dl>{Object.entries(technicals.card_back.oscillators).map(([name, value]) => (
               <div key={name}><dt>{name.replaceAll("_", " ")}</dt><dd>{cardBackValue(value)}</dd></div>
             ))}</dl>
           </section>
-          <section className={styles.metricBlock} aria-label="Backend moving average values">
+          <section className={styles.metricBlock} aria-label="Moving average values">
             <h3>Moving averages · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</h3>
             <dl>{Object.entries(technicals.card_back.moving_averages).map(([name, value]) => (
               <div key={name}><dt>{name.replaceAll("_", " ")}</dt><dd>{cardBackValue(value)}</dd></div>
@@ -183,14 +183,14 @@ export function FlipCard({
               <div><dt>Volatility label</dt><dd>{technicals.quality === "unavailable" ? "Unavailable" : technicals.volatility.label ?? "Warming up"}</dd></div>
             </dl>
           </section>
-          <section className={styles.metricBlock} aria-label="Backend pivot values">
+          <section className={styles.metricBlock} aria-label="Pivot values">
             <h3>Pivots · {qualityLabel(technicals.quality)} · {technicals.as_of ?? "as of unavailable"}</h3>
             <dl>{Object.entries(technicals.card_back.pivots).map(([name, value]) => (
               <div key={name}><dt>{name}</dt><dd>{cardBackValue(value)}</dd></div>
             ))}</dl>
             {!Object.keys(technicals.card_back.pivots).length && <p>Not available</p>}
           </section>
-        </> : <p className={styles.feedback}>{!marketSymbol ? "No market request sent: unsupported stored asset type." : loading ? "Loading actual backend values…" : "Backend technicals not available."}</p>}
+        </> : <p className={styles.feedback}>{!marketSymbol ? "No market request sent: unsupported stored asset type." : loading ? "Loading technical values…" : "Technicals not available."}</p>}
         <p className={styles.pending}>Make strategy opens a reviewable draft setup; it does not save or activate it.</p>
         <div className={styles.frontActions}>
           {query && <a href={`/technicals?${query.toString()}`}>Full technicals</a>}

@@ -3,7 +3,7 @@
   height: 48px;
   flex: 0 0 48px;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   border-bottom: 1px solid var(--color-hairline);
   background: var(--color-ground);
   padding-inline: var(--space-4);
@@ -94,12 +94,12 @@
   flex-shrink: 0;
   min-width: 0;
   align-items: stretch;
-  gap: 24px;
+  gap: 16px;
   height: 48px;
 }
 
 .bar[data-band="1180"] .nav {
-  gap: 12px;
+  gap: 10px;
 }
 
 .navLink {
@@ -147,8 +147,16 @@
   color: var(--color-text);
 }
 
+/* The search box gives way first (a shrink weight far above the badge's): the market pill and the quote badge keep
+   their whole text until the box is down to its minimum. */
+.searchAnchor {
+  flex: 0 100 200px;
+  min-width: 64px;
+}
+
 .searchInput {
-  width: 200px;
+  width: 100%;
+  min-width: 0;
   height: 32px;
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-sm);
@@ -463,9 +471,9 @@
 }
 
 .pillText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pill { min-width: 0; max-width: 240px; flex-shrink: 1; }
-.topBadge { min-width: 0; max-width: 230px; flex-shrink: 1; }
-.bar[data-band="1180"] .topBadge { max-width: 190px; }
+.pill { max-width: none; flex-shrink: 0; }
+.topBadge { min-width: 0; max-width: 260px; flex-shrink: 1; }
+.bar[data-band="1180"] .topBadge { max-width: 260px; }
 
 /* The top-bar badge during a replay (02o §a1): amber, never Live or Delayed. */
 .replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }

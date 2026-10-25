@@ -1,10 +1,13 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { askCandidates, askPrompt, askReply, conversations, strategyDraft } from "../../lib/fixtures/ask.ts";
 
+export const metadata: Metadata = { title: "Ask Desk AI" };
+
 export default function AskPage() {
   return (
-    <FixtureScreen phase={7} title="Ask Desk AI">
+    <FixtureScreen title="Ask Desk AI">
       <div className={styles.content}>
         <div className={styles.cards2}>
           <aside className={`${styles.panel} ${styles.panelStack}`} aria-labelledby="conversations-title">
@@ -66,12 +69,12 @@ export default function AskPage() {
                   <span>{change.field}</span><span className={styles.muted}>{change.before}</span><span aria-hidden="true">→</span><strong>{change.after}</strong>
                 </div>
               ))}
-              <p className={styles.footnote}>Drafting and saving strategies arrive in Phase 7. No change is stored.</p>
-              <button className={styles.button} type="button" disabled aria-label="Save strategy draft, available in Phase 7">Save strategy · Phase 7</button>
+              <p className={styles.footnote}>Drafting and saving strategies are not available yet. No change is stored.</p>
+              <button className={styles.button} type="button" disabled aria-label="Save strategy draft, not available yet">Save strategy · not available yet</button>
             </section>
 
             <label className={styles.panelStack}>
-              <span className={styles.statLabel}>Ask a question · available in Phase 7</span>
+              <span className={styles.statLabel}>Ask a question · not available yet</span>
               <textarea className={styles.composer} aria-label="Ask Desk AI, unavailable in this fixture" disabled value="Chat is not connected in this fixture." readOnly />
             </label>
           </section>

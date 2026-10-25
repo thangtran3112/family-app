@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRegisterSymbolPicker } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadReplayDays, loadReplaySessions } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { withNotableDay, defaultDraft, type SetupDraft } from "@/lib/replay/setup";
 import type { ReplayDay } from "@/lib/replay/schemas";
+import { DailyListCard } from "./DailyListCard";
 import { NotableDaysTable } from "./NotableDaysTable";
 import { RecentSessionsTable } from "./RecentSessionsTable";
 import { ResumeCard } from "./ResumeCard";
@@ -44,6 +46,10 @@ export function PracticeHub() {
         <h1 className={styles.title}>Practice</h1>
       </header>
       <div className={styles.body}>
+        <section id="daily-list" aria-labelledby="daily-title" className={styles.section}>
+          <h2 id="daily-title" className={styles.sectionTitle}>{PRACTICE_COPY.planTitle}</h2>
+          <DailyListCard />
+        </section>
         <section id="start-practice" aria-labelledby="start-title" className={styles.section}>
           <h2 id="start-title" className={styles.sectionTitle}>Start a practice session</h2>
           <SessionSetup draft={draft} onDraft={setDraft} />

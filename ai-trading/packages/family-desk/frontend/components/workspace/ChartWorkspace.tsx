@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { AsOfLine } from "@/components/ui/AsOfLine";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { ChartMarkerInput, CrosshairPoint } from "@/lib/chart-data";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
@@ -86,7 +87,7 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
     {
       id: "summary",
       label: "Summary",
-      node: technicals.data ? <RightRailSummary technicals={technicals.data} timeframeLabel={timeframeLabel(technicalsTimeframe)} /> : railState(technicals.error !== null, "technicals", technicals.refresh),
+      node: technicals.data ? <RightRailSummary technicals={technicals.data} timeframeLabel={timeframeLabel(technicalsTimeframe)} /> : railState(technicals.error !== null, "technicals", "technical summary", technicals.refresh),
     },
     {
       id: "alerts",
@@ -101,7 +102,7 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
     {
       id: "levels",
       label: "Levels",
-      node: technicals.data ? <KeyLevels technicals={technicals.data} /> : railState(technicals.error !== null, "levels", technicals.refresh),
+      node: technicals.data ? <KeyLevels technicals={technicals.data} /> : railState(technicals.error !== null, "levels", "level list", technicals.refresh),
     },
   ];
 
@@ -156,14 +157,15 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
         alertHref={`/alerts/new?source=symbol:${encodeURIComponent(symbol)}`}
       />
       <div className={styles.chartSlot}>{chartArea}</div>
+      {bars.data && <div className={styles.asOf}><AsOfLine stamp={bars.data.stamp} /></div>}
       <BottomPanel symbol={symbol} timeframeLabel={timeframeLabel(technicalsTimeframe)} technicals={technicals.data} collapsed={bottomCollapsed} onToggle={() => setBottomOverride(!bottomCollapsed)} />
       <RightRail sections={railSections} label="Symbol context" />
     </div>
   );
 }
 
-function railState(failed: boolean, subject: string, retry: () => void) {
-  return failed ? <ErrorBlock subject={subject} onRetry={retry} /> : <LoadingBlock label={`Loading ${subject}…`} height={80} />;
+function railState(failed: boolean, loading: string, subject: string, retry: () => void) {
+  return failed ? <ErrorBlock subject={subject} onRetry={retry} /> : <LoadingBlock label={`Loading ${loading}…`} height={80} />;
 }
 
 function legendValue(seriesId: string, paneId: string, values: Array<number | null>, point: CrosshairPoint | null): string {

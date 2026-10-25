@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { ScreenerFilter } from "@/lib/api/schemas";
 import { EMPTY_VALUE } from "@/lib/desk/format";
+import { COPY } from "@/lib/desk/freshness";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useDeskUi } from "./DeskContext";
@@ -67,6 +68,7 @@ export function FiltersPanel() {
             ))}
           </ul>
         )}
+        <a href="/screener/filters" className={styles.filterRow}>{COPY.newFilter}</a>
       </section>
     </div>
   );

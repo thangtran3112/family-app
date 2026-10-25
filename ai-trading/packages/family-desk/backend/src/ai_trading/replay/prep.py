@@ -20,7 +20,7 @@ import pandas as pd
 
 from ai_trading.core.calendar import et, session
 from ai_trading.replay.cache import BlobKey, BlobStore
-from ai_trading.replay.data import EMBARGO, History, prior_sessions
+from ai_trading.replay.data import EMBARGO, LOOKBACK_SESSIONS, History, prior_sessions
 from ai_trading.replay.tape import CHUNK, Feed, Tape, chunk_start
 
 log = logging.getLogger(__name__)
@@ -66,22 +66,30 @@ def finished(days: list[date], now: datetime) -> list[date]:
     ]
 
 
-def needed_sessions(days: list[date]) -> list[date]:
-    """Each replay day and its 10 prior sessions, sorted and unique."""
-    return sorted({s for d in days for s in (*prior_sessions(d), d)})
+def needed_sessions(days: list[date], lookback: int = LOOKBACK_SESSIONS) -> list[date]:
+    """Each replay day and its `lookback` (default 10) prior sessions, sorted and unique."""
+    return sorted({s for d in days for s in (*prior_sessions(d, lookback), d)})
 
 
 def preload_bars(
-    history: History, store: BlobStore, symbols: list[str], days: list[date], *, now: datetime, say: Say = print
+    history: History,
+    store: BlobStore,
+    symbols: list[str],
+    days: list[date],
+    *,
+    now: datetime,
+    say: Say = print,
+    lookback: int = LOOKBACK_SESSIONS,
 ) -> BarsReport:
-    """Minute bars and daily bars for `days` of every symbol. A symbol that fails is reported, never fatal."""
+    """Minute bars and daily bars for `days` of every symbol. A symbol that fails is reported, never fatal.
+    `lookback` is the prior sessions of minutes per day (a day list reads about two weeks of them)."""
     report = BarsReport()
     ready = finished(days, now)
     if len(ready) < len(days):
         say(f"skipping {len(days) - len(ready)} day(s) that are not finished yet")
     if not ready:
         return report
-    needed = needed_sessions(ready)
+    needed = needed_sessions(ready, lookback)
     for symbol in symbols:
         t0, fetches0 = time.monotonic(), history.fetches
         have = {k.day for k in store.keys("bars1m", symbol, needed)}

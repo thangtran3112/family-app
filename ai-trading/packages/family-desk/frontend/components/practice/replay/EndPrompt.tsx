@@ -8,9 +8,18 @@ import styles from "./panels.module.css";
 // Ending the session (02o §a3). At the window end it says so and offers "End and score". Before that it is a quiet
 // button that asks first: ending early shows the rest of the day in the journal.
 
-export type EndPromptProps = { tradeCount: number; atEnd: boolean; busy: boolean; onEnd: () => void };
+export type EndPromptProps = {
+  tradeCount: number;
+  atEnd: boolean;
+  busy: boolean;
+  onEnd: () => void;
+  /** A daily-list session ends with its day: the same prompt, worded for the day. */
+  day?: boolean;
+};
 
-export function EndPrompt({ tradeCount, atEnd, busy, onEnd }: EndPromptProps) {
+export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false }: EndPromptProps) {
+  const endLabel = day ? PRACTICE_COPY.dayEnd : PRACTICE_COPY.endAndScore;
+  const warning = day ? PRACTICE_COPY.dayEndWarning : PRACTICE_COPY.endEarlyWarning;
   const [confirming, setConfirming] = useState(false);
 
   if (atEnd) {
@@ -23,7 +32,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd }: EndPromptProps) {
           {tail && <> · <span className={styles.muted}>{tail}</span></>}
         </p>
         <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
-          {PRACTICE_COPY.endAndScore}
+          {endLabel}
         </button>
       </div>
     );
@@ -33,18 +42,18 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd }: EndPromptProps) {
     return (
       <div className={styles.endBlock}>
         <button type="button" className={`${styles.button} ${styles.quiet}`} disabled={busy} onClick={() => setConfirming(true)}>
-          End session…
+          {day ? "End day…" : "End session…"}
         </button>
       </div>
     );
   }
 
   return (
-    <div role="group" aria-label="Confirm ending the session" className={styles.confirm}>
-      <p className={styles.endText}>{PRACTICE_COPY.endEarlyWarning}</p>
+    <div role="group" aria-label={day ? "Confirm ending the day" : "Confirm ending the session"} className={styles.confirm}>
+      <p className={styles.endText}>{warning}</p>
       <div className={styles.confirmActions}>
         <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
-          {PRACTICE_COPY.endAndScore}
+          {endLabel}
         </button>
         <button type="button" className={styles.button} onClick={() => setConfirming(false)}>
           Keep practising

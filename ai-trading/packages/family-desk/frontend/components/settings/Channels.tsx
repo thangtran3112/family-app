@@ -56,7 +56,7 @@ export function Channels({
         <div>
           <h3 id="quiet-hours-title" className={styles.rowTitle}>Quiet hours</h3>
           <p className={styles.helper}>Overnight window for channel messages. Risk and system alerts still bypass quiet hours.</p>
-          <p className={styles.helper} id="quiet-hours-help">Times save as 24-hour HH:MM in America/New_York, including daylight-saving changes. Equal start and end means no quiet period.</p>
+          <p className={styles.helper} id="quiet-hours-help">Times are Eastern time (New York) and follow daylight-saving changes. Equal start and end means no quiet period.</p>
         </div>
         <div className={styles.timeFields}>
           <label className={styles.timeField} htmlFor="quiet-hours-start">

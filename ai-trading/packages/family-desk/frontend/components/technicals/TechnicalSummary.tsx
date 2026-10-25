@@ -3,6 +3,7 @@
 import { MarketChart } from "@/components/charts/MarketChart";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { AsOfLine } from "@/components/ui/AsOfLine";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { AlertsOnStock } from "@/components/workspace/AlertsOnStock";
 import { KeyLevels } from "@/components/workspace/KeyLevels";
@@ -87,6 +88,7 @@ export function TechnicalSummary({ symbol, timeframe, onTimeframe }: { symbol: s
         <WhatChangedLine technicals={data} />
         <IndicatorTables technicals={data} timeframe={timeframe} showPivots={false} plain />
         <PivotsTable pivots={data.pivots} quality={data.quality} asOf={data.as_of} />
+        <AsOfLine stamp={data.stamp} />
         <SummaryFootnote />
       </>
     );

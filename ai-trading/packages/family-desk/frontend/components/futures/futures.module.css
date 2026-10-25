@@ -429,8 +429,10 @@
   text-align: right;
 }
 
-.brokerUnavailable {
-  color: var(--color-muted);
+/* Roll dates wrap inside their cell so the margin column stays on screen instead of behind a sideways scroll. */
+.specTable td:nth-child(5) {
+  min-width: 160px;
+  white-space: normal;
 }
 
 .equivalenceGrid {

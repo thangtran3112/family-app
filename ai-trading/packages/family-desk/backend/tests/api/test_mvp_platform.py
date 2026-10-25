@@ -163,7 +163,7 @@ def test_dashboard_stub_spot_values(client, monkeypatch):
     body = response.json()
 
     assert body["stamp"] == STUB_STAMP
-    assert body["market"] == {"session": "closed", "next_open": "2026-10-26T13:30:00Z"}
+    assert body["market"] == {"session": "closed", "next_open": "2026-10-26T13:30:00Z", "next_update_at": None}
     assert [tile["symbol"] for tile in body["market_strip"]] == ["SPY", "QQQ", "IWM", "/ES", "/NQ"]
     assert body["market_strip"][0] == {"symbol": "SPY", "last": 759.97, "change_pct": -0.522, "stamp": STUB_STAMP}
     assert body["market_strip"][3] == {"symbol": "/ES", "last": None, "change_pct": None, "stamp": UNAVAILABLE_STAMP}

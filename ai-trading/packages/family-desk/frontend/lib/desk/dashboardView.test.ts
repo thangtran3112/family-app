@@ -19,6 +19,16 @@ test("market strip: SPY QQQ IWM real, /ES and /NQ unavailable and read-only", ()
   }
 });
 
+test("an empty ETF tile says when it fills; a closed one says its last close", () => {
+  const empty = { as_of: null, source: null, quality: "unavailable", freshness: "unavailable" } as const;
+  const [none, noTime] = [stripTiles([{ symbol: "SPY", last: null, change_pct: null, stamp: empty }], "2026-10-26T11:00:00Z")[0]!, stripTiles([{ symbol: "SPY", last: null, change_pct: null, stamp: empty }])[0]!];
+  assert.deepEqual([none.last, none.change, none.note], ["—", "—", "First market update Mon 7:00 AM ET"]);
+  assert.equal(noTime.note, "No market data yet");
+  const closed = { as_of: "2026-10-23T20:00:00Z", source: "alpaca", quality: "eod", freshness: "closed" } as const;
+  assert.equal(stripTiles([{ symbol: "SPY", last: 678.12, change_pct: 0.31, stamp: closed }])[0]!.note, "Last close · Fri 4:00 PM ET");
+  assert.equal(stripTiles([{ symbol: "SPY", last: 678.12, change_pct: 0.31, stamp: { ...closed, freshness: "delayed", quality: "delayed-15m" } }])[0]!.note, null);
+});
+
 test("a live futures tile is read-only with its own note", () => {
   const [tile] = stripTiles([{ symbol: "/ES", last: 5000, change_pct: 0.4, stamp: { as_of: null, source: "ibkr", quality: "realtime", freshness: "live" } }]);
   assert.deepEqual([tile!.readOnly, tile!.unavailable, tile!.note], [true, false, "Futures · read only"]);

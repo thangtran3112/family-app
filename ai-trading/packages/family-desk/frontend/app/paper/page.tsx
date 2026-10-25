@@ -1,15 +1,18 @@
+import type { Metadata } from "next";
 import { FixtureScreen } from "../../components/FixtureScreen.tsx";
 import styles from "../../components/fixtures.module.css";
 import { paperFillJournal, paperPositions, paperStrategies, paperSummary } from "../../lib/fixtures/paper.ts";
 
+export const metadata: Metadata = { title: "Paper trading" };
+
 export default function PaperPage() {
   return (
-    <FixtureScreen phase={6} title="Paper trading">
+    <FixtureScreen title="Paper trading">
       <div className={styles.content}>
         <div className={styles.sectionHeading}>
           <nav className={styles.navPills} aria-label="Paper views">
             <a href="#paper-trades" aria-current="location">Paper trades</a>
-            <a href="/backtests">Backtests · Phase 6b</a>
+            <a href="/backtests">Backtests · not available yet</a>
           </nav>
           <p className={styles.muted}>IBKR not configured · no broker actions available</p>
         </div>
@@ -109,10 +112,10 @@ export default function PaperPage() {
           </div>
           <p className={styles.bodyText}>These controls are display-only in this phase. No account is connected and no order can be submitted.</p>
           <div className={styles.buttonRow}>
-            <button className={styles.button} type="button" disabled aria-describedby="paper-action-note">Pause all strategies · Phase 6</button>
-            <button className={styles.buttonSecondary} type="button" disabled aria-describedby="paper-action-note">Place paper order · Phase 6</button>
+            <button className={styles.button} type="button" disabled aria-describedby="paper-action-note">Pause all strategies · needs broker setup</button>
+            <button className={styles.buttonSecondary} type="button" disabled aria-describedby="paper-action-note">Place paper order · needs broker setup</button>
           </div>
-          <p className={styles.footnote} id="paper-action-note">Actions stay disabled until Phase 6 wires the paper-trading workflow.</p>
+          <p className={styles.footnote} id="paper-action-note">Actions stay disabled until broker setup is finished.</p>
         </section>
       </div>
     </FixtureScreen>

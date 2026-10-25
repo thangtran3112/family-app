@@ -39,8 +39,8 @@ export function StrategyList() {
   const retry = useCallback(() => {
     setLoading(true);
     setError("");
-    void loadRows().then(setRows).catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : "Could not load strategies.");
+    void loadRows().then(setRows).catch(() => {
+      setError("Couldn't load the strategy list.");
     }).finally(() => setLoading(false));
   }, [loadRows]);
 
@@ -48,8 +48,8 @@ export function StrategyList() {
     let active = true;
     void loadRows().then((result) => {
       if (active) setRows(result);
-    }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load strategies.");
+    }).catch(() => {
+      if (active) setError("Couldn't load the strategy list.");
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -110,7 +110,7 @@ export function StrategyList() {
                       : <span className={styles.noVersion}>No version <a href={`/strategies?id=${strategy.id}`}>Add version</a></span>}
                   </td>
                   <td data-label="30-day paper P&amp;L">
-                    <span className={styles.fixtureValue}>Phase 6 fixture</span>
+                    <span className={styles.fixtureValue}>Needs broker setup</span>
                   </td>
                 </tr>
               ))}

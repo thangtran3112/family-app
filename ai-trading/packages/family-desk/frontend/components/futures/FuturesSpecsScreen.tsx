@@ -58,21 +58,21 @@ export function FuturesSpecsScreen() {
   return (
     <main className={styles.page}>
       <header className={styles.pageHeader}>
-        <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · API-provided roll dates · margin is not available</p></div>
+        <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · roll dates included · margin is not available</p></div>
         <Link className={styles.secondaryLink} href="/futures">Back to futures swing</Link>
       </header>
-      <p className={styles.sourceNote}>Contract multipliers, tick sizes, sessions, and roll dates come from the Desk futures-spec API. No broker is connected.</p>
+      <p className={styles.sourceNote}>Contract multipliers, tick sizes, sessions, and roll dates are the Desk&apos;s own reference data. No broker is connected.</p>
       {!specs && !error && <p role="status" className={styles.muted}>Loading contract reference…</p>}
       {error && <div className={styles.error} role="alert">{error}<button type="button" onClick={retry}>Try again</button></div>}
 
-      {specs?.length === 0 && <p className={styles.muted}>No futures contract specs were returned.</p>}
+      {specs?.length === 0 && <p className={styles.muted}>No futures contract specs are available.</p>}
       {specs && <>
         <section className={styles.specSection}>
           <h2>12 contracts · mini and micro</h2>
           <div className={styles.tableScroll}>
             <table className={styles.specTable}>
               <thead><tr>
-                <th scope="col">Symbol</th><th scope="col">Contract</th><th scope="col">$ / point</th><th scope="col">Tick → $ / tick</th><th scope="col">Roll dates</th><th scope="col">Approx. margin</th><th scope="col">Broker</th>
+                <th scope="col">Symbol</th><th scope="col">Contract</th><th scope="col">$ / point</th><th scope="col">Tick → $ / tick</th><th scope="col">Roll dates</th><th scope="col">Approx. margin</th>
               </tr></thead>
               <tbody>{specs.map((spec) => (
                 <tr key={spec.root}>
@@ -82,7 +82,6 @@ export function FuturesSpecsScreen() {
                   <td>{numeric(spec.tick_size)} → {numeric(spec.multiplier * spec.tick_size)}</td>
                   <td>{spec.roll_dates.length ? spec.roll_dates.join(" · ") : "unavailable"}</td>
                   <td><strong>{marginText(spec.approx_margin, spec.margin_as_of)}</strong></td>
-                  <td><span className={styles.brokerUnavailable}>no broker connected yet</span></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -90,7 +89,7 @@ export function FuturesSpecsScreen() {
         </section>
 
         <section className={styles.specSection}>
-          <h2>Mini ↔ micro equivalence · from API multipliers</h2>
+          <h2>Mini ↔ micro equivalence · from contract multipliers</h2>
           <div className={styles.equivalenceGrid}>
             {pairs.map(({ mini, micro }) => {
               const ratio = mini.multiplier / micro.multiplier;
@@ -100,7 +99,7 @@ export function FuturesSpecsScreen() {
         </section>
 
         <section className={styles.specSection}>
-          <h2>Upcoming roll dates · returned by API</h2>
+          <h2>Upcoming roll dates</h2>
           <ol className={styles.rollTimeline}>
             {nextRolls.map(({ roots, date }) => <li key={`${date}-${roots.join("-")}`}><time dateTime={date}>{date}</time><span>{roots.join(" / ")} roll</span></li>)}
             {nextRolls.length === 0 && <li><span>Roll dates unavailable.</span></li>}
