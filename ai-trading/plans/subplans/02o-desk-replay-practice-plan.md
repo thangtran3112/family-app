@@ -565,6 +565,8 @@ replay cursor) come from product knowledge. What Mobbin did supply:
 
 ## k. 02o-b v1: daily-list practice (built 2026-10-24)
 
+**Shipped 2026-10-25:** PR #174 to `dev` and PR #175 to `main`; deploy run 40167726238 succeeded.
+
 The owner's change: day-trade practice does not use a fixed symbol set. Each practice day, her own `FilterStrategySpecV1`
 filters build a candidate list (20 to 50 names) for the past day she is about to replay; she stars a few, practises one,
 ends the day, and sees how every candidate moved from its list price. The design (Opus, 2026-10-24) and its red team
