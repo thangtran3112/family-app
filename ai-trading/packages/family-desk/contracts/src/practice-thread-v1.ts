@@ -13,7 +13,7 @@ import { SchemaVersionSchema, UtcTimestampSchema } from "./strategy-common.ts";
 export const DEFAULT_STARTING_BALANCE = 50_000;
 
 const YesNoSchema = z.enum(["yes", "no"]);
-const ThreadModeSchema = z.enum(["day", "swing"]); // `swing` ships now and stays unused until 02p
+const ThreadModeSchema = z.enum(["day", "swing"]);
 const StartingBalanceSchema = z.int().min(1000).max(10_000_000);
 const IsoDaySchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);
 const StockTickerSchema = z.string().regex(/^[A-Z][A-Z0-9.]{0,9}$/);
@@ -39,13 +39,73 @@ const PracticeThreadPlanSchema = z
   })
   .meta({ id: "PracticeThreadPlanV1" });
 
+// Same bounds as ReplaySessionV1.armed, with PracticeBlockV1's item id so the generated class is shared.
+const ArmedRefsSchema = z
+  .array(
+    z
+      .strictObject({ source: z.enum(["alert_strategy", "filter"]), id: IdSchema })
+      .meta({ id: "PracticeArmedV1" }),
+  )
+  .max(5);
+
+export const SWING_SETUP_RULES = [
+  { id: "universe-symbols-unique", description: "universe symbols must be unique" },
+] as const;
+
+// The swing calendar and universe (02p): what a swing thread is created with and what it reads back.
+// `firstDay` (a session from 2017-01-03), the universe coverage and the daily-cadence arms are server
+// rules; the form defaults (20 sessions, hidden dates, 15m, tape off, 3 holds) are the form's, not the
+// contract's. The universe is frozen at creation; in a swing thread the plan's `maxLossUsd` and
+// `maxTrades` count per week.
+export const SwingSetupV1Schema = z
+  .strictObject({
+    firstDay: IsoDaySchema,
+    sessions: z.int().min(15).max(23),
+    hideDates: YesNoSchema,
+    universe: z
+      .array(
+        z
+          .strictObject({
+            symbol: StockTickerSchema,
+            source: z.enum(["watchlist", "manual", "filter", "liquidity"]),
+          })
+          .meta({ id: "SwingUniverseEntryV1" }),
+      )
+      .min(10)
+      .max(50),
+    interval: z.enum(["5m", "15m"]),
+    tape: z.enum(["off", "on"]),
+    armed: ArmedRefsSchema,
+    maxOpenHolds: z.int().min(1).max(5),
+    riskPerHoldUsd: z.int().min(1).max(100_000).optional(),
+  })
+  .superRefine((swing, ctx) => {
+    if (new Set(swing.universe.map((entry) => entry.symbol)).size !== swing.universe.length) {
+      ctx.addIssue({ code: "custom", path: ["universe"], message: SWING_SETUP_RULES[0].description });
+    }
+  })
+  .meta({ id: "SwingSetupV1" });
+
+export const PRACTICE_THREAD_RULES = [
+  { id: "closed-at-matches-status", description: "closedAt is present exactly when status is closed" },
+  { id: "swing-block-matches-mode", description: "swing is present exactly when mode is swing" },
+] as const;
+
+function swingMatchesMode(thread: { mode: "day" | "swing"; swing?: unknown }, ctx: z.RefinementCtx) {
+  if ((thread.mode === "swing") !== (thread.swing !== undefined)) {
+    ctx.addIssue({ code: "custom", path: ["swing"], message: PRACTICE_THREAD_RULES[1].description });
+  }
+}
+
 export const PracticeThreadCreateV1Schema = z
   .strictObject({
     schemaVersion: SchemaVersionSchema,
     mode: ThreadModeSchema,
     startingBalance: StartingBalanceSchema.default(DEFAULT_STARTING_BALANCE),
     plan: PracticeThreadPlanSchema,
+    swing: SwingSetupV1Schema.optional(),
   })
+  .superRefine(swingMatchesMode)
   .meta({ id: "PracticeThreadCreateV1" });
 
 // Edits the plan while the thread is active. The starting balance and the mode never change.
@@ -74,10 +134,6 @@ const PracticeThreadStatsSchema = z
   })
   .meta({ id: "PracticeThreadStatsV1" });
 
-export const PRACTICE_THREAD_RULES = [
-  { id: "closed-at-matches-status", description: "closedAt is present exactly when status is closed" },
-] as const;
-
 export const PracticeThreadV1Schema = z
   .strictObject({
     schemaVersion: SchemaVersionSchema,
@@ -86,6 +142,7 @@ export const PracticeThreadV1Schema = z
     startingBalance: StartingBalanceSchema,
     status: z.enum(["active", "closed"]),
     plan: PracticeThreadPlanSchema,
+    swing: SwingSetupV1Schema.optional(),
     createdAt: UtcTimestampSchema,
     closedAt: UtcTimestampSchema.optional(),
     stats: PracticeThreadStatsSchema,
@@ -98,19 +155,23 @@ export const PracticeThreadV1Schema = z
         message: PRACTICE_THREAD_RULES[0].description,
       });
     }
+    swingMatchesMode(thread, ctx);
   })
   .meta({ id: "PracticeThreadV1" });
 
 // One row per realized practice trade: written when its exit mark is placed (her own or the day's
-// auto-exit), once per exit mark, and removed with it if the mark is undone. `pnlUsd` is the
-// journal's own figure (no fees, spread or slippage); `r` is absent when no stop was set.
+// auto-exit), once per exit mark, and removed with it if the mark is undone. A swing hold is credited
+// when the day it exits ends, so its row carries `holdId`, and has no session or mark when the hold
+// auto-exited at a close (02p). `pnlUsd` is the journal's own figure (no fees, spread or slippage);
+// `r` is absent when no stop was set.
 export const PracticeLedgerEntryV1Schema = z
   .strictObject({
     schemaVersion: SchemaVersionSchema,
     id: IdSchema,
     threadId: IdSchema,
-    sessionId: IdSchema,
-    markId: IdSchema,
+    sessionId: IdSchema.optional(),
+    markId: IdSchema.optional(),
+    holdId: IdSchema.optional(),
     symbol: StockTickerSchema,
     day: IsoDaySchema,
     side: z.enum(["long", "short"]),
@@ -123,6 +184,7 @@ export const PracticeLedgerEntryV1Schema = z
   })
   .meta({ id: "PracticeLedgerEntryV1" });
 
+export type SwingSetupV1 = z.infer<typeof SwingSetupV1Schema>;
 export type PracticeThreadCreateV1 = z.infer<typeof PracticeThreadCreateV1Schema>;
 export type PracticeThreadPatchV1 = z.infer<typeof PracticeThreadPatchV1Schema>;
 export type PracticeThreadV1 = z.infer<typeof PracticeThreadV1Schema>;

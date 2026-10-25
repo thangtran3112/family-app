@@ -6,6 +6,9 @@ Real Postgres (`scripts/test-db.sh`); the history is the synthetic world of `tes
 The world: GAPPER sits at 106 in the premarket and 110 from the open, so a long entered at 09:30 and exited after
 10:00 wins 4 a share and the same short loses 4 a share. SPLITTER sits at 100 all day."""
 
+import json
+from pathlib import Path
+
 import pytest
 from daily_world import DAYS, NOW, make_thread
 from sqlalchemy import select, update
@@ -26,11 +29,19 @@ from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.session import ReplayProblem, SessionNotFound
 
+# A swing thread is created with a swing block (the contract), so this is the block of a valid swing create.
+_SWING_CREATE = (
+    Path(__file__).resolve().parents[3] / "contracts/fixtures/practice-thread-create-v1/valid/swing-10-symbols.json"
+)
+SWING = json.loads(_SWING_CREATE.read_text())["swing"]
+
 
 def _create(mode="day", balance=None, **plan):
     body = {"schemaVersion": 1, "mode": mode, "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", **plan}}
     if balance is not None:
         body["startingBalance"] = balance
+    if mode == "swing":
+        body["swing"] = SWING
     return PracticeThreadCreateV1.model_validate(body)
 
 

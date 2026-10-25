@@ -2798,10 +2798,12 @@ export interface components {
             entryPrice: number;
             /** Exitprice */
             exitPrice: number;
+            /** Holdid */
+            holdId?: number | null;
             /** Id */
             id: number;
             /** Markid */
-            markId: number;
+            markId?: number | null;
             /** Pnlusd */
             pnlUsd: number;
             /** R */
@@ -2814,7 +2816,7 @@ export interface components {
              */
             schemaVersion: 1;
             /** Sessionid */
-            sessionId: number;
+            sessionId?: number | null;
             /** Shares */
             shares: number;
             /**
@@ -2953,6 +2955,7 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "closed";
+            swing?: components["schemas"]["SwingSetupV1"] | null;
         };
         /** PracticeWindowV1 */
         PracticeWindowV1: {
@@ -3819,6 +3822,46 @@ export interface components {
             max: number;
             /** Used */
             used: number;
+        };
+        /** SwingSetupV1 */
+        SwingSetupV1: {
+            /** Armed */
+            armed: components["schemas"]["PracticeArmedV1"][];
+            /** Firstday */
+            firstDay: string;
+            /**
+             * Hidedates
+             * @enum {string}
+             */
+            hideDates: "yes" | "no";
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "5m" | "15m";
+            /** Maxopenholds */
+            maxOpenHolds: number;
+            /** Riskperholdusd */
+            riskPerHoldUsd?: number | null;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Tape
+             * @enum {string}
+             */
+            tape: "off" | "on";
+            /** Universe */
+            universe: components["schemas"]["SwingUniverseEntryV1"][];
+        };
+        /** SwingUniverseEntryV1 */
+        SwingUniverseEntryV1: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "watchlist" | "manual" | "filter" | "liquidity";
+            /** Symbol */
+            symbol: string;
         };
         /** SymbolSearchOut */
         SymbolSearchOut: {

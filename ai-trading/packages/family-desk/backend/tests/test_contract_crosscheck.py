@@ -17,6 +17,8 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.practice_thread import (
+    PRACTICE_THREAD_RULES,
+    SWING_SETUP_RULES,
     PracticeLedgerEntryV1,
     PracticeThreadCreateV1,
     PracticeThreadPatchV1,
@@ -86,7 +88,7 @@ _id = lambda pair: f"{pair[0]}:{_rel(pair[1])}"  # noqa: E731
 
 
 def test_every_family_has_fixtures():
-    assert len(VALID) >= 164 and len(INVALID) >= 396
+    assert len(VALID) >= 168 and len(INVALID) >= 420
 
 
 @pytest.mark.parametrize("pair", VALID, ids=_id)
@@ -101,6 +103,23 @@ def test_valid_file_round_trips_through_pydantic(pair: tuple[str, Path]):
 def test_invalid_file_is_rejected_by_pydantic(pair: tuple[str, Path]):
     family, path = pair
     with pytest.raises(ValidationError):
+        FAMILIES[family][0].model_validate_json(path.read_text())
+
+
+@pytest.mark.parametrize(
+    ("family", "fixture", "rule"),
+    [
+        ("threadcreate", "create-v1/invalid/mode-swing-without-block.json", PRACTICE_THREAD_RULES[1]),
+        ("threadcreate", "create-v1/invalid/swing-on-day-thread.json", PRACTICE_THREAD_RULES[1]),
+        ("thread", "v1/invalid/swing-without-block.json", PRACTICE_THREAD_RULES[1]),
+        ("thread", "v1/invalid/day-thread-with-swing-block.json", PRACTICE_THREAD_RULES[1]),
+        ("threadcreate", "create-v1/invalid/swing-universe-duplicate-symbol.json", SWING_SETUP_RULES[0]),
+    ],
+)
+def test_swing_rules_fail_with_their_own_message(family: str, fixture: str, rule):
+    """A fixture could be rejected for another reason: prove the hand-written rule is the one that fires."""
+    path = CONTRACTS / "fixtures" / f"practice-thread-{fixture}"
+    with pytest.raises(ValidationError, match=rule.description):
         FAMILIES[family][0].model_validate_json(path.read_text())
 
 

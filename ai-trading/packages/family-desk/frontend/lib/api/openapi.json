@@ -4878,6 +4878,19 @@
             "title": "Exitprice",
             "type": "number"
           },
+          "holdId": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holdid"
+          },
           "id": {
             "maximum": 9007199254740991.0,
             "minimum": 1.0,
@@ -4885,10 +4898,17 @@
             "type": "integer"
           },
           "markId": {
-            "maximum": 9007199254740991.0,
-            "minimum": 1.0,
-            "title": "Markid",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markid"
           },
           "pnlUsd": {
             "maximum": 1000000000.0,
@@ -4920,10 +4940,17 @@
             "type": "integer"
           },
           "sessionId": {
-            "maximum": 9007199254740991.0,
-            "minimum": 1.0,
-            "title": "Sessionid",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
           },
           "shares": {
             "maximum": 10000.0,
@@ -4956,11 +4983,9 @@
           "entryPrice",
           "exitPrice",
           "id",
-          "markId",
           "pnlUsd",
           "realizedAt",
           "schemaVersion",
-          "sessionId",
           "shares",
           "side",
           "symbol",
@@ -5414,6 +5439,16 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "swing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingSetupV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -7799,6 +7834,120 @@
           "max"
         ],
         "title": "StreamingSlotsOut",
+        "type": "object"
+      },
+      "SwingSetupV1": {
+        "additionalProperties": false,
+        "properties": {
+          "armed": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeArmedV1"
+            },
+            "maxItems": 5,
+            "title": "Armed",
+            "type": "array"
+          },
+          "firstDay": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+            "title": "Firstday",
+            "type": "string"
+          },
+          "hideDates": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Hidedates",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "maxOpenHolds": {
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Maxopenholds",
+            "type": "integer"
+          },
+          "riskPerHoldUsd": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Riskperholdusd"
+          },
+          "sessions": {
+            "maximum": 23.0,
+            "minimum": 15.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "tape": {
+            "enum": [
+              "off",
+              "on"
+            ],
+            "title": "Tape",
+            "type": "string"
+          },
+          "universe": {
+            "items": {
+              "$ref": "#/components/schemas/SwingUniverseEntryV1"
+            },
+            "maxItems": 50,
+            "minItems": 10,
+            "title": "Universe",
+            "type": "array"
+          }
+        },
+        "required": [
+          "armed",
+          "firstDay",
+          "hideDates",
+          "interval",
+          "maxOpenHolds",
+          "sessions",
+          "tape",
+          "universe"
+        ],
+        "title": "SwingSetupV1",
+        "type": "object"
+      },
+      "SwingUniverseEntryV1": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "enum": [
+              "watchlist",
+              "manual",
+              "filter",
+              "liquidity"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "symbol"
+        ],
+        "title": "SwingUniverseEntryV1",
         "type": "object"
       },
       "SymbolSearchOut": {
