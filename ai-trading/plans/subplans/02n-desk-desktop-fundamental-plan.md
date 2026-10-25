@@ -2,7 +2,9 @@
 
 Status: planned 2026-10-24 (docs only; nothing activated). This is roadmap step 3 of [02l](02l-desk-desktop-first-mvp.md) §f: the
 desktop Fundamental views, built after the desktop Technical MVP ([02l](02l-desk-desktop-first-mvp.md), [02m](02m-desk-mvp-implementation-spec.md),
-STATUS rows 5D–5F). It delivers 02c Phase 5 (long-term, covered calls, Desk AI) desktop-first and reuses everything 02l/02m built:
+STATUS rows 5D–5F). **Mocks (2026-10-24):** FD1–FD8 are complete and the owner gate has passed. **Code:** the consensus snapshot job
+(step 3a, `0004_consensus_history`) is built; Practice took `0005_replay_practice`, so the rest of the migration below becomes
+`0006_fundamental_lane`. It delivers 02c Phase 5 (long-term, covered calls, Desk AI) desktop-first and reuses everything 02l/02m built:
 the `DesktopShell`, the 1440 and 1180 bands, the lane switch, the wrong-lane interstitial, `DenseTable`, `useDeskQuery`, the
 `lib/desk/freshness.ts` copy table, the `stamp` convention, and the stub-first stream order. Nothing here redesigns them.
 

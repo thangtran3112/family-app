@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   AVATAR_MENU,
   isNavActive,
+  isPracticePath,
+  isReplayWorkspacePath,
   isWrongLane,
   laneForPath,
   LANE_STORAGE_KEY,
@@ -13,7 +15,7 @@ import {
 } from "./lanes.ts";
 
 test("every desktop route maps to a lane; the MVP routes are technical", () => {
-  for (const path of ["/", "/today", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/technicals", "/futures", "/futures/specs", "/settings", "/more"]) {
+  for (const path of ["/", "/today", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/practice", "/practice/replay", "/practice/journal", "/technicals", "/futures", "/futures/specs", "/settings", "/more"]) {
     assert.equal(laneForPath(path), "technical", path);
   }
   for (const path of ["/holdings", "/covered-calls", "/stocks", "/paper", "/backtests", "/ask", "/holdings/"]) {
@@ -31,7 +33,7 @@ test("wrong-lane routes show the interstitial in the other lane only", () => {
 });
 
 test("technical primary nav and the avatar menu match 02l §b2", () => {
-  assert.deepEqual(PRIMARY_NAV.technical.map((item) => item.label), ["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
+  assert.deepEqual(PRIMARY_NAV.technical.map((item) => item.label), ["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
   assert.deepEqual(AVATAR_MENU.map((item) => item.label), ["Settings", "More"]);
   assert.equal(isNavActive("/", "/today"), true);
   assert.equal(isNavActive("/", "/screener"), false);
@@ -53,4 +55,16 @@ test("the lane preference survives a missing or throwing storage", () => {
   const broken = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
   assert.equal(readLanePreference(broken), "technical");
   assert.doesNotThrow(() => writeLanePreference(broken, "technical"));
+});
+
+test("Practice routes: nav highlight, band and the replay-only left rail", () => {
+  assert.equal(PRIMARY_NAV.technical.find((item) => item.label === "Practice")?.href, "/practice");
+  assert.equal(isNavActive("/practice", "/practice/replay"), true);
+  assert.equal(isNavActive("/practice", "/strategies"), false);
+  for (const path of ["/practice", "/practice/", "/practice/replay", "/practice/journal"]) assert.equal(isPracticePath(path), true, path);
+  for (const path of ["/", "/practices", "/strategies"]) assert.equal(isPracticePath(path), false, path);
+  assert.equal(isReplayWorkspacePath("/practice/replay"), true);
+  assert.equal(isReplayWorkspacePath("/practice/replay/"), true);
+  assert.equal(isReplayWorkspacePath("/practice/journal"), false);
+  assert.equal(isReplayWorkspacePath("/practice"), false);
 });

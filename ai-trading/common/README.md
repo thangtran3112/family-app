@@ -10,6 +10,7 @@ directly; they build a `DataSources` and read through it.
 src/ai_trading_common/
   errors.py quality.py http.py bars.py fallback.py testing.py   core
   types.py     vendor-neutral result types and their as-of selectors
+  trades.py    the tape: `Trades` (one row per print: t, p, s, x, c) and `empty_trades_frame()`
   sources.py   one runtime-checkable Protocol per data kind
   registry.py  Kind, Provider, REGISTRY, DEFAULT_CHAINS, DataSources.from_env()
   providers/   alpaca.py sec_edgar.py fred.py finnhub.py alphavantage.py eulerpool.py ibkr.py

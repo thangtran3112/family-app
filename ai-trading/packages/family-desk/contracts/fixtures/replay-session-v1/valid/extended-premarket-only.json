@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "symbol": "NVDA",
+  "day": "2026-10-23",
+  "window": {
+    "from": "04:00",
+    "to": "09:30"
+  },
+  "session": "extended",
+  "interval": "1m",
+  "shares": 200,
+  "armed": [
+    {
+      "source": "filter",
+      "id": 2
+    }
+  ],
+  "plan": {
+    "stopRequired": "yes",
+    "signalOnly": "no",
+    "maxLossUsd": 300
+  },
+  "hideDate": "no"
+}

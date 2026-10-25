@@ -1,6 +1,238 @@
 {
   "components": {
     "schemas": {
+      "AdherenceCheckOut": {
+        "properties": {
+          "applicable": {
+            "title": "Applicable",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "stop_set",
+              "stop_honored",
+              "on_signal",
+              "max_loss",
+              "max_trades"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "applicable",
+          "passed",
+          "detail"
+        ],
+        "title": "AdherenceCheckOut",
+        "type": "object"
+      },
+      "AdherenceOut": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/AdherenceCheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "score_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Pct"
+          }
+        },
+        "required": [
+          "score_pct",
+          "hint",
+          "checks"
+        ],
+        "title": "AdherenceOut",
+        "type": "object"
+      },
+      "AdvanceIn": {
+        "description": "Exactly one of `to` and `step`. `to` at or before `revealed_through` answers an empty delta; `to` past\nthe window end is clamped and `at_end` is true. `step: \"next_signal\"` reveals through the next would-fire bar\nclose (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422.",
+        "properties": {
+          "interval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1m",
+                  "5m",
+                  "15m"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
+          "max_prints": {
+            "default": 500,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Prints",
+            "type": "integer"
+          },
+          "min_notional": {
+            "default": 0,
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
+            "title": "Min Notional",
+            "type": "integer"
+          },
+          "min_size": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Min Size",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bar",
+                  "next_signal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "title": "AdvanceIn",
+        "type": "object"
+      },
+      "AdvanceOut": {
+        "description": "What the playhead revealed in `(previous, revealed_through]`: display-interval bars that closed inside\nit, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,\nand the levels, last print and open trade at the new playhead.",
+        "properties": {
+          "at_end": {
+            "title": "At End",
+            "type": "boolean"
+          },
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayBarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "forming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormingBarOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastPrintOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "levels": {
+            "$ref": "#/components/schemas/ReplayLevelsOut"
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prints": {
+            "$ref": "#/components/schemas/PrintsOut"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/ReplaySignalOut"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          }
+        },
+        "required": [
+          "revealed_through",
+          "at_end",
+          "bars",
+          "forming",
+          "prints",
+          "signals",
+          "levels",
+          "last",
+          "open_trade",
+          "stamp"
+        ],
+        "title": "AdvanceOut",
+        "type": "object"
+      },
       "AlertLogOut": {
         "properties": {
           "alert_id": {
@@ -900,6 +1132,85 @@
         "title": "AlertStrategyVersionOut",
         "type": "object"
       },
+      "ArmedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "alert_strategy",
+              "filter"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source"
+        ],
+        "title": "ArmedItem",
+        "type": "object"
+      },
+      "ArmedOut": {
+        "properties": {
+          "bias": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bullish",
+                  "bearish",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bias"
+          },
+          "fires_so_far": {
+            "title": "Fires So Far",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "alert_strategy",
+              "filter"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "id",
+          "version_id",
+          "name",
+          "bias",
+          "fires_so_far"
+        ],
+        "title": "ArmedOut",
+        "type": "object"
+      },
       "BarOut": {
         "properties": {
           "c": {
@@ -1578,6 +1889,103 @@
         "title": "DashboardWatchlistRowOut",
         "type": "object"
       },
+      "FeedOut": {
+        "description": "Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior\nsessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);\n`signals` is every released signal (the whole list after `end`).",
+        "properties": {
+          "at_end": {
+            "title": "At End",
+            "type": "boolean"
+          },
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayBarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "forming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormingBarOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interval": {
+            "enum": [
+              "1m",
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastPrintOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "levels": {
+            "$ref": "#/components/schemas/ReplayLevelsOut"
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prints": {
+            "$ref": "#/components/schemas/PrintsOut"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/ReplaySignalOut"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revealed_through",
+          "at_end",
+          "bars",
+          "forming",
+          "prints",
+          "signals",
+          "levels",
+          "last",
+          "open_trade",
+          "stamp",
+          "interval",
+          "window_start"
+        ],
+        "title": "FeedOut",
+        "type": "object"
+      },
       "FireMarkerOut": {
         "properties": {
           "bar_time": {
@@ -1600,6 +2008,46 @@
           "bar_time"
         ],
         "title": "FireMarkerOut",
+        "type": "object"
+      },
+      "FormingBarOut": {
+        "description": "The current display bar built from revealed closed 1-minute bars; it updates once a minute.",
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "title": "V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v"
+        ],
+        "title": "FormingBarOut",
         "type": "object"
       },
       "FuturesSpecOut": {
@@ -1759,6 +2207,244 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JournalOut": {
+        "description": "Live while the session is active (realized plus the open trade marked at the playhead); final after\n`end`. `signals_vs_trades` and the 15/30-minute changes look past the playhead, so they are empty until\nthe session has ended.",
+        "properties": {
+          "adherence": {
+            "$ref": "#/components/schemas/AdherenceOut"
+          },
+          "pnl_series": {
+            "items": {
+              "$ref": "#/components/schemas/PnlPointOut"
+            },
+            "title": "Pnl Series",
+            "type": "array"
+          },
+          "signals_vs_trades": {
+            "items": {
+              "$ref": "#/components/schemas/SignalVsTradeOut"
+            },
+            "title": "Signals Vs Trades",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/JournalTotalsOut"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/JournalTradeOut"
+            },
+            "title": "Trades",
+            "type": "array"
+          }
+        },
+        "required": [
+          "totals",
+          "trades",
+          "adherence",
+          "signals_vs_trades",
+          "pnl_series"
+        ],
+        "title": "JournalOut",
+        "type": "object"
+      },
+      "JournalTotalsOut": {
+        "properties": {
+          "avg_loss_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Loss Usd"
+          },
+          "avg_win_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Win Usd"
+          },
+          "largest_loss_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Loss Usd"
+          },
+          "losses": {
+            "title": "Losses",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "r_total": {
+            "title": "R Total",
+            "type": "number"
+          },
+          "scratches": {
+            "title": "Scratches",
+            "type": "integer"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          },
+          "wins": {
+            "title": "Wins",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pnl_usd",
+          "r_total",
+          "trades",
+          "wins",
+          "losses",
+          "scratches",
+          "win_rate",
+          "avg_win_usd",
+          "avg_loss_usd",
+          "largest_loss_usd"
+        ],
+        "title": "JournalTotalsOut",
+        "type": "object"
+      },
+      "JournalTradeOut": {
+        "properties": {
+          "entry_at": {
+            "format": "date-time",
+            "title": "Entry At",
+            "type": "string"
+          },
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "exit_at": {
+            "format": "date-time",
+            "title": "Exit At",
+            "type": "string"
+          },
+          "exit_price": {
+            "title": "Exit Price",
+            "type": "number"
+          },
+          "exit_source": {
+            "enum": [
+              "her",
+              "auto"
+            ],
+            "title": "Exit Source",
+            "type": "string"
+          },
+          "no": {
+            "title": "No",
+            "type": "integer"
+          },
+          "on_signal": {
+            "title": "On Signal",
+            "type": "boolean"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          }
+        },
+        "required": [
+          "no",
+          "side",
+          "entry_at",
+          "entry_price",
+          "exit_at",
+          "exit_price",
+          "shares",
+          "pnl_usd",
+          "r",
+          "stop_price",
+          "on_signal",
+          "exit_source"
+        ],
+        "title": "JournalTradeOut",
+        "type": "object"
+      },
+      "LastPrintOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "price",
+          "at"
+        ],
+        "title": "LastPrintOut",
         "type": "object"
       },
       "LevelsOut": {
@@ -2299,6 +2985,167 @@
         "title": "MacdOut",
         "type": "object"
       },
+      "MarkOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "long_entry",
+              "short_entry",
+              "long_exit",
+              "short_exit",
+              "stop",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
+          },
+          "source": {
+            "enum": [
+              "her",
+              "auto"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "trade_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade No"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "kind",
+          "at",
+          "price",
+          "shares",
+          "stop_price",
+          "note",
+          "trade_no",
+          "source"
+        ],
+        "title": "MarkOut",
+        "type": "object"
+      },
+      "MarkResultOut": {
+        "properties": {
+          "journal": {
+            "$ref": "#/components/schemas/JournalOut"
+          },
+          "mark": {
+            "$ref": "#/components/schemas/MarkOut"
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mark",
+          "open_trade",
+          "journal"
+        ],
+        "title": "MarkResultOut",
+        "type": "object"
+      },
+      "MarkUndoOut": {
+        "properties": {
+          "journal": {
+            "$ref": "#/components/schemas/JournalOut"
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "removed_mark_id": {
+            "title": "Removed Mark Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed_mark_id",
+          "open_trade",
+          "journal"
+        ],
+        "title": "MarkUndoOut",
+        "type": "object"
+      },
       "MarkersOut": {
         "properties": {
           "fires": {
@@ -2538,6 +3385,126 @@
         "title": "Metrics",
         "type": "object"
       },
+      "OpenTradeOut": {
+        "properties": {
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "last_price": {
+            "title": "Last Price",
+            "type": "number"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "trade_no": {
+            "title": "Trade No",
+            "type": "integer"
+          },
+          "unrealized_usd": {
+            "title": "Unrealized Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "trade_no",
+          "side",
+          "shares",
+          "entry_price",
+          "stop_price",
+          "last_price",
+          "unrealized_usd",
+          "r"
+        ],
+        "title": "OpenTradeOut",
+        "type": "object"
+      },
+      "PaceOut": {
+        "description": "Eligible prints and shares per market second over the last `window_s` seconds before the playhead.",
+        "properties": {
+          "band": {
+            "anyOf": [
+              {
+                "enum": [
+                  "quiet",
+                  "steady",
+                  "busy",
+                  "frantic"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band"
+          },
+          "prints_per_s": {
+            "title": "Prints Per S",
+            "type": "number"
+          },
+          "shares_per_s": {
+            "title": "Shares Per S",
+            "type": "number"
+          },
+          "window_s": {
+            "title": "Window S",
+            "type": "integer"
+          },
+          "x_of_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Of Avg"
+          }
+        },
+        "required": [
+          "window_s",
+          "prints_per_s",
+          "shares_per_s",
+          "x_of_avg",
+          "band"
+        ],
+        "title": "PaceOut",
+        "type": "object"
+      },
       "PatternMarkerOut": {
         "properties": {
           "bar_close": {
@@ -2631,6 +3598,170 @@
         "title": "PivotMethodsOut",
         "type": "object"
       },
+      "Plan": {
+        "additionalProperties": false,
+        "properties": {
+          "maxLossUsd": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxlossusd"
+          },
+          "maxTrades": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxtrades"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "signalOnly": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Signalonly",
+            "type": "string"
+          },
+          "stopRequired": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Stoprequired",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signalOnly",
+          "stopRequired"
+        ],
+        "title": "Plan",
+        "type": "object"
+      },
+      "PnlPointOut": {
+        "properties": {
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          }
+        },
+        "required": [
+          "t",
+          "pnl_usd"
+        ],
+        "title": "PnlPointOut",
+        "type": "object"
+      },
+      "PrintsOut": {
+        "properties": {
+          "big_print_usd": {
+            "title": "Big Print Usd",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "feed": {
+            "enum": [
+              "sip",
+              "iex"
+            ],
+            "title": "Feed",
+            "type": "string"
+          },
+          "pace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "items": {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "enum": [
+                    -1,
+                    0,
+                    1
+                  ],
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "integer"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feed",
+          "rows",
+          "count",
+          "volume",
+          "shown",
+          "big_print_usd",
+          "pace"
+        ],
+        "title": "PrintsOut",
+        "type": "object"
+      },
       "Problem": {
         "properties": {
           "message": {
@@ -2647,6 +3778,628 @@
           "message"
         ],
         "title": "Problem",
+        "type": "object"
+      },
+      "ReplayBarOut": {
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "ext": {
+            "title": "Ext",
+            "type": "boolean"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "title": "V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v",
+          "ext"
+        ],
+        "title": "ReplayBarOut",
+        "type": "object"
+      },
+      "ReplayDayOut": {
+        "description": "One notable day. Spoiler-free: only what a trader knows at the open (the gap) plus non-directional heat\n(volatility rank, heavy volume). Never the day's change, range, close, or close location.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Pct"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rv_pct_rank": {
+            "title": "Rv Pct Rank",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "enum": [
+                "gap_up",
+                "gap_down",
+                "heavy_volume",
+                "earnings"
+              ],
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "day",
+          "weekday",
+          "rank",
+          "rv_pct_rank",
+          "gap_pct",
+          "tags",
+          "attempts"
+        ],
+        "title": "ReplayDayOut",
+        "type": "object"
+      },
+      "ReplayDaysOut": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "lookback_sessions": {
+            "title": "Lookback Sessions",
+            "type": "integer"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
+          "symbols",
+          "lookback_sessions",
+          "stamp"
+        ],
+        "title": "ReplayDaysOut",
+        "type": "object"
+      },
+      "ReplayLevelsOut": {
+        "properties": {
+          "opening_range_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Range High"
+          },
+          "opening_range_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Range Low"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "session_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session High"
+          },
+          "session_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Low"
+          }
+        },
+        "title": "ReplayLevelsOut",
+        "type": "object"
+      },
+      "ReplaySessionOut": {
+        "properties": {
+          "armed": {
+            "items": {
+              "$ref": "#/components/schemas/ArmedOut"
+            },
+            "title": "Armed",
+            "type": "array"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "journal": {
+            "$ref": "#/components/schemas/JournalOut"
+          },
+          "marks": {
+            "items": {
+              "$ref": "#/components/schemas/MarkOut"
+            },
+            "title": "Marks",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ReplaySessionV1"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tape_feed": {
+            "enum": [
+              "sip",
+              "iex"
+            ],
+            "title": "Tape Feed",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "attempt",
+          "status",
+          "spec",
+          "window_start",
+          "window_end",
+          "revealed_through",
+          "tape_feed",
+          "armed",
+          "marks",
+          "open_trade",
+          "journal",
+          "notes",
+          "rating",
+          "created_at",
+          "ended_at",
+          "stamp"
+        ],
+        "title": "ReplaySessionOut",
+        "type": "object"
+      },
+      "ReplaySessionPatch": {
+        "description": "PATCH body: notes and the self-rating only.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          }
+        },
+        "title": "ReplaySessionPatch",
+        "type": "object"
+      },
+      "ReplaySessionSummaryOut": {
+        "description": "A row of the hub's Resume card and Recent sessions table.",
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "hide_date": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Hide Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnl Usd"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "day",
+          "attempt",
+          "status",
+          "hide_date",
+          "revealed_through",
+          "window_end",
+          "trades",
+          "pnl_usd",
+          "adherence_pct",
+          "updated_at"
+        ],
+        "title": "ReplaySessionSummaryOut",
+        "type": "object"
+      },
+      "ReplaySessionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "armed": {
+            "items": {
+              "$ref": "#/components/schemas/ArmedItem"
+            },
+            "maxItems": 5,
+            "title": "Armed",
+            "type": "array"
+          },
+          "day": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+            "title": "Day",
+            "type": "string"
+          },
+          "hideDate": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Hidedate",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "1m",
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "session": {
+            "enum": [
+              "regular",
+              "extended"
+            ],
+            "title": "Session",
+            "type": "string"
+          },
+          "shares": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Shares",
+            "type": "integer"
+          },
+          "symbol": {
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Symbol",
+            "type": "string"
+          },
+          "window": {
+            "$ref": "#/components/schemas/Window"
+          }
+        },
+        "required": [
+          "armed",
+          "day",
+          "hideDate",
+          "interval",
+          "plan",
+          "schemaVersion",
+          "session",
+          "shares",
+          "symbol",
+          "window"
+        ],
+        "title": "ReplaySessionV1",
+        "type": "object"
+      },
+      "ReplaySignalOut": {
+        "properties": {
+          "bar_close": {
+            "format": "date-time",
+            "title": "Bar Close",
+            "type": "string"
+          },
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "bias": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bullish",
+                  "bearish",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bias"
+          },
+          "close": {
+            "title": "Close",
+            "type": "number"
+          },
+          "evidence": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "alert_strategy",
+              "filter"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "id",
+          "name",
+          "bias",
+          "bar_time",
+          "bar_close",
+          "close",
+          "evidence"
+        ],
+        "title": "ReplaySignalOut",
         "type": "object"
       },
       "ScreenerFilterCreate": {
@@ -3409,6 +5162,59 @@
         "title": "SignalOut",
         "type": "object"
       },
+      "SignalVsTradeOut": {
+        "properties": {
+          "chg_15m_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 15M Pct"
+          },
+          "chg_30m_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 30M Pct"
+          },
+          "close": {
+            "title": "Close",
+            "type": "number"
+          },
+          "her": {
+            "title": "Her",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "name",
+          "close",
+          "chg_15m_pct",
+          "chg_30m_pct",
+          "her"
+        ],
+        "title": "SignalVsTradeOut",
+        "type": "object"
+      },
       "StageUpdate": {
         "properties": {
           "confirm": {
@@ -3448,7 +5254,8 @@
               "delayed",
               "closed",
               "paused",
-              "unavailable"
+              "unavailable",
+              "replay"
             ],
             "title": "Freshness",
             "type": "string"
@@ -3620,7 +5427,8 @@
               "delayed",
               "closed",
               "paused",
-              "unavailable"
+              "unavailable",
+              "replay"
             ],
             "title": "Freshness",
             "type": "string"
@@ -4512,7 +6320,8 @@
               "delayed",
               "closed",
               "paused",
-              "unavailable"
+              "unavailable",
+              "replay"
             ],
             "title": "Freshness",
             "type": "string"
@@ -4614,6 +6423,27 @@
           "at"
         ],
         "title": "WatchlistTableTag",
+        "type": "object"
+      },
+      "Window": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "Window",
         "type": "object"
       }
     }
@@ -5892,6 +7722,549 @@
         "summary": "Stream Quotes",
         "tags": [
           "quotes"
+        ]
+      }
+    },
+    "/api/desk/replay/days": {
+      "get": {
+        "operationId": "list_days_api_desk_replay_days_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "pattern": "^[A-Z][A-Z0-9.]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayDaysOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Days",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_desk_replay_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "ended"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReplaySessionSummaryOut"
+                  },
+                  "title": "Response List Sessions Api Desk Replay Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "replay"
+        ]
+      },
+      "post": {
+        "description": "Start a practice session from a `ReplaySessionV1`: validates the day and its data, snapshots the armed\nstrategy versions, and computes the would-fire signals (held back until the playhead reaches them). One\nactive session per symbol and day: a second POST returns the existing one; after `end` it is attempt n + 1.",
+        "operationId": "create_session_api_desk_replay_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaySessionV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}": {
+      "get": {
+        "operationId": "get_session_state_api_desk_replay_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session State",
+        "tags": [
+          "replay"
+        ]
+      },
+      "patch": {
+        "description": "Notes and the self-rating only; a key left out is left alone, `null` clears it.",
+        "operationId": "patch_session_api_desk_replay_sessions__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaySessionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Session",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/advance": {
+      "post": {
+        "operationId": "advance_session_api_desk_replay_sessions__session_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvanceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advance Session",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/end": {
+      "post": {
+        "description": "Auto-exit an open trade at the last price, reveal the whole window, and store the final journal. Idempotent.",
+        "operationId": "end_session_api_desk_replay_sessions__session_id__end_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Session",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/feed": {
+      "get": {
+        "operationId": "session_feed_api_desk_replay_sessions__session_id__feed_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "1m",
+                    "5m",
+                    "15m"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interval"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_size",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Min Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_notional",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000000,
+              "minimum": 0,
+              "title": "Min Notional",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Feed",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/marks": {
+      "post": {
+        "description": "Place a practice mark at the playhead: the server stamps the time and the last print's price.",
+        "operationId": "place_mark_api_desk_replay_sessions__session_id__marks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "A PracticeMarkV1",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Mark",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/marks/{mark_id}": {
+      "delete": {
+        "description": "Undo the last mark, only while the playhead has not moved since it was placed (else 409).",
+        "operationId": "undo_mark_api_desk_replay_sessions__session_id__marks__mark_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mark_id",
+            "required": true,
+            "schema": {
+              "title": "Mark Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkUndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Mark",
+        "tags": [
+          "replay"
         ]
       }
     },

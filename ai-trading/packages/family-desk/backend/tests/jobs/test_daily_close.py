@@ -77,3 +77,24 @@ def test_run_writes_the_days_bar(db_session, watchlist_with_items):
 
     bars = read_bars(db_session, "AAPL", "1d", now.date(), now.date(), "stock", as_of=now)
     assert list(bars["close"]) == [100.0]
+
+
+def test_run_refreshes_the_notable_days_after_the_daily_pass(db_session, watchlist_with_items, monkeypatch):
+    """02o §c1: the Practice lane's notable days ride the daily close."""
+    seen = []
+    monkeypatch.setattr(daily_close.replay_days, "refresh", lambda db, sources, *, now: seen.append((sources, now)))
+    sources = _FakeSources(FakeBarsSource())
+    now = datetime(2026, 10, 6, 21, 0, tzinfo=UTC)
+    assert daily_close.run(db_session, sources, JobClock(), now=now).ok is True
+    assert seen == [(sources, now)]
+
+
+def test_a_notable_days_failure_never_fails_the_daily_close(db_session, watchlist_with_items, monkeypatch):
+    def broken(db, sources, *, now):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(daily_close.replay_days, "refresh", broken)
+    now = datetime(2026, 10, 6, 21, 0, tzinfo=UTC)
+    clock = JobClock()
+    assert daily_close.run(db_session, _FakeSources(FakeBarsSource()), clock, now=now).ok is True
+    assert clock.succeeded_today(daily_close.NAME, now)

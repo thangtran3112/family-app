@@ -19,7 +19,7 @@ from ai_trading.api.schemas.settings import SettingsChannelStateOut, SettingsCha
 from ai_trading.db.models import User
 from ai_trading.mvp_stub import settings as stub_settings
 from ai_trading.mvp_stub import stub_enabled
-from ai_trading.notify.channel import Channel, ChannelError
+from ai_trading.notify.channel import Channel, ChannelError, ChannelNotConnected
 from ai_trading.notify.dispatch import RETRY_DELAYS_SECONDS
 
 router = APIRouter(prefix="/api/desk/settings", tags=["settings"])
@@ -85,12 +85,15 @@ def _slack_state(row: User, channels: dict[str, Channel]) -> SettingsChannelStat
     return SettingsChannelStateOut(channel="slack", connected=configured and _slack_listed(row), configured=configured)
 
 
-def _send_test(channel: Channel) -> Literal["sent", "failed"]:
+def _send_test(channel: Channel, **target: str) -> Literal["sent", "failed", "not_connected"]:
     """One send, then a retry after each wait in `RETRY_DELAYS_SECONDS`, the same schedule
-    `dispatch_pending` uses. The exception text is dropped, so no token or webhook URL is echoed."""
+    `dispatch_pending` uses. The exception text is dropped, so no token or webhook URL is echoed.
+    A channel that cannot send right now (alerts off) answers `not_connected` without a retry."""
     for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
         try:
-            channel.send(title=_TEST_TITLE, body=_TEST_BODY, severity=_TEST_SEVERITY)
+            channel.send(title=_TEST_TITLE, body=_TEST_BODY, severity=_TEST_SEVERITY, **target)
+        except ChannelNotConnected:
+            return "not_connected"
         except ChannelError:
             if attempt < len(RETRY_DELAYS_SECONDS):
                 time.sleep(RETRY_DELAYS_SECONDS[attempt])
@@ -160,4 +163,5 @@ def test_channel(
     wired = _channel_map(request).get(channel)
     if not ready or wired is None:
         return SettingsChannelTestOut(status="not_connected")
-    return SettingsChannelTestOut(status=_send_test(wired))
+    target = {"chat_id": row.telegram_chat_id} if channel == "telegram" and row.telegram_chat_id else {}
+    return SettingsChannelTestOut(status=_send_test(wired, **target))

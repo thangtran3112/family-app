@@ -15,6 +15,7 @@ from typing import Literal, Protocol, runtime_checkable
 import pandas as pd
 
 from ai_trading_common.bars import Bars, Timeframe
+from ai_trading_common.trades import Trades
 from ai_trading_common.types import (
     ActiveSymbol,
     AnalystTargets,
@@ -35,8 +36,28 @@ from ai_trading_common.types import (
 @runtime_checkable
 class BarsSource(Protocol):
     def bars(
-        self, symbol: str, timeframe: Timeframe, start: pd.Timestamp, end: pd.Timestamp, *, now: pd.Timestamp
+        self,
+        symbol: str,
+        timeframe: Timeframe,
+        start: pd.Timestamp,
+        end: pd.Timestamp,
+        *,
+        now: pd.Timestamp,
+        adjustment: str = "all",
     ) -> Bars: ...
+
+
+@runtime_checkable
+class TradesSource(Protocol):
+    def trades(
+        self,
+        symbol: str,
+        start: pd.Timestamp,
+        end: pd.Timestamp,
+        *,
+        feed: Literal["sip", "iex"],
+        now: pd.Timestamp | None = None,
+    ) -> Trades: ...
 
 
 @runtime_checkable

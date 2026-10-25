@@ -88,3 +88,6 @@ export function useDeskUi(): DeskUiValue {
 
 /** The element a page portals its right-rail content into (see RightRail). Null before mount. */
 export const RailSlotContext = createContext<HTMLElement | null>(null);
+
+/** The element the replay workspace portals its Session panel into (see LeftRailPortal). Null on every other page. */
+export const LeftSlotContext = createContext<HTMLElement | null>(null);

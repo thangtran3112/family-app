@@ -1,5 +1,5 @@
 """The Desk's import boundary with `ai_trading_common` (02j §7): Desk code imports only
-`ai_trading_common.types`, `sources`, `registry`, `bars`, `errors`, `quality`, and -- in tests
+`ai_trading_common.types`, `sources`, `registry`, `bars`, `trades`, `errors`, `quality`, and -- in tests
 only -- `testing`. It never imports `ai_trading_common.providers`: that module is an
 implementation detail of the registry, and importing it from the Desk would let a caller bypass
 `DataSources`'s fallback chains and bind to one vendor directly, defeating the whole point of
@@ -10,7 +10,9 @@ import ast
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "ai_trading"
-ALLOWED = {f"ai_trading_common.{name}" for name in ("types", "sources", "registry", "bars", "errors", "quality")}
+ALLOWED = {
+    f"ai_trading_common.{name}" for name in ("types", "sources", "registry", "bars", "trades", "errors", "quality")
+}
 DYNAMIC_IMPORTERS = frozenset({"__import__", "import_module"})
 
 

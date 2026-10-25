@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
+from ai_trading_common.trades import Trades, empty_trades_frame
 
 
 class FakeClock:
@@ -49,6 +52,28 @@ def make_client(responses, clock: FakeClock | None = None) -> tuple[ThrottledCli
     session = FakeSession(responses)
     client = ThrottledClient(clock=clock.now, sleep=clock.sleep, jitter=lambda a, b: 0.0, session=session)
     return client, session, clock
+
+
+class FakeTrades:
+    """A trades source over canned frames keyed by `(symbol, feed)`. It returns the stored prints with
+    `start <= t < end`, or an empty `Trades` for a key with none. `refuse_sip` makes the SIP feed raise
+    `NotConfigured`, as a free key without the SIP entitlement does. Every call is recorded in `calls` as
+    `(symbol, start, end, feed)`."""
+
+    def __init__(self, frames: dict[tuple[str, str], pd.DataFrame] | None = None, *, refuse_sip: bool = False) -> None:
+        self.frames = frames or {}
+        self.refuse_sip = refuse_sip
+        self.calls: list[tuple[str, pd.Timestamp, pd.Timestamp, str]] = []
+
+    def trades(self, symbol, start, end, *, feed, now=None) -> Trades:
+        self.calls.append((symbol, start, end, feed))
+        if self.refuse_sip and feed == "sip":
+            raise NotConfigured("fake", "sip refused")
+        frame = self.frames.get((symbol, feed))
+        if frame is None:
+            return Trades(frame=empty_trades_frame(), source="fake", feed=feed)
+        kept = frame[(frame["t"] >= start) & (frame["t"] < end)].reset_index(drop=True)
+        return Trades(frame=kept, source="fake", feed=feed)
 
 
 class FakeGateway:

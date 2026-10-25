@@ -4,6 +4,10 @@ Status: planned 2026-10-24 (docs only; nothing activated). **Owner priority (202
 Fundamental-lane mock runs.** The Practice mock runs (R0, PA–PC, §e) take the single Paper writer before 02n's F1–F6; 02n's F0 was
 gated on the Monday 2026-10-26 Flex move anyway (02n §g decision 7), and Practice needs only Alpaca history, which works today.
 
+Implementation (2026-10-24): the backend stream (steps 3a–3d) and the frontend stream (step 4) are complete and integrated on
+`feature/desk-beyond-mvp-2`, pending the integration gates and the pull request. The step 5 Playwright Practice specs pass at 1440 and
+1180 against the stub (`DESK_REPLAY_STUB=1`); the stub-off real-data run and the §i acceptance checks are still open.
+
 It extends the deployed Technical-lane desktop MVP ([02l](02l-desk-desktop-first-mvp.md), [02m](02m-desk-mvp-implementation-spec.md),
 STATUS 5D–5F) and reuses its shell, bands, `DenseTable`, `MarketChart` markers and panes, the copy table, `useDeskQuery`, the stub-first
 stream order, and the contracts pipeline ([02k](02k-desk-strategy-config-contracts.md)). Nothing here redesigns them.
@@ -319,7 +323,8 @@ needs an open trade and a price on the losing side of the last price, any mark n
 
 Same pull request: runtime-role grants in `docker/postgres/zz-20-desk-roles.sh` and `tests/test_db_roles.py`, `tests/test_db_migrations.py`,
 ORM models in `db/models.py`. **Numbering:** 02n plans `0004_fundamental_lane`; whichever lane merges second renumbers its file and
-`down_revision` (the single-head migration test catches a clash). Practice is expected to merge first.
+`down_revision` (the single-head migration test catches a clash). Practice is expected to merge first. *Resolved 2026-10-24:* the
+consensus-history migration (02n step 3a) landed first as `0004_consensus_history`, so Practice shipped as `0005_replay_practice`.
 
 ### c4. Contracts (`contracts/src/replay-session-v1.ts`)
 

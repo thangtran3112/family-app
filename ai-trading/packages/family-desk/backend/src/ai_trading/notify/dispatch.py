@@ -3,8 +3,9 @@ was not sent (02m §a3.7, §b5.5) so the delivery log can show it:
 
 - `skipped_quiet_hours`: held for the user's quiet hours; sent on a later pass once they end.
 - `skipped_preferences`: the user's channel list leaves this channel off; sent later if she turns it on.
-- `no_channel`: nothing is wired for this channel (no key stored for it), so the alert only reached the
-  inbox. This one is final: turning a channel on later does not send alerts from before it existed.
+- `no_channel`: nothing is wired for this channel (no key stored for it, no chat linked, or the alert runtime is
+  off), so the alert only reached the inbox. This one is final: turning a channel on later does not send alerts
+  from before it existed.
 
 A held or skipped row is looked at again on every pass for a day; after that it stays as recorded.
 """
@@ -20,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_trading.db.models import Alert, Delivery, User
-from ai_trading.notify.channel import Channel, ChannelError
+from ai_trading.notify.channel import Channel, ChannelNotConnected
 from ai_trading.notify.quiet_hours import in_quiet_hours
 from ai_trading.notify.redact import redact
 
@@ -93,8 +94,9 @@ def dispatch_pending(
     A channel the user's list leaves off -> "skipped_preferences"; one inside her quiet hours for a
     non-urgent alert -> "skipped_quiet_hours" (both are tried again on the next pass). Otherwise calls
     `channels[row.channel].send(...)`, retrying up to `len(RETRY_DELAYS_SECONDS)` times with `sleep` between
-    attempts on `ChannelError`; final failure -> `status="failed"`, `error=redact.redact(str(exc))`,
-    `attempted_at=now`; success -> `status="sent"`, `attempted_at=now`. One UPDATE per row; caller commits.
+    attempts on a send error (`ChannelNotConnected` is not retried: -> "no_channel"); final failure ->
+    `status="failed"`, `error=redact.redact(str(exc))`, `attempted_at=now`; success -> `status="sent"`,
+    `attempted_at=now`. One UPDATE per row; caller commits.
     """
     rows = session.execute(
         select(Delivery, Alert, User)
@@ -139,11 +141,16 @@ def dispatch_pending(
                 outcomes.append(DeliveryOutcome(delivery.id, "skipped_quiet_hours"))
                 continue
 
-        last_error: ChannelError | None = None
+        last_error: Exception | None = None
         for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
             try:
                 channel.send(title=alert.title, body=alert.body, severity=alert.severity, **_target(channel, user))
-            except ChannelError as exc:
+            except ChannelNotConnected:  # retrying cannot help: record it and move on
+                delivery.status = "no_channel"
+                delivery.attempted_at = now
+                outcomes.append(DeliveryOutcome(delivery.id, "no_channel"))
+                break
+            except Exception as exc:  # a ChannelError, or a channel bug: neither may roll back this pass's inbox rows
                 last_error = exc
                 if attempt < len(RETRY_DELAYS_SECONDS):
                     sleep(RETRY_DELAYS_SECONDS[attempt])
