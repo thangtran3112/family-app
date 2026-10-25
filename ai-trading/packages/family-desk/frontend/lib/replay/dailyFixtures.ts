@@ -1,6 +1,7 @@
 // Illustrative daily-list payloads in the shapes of the generated contract (`lib/api/openapi.d.ts`). The numbers are
 // made up (they are not market data); the node tests parse them with the real schemas.
 import type { DayList, PracticePlan } from "./daily.ts";
+import { threadBrief } from "./threadFixtures.ts";
 
 const stamp = { as_of: "2026-03-09T13:15:00Z", source: "alpaca", quality: "delayed-15m", freshness: "replay" } as const;
 
@@ -22,6 +23,7 @@ export const planSpec = {
 
 export const plan: PracticePlan = {
   id: 3,
+  thread_id: 1,
   spec: planSpec as unknown as PracticePlan["spec"],
   sessions: 20,
   days_opened: 6,
@@ -96,8 +98,10 @@ export const dayList: DayList = {
     },
   ],
   watch: [{ symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
+  watch_check: { starred: ["SMCI"], traded: [], off_watch: [], verdict: "no_trades", label: "No practice trades yet" },
   clock: null,
   sessions: [],
+  thread: threadBrief,
   warnings: ["Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists"],
   peek: null,
   journal: null,

@@ -3,7 +3,8 @@ import test, { after } from "node:test";
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import { createDeskApiClient, DeskApiError } from "../api/client.ts";
 import { daysResponse, delta, feed, markResult, session, sessionSummary, spec } from "../replay/fixtures.ts";
-import { advanceReplay, createReplaySession, endReplay, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, patchReplaySession, placeMark, undoMark } from "./replay.ts";
+import { advanceReplay, closeThread, createReplaySession, createThread, endReplay, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, loadThread, loadThreads, openNextDay, patchReplaySession, patchThread, placeMark, undoMark } from "./replay.ts";
+import { activeThread, closedThread, thread } from "../replay/threadFixtures.ts";
 
 type Call = { method: string; path: string; body: unknown };
 const seen: Call[] = [];
@@ -92,7 +93,7 @@ test("feed sends its tape query; a mark posts the mark itself; undo deletes and 
   assert.equal((await placeMark(12, mark, { client: d.client })).mark.id, 3);
   assert.deepEqual(d.calls[0], { method: "POST", path: "/api/desk/replay/sessions/12/marks", body: mark });
 
-  d = fakeDesk({ removed_mark_id: 3, open_trade: null, journal: markResult.journal });
+  d = fakeDesk({ removed_mark_id: 3, open_trade: null, journal: markResult.journal, thread: null });
   assert.equal((await undoMark(12, 3, { client: d.client })).open_trade, null);
   assert.deepEqual(d.calls[0], { method: "DELETE", path: "/api/desk/replay/sessions/12/marks/3", body: undefined });
 });
@@ -112,4 +113,41 @@ test("a 422 with spec problems rejects with the problems attached", async () => 
   const error = await createReplaySession(spec, { client: fakeDesk({ detail: { problems } }, 422).client }).catch((caught: unknown) => caught);
   assert.ok(error instanceof DeskApiError);
   assert.deepEqual([error.kind, error.status, error.problems], ["http", 422, problems]);
+});
+
+test("the thread loaders use the thread routes: list, read, create, patch the plan, close", async () => {
+  let d = fakeDesk([activeThread]);
+  assert.equal((await loadThreads({ client: d.client })).length, 1);
+  assert.deepEqual(d.calls[0], { method: "GET", path: "/api/desk/replay/threads", body: undefined });
+
+  d = fakeDesk(thread);
+  assert.equal((await loadThread(1, { client: d.client })).daily.length, 8);
+  assert.deepEqual(d.calls[0], { method: "GET", path: "/api/desk/replay/threads/1", body: undefined });
+
+  const create = { schemaVersion: 1, mode: "day", startingBalance: 50000, plan: { stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no" } };
+  d = fakeDesk(thread);
+  await createThread(create, { client: d.client });
+  assert.deepEqual(d.calls[0], { method: "POST", path: "/api/desk/replay/threads", body: create });
+
+  const patch = { schemaVersion: 1, plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" } };
+  d = fakeDesk(thread);
+  await patchThread(1, patch, { client: d.client });
+  assert.deepEqual(d.calls[0], { method: "PATCH", path: "/api/desk/replay/threads/1", body: patch });
+
+  d = fakeDesk(closedThread);
+  assert.equal((await closeThread(3, { client: d.client })).thread.status, "closed");
+  assert.deepEqual(d.calls[0], { method: "POST", path: "/api/desk/replay/threads/3/close", body: {} });
+});
+
+test("a new daily plan names its thread; continuing sends an empty body", async () => {
+  const answer = { plan: (await import("../replay/dailyFixtures.ts")).plan, day_list_id: null };
+  let d = fakeDesk(answer);
+  await openNextDay({ schemaVersion: 1 }, { client: d.client, threadId: 4 });
+  assert.deepEqual(d.calls[0]!.body, { plan: { schemaVersion: 1 }, threadId: 4 });
+  d = fakeDesk(answer);
+  await openNextDay({ schemaVersion: 1 }, { client: d.client });
+  assert.deepEqual(d.calls[0]!.body, { plan: { schemaVersion: 1 } });
+  d = fakeDesk(answer);
+  await openNextDay(undefined, { client: d.client });
+  assert.deepEqual(d.calls[0]!.body, {});
 });

@@ -10,11 +10,14 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { withPriorities } from "@/lib/desk/columns";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { endDay, loadDaily, loadDayList, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
+import { dayResultTone, formatBalance, formatDayResult, planRows } from "@/lib/replay/threadView";
 import { PeekPanel } from "./PeekPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { UniverseFootnote } from "./UniverseFootnote";
@@ -66,6 +69,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
+
+  // The risk plan is the thread's (D-007): read it from the thread, not from the day's plan.
+  const threadId = list.thread?.id ?? null;
+  const thread = useDeskQuery(`day-thread:${threadId}`, (signal) => loadThread(threadId ?? 0, { signal }), { enabled: threadId !== null });
 
   const peek = useDeskQuery(`day-peek:${list.id}:${selected}`, (signal) => loadDayList(list.id, { peek: selected ?? undefined }, { signal }), { enabled: selected !== null });
 
@@ -142,6 +149,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           <Link href="/practice" className={styles.button}>Practice</Link>
         </div>
       </header>
+      {list.thread && <ThreadStrip thread={list.thread} />}
       <div className={styles.body}>
         <p className={styles.line}>{listHeaderText(list)}</p>
         <ul className={styles.chips} aria-label="Filters">
@@ -235,16 +243,22 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           },
           {
             id: "plan",
-            label: "Plan",
+            label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
             node: (
               <dl className={styles.facts}>
+                {list.thread && (
+                  <>
+                    <div><dt>{PRACTICE_COPY.threadBalance}</dt><dd>{formatBalance(list.thread.balance)} <SimulatedBadge /></dd></div>
+                    {list.thread.today_pnl_usd !== null && (
+                      <div><dt>{PRACTICE_COPY.threadToday}</dt><dd className={styles[dayResultTone(list.thread.today_pnl_usd)]}>{formatDayResult(list.thread.today_pnl_usd)}</dd></div>
+                    )}
+                  </>
+                )}
                 <div><dt>Window</dt><dd>{setup.window.from}–{setup.window.to} ET</dd></div>
                 <div><dt>Chart</dt><dd>{setup.interval}</dd></div>
-                <div><dt>Shares</dt><dd>{setup.shares}</dd></div>
-                <div><dt>Stop</dt><dd>{setup.plan.stopRequired === "yes" ? "Every entry" : "Optional"}</dd></div>
-                {setup.plan.maxLossUsd !== undefined && <div><dt>Max loss</dt><dd>${setup.plan.maxLossUsd}</dd></div>}
-                {setup.plan.maxTrades !== undefined && <div><dt>Max trades</dt><dd>{setup.plan.maxTrades}</dd></div>}
+                {thread.data?.thread.plan && planRows(thread.data.thread.plan).map((row) => <div key={row.id}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}
                 {ended && <div><dt>Day</dt><dd>{formatEtDay(list.day)}</dd></div>}
+                {list.thread && <p className={`${styles.muted} ${styles.factsNote}`}>{PRACTICE_COPY.threadPlanFrom}</p>}
               </dl>
             ),
           },

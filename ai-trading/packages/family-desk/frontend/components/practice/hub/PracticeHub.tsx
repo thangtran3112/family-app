@@ -13,12 +13,15 @@ import { NotableDaysTable } from "./NotableDaysTable";
 import { RecentSessionsTable } from "./RecentSessionsTable";
 import { ResumeCard } from "./ResumeCard";
 import { SessionSetup } from "./SessionSetup";
+import { ThreadsSection } from "./ThreadsSection";
 import styles from "./hub.module.css";
 
 /** Practice hub (02o §a2): set up a replay of a past day, pick a notable day, and resume or review sessions. */
 export function PracticeHub() {
   const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
   const [showDates, setShowDates] = useState(false);
+  // Bumped when a thread changes (created here), so the threads band and the daily-list card both refetch.
+  const [threadRevision, setThreadRevision] = useState(0);
   useRegisterSymbolPicker((symbol) => setDraft((current) => ({ ...current, symbol })));
 
   // All notable days first: the answer also says which symbols are on her watchlists. A typed symbol on that list
@@ -46,9 +49,10 @@ export function PracticeHub() {
         <h1 className={styles.title}>Practice</h1>
       </header>
       <div className={styles.body}>
+        <ThreadsSection revision={threadRevision} onChanged={() => setThreadRevision((n) => n + 1)} />
         <section id="daily-list" aria-labelledby="daily-title" className={styles.section}>
           <h2 id="daily-title" className={styles.sectionTitle}>{PRACTICE_COPY.planTitle}</h2>
-          <DailyListCard />
+          <DailyListCard revision={threadRevision} />
         </section>
         <section id="start-practice" aria-labelledby="start-title" className={styles.section}>
           <h2 id="start-title" className={styles.sectionTitle}>Start a practice session</h2>

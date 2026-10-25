@@ -31,7 +31,7 @@ test("the contract's required fields are required: the feed's interval and windo
   assert.equal(ReplayFeedSchema.safeParse({ ...feed, window_start: undefined }).success, false);
   assert.equal(ReplayFeedSchema.safeParse({ ...feed, interval: "30m" }).success, false);
   assert.equal(MarkUndoSchema.safeParse({ removed_mark_id: 3, open_trade: null }).success, false);
-  assert.equal(MarkUndoSchema.parse({ removed_mark_id: 3, open_trade: null, journal: markResult.journal }).open_trade, null);
+  assert.equal(MarkUndoSchema.parse({ removed_mark_id: 3, open_trade: null, journal: markResult.journal, thread: null }).open_trade, null);
 });
 
 test("the session list is a bare array", () => {
