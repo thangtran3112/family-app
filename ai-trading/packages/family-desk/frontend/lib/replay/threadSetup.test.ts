@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
-import { defaultPlanDraft } from "./planSetup.ts";
 import { activeThread } from "./threadFixtures.ts";
 import {
   defaultThreadDraft,
@@ -13,7 +12,6 @@ import {
   threadProblems,
   validatePlanEdit,
   validateThreadDraft,
-  withThreadPlan,
 } from "./threadSetup.ts";
 
 test("the New thread form starts at 50,000 with a stop on every entry, day trading, and no optional limit", () => {
@@ -83,18 +81,6 @@ test("server problems map to the form's fields, and a 409 stays a plain sentence
   assert.equal(problems.maxLossUsd, "Max loss: whole dollars from 1 to 100,000");
   const error = new DeskApiError("http", 409, { detail: "A day thread is already active" });
   assert.equal(error.detail, "A day thread is already active");
-});
-
-test("the daily plan carries the thread's risk plan, so the form no longer asks for it", () => {
-  const base = defaultPlanDraft(new Date("2026-10-25T12:00:00Z"));
-  const bound = withThreadPlan(base, activeThread.thread.plan);
-  assert.deepEqual(
-    [bound.setup.stopRequired, bound.setup.signalOnly, bound.setup.maxLossUsd, bound.setup.maxTrades, bound.setup.note],
-    [true, true, "600", "3", "Trade only VWAP reclaims. Stop at a real level. One trade at a time."],
-  );
-  assert.equal(bound.listAt, base.listAt);
-  const bare = withThreadPlan(base, { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" });
-  assert.deepEqual([bare.setup.stopRequired, bare.setup.maxLossUsd, bare.setup.note], [false, "", ""]);
 });
 
 test("the form's own sentences pass the banned-term check", () => {

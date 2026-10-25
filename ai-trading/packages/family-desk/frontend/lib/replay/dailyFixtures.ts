@@ -15,9 +15,7 @@ export const planSpec = {
     window: { from: "09:30", to: "11:30" },
     session: "regular",
     interval: "5m",
-    shares: 100,
     armed: [],
-    plan: { stopRequired: "yes", signalOnly: "no", maxLossUsd: 200 },
   },
 } as const;
 

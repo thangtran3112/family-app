@@ -5,7 +5,6 @@ import {
 } from "@ai-trading/contracts/practice-thread-v1";
 import type { DeskApiProblem } from "../api/client.ts";
 import { formatBalance } from "./threadView.ts";
-import type { PlanDraft } from "./planSetup.ts";
 import type { ThreadPlan } from "./threads.ts";
 
 // The hub's "New thread" form and the journal's "Edit plan" form (02r): the draft the form edits, its conversion to a
@@ -138,19 +137,4 @@ export function validatePlanEdit(draft: ThreadDraft, startingBalance: number): V
   if (!parsed.success) return { ok: false, problems: readIssues(parsed.error.issues) };
   const over = maxLossProblem(parsed.data.plan.maxLossUsd, startingBalance);
   return over ? { ok: false, problems: { maxLossUsd: over } } : { ok: true, spec: parsed.data };
-}
-
-/** The daily-list plan carries the thread's risk plan (the server applies the thread's own either way): the form no longer asks. */
-export function withThreadPlan(draft: PlanDraft, plan: ThreadPlan): PlanDraft {
-  return {
-    ...draft,
-    setup: {
-      ...draft.setup,
-      stopRequired: plan.stopNoteOnEntry === "yes",
-      signalOnly: plan.tradeOnlyOnSignal === "yes",
-      maxLossUsd: plan.maxLossUsd === undefined ? "" : String(plan.maxLossUsd),
-      maxTrades: plan.maxTrades === undefined ? "" : String(plan.maxTrades),
-      note: plan.planNote ?? "",
-    },
-  };
 }

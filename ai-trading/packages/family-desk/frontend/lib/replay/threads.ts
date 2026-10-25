@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { PracticeThreadV1Schema } from "@ai-trading/contracts/practice-thread-v1";
+import type { components } from "../api/openapi.js";
 
 // Response shapes of the practice-thread endpoints (02r): `/replay/threads`, `/replay/threads/{id}` and the thread
 // header strip every day screen and the workspace carry. `PracticeThreadV1` is the contract itself (plan and stats);
-// the rest mirrors `ai_trading/api/schemas/threads.py`. The generated OpenAPI of this tree predates the routes, so these
-// are not yet checked with `satisfies z.ZodType<components[…]>` the way lib/replay/daily.ts is; add the checks when
-// `pnpm gen:api` carries them. Every dollar figure here is SIMULATED.
+// the rest mirrors `ai_trading/api/schemas/threads.py` and is checked against the generated OpenAPI the way
+// lib/replay/daily.ts is: a field the backend adds, drops or retypes breaks `pnpm typecheck`. Every dollar figure here
+// is SIMULATED.
 
 const finite = z.number().finite();
 const weekday = z.enum(["Mon", "Tue", "Wed", "Thu", "Fri"]);
@@ -21,7 +22,7 @@ export const ThreadBriefSchema = z.object({
   balance: finite,
   today_pnl_usd: finite.nullable(),
   label: z.string(),
-});
+}) satisfies z.ZodType<components["schemas"]["ThreadBriefOut"]>;
 
 export const ThreadTodaySchema = z.object({
   day_list_id: finite.int(),
@@ -31,14 +32,14 @@ export const ThreadTodaySchema = z.object({
   status: z.enum(["listed", "practicing"]),
   trades: finite.int(),
   pnl_usd: finite,
-});
+}) satisfies z.ZodType<components["schemas"]["ThreadTodayOut"]>;
 
 /** A row of the hub's "Your practice threads": the contract thread, today's open day, and a SIMULATED label. */
 export const ThreadSummarySchema = z.object({
   thread: PracticeThreadV1Schema,
   today: ThreadTodaySchema.nullable(),
   label: z.string(),
-});
+}) satisfies z.ZodType<components["schemas"]["ThreadSummaryOut"]>;
 
 /** One ended practice day: `skipped` ended with no session, so the balance carried. `balance` is at the day's end. */
 export const ThreadDaySchema = z.object({
@@ -51,15 +52,15 @@ export const ThreadDaySchema = z.object({
   pnl_usd: finite,
   adherence_pct: finite.int().nullable(),
   balance: finite,
-});
+}) satisfies z.ZodType<components["schemas"]["ThreadDayOut"]>;
 
 /** `n` 0 is the starting balance (no day), then one point per ended day. */
-export const CurvePointSchema = z.object({ n: finite.int(), day: z.iso.date().nullable(), balance: finite });
+export const CurvePointSchema = z.object({ n: finite.int(), day: z.iso.date().nullable(), balance: finite }) satisfies z.ZodType<components["schemas"]["CurvePointOut"]>;
 
 export const ThreadSchema = ThreadSummarySchema.extend({
   daily: z.array(ThreadDaySchema),
   curve: z.array(CurvePointSchema),
-});
+}) satisfies z.ZodType<components["schemas"]["ThreadOut"]>;
 
 export const ThreadsSchema = z.array(ThreadSummarySchema);
 
