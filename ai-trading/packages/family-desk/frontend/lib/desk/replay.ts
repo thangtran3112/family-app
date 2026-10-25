@@ -86,6 +86,10 @@ export const loadDayList = (id: number, params: { peek?: string } = {}, options?
 export const patchDayList = (id: number, body: { watch?: string[]; notes?: string | null; rating?: number | null }, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}`), DayListSchema, jsonInit("PATCH", body, options));
 
+/** Re-lists a day she has not started at a later list time (D-012): moves the plan's list time and rebuilds this list in place. */
+export const relistDay = (id: number, listAt: string, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}/relist`), DayListSchema, jsonInit("POST", { listAt }, options));
+
 /** Starts the day's practice session on a name from the list (the plan's setup, from the day clock). */
 export const startDaySession = (id: number, symbol: string, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}/sessions`), ReplaySessionSchema, jsonInit("POST", { symbol }, options));

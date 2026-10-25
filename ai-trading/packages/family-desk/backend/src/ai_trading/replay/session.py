@@ -307,18 +307,19 @@ def _levels(ctx: Ctx, minutes: pd.DataFrame, through: pd.Timestamp) -> dict[str,
 
 
 def last_price(ctx: Ctx, through: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
-    """The mark price: the last eligible print at or before `through`, else the last revealed 1-minute close."""
+    """The mark price: the last eligible print at or before `through`, else the last revealed 1-minute close, in
+    whole cents (`journal_mod.fill_price`) so what she sees is what the P/L runs on (D-033)."""
     try:
         found = ctx.svc.tape.last_print(ctx.store, ctx.symbol, through, ctx.feed)  # type: ignore[arg-type]
     except ProviderError as exc:
         log.warning("tape unavailable for the last price: %s", exc)
         found = None
     if found is not None:
-        return found[1], found[0]
+        return journal_mod.fill_price(found[1]), found[0]
     closed = _day_minutes(ctx, through)
     if closed.empty:
         return None
-    return float(closed["close"].iloc[-1]), closed.index[-1] + MINUTE
+    return journal_mod.fill_price(float(closed["close"].iloc[-1])), closed.index[-1] + MINUTE
 
 
 def _age_s(found: tuple[float, pd.Timestamp] | None, through: pd.Timestamp) -> int | None:
@@ -391,7 +392,7 @@ def summary_out(db: Session, row: ReplaySession) -> dict[str, Any]:
     else:
         closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
         trades = len(closed)
-        pnl = round(sum(t.sign * (t.exit_price - t.entry_price) * t.shares for t in closed), 2) if closed else None  # type: ignore[operator]
+        pnl = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]) if closed else None
         adherence = None
     return {
         "id": row.id,

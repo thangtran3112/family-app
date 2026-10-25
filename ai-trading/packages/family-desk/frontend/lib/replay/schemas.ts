@@ -146,7 +146,7 @@ const ArmedSchema = z.object({
 
 export const ReplaySessionSchema = z.object({
   id: finite.int(),
-  /** The day list this session practises (daily-list practice); null for a standalone session. */
+  /** The day list this session practices (daily-list practice); null for a standalone session. */
   day_list_id: finite.int().nullable(),
   /** The practice thread its realized trades book into; null for a standalone session (02r). */
   thread_id: finite.int().nullable(),

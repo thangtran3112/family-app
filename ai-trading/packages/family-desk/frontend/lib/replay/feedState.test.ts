@@ -62,7 +62,7 @@ test("mergeBars returns the same array when nothing arrived", () => {
 
 test("pace prefers the API's numbers, else counts the last 10 market seconds across advances", () => {
   const withApi = applyAdvance(base(), next({}));
-  assert.deepEqual(paceOf(withApi), { printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 });
+  assert.deepEqual(paceOf(withApi), { windowS: 10, printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 });
 
   const noPace = (to: string, count: number, volume: number) => next({ revealed_through: to, prints: { feed: "sip", rows: [], count, volume, shown: 0, big_print_usd: 200000, pace: null } });
   let view = viewFromFeed(ReplayFeedSchema.parse({ ...feed, revealed_through: "2026-04-07T14:07:00Z", prints: { feed: "sip", rows: [], count: 0, volume: 0, shown: 0, big_print_usd: 200000, pace: null } }), "5m");

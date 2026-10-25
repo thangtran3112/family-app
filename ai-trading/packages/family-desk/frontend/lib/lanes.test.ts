@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AVATAR_MENU,
+  hasPracticeLeftRail,
   isNavActive,
   isPracticePath,
   isReplayWorkspacePath,
@@ -67,4 +68,9 @@ test("Practice routes: nav highlight, band and the replay-only left rail", () =>
   assert.equal(isReplayWorkspacePath("/practice/replay/"), true);
   assert.equal(isReplayWorkspacePath("/practice/journal"), false);
   assert.equal(isReplayWorkspacePath("/practice"), false);
+});
+
+test("the replay, the day list and the journal own the left rail", () => {
+  for (const path of ["/practice/replay", "/practice/day", "/practice/journal", "/practice/day/"]) assert.equal(hasPracticeLeftRail(path), true, path);
+  for (const path of ["/practice", "/", "/watchlists", "/practice/other"]) assert.equal(hasPracticeLeftRail(path), false, path);
 });

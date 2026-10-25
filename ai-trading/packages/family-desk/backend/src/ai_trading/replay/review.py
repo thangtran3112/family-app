@@ -3,6 +3,10 @@
 It looks past the playhead (the window end and the close), so `plan.end_day` computes it only after the day is over
 and the API serves it only then. The list price is the price at the evaluating filter's cut (`screen.build_list`),
 on the day's own share basis, so it compares with the raw 1-minute prices of the day.
+
+Rank is by the **signed** move from the list price to the window end, the biggest gain first (D-031). It used to be
+by absolute move, which put a -5% above a +4% without saying so; a review stored that way is re-ranked on read
+(`normalized`), so every ended day reads the same way.
 """
 
 import statistics
@@ -67,19 +71,25 @@ def compute_review(
     window_end: pd.Timestamp,
     picks: Mapping[str, str],
 ) -> dict[str, Any]:
-    """The review: every candidate's move, ranked by absolute move from the list price, her picks (`traded`
-    first, then `starred`) highlighted with their rank, and the Selection numbers.
+    """The review: every candidate's move, ranked by signed move from the list price to the window end (biggest gain
+    first), her picks (`traded` first, then `starred`) highlighted with their rank, and the Selection numbers.
 
     `picks` maps a symbol to `traded` or `starred`. The median is over every candidate that has a move."""
-    rows = [candidate_move(c, minutes.get(c["symbol"]), day, window_end) for c in candidates]
-    moved = sorted((r for r in rows if r["move_pct"] is not None), key=lambda r: (-abs(r["move_pct"]), r["symbol"]))
+    return rank_review(
+        [candidate_move(c, minutes.get(c["symbol"]), day, window_end) for c in candidates], window_end, picks
+    )
+
+
+def rank_review(rows: list[dict[str, Any]], window_end: Any, picks: Mapping[str, str | None]) -> dict[str, Any]:
+    """The ranked review of per-candidate moves: rank 1 is the biggest gain, a loss ranks below every gain, and the
+    list median is the median of the signed moves."""
+    rows = [{**r, "picked": picks.get(r["symbol"])} for r in rows]
+    moved = sorted((r for r in rows if r["move_pct"] is not None), key=lambda r: (-r["move_pct"], r["symbol"]))
     rank = {r["symbol"]: i for i, r in enumerate(moved, start=1)}
     for r in rows:
         r["rank"] = rank.get(r["symbol"])
-        r["picked"] = picks.get(r["symbol"])
     chosen = [r for r in rows if r["picked"] and r["move_pct"] is not None]
     chosen.sort(key=lambda r: (r["picked"] != "traded", r["rank"]))
-    absolute = [abs(r["move_pct"]) for r in moved]
     return {
         "window_end": window_end,
         "of": len(moved),
@@ -89,9 +99,15 @@ def compute_review(
                 {"symbol": r["symbol"], "kind": r["picked"], "move_pct": r["move_pct"], "rank": r["rank"]}
                 for r in chosen
             ],
-            "median_abs_move_pct": round(statistics.median(absolute), 2) if absolute else None,
-            "picks_avg_abs_move_pct": (
-                round(sum(abs(r["move_pct"]) for r in chosen) / len(chosen), 2) if chosen else None
-            ),
+            "median_move_pct": round(statistics.median(r["move_pct"] for r in moved), 2) if moved else None,
+            "picks_avg_move_pct": round(sum(r["move_pct"] for r in chosen) / len(chosen), 2) if chosen else None,
         },
     }
+
+
+def normalized(stored: dict[str, Any]) -> dict[str, Any]:
+    """A stored review ranked the current way. Reviews stored before D-031 ranked by absolute move and carried the
+    absolute median; the moves and the picks in them are still right, so only the ranking and the selection change."""
+    rows = [{k: v for k, v in r.items() if k not in ("rank", "picked")} for r in stored["rows"]]
+    picks = {r["symbol"]: r["picked"] for r in stored["rows"] if r.get("picked")}
+    return rank_review(rows, stored["window_end"], picks)

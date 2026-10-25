@@ -524,10 +524,25 @@ class DayJournalSessionOut(BaseModel):
     adherence_pct: int | None
 
 
+class DayTradeLineOut(JournalTradeOut):
+    """One closed practice trade of the day, with the name it was on."""
+
+    symbol: str
+
+
 class DayJournalOut(BaseModel):
+    """The day's practice result, SIMULATED dollars to the cent: one line per closed trade, the win and loss counts
+    (a scratch is neither), and the thread's balance before and after the day (null for a day with no thread)."""
+
     sessions: list[DayJournalSessionOut]
     trades: int
     pnl_usd: FiniteFloat
+    wins: int
+    losses: int
+    scratches: int
+    lines: list[DayTradeLineOut]
+    balance_before: FiniteFloat | None
+    balance_after: FiniteFloat | None
 
 
 class ReviewRowOut(BaseModel):
@@ -540,7 +555,7 @@ class ReviewRowOut(BaseModel):
     high_pct: FiniteFloat | None
     low_pct: FiniteFloat | None
     range_pct: FiniteFloat | None
-    rank: int | None  # 1 = the biggest absolute move from the list price
+    rank: int | None  # 1 = the biggest gain from the list price to the window end; a loss ranks below every gain
     picked: StarKind | None
 
 
@@ -552,14 +567,20 @@ class SelectionPickOut(BaseModel):
 
 
 class SelectionOut(BaseModel):
+    """Signed: a loss pulls the median and the average down (D-031 ranked and averaged by size before)."""
+
     picks: list[SelectionPickOut]
-    median_abs_move_pct: FiniteFloat | None
-    picks_avg_abs_move_pct: FiniteFloat | None
+    median_move_pct: FiniteFloat | None
+    picks_avg_move_pct: FiniteFloat | None
 
 
 class ReviewOut(BaseModel):
-    """Every candidate's move from its list price to the window end and the close. Only present once the day ended."""
+    """Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
+    window end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen
+    hid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029)."""
 
+    day: date
+    dates_hidden: bool
     window_end: datetime
     of: int  # candidates with a move
     rows: list[ReviewRowOut]
@@ -575,6 +596,15 @@ class WatchCheckOut(BaseModel):
     off_watch: list[str]
     verdict: Literal["no_trades", "on_watch", "off_watch"]
     label: str
+
+
+class RelistOfferOut(BaseModel):
+    """The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which
+    moves the plan's list time, and the practice window's start with it when `window_from` is set."""
+
+    list_at: str
+    label: str
+    window_from: str | None
 
 
 class DayListOut(BaseModel):
@@ -600,6 +630,7 @@ class DayListOut(BaseModel):
     watch_check: WatchCheckOut
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]
+    relist: RelistOfferOut | None
     peek: PeekOut | None
     journal: DayJournalOut | None
     review: ReviewOut | None
@@ -617,6 +648,12 @@ class DayListPatch(BaseModel):
     watch: list[str] | None = Field(default=None, max_length=5)
     notes: str | None = Field(default=None, max_length=2000)
     rating: int | None = Field(default=None, ge=1, le=5)
+
+
+class DayRelistIn(BaseModel):
+    """POST body: the list time to re-list at, "HH:MM" ET. The plan's rules apply (422)."""
+
+    listAt: str = Field(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 class DaySessionIn(BaseModel):

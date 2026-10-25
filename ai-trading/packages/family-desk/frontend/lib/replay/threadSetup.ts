@@ -4,7 +4,7 @@ import {
   PracticeThreadPatchV1Schema,
 } from "@ai-trading/contracts/practice-thread-v1";
 import type { DeskApiProblem } from "../api/client.ts";
-import { formatBalance } from "./threadView.ts";
+import { formatWhole } from "./threadView.ts";
 import type { ThreadPlan } from "./threads.ts";
 
 // The hub's "New thread" form and the journal's "Edit plan" form (02r): the draft the form edits, its conversion to a
@@ -110,7 +110,7 @@ type Validation<T> = { ok: true; spec: T } | { ok: false; problems: ThreadProble
 /** The server's rule on top of the contract: a day's max loss cannot be more than the whole starting balance. */
 function maxLossProblem(maxLoss: number | undefined, balance: number): string | null {
   return maxLoss !== undefined && Number.isFinite(balance) && maxLoss > balance
-    ? `Max loss can't be more than your simulated starting balance (${formatBalance(balance)})`
+    ? `Max loss can't be more than your simulated starting balance (${formatWhole(balance)})`
     : null;
 }
 

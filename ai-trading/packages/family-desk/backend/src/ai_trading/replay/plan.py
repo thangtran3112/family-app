@@ -23,6 +23,7 @@ from typing import Any
 
 import pandas as pd
 from ai_trading_common.errors import ProviderError
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -44,6 +45,7 @@ from ai_trading.db.models import (
     UniverseSymbol,
 )
 from ai_trading.replay import days as days_mod
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import prep as prep_mod
 from ai_trading.replay import review as review_mod
 from ai_trading.replay import screen
@@ -189,8 +191,9 @@ def _ensure_desk_universe(db: Session, svc: Services, now: datetime) -> None:
 def create_plan(
     db: Session, user_id: int, spec: PracticeBlockV1, svc: Services, thread: PracticeThread
 ) -> PracticePlan:
-    """Validate and save a plan, archive the one it replaces, freeze the universe, and mark prep as running (the
-    caller starts `run_prep`). Server rules that need a lookup: the day range, her filters, the premarket list time.
+    """Validate and save a plan, archive the one it replaces (ending its half-practised day), freeze the universe, and
+    mark prep as running (the caller starts `run_prep`). Server rules that need a lookup: the day range, her filters,
+    the premarket list time.
     The plan binds to `thread`, which carries the risk plan (D-007): the block's own plan fields are never read."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     first = date.fromisoformat(dumped["firstDay"])
@@ -216,6 +219,12 @@ def create_plan(
     now = svc.now()
     old = active_plan(db, user_id, lock=True)
     if old is not None:
+        # One open day at a time (D-030): a day the old plan left half practised ends with the plan. Its trades are
+        # already booked in the thread's ledger, so ending it keeps its P/L, and the new plan's Day 1 is the only day
+        # open (TODAY then agrees with the balance). A day that was only listed has booked nothing and is left alone.
+        under_way = _latest(db, old.id)
+        if under_way is not None and under_way.status == "practicing":
+            end_day(db, user_id, under_way.id, svc)
         old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live at a time
         db.flush()
     _ensure_desk_universe(db, svc, now)
@@ -412,28 +421,38 @@ def _universe_note(built_size: int, filters: list[FilterInput], capped: bool) ->
     return {"label": notes[0], "footnote": " · ".join(notes)}
 
 
-def open_next(db: Session, user_id: int, svc: Services) -> Opened:
-    """The current day list while it is not over; else the next day's list, built now. While the plan's data is not
-    ready the result carries no list and the plan's prep progress says why. Every day done: no list."""
-    plan = active_plan(db, user_id, lock=True)
-    if plan is None:
-        raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
-    days = plan_days(plan.first_day, plan.spec["sessions"])
-    latest = _latest(db, plan.id)
-    if latest is not None and latest.status != "ended":
-        return Opened(plan, latest)
-    index = 0 if latest is None else days.index(latest.day) + 1
-    if index >= len(days):
-        return Opened(plan, None)
-    day = days[index]
-    store = svc.store_factory(db)
-    now = svc.now()
-    if not _day_ready(plan, store, day):
-        stale = _prep_stale(plan, now)
-        if stale:
-            plan.prep = {**plan.prep, "updated_at": now.isoformat()}
-        return Opened(plan, None, restart_prep=stale)
+def _refresh_universe(db: Session, plan: PracticePlan, svc: Services, now: datetime) -> bool:
+    """Freeze today's Desk universe onto the plan (D-011). A plan saved before the universe was built or grown kept its
+    old set for every later day (17 names beside 134); each day's list now reads the current set, the way the live
+    screener does. Returns True when the set gained symbols: their bars are not prepared yet, so prep runs again."""
+    _ensure_desk_universe(db, svc, now)
+    symbols, capped = practice_universe(db, plan.owner_user_id)
+    kept = list(plan.universe["symbols"])
+    if symbols == kept and capped == bool(plan.universe.get("capped")):
+        return False
+    plan.universe = {"source": "desk", "symbols": symbols, "capped": capped, "frozen_at": now.isoformat()}
+    grew = bool(set(symbols) - set(kept))
+    if grew:
+        plan.prep = {"state": "running", "done": 0, "total": len(symbols), "failed": {}, "updated_at": now.isoformat()}
+    return grew
 
+
+def _prepared(plan: PracticePlan, store: BlobStore, day: date, grew: bool, now: datetime) -> tuple[bool, bool]:
+    """`(ready, restart_prep)` for building `day`'s list. A universe that just grew resets prep to running; when every
+    symbol's frames are already cached the list can build now and prep is over, else prep must run again."""
+    ready = _day_ready(plan, store, day)
+    if ready and grew:
+        plan.prep = {**plan.prep, "state": "done", "done": plan.prep["total"], "updated_at": now.isoformat()}
+    if ready:
+        return True, False
+    restart = grew or _prep_stale(plan, now)
+    if restart:
+        plan.prep = {**plan.prep, "updated_at": now.isoformat()}
+    return False, restart
+
+
+def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, store: BlobStore, now: datetime) -> dict:
+    """The list of `day` from the plan as it stands now: the columns of a `ReplayDayList` that the build decides."""
     spec = plan.spec
     list_at = et(day, spec["screen"]["listAt"])
     filters = _filter_inputs(db, plan)
@@ -449,19 +468,15 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
     for candidate in built.candidates:
         candidate["reported_before_open"] = candidate["symbol"] in flagged
     note = _universe_note(len(plan.universe["symbols"]), filters, bool(plan.universe.get("capped")))
-    row = ReplayDayList(
-        plan_id=plan.id,
-        owner_user_id=user_id,
-        day=day,
-        day_no=index + 1,
-        screen={
+    return {
+        "screen": {
             "filters": [{"id": f.id, "version_id": f.version_id, "name": f.name} for f in filters],
             "listAt": spec["screen"]["listAt"],
             "maxList": spec["screen"]["maxList"],
         },
-        list_at=list_at.to_pydatetime(),
-        data_through=built.data_through.to_pydatetime(),
-        universe=jsonable(
+        "list_at": list_at.to_pydatetime(),
+        "data_through": built.data_through.to_pydatetime(),
+        "universe": jsonable(
             {
                 "source": "desk",
                 **built.universe,
@@ -472,8 +487,38 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
                 **note,
             }
         ),
-        columns=built.columns,
-        candidates=jsonable(built.candidates),
+        "columns": built.columns,
+        "candidates": jsonable(built.candidates),
+    }
+
+
+def open_next(db: Session, user_id: int, svc: Services) -> Opened:
+    """The current day list while it is not over; else the next day's list, built now on today's Desk universe
+    (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
+    Every day done: no list."""
+    plan = active_plan(db, user_id, lock=True)
+    if plan is None:
+        raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
+    days = plan_days(plan.first_day, plan.spec["sessions"])
+    latest = _latest(db, plan.id)
+    if latest is not None and latest.status != "ended":
+        return Opened(plan, latest)
+    index = 0 if latest is None else days.index(latest.day) + 1
+    if index >= len(days):
+        return Opened(plan, None)
+    day = days[index]
+    store = svc.store_factory(db)
+    now = svc.now()
+    ready, restart = _prepared(plan, store, day, _refresh_universe(db, plan, svc, now), now)
+    if not ready:
+        return Opened(plan, None, restart_prep=restart)
+
+    row = ReplayDayList(
+        plan_id=plan.id,
+        owner_user_id=user_id,
+        day=day,
+        day_no=index + 1,
+        **_list_fields(db, plan, day, svc, store, now),
         watch=[],
         revealed_through=None,
         status="listed",
@@ -495,6 +540,48 @@ def open_next(db: Session, user_id: int, svc: Services) -> Opened:
         assert plan is not None
         return Opened(plan, _latest(db, plan.id))
     return Opened(plan, row)
+
+
+def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Services) -> Opened:
+    """Move the open plan's list time and rebuild this day's list in place (D-012). A plan saved at 8:30 with a filter
+    that reads the day's own 15-minute bars can never match there; this is the in-screen way out, where `End day`
+    would only close the day for good. Only a day she has not started can be relisted, and only on the live plan.
+
+    The list time is a plan field, so it moves for the plan's later days too, and the practice window starts no
+    earlier than the list (a window that opened before the list would let the list see the future). The same rules
+    as a new plan apply (422): each filter's earliest list time, and the window staying inside the session. When the
+    universe grew and its bars are not ready yet the plan is saved and the list stays as it was: relist again once
+    the plan's data is prepared (the result then carries `restart_prep`)."""
+    row = get_day_list(db, user_id, day_list_id, lock=True)
+    plan = active_plan(db, user_id, lock=True)
+    if plan is None or plan.id != row.plan_id:
+        raise ReplayProblem("This plan was replaced · relist from the current plan's day", path="listAt", status=409)
+    if row.status != "listed":
+        raise ReplayProblem("The day is under way · its list time can no longer change", path="listAt", status=409)
+    for ref, spec, _ in _resolve_filters(db, user_id, plan.spec["screen"]["filters"]):
+        if list_at < (need := screen.earliest_list_at(spec)):
+            raise ReplayProblem(_early_list_message(ref.name, spec, need), path="listAt")
+    spec = plan.spec
+    window = spec["setup"]["window"]
+    moved = {**spec, "screen": {**spec["screen"], "listAt": list_at}}
+    moved["setup"] = {**spec["setup"], "window": {**window, "from": max(window["from"], list_at)}}
+    try:
+        PracticeBlockV1.model_validate(without_legacy_plan_fields(moved))
+    except ValidationError as exc:
+        raise ReplayProblem(str(exc.errors()[0]["msg"]).removeprefix("Value error, "), path="listAt") from None
+    now = svc.now()
+    plan.spec, plan.updated_at = moved, now
+    store = svc.store_factory(db)
+    ready, restart = _prepared(plan, store, row.day, _refresh_universe(db, plan, svc, now), now)
+    if ready:
+        fields = _list_fields(db, plan, row.day, svc, store, now)
+        on_list = {c["symbol"] for c in fields["candidates"]}
+        for key, value in fields.items():
+            setattr(row, key, value)
+        row.watch = [w for w in row.watch if w["symbol"] in on_list]
+        row.updated_at = now
+    db.flush()
+    return Opened(plan, row, restart_prep=restart)
 
 
 # -- reading and changing a day list ---------------------------------------------------------------------------
@@ -575,6 +662,34 @@ def _join(names: list[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def _early_filters(db: Session, row: ReplayDayList) -> list[tuple[str, str]]:
+    """The filters of the list that read bars of the day itself and had none by the list time: `(name, earliest list
+    time)`. A plan saved before the server refused such a list time (D-001) still has them."""
+    early = []
+    for item in row.screen["filters"]:
+        version = db.get(FilterStrategyVersion, item["version_id"])
+        if version is not None and row.screen["listAt"] < (need := screen.earliest_list_at(version.spec)):
+            early.append((item["name"], need))
+    return early
+
+
+def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | None:
+    """The in-screen remedy for an early list (D-012): the list time that lets every filter read the day, when the
+    practice window can still follow it. Only a day not yet started on the live plan can move."""
+    if row.status != "listed" or plan.status != "active":
+        return None
+    early = _early_filters(db, row)
+    window = plan.spec["setup"]["window"]
+    need = max((time for _, time in early), default=None)
+    if need is None or need >= window["to"]:
+        return None
+    return {
+        "list_at": need,
+        "label": f"Re-list at {clock12(need)}",
+        "window_from": need if need > window["from"] else None,
+    }
+
+
 def _few_names_reason(db: Session, row: ReplayDayList) -> str:
     """Why a list is short, from what the list stored: no symbol could be scanned, a filter that could only read
     the previous session at this list time (a plan saved before the server refused that), no bars to read, or
@@ -586,17 +701,13 @@ def _few_names_reason(db: Session, row: ReplayDayList) -> str:
             f"No symbol could be scanned · {universe['no_data']} had no price data and {universe['below_floor']} fell "
             "below the $5 and 500,000-share floor"
         )
-    early: list[tuple[str, str]] = []
-    for item in filters:
-        version = db.get(FilterStrategyVersion, item["version_id"])
-        if version is not None and list_at < (need := screen.earliest_list_at(version.spec)):
-            early.append((item["name"], need))
+    early = _early_filters(db, row)
     if early:
         verb = "reads" if len(early) == 1 else "read"
         return (
             f"{_join([name for name, _ in early])} {verb} bars of the day itself, and none had closed by "
-            f"{clock12(list_at)} · only the previous session was visible. Start a new plan with a list time of "
-            f"{clock12(max(need for _, need in early))} or later"
+            f"{clock12(list_at)} · only the previous session was visible. Re-list at "
+            f"{clock12(max(need for _, need in early))} or later to read the day's own bars"
         )
     if all(item["scanned"] == 0 for item in universe["filters"]):
         return (
@@ -633,6 +744,24 @@ def watch_check(db: Session, row: ReplayDayList, sessions: list[ReplaySession]) 
     return {"starred": starred, "traded": traded, "off_watch": off, "verdict": verdict, "label": label}
 
 
+def _ended_journal(
+    db: Session, plan: PracticePlan, row: ReplayDayList, sessions: list[ReplaySession]
+) -> dict[str, Any]:
+    """The finished day's result with the thread's SIMULATED balance before and after it (D-032)."""
+    thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
+    balances = None if thread is None else threads_mod.day_balances(db, thread, row.id)
+    before, after = balances if balances is not None else (None, None)
+    return {**_day_journal(sessions), "balance_before": before, "balance_after": after}
+
+
+def _ended_review(plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | None:
+    """The stored review ranked the current way (see `review.normalized`), with the day's date and whether the plan
+    hid it while the day was running: the finished day shows its date (D-029)."""
+    if row.review is None:
+        return None
+    return {**review_mod.normalized(row.review), "day": row.day, "dates_hidden": plan.spec["hideDates"] == "yes"}
+
+
 def day_list_out(
     db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None
 ) -> dict[str, Any]:
@@ -667,9 +796,10 @@ def day_list_out(
         "watch_check": watch_check(db, row, sessions),
         "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
+        "relist": _relist_offer(db, plan, row),
         "peek": None if peek is None else _peek(db, svc, row, peek),
-        "journal": row.journal if ended else None,
-        "review": row.review if ended else None,
+        "journal": _ended_journal(db, plan, row, sessions) if ended else None,
+        "review": _ended_review(plan, row) if ended else None,
         "notes": row.notes,
         "rating": row.rating,
         "created_at": row.created_at,
@@ -787,7 +917,10 @@ def _utc(value: datetime) -> pd.Timestamp:
 
 
 def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
-    rows = []
+    """The day's practice result from its sessions' final journals: a row per session, a line per closed trade (oldest
+    entry first), and the win, loss and scratch counts. Read back from the journals, so a day stored before the trade
+    lines existed serves them too."""
+    rows, lines = [], []
     for s in sessions:
         journal = s.journal or {}
         totals = journal.get("totals", {})
@@ -800,10 +933,17 @@ def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
                 "adherence_pct": (journal.get("adherence") or {}).get("score_pct"),
             }
         )
+        lines.extend({"symbol": s.symbol, **trade} for trade in journal.get("trades", []))
+    lines.sort(key=lambda line: line["entry_at"])
+    pnls = [line["pnl_usd"] for line in lines]
     return {
         "sessions": rows,
         "trades": sum(r["trades"] for r in rows),
-        "pnl_usd": round(sum(r["pnl_usd"] for r in rows), 2),
+        "pnl_usd": journal_mod.usd_sum([r["pnl_usd"] for r in rows]),
+        "wins": sum(1 for p in pnls if p > 0),
+        "losses": sum(1 for p in pnls if p < 0),
+        "scratches": sum(1 for p in pnls if p == 0),
+        "lines": lines,
     }
 
 
@@ -868,6 +1008,7 @@ __all__ = (
     "plan_days",
     "plan_out",
     "practice_universe",
+    "relist",
     "run_prep",
     "start_session",
 )

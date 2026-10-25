@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { isPracticePath, isReplayWorkspacePath, isWrongLane } from "@/lib/lanes";
+import { hasPracticeLeftRail, isPracticePath, isWrongLane } from "@/lib/lanes";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { DeskStatusProvider, DeskUiProvider, LeftSlotContext, RailSlotContext, useDeskUi } from "./DeskContext";
 import { LeftRail } from "./LeftRail";
@@ -30,19 +30,19 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
   const { lane, leftCollapsed } = useDeskUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [leftSlot, setLeftSlot] = useState<HTMLElement | null>(null);
-  // Practice pages (02o §a1) get the amber band; the replay workspace swaps the watchlists for its Session panel.
+  // Practice pages (02o §a1) get the amber band; the replay, the day list and the journal swap the watchlists for their own left panel.
   const practice = isPracticePath(pathname);
-  const replay = isReplayWorkspacePath(pathname);
+  const ownLeft = hasPracticeLeftRail(pathname);
 
   return (
     <RailSlotContext.Provider value={slot}>
-      <LeftSlotContext.Provider value={replay ? leftSlot : null}>
-      <div className="dk-shell" data-band={band} data-left={leftCollapsed && !replay ? "collapsed" : "open"} data-practice={practice ? "true" : undefined}>
+      <LeftSlotContext.Provider value={ownLeft ? leftSlot : null}>
+      <div className="dk-shell" data-band={band} data-left={leftCollapsed && !ownLeft ? "collapsed" : "open"} data-practice={practice ? "true" : undefined}>
         <a className="skip-link" href="#main-content">Skip to content</a>
         <div className="dk-top"><TopBar band={band} /></div>
         {practice && <div className="dk-band"><PracticeBand /></div>}
         <div className="dk-left">
-          {replay ? <aside className={leftStyles.root} aria-label="Practice session" ref={setLeftSlot} /> : <LeftRail band={band} />}
+          {ownLeft ? <aside className={leftStyles.root} aria-label="Practice side panel" ref={setLeftSlot} /> : <LeftRail band={band} />}
         </div>
         <div className="dk-center" id="main-content" tabIndex={-1}>
           {isWrongLane(lane, pathname) ? <WrongLaneInterstitial pathname={pathname} /> : children}

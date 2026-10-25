@@ -7,11 +7,13 @@ network call anywhere in this directory.
 from collections.abc import Iterator
 
 import pytest
+from daily_world import SYMBOLS
 from fakes import fake_data_sources
 from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 from ai_trading.api.auth import IDENTITY_HEADER, get_data_sources, get_session
+from ai_trading.replay import plan as plan_mod
 
 OWNER_EMAIL = "owner@example.com"
 OTHER_EMAIL = "spouse@example.com"
@@ -19,6 +21,12 @@ OTHER_EMAIL = "spouse@example.com"
 
 def auth_headers(email: str = OWNER_EMAIL) -> dict[str, str]:
     return {IDENTITY_HEADER: email}
+
+
+@pytest.fixture(autouse=True)
+def desk_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The three synthetic names are the Desk universe in these tests (see `tests/replay/conftest.py`)."""
+    monkeypatch.setattr(plan_mod, "practice_universe", lambda db, user_id: (list(SYMBOLS), False))
 
 
 @pytest.fixture

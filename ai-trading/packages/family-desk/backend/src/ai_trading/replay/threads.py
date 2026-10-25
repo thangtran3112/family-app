@@ -18,7 +18,7 @@ All money here is SIMULATED and every sentence that mentions it says so.
 """
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import func, or_, select
@@ -161,8 +161,9 @@ def patch_thread(
 
 def open_day(db: Session, thread_id: int) -> ReplayDayList | None:
     """The practice day under way: the unfinished day list of the thread's active daily plan, else a day a replaced
-    plan left half practised (it has a session whose trades still book, so it holds the thread open). A replaced
-    plan's day that was only listed holds nothing and is ignored."""
+    plan left half practised (it has a session whose trades still book, so it holds the thread open). A new plan ends
+    the day it replaces (D-030), so that second case is a day stored before then. A replaced plan's day that was only
+    listed holds nothing and is ignored."""
     return db.execute(
         select(ReplayDayList)
         .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
@@ -220,7 +221,8 @@ def _weekday(day: Any) -> str:
 
 
 def _money(value: float | Decimal) -> float:
-    return round(float(value), 2)
+    """Dollars to the cent. Decimal all the way (D-033): a float round can land a half cent on the wrong side."""
+    return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _ledger(db: Session, thread_id: int) -> list[PracticeLedger]:
@@ -291,6 +293,15 @@ def _series(db: Session, thread: PracticeThread, ledger: list[PracticeLedger]) -
             }
         )
     return rows
+
+
+def day_balances(db: Session, thread: PracticeThread, day_list_id: int) -> tuple[float, float] | None:
+    """The SIMULATED balance before and after one ended day of the thread, from the same series the journal draws (None
+    for a day that has not ended or is not the thread's)."""
+    for row in _series(db, thread, _ledger(db, thread.id)):
+        if row["day_list_id"] == day_list_id:
+            return _money(Decimal(str(row["balance"])) - Decimal(str(row["pnl_usd"]))), row["balance"]
+    return None
 
 
 def _stats(thread: PracticeThread, ledger: list[PracticeLedger], series: list[dict[str, Any]]) -> dict[str, Any]:
@@ -447,6 +458,7 @@ __all__ = (
     "brief",
     "close_thread",
     "create_thread",
+    "day_balances",
     "detail",
     "get_thread",
     "ledger_page",

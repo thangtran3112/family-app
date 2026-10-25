@@ -18,7 +18,15 @@ from ai_trading.contracts.practice_thread import (
     PracticeThreadV1,
 )
 from ai_trading.core.calendar import et
-from ai_trading.db.models import PracticeLedger, PracticeMark, PracticePlan, PracticeThread, ReplaySession, User
+from ai_trading.db.models import (
+    PracticeLedger,
+    PracticeMark,
+    PracticePlan,
+    PracticeThread,
+    ReplayDayList,
+    ReplaySession,
+    User,
+)
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import plan as plan_mod
@@ -168,22 +176,72 @@ def test_closing_waits_for_an_open_day_then_archives_the_plan_and_refuses_new_pl
     assert out.status == "closed" and out.closedAt is not None
 
 
-def test_a_replaced_plans_half_practised_day_holds_the_thread_open_and_keeps_its_own_header(
+def _open_days(db_session, thread_id):
+    """Every unfinished day list of the thread, on any of its plans."""
+    return list(
+        db_session.execute(
+            select(ReplayDayList)
+            .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
+            .where(PracticePlan.thread_id == thread_id, ReplayDayList.status != "ended")
+        ).scalars()
+    )
+
+
+def test_replacing_a_plan_ends_its_half_practised_day_so_one_day_is_open_and_the_balance_reconciles(
     db_session, user_id, svc
 ) -> None:
+    """D-030: the replaced plan's half-practised day used to stay open beside the new plan's Day 1, and TODAY read the
+    new day's $0 beside a balance that already held the old day's +$40."""
     row, session, thread = _day_one(db_session, user_id, svc)
     _trade(db_session, user_id, svc, session.id, "long", shares=10)  # +40 booked, the day still open
-    _plan(db_session, user_id, svc)  # a new plan replaces the old one and leaves its day practicing
+    assert threads_mod.brief(db_session, thread.id)["today_pnl_usd"] == 40.0
+
+    _ready(db_session, user_id, svc)  # a new plan replaces the old one
     old = db_session.get(PracticePlan, row.plan_id)
-    assert old.status == "archived" and db_session.get(type(row), row.id).status == "practicing"
-    assert threads_mod.open_day(db_session, thread.id).id == row.id  # the new plan has no day yet
-    assert threads_mod.brief(db_session, thread.id, row.id)["today_pnl_usd"] == 40.0
-    with pytest.raises(ReplayProblem) as held:
-        threads_mod.close_thread(db_session, user_id, thread.id, NOW)
-    assert held.value.status == 409 and "End today's practice day" in held.value.message
-    plan_mod.end_day(db_session, user_id, row.id, svc)  # reachable by id: end it, then the thread can close
-    assert threads_mod.close_thread(db_session, user_id, thread.id, NOW).status == "closed"
-    assert _stats(db_session, thread).balance == 50_040.0
+    ended = db_session.get(ReplayDayList, row.id)
+    assert old.status == "archived" and ended.status == "ended" and ended.ended_at is not None
+    assert ended.journal["pnl_usd"] == 40.0 and ended.journal["trades"] == 1 and ended.review is not None
+    assert _open_days(db_session, thread.id) == []  # the old day is over; the new plan has not opened a day yet
+
+    opened = _open(db_session, user_id, svc).day_list  # the new plan's Day 1
+    assert opened.id != row.id and (opened.day_no, opened.status) == (1, "listed")
+    assert [day.id for day in _open_days(db_session, thread.id)] == [opened.id]
+    assert threads_mod.open_day(db_session, thread.id).id == opened.id
+
+    detail = threads_mod.detail(db_session, thread)
+    assert detail["thread"].stats.balance == 50_040.0 == detail["curve"][-1]["balance"]
+    assert [(d["day_list_id"], d["kind"], d["pnl_usd"], d["balance"]) for d in detail["daily"]] == [
+        (row.id, "practiced", 40.0, 50_040.0)
+    ]
+    assert detail["today"]["day_list_id"] == opened.id and detail["today"]["pnl_usd"] == 0.0
+    assert threads_mod.brief(db_session, thread.id, row.id)["today_pnl_usd"] == 40.0  # the old day keeps its own header
+    assert threads_mod.brief(db_session, thread.id)["balance"] == 50_040.0
+    assert _stats(db_session, thread).bestDayUsd == _stats(db_session, thread).worstDayUsd == 40.0
+
+
+def test_replacing_a_plan_exits_an_open_trade_at_the_last_price_and_books_it(db_session, user_id, svc) -> None:
+    row, session, thread = _day_one(db_session, user_id, svc)
+    _advance(db_session, user_id, svc, session.id, "09:30")
+    _mark(db_session, user_id, svc, session.id, "long_entry", shares=10)
+    _advance(db_session, user_id, svc, session.id, "10:00")  # GAPPER is 110 here, 4 a share above the entry
+    assert _ledger(db_session, thread.id) == []  # an open trade has realized nothing
+
+    _plan(db_session, user_id, svc)
+    ended = db_session.get(ReplayDayList, row.id)
+    assert ended.status == "ended" and ended.journal["pnl_usd"] == 40.0
+    assert [entry.pnl_usd for entry in _ledger(db_session, thread.id)] == [40]
+    assert _stats(db_session, thread).balance == 50_040.0 and _open_days(db_session, thread.id) == []
+
+
+def test_a_rejected_replacement_leaves_the_half_practised_day_open(db_session, user_id, svc) -> None:
+    row, session, thread = _day_one(db_session, user_id, svc)
+    _trade(db_session, user_id, svc, session.id, "long", shares=10)
+    db_session.commit()
+    with pytest.raises(ReplayProblem):
+        _plan(db_session, user_id, svc, firstDay="2016-12-30")  # fails validation before the old plan is touched
+    db_session.rollback()
+    assert db_session.get(ReplayDayList, row.id).status == "practicing"
+    assert db_session.get(PracticePlan, row.plan_id).status == "active"
 
 
 def test_a_replaced_plans_day_that_was_only_listed_does_not_hold_the_thread(db_session, user_id, svc) -> None:

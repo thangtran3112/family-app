@@ -2,7 +2,7 @@
 
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { barsLayout, type Box } from "@/lib/replay/threadChart";
-import { dayResultTone, formatDayResult, weeksOf } from "@/lib/replay/threadView";
+import { dayResultTone, formatAxisDollars, formatDayResult, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
@@ -13,10 +13,10 @@ export function DayBars({ thread }: { thread: Thread }) {
   const layout = barsLayout(thread.daily, weeksOf(thread.daily), BOX);
   const { plot, zeroY, slots, weeks } = layout;
   const bottom = plot.y + plot.height;
-  const practised = thread.daily.filter((day) => day.kind === "practiced");
-  const won = practised.filter((day) => day.pnl_usd > 0).length;
-  const lost = practised.filter((day) => day.pnl_usd < 0).length;
-  const skipped = thread.daily.length - practised.length;
+  const practiced = thread.daily.filter((day) => day.kind === "practiced");
+  const won = practiced.filter((day) => day.pnl_usd > 0).length;
+  const lost = practiced.filter((day) => day.pnl_usd < 0).length;
+  const skipped = thread.daily.length - practiced.length;
   const summary = `${PRACTICE_COPY.barsTitle}: ${won} won, ${lost} lost, ${skipped} skipped.`;
 
   return (
@@ -24,7 +24,7 @@ export function DayBars({ thread }: { thread: Thread }) {
       {layout.ticks.map((tick) => (
         <g key={tick.value}>
           <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatDayResult(tick.value)}</text>
+          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value, true)}</text>
         </g>
       ))}
       <line x1={plot.x} x2={plot.x + plot.width} y1={zeroY} y2={zeroY} className={styles.zeroLine} />
@@ -43,7 +43,7 @@ export function DayBars({ thread }: { thread: Thread }) {
             {tone !== "flat" && <rect x={slot.x} y={slot.barY} width={slot.width} height={slot.barHeight} className={styles[tone]} />}
             <text
               x={slot.center}
-              y={tone === "down" ? slot.barY + slot.barHeight + 12 : slot.barY - 4}
+              y={tone === "down" ? (slot.barY + slot.barHeight + 12 <= bottom ? slot.barY + slot.barHeight + 12 : zeroY - 4) : slot.barY - 4}
               textAnchor="middle"
               className={`${styles.valueLabel} ${styles[tone]}`}
             >

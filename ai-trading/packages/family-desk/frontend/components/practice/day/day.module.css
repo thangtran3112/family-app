@@ -3,15 +3,25 @@
 .screen { display: flex; min-width: 0; min-height: 0; flex-direction: column; font-variant-numeric: tabular-nums; }
 .header { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
 .title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.titleRow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* 1180: the Peek drawer overlays the right 320 px, so the screen leaves that room instead of hiding the table behind it. */
+.screen[data-drawer="open"] { padding-right: 320px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .body { display: flex; min-width: 0; flex-direction: column; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
 .section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-micro); }
-.line { margin: 0; font-size: var(--text-label); }
+.line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: 0; font-size: var(--text-label); }
+.built { color: var(--color-muted); font-size: var(--text-micro); }
+.sectionHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.filterRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.filterLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.filterNote { color: var(--color-muted); font-size: var(--text-micro); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .chip { display: inline-flex; min-height: 20px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
 .chipAmber { border-color: var(--color-amber); color: var(--color-amber); }
+/* A filter chosen at setup reads as on: filled amber (P7). Every chip on this screen is one. */
+.chipOn { min-height: 24px; border-color: var(--color-amber); background: var(--color-amber); padding: 0 var(--space-3); color: var(--color-on-pill); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); }
 .footnote { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
 
@@ -45,10 +55,35 @@
 .tab { border: 0; border-radius: 4px; background: transparent; padding: 0 var(--space-3); min-height: 24px; color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
 .tab[aria-selected="true"] { background: var(--color-raised); box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
 
-/* Watch rail */
-.rail { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
+/* Left rail: the block's days, the thread box, the starred names (P7) */
+.side { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
+.sideSection { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3); }
+.sideHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.sideTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.sideHint { color: var(--color-muted); font-size: var(--text-micro); }
+.sideFacts { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); font-size: var(--text-label); }
+.sideFacts div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.sideFacts dt { color: var(--color-muted); }
+.sideFacts dd { margin: 0; font-weight: var(--weight-semibold); }
+.ladder { display: flex; margin: 0; padding: 0; flex-direction: column; list-style: none; }
+.ladderRow { display: grid; min-height: 28px; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
+.ladderMark { color: var(--color-muted); font-size: var(--text-micro); text-align: center; }
+.ladderRow[data-state="ended"] .ladderMark { color: var(--color-up); }
+.ladderRow[data-state="open"] { box-shadow: inset 2px 0 0 var(--color-amber); background: var(--color-panel); }
+.ladderRow[data-state="open"] .ladderMark { color: var(--color-amber); }
+.ladderRow[data-state="locked"], .ladderRow[data-state="opens_after"] { color: var(--color-muted); }
+.ladderDetail { color: var(--color-muted); font-size: var(--text-micro); }
 .watchList { display: flex; margin: 0; padding: 0; flex-direction: column; gap: var(--space-1); list-style: none; }
-.watchRow { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.watchRow { display: flex; min-height: 32px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
+.watchRow[data-selected="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.watchName { display: inline-flex; min-height: 24px; align-items: center; gap: var(--space-2); border: 0; background: transparent; padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-label); cursor: pointer; }
+.watchName:hover .symbol { text-decoration: underline; }
+.watchName:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.watchStar { color: var(--color-amber); }
+.peekFacts { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); font-size: var(--text-label); }
+.peekFacts div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding-bottom: var(--space-1); }
+.peekFacts dt { color: var(--color-muted); }
+.peekFacts dd { margin: 0; font-weight: var(--weight-semibold); text-align: right; }
 .facts { display: grid; margin: 0; grid-template-columns: 1fr 1fr; gap: var(--space-2); font-size: var(--text-label); }
 .facts dt { color: var(--color-muted); font-size: var(--text-micro); }
 .facts dd { margin: 0; }

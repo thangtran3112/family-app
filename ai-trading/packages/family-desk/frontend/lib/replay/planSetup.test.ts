@@ -8,6 +8,7 @@ import {
   defaultPlanDraft,
   earliestListAt,
   listTimeFrom,
+  listTimeHeld,
   listTimeNeed,
   planDraftToSpec,
   planFieldOfPath,
@@ -38,8 +39,6 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
   assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
   assert.equal(JSON.stringify(spec).includes("null"), false);
-  const withPlan = ready({ setup: { ...ready().setup, shares: "250", maxLossUsd: "200", note: "stay small" } });
-  assert.deepEqual(Object.keys((planDraftToSpec(withPlan) as { setup: object }).setup), ["window", "session", "interval", "armed"]);
 });
 
 test("a good draft validates; the window may not begin before the list time", () => {
@@ -73,10 +72,10 @@ test("server paths land on the form fields, and a server sentence is shown as it
   assert.equal(planFieldOfPath("firstDay"), "firstDay");
   assert.equal(planFieldOfPath("screen.filters.1.id"), "filters");
   assert.equal(planFieldOfPath("screen.listAt"), "listAt");
-  assert.equal(planFieldOfPath("setup.plan.maxLossUsd"), "maxLossUsd");
+  assert.equal(planFieldOfPath("setup.plan.maxLossUsd"), "form");
   assert.equal(planFieldOfPath("setup.armed.0.id"), "armed");
   assert.equal(planFieldOfPath("window"), "window");
-  assert.equal(planFieldOfPath("plan.stopRequired"), "stopRequired");
+  assert.equal(planFieldOfPath("plan.stopRequired"), "form");
   assert.equal(planFieldOfPath("mystery"), "form");
   const error = new DeskApiError("http", 422, { problems: [{ path: "screen.listAt", message: "Premarket filters need a list time of 8:30 AM or later" }] });
   assert.deepEqual(planProblems(error.problems), { listAt: "Premarket filters need a list time of 8:30 AM or later" });
@@ -156,4 +155,19 @@ test("arming keeps what she armed by hand, never doubles a filter, and stops at 
   assert.equal(withFilterToggled(armedFirst, 3, timings).setup.armed.length, 1); // already armed: one entry
   const full = { ...draft, filterIds: [1, 2, 3] };
   assert.equal(withFilterToggled(full, 4, timings), full); // the fourth filter is refused: nothing changes
+});
+
+// D-017: the "needs a list time of 10:00 AM or later" line showed with 10:00 selected, and "Gap up needs 8:30" with 10:00.
+test("a list time is held only when it is earlier than the picked filters need", () => {
+  const volume = withFilterToggled(defaultPlanDraft(NOW), 2, timings); // Abnormal volume: the list time moves up to 10:00
+  const need = listTimeNeed(volume.filterIds, timings);
+  assert.equal(volume.listAt, "10:00");
+  assert.equal(listTimeHeld(volume.listAt, need), false, "10:00 satisfies a 15-minute filter: no line");
+  assert.equal(listTimeHeld("10:45", need), false);
+  assert.equal(listTimeHeld("08:30", need), true, "8:30 is off, with the reason on the button");
+  const gap = withFilterToggled(withListTime(defaultPlanDraft(NOW), "10:00"), 1, timings);
+  const gapNeed = listTimeNeed(gap.filterIds, timings);
+  assert.equal(listTimeHeld(gap.listAt, gapNeed), false, "Gap up needs 8:30: 10:00 holds");
+  assert.equal(listTimeHeld("10:00", listTimeNeed([], timings)), false, "no cadence filter, nothing to say");
+  assert.equal(validatePlanDraft({ ...volume, filterIds: [2] }).ok, true, "and the draft submits");
 });

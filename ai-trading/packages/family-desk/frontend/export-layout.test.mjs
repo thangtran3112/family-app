@@ -6,6 +6,12 @@ test("static export contains the Desk entry point and Next assets", async () => 
   await access(new URL("./out/_next/", import.meta.url));
 });
 
+// D-010: the browser asks for /favicon.ico on every load, so the export ships one (and the SVG its <link> points at).
+test("static export ships the favicon", async () => {
+  await access(new URL("./out/favicon.ico", import.meta.url));
+  await access(new URL("./out/icon.svg", import.meta.url));
+});
+
 // Every route of the desktop MVP (02m §c1) plus the accepted legacy routes ships as a page.
 const routes = [
   "today",

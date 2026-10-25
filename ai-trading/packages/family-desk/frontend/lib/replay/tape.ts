@@ -34,7 +34,15 @@ export const isBigPrint = (row: Pick<TapeRow, "price" | "size">, bigPrintUsd: nu
 export type TickTone = "up" | "down" | "same";
 export const tickTone = (tick: -1 | 0 | 1): TickTone => (tick > 0 ? "up" : tick < 0 ? "down" : "same");
 
-export type TapeDisplayRow = { key: string; t: string; price: string; size: string; tone: TickTone; big: boolean };
+/** "$1.30M", "$812K", "$640": the dollar notional of a big print, short enough for the tape's BIG column. */
+export function formatNotional(usd: number): string {
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000) return `$${Math.round(usd / 1_000)}K`;
+  return `$${Math.round(usd)}`;
+}
+
+/** `bigText` is the print's price times its size once it clears the big-print notional, else empty: the column never shows a figure the print does not have. */
+export type TapeDisplayRow = { key: string; t: string; price: string; size: string; tone: TickTone; big: boolean; bigText: string };
 
 /** Newest first, as a tape reads. At most `limit` rows are drawn so a fast tape stays cheap to paint. */
 export function tapeRows(view: Pick<ReplayView, "tape" | "tapeMeta">, limit = 120): TapeDisplayRow[] {
@@ -42,7 +50,8 @@ export function tapeRows(view: Pick<ReplayView, "tape" | "tapeMeta">, limit = 12
   const rows: TapeDisplayRow[] = [];
   for (let index = view.tape.length - 1; index >= 0 && rows.length < limit; index -= 1) {
     const row = view.tape[index]!;
-    rows.push({ key: `${row.t}:${index}`, t: row.t, price: formatPrice(row.price), size: formatNumber(row.size, 0), tone: tickTone(row.tick), big: isBigPrint(row, big) });
+    const isBig = isBigPrint(row, big);
+    rows.push({ key: `${row.t}:${index}`, t: row.t, price: formatPrice(row.price), size: formatNumber(row.size, 0), tone: tickTone(row.tick), big: isBig, bigText: isBig ? formatNotional(row.price * row.size) : "" });
   }
   return rows;
 }
@@ -64,16 +73,26 @@ export function haltedTapeText(quietS: number | null): string | null {
 
 const BAND_LABEL = { quiet: "Quiet", steady: "Steady", busy: "Busy", frantic: "Frantic" } as const;
 
-/** "12 prints/s · 3,400 sh/s · Busy · 1.8x avg". */
+/** "Pace · 10 seconds": the window the meter reads, so "1.4x usual" says over what (D-024). */
+export const paceHeading = (pace: PaceView | null): string => (pace ? `Pace · ${formatNumber(pace.windowS, 0)} seconds` : "Pace");
+
+/** "239.2 prints/s · 11,117 sh/s". */
+export function paceRate(pace: PaceView): string {
+  return [`${formatNumber(pace.printsPerSecond, pace.printsPerSecond < 10 ? 1 : 0)} prints/s`, `${formatNumber(pace.sharesPerSecond, 0)} sh/s`].join(" · ");
+}
+
+/** "Quiet · 1.4x usual"; empty when the server gave neither a band nor a multiple. */
+export function paceVerdict(pace: PaceView): string {
+  const parts: string[] = [];
+  if (pace.band) parts.push(BAND_LABEL[pace.band]);
+  if (pace.timesAverage != null) parts.push(`${formatNumber(pace.timesAverage, 1)}x usual`);
+  return parts.join(" · ");
+}
+
+/** "12 prints/s · 3,400 sh/s · Busy · 1.8x usual". */
 export function paceText(pace: PaceView | null): string {
   if (!pace) return "Pace · waiting for prints";
-  const parts = [
-    `${formatNumber(pace.printsPerSecond, pace.printsPerSecond < 10 ? 1 : 0)} prints/s`,
-    `${formatNumber(pace.sharesPerSecond, 0)} sh/s`,
-  ];
-  if (pace.band) parts.push(BAND_LABEL[pace.band]);
-  if (pace.timesAverage != null) parts.push(`${formatNumber(pace.timesAverage, 1)}x avg`);
-  return parts.join(" · ");
+  return [paceRate(pace), paceVerdict(pace)].filter(Boolean).join(" · ");
 }
 
 /** Bar fill 0..1 for the pace meter: the band when the API gives one, else a log-ish scale of shares per second. */

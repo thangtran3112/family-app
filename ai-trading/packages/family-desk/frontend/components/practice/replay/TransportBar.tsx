@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Speed } from "@/lib/replay/clock";
+import { KEY_LEGEND } from "@/lib/replay/keys";
 import { statusLine, type PlayerStatus } from "@/lib/replay/player";
 import type { ReplayInterval, ReplayMark, ReplaySignal } from "@/lib/replay/schemas";
 import { INTERVALS } from "@/lib/replay/setup";
@@ -68,6 +69,11 @@ export function TransportBar(props: TransportBarProps) {
         </p>
       )}
       <ReplayTimeline windowStart={windowStart} windowEnd={windowEnd} revealedThrough={revealedThrough} marks={marks} signals={signals} />
+      <div className={styles.keyLegend} role="group" aria-label="Keyboard legend">
+        {KEY_LEGEND.map((item) => (
+          <span key={item.keys}><kbd>{item.keys}</kbd>{item.label}</span>
+        ))}
+      </div>
     </div>
   );
 }

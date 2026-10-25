@@ -127,12 +127,12 @@ export function chartBars(view: Pick<ReplayView, "bars" | "forming">): ReplayBar
  * `pace` wins; without it the numbers come from the counts of the last advances (each carries its whole span's
  * `count` and `volume`, so a capped tape stays honest).
  */
-export type PaceView = { printsPerSecond: number; sharesPerSecond: number; band: "quiet" | "steady" | "busy" | "frantic" | null; timesAverage: number | null };
+export type PaceView = { windowS: number; printsPerSecond: number; sharesPerSecond: number; band: "quiet" | "steady" | "busy" | "frantic" | null; timesAverage: number | null };
 
 export function paceOf(view: Pick<ReplayView, "tapeMeta" | "paceSamples" | "revealedThrough">): PaceView | null {
   const server = view.tapeMeta?.pace;
   if (server) {
-    return { printsPerSecond: server.prints_per_s, sharesPerSecond: server.shares_per_s, band: server.band ?? null, timesAverage: server.x_of_avg ?? null };
+    return { windowS: server.window_s, printsPerSecond: server.prints_per_s, sharesPerSecond: server.shares_per_s, band: server.band ?? null, timesAverage: server.x_of_avg ?? null };
   }
   const end = ms(view.revealedThrough);
   const start = end - PACE_WINDOW_S * 1000;
@@ -150,7 +150,7 @@ export function paceOf(view: Pick<ReplayView, "tapeMeta" | "paceSamples" | "reve
   }
   if (covered <= 0) return null;
   const seconds = covered / 1000;
-  return { printsPerSecond: count / seconds, sharesPerSecond: volume / seconds, band: null, timesAverage: null };
+  return { windowS: PACE_WINDOW_S, printsPerSecond: count / seconds, sharesPerSecond: volume / seconds, band: null, timesAverage: null };
 }
 
 /** No print in the last 30 market seconds before the playhead (and the tape has started). */

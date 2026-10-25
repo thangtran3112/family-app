@@ -152,10 +152,34 @@ const DayJournalSessionSchema = z.object({
   adherence_pct: finite.int().nullable(),
 }) satisfies z.ZodType<components["schemas"]["DayJournalSessionOut"]>;
 
+/** One closed practice trade of the day, with the name it was on (D-032). */
+const DayTradeLineSchema = z.object({
+  no: finite.int(),
+  symbol: z.string(),
+  side: z.enum(["long", "short"]),
+  entry_at: timestamp,
+  entry_price: finite,
+  exit_at: timestamp,
+  exit_price: finite,
+  shares: finite.int(),
+  pnl_usd: finite,
+  r: metric,
+  stop_price: metric,
+  on_signal: z.boolean(),
+  exit_source: z.enum(["her", "auto"]),
+}) satisfies z.ZodType<components["schemas"]["DayTradeLineOut"]>;
+
+/** The day's SIMULATED result to the cent: a line per trade, the win and loss counts, and the thread's balance before and after. */
 const DayJournalSchema = z.object({
   sessions: z.array(DayJournalSessionSchema),
   trades: finite.int(),
   pnl_usd: finite,
+  wins: finite.int(),
+  losses: finite.int(),
+  scratches: finite.int(),
+  lines: z.array(DayTradeLineSchema),
+  balance_before: metric,
+  balance_after: metric,
 }) satisfies z.ZodType<components["schemas"]["DayJournalOut"]>;
 
 export const ReviewRowSchema = z.object({
@@ -174,11 +198,13 @@ export const ReviewRowSchema = z.object({
 
 const SelectionSchema = z.object({
   picks: z.array(z.object({ symbol: z.string(), kind: StarKindSchema, move_pct: finite, rank: finite.int() })),
-  median_abs_move_pct: metric,
-  picks_avg_abs_move_pct: metric,
+  median_move_pct: metric,
+  picks_avg_move_pct: metric,
 }) satisfies z.ZodType<components["schemas"]["SelectionOut"]>;
 
 const ReviewSchema = z.object({
+  day: z.iso.date(),
+  dates_hidden: z.boolean(),
   window_end: timestamp,
   of: finite.int(),
   rows: z.array(ReviewRowSchema),
@@ -193,6 +219,13 @@ const WatchCheckSchema = z.object({
   verdict: z.enum(["no_trades", "on_watch", "off_watch"]),
   label: z.string(),
 });
+
+/** The in-screen remedy for a list built too early for its filters (D-012). */
+const RelistOfferSchema = z.object({
+  list_at: z.string(),
+  label: z.string(),
+  window_from: z.string().nullable(),
+}) satisfies z.ZodType<components["schemas"]["RelistOfferOut"]>;
 
 export const DayListSchema = z.object({
   id: finite.int(),
@@ -215,6 +248,7 @@ export const DayListSchema = z.object({
   /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
   thread: ThreadBriefSchema.nullable(),
   warnings: z.array(z.string()),
+  relist: RelistOfferSchema.nullable(),
   peek: PeekSchema.nullable(),
   journal: DayJournalSchema.nullable(),
   review: ReviewSchema.nullable(),
@@ -235,3 +269,5 @@ export type Peek = z.infer<typeof PeekSchema>;
 export type DayReview = NonNullable<DayList["review"]>;
 export type ReviewRow = z.infer<typeof ReviewRowSchema>;
 export type DayJournal = NonNullable<DayList["journal"]>;
+export type DayTradeLine = DayJournal["lines"][number];
+export type RelistOffer = NonNullable<DayList["relist"]>;

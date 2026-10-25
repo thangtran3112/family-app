@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   changeTone,
   formatAgo,
+  formatClock,
   formatCompact,
   formatAsOfText,
   formatEtClock,
@@ -79,4 +80,12 @@ test("a plain date has no time of day and never slides to the evening before", (
   assert.equal(formatAsOfText("2026-10-23"), "Fri 2026-10-23");
   assert.equal(formatAsOfText("2026-10-23T19:45:00+00:00"), "3:45 PM ET");
   assert.equal(formatAsOfText(null), "—");
+});
+
+test("a list or window time named as HH:MM reads as a 12-hour clock", () => {
+  assert.equal(formatClock("10:00"), "10:00 AM");
+  assert.equal(formatClock("09:30"), "9:30 AM");
+  assert.equal(formatClock("12:05"), "12:05 PM");
+  assert.equal(formatClock("15:30"), "3:30 PM");
+  assert.equal(formatClock("00:15"), "12:15 AM");
 });
