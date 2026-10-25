@@ -114,6 +114,11 @@ for route in today screener screener/filters strategies/library alerts alerts/ne
   mkdir -p "$DESK/$(dirname "$route")"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
+# The Practice routes from 02o.
+for route in practice practice/replay practice/journal; do
+  mkdir -p "$DESK/$route"
+  printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
+done
 printf 'chunk\n' >"$DESK/_next/static/chunks/desk.js"
 printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
 "$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
