@@ -3231,6 +3231,757 @@
         "title": "FeedOut",
         "type": "object"
       },
+      "FeedbackAttachmentOut": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size_bytes",
+          "content_type"
+        ],
+        "title": "FeedbackAttachmentOut",
+        "type": "object"
+      },
+      "FeedbackCountsOut": {
+        "description": "Reports per status over the whole log, not over the page.",
+        "properties": {
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "integer"
+          },
+          "fixed": {
+            "title": "Fixed",
+            "type": "integer"
+          },
+          "in_progress": {
+            "title": "In Progress",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "wont_fix": {
+            "title": "Wont Fix",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "open",
+          "in_progress",
+          "fixed",
+          "wont_fix",
+          "duplicate"
+        ],
+        "title": "FeedbackCountsOut",
+        "type": "object"
+      },
+      "FeedbackCreateIn": {
+        "additionalProperties": false,
+        "description": "File a report. A bug carries a severity and a feature request does not; `attachment_ids` are screenshots the\ncaller staged earlier (`POST /attachments`).",
+        "properties": {
+          "app_version": {
+            "maxLength": 64,
+            "title": "App Version",
+            "type": "string"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 6,
+            "title": "Attachment Ids",
+            "type": "array"
+          },
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "kind": {
+            "enum": [
+              "bug",
+              "request"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackLinkIn"
+            },
+            "maxItems": 10,
+            "title": "Links",
+            "type": "array"
+          },
+          "route": {
+            "maxLength": 300,
+            "minLength": 1,
+            "pattern": "^/",
+            "title": "Route",
+            "type": "string"
+          },
+          "screen": {
+            "maxLength": 120,
+            "title": "Screen",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2",
+                  "P3"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "body",
+          "screen",
+          "route",
+          "app_version",
+          "context",
+          "captured_at"
+        ],
+        "title": "FeedbackCreateIn",
+        "type": "object"
+      },
+      "FeedbackDetailOut": {
+        "properties": {
+          "app_version": {
+            "title": "App Version",
+            "type": "string"
+          },
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackAttachmentOut"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "fix_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Ref"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "bug",
+              "request"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "reported_by": {
+            "title": "Reported By",
+            "type": "string"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "screen": {
+            "title": "Screen",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2",
+                  "P3"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "in_progress",
+              "fixed",
+              "wont_fix",
+              "duplicate"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "kind",
+          "severity",
+          "title",
+          "route",
+          "area",
+          "reported_by",
+          "updated_at",
+          "status",
+          "fix_ref",
+          "body",
+          "expected",
+          "screen",
+          "app_version",
+          "context",
+          "captured_at",
+          "links",
+          "attachments",
+          "events",
+          "duplicate_of"
+        ],
+        "title": "FeedbackDetailOut",
+        "type": "object"
+      },
+      "FeedbackEventOut": {
+        "properties": {
+          "actor": {
+            "enum": [
+              "user",
+              "owner",
+              "claude-code",
+              "hermes"
+            ],
+            "title": "Actor",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "in_progress",
+                  "fixed",
+                  "wont_fix",
+                  "duplicate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "to_status": {
+            "enum": [
+              "open",
+              "in_progress",
+              "fixed",
+              "wont_fix",
+              "duplicate"
+            ],
+            "title": "To Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "actor",
+          "from_status",
+          "to_status",
+          "note"
+        ],
+        "title": "FeedbackEventOut",
+        "type": "object"
+      },
+      "FeedbackItemOut": {
+        "description": "A row of the dashboard list.",
+        "properties": {
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "fix_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Ref"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "bug",
+              "request"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "reported_by": {
+            "title": "Reported By",
+            "type": "string"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2",
+                  "P3"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "in_progress",
+              "fixed",
+              "wont_fix",
+              "duplicate"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "kind",
+          "severity",
+          "title",
+          "route",
+          "area",
+          "reported_by",
+          "updated_at",
+          "status",
+          "fix_ref"
+        ],
+        "title": "FeedbackItemOut",
+        "type": "object"
+      },
+      "FeedbackLinkIn": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "FeedbackLinkIn",
+        "type": "object"
+      },
+      "FeedbackLinkOut": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "title": "FeedbackLinkOut",
+        "type": "object"
+      },
+      "FeedbackListOut": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/FeedbackCountsOut"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "counts"
+        ],
+        "title": "FeedbackListOut",
+        "type": "object"
+      },
+      "FeedbackPatchIn": {
+        "additionalProperties": false,
+        "description": "Either a status change (the owner: `status`, `fix_ref`, `duplicate_of`, `note`) or the filer's own edit while the\nreport is open (`title`, `body`, `expected`, `severity`, `links`); a key left out is left alone.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "fix_ref": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Ref"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FeedbackLinkIn"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2",
+                  "P3"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "in_progress",
+                  "fixed",
+                  "wont_fix",
+                  "duplicate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "FeedbackPatchIn",
+        "type": "object"
+      },
+      "FeedbackUploadOut": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size_bytes",
+          "content_type",
+          "report_id"
+        ],
+        "title": "FeedbackUploadOut",
+        "type": "object"
+      },
       "Filter": {
         "additionalProperties": false,
         "properties": {
@@ -13605,6 +14356,484 @@
         "summary": "Dashboard",
         "tags": [
           "dashboard"
+        ]
+      }
+    },
+    "/api/desk/feedback": {
+      "get": {
+        "description": "The dashboard: reports newest first by default, and the counts per status over the whole log. `limit` guards the\nanswer; the Desk shows one scrolling list.",
+        "operationId": "list_feedback_api_desk_feedback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "open",
+                      "in_progress",
+                      "fixed",
+                      "wont_fix",
+                      "duplicate"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "bug",
+                    "request"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "newest",
+              "enum": [
+                "newest",
+                "updated",
+                "oldest"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Feedback",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "post": {
+        "description": "File a bug or a feature request. The screenshots are the caller's own staged files, named by id.",
+        "operationId": "create_feedback_api_desk_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Feedback",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/desk/feedback/attachments": {
+      "post": {
+        "description": "Stage a screenshot before the report exists, so the form can show the upload before Send. Staged files older\nthan 24 hours are deleted by this route on its next call; a user holds at most six.",
+        "operationId": "stage_screenshot_api_desk_feedback_attachments_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stage Screenshot",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/desk/feedback/attachments/{attachment_id}": {
+      "delete": {
+        "description": "Remove one of the caller's own staged screenshots (the form's Remove). A file already on a report stays: 409.",
+        "operationId": "remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Staged Screenshot",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "get": {
+        "description": "The bytes. A staged file is its uploader's alone; an attached one is every signed-in user's.",
+        "operationId": "get_screenshot_api_desk_feedback_attachments__attachment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The screenshot's bytes, with the stored content type."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Screenshot",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/desk/feedback/{report_id}": {
+      "get": {
+        "operationId": "get_feedback_api_desk_feedback__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Feedback",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "patch": {
+        "description": "The owner moves a report between statuses (`status`, with `fix_ref`, `duplicate_of` or `note` where the status\nneeds them); the filer edits her own report while it is open. One request does one of the two.",
+        "operationId": "patch_feedback_api_desk_feedback__report_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Feedback",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/desk/feedback/{report_id}/attachments": {
+      "post": {
+        "description": "Add a screenshot to an existing report: the filer or the owner, up to six in all.",
+        "operationId": "add_screenshot_api_desk_feedback__report_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Screenshot",
+        "tags": [
+          "feedback"
         ]
       }
     },

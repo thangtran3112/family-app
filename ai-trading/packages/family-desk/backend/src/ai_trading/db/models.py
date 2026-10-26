@@ -4,9 +4,9 @@
 `signals`, `alerts`, `deliveries` -- Alembic `0002`), and the technical desktop MVP's screener, universe,
 metrics, and feed-health tables (02m §b2 -- Alembic `0003`), the consensus-history tables
 (`consensus_snapshots`, `earnings_results`, `analyst_targets` -- 02n §d, Alembic `0004`), and the replay
-practice tables (02o c3 -- Alembic `0005`). Still out of scope: `iv_daily`, `order_intents`/`fills` and the
-rest of 02a §9's later-phase tables (Phase 2a's own D3 ruling -- "a table arrives with the phase that first
-needs it").
+practice tables (02o c3 -- Alembic `0005`), and the feedback log (02s -- Alembic `0010`). Still out of scope:
+`iv_daily`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase 2a's own D3 ruling -- "a
+table arrives with the phase that first needs it").
 
 Every bar table's primary key matches how `ai_trading.data.bars`/`rolls` upsert into it (`symbol`
 plus the bar's own time column; `product` plus `contract_month`), so `INSERT ... ON CONFLICT DO
@@ -797,3 +797,84 @@ class PracticeWeek(Base):
     rating: Mapped[int | None] = mapped_column(SmallInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# -- Feedback log (Alembic 0010, 02s): bugs and feature requests the family files from the Desk ---------------
+
+
+class FeedbackReport(Base):
+    """One bug or feature request (`F-001`, ...: the id, never reused). Every signed-in user reads every report; a bug
+    carries a severity, a request does not. `fixed` always names its fix and `duplicate` its original."""
+
+    __tablename__ = "feedback_reports"
+    __table_args__ = (
+        CheckConstraint("kind IN ('bug', 'request')", name="ck_feedback_reports_kind"),
+        CheckConstraint(
+            "severity IS NULL OR severity IN ('P0', 'P1', 'P2', 'P3')", name="ck_feedback_reports_severity"
+        ),
+        CheckConstraint("(kind = 'bug') = (severity IS NOT NULL)", name="ck_feedback_reports_kind_severity"),
+        CheckConstraint(
+            "status IN ('open', 'in_progress', 'fixed', 'wont_fix', 'duplicate')", name="ck_feedback_reports_status"
+        ),
+        CheckConstraint("status <> 'fixed' OR fix_ref IS NOT NULL", name="ck_feedback_reports_fixed_ref"),
+        CheckConstraint("status <> 'duplicate' OR duplicate_of IS NOT NULL", name="ck_feedback_reports_duplicate_of"),
+        Index("ix_feedback_reports_status_id", "status", text("id DESC")),
+        Index("ix_feedback_reports_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # "bug" | "request"
+    severity: Mapped[str | None] = mapped_column(String)  # "P0".."P3"; bugs only
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    expected: Mapped[str | None] = mapped_column(Text)
+    screen: Mapped[str] = mapped_column(Text, nullable=False)
+    route: Mapped[str] = mapped_column(Text, nullable=False)
+    app_version: Mapped[str] = mapped_column(Text, nullable=False)
+    context: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    links: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    # "open" | "in_progress" | "fixed" | "wont_fix" | "duplicate"
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open", server_default=text("'open'"))
+    fix_ref: Mapped[str | None] = mapped_column(Text)  # a commit hash and/or `PR #nnn`
+    duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("feedback_reports.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class FeedbackEvent(Base):
+    """The timeline of a report: one row for the filing (`from_status` null) and one per status change."""
+
+    __tablename__ = "feedback_events"
+    __table_args__ = (Index("ix_feedback_events_report_id_at", "report_id", "at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("feedback_reports.id", ondelete="CASCADE"), nullable=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actor: Mapped[str] = mapped_column(String, nullable=False)  # "user" | "owner" | "claude-code" | "hermes"
+    from_status: Mapped[str | None] = mapped_column(String)
+    to_status: Mapped[str] = mapped_column(String, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class FeedbackAttachment(Base):
+    """A screenshot, stored as bytes next to the report like `replay_blobs.payload`. `report_id` is null while the file
+    is staged (uploaded before the report exists); staged files older than a day are swept on the next staging call."""
+
+    __tablename__ = "feedback_attachments"
+    __table_args__ = (
+        CheckConstraint("size_bytes <= 5242880", name="ck_feedback_attachments_size_bytes"),
+        Index("ix_feedback_attachments_report_id", "report_id"),
+        Index("ix_feedback_attachments_user_staged", "user_id", postgresql_where=text("report_id IS NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    report_id: Mapped[int | None] = mapped_column(ForeignKey("feedback_reports.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    content_type: Mapped[str] = mapped_column(String, nullable=False)  # "image/png" | "image/jpeg" | "image/webp"
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)  # never loaded with the row
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

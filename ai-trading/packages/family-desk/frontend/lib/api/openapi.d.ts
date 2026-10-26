@@ -236,6 +236,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Feedback
+         * @description The dashboard: reports newest first by default, and the counts per status over the whole log. `limit` guards the
+         *     answer; the Desk shows one scrolling list.
+         */
+        get: operations["list_feedback_api_desk_feedback_get"];
+        put?: never;
+        /**
+         * Create Feedback
+         * @description File a bug or a feature request. The screenshots are the caller's own staged files, named by id.
+         */
+        post: operations["create_feedback_api_desk_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/feedback/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Screenshot
+         * @description Stage a screenshot before the report exists, so the form can show the upload before Send. Staged files older
+         *     than 24 hours are deleted by this route on its next call; a user holds at most six.
+         */
+        post: operations["stage_screenshot_api_desk_feedback_attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/feedback/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Screenshot
+         * @description The bytes. A staged file is its uploader's alone; an attached one is every signed-in user's.
+         */
+        get: operations["get_screenshot_api_desk_feedback_attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove Staged Screenshot
+         * @description Remove one of the caller's own staged screenshots (the form's Remove). A file already on a report stays: 409.
+         */
+        delete: operations["remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/feedback/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Feedback */
+        get: operations["get_feedback_api_desk_feedback__report_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Feedback
+         * @description The owner moves a report between statuses (`status`, with `fix_ref`, `duplicate_of` or `note` where the status
+         *     needs them); the filer edits her own report while it is open. One request does one of the two.
+         */
+        patch: operations["patch_feedback_api_desk_feedback__report_id__patch"];
+        trace?: never;
+    };
+    "/api/desk/feedback/{report_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Screenshot
+         * @description Add a screenshot to an existing report: the filer or the owner, up to six in all.
+         */
+        post: operations["add_screenshot_api_desk_feedback__report_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/futures/specs": {
         parameters: {
             query?: never;
@@ -2369,6 +2481,248 @@ export interface components {
              * Format: date-time
              */
             window_start: string;
+        };
+        /** FeedbackAttachmentOut */
+        FeedbackAttachmentOut: {
+            /** Content Type */
+            content_type: string;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: number;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /**
+         * FeedbackCountsOut
+         * @description Reports per status over the whole log, not over the page.
+         */
+        FeedbackCountsOut: {
+            /** Duplicate */
+            duplicate: number;
+            /** Fixed */
+            fixed: number;
+            /** In Progress */
+            in_progress: number;
+            /** Open */
+            open: number;
+            /** Wont Fix */
+            wont_fix: number;
+        };
+        /**
+         * FeedbackCreateIn
+         * @description File a report. A bug carries a severity and a feature request does not; `attachment_ids` are screenshots the
+         *     caller staged earlier (`POST /attachments`).
+         */
+        FeedbackCreateIn: {
+            /** App Version */
+            app_version: string;
+            /** Attachment Ids */
+            attachment_ids?: number[];
+            /** Body */
+            body: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            };
+            /** Expected */
+            expected?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bug" | "request";
+            /** Links */
+            links?: components["schemas"]["FeedbackLinkIn"][];
+            /** Route */
+            route: string;
+            /** Screen */
+            screen: string;
+            /** Severity */
+            severity?: ("P0" | "P1" | "P2" | "P3") | null;
+            /** Title */
+            title: string;
+        };
+        /** FeedbackDetailOut */
+        FeedbackDetailOut: {
+            /** App Version */
+            app_version: string;
+            /** Area */
+            area: string;
+            /** Attachments */
+            attachments: components["schemas"]["FeedbackAttachmentOut"][];
+            /** Body */
+            body: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            };
+            /** Duplicate Of */
+            duplicate_of: number | null;
+            /** Events */
+            events: components["schemas"]["FeedbackEventOut"][];
+            /** Expected */
+            expected: string | null;
+            /** Fix Ref */
+            fix_ref: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bug" | "request";
+            /** Links */
+            links: components["schemas"]["FeedbackLinkOut"][];
+            /** Ref */
+            ref: string;
+            /** Reported By */
+            reported_by: string;
+            /** Route */
+            route: string;
+            /** Screen */
+            screen: string;
+            /** Severity */
+            severity: ("P0" | "P1" | "P2" | "P3") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "in_progress" | "fixed" | "wont_fix" | "duplicate";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FeedbackEventOut */
+        FeedbackEventOut: {
+            /**
+             * Actor
+             * @enum {string}
+             */
+            actor: "user" | "owner" | "claude-code" | "hermes";
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** From Status */
+            from_status: ("open" | "in_progress" | "fixed" | "wont_fix" | "duplicate") | null;
+            /** Note */
+            note: string | null;
+            /**
+             * To Status
+             * @enum {string}
+             */
+            to_status: "open" | "in_progress" | "fixed" | "wont_fix" | "duplicate";
+        };
+        /**
+         * FeedbackItemOut
+         * @description A row of the dashboard list.
+         */
+        FeedbackItemOut: {
+            /** Area */
+            area: string;
+            /** Fix Ref */
+            fix_ref: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bug" | "request";
+            /** Ref */
+            ref: string;
+            /** Reported By */
+            reported_by: string;
+            /** Route */
+            route: string;
+            /** Severity */
+            severity: ("P0" | "P1" | "P2" | "P3") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "in_progress" | "fixed" | "wont_fix" | "duplicate";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FeedbackLinkIn */
+        FeedbackLinkIn: {
+            /** Label */
+            label?: string | null;
+            /** Url */
+            url: string;
+        };
+        /** FeedbackLinkOut */
+        FeedbackLinkOut: {
+            /** Label */
+            label: string | null;
+            /** Url */
+            url: string;
+        };
+        /** FeedbackListOut */
+        FeedbackListOut: {
+            counts: components["schemas"]["FeedbackCountsOut"];
+            /** Items */
+            items: components["schemas"]["FeedbackItemOut"][];
+        };
+        /**
+         * FeedbackPatchIn
+         * @description Either a status change (the owner: `status`, `fix_ref`, `duplicate_of`, `note`) or the filer's own edit while the
+         *     report is open (`title`, `body`, `expected`, `severity`, `links`); a key left out is left alone.
+         */
+        FeedbackPatchIn: {
+            /** Body */
+            body?: string | null;
+            /** Duplicate Of */
+            duplicate_of?: number | null;
+            /** Expected */
+            expected?: string | null;
+            /** Fix Ref */
+            fix_ref?: string | null;
+            /** Links */
+            links?: components["schemas"]["FeedbackLinkIn"][] | null;
+            /** Note */
+            note?: string | null;
+            /** Severity */
+            severity?: ("P0" | "P1" | "P2" | "P3") | null;
+            /** Status */
+            status?: ("open" | "in_progress" | "fixed" | "wont_fix" | "duplicate") | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** FeedbackUploadOut */
+        FeedbackUploadOut: {
+            /** Content Type */
+            content_type: string;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: number;
+            /** Report Id */
+            report_id: number | null;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /** Filter */
         Filter: {
@@ -6120,6 +6474,269 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feedback_api_desk_feedback_get: {
+        parameters: {
+            query?: {
+                status?: ("open" | "in_progress" | "fixed" | "wont_fix" | "duplicate")[] | null;
+                kind?: ("bug" | "request") | null;
+                area?: string | null;
+                q?: string | null;
+                sort?: "newest" | "updated" | "oldest";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_feedback_api_desk_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_screenshot_api_desk_feedback_attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackUploadOut"];
+                };
+            };
+        };
+    };
+    get_screenshot_api_desk_feedback_attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The screenshot's bytes, with the stored content type. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feedback_api_desk_feedback__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_feedback_api_desk_feedback__report_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_screenshot_api_desk_feedback__report_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackUploadOut"];
                 };
             };
             /** @description Validation Error */

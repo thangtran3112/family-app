@@ -258,6 +258,8 @@ Paper file TobyTest, new page **"R3 · Desktop · Technical MVP"** (the mobile p
 **Count: 13 boards** (D1–D11 plus the two 1180 boards): **6 Sonnet** (D1, D2, D3, D4, D5, D10), **7 Haiku** (D6, D7, D8, D9,
 D11, and the two D12 boards).
 
+Added later (2026-10-26): the three Desk feedback boards of [02s](02s-desk-feedback-log.md) were added to the same Paper page after the 13 MVP boards, which stay unchanged.
+
 ### d2. Runs
 
 | Run | Model | Boards | Depends on | Status (2026-10-24) |
