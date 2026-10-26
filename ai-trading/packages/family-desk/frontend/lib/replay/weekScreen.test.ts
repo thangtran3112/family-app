@@ -85,7 +85,7 @@ test("Start Week opens the day's board, or says why nothing opened", () => {
   assert.deepEqual(startOutcome(swingOpenNext), { kind: "open", href: "/practice/day?id=71" });
   assert.deepEqual(startOutcome(swingOpenNextWaiting), {
     kind: "wait",
-    text: "Preparing the swing data · 12 of 51 · The next day opens when the data is ready. You can leave this page.",
+    text: "Preparing the swing data · 12 of 51 (23%) · The next day opens when the data is ready. You can leave this page.",
   });
   const done = startOutcome({ ...swingOpenNextWaiting, plan: { ...swingOpenNextWaiting.plan, finished: true } });
   assert.deepEqual(done, { kind: "wait", text: "Thread finished · every hold closed at the last close" });

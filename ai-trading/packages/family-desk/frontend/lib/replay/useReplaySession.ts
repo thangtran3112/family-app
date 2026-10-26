@@ -270,6 +270,12 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         say("error", built.message);
         return false;
       }
+      // D-068: before the first regular price of a swing day nothing can be marked. Say so here, so no request goes out to be
+      // refused (the browser logs every refused request as a failed load, though the refusal is the plain answer).
+      if (built.mark.kind !== "note" && sessionRef.current?.thread?.mode === "swing" && viewRef.current?.last === null) {
+        say("error", PRACTICE_COPY.swingMarketNotOpen);
+        return false;
+      }
       const accepted = await exec(async () => {
         try {
           const result = await placeMark(id, built.mark);

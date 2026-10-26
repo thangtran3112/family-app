@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { loadUniverseDays, openNextDay } from "@/lib/desk/replay";
+import { savePlanPatiently } from "@/lib/desk/patience";
+import { loadDaily, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { OpenNext } from "@/lib/replay/daily";
@@ -41,6 +42,8 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
   const [problems, setProblems] = useState<PlanProblems>({});
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Set while the gateway has cut a slow save short and the screen is waiting for the plan to show up (D-058).
+  const [still, setStill] = useState(false);
   const filters = useDeskQuery("practice:plan-filters", (signal) => loadFilters({ signal }));
   // Once the Desk has recorded 20 finished days of its universe, a new plan starts on the first one (02o-b2) unless she has picked a day.
   const recorded = useDeskQuery("practice:universe-days", (signal) => loadUniverseDays({}, { signal }));
@@ -60,16 +63,30 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
     }
     setProblems({});
     setFailed(false);
+    setStill(false);
     setSubmitting(true);
     try {
-      onSaved(await openNextDay(result.spec, { threadId: thread.id }));
+      const before = await loadDaily().then((daily) => daily.plan?.id ?? null, () => null);
+      const onWaiting = () => setStill(true);
+      onSaved(
+        await savePlanPatiently(
+          () => openNextDay(result.spec, { threadId: thread.id }),
+          () => openNextDay(),
+          () => loadDaily().then((daily) => daily.plan?.id ?? null),
+          before,
+          { onWaiting },
+        ),
+      );
     } catch (error) {
       if (error instanceof DeskApiError && error.status === 422 && error.problems.length > 0) setProblems(planProblems(error.problems));
       else setFailed(true);
+      setStill(false);
       setSubmitting(false);
     }
   }
 
+  // D-050: with no filter ticked there is nothing to list, so Start day waits (the hint under the filters says so).
+  const noFilters = draft.filterIds.length === 0;
   const setup = draft.setup;
   const patchSetup = (next: PlanDraft["setup"]) => setDraft({ ...draft, setup: next });
 
@@ -249,11 +266,12 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
       <ArmStrategiesField armed={setup.armed} onChange={(armed) => patchSetup({ ...setup, armed })} error={problems.armed} />
 
       {problems.form && <p role="alert" className={styles.fieldError}>{problems.form}</p>}
+      {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
       {failed && <ErrorBlock message={PRACTICE_COPY.planStartError} onRetry={() => void save()} />}
       <div className={styles.actions}>
-        <span className={`${styles.hint} ${styles.actionNote}`}>{PRACTICE_COPY.threadPlanFrom}</span>
+        <span className={`${styles.hint} ${styles.actionNote}`}>{noFilters ? `${PRACTICE_COPY.planSaveFilterFirst} · ${PRACTICE_COPY.threadPlanFrom}` : PRACTICE_COPY.threadPlanFrom}</span>
         {onCancel && <button type="button" className={styles.button} onClick={onCancel}>Cancel</button>}
-        <button type="submit" className={styles.primary} disabled={submitting} aria-busy={submitting || undefined}>
+        <button type="submit" className={styles.primary} disabled={submitting || noFilters} aria-busy={submitting || undefined} title={noFilters ? PRACTICE_COPY.planSaveFilterFirst : undefined}>
           {submitting ? PRACTICE_COPY.planSubmitting : PRACTICE_COPY.planSubmit}
         </button>
       </div>

@@ -77,13 +77,13 @@ test("symbols left out are listed under the table with their neutral reason", ()
 });
 
 test("prep progress, polling and why Start is off", () => {
-  assert.equal(prepProgressText(universePreviewPreparing), "Preparing as-of data · 96 of 133 · watchlist and manual picks are ready");
+  assert.equal(prepProgressText(universePreviewPreparing), "Preparing as-of data · 96 of 133 (72%) · this can take several minutes · watchlist and manual picks are ready");
   assert.equal(prepProgressText(universePreview), "As-of data is ready");
   assert.equal(isPreparing(universePreviewPreparing), true);
   assert.equal(isPreparing(universePreview), false);
   assert.equal(isPreparing(null), false);
   assert.equal(startBlocker(null), "Build the universe first");
-  assert.equal(startBlocker(universePreviewPreparing), "Wait for the data to finish · 96 of 133");
+  assert.equal(startBlocker(universePreviewPreparing), "Wait for the data to finish · 96 of 133 (72%)");
   assert.equal(startBlocker({ ...universePreview, rows: universePreview.rows.slice(0, 5) }), "Pick at least 10 symbols · you have 5");
   assert.equal(startBlocker({ ...universePreview, rows: universePreview.rows.slice(0, 10) }), null);
   assert.equal(startBlocker(universePreview), null);

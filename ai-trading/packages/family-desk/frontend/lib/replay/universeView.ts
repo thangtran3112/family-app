@@ -1,5 +1,5 @@
 import { EMPTY_VALUE, changeTone, formatCompact, formatPct, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
-import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import { PRACTICE_COPY, practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingSource, UniverseExcluded, UniversePreview, UniverseRow } from "./swingApi.ts";
 
 // The swing setup's universe builder (02p c1, c3), view logic: the fill order and counts as displayed, source chips,
@@ -124,13 +124,13 @@ export const isPreparing = (preview: Pick<UniversePreview, "state"> | null): boo
 
 /** "Preparing as-of data · 96 of 133 · watchlist and manual picks are ready", or "As-of data is ready". */
 export function prepProgressText(preview: Pick<UniversePreview, "state" | "prep">): string {
-  return preview.state === "ready" ? PRACTICE_COPY.swingPrepReady : practiceText("swingPrepProgress", { done: preview.prep.done, total: preview.prep.total });
+  return preview.state === "ready" ? PRACTICE_COPY.swingPrepReady : practiceText("swingPrepProgress", { done: preview.prep.done, total: preview.prep.total, pct: prepPercent(preview.prep.done, preview.prep.total) });
 }
 
 /** Why `Start swing thread` is off, in plain words; null when the table is ready to start from. */
 export function startBlocker(preview: Pick<UniversePreview, "state" | "prep" | "rows"> | null): string | null {
   if (preview === null) return PRACTICE_COPY.swingBuildFirst;
-  if (preview.state === "preparing") return practiceText("swingWaitForData", { done: preview.prep.done, total: preview.prep.total });
+  if (preview.state === "preparing") return practiceText("swingWaitForData", { done: preview.prep.done, total: preview.prep.total, pct: prepPercent(preview.prep.done, preview.prep.total) });
   if (preview.rows.length < MIN_UNIVERSE) return practiceText("swingNeedMore", { min: MIN_UNIVERSE, n: preview.rows.length });
   return null;
 }

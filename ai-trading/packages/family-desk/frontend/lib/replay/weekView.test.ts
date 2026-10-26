@@ -61,6 +61,9 @@ test("a figure that could not be computed is a dash, never a guess; to date chan
   assert.equal(tile(tiles, "gap_share").sub, "no carried holds");
   assert.equal(tile(weekTiles(weekClosed.review, true), "realized").sub, "holds closed so far");
   assert.equal(tile(weekTiles({ tiles: { ...weekClosed.review.tiles, gap_share_pct: -12.4 } }), "gap_share").value, "−12%");
+  // D-070: a gap bigger than the week's whole change is not printed as 315%
+  const over = tile(weekTiles({ tiles: { ...weekClosed.review.tiles, gap_usd: -113.51, gap_share_pct: 315.3 } }), "gap_share");
+  assert.deepEqual([over.value, over.sub], ["Over 100%", "Gap −$113.51 · more than the week's whole change"]);
 });
 
 test("the selection sentence is the API's line; without one the plain reason shows", () => {

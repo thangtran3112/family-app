@@ -72,6 +72,7 @@ LOOKBACK_BARS_MAX = 6000  # the feed's warm-up bars (1-minute interval would oth
 RATING_RANGE = (1, 5)
 STAMP_SOURCE = "alpaca"
 STALE_PRINT_S = 30  # a mark priced off a print older than this carries a warning
+STOP_REQUIRED = "Your plan asks for a stop on every entry · type a stop price first"
 QUIET_PRINT_S = 60  # no eligible print for this long marks the tape quiet (a halt looks the same from here)
 
 
@@ -867,6 +868,10 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
         # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
         # stamped at a time the day has already passed. `advance` catches the name up first.
         raise ReplayProblem("This name is behind the day clock · advance to catch up before you mark", path="kind")
+    if body["kind"] in ENTRY_KINDS and body.get("stopPrice") is None and _plan_of(row.spec).stop_required:
+        # D-060, D-067: "Stop on every entry" is a rule of the thread, so an entry without a stop is refused up front,
+        # not scored against her afterwards. A stop typed later (the Stop key) still moves the line of a legacy entry.
+        raise ReplayProblem(STOP_REQUIRED, path="stopPrice")
     if ctx.swing:
         return _place_swing_mark(db, ctx, body, svc)
     kind = body["kind"]

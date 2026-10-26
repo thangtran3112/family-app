@@ -299,6 +299,7 @@ export const PRACTICE_COPY = {
   planStateInProgress: "in progress",
   planStateListed: "list ready",
   planDayDone: "Day {day} done",
+  planDayDoneNext: "Day {done} done · Day {next} next",
   planDone: "All {of} days done",
   planPreparing: "Preparing data · {done} of {total}",
   planPreparingHint: "The first list opens when the data is ready. You can leave this page.",
@@ -306,7 +307,7 @@ export const PRACTICE_COPY = {
   planContinue: "Continue",
   planStart: "Start Day 1",
   planNew: "New plan",
-  planReplace: "Start day saves this plan, replaces your current one and opens its first list. Your finished days stay in Recent sessions.",
+  planReplace: "Start day saves this plan, replaces your current one and opens its first list. Your finished days stay in Recent sessions. A new plan starts over at its own first day, so it can replay a day you have already practised.",
   planStartError: "Couldn't open the list · Try again",
   planFilters: "Filters",
   planFiltersEmpty: "No filters found · save one in the Screener first",
@@ -317,6 +318,10 @@ export const PRACTICE_COPY = {
   planSubmit: "Start day",
   planSubmitting: "Starting…",
   planOpening: "Opening the day…",
+  stopFirst: "Your plan asks for a stop on every entry · type a stop price first",
+  // D-058, D-059: the day or the scan outlasted the gateway's wait; the Desk is still finishing it and the screen asks again.
+  planStillWorking: "Still preparing your day · this can take a minute or two",
+  planSaveFilterFirst: "Pick at least one filter to start a day",
   planListAtNeeds: "{filters} needs a list time of {time} or later · before then none of its bars of the day has closed",
   planArmed: "Armed on practice days: {names}",
   planArmedNone: "Nothing armed · no would-fire signals while you practice",
@@ -337,6 +342,7 @@ export const PRACTICE_COPY = {
   dayUniverse: "Universe: today's Desk set, up to {max} names by today's dollar volume ({size} names here). It can differ from the names that traded on that day.",
   daySource: "Source: Alpaca SIP bars up to {through} · nothing after the list time is shown",
   dayNoNames: "No name passed your filters on this day · widen a filter, or end the day to open the next",
+  dayNoNamesScreener: "Open the Screener to widen a filter",
   dayNoneMatched: "{matched} of {size} matched",
   dayBlockTitle: "This block · {of} days",
   dayLadderEnded: "Ended · review",
@@ -377,6 +383,8 @@ export const PRACTICE_COPY = {
   dayRescanNew: "New since your list",
   dayRescanReadOnly: "Names new since your list are for reading: you star and practice names from the list above.",
   dayRescanError: "Couldn't re-scan · Try again",
+  dayRescanning: "Re-scanning…",
+  dayRescanStillWorking: "Still scanning · this can take a minute or two",
   dayEnd: "End day",
   dayEndWarning: "Ending the day shows how every name moved after the list.",
   dayEnded: "Day over",
@@ -566,6 +574,7 @@ export const PRACTICE_COPY = {
   swingBoardUniverse: "Universe",
   swingBoardMatches: "Matches",
   swingBoardStarHint: "Star up to 5 focus names · you can practice your focus names and your holds",
+  swingBoardStarFirst: "Star a name to start the day · you can practice your focus names and your holds",
   swingBoardPeek: "Peek shows daily bars through the prior close",
   swingLoadError: "Couldn't load this swing day · Try again",
   swingContinueError: "Couldn't open the next day · Try again",
@@ -573,7 +582,7 @@ export const PRACTICE_COPY = {
   swingEndError: "Couldn't end the day · Try again",
   swingPassError: "Couldn't pass this day · Try again",
   swingStartError: "Couldn't start the day · Try again",
-  swingPrepWait: "Preparing the swing data · {done} of {total}",
+  swingPrepWait: "Preparing the swing data · {done} of {total} ({pct}%)",
   swingPrepWaitHint: "The next day opens when the data is ready. You can leave this page.",
   swingThreadFinished: "Thread finished · every hold closed at the last close",
   // the stop pause and the day strip
@@ -636,9 +645,9 @@ export const PRACTICE_COPY = {
   swingStartThreadError: "Couldn't start the swing thread · Try again",
   swingPreviewError: "Couldn't build the universe · Try again",
   swingBuildFirst: "Build the universe first",
-  swingWaitForData: "Wait for the data to finish · {done} of {total}",
+  swingWaitForData: "Wait for the data to finish · {done} of {total} ({pct}%)",
   swingNeedMore: "Pick at least {min} symbols · you have {n}",
-  swingPrepProgress: "Preparing as-of data · {done} of {total} · watchlist and manual picks are ready",
+  swingPrepProgress: "Preparing as-of data · {done} of {total} ({pct}%) · this can take several minutes · watchlist and manual picks are ready",
   swingPrepReady: "As-of data is ready",
   swingBasis: "as of the close before Day 1",
   swingSurvivors: "survivors only",
@@ -674,6 +683,8 @@ export const PRACTICE_COPY = {
   swingTileNoClosed: "no holds closed yet",
   swingTileDaysHeld: "closed holds",
   swingTileNoGap: "no carried holds",
+  swingTileGapOver: "Over 100%",
+  swingTileGapOverSub: "{gap} · more than the week's whole change",
   swingTileAdherence: "plan checks passed",
   swingTileSelection: "vs the universe median",
   swingTileTiming: "your prices vs holding close to close",
@@ -702,6 +713,9 @@ export function containsPracticeBannedTerm(text: string): boolean {
 }
 
 type PracticeKey = keyof typeof PRACTICE_COPY;
+/** Whole percent of a prepare run that is done (0 when nothing is counted yet). */
+export const prepPercent = (done: number, total: number): number => (total > 0 ? Math.min(100, Math.floor((100 * done) / total)) : 0);
+
 export const practiceText = (key: PracticeKey, values: Record<string, string | number> = {}): string =>
   fill(PRACTICE_COPY[key], Object.fromEntries(Object.entries(values).map(([name, value]) => [name, String(value)])));
 

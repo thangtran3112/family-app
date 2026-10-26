@@ -47,6 +47,7 @@ import type { Paused, ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText, sizingRiskUsd } from "@/lib/replay/swing";
+import { whenReady } from "@/lib/desk/patience";
 import { endAnyDay } from "@/lib/replay/swingApi";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
@@ -285,6 +286,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       draft={draft}
       onDraft={setDraft}
       stopHint={stopHint}
+      stopRequired={spec.plan.stopRequired === "yes"}
       stopMissing={needsStop}
       since={entrySince(session.marks, view.openTrade)}
       realized={realized}
@@ -436,7 +438,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
             // overnight and goes back to its board, ended.
             if (swing && api.player.status === "playing") api.togglePlay();
             setDayBusy(true);
-            const ending: Promise<unknown> = swing ? endAnyDay(dayListId) : endDay(dayListId);
+            const ending: Promise<unknown> = whenReady(() => (swing ? endAnyDay(dayListId) : endDay(dayListId)));
             ending
               .then(() => router.push(`/practice/day?id=${dayListId}`))
               .catch(() => {

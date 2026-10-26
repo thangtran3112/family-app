@@ -35,6 +35,7 @@ from ai_trading.core.calendar import et, previous_session
 from ai_trading.db.models import PracticeHold, PracticeLedger, PracticeMark, PracticeWeek
 from ai_trading.replay import hold_rows, swing
 from ai_trading.replay import holds as holds_mod
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
@@ -121,7 +122,8 @@ def _exit(db, row, day, *, hhmm="14:00", world, source="her"):
 
 
 def _raw_close(world, symbol, day):
-    return float(world.raw[symbol].loc[day, "close"])
+    """The official close a hold is marked at: the raw daily close in whole cents (D-033, D-064)."""
+    return journal_mod.fill_price(float(world.raw[symbol].loc[day, "close"]))
 
 
 def _ledger(db, thread):
@@ -523,7 +525,7 @@ def test_a_gap_day_splits_the_equity_change_into_the_overnight_gap_and_the_rest(
     _end(db_session, owner, svc, day3)
     day4 = _end(db_session, owner, svc, _open(db_session, owner, svc, thread))  # S01 gaps up 6% on Day 4
     assert DAYS[3] == GAP_UP_DAY
-    prior, first = _raw_close(world, "S01", DAYS[2]), bar_close(world, "S01", DAYS[3], "09:30")
+    prior, first = _raw_close(world, "S01", DAYS[2]), journal_mod.fill_price(bar_close(world, "S01", DAYS[3], "09:30"))
     close = _raw_close(world, "S01", DAYS[3])
     gap = round(100 * (first - prior), 2)
     assert gap > 500  # a real 6% gap
@@ -545,7 +547,7 @@ def test_a_short_gains_from_a_gap_down(db_session, owner, world, svc) -> None:
     _end(db_session, owner, svc, day6)
     day7 = _end(db_session, owner, svc, _open(db_session, owner, svc, thread))
     assert DAYS[6] == GAP_DOWN_DAY
-    prior, first = _raw_close(world, "S02", DAYS[5]), bar_close(world, "S02", DAYS[6], "09:30")
+    prior, first = _raw_close(world, "S02", DAYS[5]), journal_mod.fill_price(bar_close(world, "S02", DAYS[6], "09:30"))
     assert day7.journal["gap_usd"] == round(-100 * (first - prior), 2) > 600
 
 
@@ -1059,7 +1061,7 @@ def test_the_day_list_out_reads_holds_live_at_the_prior_close_and_serves_the_sto
         out["sessions"] == [] and out["watch"] == [] and out["peek"] is None and out["label"] == day2.universe["label"]
     )
     peeked = swing.day_list_out(db_session, owner, day2.id, svc, peek="S01")["peek"]
-    assert peeked["daily"][-1]["t"] == DAYS[0] and peeked["levels"]["prior_close"] == pytest.approx(close)
+    assert peeked["daily"][-1]["t"] == DAYS[0] and peeked["levels"]["prior_close"] == pytest.approx(close, abs=0.005)
     with pytest.raises(ReplayProblem) as caught:
         swing.day_list_out(db_session, owner, day2.id, svc, peek="ZZZZ")
     assert caught.value.message == "ZZZZ is not on today's board"

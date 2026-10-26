@@ -1,5 +1,5 @@
 import { DeskApiError } from "../api/client.ts";
-import { fillCopy, practiceText } from "../desk/freshness.ts";
+import { fillCopy, practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, WeekOut } from "./swingApi.ts";
 import type { SwingState, ThreadDay, ThreadToday } from "./threads.ts";
 import { formatBalance } from "./threadView.ts";
@@ -115,7 +115,7 @@ export function startOutcome(next: SwingOpenNext): StartOutcome {
   if (next.day_list_id !== null) return { kind: "open", href: dayBoardHref(next.day_list_id) };
   if (next.plan.finished) return { kind: "wait", text: practiceText("swingThreadFinished") };
   const { done, total } = next.plan.prep;
-  return { kind: "wait", text: `${practiceText("swingPrepWait", { done, total })} · ${practiceText("swingPrepWaitHint")}` };
+  return { kind: "wait", text: `${practiceText("swingPrepWait", { done, total, pct: prepPercent(done, total) })} · ${practiceText("swingPrepWaitHint")}` };
 }
 
 // -- day rows --------------------------------------------------------------------------------------------------

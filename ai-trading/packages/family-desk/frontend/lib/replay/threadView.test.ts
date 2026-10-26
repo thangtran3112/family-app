@@ -41,6 +41,7 @@ test("money is dollars and cents with the sign as the cue, and never prints NaN 
 
 test("the thread card reads in plain words", () => {
   assert.equal(threadName(activeThread.thread), "October thread");
+  assert.equal(threadName({ ...activeThread.thread, mode: "swing" }), "October swing thread", "a swing thread never reads like the day thread of its month (D-069)");
   assert.equal(threadStartedText(activeThread.thread), "Started Oct 5");
   assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123.00 so far");
   assert.equal(startedWithText(freshThread.thread), "Started with $50,000 · no change yet");

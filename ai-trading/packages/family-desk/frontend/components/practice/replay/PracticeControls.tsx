@@ -34,7 +34,9 @@ export type PracticeControlsProps = {
   onDraft: (draft: MarkDraft) => void;
   /** The plan asks for a stop on every entry and the stop field is empty. */
   stopHint: boolean;
-  /** The open trade has no stop note although the plan asks for one: offer the one-click fix, never block (D-022). */
+  /** The plan asks for a stop on every entry (D-060): an entry is refused without one. */
+  stopRequired: boolean;
+  /** The open trade has no stop note although the plan asks for one (an entry from before the server refused it): offer the one-click fix (D-022). */
   stopMissing: boolean;
   /** When the open trade was entered (its entry mark); null when unknown. */
   since: string | null;
@@ -115,6 +117,8 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
 export function PracticeControls(props: PracticeControlsProps) {
   const { side, openTrade, lastPrice, draft, onDraft, composer, onComposer, disabled, swing } = props;
   const entering = side === "flat";
+  // D-060: with the plan asking for a stop on every entry, Long and Short wait until a stop price is typed.
+  const waitsForStop = props.stopHint && entering;
   return (
     <div className={styles.controls}>
       {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <OpenTradeCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
@@ -132,18 +136,26 @@ export function PracticeControls(props: PracticeControlsProps) {
           <input className={styles.control} inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
         </label>
         <label className={styles.field}>
-          Stop price (optional)
+          {entering ? (props.stopRequired ? "Stop price (required)" : "Stop price (optional)") : "Stop price"}
           <input className={styles.control} inputMode="decimal" value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
         </label>
       </div>
-      {props.stopHint && entering && <p className={styles.hint}>Your plan asks for a stop on every entry. Type a stop price first, or add a stop note right after.</p>}
+      {props.stopHint && entering && <p className={styles.hint} role="status">{PRACTICE_COPY.stopFirst}</p>}
       <div className={styles.buttonRow}>
-        <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled} title="Practice long (B)" onClick={props.onLong}>Long (B)</button>
-        <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled} title="Practice short (S)" onClick={props.onShort}>Short (S)</button>
+        <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled || waitsForStop} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice long (B)"} onClick={props.onLong}>Long (B)</button>
+        <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled || waitsForStop} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice short (S)"} onClick={props.onShort}>Short (S)</button>
         <button type="button" className={styles.button} disabled={disabled || entering} title="Exit the open practice trade (X)" onClick={props.onExit}>Exit (X)</button>
       </div>
       <div className={styles.buttonRow}>
-        <button type="button" className={styles.button} disabled={disabled || entering} title="Stop note (T)" onClick={() => onComposer("stop")}>Stop (T)</button>
+        <button
+          type="button"
+          className={styles.button}
+          disabled={disabled || entering}
+          title="Stop note (T)"
+          onClick={() => ((draft.stopPrice ?? "").trim() === "" ? onComposer("stop") : props.onStop(draft.stopPrice ?? ""))}
+        >
+          Stop (T)
+        </button>
         <button type="button" className={styles.button} disabled={disabled} title="Note (N)" onClick={() => onComposer("note")}>Note (N)</button>
       </div>
       {composer && <ComposerForm key={composer} composer={composer} lastPrice={lastPrice} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}

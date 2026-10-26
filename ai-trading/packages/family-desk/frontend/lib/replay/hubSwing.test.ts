@@ -55,14 +55,14 @@ test("Start swing thread says why it is off, field problems first", () => {
   assert.equal(startBlockedBy({ preview: universePreview, fresh: false, problems: {} }), HUB_SWING_COPY.updatingList);
   assert.equal(startBlockedBy({ preview: universePreview, fresh: true, problems: { sessions: "Sessions: a whole number from 15 to 23" } }), "Sessions: a whole number from 15 to 23");
   const preparing = startBlockedBy({ preview: universePreviewPreparing, fresh: true, problems: {} });
-  assert.match(preparing ?? "", /^Wait for the data to finish · \d+ of \d+$/);
+  assert.match(preparing ?? "", /^Wait for the data to finish · \d+ of \d+ \(\d+%\)$/);
   const few = startBlockedBy({ preview: { ...universePreview, rows: universePreview.rows.slice(0, 4) }, fresh: true, problems: {} });
   assert.equal(few, "Pick at least 10 symbols · you have 4");
 });
 
 test("Continue: a day opens, a running prep waits with its counts, a finished thread has nothing left", () => {
   assert.deepEqual(continueOutcome(swingOpenNext), { kind: "open", dayListId: 71 });
-  assert.deepEqual(continueOutcome(swingOpenNextWaiting), { kind: "preparing", text: "Preparing the swing data · 12 of 51" });
+  assert.deepEqual(continueOutcome(swingOpenNextWaiting), { kind: "preparing", text: "Preparing the swing data · 12 of 51 (23%)" });
   const finished = { ...swingOpenNextWaiting, plan: { ...swingOpenNextWaiting.plan, finished: true } };
   assert.deepEqual(continueOutcome(finished), { kind: "finished" });
 });
