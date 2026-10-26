@@ -632,8 +632,11 @@ stops reporting for five minutes is started again by the next open. No scheduler
 post-ship default; day-ordered prep readiness; day-scope `maxLoss` and `maxTrades` across sessions.
 
 **02o-b2 built (2026-10-25, `feature/desk-o-b2`).** The switch protocol on the shared day clock and `maxSymbols` (commit
-3d33db18; migration `0008`), then the two read paths below. Still deferred: the block page and per-day schedule, and
-day-ordered prep readiness.
+3d33db18; migration `0009_replay_switch_rescan`: it was written as `0008`, and the swing practice migration (02p) took `0008`
+first, so it was renumbered when the two branches met and the chain is `0007 -> 0008 (swing) -> 0009 (this)`, one head), then the two
+read paths below. Still deferred: the block page and per-day schedule, and day-ordered prep readiness. **Integrated 2026-10-25** with
+02p and the walkthrough fixes on `feature/desk-swing-integration` (merge `940b8b10`); the Playwright specs that ran on the stub clock
+before now run on the frozen E2E clock (the first-day spec records Fri 2026-09-18, which is 20 finished sessions before it).
 - **Re-scan at the playhead.** `POST /replay/day-lists/{id}/rescan` runs the day's filters again at the day clock with the
   filter versions the list used, the list's universe, and every input cut `LIST_DATA_LAG` before the clock (the same
   `build_list`). A scan is a row in `replay_day_scans` (`seq`, `as_of` = the clock it ran at, `data_through`); the frozen list,

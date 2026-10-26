@@ -594,5 +594,18 @@ additive swing branches on `POST /threads`, `GET /threads*`, `POST /daily/next` 
 - Parked (independent review, owner may tighten): own picks under the live floor never match a filter on the board; an early close right after a frozen week books its exit in no week's realized P/L
   (equity and balance agree); standalone sessions can still replay a future day of an active swing thread (the plan only blocks an active same-symbol-day session).
 
+**Integration (2026-10-25, `feature/desk-swing-integration`).** The swing branch met 02o-b2 (`0009_replay_switch_rescan`, one alembic head after `0008`) and
+the walkthrough fixes (STATUS 5M, D-008..D-045), then three defects found in review closed (STATUS 5N).
+- **Prices.** The swing paths now price every fill in whole cents like the day paths (D-033): the first revealed price of a day, the stop pause's price and the
+  strip rows go through `journal.fill_price` (only the last price did). The day summary's gap stays the raw one-minute close (`swing._first_regular_close`), so it
+  can differ from the hold's fill by under a cent a share.
+- **Thread list.** `GET /replay/threads` rows answer `last_day` (the last ended day of the balance's own series) beside `today`, so a card shows its own last-day figure
+  with no day open (D-048). `PracticePlanOut.day_offset` gives a day one number in its thread after a plan replacement (D-047); a swing thread has one plan, so its
+  offset is 0 and its numbers did not change.
+- **Hub.** The New thread form keeps the 02p rule (one active thread per mode: the taken mode's segment turns off with the reason, Swing stays open) over the
+  walkthrough fix that disabled the whole form (D-009, D-016, which assumed one thread). Money reads in cents everywhere (D-044), and Close thread is its own section
+  of the journal's rail (D-040); the swing specs follow both.
+- **Tests.** The swing play tests price their expectations as fills; the migration downgrade test seeds at head; 16 swing Playwright tests pass at 1440 and 1180.
+
 **Not built**: Paper boards PS1 to PS7 (G2), the R0s real-data run, the acceptance week with the wife (G3), a ledger list in the swing journal (there is no ledger list component to reuse),
 rerouting the hub's recent-sessions rows of swing days to the board.
