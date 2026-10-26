@@ -1,4 +1,4 @@
-import { formatEtDayTime } from "@/lib/desk/feedbackView";
+import { formatEtDayTimeShort } from "@/lib/desk/feedbackView";
 import type { Captured } from "@/lib/desk/feedbackContext";
 import styles from "./feedbackForm.module.css";
 
@@ -14,7 +14,7 @@ export function HowThisWorks({ captured, screen }: { captured: Captured; screen:
     ["Screen", screen],
     ["Route", captured.route],
     ["App version", captured.appVersion],
-    ["Captured", formatEtDayTime(captured.capturedAt)],
+    ["Captured", formatEtDayTimeShort(captured.capturedAt)],
   ];
   return (
     <div className={styles.how}>

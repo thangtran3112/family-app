@@ -109,6 +109,12 @@ export function formatEtDayTime(iso: string): string {
   return stamp === EMPTY_VALUE ? EMPTY_VALUE : `${formatEtDay(iso)} ${stamp.slice(-5)} ET`;
 }
 
+/** "Thu 20:00 ET": the form's rail, where the full date is already in the panel beside it. */
+export function formatEtDayTimeShort(iso: string): string {
+  const stamp = formatEtStamp(iso);
+  return stamp === EMPTY_VALUE ? EMPTY_VALUE : `${formatEtDay(iso).slice(0, 3)} ${stamp.slice(-5)} ET`;
+}
+
 /** "just now" / "12 min ago" / "2 h ago" / "3 d ago" (the agent line). */
 export function agoText(iso: string, now: Date): string {
   const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);

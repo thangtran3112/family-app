@@ -16,6 +16,7 @@ import {
   filledLinks,
   formatBytes,
   formatEtDayTime,
+  formatEtDayTimeShort,
   formatShortDay,
   linkHost,
   listFootnote,
@@ -89,6 +90,8 @@ test("dates print in Eastern time the way the board does", () => {
   assert.equal(formatShortDay("2026-10-25T13:14:00Z"), "Sun 10-25");
   assert.equal(formatShortDay("2026-10-26T03:30:00Z"), "Sun 10-25"); // 11:30 PM on the 25th in New York
   assert.equal(formatEtDayTime("2026-10-25T13:14:00Z"), "Sun 2026-10-25 09:14 ET");
+  assert.equal(formatEtDayTimeShort("2026-10-26T14:12:00Z"), "Mon 10:12 ET");
+  assert.equal(formatEtDayTimeShort("not a date"), "—");
   assert.equal(formatEtDayTime("not a date"), "—");
   assert.equal(formatShortDay("not a date"), "—");
 });

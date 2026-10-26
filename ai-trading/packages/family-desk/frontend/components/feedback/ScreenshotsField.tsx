@@ -79,21 +79,19 @@ function UploadRow({ item, onRetry, onRemove }: { item: UploadItem; onRetry: () 
   if (item.status === "failed") {
     return (
       <li className={styles.upRow} data-status="failed">
-        <span className={styles.thumb} data-pending="true" aria-hidden="true" />
-        <div className={styles.failBody}>
-          <div className={styles.failHead}>
-            <div className={styles.upBody}>
-              <span className={styles.upName}>{item.filename}</span>
-              <span className={styles.upMeta}>{formatBytes(item.size)} · {typeLabel(item.contentType)}</span>
-            </div>
-            <span className={styles.failChip}>Upload failed</span>
+        <div className={styles.failHead}>
+          <span className={styles.thumb} data-pending="true" aria-hidden="true" />
+          <div className={styles.upBody}>
+            <span className={styles.upName}>{item.filename}</span>
+            <span className={styles.upMeta}>{formatBytes(item.size)} · {typeLabel(item.contentType)}</span>
           </div>
-          <p className={styles.failText} role="alert">{item.failure}</p>
-          <div className={styles.failActions}>
-            <button type="button" className={styles.smallButton} onClick={onRetry}>Retry</button>
-            <button type="button" className={styles.smallButton} aria-label={`Remove ${item.filename}`} onClick={onRemove}>Remove</button>
-            <span className={styles.hint}>Retry sends the same file again · remove it and add a smaller one to fix this.</span>
-          </div>
+          <span className={styles.failChip}>Upload failed</span>
+        </div>
+        <p className={styles.failText} role="alert">{item.failure}</p>
+        <div className={styles.failActions}>
+          <button type="button" className={styles.smallButton} onClick={onRetry}>Retry</button>
+          <button type="button" className={styles.smallButton} aria-label={`Remove ${item.filename}`} onClick={onRemove}>Remove</button>
+          <span className={styles.hint}>Retry sends the same file again · remove it and add a smaller one to fix this.</span>
         </div>
       </li>
     );
