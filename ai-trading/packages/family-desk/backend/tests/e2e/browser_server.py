@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import server
@@ -17,7 +17,7 @@ from seed import reset_database as reset_seeded_database
 from server import SESSION_LIFECYCLE, app, install_e2e_runtime
 from sqlalchemy.orm import Session
 
-from ai_trading.db.models import FeedHealth
+from ai_trading.db.models import FeedHealth, UniverseDay
 
 # The Practice specs replay the one fixture day (`replay/fixture.py`); only this test-only runtime turns that on.
 os.environ.setdefault("DESK_REPLAY_STUB", "1")
@@ -89,6 +89,33 @@ def scenario(
     return {"now": current_now().isoformat()}
 
 
+class RecordedDay(BaseModel):
+    day: date
+    symbols: list[str]
+
+
+class RecordedDays(BaseModel):
+    """Mornings the Desk "recorded" its universe (`universe_days`), for the browser specs of the practice lists."""
+
+    days: list[RecordedDay]
+
+
+def record_universe_days(
+    body: RecordedDays,
+    identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email"),
+):
+    _verified(identity)
+    with Session(app.state.e2e_engine) as db:
+        for item in body.days:
+            row = db.get(UniverseDay, item.day)
+            if row is None:
+                db.add(UniverseDay(day=item.day, symbols=item.symbols, created_at=datetime.now(UTC)))
+            else:
+                row.symbols = item.symbols
+        db.commit()
+    return {"recorded": len(body.days)}
+
+
 def engine_tick(identity: str | None = Header(default=None, alias="Cf-Access-Authenticated-User-Email")):
     _verified(identity)
     try:
@@ -112,6 +139,7 @@ app.add_api_route("/api/desk/__e2e/runtime", runtime, methods=["GET"], include_i
 app.add_api_route("/api/desk/__e2e/tick", engine_tick, methods=["POST"], include_in_schema=False)
 app.add_api_route("/api/desk/__e2e/reset", reset_database, methods=["POST"], include_in_schema=False)
 app.add_api_route("/api/desk/__e2e/scenario", scenario, methods=["POST"], include_in_schema=False)
+app.add_api_route("/api/desk/__e2e/universe-days", record_universe_days, methods=["POST"], include_in_schema=False)
 install_e2e_runtime()
 
 if __name__ == "__main__":

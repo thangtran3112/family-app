@@ -11,7 +11,8 @@ import { SchemaVersionSchema } from "./strategy-common.ts";
 // boolean or null, every object is strict, and no field names an order, account or broker, as in the
 // other 02k-family contracts. The server rules that need a database (the filters are hers and
 // runnable, `listAt` of 08:30 or later for a premarket filter, every day finished, `firstDay` from
-// 2017-01-03) are not contract rules.
+// 2017-01-03) are not contract rules. `maxSymbols` (02o-b2, optional) caps the names she may watch
+// (star) and practise on one day; a block without it gets the server default (5, the star cap).
 
 const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
 const IsoDaySchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);
@@ -58,6 +59,7 @@ export const PracticeBlockV1Schema = z
     firstDay: IsoDaySchema,
     sessions: z.int().min(5).max(30),
     hideDates: YesNoSchema,
+    maxSymbols: z.int().min(1).max(5).optional(),
     screen: PracticeScreenSchema,
     setup: PracticeSetupSchema,
   })

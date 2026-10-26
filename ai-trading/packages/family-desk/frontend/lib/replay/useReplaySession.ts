@@ -5,12 +5,13 @@ import { DeskApiError } from "../api/client.ts";
 import { advanceReplay, endReplay, loadReplayFeed, loadReplaySession, placeMark, undoMark, type AdvanceTarget, type TapeParams } from "../desk/replay.ts";
 import { PRACTICE_COPY } from "../desk/freshness.ts";
 import { delayUntilNextTick, isSpeed, jumpMinutes, nextTo, type Speed } from "./clock.ts";
-import { applyAdvance, viewFromFeed, type ReplayView } from "./feedState.ts";
+import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
 import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } from "./markInput.ts";
 import type { EntryOrExit } from "./keys.ts";
 import { canUndoLast, lastMark } from "./marks.ts";
 import { canRequest, initialPlayer, playerReducer } from "./player.ts";
-import type { ReplayInterval, ReplaySession } from "./schemas.ts";
+import { createRequestQueue } from "./requestQueue.ts";
+import type { Paused, ReplayInterval, ReplaySession } from "./schemas.ts";
 import { problemMessage } from "./setup.ts";
 import { filterById, tapeQuery, type SizeFilterId } from "./tape.ts";
 import { etWallToUtcIso, ms } from "./time.ts";
@@ -33,6 +34,9 @@ export type ReplaySessionApi = {
   /** The live open trade, fresher than `session.open_trade`. */
   reload: () => void;
   dismissToast: () => void;
+  /** Swing only: the stop that paused the last advance (null otherwise). It stays until dismissed or the next advance. */
+  paused: Paused | null;
+  dismissPause: () => void;
   /** Shows a message in the toast slot (a key that is not possible now, for example). */
   notify: (tone: Toast["tone"], text: string) => void;
   togglePlay: () => void;
@@ -42,6 +46,8 @@ export type ReplaySessionApi = {
   jumpBy: (minutes: number) => void;
   jumpToTime: (hhmm: string) => void;
   jumpToEnd: () => void;
+  /** Moves a name that is behind the day clock up to it (02o-b2). */
+  catchUp: () => void;
   /** Resolves true when the server accepted the mark. */
   mark: (kind: EntryOrExit, draft: MarkDraft) => Promise<boolean>;
   stopNote: (price: string) => void;
@@ -72,7 +78,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   const filterRef = useRef(filterId);
   const intervalRef = useRef(interval);
   const busy = useRef(false);
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const [queue] = useState(createRequestQueue);
   const lastStart = useRef(0);
   const toastId = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -91,6 +97,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     toastTimer.current = setTimeout(() => setToast(null), DISMISS_MS);
   }, []);
   const dismissToast = useCallback(() => setToast(null), []);
+  const dismissPause = useCallback(() => setView((current) => (current ? withoutPause(current) : current)), []);
 
   const tape = useCallback((): TapeParams => {
     const query = tapeQuery(filterById(filterRef.current), viewRef.current?.tapeMeta?.bigPrintUsd ?? null);
@@ -107,10 +114,23 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const loaded = await loadReplaySession(id, { signal: controller.signal });
         const feed = await loadReplayFeed(id, { interval: loaded.spec.interval }, { signal: controller.signal });
         if (controller.signal.aborted) return;
+        let shown = viewFromFeed(feed, loaded.spec.interval);
+        let atEnd = feed.at_end || loaded.status === "ended";
+        if (loaded.thread?.mode === "swing" && loaded.status === "active") {
+          // The day clock is shared: a name left behind it is lifted to it by its next advance (and cannot be marked
+          // before). An advance to where it already is does exactly that, so a name opened from the strip or the board
+          // shows the clock the strip shows.
+          const delta = await advanceReplay(id, { to: feed.revealed_through }, { interval: loaded.spec.interval }, { signal: controller.signal }).catch(() => null);
+          if (controller.signal.aborted) return;
+          if (delta) {
+            shown = applyAdvance(shown, delta);
+            atEnd = atEnd || delta.at_end;
+          }
+        }
         setSession(loaded);
         setIntervalState(loaded.spec.interval);
-        setView(viewFromFeed(feed, loaded.spec.interval));
-        dispatch({ type: "loaded", atEnd: feed.at_end || loaded.status === "ended" });
+        setView(shown);
+        dispatch({ type: "loaded", atEnd });
       } catch {
         if (!controller.signal.aborted) setLoadError(true);
       }
@@ -122,25 +142,31 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     };
   }, [id, revision]);
 
-  /** Runs `task` after every earlier user action, counted as the one request in flight. Resolves with its result. */
-  const exec = useCallback(<T,>(task: () => Promise<T>): Promise<T | null> => {
-    const run = chain.current.then(async () => {
-      if (!alive.current) return null;
-      busy.current = true;
-      dispatch({ type: "request" });
-      try {
-        return await task();
-      } catch {
-        // Every task answers its own failures; this keeps a surprise from leaving the player stuck "busy".
-        dispatch({ type: "failed", message: PRACTICE_COPY.advanceError });
-        return null;
-      } finally {
-        busy.current = false;
-      }
-    });
-    chain.current = run.catch(() => undefined);
-    return run.catch(() => null);
-  }, []);
+  /**
+   * Runs `task` after every earlier user action, counted as the one request in flight. Resolves with its result.
+   * `press` (Step, Jump, Next signal): dropped when an advance ahead of it stopped at a crossed stop.
+   */
+  const exec = useCallback(
+    <T,>(task: () => Promise<T>, press = false): Promise<T | null> =>
+      queue.run(
+        async () => {
+          if (!alive.current) return null;
+          busy.current = true;
+          dispatch({ type: "request" });
+          try {
+            return await task();
+          } catch {
+            // Every task answers its own failures; this keeps a surprise from leaving the player stuck "busy".
+            dispatch({ type: "failed", message: PRACTICE_COPY.advanceError });
+            return null;
+          } finally {
+            busy.current = false;
+          }
+        },
+        { dropAfterPause: press },
+      ),
+    [queue],
+  );
 
   /** Moves the playhead. Failures: a 422 (for example no more signals) is a message; anything else stops playback. */
   const advance = useCallback(
@@ -150,7 +176,9 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const delta = await advanceReplay(id, target, tape());
         if (!alive.current) return false;
         setView((current) => (current ? applyAdvance(current, delta) : current));
-        dispatch({ type: "settled", atEnd: delta.at_end });
+        // A stop pause (swing) stops playback; no timer starts another request until she plays again, and no press queued behind this one runs.
+        if (delta.paused != null) queue.notePause();
+        dispatch({ type: "settled", atEnd: delta.at_end, paused: delta.paused != null });
         return true;
       } catch (error) {
         if (!alive.current) return false;
@@ -163,7 +191,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         return false;
       }
     },
-    [id, say, tape],
+    [id, say, tape, queue],
   );
 
   // Play: one request per wall-clock second, started only when none is in flight, so a slow answer stutters the
@@ -191,16 +219,16 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     if (isSpeed(next)) dispatch({ type: "speed", speed: next });
   }, []);
   const step = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "bar" }));
+    if (guard()) void exec(() => advance({ step: "bar" }), true);
   }, [exec, advance]);
   const nextSignal = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "next_signal" }));
+    if (guard()) void exec(() => advance({ step: "next_signal" }), true);
   }, [exec, advance]);
   const jumpBy = useCallback(
     (minutes: number) => {
       const current = viewRef.current;
       const target = sessionRef.current;
-      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(current.revealedThrough, minutes, target.window_end) }));
+      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(current.revealedThrough, minutes, target.window_end) }), true);
     },
     [exec, advance],
   );
@@ -209,13 +237,29 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       const target = sessionRef.current;
       const to = target ? etWallToUtcIso(target.spec.day, hhmm) : null;
       if (!target || to === null || !guard()) return;
-      void exec(() => advance({ to }));
+      void exec(() => advance({ to }), true);
     },
     [exec, advance],
   );
   const jumpToEnd = useCallback(() => {
     const target = sessionRef.current;
-    if (target && guard()) void exec(() => advance({ to: target.window_end }));
+    if (target && guard()) void exec(() => advance({ to: target.window_end }), true);
+  }, [exec, advance]);
+
+  /** Swing only: a mark moves a hold, so the day strip and the Daily chart's hold marker are read again (runs inside the one request in flight). */
+  const refreshSwing = useCallback(async () => {
+    if (id === null || sessionRef.current?.thread?.mode !== "swing") return;
+    try {
+      const feed = await loadReplayFeed(id, tape());
+      if (alive.current) setView((current) => (current ? applyFeedSwing(current, feed) : current));
+    } catch {
+      // The strip catches up on the next advance; a failed read here is not worth a message.
+    }
+  }, [id, tape]);
+
+  const catchUp = useCallback(() => {
+    const clock = viewRef.current?.dayClock;
+    if (clock && guard()) void exec(() => advance({ to: clock }));
   }, [exec, advance]);
 
   /** Sends a built mark; the server stamps it at the playhead and answers the new book. */
@@ -231,7 +275,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           const result = await placeMark(id, built.mark);
           if (!alive.current) return false;
           setSession((current) => (current ? { ...current, marks: [...current.marks, result.mark], open_trade: result.open_trade, journal: result.journal, thread: result.thread ?? current.thread } : current));
-          setView((current) => (current ? { ...current, openTrade: result.open_trade } : current));
+          setView((current) => (current ? withHoldMarker({ ...current, openTrade: result.open_trade }, result.hold ?? null, sessionRef.current?.spec.day ?? "") : current));
+          await refreshSwing();
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
           if (result.warning) say("info", result.warning); // priced off an old print: the price is accepted, the warning says so
           return true;
@@ -244,7 +289,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       });
       return accepted === true;
     },
-    [id, exec, say],
+    [id, exec, say, refreshSwing],
   );
   const mark = useCallback((kind: EntryOrExit, draft: MarkDraft) => send(markForAction(kind, draft)), [send]);
   const stopNote = useCallback((price: string) => void send(stopMark(price)), [send]);
@@ -270,7 +315,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         setSession((now) =>
           now ? { ...now, marks: now.marks.filter((item) => item.id !== last.id), open_trade: result.open_trade, journal: result.journal, thread: result.thread ?? now.thread } : now,
         );
-        setView((now) => (now ? { ...now, openTrade: result.open_trade } : now));
+        setView((now) => (now ? withHoldMarker({ ...now, openTrade: result.open_trade }, result.hold ?? null, sessionRef.current?.spec.day ?? "") : now));
+        await refreshSwing();
         dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
         say("info", PRACTICE_COPY.undone);
       } catch (error) {
@@ -279,7 +325,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         say("error", problemMessage(error, error instanceof DeskApiError && error.status === 409 ? PRACTICE_COPY.undoTooLate : PRACTICE_COPY.markError));
       }
     });
-  }, [id, exec, say]);
+  }, [id, exec, say, refreshSwing]);
 
   const end = useCallback(async (): Promise<ReplaySession | null> => {
     if (id === null) return null;
@@ -339,8 +385,9 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   return useMemo(
     () => ({
       session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
-      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, mark, stopNote, note, undo, end, setFilter, setInterval,
+      paused: view?.paused ?? null, dismissPause,
+      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, mark, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

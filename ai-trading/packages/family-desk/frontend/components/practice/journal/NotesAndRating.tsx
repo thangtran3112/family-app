@@ -13,6 +13,8 @@ export type NotesAndRatingProps = {
   saving: boolean;
   saved: boolean;
   onSave: (patch: { notes?: string | null; rating?: number | null }) => void;
+  /** Label of the notes box; "Session notes" in the session journal. */
+  notesLabel?: string;
 };
 
 /** Trimmed text, or null when nothing is left. */
@@ -22,7 +24,7 @@ const normalise = (text: string): string | null => {
 };
 
 /** Self-rating (1 to 5, click the selected one to clear) and the session notes. */
-export function NotesAndRating({ notes, rating, saving, saved, onSave }: NotesAndRatingProps) {
+export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabel = "Session notes" }: NotesAndRatingProps) {
   const id = useId();
   const [draft, setDraft] = useState(notes ?? "");
   const [synced, setSynced] = useState(notes);
@@ -60,7 +62,7 @@ export function NotesAndRating({ notes, rating, saving, saved, onSave }: NotesAn
         })}
       </div>
 
-      <label htmlFor={`${id}-notes`} className={styles.fieldLabel}>Session notes</label>
+      <label htmlFor={`${id}-notes`} className={styles.fieldLabel}>{notesLabel}</label>
       <textarea
         id={`${id}-notes`}
         className={styles.textarea}

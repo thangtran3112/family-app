@@ -11,13 +11,14 @@ the P/L used, and P/L is computed in `Decimal`, never in float. Every dollar fig
 `usd_sum`, so the order of the arithmetic cannot move a cent.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import pandas as pd
 
-from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS, Fire, Mark, Plan
+from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS, Fire, Mark, Plan, Span, unseen
 
 MINUTE = pd.Timedelta(minutes=1)
 ON_SIGNAL_BARS = 3  # an entry within this many display bars after an armed signal counts as "on a signal"
@@ -55,6 +56,9 @@ def usd_mean(values: list[float]) -> float | None:
         return None
     total = sum((_dec(v) for v in values), Decimal(0))
     return float((total / len(values)).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+NOT_ON_NAME = "you were on another name"
 
 
 @dataclass
@@ -249,9 +253,12 @@ def _totals(trades: list[Trade]) -> dict[str, Any]:
     }
 
 
-def _signals_vs_trades(fires: list[Fire], trades: list[Trade], bars: pd.DataFrame, window_end: pd.Timestamp):
+def _signals_vs_trades(
+    fires: list[Fire], trades: list[Trade], bars: pd.DataFrame, window_end: pd.Timestamp, away: Sequence[Span] = ()
+):
     """One row per fire. The 15/30-minute changes use the last closed minute at or before bar close + N minutes
-    and are null when that point is past the window end (nothing was replayed there)."""
+    and are null when that point is past the window end (nothing was replayed there). A fire inside a span she was on
+    another name is listed, and says so instead of "no trade"."""
     rows = []
     closed = bars[bars.index + MINUTE <= window_end]
     for fire in fires:
@@ -265,11 +272,12 @@ def _signals_vs_trades(fires: list[Fire], trades: list[Trade], bars: pd.DataFram
                 else None
             )
         entered = [t for t in trades if timedelta_ok(t.entry_at - fire.bar_close, pd.Timedelta(minutes=15))]
-        row["her"] = (
-            f"entered {round((entered[0].entry_at - fire.bar_close).total_seconds() / 60)} min later"
-            if entered
-            else "no trade"
-        )
+        if unseen(list(away), fire.bar_close):
+            row["her"] = NOT_ON_NAME
+        elif entered:
+            row["her"] = f"entered {round((entered[0].entry_at - fire.bar_close).total_seconds() / 60)} min later"
+        else:
+            row["her"] = "no trade"
         rows.append(row)
     return rows
 
@@ -305,14 +313,17 @@ def compute_journal(
     last_price: float | None,
     final: bool,
     day_trades: list[Trade] | None = None,
+    away: Sequence[Span] = (),
 ) -> dict[str, Any]:
     """The `JournalOut` dict. `bars`: 1-minute OHLC indexed by UTC bar start (only rows closed by `as_of` are
     read). `fires`: the released signals (all of them when `final`). `final` fills `signals_vs_trades`, which
     looks past the playhead; an open trade at `as_of` is marked at `last_price` and counted in the P/L series
-    but not in the totals."""
+    but not in the totals. `away`: the spans she was on another name; a signal that fired inside one was never in front
+    of her, so it does not count as "a signal" for the on-signal check (02o-b2)."""
     trades, open_now = assemble(marks)
     visible = bars[bars.index + MINUTE <= as_of]
-    checks = _checks(trades, plan, fires, visible, display_minutes, day_trades or [])
+    watched = [f for f in fires if not unseen(list(away), f.bar_close)]
+    checks = _checks(trades, plan, watched, visible, display_minutes, day_trades or [])
     applicable = [c for c in checks if c["applicable"]]
     score = round(100 * sum(c["passed"] for c in applicable) / len(applicable)) if applicable else None
     hint = None if score is not None else (HINT_NO_PLAN if not plan.any else HINT_NO_TRADES)
@@ -332,13 +343,13 @@ def compute_journal(
                 "stop_price": t.stop_price,
                 "on_signal": any(
                     timedelta_ok(t.entry_at - f.bar_close, pd.Timedelta(minutes=ON_SIGNAL_BARS * display_minutes))
-                    for f in fires
+                    for f in watched
                 ),
                 "exit_source": t.exit_source,
             }
             for t in trades
         ],
         "adherence": {"score_pct": score, "hint": hint, "checks": checks},
-        "signals_vs_trades": _signals_vs_trades(fires, trades, bars, window_end) if final else [],
+        "signals_vs_trades": _signals_vs_trades(fires, trades, bars, window_end, away) if final else [],
         "pnl_series": _pnl_series(trades, open_now if last_price is not None else None, visible, window_start, as_of),
     }

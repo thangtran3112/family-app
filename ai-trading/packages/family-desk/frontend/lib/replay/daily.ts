@@ -19,13 +19,13 @@ const StarKindSchema = z.enum(["traded", "starred"]);
 
 const PlanFilterSchema = z.object({ id: finite.int(), name: z.string() }) satisfies z.ZodType<components["schemas"]["PlanFilterOut"]>;
 
-const PlanCurrentSchema = z.object({
+export const PlanCurrentSchema = z.object({
   id: finite.int(),
   day_no: finite.int(),
   status: DayListStatusSchema,
 }) satisfies z.ZodType<components["schemas"]["PlanCurrentOut"]>;
 
-const PlanPrepSchema = z.object({
+export const PlanPrepSchema = z.object({
   state: z.enum(["running", "done"]),
   done: finite.int(),
   total: finite.int(),
@@ -38,7 +38,11 @@ export const PracticePlanSchema = z.object({
   thread_id: finite.int().nullable(),
   spec: PracticeBlockV1Schema,
   sessions: finite.int(),
+  /** The most names she can star and practice in a day (the plan's `maxSymbols`, else 5). */
+  max_symbols: finite.int(),
   days_opened: finite.int(),
+  /** Ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset` (D-047). */
+  day_offset: finite.int(),
   filters: z.array(PlanFilterSchema),
   current: PlanCurrentSchema.nullable(),
   next_day: z.iso.date().nullable(),
@@ -77,6 +81,14 @@ const ListFilterCountsSchema = z.object({
   matches_total: finite.int(),
 }) satisfies z.ZodType<components["schemas"]["ListFilterCountsOut"]>;
 
+/** Where the scanned names came from: the Desk's recording of that morning, or today's Desk set (02o-b2). */
+const UniverseMembershipSchema = z.object({
+  source: z.enum(["universe_days", "today"]),
+  recorded_size: finite.int().nullable(),
+  scanned_size: finite.int(),
+  note: z.string(),
+}) satisfies z.ZodType<components["schemas"]["UniverseMembershipOut"]>;
+
 const ListUniverseSchema = z.object({
   source: z.literal("desk"),
   size: finite.int(),
@@ -89,6 +101,8 @@ const ListUniverseSchema = z.object({
   filters: z.array(ListFilterCountsSchema),
   label: z.string(),
   footnote: z.string(),
+  /** Null for a list opened before 02o-b2. */
+  membership: UniverseMembershipSchema.nullable().optional(),
 }) satisfies z.ZodType<components["schemas"]["ListUniverseOut"]>;
 
 export const ListColumnSchema = z.object({ key: z.string(), label: z.string(), format: z.string() }) satisfies z.ZodType<
@@ -109,15 +123,40 @@ export const CandidateSchema = z.object({
   metrics: z.record(z.string(), metric),
 }) satisfies z.ZodType<components["schemas"]["CandidateOut"]>;
 
-const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
-
-const DaySessionSchema = z.object({ id: finite.int(), symbol: z.string(), status: SessionStatusSchema }) satisfies z.ZodType<
-  components["schemas"]["DaySessionOut"]
+/** A name a re-scan shows; `new_since_list` means the day list did not hold it (02o-b2). */
+const RescanCandidateSchema = CandidateSchema.extend({ new_since_list: z.boolean() }) satisfies z.ZodType<
+  components["schemas"]["RescanCandidateOut"]
 >;
+
+/** The latest re-scan of the day's filters, run at the day clock `as_of` on data through `data_through` (02o-b2). */
+const RescanSchema = z.object({
+  seq: finite.int(),
+  as_of: timestamp,
+  data_through: timestamp,
+  universe: ListUniverseSchema,
+  columns: z.array(ListColumnSchema),
+  candidates: z.array(RescanCandidateSchema),
+  new_count: finite.int(),
+  created_at: timestamp,
+}) satisfies z.ZodType<components["schemas"]["RescanOut"]>;
+
+export const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
+
+/** A name she has practiced today: the day strip's row (02o-b2). */
+export const DaySessionSchema = z.object({
+  id: finite.int(),
+  symbol: z.string(),
+  status: SessionStatusSchema,
+  revealed_through: timestamp,
+  /** Behind the day clock: its next advance catches it up, and it cannot be marked until then. */
+  behind_clock: z.boolean(),
+  /** The day holds one open trade at a time: close it before moving to another name. */
+  has_open_trade: z.boolean(),
+}) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
 
 // -- peek -----------------------------------------------------------------------------------------------------
 
-const PeekDailyBarSchema = z.object({ t: z.iso.date(), o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
+export const PeekDailyBarSchema = z.object({ t: z.iso.date(), o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
   components["schemas"]["PeekDailyBarOut"]
 >;
 
@@ -125,7 +164,7 @@ const PeekMinuteBarSchema = z.object({ t: timestamp, o: finite, h: finite, l: fi
   components["schemas"]["PeekMinuteBarOut"]
 >;
 
-const PeekLevelsSchema = z.object({
+export const PeekLevelsSchema = z.object({
   prior_high: metric.optional(),
   prior_low: metric.optional(),
   prior_close: metric.optional(),
@@ -249,6 +288,7 @@ export const DayListSchema = z.object({
   thread: ThreadBriefSchema.nullable(),
   warnings: z.array(z.string()),
   relist: RelistOfferSchema.nullable(),
+  rescan: RescanSchema.nullable(),
   peek: PeekSchema.nullable(),
   journal: DayJournalSchema.nullable(),
   review: ReviewSchema.nullable(),
@@ -259,12 +299,33 @@ export const DayListSchema = z.object({
   stamp: ReplayStampSchema,
 }) satisfies z.ZodType<components["schemas"]["DayListOut"]>;
 
+// -- the recorded universe (02o-b2) ----------------------------------------------------------------------------
+
+const UniverseDaySchema = z.object({
+  day: z.iso.date(),
+  recorded: z.boolean(),
+  size: finite.int().nullable(),
+  symbols: z.array(z.string()),
+  note: z.string(),
+}) satisfies z.ZodType<components["schemas"]["UniverseDayOut"]>;
+
+/** The `universe_days` read path: its coverage, the first day a new plan defaults to (null until 20 finished days are
+ *  recorded) with the reason, and with `?day=` that morning's membership. */
+export const UniverseDaysSchema = z.object({
+  coverage: z.object({ first_day: z.iso.date().nullable(), last_day: z.iso.date().nullable(), days: finite.int() }),
+  first_day_default: z.iso.date().nullable(),
+  first_day_note: z.string(),
+  day: UniverseDaySchema.nullable(),
+}) satisfies z.ZodType<components["schemas"]["UniverseDaysOut"]>;
+
+export type UniverseDays = z.infer<typeof UniverseDaysSchema>;
 export type DayListStatus = z.infer<typeof DayListStatusSchema>;
 export type PracticePlan = z.infer<typeof PracticePlanSchema>;
 export type OpenNext = z.infer<typeof OpenNextSchema>;
 export type DayList = z.infer<typeof DayListSchema>;
 export type ListColumn = z.infer<typeof ListColumnSchema>;
 export type Candidate = z.infer<typeof CandidateSchema>;
+export type Rescan = NonNullable<DayList["rescan"]>;
 export type Peek = z.infer<typeof PeekSchema>;
 export type DayReview = NonNullable<DayList["review"]>;
 export type ReviewRow = z.infer<typeof ReviewRowSchema>;

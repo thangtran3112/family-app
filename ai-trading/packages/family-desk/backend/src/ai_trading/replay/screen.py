@@ -391,10 +391,13 @@ def _empty_daily() -> pd.DataFrame:
     return pd.DataFrame({c: np.array([], dtype="float64") for c in (*_PRICE_COLUMNS, "volume")}, index=pd.Index([]))
 
 
-def asof_frames(history: History, store: BlobStore, symbol: str, days: list[date]) -> dict[date, pd.DataFrame | None]:
+def asof_frames(
+    history: History, store: BlobStore, symbol: str, days: list[date], split: pd.DataFrame | None = None
+) -> dict[date, pd.DataFrame | None]:
     """The rebased daily frame (through the session before each day) per day, from the blob cache. Missing days
     cost two requests in all: the raw daily range and the split-adjusted range. A day the symbol did not trade
-    is stored as an empty frame, so it is asked about once."""
+    is stored as an empty frame, so it is asked about once. `split` is a split-adjusted frame that already covers
+    every missing day (a swing thread holds one for its whole range): it saves the second request."""
     out: dict[date, pd.DataFrame | None] = {}
     missing = []
     for day in days:
@@ -406,7 +409,8 @@ def asof_frames(history: History, store: BlobStore, symbol: str, days: list[date
             out[day] = frame if len(frame) else None
     if missing:
         raw = history.preload_daily(store, symbol, missing)
-        split = history.split_daily(symbol, missing[0], missing[-1])
+        if split is None:
+            split = history.split_daily(symbol, missing[0], missing[-1])
         for day in missing:
             frame = rebase_split(split, raw[day], day) if len(raw[day]) else None
             out[day] = frame

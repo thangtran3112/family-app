@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "mode": "swing",
+  "startingBalance": 250000,
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes",
+    "maxLossUsd": 2500,
+    "maxTrades": 3
+  },
+  "swing": {
+    "firstDay": "2023-09-11",
+    "sessions": 23,
+    "hideDates": "no",
+    "universe": [
+      {
+        "symbol": "AAPL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "MSFT",
+        "source": "manual"
+      },
+      {
+        "symbol": "NVDA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMZN",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "GOOGL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "META",
+        "source": "manual"
+      },
+      {
+        "symbol": "TSLA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMD",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "AVGO",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "NFLX",
+        "source": "manual"
+      },
+      {
+        "symbol": "AK",
+        "source": "filter"
+      },
+      {
+        "symbol": "AL",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "AM",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "AN",
+        "source": "manual"
+      },
+      {
+        "symbol": "AO",
+        "source": "filter"
+      },
+      {
+        "symbol": "AP",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "AQ",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "AR",
+        "source": "manual"
+      },
+      {
+        "symbol": "BK",
+        "source": "filter"
+      },
+      {
+        "symbol": "BL",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "BM",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "BN",
+        "source": "manual"
+      },
+      {
+        "symbol": "BO",
+        "source": "filter"
+      },
+      {
+        "symbol": "BP",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "BQ",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "BR",
+        "source": "manual"
+      },
+      {
+        "symbol": "CK",
+        "source": "filter"
+      },
+      {
+        "symbol": "CL",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "CM",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "CN",
+        "source": "manual"
+      },
+      {
+        "symbol": "CO",
+        "source": "filter"
+      },
+      {
+        "symbol": "CP",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "CQ",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "CR",
+        "source": "manual"
+      },
+      {
+        "symbol": "DK",
+        "source": "filter"
+      },
+      {
+        "symbol": "DL",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "DM",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "DN",
+        "source": "manual"
+      },
+      {
+        "symbol": "DO",
+        "source": "filter"
+      },
+      {
+        "symbol": "DP",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "DQ",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "DR",
+        "source": "manual"
+      },
+      {
+        "symbol": "EK",
+        "source": "filter"
+      },
+      {
+        "symbol": "EL",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "EM",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "EN",
+        "source": "manual"
+      },
+      {
+        "symbol": "EO",
+        "source": "filter"
+      },
+      {
+        "symbol": "EP",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "EQ",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "ER",
+        "source": "manual"
+      }
+    ],
+    "interval": "5m",
+    "tape": "on",
+    "armed": [
+      {
+        "source": "alert_strategy",
+        "id": 1
+      },
+      {
+        "source": "filter",
+        "id": 2
+      },
+      {
+        "source": "alert_strategy",
+        "id": 3
+      },
+      {
+        "source": "filter",
+        "id": 4
+      },
+      {
+        "source": "filter",
+        "id": 5
+      }
+    ],
+    "maxOpenHolds": 5
+  }
+}

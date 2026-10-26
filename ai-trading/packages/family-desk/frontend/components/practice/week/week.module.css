@@ -1,0 +1,73 @@
+/* Weekly review (02p e1): screen frame, equity chart block, tables, the universe heat strip, notes and the closing button. Tokens only.
+   Colour never carries a meaning alone: a hold in the heat strip also says "Held" or "Focus", a loss also has its minus sign. 32 px controls, 24 px targets. */
+
+/* Screen frame */
+.screen { display: flex; min-width: 0; min-height: 0; flex-direction: column; font-variant-numeric: tabular-nums; }
+.header { display: flex; min-height: 44px; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
+.titleBlock { display: flex; min-width: 0; flex: 1 1 320px; flex-direction: column; gap: var(--space-1); }
+.titleRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.chip { display: inline-flex; min-height: 24px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
+.chipOpen { border-color: var(--color-amber); color: var(--color-amber); }
+.sub { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.center { display: flex; min-width: 0; flex-direction: column; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+
+/* Text and sections */
+.muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.hint { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.lead { margin: 0; font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
+.alert { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
+.section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.sectionHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.subTitle { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); }
+.lines { display: flex; margin: 0; padding: 0; flex-direction: column; gap: var(--space-1); list-style: none; font-size: var(--text-label); line-height: var(--line-label); }
+.banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); line-height: var(--line-label); }
+
+/* Controls */
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; text-decoration: none; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--color-raised); }
+.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+.primary { border-color: var(--color-amber); color: var(--color-amber); }
+.link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
+.link:hover { text-decoration: underline; }
+.button:focus-visible, .link:focus-visible, .summary:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+/* Signed money, R and points: the sign carries the meaning, the colour repeats it. Flat is muted. */
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.flat { color: var(--color-muted); }
+.amber { color: var(--color-amber); }
+
+/* Equity chart: balance and equity per close, this week shaded. */
+.chartBlock { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.legend { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1) var(--space-4); list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
+.legendItem { display: inline-flex; align-items: center; gap: var(--space-1); }
+.swatch { width: 14px; height: 2px; flex-shrink: 0; }
+.swatchBalance { background: #E5E5EA; }
+.swatchEquity { background: #FFB020; }
+.swatchWeek { width: 12px; height: 12px; border: 1px solid var(--color-hairline); background: var(--color-panel); }
+.details { font-size: var(--text-label); }
+.summary { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-muted); cursor: pointer; }
+
+/* Tables: the DenseTable cells; a day's link and a hold's symbol read as text with a role. */
+.cellStrong { font-weight: var(--weight-semibold); }
+.cellMuted { color: var(--color-muted); }
+
+/* Universe heat strip: the names best to worst; a hold has a solid amber edge and "Held", a focus name a dashed edge and "Focus". */
+.heat { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1); list-style: none; }
+.heatItem { display: inline-flex; min-height: 24px; align-items: center; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); font-size: var(--text-micro); white-space: nowrap; }
+.heatSymbol { font-weight: var(--weight-bold); }
+.heatTag { color: var(--color-amber); font-weight: var(--weight-semibold); }
+.heatHeld { border-color: var(--color-amber); background: var(--color-raised); }
+.heatFocus { border-style: dashed; border-color: var(--color-muted); }
+
+/* Adherence and notes sit side by side at 1440 and stack below. */
+.pair { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
+@media (max-width: 1279px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+.block { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.footer { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding-top: var(--space-3); }
+.status { margin: 0; color: var(--color-muted); font-size: var(--text-label); }

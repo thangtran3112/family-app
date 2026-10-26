@@ -9,17 +9,17 @@ armed strategy). A tape row is `[time, price, size, tick]`, oldest first.
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_serializer
 
-from ai_trading.api.schemas.common import Stamp
+from ai_trading.api.schemas.common import Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
 
 Interval = Literal["1m", "5m", "15m"]
-TapeFeed = Literal["sip", "iex"]
+TapeFeed = Literal["sip", "iex", "off"]  # "off": a swing thread's default, no tape is read (02p a4)
 SessionStatus = Literal["active", "ended"]
 ArmedSource = Literal["alert_strategy", "filter"]
 Bias = Literal["bullish", "bearish", "neutral"]
@@ -70,15 +70,120 @@ class MarkOut(BaseModel):
     source: Literal["her", "auto"]
 
 
-class OpenTradeOut(BaseModel):
+class OpenTradeOut(SwingOptional):
+    """The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
+    four last fields say how long it has been held and which price it is valued at; a day session leaves them out."""
+
+    swing_only: ClassVar[tuple[str, ...]] = ("opened_day_no", "days_held", "gap_usd", "price_basis")
+
     trade_no: int
     side: Side
     shares: int
     entry_price: FiniteFloat
     stop_price: FiniteFloat | None
-    last_price: FiniteFloat
+    last_price: FiniteFloat  # a swing hold is never null here: its prior close stands in before the first price
     unrealized_usd: FiniteFloat
     r: FiniteFloat | None  # unrealized R when a stop note exists
+    opened_day_no: int | None = None
+    days_held: int | None = None  # counts the day itself
+    gap_usd: FiniteFloat | None = None  # a carried hold's overnight gap so far, signed for its side
+    price_basis: Literal["prior_close", "last"] | None = None
+
+
+# -- swing session shapes (02p): holds, the stop pause, the day strip and the daily block ------------------------------
+
+
+class EarningsChipOut(BaseModel):
+    """An explicit report date and timing within the next ten sessions. Never a guess from a gap (02p a3 rule 9)."""
+
+    in_sessions: int  # 0 is the day itself
+    timing: Literal["before open", "after close"]
+
+
+class HoldOut(BaseModel):
+    """A practice hold as the screens read it. Days are numbers and weekdays, never dates. An open hold carries
+    `unrealized_usd`, a closed one `pnl_usd`; `price_basis` says which price an open one is valued at."""
+
+    id: int
+    symbol: str
+    side: Side
+    shares: int  # after any split since entry
+    entry_day_no: int
+    entry_weekday: Weekday
+    entry_price: FiniteFloat
+    days_held: int
+    stop_at_entry: FiniteFloat | None
+    stop_price: FiniteFloat | None
+    stop_hit: Literal["yes", "no"]  # the stop was crossed and the pause not yet answered
+    status: Literal["open", "closed"]
+    exit_day_no: int | None
+    exit_price: FiniteFloat | None
+    exit_source: Literal["her", "auto"] | None
+    last_close: FiniteFloat | None  # the last official close the hold was marked at, on its current share basis
+    price_basis: Literal["prior_close", "last"] | None
+    unrealized_usd: FiniteFloat | None
+    pnl_usd: FiniteFloat | None
+    r: FiniteFloat | None
+    gap_usd: FiniteFloat | None
+    earnings: EarningsChipOut | None
+    split_note: str | None
+
+
+class PausedOut(BaseModel):
+    """A stop was crossed: the playhead stopped at the close of the first one-minute bar that did (02p b5). It is a
+    pause, never an exit. `also` lists every other hold crossed in the same minute."""
+
+    symbol: str
+    stop_price: FiniteFloat
+    at: datetime
+    price: FiniteFloat
+    kind: Literal["cross", "gap"]
+    also: list[str]
+
+
+class StripHoldOut(BaseModel):
+    side: Side
+    shares: int
+    unrealized_usd: FiniteFloat
+    stop_price: FiniteFloat | None
+    stop_distance_pct: FiniteFloat | None  # positive while the price is on the safe side of the stop
+    stopped: Literal["yes", "no"]
+
+
+class StripRowOut(BaseModel):
+    """A row of the day strip: every open hold, then the focus names, at most ten. `last` is the last revealed regular
+    session price at the DAY CLOCK; `chg_pct` is against the restated prior close."""
+
+    symbol: str
+    source: Literal["hold", "focus"]
+    last: FiniteFloat | None
+    chg_pct: FiniteFloat | None
+    hold: StripHoldOut | None
+
+
+class DailyBarOut(BaseModel):
+    t: date
+    o: FiniteFloat
+    h: FiniteFloat
+    l: FiniteFloat  # noqa: E741 -- the wire name
+    c: FiniteFloat
+    v: FiniteFloat
+
+
+class DailyHoldMarkerOut(BaseModel):
+    entry_t: date
+    side: Side
+    entry_price: FiniteFloat
+    stop_price: FiniteFloat | None
+
+
+class DailyBlockOut(BaseModel):
+    """The Daily chart: the rebased bars through the session before the day (never the day's own), the forming candle
+    built from revealed one-minute bars, and this name's open hold for the entry marker and the stop line."""
+
+    bars: list[DailyBarOut]
+    forming: DailyBarOut | None
+    holds: list[DailyHoldMarkerOut]
 
 
 class JournalTotalsOut(BaseModel):
@@ -172,6 +277,8 @@ class ReplaySessionOut(BaseModel):
     window_start: datetime
     window_end: datetime
     revealed_through: datetime
+    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    behind_clock: bool  # this name is behind the day clock: its next advance catches it up; no marks until then
     tape_feed: TapeFeed
     armed: list[ArmedOut]
     marks: list[MarkOut]
@@ -285,6 +392,7 @@ class ReplaySignalOut(BaseModel):
     bar_close: datetime
     close: FiniteFloat
     evidence: dict[str, FiniteFloat]
+    seen: bool  # false: it fired while she was on another name, so it is on the chart but not scored
 
 
 class ReplayLevelsOut(BaseModel):
@@ -301,12 +409,16 @@ class LastPrintOut(BaseModel):
     age_s: int  # seconds from this print to the playhead; a mark priced off an old print carries a warning
 
 
-class AdvanceOut(BaseModel):
+class AdvanceOut(SwingOptional):
     """What the playhead revealed in `(previous, revealed_through]`: display-interval bars that closed inside
     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
     and the levels, last print and open trade at the new playhead."""
 
+    swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming")
+
     revealed_through: datetime
+    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    behind_clock: bool  # this name's playhead is behind the day clock (the feed of a name she left)
     at_end: bool
     bars: list[ReplayBarOut]
     forming: FormingBarOut | None
@@ -317,6 +429,10 @@ class AdvanceOut(BaseModel):
     quiet_s: int | None  # seconds with no eligible print, once that passes a minute: a halt looks like this
     open_trade: OpenTradeOut | None
     stamp: Stamp
+    # swing sessions only (02p); left out of a day session's JSON
+    paused: PausedOut | None = None
+    strip: list[StripRowOut] | None = None
+    daily_forming: DailyBarOut | None = None
 
 
 class FeedOut(AdvanceOut):
@@ -324,26 +440,35 @@ class FeedOut(AdvanceOut):
     sessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);
     `signals` is every released signal (the whole list after `end`)."""
 
+    swing_only: ClassVar[tuple[str, ...]] = (*AdvanceOut.swing_only, "daily")
+
     interval: Interval
     window_start: datetime  # where the revealed window starts inside `bars`
+    daily: DailyBlockOut | None = None  # a swing session only
 
 
 # -- marks --------------------------------------------------------------------------------------------------
 
 
-class MarkResultOut(BaseModel):
+class MarkResultOut(SwingOptional):
+    swing_only: ClassVar[tuple[str, ...]] = ("hold",)
+
     mark: MarkOut
     open_trade: OpenTradeOut | None
     journal: JournalOut
     warning: str | None  # set when the mark was priced off a print older than 30 seconds
     thread: ThreadBriefOut | None = None  # an exit mark books its P/L: the balance after it
+    hold: HoldOut | None = None  # a swing session: the hold this mark opened, changed or closed
 
 
-class MarkUndoOut(BaseModel):
+class MarkUndoOut(SwingOptional):
+    swing_only: ClassVar[tuple[str, ...]] = ("hold",)
+
     removed_mark_id: int
     open_trade: OpenTradeOut | None
     journal: JournalOut
     thread: ThreadBriefOut | None = None  # undoing an exit takes its P/L back out of the balance
+    hold: HoldOut | None = None  # a swing session: the hold after the undo (null when an entry was undone)
 
 
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
@@ -379,7 +504,9 @@ class PracticePlanOut(BaseModel):
     thread_id: int | None  # the practice thread this plan's days book into
     spec: PracticeBlockV1
     sessions: int
+    max_symbols: int  # the most names she can star and practise in a day (the plan's `maxSymbols`, else 5)
     days_opened: int
+    day_offset: int  # ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset`
     filters: list[PlanFilterOut]
     current: PlanCurrentOut | None
     next_day: date | None
@@ -429,6 +556,16 @@ class ListFilterCountsOut(BaseModel):
     matches_total: int
 
 
+class UniverseMembershipOut(BaseModel):
+    """Where the scanned names came from (02o-b2): the symbols the Desk recorded for that morning (`universe_days`), or
+    today's Desk set for a day before the recording began. `note` says so in plain words."""
+
+    source: Literal["universe_days", "today"]
+    recorded_size: int | None  # symbols the Desk recorded that morning; null when no pass recorded it
+    scanned_size: int  # the ones the list scanned (the recorded names her plan prepared)
+    note: str
+
+
 class ListUniverseOut(BaseModel):
     """What was scanned. `label` and `footnote` state the universe plainly; show them beside any score."""
 
@@ -443,6 +580,7 @@ class ListUniverseOut(BaseModel):
     filters: list[ListFilterCountsOut]
     label: str
     footnote: str
+    membership: UniverseMembershipOut | None = None  # null for a list opened before 02o-b2
 
 
 class ListColumnOut(BaseModel):
@@ -467,15 +605,40 @@ class CandidateOut(BaseModel):
     metrics: dict[str, FiniteFloat | None]
 
 
+class RescanCandidateOut(CandidateOut):
+    """A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised)."""
+
+    new_since_list: bool
+
+
+class RescanOut(BaseModel):
+    """The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.
+    It is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans."""
+
+    seq: int
+    as_of: datetime
+    data_through: datetime
+    universe: ListUniverseOut
+    columns: list[ListColumnOut]
+    candidates: list[RescanCandidateOut]
+    new_count: int
+    created_at: datetime
+
+
 class StarOut(BaseModel):
     symbol: str
     starred_clock: datetime  # the day clock when she starred it (the list time before the day starts)
 
 
 class DaySessionOut(BaseModel):
+    """A name she has practised today: the day strip's row."""
+
     id: int
     symbol: str
     status: SessionStatus
+    revealed_through: datetime
+    behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
+    has_open_trade: bool  # the day holds one open trade at a time: close it before moving to another name
 
 
 class PeekDailyBarOut(BaseModel):
@@ -631,6 +794,7 @@ class DayListOut(BaseModel):
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]
     relist: RelistOfferOut | None
+    rescan: RescanOut | None  # the latest re-scan at the day clock; null until she runs one
     peek: PeekOut | None
     journal: DayJournalOut | None
     review: ReviewOut | None
@@ -658,3 +822,32 @@ class DayRelistIn(BaseModel):
 
 class DaySessionIn(BaseModel):
     symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")
+
+
+# -- the recorded universe (02o-b2) ----------------------------------------------------------------------------
+
+
+class UniverseCoverageOut(BaseModel):
+    first_day: date | None  # the first morning a premarket pass recorded the Desk's universe
+    last_day: date | None
+    days: int
+
+
+class UniverseDayOut(BaseModel):
+    """One morning's recorded membership. `recorded` false: no pass wrote it, so that day's list scans today's set."""
+
+    day: date
+    recorded: bool
+    size: int | None
+    symbols: list[str]
+    note: str
+
+
+class UniverseDaysOut(BaseModel):
+    """The `universe_days` read path: its coverage, the first day a new plan should default to (null until 20 finished
+    days have been recorded), and with `?day=` that morning's membership."""
+
+    coverage: UniverseCoverageOut
+    first_day_default: date | None
+    first_day_note: str
+    day: UniverseDayOut | None

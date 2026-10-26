@@ -171,3 +171,12 @@ export function replayTickLabel(time: Time, tickType: number, hideDates: boolean
   if (hideDates || typeof time === "object") return "";
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(new Date(typeof time === "number" ? time * 1000 : time));
 }
+
+/**
+ * The "Source time" cell of a chart's data table. Dates hidden: the caller's label for the row when it has one ("D-3",
+ * "Day 6"; a stand-in timeline's own clock time says nothing), else the time of day.
+ */
+export function sourceTimeLabel(t: string, index: number, hideDates: boolean, rowLabels?: readonly string[]): string {
+  if (!hideDates) return t;
+  return rowLabels?.[index] ?? formatChartClock(Math.floor(Date.parse(t) / 1000) as UTCTimestamp);
+}

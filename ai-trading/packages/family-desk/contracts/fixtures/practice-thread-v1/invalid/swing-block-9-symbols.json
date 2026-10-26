@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "id": 5,
+  "mode": "swing",
+  "startingBalance": 250000,
+  "status": "active",
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes",
+    "maxLossUsd": 2500,
+    "maxTrades": 3
+  },
+  "swing": {
+    "firstDay": "2024-03-04",
+    "sessions": 15,
+    "hideDates": "yes",
+    "universe": [
+      {
+        "symbol": "AAPL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "MSFT",
+        "source": "manual"
+      },
+      {
+        "symbol": "NVDA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMZN",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "GOOGL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "META",
+        "source": "manual"
+      },
+      {
+        "symbol": "TSLA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMD",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "AVGO",
+        "source": "watchlist"
+      }
+    ],
+    "interval": "15m",
+    "tape": "off",
+    "armed": [],
+    "maxOpenHolds": 3,
+    "riskPerHoldUsd": 500
+  },
+  "createdAt": "2026-10-24T14:00:00Z",
+  "stats": {
+    "balance": 250800,
+    "daysPracticed": 2,
+    "daysSkipped": 1,
+    "wins": 1,
+    "losses": 1,
+    "winRate": 0.5,
+    "avgWinUsd": 1200,
+    "avgLossUsd": -400,
+    "bestDayUsd": 1200,
+    "worstDayUsd": -400,
+    "adherenceFirstPct": 75,
+    "adherenceLastPct": 90
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": 13,
+  "threadId": 2,
+  "holdId": "4",
+  "symbol": "NVDA",
+  "day": "2026-10-27",
+  "side": "long",
+  "shares": 40,
+  "entryPrice": 118.2,
+  "exitPrice": 124.9,
+  "pnlUsd": 268,
+  "r": 1.2,
+  "realizedAt": "2026-10-27T20:00:00Z"
+}

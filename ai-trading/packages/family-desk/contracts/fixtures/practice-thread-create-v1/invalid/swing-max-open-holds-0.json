@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "mode": "swing",
+  "startingBalance": 250000,
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes",
+    "maxLossUsd": 2500,
+    "maxTrades": 3
+  },
+  "swing": {
+    "firstDay": "2024-03-04",
+    "sessions": 15,
+    "hideDates": "yes",
+    "universe": [
+      {
+        "symbol": "AAPL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "MSFT",
+        "source": "manual"
+      },
+      {
+        "symbol": "NVDA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMZN",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "GOOGL",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "META",
+        "source": "manual"
+      },
+      {
+        "symbol": "TSLA",
+        "source": "filter"
+      },
+      {
+        "symbol": "AMD",
+        "source": "liquidity"
+      },
+      {
+        "symbol": "AVGO",
+        "source": "watchlist"
+      },
+      {
+        "symbol": "NFLX",
+        "source": "manual"
+      }
+    ],
+    "interval": "15m",
+    "tape": "off",
+    "armed": [],
+    "maxOpenHolds": 0,
+    "riskPerHoldUsd": 500
+  }
+}

@@ -11,7 +11,7 @@ import {
   type Tone,
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatUsd } from "./journalView.ts";
 import type { ThreadPlan } from "./threads.ts";
 
@@ -20,14 +20,37 @@ import type { ThreadPlan } from "./threads.ts";
 
 export const MAX_STARS = 5;
 
+/** "name" or "names" for a count. */
+export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
+
+/** The most names the plan lets her star and practise in a day (`maxSymbols`; the server sends the effective cap). */
+export const nameCap = (plan: Pick<PracticePlan, "max_symbols">): number => plan.max_symbols;
+
+/** "2 of 3 names practiced today". */
+export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string {
+  const max = nameCap(list.plan);
+  return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
+}
+
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
 
 const dayName = (weekday: string, day: string | null, hidden: boolean): string => (hidden || day === null ? weekday : formatEtDay(day));
 
+/** A day's number in its thread (D-047): a plan counts its own days from 1, and a plan that replaced another comes after the
+ *  days the thread had already ended. This is the number the journal gives the same day (`n`). */
+export const threadDayNo = (plan: Pick<PracticePlan, "day_offset">, planDayNo: number): number => planDayNo + plan.day_offset;
+
+/** "Day 7 of 20", or "Day 7 · plan day 2 of 5" when an earlier plan's days came first: one number for the day on every screen. */
+export function dayNumberText(plan: Pick<PracticePlan, "day_offset" | "sessions">, planDayNo: number): string {
+  return plan.day_offset === 0
+    ? practiceText("planDay", { day: planDayNo, of: plan.sessions })
+    : practiceText("planDayInThread", { day: threadDayNo(plan, planDayNo), planDay: planDayNo, of: plan.sessions });
+}
+
 /** "Day 7 of 20 · Tue", or "Day 7 of 20 · Tue 2026-03-03" with dates shown. */
-export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day">, hidden: boolean): string {
-  return `${practiceText("planDay", { day: list.day_no, of: list.of })} · ${dayName(list.weekday, list.day, hidden)}`;
+export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }, hidden: boolean): string {
+  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day, hidden)}`;
 }
 
 /** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30" (kept whole for the plain-text reads). */
@@ -57,8 +80,10 @@ export function listBuiltText(list: Pick<DayList, "list_at" | "data_through">): 
 /** The Desk universe is capped at this many names by dollar volume (the backend's `MAX_UNIVERSE`). */
 export const UNIVERSE_CAP = 250;
 
-/** P7's universe footnote with the list's own size, then whatever else the server said (a watchlist scope, a cap). */
-export function universeNote(universe: Pick<DayList["universe"], "size" | "label" | "footnote">): string {
+/** P7's universe footnote with the list's own size, then whatever else the server said (a watchlist scope, a cap); the recorded morning's own note when the Desk recorded it. */
+export function universeNote(universe: Pick<DayList["universe"], "size" | "label" | "footnote" | "membership">): string {
+  // A day with a recorded morning (02o-b2) says so in the server's own words; the line about today's set is for the days before the recording.
+  if (universe.membership?.source === "universe_days") return universe.footnote;
   const extra = (universe.footnote.startsWith(universe.label) ? universe.footnote.slice(universe.label.length) : "").replace(/^ · /, "").trim();
   const base = practiceText("dayUniverse", { max: UNIVERSE_CAP, size: universe.size });
   return extra ? `${base} ${extra.charAt(0).toUpperCase()}${extra.slice(1)}.` : base;
@@ -83,14 +108,15 @@ export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOn
 
 export type LadderRow = { n: number; weekday: string | null; state: "ended" | "open" | "opens_after" | "locked"; detail: string };
 
-/** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked. */
-export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">): LadderRow[] {
+/** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked.
+ *  `n` is the plan's own count; `offset` (the plan's `day_offset`) turns it into the thread's number for the labels (D-047). */
+export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">, offset = 0): LadderRow[] {
   const ended = list.status === "ended";
   return Array.from({ length: list.of }, (_, index): LadderRow => {
     const n = index + 1;
     if (n < list.day_no || (n === list.day_no && ended)) return { n, weekday: n === list.day_no ? list.weekday : null, state: "ended", detail: PRACTICE_COPY.dayLadderEnded };
     if (n === list.day_no) return { n, weekday: list.weekday, state: "open", detail: PRACTICE_COPY.dayLadderOpen };
-    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no }) };
+    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no + offset }) };
     return { n, weekday: null, state: "locked", detail: PRACTICE_COPY.dayLadderLocked };
   });
 }
@@ -120,7 +146,7 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   if (current !== null && current.status !== "ended") {
     // A listed day has not been practiced yet; only a practicing one is "in progress" (D-035).
     return {
-      headline: practiceText(current.status === "practicing" ? "planInProgress" : "planListed", { day: current.day_no, of: plan.sessions }),
+      headline: `${dayNumberText(plan, current.day_no)} · ${PRACTICE_COPY[current.status === "practicing" ? "planStateInProgress" : "planStateListed"]}`,
       detail: failed,
       action: "continue",
     };
@@ -134,9 +160,9 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   }
   const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day, hidden) })}`;
   // The day just ended is said as done, and Continue opens the next one: the same list the review's "Next day" opens.
-  const done = current === null ? null : practiceText("planDayDone", { day: current.day_no });
+  const done = current === null ? null : practiceText("planDayDone", { day: threadDayNo(plan, current.day_no) });
   return {
-    headline: `${practiceText("planDay", { day: plan.next_day_no ?? plan.days_opened + 1, of: plan.sessions })}${next}`,
+    headline: `${dayNumberText(plan, plan.next_day_no ?? plan.days_opened + 1)}${next}`,
     detail: [done, failed].filter(Boolean).join(" · ") || null,
     action: plan.days_opened === 0 ? "start" : "continue",
   };
@@ -227,11 +253,63 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a sixth name is refused. */
-export function toggledStars(watch: readonly { symbol: string }[], symbol: string): string[] | null {
+/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most five). */
+export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
   const symbols = watch.map((star) => star.symbol);
   if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
-  return symbols.length >= MAX_STARS ? null : [...symbols, symbol];
+  return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
+}
+
+/** The message for a refused star: the plain 5-name line, or the plan's own cap. */
+export function starsFullText(cap: number): string {
+  return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
+}
+
+export type StripRow = {
+  symbol: string;
+  /** The session to resume; null for a starred name she has not opened yet. */
+  sessionId: number | null;
+  starred: boolean;
+  behind: boolean;
+  holding: boolean;
+};
+
+/** The day's names: every one she has opened, then the starred ones she has not. `from` is the name she is on and its
+ *  playhead: another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { symbol: string; playhead: string }): StripRow[] {
+  const starred = new Set(list.watch.map((star) => star.symbol));
+  const opened = list.sessions.map((session): StripRow => ({
+    symbol: session.symbol,
+    sessionId: session.id,
+    starred: starred.has(session.symbol),
+    behind:
+      session.behind_clock ||
+      (from !== undefined && session.symbol !== from.symbol && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
+    holding: session.has_open_trade,
+  }));
+  const open = new Set(opened.map((row) => row.symbol));
+  const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
+  return [...opened, ...rest];
+}
+
+// ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
+
+/** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */
+export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): boolean =>
+  list.status !== "ended" && list.clock !== null && Date.parse(list.clock) >= Date.parse(list.list_at);
+
+/** "Scan 2 · run at 10:00 AM ET · data through 9:45 AM": the clock it ran at and the time its data stops. */
+export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
+  practiceText("dayRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
+
+/** "2 of 2 matched · 1 new since your list". */
+export const rescanCounts = (scan: Pick<Rescan, "universe" | "new_count">): string =>
+  practiceText("dayRescanCounts", { shown: scan.universe.shown, matched: scan.universe.matches_total, fresh: scan.new_count });
+
+/** The day clock has moved since the scan ran: the scan is older than the screen's clock. */
+export function rescanStaleText(list: Pick<DayList, "clock" | "rescan">): string | null {
+  if (list.rescan === null || list.clock === null || Date.parse(list.clock) <= Date.parse(list.rescan.as_of)) return null;
+  return practiceText("dayRescanStale", { clock: formatEtTimeZone(list.clock) });
 }
 
 export function listWarning(list: Pick<DayList, "warnings">): string | null {
@@ -335,3 +413,6 @@ export function peekDailyBars(bars: readonly PeekDaily[], hidden: boolean): Peek
   const days = syntheticDays(bars.length);
   return bars.map((bar, index) => ({ ...bar, t: days[index]! }));
 }
+
+/** A hidden Peek chart's row labels for a screen reader: "D-3", "D-2", "D-1" (every bar is before the day; the last is the prior close). */
+export const peekOffsets = (count: number): string[] => Array.from({ length: count }, (_, index) => `D-${count - index}`);

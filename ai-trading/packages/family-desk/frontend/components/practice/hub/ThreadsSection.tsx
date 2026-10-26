@@ -1,33 +1,37 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { loadDaily, loadThread, loadThreads } from "@/lib/desk/replay";
+import { loadDaily, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { activeThreads, HUB_SWING_COPY, openModes } from "@/lib/replay/hubSwing";
 import type { ThreadSummary } from "@/lib/replay/threads";
-import { threadName } from "@/lib/replay/threadView";
+import { threadModeLabel, threadName } from "@/lib/replay/threadView";
 import { ClosedThreadCard, ThreadCard } from "./ThreadCard";
 import { NewThreadForm } from "./NewThreadForm";
+import { SwingThreadCard } from "./SwingThreadCard";
 import styles from "./hub.module.css";
 
-/** "Your practice threads" (02r): her pretend accounts. The selected thread's card on the left; on the right the New
- *  thread form: live with no active thread, disabled with a note while one is (the server allows one active day thread at a time). */
+/** "Your practice threads" (02r, 02p): her pretend accounts. The server allows one active thread per mode, so a day
+ *  thread's card and a swing thread's card sit side by side; the New thread form follows while a mode is free. A closed
+ *  thread is picked from the switcher and shown beside them (or alone when none is active). */
 export function ThreadsSection({ revision, onChanged }: { revision?: number; onChanged: () => void }) {
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   const daily = useDeskQuery("replay-daily-for-threads", (signal) => loadDaily({ signal }), { revision });
   const [pickedId, setPickedId] = useState<number | null>(null);
 
   const list: ThreadSummary[] = threads.data ?? [];
-  const active = list.find((row) => row.thread.status === "active") ?? null;
-  // The card's TODAY row falls back to the last ended day (D-030), which only the thread's day series holds.
-  const activeId = active?.thread.id ?? null;
-  const detail = useDeskQuery(`replay-thread-days:${activeId}`, (signal) => loadThread(activeId ?? 0, { signal }), { enabled: activeId !== null, revision });
-  const lastDay = detail.data?.daily.at(-1) ?? null;
-  const selected = list.find((row) => row.thread.id === pickedId) ?? active ?? list[0] ?? null;
-  // A plan opens days in its own thread only: a plan bound to a closed thread is not offered here.
+  const active = activeThreads(list);
+  const open = openModes(active);
+  const actives = [active.day, active.swing].filter((row): row is ThreadSummary => row !== null);
+  const closed = list.filter((row) => row.thread.status === "closed");
+  const picked = closed.find((row) => row.thread.id === pickedId) ?? null;
+  const cards = actives.length > 0 ? (picked ? [...actives, picked] : actives) : [picked ?? list[0]].filter((row): row is ThreadSummary => row !== undefined);
+  // A plan opens days in its own thread only: a plan bound to a closed thread (or to the swing thread) is not offered here.
   const plan = daily.data?.plan ?? null;
-  const planOpen = plan !== null && !plan.finished && active !== null && plan.thread_id === active.thread.id;
+  const planOpen = plan !== null && !plan.finished && active.day !== null && plan.thread_id === active.day.thread.id;
 
   function focusNewThread() {
     document.getElementById("thread-balance")?.focus();
@@ -39,36 +43,53 @@ export function ThreadsSection({ revision, onChanged }: { revision?: number; onC
         <h2 id="threads-title" className={styles.sectionTitle}>{PRACTICE_COPY.threadsTitle}</h2>
         <p className={styles.hint}>{PRACTICE_COPY.threadsHint}</p>
       </div>
-      {threads.loading || detail.loading ? (
+      {threads.loading ? (
         <LoadingBlock label={PRACTICE_COPY.threadsLoading} height={180} />
       ) : threads.data === null ? (
         <ErrorBlock message={PRACTICE_COPY.threadsLoadError} onRetry={threads.refresh} />
       ) : (
         <>
-          {list.length > 1 && (
+          {closed.length > 0 && list.length > 1 && (
             <div role="group" aria-label={PRACTICE_COPY.threadSwitcher} className={`${styles.segmented} ${styles.threadSwitch}`}>
-              {list.map((row) => (
+              {closed.map((row) => (
                 <button
                   key={row.thread.id}
                   type="button"
                   className={styles.segment}
-                  aria-pressed={row.thread.id === selected?.thread.id}
-                  onClick={() => setPickedId(row.thread.id)}
+                  aria-pressed={cards.some((card) => card.thread.id === row.thread.id)}
+                  onClick={() => setPickedId(pickedId === row.thread.id && actives.length > 0 ? null : row.thread.id)}
                 >
-                  {`${threadName(row.thread)} · ${row.thread.status === "active" ? PRACTICE_COPY.threadActive : PRACTICE_COPY.threadClosedBadge}`}
+                  {`${threadName(row.thread)} · ${threadModeLabel(row.thread.mode)} · ${PRACTICE_COPY.threadClosedBadge}`}
                 </button>
               ))}
             </div>
           )}
           <div className={styles.threadGrid}>
-            {selected === null ? (
-              <p className={styles.threadEmpty}>{PRACTICE_COPY.threadNone}</p>
-            ) : selected.thread.status === "active" ? (
-              <ThreadCard summary={selected} lastDay={lastDay} planOpen={planOpen} onChanged={onChanged} />
-            ) : (
-              <ClosedThreadCard thread={selected.thread} canStartNew={active === null} onStartNew={focusNewThread} />
+            {cards.length === 0 && <p className={styles.threadEmpty}>{PRACTICE_COPY.threadNone}</p>}
+            {cards.map((row) =>
+              row.thread.status === "closed" ? (
+                <ClosedThreadCard key={row.thread.id} thread={row.thread} canStartNew={open.day || open.swing} onStartNew={focusNewThread} />
+              ) : row.thread.mode === "swing" ? (
+                <SwingThreadCard key={row.thread.id} summary={row} onChanged={onChanged} />
+              ) : (
+                <ThreadCard key={row.thread.id} summary={row} planOpen={planOpen} onChanged={onChanged} />
+              ),
             )}
-            <NewThreadForm active={active?.thread ?? null} onCreated={onChanged} />
+            {open.day || open.swing ? (
+              <NewThreadForm key={`${open.day}-${open.swing}`} open={open} wide={cards.length >= 2} onCreated={onChanged} />
+            ) : (
+              <div className={styles.threadPanel}>
+                <h3 className={styles.threadTitle}>{PRACTICE_COPY.threadNewTitle}</h3>
+                <p className={styles.muted}>{HUB_SWING_COPY.bothActive}</p>
+                <div className={styles.inline}>
+                  {actives.map((row) => (
+                    <Link key={row.thread.id} href={`/practice/journal?thread=${row.thread.id}`} className={styles.threadLink}>
+                      {`${threadModeLabel(row.thread.mode)} · ${PRACTICE_COPY.threadJournal}`}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

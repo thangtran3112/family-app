@@ -7,17 +7,19 @@ import styles from "./thread.module.css";
 
 /** The risk plan of a practice thread (02r, D-007): stop on every entry, trade only on a signal, max loss, max trades and a
  *  note. Shared by the hub's New thread form and the journal's Edit plan form; the parent owns the draft. `idPrefix` keeps
- *  the ids unique when two forms are on screen. */
+ *  the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and max trades as weekly. */
 export function ThreadPlanFields({
   draft,
   onDraft,
   problems,
   idPrefix,
+  perWeek = false,
 }: {
   draft: ThreadDraft;
   onDraft: (draft: ThreadDraft) => void;
   problems: ThreadProblems;
   idPrefix: string;
+  perWeek?: boolean;
 }) {
   const id = (name: string) => `${idPrefix}-${name}`;
   return (
@@ -27,7 +29,7 @@ export function ThreadPlanFields({
         <YesNo id={id("signal")} label={PRACTICE_COPY.threadSignalOnly} value={draft.tradeOnlyOnSignal} error={problems.tradeOnlyOnSignal} onChange={(tradeOnlyOnSignal) => onDraft({ ...draft, tradeOnlyOnSignal })} />
       </div>
       <div className={styles.row}>
-        <Field id={id("max-loss")} label={PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
+        <Field id={id("max-loss")} label={perWeek ? PRACTICE_COPY.swingMaxLossWeek : PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
           <input
             id={id("max-loss")}
             type="number"
@@ -43,7 +45,7 @@ export function ThreadPlanFields({
             onChange={(event) => onDraft({ ...draft, maxLossUsd: event.target.value })}
           />
         </Field>
-        <Field id={id("max-trades")} label={PRACTICE_COPY.threadMaxTrades} error={problems.maxTrades}>
+        <Field id={id("max-trades")} label={perWeek ? PRACTICE_COPY.swingMaxTradesWeek : PRACTICE_COPY.threadMaxTrades} error={problems.maxTrades}>
           <input
             id={id("max-trades")}
             type="number"
@@ -60,6 +62,7 @@ export function ThreadPlanFields({
           />
         </Field>
       </div>
+      {perWeek && <p className={styles.hint}>{PRACTICE_COPY.swingPerWeekNote}</p>}
       <Field id={id("note")} label={`${PRACTICE_COPY.threadPlanNote} · 500 characters`} error={problems.planNote} wide>
         <textarea
           id={id("note")}

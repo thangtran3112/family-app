@@ -10,6 +10,7 @@ from safety import e2e_url
 from seeded_source import data_sources
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from swing_services import replay_services
 
 from ai_trading.api import quotes
 from ai_trading.api.main import app
@@ -69,12 +70,15 @@ async def _e2e_lifespan(application: FastAPI):
     missing = object()
     previous = {
         name: getattr(application.state, name, missing)
-        for name in ("session_factory", "health_engine", "data_sources", "e2e_engine")
+        for name in ("session_factory", "health_engine", "data_sources", "e2e_engine", "replay_services")
     }
     application.state.session_factory = factory
     application.state.health_engine = health_engine
     application.state.data_sources = data_sources(factory)
     application.state.e2e_engine = engine
+    # The Practice services over the swing world and the TSLA fixture (`swing_services.py`); `api.replay.get_services`
+    # serves what it finds here before it would build its own from the stub flag.
+    application.state.replay_services = replay_services(application.state.data_sources)
     try:
         yield
     finally:

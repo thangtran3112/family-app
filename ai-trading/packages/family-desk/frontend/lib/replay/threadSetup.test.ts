@@ -49,7 +49,8 @@ test("each field has its own plain message", () => {
   const blank = validateThreadDraft({ ...defaultThreadDraft(), startingBalance: "" });
   assert.equal(blank.ok, false);
   const swing = validateThreadDraft({ ...defaultThreadDraft(), mode: "swing" });
-  assert.equal(swing.ok, true, "the contract accepts swing; the server says it is not open yet");
+  assert.equal(swing.ok, false, "a swing create needs its swing block (02p); the draft has none yet");
+  if (!swing.ok) assert.equal(swing.problems.form, "swing is present exactly when mode is swing");
 });
 
 test("a max loss above the starting balance is refused in the server's words", () => {

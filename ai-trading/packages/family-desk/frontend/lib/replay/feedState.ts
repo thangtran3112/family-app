@@ -1,5 +1,9 @@
 import type {
+  DailyBar,
+  DailyBlock,
+  Hold,
   OpenTrade,
+  Paused,
   ReplayBar,
   ReplayDelta,
   ReplayFeed,
@@ -7,6 +11,7 @@ import type {
   ReplayLevels,
   ReplayPace,
   ReplaySignal,
+  StripRow,
   TapeFeed,
 } from "./schemas.ts";
 import { ms } from "./time.ts";
@@ -41,7 +46,18 @@ export type ReplayView = {
   quietS: number | null;
   openTrade: OpenTrade | null;
   revealedThrough: string;
+  /** The day list's shared clock (null for a standalone session) and whether this name's playhead is behind it. */
+  dayClock: string | null;
+  behindClock: boolean;
   atEnd: boolean;
+  /** Swing only (null for a day session): the day strip at the day clock, the latest answer wins. */
+  strip: StripRow[] | null;
+  /** Swing only: the Daily chart's bars through the prior close and this name's hold marker (a feed answer). */
+  daily: DailyBlock | null;
+  /** Swing only: the forming day candle, the latest answer wins. */
+  dailyForming: DailyBar | null;
+  /** Swing only: the stop that paused the last advance, kept for the toast until she dismisses it or the next advance. */
+  paused: Paused | null;
 };
 
 const toRow = ([t, price, size, tick]: ReplayDelta["prints"]["rows"][number]): TapeRow => ({ t, price, size, tick });
@@ -89,7 +105,13 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
     quietS: feed.quiet_s,
     openTrade: feed.open_trade,
     revealedThrough: feed.revealed_through,
+    dayClock: feed.day_clock,
+    behindClock: feed.behind_clock,
     atEnd: feed.at_end,
+    strip: feed.strip ?? null,
+    daily: feed.daily ?? null,
+    dailyForming: feed.daily?.forming ?? null,
+    paused: null,
   };
 }
 
@@ -113,8 +135,44 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
     quietS: delta.quiet_s,
     openTrade: delta.open_trade,
     revealedThrough: delta.revealed_through,
+    dayClock: delta.day_clock,
+    behindClock: delta.behind_clock,
     atEnd: delta.at_end,
+    // The latest value stands; an answer without a strip (a day session) leaves what the view had.
+    strip: delta.strip ?? view.strip,
+    dailyForming: delta.daily_forming ?? view.dailyForming,
+    // A pause belongs to the advance that found it: the next advance clears it.
+    paused: delta.paused ?? null,
   };
+}
+
+/** Clears the stop pause (she dismissed the toast). */
+export const dismissPause = (view: ReplayView): ReplayView => (view.paused === null ? view : { ...view, paused: null });
+
+/** Takes the day strip and the Daily block from a fresh `feed` answer and leaves the rest alone (after a mark moved a hold). */
+export function applyFeedSwing(view: ReplayView, feed: ReplayFeed): ReplayView {
+  if (ms(feed.revealed_through) < ms(view.revealedThrough)) return view;
+  return { ...view, strip: feed.strip ?? view.strip, daily: feed.daily ?? view.daily, dailyForming: feed.daily?.forming ?? view.dailyForming };
+}
+
+/** The Daily chart's data with the newest forming candle in place: bars through the prior close, the forming candle, the hold marker. */
+export function dailyBlock(view: Pick<ReplayView, "daily" | "dailyForming">): DailyBlock | null {
+  return view.daily === null ? null : { ...view.daily, forming: view.dailyForming ?? view.daily.forming };
+}
+
+/**
+ * Moves this name's hold marker after a mark: an open hold gets (or keeps) its marker with the new stop, a closed hold or
+ * none removes it. A hold entered today has no earlier marker, so it starts at `today` (the session's day). A day
+ * session has no Daily block and is returned as it is.
+ */
+export function withHoldMarker(view: ReplayView, hold: Pick<Hold, "status" | "side" | "entry_price" | "stop_price"> | null, today: string): ReplayView {
+  if (view.daily === null) return view;
+  const old = view.daily.holds[0];
+  const holds =
+    hold === null || hold.status !== "open"
+      ? []
+      : [{ entry_t: old?.entry_t ?? today, side: hold.side, entry_price: hold.entry_price, stop_price: hold.stop_price }];
+  return { ...view, daily: { ...view.daily, holds } };
 }
 
 /** The chart's bars: closed bars plus the forming one (replacing a closed bar with the same start). */
