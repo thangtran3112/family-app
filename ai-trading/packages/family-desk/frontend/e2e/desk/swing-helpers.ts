@@ -1,4 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
+import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, test } from "./helpers";
 
@@ -148,4 +149,9 @@ export async function railSection(page: Page, rail: string, section: string) {
   const drawer = page.getByRole("dialog", { name: section });
   await expect(drawer).toBeVisible();
   return drawer;
+}
+
+/** The swing thread's row of the landing's table: its line, balance, and the Start or Continue Day N button or the week review link. */
+export function swingRow(page: Page) {
+  return page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel }).getByRole("row", { name: /Swing/ });
 }
