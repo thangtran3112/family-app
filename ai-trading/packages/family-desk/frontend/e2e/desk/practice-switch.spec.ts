@@ -1,7 +1,8 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
+import { THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter } from "./hub-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
 // replay TSLA's day at a fraction of its prices (`replay/fixture.py`), so one daily list holds four names. Every session
@@ -10,7 +11,6 @@ import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helper
 const DAY = "2026-09-25";
 const FIRST_RECORDED = "2026-09-18"; // 20 finished sessions before the E2E clock
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
-const DAY_URL = /\/practice\/day\?id=\d+/;
 
 const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
 
@@ -34,7 +34,7 @@ async function recordUniverse(context: BrowserContext, days: { day: string; symb
   expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days } })).ok()).toBeTruthy();
 }
 
-/** A filter that lists every name the stub has bars for, a thread, and a two-name plan saved through the hub form. */
+/** A filter that lists every name the stub has bars for, and a thread with a two-name plan started through the New plan modal. */
 async function startTwoNamePlan(page: Page, context: BrowserContext) {
   const all = {
     schemaVersion: 1,
@@ -44,28 +44,16 @@ async function startTwoNamePlan(page: Page, context: BrowserContext) {
     when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
     maxResults: 50,
   };
-  expect((await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: all } })).ok()).toBeTruthy();
-  await openDesk(page, "/practice");
-  const threads = page.locator("#threads");
-  const form = threads.getByRole("form", { name: "New thread" });
-  await form.getByRole("group", { name: PRACTICE_COPY.threadStopOnEntry }).getByRole("button", { name: "No", exact: true }).click(); // this spec is not about stops (D-060)
-  await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
-  await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
-
-  const daily = page.locator("#daily-list");
-  await daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Every name" }).check();
-  await daily.locator('input[type="date"]').fill(DAY);
-  await daily.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
-  await daily.getByLabel("To", { exact: true }).fill("09:40");
-  await daily.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "1m", exact: true }).click();
+  await saveFilter(context, all);
+  const dialog = await openNewPlan(page);
+  await fillNewPlan(dialog, { filter: "Every name" }); // this spec is not about stops (D-060): Stop on every entry is No
   // The plan's own limit on names: three is the default, this plan allows two.
-  const names = daily.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols });
+  const names = dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols });
   await expect(names.getByRole("button", { name: "3", exact: true })).toHaveAttribute("aria-pressed", "true");
   await names.getByRole("button", { name: "2", exact: true }).click();
-  await daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true }).click();
-  await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
-  await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
-  await page.waitForURL(DAY_URL);
+  await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+  await page.waitForURL(THREAD_URL, { timeout: 90_000 });
+  await openFirstDay(page);
 }
 
 test.describe("Practice: switching names", () => {
@@ -224,14 +212,10 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
   });
 
-  test("the plan form starts on the first recorded morning once 20 finished days are recorded, and says why", async ({ page, context }) => {
-    await openDesk(page, "/practice");
-    const threads = page.locator("#threads");
-    await threads.getByRole("form", { name: "New thread" }).getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
-    await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
-    const daily = page.locator("#daily-list");
-    const firstDay = daily.locator('input[type="date"]');
-    const note = daily.getByTestId("first-day-note");
+  test("the New plan modal starts on the first recorded morning once 20 finished days are recorded, and says why", async ({ page, context }) => {
+    let dialog = await openNewPlan(page);
+    let firstDay = dialog.locator('input[type="date"]');
+    let note = dialog.getByTestId("first-day-note");
 
     // Nothing recorded yet: the usual start, three months back.
     await expect(note).toHaveText("The Desk has not recorded a morning's universe yet · the default start is three months back");
@@ -240,7 +224,9 @@ test.describe("Practice: switching names", () => {
     // The Desk has recorded 20 finished days since Fri 2026-09-18 (the E2E clock is Thu 2026-10-15 after the close): a new plan
     // starts on it, unless she picks a day.
     await recordUniverse(context, [{ day: FIRST_RECORDED, symbols: ["TSLA"] }]);
-    await openDesk(page, "/practice");
+    dialog = await openNewPlan(page);
+    firstDay = dialog.locator('input[type="date"]');
+    note = dialog.getByTestId("first-day-note");
     await expect(note).toHaveText("The first day the Desk recorded its universe · 20 finished days of it exist");
     await expect(firstDay).toHaveValue(FIRST_RECORDED);
     await firstDay.fill("2026-09-28");

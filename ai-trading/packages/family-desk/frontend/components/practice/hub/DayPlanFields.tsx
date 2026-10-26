@@ -1,15 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
-import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { savePlanPatiently } from "@/lib/desk/patience";
-import { loadDaily, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import type { OpenNext } from "@/lib/replay/daily";
-import type { PracticeThread } from "@/lib/replay/threads";
+import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import {
   EARLIEST_LIST_DAY,
   LIST_TIMES,
@@ -17,12 +13,8 @@ import {
   NAME_CHOICES,
   SESSION_CHOICES,
   clock12,
-  defaultPlanDraft,
-  effectiveFirstDay,
   listTimeHeld,
   listTimeNeed,
-  planProblems,
-  validatePlanDraft,
   withFilterToggled,
   withListTime,
   type FilterTimings,
@@ -30,81 +22,46 @@ import {
   type PlanProblems,
 } from "@/lib/replay/planSetup";
 import { INTERVALS } from "@/lib/replay/setup";
+import { runLabels } from "@/lib/spec/describe";
 import { ArmStrategiesField } from "./ArmStrategiesField";
 import styles from "./hub.module.css";
+import modal from "./landing.module.css";
 
-/** The daily-list plan (02o-b v1): her filters, when the list is built, how many days, and the practice setup that
- *  every day shares. "Start day" saves it (replacing a current plan), starts preparing the data and, when that is ready,
- *  opens Day 1. A filter she picks is armed for the practice days; the list time moves up for a cadence filter. The
- *  risk plan (stop, signal, max loss, max trades, note) is the thread's (02r, D-007) and is not asked here. */
-export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeThread; onSaved: (result: OpenNext) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<PlanDraft>(() => defaultPlanDraft(new Date()));
-  const [problems, setProblems] = useState<PlanProblems>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [failed, setFailed] = useState(false);
-  // Set while the gateway has cut a slow save short and the screen is waiting for the plan to show up (D-058).
-  const [still, setStill] = useState(false);
+/**
+ * The daily-list half of the New plan modal (02r2, from the old daily-plan form): her filters as one vertical column of
+ * checkboxes, the days, the list time and size, the window and the armed strategies. The parent owns the draft and the
+ * first day (the recorded default only applies until she picks one). A filter she picks is armed for the practice days, and
+ * the list time moves up for a cadence filter.
+ */
+export function DayPlanFields({
+  draft,
+  onDraft,
+  problems,
+  firstDay,
+  firstDayNote,
+  onFirstDay,
+}: {
+  draft: PlanDraft;
+  onDraft: (draft: PlanDraft) => void;
+  problems: PlanProblems;
+  firstDay: string;
+  firstDayNote: string | null;
+  onFirstDay: (day: string) => void;
+}) {
   const filters = useDeskQuery("practice:plan-filters", (signal) => loadFilters({ signal }));
-  // Once the Desk has recorded 20 finished days of its universe, a new plan starts on the first one (02o-b2) unless she has picked a day.
-  const recorded = useDeskQuery("practice:universe-days", (signal) => loadUniverseDays({}, { signal }));
-  const [dayPicked, setDayPicked] = useState(false);
-  const firstDay = effectiveFirstDay(draft.firstDay, dayPicked, recorded.data?.first_day_default ?? null);
   const timings: FilterTimings = useMemo(() => new Map((filters.data ?? []).map((filter) => [filter.id, { run_on: filter.run_on, session: filter.session }])), [filters.data]);
   // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
   const need = listTimeNeed(draft.filterIds, timings);
   const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
   const needText = practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: clock12(need.time) });
-
-  async function save() {
-    const result = validatePlanDraft({ ...draft, firstDay });
-    if (!result.ok) {
-      setProblems(result.problems);
-      return;
-    }
-    setProblems({});
-    setFailed(false);
-    setStill(false);
-    setSubmitting(true);
-    try {
-      const before = await loadDaily().then((daily) => daily.plan?.id ?? null, () => null);
-      const onWaiting = () => setStill(true);
-      onSaved(
-        await savePlanPatiently(
-          () => openNextDay(result.spec, { threadId: thread.id }),
-          () => openNextDay(),
-          () => loadDaily().then((daily) => daily.plan?.id ?? null),
-          before,
-          { onWaiting },
-        ),
-      );
-    } catch (error) {
-      if (error instanceof DeskApiError && error.status === 422 && error.problems.length > 0) setProblems(planProblems(error.problems));
-      else setFailed(true);
-      setStill(false);
-      setSubmitting(false);
-    }
-  }
-
-  // D-050: with no filter ticked there is nothing to list, so Start day waits (the hint under the filters says so).
-  const noFilters = draft.filterIds.length === 0;
   const setup = draft.setup;
-  const patchSetup = (next: PlanDraft["setup"]) => setDraft({ ...draft, setup: next });
+  const patchSetup = (next: PlanDraft["setup"]) => onDraft({ ...draft, setup: next });
 
   return (
-    <form
-      className={styles.form}
-      noValidate
-      aria-label="Daily list plan"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void save();
-      }}
-    >
-      <p className={styles.muted}>{PRACTICE_COPY.planIntro}</p>
-      {onCancel && <p className={styles.muted}>{PRACTICE_COPY.planReplace}</p>}
-
+    <>
       <fieldset className={styles.group} aria-describedby={problems.filters ? "plan-filters-error" : undefined}>
         <legend className={styles.legend}>{PRACTICE_COPY.planFilters}</legend>
+        <p className={styles.hint}>{practiceText("newPlanFiltersHint", { max: MAX_FILTERS })}</p>
         {filters.loading ? (
           <LoadingBlock label="Loading your filters…" height={64} />
         ) : filters.data === null ? (
@@ -112,7 +69,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
         ) : filters.data.length === 0 ? (
           <p className={styles.hint}>{PRACTICE_COPY.planFiltersEmpty}</p>
         ) : (
-          <ul className={styles.armList}>
+          <ul className={`${styles.armList} ${modal.filterList}`}>
             {filters.data.map((filter) => {
               const checked = draft.filterIds.includes(filter.id);
               const blocked = !checked && draft.filterIds.length >= MAX_FILTERS;
@@ -124,18 +81,19 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
                       className={styles.check}
                       checked={checked}
                       disabled={blocked}
-                      onChange={() => setDraft(withFilterToggled(draft, filter.id, timings))}
+                      onChange={() => onDraft(withFilterToggled(draft, filter.id, timings))}
                     />
                     <span className={styles.armText}>
                       <span className={styles.armName}>{filter.name}</span>
+                      <span className={styles.armRule}>{`At ${runLabels[filter.run_on]} during ${filter.session === "regular" ? "regular hours" : "extended hours"}`}</span>
                     </span>
+                    <span className={styles.chip}>{HUB_SWING_COPY.filterOrigin[filter.origin]}</span>
                   </label>
                 </li>
               );
             })}
           </ul>
         )}
-        <p className={styles.hint}>{PRACTICE_COPY.planFiltersMax}</p>
         {problems.filters && <p id="plan-filters-error" role="alert" className={styles.fieldError}>{problems.filters}</p>}
       </fieldset>
 
@@ -148,12 +106,9 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
             value={firstDay}
             min={EARLIEST_LIST_DAY}
             aria-invalid={problems.firstDay ? true : undefined}
-            onChange={(event) => {
-              setDayPicked(true);
-              setDraft({ ...draft, firstDay: event.target.value });
-            }}
+            onChange={(event) => onFirstDay(event.target.value)}
           />
-          {recorded.data && <span className={styles.hint} data-testid="first-day-note">{recorded.data.first_day_note}</span>}
+          {firstDayNote && <span className={styles.hint} data-testid="first-day-note">{firstDayNote}</span>}
           {problems.firstDay && <span role="alert" className={styles.fieldError}>{problems.firstDay}</span>}
         </label>
         <div className={styles.field}>
@@ -165,7 +120,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
                 type="button"
                 className={styles.segment}
                 aria-pressed={draft.sessions === String(count)}
-                onClick={() => setDraft({ ...draft, sessions: String(count) })}
+                onClick={() => onDraft({ ...draft, sessions: String(count) })}
               >
                 {count}
               </button>
@@ -182,7 +137,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
                 type="button"
                 className={styles.segment}
                 aria-pressed={draft.maxSymbols === String(count)}
-                onClick={() => setDraft({ ...draft, maxSymbols: String(count) })}
+                onClick={() => onDraft({ ...draft, maxSymbols: String(count) })}
               >
                 {count}
               </button>
@@ -197,7 +152,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
             role="switch"
             className={styles.check}
             checked={draft.hideDates}
-            onChange={(event) => setDraft({ ...draft, hideDates: event.target.checked })}
+            onChange={(event) => onDraft({ ...draft, hideDates: event.target.checked })}
           />
           {PRACTICE_COPY.planHideDates}
         </label>
@@ -215,7 +170,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
                 aria-pressed={draft.listAt === item.value}
                 disabled={listTimeHeld(item.value, need)}
                 title={listTimeHeld(item.value, need) ? needText : undefined}
-                onClick={() => setDraft(withListTime(draft, item.value))}
+                onClick={() => onDraft(withListTime(draft, item.value))}
               >
                 {item.label}
               </button>
@@ -235,7 +190,7 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
             className={styles.control}
             value={draft.maxList}
             aria-invalid={problems.maxList ? true : undefined}
-            onChange={(event) => setDraft({ ...draft, maxList: event.target.value })}
+            onChange={(event) => onDraft({ ...draft, maxList: event.target.value })}
           />
           {problems.maxList && <span role="alert" className={styles.fieldError}>{problems.maxList}</span>}
         </label>
@@ -264,17 +219,6 @@ export function DailyPlanForm({ thread, onSaved, onCancel }: { thread: PracticeT
       </fieldset>
 
       <ArmStrategiesField armed={setup.armed} onChange={(armed) => patchSetup({ ...setup, armed })} error={problems.armed} />
-
-      {problems.form && <p role="alert" className={styles.fieldError}>{problems.form}</p>}
-      {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
-      {failed && <ErrorBlock message={PRACTICE_COPY.planStartError} onRetry={() => void save()} />}
-      <div className={styles.actions}>
-        <span className={`${styles.hint} ${styles.actionNote}`}>{noFilters ? `${PRACTICE_COPY.planSaveFilterFirst} · ${PRACTICE_COPY.threadPlanFrom}` : PRACTICE_COPY.threadPlanFrom}</span>
-        {onCancel && <button type="button" className={styles.button} onClick={onCancel}>Cancel</button>}
-        <button type="submit" className={styles.primary} disabled={submitting || noFilters} aria-busy={submitting || undefined} title={noFilters ? PRACTICE_COPY.planSaveFilterFirst : undefined}>
-          {submitting ? PRACTICE_COPY.planSubmitting : PRACTICE_COPY.planSubmit}
-        </button>
-      </div>
-    </form>
+    </>
   );
 }
