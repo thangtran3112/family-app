@@ -97,6 +97,7 @@ def test_without_the_gateway_identity_every_feedback_route_is_401_even_with_a_bo
     assert client.post(f"{BASE}/attachments", files=shot).status_code == 401
     assert client.post(f"{BASE}/1/attachments", files=shot).status_code == 401
     assert client.get(f"{BASE}/attachments/1").status_code == 401
+    assert client.delete(f"{BASE}/attachments/1").status_code == 401
     assert client.get(f"{BASE}?status=open").status_code == 401
 
 
@@ -317,6 +318,37 @@ def test_staging_stores_a_screenshot_with_no_report_and_serves_it_back_to_its_up
     for email in (OWNER_EMAIL, THIRD_EMAIL):  # a staged file is not the caller's: not found, never forbidden
         assert client.get(f"{BASE}/attachments/{shot['id']}", headers=auth_headers(email)).status_code == 404
     assert client.get(f"{BASE}/attachments/99999", headers=auth_headers()).status_code == 404
+
+
+def test_removing_a_staged_screenshot_frees_its_slot_and_its_bytes(client):
+    shots = [stage(client).json() for _ in range(6)]
+    assert stage(client).status_code == 409  # six staged: the seventh waits
+    gone = client.delete(f"{BASE}/attachments/{shots[0]['id']}", headers=auth_headers(OTHER_EMAIL))
+    assert gone.status_code == 204 and gone.content == b""
+    assert gone.headers["cache-control"] == "no-store"
+    assert client.get(f"{BASE}/attachments/{shots[0]['id']}", headers=auth_headers(OTHER_EMAIL)).status_code == 404
+    assert stage(client).status_code == 201  # the slot is free again, no 24-hour wait
+    assert client.delete(f"{BASE}/attachments/{shots[0]['id']}", headers=auth_headers(OTHER_EMAIL)).status_code == 404
+
+
+def test_a_staged_screenshot_is_removed_by_its_uploader_alone(client):
+    shot = stage(client).json()
+    for email in (OWNER_EMAIL, THIRD_EMAIL):  # not the caller's: not found, and the file is untouched
+        assert client.delete(f"{BASE}/attachments/{shot['id']}", headers=auth_headers(email)).status_code == 404
+    assert client.get(f"{BASE}/attachments/{shot['id']}", headers=auth_headers(OTHER_EMAIL)).status_code == 200
+    assert client.delete(f"{BASE}/attachments/99999", headers=auth_headers()).status_code == 404
+
+
+def test_a_screenshot_already_on_a_report_cannot_be_removed(client):
+    shot = stage(client).json()
+    report = file_report(client, attachment_ids=[shot["id"]])
+    refused = client.delete(f"{BASE}/attachments/{shot['id']}", headers=auth_headers(OTHER_EMAIL))
+    assert refused.status_code == 409 and "already on a report" in refused.json()["detail"]
+    assert [a["id"] for a in client.get(f"{BASE}/{report['id']}", headers=auth_headers()).json()["attachments"]] == [
+        shot["id"]
+    ]
+    # someone else's attached file is a 404 for the caller, never a hint that it exists
+    assert client.delete(f"{BASE}/attachments/{shot['id']}", headers=auth_headers(OWNER_EMAIL)).status_code == 404
 
 
 def test_the_type_is_decided_by_magic_bytes_not_by_the_header_or_the_name(client):

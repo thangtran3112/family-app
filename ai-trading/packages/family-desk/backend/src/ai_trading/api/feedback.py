@@ -1,6 +1,6 @@
-"""`/api/desk/feedback/*` (02s): the feedback log. Seven routes: the dashboard list with its counts, filing a
-report, one report, the owner's status change or the filer's own edit, and the screenshots (staged before Send, added
-to a report, and the bytes). All behind the gateway identity, all `Cache-Control: no-store`.
+"""`/api/desk/feedback/*` (02s): the feedback log. Eight routes: the dashboard list with its counts, filing a
+report, one report, the owner's status change or the filer's own edit, and the screenshots (staged before Send, removed
+while staged, added to a report, and the bytes). All behind the gateway identity, all `Cache-Control: no-store`.
 
 Every signed-in user reads every report (two users share one flat log). Who may change a status is the owner, an email
 in `DESK_OWNER_EMAILS`; everyone else is a filer. The rules live in `ai_trading.feedback`, which the CLI calls too.
@@ -260,6 +260,16 @@ def get_screenshot(
             "Cache-Control": "private, no-store",  # a returned Response skips the router's `no-store` dependency
         },
     )
+
+
+@router.delete("/attachments/{attachment_id}", status_code=204, response_model=None)
+def remove_staged_screenshot(
+    attachment_id: int,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> None:
+    """Remove one of the caller's own staged screenshots (the form's Remove). A file already on a report stays: 409."""
+    _call(svc.delete_staged, db, attachment_id, user.id)
 
 
 @router.get("/{report_id}", response_model=FeedbackDetailOut)

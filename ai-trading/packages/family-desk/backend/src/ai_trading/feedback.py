@@ -456,6 +456,22 @@ def stage_attachment(db: Session, user_id: int, filename: str | None, data: byte
     return _attachment_out(row)
 
 
+def delete_staged(db: Session, attachment_id: int, user_id: int) -> None:
+    """Remove one of the caller's own staged screenshots (the form's Remove). Someone else's or a missing one is a 404;
+    a file already on a report stays, because it is part of that report's evidence (409)."""
+    row = db.scalar(
+        select(FeedbackAttachment)
+        .where(FeedbackAttachment.id == attachment_id, FeedbackAttachment.user_id == user_id)
+        .with_for_update()
+    )
+    if row is None:
+        raise FeedbackError(404, "screenshot not found")
+    if row.report_id is not None:
+        raise FeedbackError(409, "This screenshot is already on a report and stays with it")
+    db.delete(row)
+    db.flush()
+
+
 def add_attachment(
     db: Session, report_id: int, actor: Actor, filename: str | None, data: bytes, now: datetime
 ) -> dict[str, Any]:
