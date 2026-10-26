@@ -136,7 +136,64 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "practice_holds",
         "practice_weeks",
         "replay_day_scans",
+        "feedback_reports",
+        "feedback_events",
+        "feedback_attachments",
     }
+
+
+def test_desk_runtime_can_use_the_feedback_tables(role_split_urls: RoleSplitUrls) -> None:
+    # 0010's tables (and their id sequences) are reachable through the zz-20 script's default privileges, with no grant
+    # change: filing, a status change, a screenshot and the staging sweep's DELETE, all as the runtime role.
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            user_id = conn.execute(
+                text("INSERT INTO users (email) VALUES (:email) RETURNING id"), {"email": "feedback-roles@example.test"}
+            ).scalar_one()
+            report_id = conn.execute(
+                text(
+                    "INSERT INTO feedback_reports (user_id, kind, severity, title, body, screen, route, app_version, "
+                    "captured_at, status, created_at, updated_at) VALUES (:u, 'bug', 'P2', 't', 'b', 's', '/', 'dev', "
+                    "now(), 'open', now(), now()) RETURNING id"
+                ),
+                {"u": user_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO feedback_events (report_id, at, actor, from_status, to_status) "
+                    "VALUES (:r, now(), 'user', NULL, 'open')"
+                ),
+                {"r": report_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO feedback_attachments (report_id, user_id, filename, content_type, size_bytes, sha256, "
+                    "payload, created_at) VALUES (NULL, :u, 'a.png', 'image/png', 2, '0', :p, now())"
+                ),
+                {"u": user_id, "p": b"\x89P"},
+            )
+            conn.execute(
+                text("UPDATE feedback_reports SET status = 'fixed', fix_ref = '1a2b3c4' WHERE id = :r"),
+                {"r": report_id},
+            )
+            conn.execute(text("SELECT id FROM users WHERE id = :u FOR UPDATE"), {"u": user_id})  # the staging lock
+            conn.execute(
+                text("DELETE FROM feedback_attachments WHERE report_id IS NULL AND user_id = :u"), {"u": user_id}
+            )
+            conn.execute(text("DELETE FROM feedback_reports WHERE id = :r"), {"r": report_id})
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM feedback_reports WHERE id = :r) "
+                    "+ (SELECT COUNT(*) FROM feedback_events WHERE report_id = :r) "
+                    "+ (SELECT COUNT(*) FROM feedback_attachments WHERE user_id = :u)"
+                ),
+                {"r": report_id, "u": user_id},
+            ).scalar_one()
+            assert remaining == 0
+            conn.execute(text("DELETE FROM users WHERE id = :u"), {"u": user_id})
+    finally:
+        runtime_engine.dispose()
 
 
 def test_desk_runtime_can_select_insert_update_delete_replay_tables(role_split_urls: RoleSplitUrls) -> None:
