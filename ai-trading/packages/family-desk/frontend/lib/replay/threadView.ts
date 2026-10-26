@@ -50,8 +50,10 @@ export const threadModeLabel = (mode: PracticeThread["mode"]): string => (mode =
 const monthName = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "long" });
 const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short", day: "numeric" });
 
-/** "October thread": the month it was started (the thread has no name of its own). */
-export const threadName = (thread: Pick<PracticeThread, "createdAt">): string => `${monthName.format(new Date(thread.createdAt))} thread`;
+/** "October thread" for a day thread, "October swing thread" for a swing one: the month it was started, and the mode when
+ *  it is not the default so two threads of one month never read the same (D-069). The thread has no name of its own. */
+export const threadName = (thread: Pick<PracticeThread, "createdAt" | "mode">): string =>
+  `${monthName.format(new Date(thread.createdAt))} ${thread.mode === "swing" ? "swing thread" : "thread"}`;
 
 /** "Started Oct 25": the day she started it (not a replayed day, so no date is spoiled). */
 export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;

@@ -1,4 +1,4 @@
-import { practiceText } from "../desk/freshness.ts";
+import { practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, UniversePreview } from "./swingApi.ts";
 import type { SwingProblems } from "./swingSetup.ts";
 import { startBlocker } from "./universeView.ts";
@@ -106,7 +106,7 @@ export type ContinueOutcome =
 export function continueOutcome(next: Pick<SwingOpenNext, "day_list_id" | "plan">): ContinueOutcome {
   if (next.day_list_id !== null) return { kind: "open", dayListId: next.day_list_id };
   if (next.plan.finished) return { kind: "finished" };
-  return { kind: "preparing", text: practiceText("swingPrepWait", { done: next.plan.prep.done, total: next.plan.prep.total }) };
+  return { kind: "preparing", text: practiceText("swingPrepWait", { done: next.plan.prep.done, total: next.plan.prep.total, pct: prepPercent(next.plan.prep.done, next.plan.prep.total) }) };
 }
 
 /** The plan rows of a swing thread: the day rule's two limits count per week there (02p). */

@@ -55,8 +55,20 @@ export function startWeekAction(state: Pick<SwingState, "next" | "week_no"> | nu
 
 export type WeekTile = { id: string; label: string; value: string; sub: string; tone: Tone };
 
+/** A share of the week's change. Past 100% the gap is bigger than the whole change (the rest of the week pulled the other
+ *  way), so the tile says "Over 100%" and its line says why instead of printing 315% (D-070). */
+const OVER_SHARE = 100;
 const share = (value: number | null | undefined): string =>
-  value == null || !Number.isFinite(value) ? EMPTY_VALUE : `${value < 0 ? MINUS : ""}${Math.abs(Math.round(value))}%`;
+  value == null || !Number.isFinite(value)
+    ? EMPTY_VALUE
+    : Math.abs(value) > OVER_SHARE
+      ? PRACTICE_COPY.swingTileGapOver
+      : `${value < 0 ? MINUS : ""}${Math.abs(Math.round(value))}%`;
+const gapSub = (t: Pick<WeekReview["tiles"], "gap_usd" | "gap_share_pct">): string => {
+  const text = gapText(t.gap_usd);
+  if (text === null) return PRACTICE_COPY.swingTileNoGap;
+  return t.gap_share_pct != null && Math.abs(t.gap_share_pct) > OVER_SHARE ? practiceText("swingTileGapOverSub", { gap: text }) : text;
+};
 
 /** The review's tiles in reading order. `toDate` only changes the wording of the sub-lines. */
 export function weekTiles(review: Pick<WeekReview, "tiles">, toDate = false): WeekTile[] {
@@ -81,7 +93,7 @@ export function weekTiles(review: Pick<WeekReview, "tiles">, toDate = false): We
       sub: PRACTICE_COPY.swingTileDaysHeld,
       tone: "flat",
     },
-    { id: "gap_share", label: "Gap share of P/L", value: share(t.gap_share_pct), sub: gapText(t.gap_usd) ?? PRACTICE_COPY.swingTileNoGap, tone: "flat" },
+    { id: "gap_share", label: "Gap share of P/L", value: share(t.gap_share_pct), sub: gapSub(t), tone: "flat" },
     { id: "adherence", label: "Adherence", value: t.adherence_pct == null ? EMPTY_VALUE : `${Math.round(t.adherence_pct)}%`, sub: PRACTICE_COPY.swingTileAdherence, tone: "flat" },
     { id: "selection", label: "Selection", value: signedPts(t.selection_pts), sub: PRACTICE_COPY.swingTileSelection, tone: ptsTone(t.selection_pts) },
     { id: "timing", label: "Timing", value: signedPts(t.timing_pts), sub: PRACTICE_COPY.swingTileTiming, tone: ptsTone(t.timing_pts) },

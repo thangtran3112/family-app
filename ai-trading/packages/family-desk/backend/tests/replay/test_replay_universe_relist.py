@@ -112,6 +112,18 @@ def test_an_early_list_offers_a_relist_at_the_filters_earliest_time(db_session, 
     assert "none had closed by 8:30 AM" in out["warnings"][0] and "Re-list at 10:00 AM" in out["warnings"][0]
 
 
+def test_an_empty_list_offers_a_relist_at_the_next_list_time(db_session, user_id, svc) -> None:
+    """D-054: nothing matched and every filter could read the day, so the offer is a later look, not a dead end."""
+    row = _first_list(db_session, user_id, svc)
+    row.candidates = []
+    db_session.commit()
+    out = _out(db_session, user_id, svc, row.id)
+    assert out["relist"] == {"list_at": "10:00", "label": "Re-list at 10:00 AM", "window_from": "10:00"}
+    plan_mod.relist(db_session, user_id, row.id, "10:00", svc)  # the rebuilt list has names again: no more offers
+    db_session.commit()
+    assert _out(db_session, user_id, svc, row.id)["relist"] is None
+
+
 def test_a_list_that_can_run_offers_nothing(db_session, user_id, svc) -> None:
     row = _first_list(db_session, user_id, svc)  # Gap up and Gap down at 08:30: both can run
     assert _out(db_session, user_id, svc, row.id)["relist"] is None
@@ -131,7 +143,9 @@ def test_relisting_moves_the_plans_list_time_and_window_and_rebuilds_the_day_in_
     assert row.data_through == et(DAYS[0], "09:45") and row.status == "listed"
     assert plan.spec["screen"]["listAt"] == "10:00" and plan.spec["setup"]["window"] == {"from": "10:00", "to": "11:30"}
     out = _out(db_session, user_id, svc, row.id)
-    assert out["relist"] is None and "none had closed" not in " ".join(out["warnings"])  # the reason is gone
+    assert "none had closed" not in " ".join(out["warnings"])  # the reason is gone
+    # D-054: nothing matched at 10:00 either, so the next offer is the later list time, not a dead end
+    assert out["relist"] == {"list_at": "10:45", "label": "Re-list at 10:45 AM", "window_from": "10:45"}
     assert out["screen"]["list_at"] == "10:00"
 
 

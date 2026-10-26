@@ -5,6 +5,8 @@ module holds the reads and the small writes the session needs and keeps them out
 
 - **The price basis** (a4): regular session only. Tape off -> the close of the last CLOSED regular one-minute bar (first
   one at 09:31); tape on -> the last eligible print at or after 09:30:00. A premarket print never prices a swing mark.
+  Once the clock reaches the regular close, every price is the day's OFFICIAL close (the daily bar's), the same price
+  `swing.end_day` marks the holds at, so a hold reads the same at the 16:00 playhead and after End day (D-064).
 - **The stop pause** (b5): `stop_pause` finds the first one-minute bar that crossed an open hold's stop and hands
   `advance` the time to clamp to. A stop never exits.
 - **The strip and the daily block** (d2, a3 rule 4): rows for the holds and the focus names at the DAY CLOCK, and the
@@ -121,11 +123,38 @@ def day_minutes(ctx: "Ctx", symbol: str) -> pd.DataFrame | None:
     return cache[symbol]
 
 
+def official_close(history: Any, store: Any, symbol: str, day: date) -> float | None:
+    """The official close of `day`: the raw daily bar's close on `day`'s own share basis, in whole cents (D-033), or
+    None when the name did not trade. It is the day's value of an open hold: `swing.end_day` marks the hold at it, and
+    the live day reads it once the clock has reached the close, so the two never disagree (D-064)."""
+    try:
+        raw = history.daily_bars(store, symbol, day)
+    except ProviderError as exc:
+        log.warning("swing: daily bars unavailable for %s: %s", symbol, exc)
+        return None
+    return journal_mod.fill_price(float(raw.loc[day, "close"])) if day in raw.index else None
+
+
+def _close_if_over(ctx: "Ctx", symbol: str, through: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
+    """`(official close, the regular close)` when `through` has reached the regular close, else None. The day's own
+    daily bar is the day's outcome, so it is read only once the clock is at the close, where it is revealed."""
+    found = trading_session("stock", ctx.row.day)
+    assert found is not None
+    if through < found.regular_close:
+        return None
+    cache = ctx._cache.setdefault("swing_official", {})
+    if symbol not in cache:
+        cache[symbol] = official_close(ctx.svc.history, ctx.store, symbol, ctx.row.day)
+    return None if cache[symbol] is None else (cache[symbol], found.regular_close)
+
+
 def last_price(ctx: "Ctx", through: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
     """The swing mark price at `through` and when it printed, or None before the first regular price. With the tape
     on, the last eligible print at or after 09:30:00 (a premarket print never counts; a tape outage or a quiet tape
     falls back to the one-minute close, as the day paths do); with it off, the last closed regular one-minute bar.
-    Whole cents, as the day paths price (D-033)."""
+    At or after the regular close it is the official close (D-064). Whole cents, as the day paths price (D-033)."""
+    if (over := _close_if_over(ctx, ctx.symbol, through)) is not None:
+        return over
     found = trading_session("stock", ctx.row.day)
     assert found is not None
     if ctx.feed != "off":
@@ -145,7 +174,7 @@ def last_price(ctx: "Ctx", through: pd.Timestamp) -> tuple[float, pd.Timestamp] 
 def first_price(ctx: "Ctx", through: pd.Timestamp) -> float | None:
     """The first regular-session price of the day revealed by `through`: the opening print with the tape on (looked for
     in the first five minutes), else the 09:30 bar's close; whole cents, as every fill is (D-033). ponytail: a tape that
-    has no print in those five minutes reads the bar close; the day summary's gap is always the raw bar close
+    has no print in those five minutes reads the bar close; the day summary's gap is always the bar close
     (`swing._first_regular_close`), so it can differ from this price by under a cent a share."""
     found = trading_session("stock", ctx.row.day)
     assert found is not None
@@ -168,7 +197,10 @@ def first_price(ctx: "Ctx", through: pd.Timestamp) -> float | None:
 
 
 def last_close_at(ctx: "Ctx", symbol: str, clock: pd.Timestamp) -> float | None:
-    """`symbol`'s last revealed regular-session one-minute close at `clock` (strip rows), in whole cents (D-033)."""
+    """`symbol`'s last revealed regular-session one-minute close at `clock` (strip rows), in whole cents (D-033); the
+    official close once the clock has reached the close (D-064)."""
+    if (over := _close_if_over(ctx, symbol, clock)) is not None:
+        return over[0]
     closed = _closed(day_minutes(ctx, symbol), clock)
     return None if closed.empty else journal_mod.fill_price(float(closed["close"].iloc[-1]))
 

@@ -61,6 +61,7 @@ from ai_trading.db.models import (
 from ai_trading.replay import days as days_mod
 from ai_trading.replay import hold_rows, screen, swing_play
 from ai_trading.replay import holds as holds_mod
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import prep as prep_mod
 from ai_trading.replay import session as session_mod
@@ -559,12 +560,6 @@ def _value_price(hold: holds_mod.Hold) -> float:
     return hold.last_close if hold.last_close is not None else hold.entry_price
 
 
-def _close_of(history: History, store: BlobStore, symbol: str, day: date) -> float | None:
-    """The official close of `day`: the raw daily bar's close, on `day`'s own share basis (None: it did not trade)."""
-    raw = history.daily_bars(store, symbol, day)
-    return float(raw.loc[day, "close"]) if day in raw.index else None
-
-
 def _minutes_of(history: History, store: BlobStore, symbol: str, day: date) -> pd.DataFrame | None:
     try:
         frame = history.minute_bars(store, symbol, [day]).get(day)
@@ -575,15 +570,16 @@ def _minutes_of(history: History, store: BlobStore, symbol: str, day: date) -> p
 
 
 def _first_regular_close(frame: pd.DataFrame | None, day: date) -> float | None:
-    """The first regular-session price of `day`: the 09:30 one-minute bar's close. ponytail: with the tape on, the
-    exact opening print can differ from this by a cent or two; the gap figure stays one-minute exact until a swing
+    """The first regular-session price of `day`: the 09:30 one-minute bar's close, in whole cents like every fill and
+    every mark (D-033, D-064: the gap runs from a whole-cent close to a whole-cent price). ponytail: with the tape on,
+    the exact opening print can differ from this by a cent or two; the gap figure stays one-minute exact until a swing
     thread asks for prints (the tape is fetched around the playhead only)."""
     if frame is None:
         return None
     found = trading_session("stock", day)
     assert found is not None
     regular = frame[(frame.index >= found.regular_open) & (frame.index < found.regular_close)]
-    return float(regular["close"].iloc[0]) if len(regular) else None
+    return journal_mod.fill_price(float(regular["close"].iloc[0])) if len(regular) else None
 
 
 # -- the board (d1) ------------------------------------------------------------------------------------------------
@@ -1047,7 +1043,7 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
             stop_hits.append({"symbol": r.symbol, "at": crossing.at.tz_convert(ET).strftime("%H:%M"), "watched": "no"})
 
     for r in open_rows:
-        close = _close_of(svc.history, store, r.symbol, day)
+        close = swing_play.official_close(svc.history, store, r.symbol, day)
         if close is not None:
             hold_rows.apply(r, holds_mod.mark_close(hold_rows.to_hold(r), close, day))
     last_day = day == days[-1]

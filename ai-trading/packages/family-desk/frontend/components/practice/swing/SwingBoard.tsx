@@ -9,7 +9,8 @@ import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChro
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
-import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText, prepPercent } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
 import { loadThread, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import {
@@ -173,7 +174,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
   const pass = () =>
     run(async () => {
-      const answer = await endAnyDay(list.id);
+      const answer = await whenReady(() => endAnyDay(list.id));
       if (!isSwingDayList(answer)) return;
       setList(answer);
       setConfirmPass(false);
@@ -184,7 +185,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
     run(async () => {
       if (threadId === null) return;
       const now = Date.now();
-      follow(prepStep(await continueSwingThread(threadId), now, now));
+      follow(prepStep(await whenReady(() => continueSwingThread(threadId)), now, now));
     }, PRACTICE_COPY.swingContinueError);
 
   function cancelPass() {
@@ -246,7 +247,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
         )}
         {prep !== null && (
           <div role="status">
-            <p className={dayStyles.line}>{practiceText("swingPrepWait", { done: prep.done, total: prep.total })}</p>
+            <p className={dayStyles.line}>{practiceText("swingPrepWait", { done: prep.done, total: prep.total, pct: prepPercent(prep.done, prep.total) })}</p>
             <p className={dayStyles.muted}>{PRACTICE_COPY.swingPrepWaitHint}</p>
           </div>
         )}
@@ -284,7 +285,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
         <section className={dayStyles.section} aria-label="Universe">
           <h2 className={dayStyles.sectionTitle}>{PRACTICE_COPY.swingBoardUniverse}</h2>
-          {!ended && <p id="swing-star-hint" className={dayStyles.muted}>{PRACTICE_COPY.swingBoardStarHint}</p>}
+          {!ended && <p id="swing-star-hint" className={dayStyles.muted}>{start.kind === "none" ? PRACTICE_COPY.swingBoardStarFirst : PRACTICE_COPY.swingBoardStarHint}</p>}
           <UniverseTable list={list} held={held} locked={ended} selected={selected} onSelect={setSelected} onStar={star} />
           <p className={dayStyles.footnote}>{list.label}</p>
           <p className={dayStyles.footnote}>{list.universe.footnote}</p>
