@@ -119,13 +119,19 @@ for route in practice practice/replay practice/journal practice/day practice/wee
   mkdir -p "$DESK/$route"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
+# The Feedback log from 02s: the dashboard (a report is `?id=` on the same route) and the filing form, each with its Flight segment.
+for route in feedback feedback/new; do
+  mkdir -p "$DESK/$route"
+  printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
+  printf 'Flight\n' >"$DESK/$route/__next.${route//\//.}.__PAGE__.txt"
+done
 printf 'chunk\n' >"$DESK/_next/static/chunks/desk.js"
 printf 'icon\n' >"$DESK/icon.svg"
 printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
 "$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
 cmp -s "$(live_file test-desk strategies.html)" "$DESK/strategies.html" || fail "Desk strategies not published"
 pass "Desk profile uploads its own routes with the shared transaction"
-for extra in api/desk/strategies.html private.txt strategies/__next._unknown.txt unknown.html .txt; do
+for extra in api/desk/strategies.html private.txt strategies/__next._unknown.txt feedback/__next._unknown.txt feedback/new.json unknown.html .txt; do
   mkdir -p "$DESK/$(dirname "$extra")"; printf 'private\n' >"$DESK/$extra"; : >"$CALL_LOG"
   "$TARGET" "$DESK" test-desk desk >/dev/null 2>&1 && fail "Desk accepted $extra"
   [[ ! -s "$CALL_LOG" ]] || fail "Desk rejection reached cloud calls"
