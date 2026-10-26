@@ -866,7 +866,8 @@ def test_an_early_close_waits_for_the_open_day_then_exits_at_the_last_ended_clos
     day3 = _open(db_session, owner, svc, thread)
     with pytest.raises(ReplayProblem) as caught:
         threads_mod.close_thread(db_session, owner, thread.id, NOW)
-    assert (caught.value.status, caught.value.message) == (409, threads_mod.DAY_OPEN)
+    # 02p b7: a swing thread names the open day's number, not the day thread's sentence.
+    assert (caught.value.status, caught.value.message) == (409, "End Day 3 first")
     db_session.rollback()
     db_session.refresh(hold)
     assert hold.status == "open"  # the refusal changed nothing

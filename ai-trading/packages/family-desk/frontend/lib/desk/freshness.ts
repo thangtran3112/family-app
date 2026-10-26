@@ -481,6 +481,7 @@ export const PRACTICE_COPY = {
   swingBoardPeek: "Peek shows daily bars through the prior close",
   swingLoadError: "Couldn't load this swing day · Try again",
   swingContinueError: "Couldn't open the next day · Try again",
+  swingPrepTooLong: "The next day's data is taking longer than usual · Try again in a few minutes",
   swingEndError: "Couldn't end the day · Try again",
   swingPassError: "Couldn't pass this day · Try again",
   swingStartError: "Couldn't start the day · Try again",

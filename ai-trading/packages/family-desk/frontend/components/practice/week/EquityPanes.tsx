@@ -49,6 +49,7 @@ export function EquityPanes({ series }: { series: EquitySeries }) {
         sessionShading
         lastPricePill={false}
         hideDates
+        rowLabels={rows.map((row) => row.day)}
         chrome="bare"
         height={300}
       />

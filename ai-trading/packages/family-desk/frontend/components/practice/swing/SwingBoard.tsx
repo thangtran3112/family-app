@@ -22,13 +22,16 @@ import {
   heldSides,
   lateStars,
   lateStarsText,
+  prepStep,
   resumeDayLabel,
   starEntry,
+  trustedSwingState,
+  type PrepStep,
 } from "@/lib/replay/boardView";
-import { isStarred, peekDailyBars, toggledStars } from "@/lib/replay/dayView";
+import { isStarred, peekDailyBars, peekOffsets, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingDatesHidden, swingHeaderLine } from "@/lib/replay/swing";
-import { continueSwingThread, endAnyDay, isSwingDayList, loadAnyDayList, patchAnyDayList, type BoardRow, type SwingDayList, type SwingOpenNext, type SwingPeek, type SwingPlan } from "@/lib/replay/swingApi";
+import { continueSwingThread, endAnyDay, isSwingDayList, loadAnyDayList, patchAnyDayList, type BoardRow, type SwingDayList, type SwingPeek, type SwingPlan } from "@/lib/replay/swingApi";
 import dayStyles from "../day/day.module.css";
 import { BoardSummaryStrip } from "./BoardSummaryStrip";
 import { HoldsTable } from "./HoldsTable";
@@ -57,13 +60,17 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const latestStar = useRef(0);
   const passButton = useRef<HTMLButtonElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
+  // Answers that land after she left the board move nothing; and when the wait for the next day's data began.
+  const mounted = useRef(true);
+  const prepSince = useRef<number | null>(null);
 
   const ended = list.status === "ended";
   const threadId = list.thread?.id ?? list.plan.thread_id;
   // The thread knows the dates rule and where the calendar goes next. Until it answers, dates stay hidden.
   const thread = useDeskQuery(`swing-thread:${threadId}`, (signal) => loadThread(threadId ?? 0, { signal }), { enabled: threadId !== null });
   const hidden = swingDatesHidden(thread.data?.thread.swing);
-  const swingState = thread.data ? (thread.data.swing ?? null) : thread.error !== null ? null : undefined;
+  // Right after Pass the thread is read again; until that answer lands the old one (still on Day N) offers nothing.
+  const swingState = trustedSwingState(thread);
 
   const peek = useDeskQuery(`swing-peek:${list.id}:${selected}`, (signal) => loadAnyDayList(list.id, { peek: selected ?? undefined }, { signal }), {
     enabled: selected !== null && !ended,
@@ -76,20 +83,49 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
     if (confirmPass) confirmButton.current?.focus();
   }, [confirmPass]);
 
-  // The next day is still being prepared: ask again until it opens (the call is safe to repeat).
   useEffect(() => {
-    if (prep === null || threadId === null) return;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /** Where Continue goes: to the day that opened, to the hub when there is nothing to wait for, else wait for the data. */
+  function follow(step: PrepStep) {
+    if (!mounted.current) return;
+    if (step.kind === "open") router.push(step.href);
+    else if (step.kind === "hub") router.push("/practice");
+    else if (step.kind === "wait") setPrep(step.prep);
+    else {
+      setPrep(null);
+      setMessage(PRACTICE_COPY.swingPrepTooLong);
+    }
+  }
+
+  const followRef = useRef(follow);
+  useEffect(() => {
+    followRef.current = follow;
+  });
+
+  // The next day is still being prepared: ask again until it opens (the call is safe to repeat), for at most ten minutes.
+  useEffect(() => {
+    if (prep === null || threadId === null) {
+      prepSince.current = null;
+      return;
+    }
+    const since = (prepSince.current ??= Date.now());
     const timer = setTimeout(() => {
       continueSwingThread(threadId).then(
-        (result) => settle(router, result, setPrep),
+        (result) => followRef.current(prepStep(result, since, Date.now())),
         (error: unknown) => {
+          if (!mounted.current) return;
           setPrep(null);
           setMessage(problemMessage(error, PRACTICE_COPY.swingContinueError));
         },
       );
     }, PREP_WAIT_MS);
     return () => clearTimeout(timer);
-  }, [prep, threadId, router]);
+  }, [prep, threadId]);
 
   async function run(action: () => Promise<void>, fallback: string) {
     setBusy(true);
@@ -127,9 +163,10 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   }
 
   const start = boardStart(list);
+  // Start and Resume ask the same thing: the name's session at the day clock (a name left behind it is lifted by the server).
   const startNow = () =>
     run(async () => {
-      if (start.kind !== "start") return;
+      if (start.kind === "none") return;
       const session = await startDaySession(list.id, start.symbol);
       router.push(`/practice/replay?id=${session.id}`);
     }, PRACTICE_COPY.swingStartError);
@@ -146,7 +183,8 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const proceed = () =>
     run(async () => {
       if (threadId === null) return;
-      settle(router, await continueSwingThread(threadId), setPrep);
+      const now = Date.now();
+      follow(prepStep(await continueSwingThread(threadId), now, now));
     }, PRACTICE_COPY.swingContinueError);
 
   function cancelPass() {
@@ -165,10 +203,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       <header className={dayStyles.header}>
         <h1 className={dayStyles.title}>{swingHeaderLine(list, hidden)}</h1>
         <div className={dayStyles.actions}>
-          {!ended && start.kind === "resume" && (
-            <Link href={`/practice/replay?id=${start.sessionId}`} className={`${dayStyles.button} ${dayStyles.primary}`}>{resumeDayLabel(list.day_no)}</Link>
-          )}
-          {!ended && start.kind !== "resume" && (
+          {!ended && (
             <button
               type="button"
               className={`${dayStyles.button} ${dayStyles.primary}`}
@@ -176,7 +211,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
               aria-describedby={start.kind === "none" ? "swing-star-hint" : undefined}
               onClick={() => void startNow()}
             >
-              {practiceText("swingStartDay", { n: list.day_no })}
+              {start.kind === "resume" ? resumeDayLabel(list.day_no) : practiceText("swingStartDay", { n: list.day_no })}
             </button>
           )}
           {!ended && canPass(list) && !confirmPass && (
@@ -220,10 +255,15 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
         {after && (
           <div className={styles.after}>
             {after.notice && <p className={styles.notice} role="status">{after.notice}</p>}
+            {threadId !== null && after.waiting && (
+              <Link href={`/practice/week?thread=${threadId}&week=${after.waiting.weekNo}`} className={`${dayStyles.button} ${dayStyles.primary}`}>
+                {after.waiting.label}
+              </Link>
+            )}
             {threadId !== null && (
               <Link
                 href={`/practice/week?thread=${threadId}&week=${after.reviewWeekNo}`}
-                className={after.notice ? `${dayStyles.button} ${dayStyles.primary}` : dayStyles.button}
+                className={after.notice && !after.waiting ? `${dayStyles.button} ${dayStyles.primary}` : dayStyles.button}
               >
                 {after.reviewLabel}
               </Link>
@@ -286,13 +326,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       />
     </div>
   );
-}
-
-/** Where Continue goes: to the day that opened, to the hub when there is nothing to wait for, else wait for the data. */
-function settle(router: ReturnType<typeof useRouter>, result: SwingOpenNext, setPrep: (prep: SwingPlan["prep"]) => void) {
-  if (result.day_list_id !== null) router.push(`/practice/day?id=${result.day_list_id}`);
-  else if (result.plan.finished || result.plan.prep.state !== "running") router.push("/practice");
-  else setPrep(result.plan.prep);
 }
 
 function UniverseTable({
@@ -382,6 +415,7 @@ function BoardPeek({
   hideDates: boolean;
 }) {
   const bars = useMemo(() => (peek ? peekDailyBars(peek.daily, hideDates) : []), [peek, hideDates]);
+  const rowLabels = useMemo(() => (hideDates ? peekOffsets(bars.length) : undefined), [bars, hideDates]);
   const levels = useMemo<MarketChartLevel[]>(
     () => (peek ? PEEK_LEVELS.map((key) => ({ label: LEVEL_LABELS[key], price: peek.levels[key] ?? null, style: "dotted" as const })) : []),
     [peek],
@@ -392,7 +426,7 @@ function BoardPeek({
   return (
     <div className={dayStyles.peek}>
       <h3 className={dayStyles.peekTitle}>{peek.symbol}</h3>
-      <MarketChart symbol={peek.symbol} interval="1d" bars={bars} quality="eod" asOf={null} levels={levels} volume hideDates={hideDates} chrome="bare" height={260} />
+      <MarketChart symbol={peek.symbol} interval="1d" bars={bars} quality="eod" asOf={null} levels={levels} volume hideDates={hideDates} rowLabels={rowLabels} chrome="bare" height={260} />
       <p className={dayStyles.muted}>{PRACTICE_COPY.swingBoardPeek}</p>
     </div>
   );

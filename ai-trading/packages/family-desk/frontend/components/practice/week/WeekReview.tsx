@@ -65,7 +65,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
   const sourceLine = bySource === null ? null : `${WEEK_TEXT.sourceLead} · ${bySource}`;
   const filterLine = filterQualityLine(review.filter_quality);
   const untraded = focusUntradedLines(review.focus_untraded);
-  const action = weekAction({ weekNo: week.week_no, toDate, lastDayNo: review.week.last_day_no, state: thread?.swing });
+  const action = weekAction({ weekNo: week.week_no, toDate, lastDayNo: review.week.last_day_no, state: thread?.swing, daily: thread?.daily, today: thread?.today });
 
   // The rating shows the moment she picks it and goes back, with a line saying so, if the save fails. The notes stay in the
   // box she typed them in until the server has them, so a failed save loses no text. `confirmed` is the last value the
@@ -202,7 +202,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
             {action.kind === "start" ? (
               <button type="button" className={`${styles.button} ${styles.primary}`} disabled={start.busy} onClick={startWeek}>{action.label}</button>
             ) : (
-              <Link href={threadHref(threadId)} className={`${styles.button} ${styles.primary}`}>{action.label}</Link>
+              <Link href={action.href ?? threadHref(threadId)} className={`${styles.button} ${styles.primary}`}>{action.label}</Link>
             )}
           </div>
           {start.message !== null && <p className={styles.alert} role="alert">{start.message}</p>}

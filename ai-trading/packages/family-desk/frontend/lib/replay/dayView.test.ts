@@ -14,6 +14,7 @@ import {
   moveText,
   ordinal,
   peekDailyBars,
+  peekOffsets,
   planArmedText,
   planCard,
   selectionText,
@@ -144,4 +145,9 @@ test("with dates hidden the Peek chart gets a stand-in timeline, never the real 
   assert.deepEqual(hidden.map((bar) => bar.c), [2, 3]);
   assert.equal(syntheticDays(6).at(-1), "2001-01-08"); // weekends are skipped
   assert.equal(JSON.stringify(hidden).includes("2026"), false);
+});
+
+test("hidden Peek bars are named by how many sessions back they are: D-12 up to D-1, the prior close (M4)", () => {
+  assert.deepEqual(peekOffsets(3), ["D-3", "D-2", "D-1"]);
+  assert.deepEqual(peekOffsets(0), []);
 });

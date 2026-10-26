@@ -1,8 +1,9 @@
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { SortValue } from "../desk/sort.ts";
 import type { ListColumn } from "./daily.ts";
+import { pollExpired } from "./hubSwing.ts";
 import { firstSessionSymbol, sideLabel } from "./swing.ts";
-import type { BoardRow, SwingDayList } from "./swingApi.ts";
+import type { BoardRow, SwingDayList, SwingOpenNext, SwingPlan } from "./swingApi.ts";
 import type { SwingState } from "./threads.ts";
 import { etWallToUtcIso, ms } from "./time.ts";
 import { SOURCE_ORDER } from "./universeView.ts";
@@ -82,8 +83,11 @@ export const lateStarsText = (names: readonly string[]): string | null =>
 export const resumeDayLabel = (dayNo: number): string => `Resume Day ${dayNo}`;
 
 export type BoardStart =
-  /** The day is under way: go to the open session of the first focus name (else a hold, else any open one). */
-  | { kind: "resume"; sessionId: number }
+  /**
+   * The day is under way: reopen the name's session at the day clock (the first focus name's, else a hold's, else any open
+   * one). Asked of the server like a start, never opened by session id: that session may be behind the day clock.
+   */
+  | { kind: "resume"; symbol: string }
   /** Start the workspace on the first focus name, or on a hold when nothing is starred. */
   | { kind: "start"; symbol: string }
   /** Nothing starred and no hold to open on. */
@@ -94,7 +98,7 @@ export function boardStart(list: Pick<SwingDayList, "status" | "watch" | "holds"
   if (list.status === "practicing") {
     const open = list.sessions.filter((session) => session.status === "active");
     const session = open.find((item) => item.symbol === symbol) ?? open[0];
-    if (session) return { kind: "resume", sessionId: session.id };
+    if (session) return { kind: "resume", symbol: session.symbol };
   }
   return symbol === null ? { kind: "none" } : { kind: "start", symbol };
 }
@@ -110,6 +114,8 @@ export type EndedDayView = {
   /** The link to this day's week: "Open Week 2 review". */
   reviewLabel: string;
   reviewWeekNo: number;
+  /** An older day while the thread waits on a LATER week's review: that review's link, beside this day's own. */
+  waiting: { weekNo: number; label: string } | null;
   /**
    * `continue`: the next day opens from here. `review`: the finished week's review comes first (the review page offers
    * the next week). `finished`: the thread is over. Null while the thread state has not loaded.
@@ -123,7 +129,7 @@ export type EndedDayView = {
  */
 export function endedDayView(list: Pick<SwingDayList, "day_no" | "of" | "week_no">, swing: SwingState | null | undefined): EndedDayView {
   const reviewLabel = practiceText("swingOpenReview", { n: list.week_no });
-  const base = { notice: null, reviewLabel, reviewWeekNo: list.week_no };
+  const base = { notice: null, reviewLabel, reviewWeekNo: list.week_no, waiting: null };
   const finished = { kind: "finished", text: PRACTICE_COPY.swingThreadFinished } as const;
   if (swing === undefined) return { ...base, next: null };
   if (swing === null) {
@@ -131,8 +137,38 @@ export function endedDayView(list: Pick<SwingDayList, "day_no" | "of" | "week_no
   }
   if (swing.next === "finished") return { ...base, next: finished };
   if (swing.next === "week_review") {
-    // The state's week is the week of the next day to open, so the review waiting is the one before it.
-    return { ...base, notice: swing.week_no - 1 === list.week_no ? practiceText("swingReviewReady", { n: list.week_no }) : null, next: { kind: "review" } };
+    // The state's week is the week of the next day to open, so the review waiting is the one before it. Any ended day says so.
+    const weekNo = swing.week_no - 1;
+    const waiting = weekNo === list.week_no ? null : { weekNo, label: practiceText("swingOpenReview", { n: weekNo }) };
+    return { ...base, notice: practiceText("swingReviewReady", { n: weekNo }), waiting, next: { kind: "review" } };
   }
   return { ...base, next: { kind: "continue", label: practiceText("swingContinueDay", { n: swing.day_no }) } };
+}
+
+/**
+ * The thread state the board may act on. `updating`: the thread is being read again (right after Pass), and the answer on
+ * hand predates the pass, so it offers nothing yet. A failed refresh leaves that old answer too: null, as for a thread
+ * that cannot be read (the server decides what Continue opens).
+ */
+export function trustedSwingState(thread: { data: { swing?: SwingState | null } | null; error: unknown; updating: boolean }): SwingState | null | undefined {
+  if (thread.updating) return undefined;
+  if (thread.data !== null) return thread.error === null ? (thread.data.swing ?? null) : null;
+  return thread.error === null ? undefined : null;
+}
+
+// -- waiting for the next day's data --------------------------------------------------------------------------------
+
+export type PrepStep =
+  | { kind: "open"; href: string }
+  /** Nothing to wait for: back to the hub. */
+  | { kind: "hub" }
+  | { kind: "wait"; prep: SwingPlan["prep"] }
+  /** The data is taking too long: stop asking (the same ten minutes as the setup's preview). */
+  | { kind: "expired" };
+
+/** What `POST /daily/next` means for a board waiting since `startedAt`: the day that opened, the hub, keep asking, or give up. */
+export function prepStep(result: SwingOpenNext, startedAt: number, now: number): PrepStep {
+  if (result.day_list_id !== null) return { kind: "open", href: `/practice/day?id=${result.day_list_id}` };
+  if (result.plan.finished || result.plan.prep.state !== "running") return { kind: "hub" };
+  return pollExpired(startedAt, now) ? { kind: "expired" } : { kind: "wait", prep: result.plan.prep };
 }

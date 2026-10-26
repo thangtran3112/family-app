@@ -1,7 +1,7 @@
 import { DeskApiError } from "../api/client.ts";
 import { fillCopy, practiceText } from "../desk/freshness.ts";
 import type { SwingOpenNext, WeekOut } from "./swingApi.ts";
-import type { SwingState, ThreadDay } from "./threads.ts";
+import type { SwingState, ThreadDay, ThreadToday } from "./threads.ts";
 import { formatBalance } from "./threadView.ts";
 import { startWeekAction, type EquitySeries, type WeekDayRowView } from "./weekView.ts";
 
@@ -79,19 +79,33 @@ export function weekSubtitle(week: Pick<WeekOut, "label" | "to_date" | "review">
 export type WeekAction =
   /** `Start Week 3`: calls `POST /daily/next` and opens the new week's first day. */
   | { kind: "start"; label: string; weekNo: number }
-  /** A plain link to the thread. */
-  | { kind: "link"; label: string };
+  /** A plain link: that day's board when `href` is set, else the thread. */
+  | { kind: "link"; label: string; href: string | null };
 
 /**
  * One button closes the review. `Start Week 3` when this week just ended and the thread waits for the next one; for the
- * open week "Back to Day 7" (the day she is on); otherwise (the final week, or a week she has already moved past) "Back to
- * your thread". `state` is null until the thread loads, or when it failed to load.
+ * open week "Back to Day 7" (the day she is on, linking to its board; with no board to go to, "Back to your thread");
+ * otherwise (the final week, or a week she has already moved past) "Back to your thread". `state` is null until the thread
+ * loads, or when it failed to load; `daily` and `today` are the thread's ended days and its open day.
  */
-export function weekAction(args: { weekNo: number; toDate: boolean; lastDayNo: number; state: SwingState | null | undefined }): WeekAction {
-  const { weekNo, toDate, lastDayNo, state } = args;
-  if (toDate) return { kind: "link", label: fillCopy(WEEK_TEXT.backToDay, { n: String(state?.day_no ?? lastDayNo) }) };
+export function weekAction(args: {
+  weekNo: number;
+  toDate: boolean;
+  lastDayNo: number;
+  state: SwingState | null | undefined;
+  daily?: ReadonlyArray<Pick<ThreadDay, "n" | "day_list_id">> | null;
+  today?: Pick<ThreadToday, "day_no" | "day_list_id"> | null;
+}): WeekAction {
+  const { weekNo, toDate, lastDayNo, state, daily, today } = args;
+  if (toDate) {
+    const dayNo = state?.day_no ?? lastDayNo;
+    const dayListId = today?.day_no === dayNo ? today.day_list_id : dayListIdOf(daily, dayNo);
+    return dayListId === null
+      ? { kind: "link", label: WEEK_TEXT.backToThread, href: null }
+      : { kind: "link", label: fillCopy(WEEK_TEXT.backToDay, { n: String(dayNo) }), href: dayBoardHref(dayListId) };
+  }
   const start = startWeekAction(state, weekNo);
-  return start ? { kind: "start", label: start.label, weekNo: start.weekNo } : { kind: "link", label: WEEK_TEXT.backToThread };
+  return start ? { kind: "start", label: start.label, weekNo: start.weekNo } : { kind: "link", label: WEEK_TEXT.backToThread, href: null };
 }
 
 export type StartOutcome = { kind: "open"; href: string } | { kind: "wait"; text: string };

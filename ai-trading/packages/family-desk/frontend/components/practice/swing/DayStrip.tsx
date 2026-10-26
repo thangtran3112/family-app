@@ -1,5 +1,6 @@
 "use client";
 
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { StripRow } from "@/lib/replay/schemas";
 import { stripRowView } from "@/lib/replay/swing";
@@ -26,7 +27,10 @@ export function DayStrip({ rows, current, opening, disabled = false, onSwitch }:
   const list = rows ?? [];
   return (
     <section className={styles.strip} aria-label={PRACTICE_COPY.swingStripTitle}>
-      <h2 className={styles.stripTitle}>{PRACTICE_COPY.swingStripTitle}</h2>
+      <div className={styles.stripHead}>
+        <h2 className={styles.stripTitle}>{PRACTICE_COPY.swingStripTitle}</h2>
+        <SimulatedBadge />
+      </div>
       {list.length === 0 ? (
         <p className={styles.muted}>{PRACTICE_COPY.swingStripEmpty}</p>
       ) : (

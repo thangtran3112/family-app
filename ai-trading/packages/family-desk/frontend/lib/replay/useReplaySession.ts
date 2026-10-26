@@ -10,6 +10,7 @@ import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } fro
 import type { EntryOrExit } from "./keys.ts";
 import { canUndoLast, lastMark } from "./marks.ts";
 import { canRequest, initialPlayer, playerReducer } from "./player.ts";
+import { createRequestQueue } from "./requestQueue.ts";
 import type { Paused, ReplayInterval, ReplaySession } from "./schemas.ts";
 import { problemMessage } from "./setup.ts";
 import { filterById, tapeQuery, type SizeFilterId } from "./tape.ts";
@@ -75,7 +76,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   const filterRef = useRef(filterId);
   const intervalRef = useRef(interval);
   const busy = useRef(false);
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const [queue] = useState(createRequestQueue);
   const lastStart = useRef(0);
   const toastId = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -139,25 +140,31 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     };
   }, [id, revision]);
 
-  /** Runs `task` after every earlier user action, counted as the one request in flight. Resolves with its result. */
-  const exec = useCallback(<T,>(task: () => Promise<T>): Promise<T | null> => {
-    const run = chain.current.then(async () => {
-      if (!alive.current) return null;
-      busy.current = true;
-      dispatch({ type: "request" });
-      try {
-        return await task();
-      } catch {
-        // Every task answers its own failures; this keeps a surprise from leaving the player stuck "busy".
-        dispatch({ type: "failed", message: PRACTICE_COPY.advanceError });
-        return null;
-      } finally {
-        busy.current = false;
-      }
-    });
-    chain.current = run.catch(() => undefined);
-    return run.catch(() => null);
-  }, []);
+  /**
+   * Runs `task` after every earlier user action, counted as the one request in flight. Resolves with its result.
+   * `press` (Step, Jump, Next signal): dropped when an advance ahead of it stopped at a crossed stop.
+   */
+  const exec = useCallback(
+    <T,>(task: () => Promise<T>, press = false): Promise<T | null> =>
+      queue.run(
+        async () => {
+          if (!alive.current) return null;
+          busy.current = true;
+          dispatch({ type: "request" });
+          try {
+            return await task();
+          } catch {
+            // Every task answers its own failures; this keeps a surprise from leaving the player stuck "busy".
+            dispatch({ type: "failed", message: PRACTICE_COPY.advanceError });
+            return null;
+          } finally {
+            busy.current = false;
+          }
+        },
+        { dropAfterPause: press },
+      ),
+    [queue],
+  );
 
   /** Moves the playhead. Failures: a 422 (for example no more signals) is a message; anything else stops playback. */
   const advance = useCallback(
@@ -167,7 +174,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const delta = await advanceReplay(id, target, tape());
         if (!alive.current) return false;
         setView((current) => (current ? applyAdvance(current, delta) : current));
-        // A stop pause (swing) stops playback; no timer starts another request until she plays again.
+        // A stop pause (swing) stops playback; no timer starts another request until she plays again, and no press queued behind this one runs.
+        if (delta.paused != null) queue.notePause();
         dispatch({ type: "settled", atEnd: delta.at_end, paused: delta.paused != null });
         return true;
       } catch (error) {
@@ -181,7 +189,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         return false;
       }
     },
-    [id, say, tape],
+    [id, say, tape, queue],
   );
 
   // Play: one request per wall-clock second, started only when none is in flight, so a slow answer stutters the
@@ -209,16 +217,16 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     if (isSpeed(next)) dispatch({ type: "speed", speed: next });
   }, []);
   const step = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "bar" }));
+    if (guard()) void exec(() => advance({ step: "bar" }), true);
   }, [exec, advance]);
   const nextSignal = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "next_signal" }));
+    if (guard()) void exec(() => advance({ step: "next_signal" }), true);
   }, [exec, advance]);
   const jumpBy = useCallback(
     (minutes: number) => {
       const current = viewRef.current;
       const target = sessionRef.current;
-      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(current.revealedThrough, minutes, target.window_end) }));
+      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(current.revealedThrough, minutes, target.window_end) }), true);
     },
     [exec, advance],
   );
@@ -227,13 +235,13 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       const target = sessionRef.current;
       const to = target ? etWallToUtcIso(target.spec.day, hhmm) : null;
       if (!target || to === null || !guard()) return;
-      void exec(() => advance({ to }));
+      void exec(() => advance({ to }), true);
     },
     [exec, advance],
   );
   const jumpToEnd = useCallback(() => {
     const target = sessionRef.current;
-    if (target && guard()) void exec(() => advance({ to: target.window_end }));
+    if (target && guard()) void exec(() => advance({ to: target.window_end }), true);
   }, [exec, advance]);
 
   /** Swing only: a mark moves a hold, so the day strip and the Daily chart's hold marker are read again (runs inside the one request in flight). */

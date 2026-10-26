@@ -129,6 +129,9 @@ test.describe("Swing practice", () => {
     await expect(page.getByText("Day 1 of 15 · Week 1 · Mon")).toBeVisible();
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Balance $50,000 · Equity $50,000 · Free cash $50,000");
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText(PRACTICE_COPY.threadSimulated);
+    // M5: every rail section with dollars is labelled SIMULATED (the strip's hold P/L, the plan's week limits).
+    await expect(strip.getByText(PRACTICE_COPY.threadSimulated, { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Swing plan" }).getByText(PRACTICE_COPY.threadSimulated, { exact: true })).toBeVisible();
 
     // Before the first bar nothing can be entered.
     await expect(playhead(page)).toContainText("9:30");
@@ -277,6 +280,17 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("table", { name: "Practice holds" }).getByRole("row", { name: /^S01/ })).toContainText("Exit Day 3");
     await expectNoDates(page);
     await shot(page, "swing-day-exit");
+
+    // C1: Day 3 has ended but the thread goes on. Its journal (opened from the hub's recent sessions) names the day by number
+    // and weekday, in the title, the Practice band and the badge: one date would give every later day's.
+    await openDesk(page, "/practice");
+    const recent = await railSection(page, "Practice sessions", "Recent");
+    await recent.getByRole("table", { name: "Recent practice sessions" }).getByRole("row", { name: /S01/ }).first().click();
+    await page.waitForURL(/\/practice\/journal\?id=\d+/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/^S01 · Day \d of 15 · Week 1 · (Mon|Tue|Wed) · attempt 1 · Practice journal$/);
+    await expect(page.getByRole("heading", { name: "Chart", level: 2 })).toBeVisible();
+    await expectNoDates(page);
+    await shot(page, "swing-session-journal");
   });
   test("the S03 split morning keeps a carried hold's P/L, and the S02 gap through a stop pauses the first advance", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -439,8 +453,17 @@ test.describe("Swing practice", () => {
     await expect(page.getByText("Week to date", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Through the last finished day's close · not final yet")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Start Week/ })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Back to Day 7" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveCount(0); // Day 7 has no board yet
+    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
     await expectNoDates(page);
+
+    // Once Day 7 is open, the same review goes back to its board.
+    const dayList7 = await openNextDay(context, threadId);
+    await openDesk(page, `/practice/week?thread=${threadId}&week=2`);
+    await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveAttribute("href", `/practice/day?id=${dayList7}`);
+    await page.getByRole("link", { name: "Back to Day 7" }).click();
+    await page.waitForURL(BOARD_URL);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Week 2 · Tue");
   });
   test("acceptance: nothing past the day clock reaches the browser, a carried hold hand-checks, and the thread closes at the last close", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -472,7 +495,13 @@ test.describe("Swing practice", () => {
     await expect(page.getByText(/^Paused at 11:/)).toBeVisible();
     const toggle = page.getByRole("group", { name: "Chart interval" });
     await toggle.getByRole("button", { name: "Daily", exact: true }).click();
-    await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
+    const dailyChart = page.getByRole("region", { name: "S01 1d market chart" });
+    await expect(dailyChart).toBeVisible();
+    // M4: with dates hidden the chart's data table names its rows "D-1" ... "Today", not stand-in times of day.
+    await dailyChart.getByText(/^Chart data table/).click();
+    await expect(dailyChart.getByRole("rowheader", { name: "Today" })).toBeVisible();
+    await expect(dailyChart.getByRole("rowheader", { name: "D-1", exact: true })).toBeVisible();
+    await expect(dailyChart.getByRole("rowheader", { name: /AM|PM/ })).toHaveCount(0);
     await toggle.getByRole("button", { name: "5m", exact: true }).click();
     await expect(page.getByRole("region", { name: "S01 5m market chart" })).toBeVisible();
     await toggle.getByRole("button", { name: "15m", exact: true }).click();
@@ -557,7 +586,7 @@ test.describe("Swing practice", () => {
     // A thread cannot close while its day is open: the API says so in words, and so does the journal.
     const refused = await context.request.post(`${REPLAY}/threads/${threadId}/close`);
     expect(refused.status()).toBe(409);
-    expect(JSON.stringify(await refused.json())).toContain("End today's practice day before closing the thread");
+    expect(JSON.stringify(await refused.json())).toContain("End Day 3 first");
     await openDesk(page, `/practice/journal?thread=${threadId}`);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
@@ -565,13 +594,13 @@ test.describe("Swing practice", () => {
     const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
     await plan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
     await plan.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
-    await expect(plan.getByText(/End today's practice day before closing the thread/)).toBeVisible();
+    await expect(plan.getByText("End Day 3 first")).toBeVisible();
     expect((await get(context, `/threads/${threadId}`)).thread.status).toBe("active");
     await shot(page, "swing-journal-close-refused");
 
     // End the day from the board it opened on, then close the thread: the holds leave at that last close.
     await openDesk(page, `/practice/day?id=${(await get(context, `/threads/${threadId}`)).today.day_list_id}`);
-    await page.getByRole("link", { name: "Resume Day 3" }).click();
+    await page.getByRole("button", { name: "Resume Day 3" }).click();
     await page.waitForURL(SESSION_URL);
     // S01 was left at 11:00 while S04 ran to the close: it comes back at the shared day clock, not at its own old playhead.
     await expect(page.getByText(/^End Day 3 · 2 holds stay open overnight/)).toBeVisible();
@@ -629,6 +658,60 @@ test.describe("Swing practice", () => {
     const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];
     expect(closed.map((hold) => hold.symbol)).toEqual(["S02"]);
     expect(closed[0]!.exit_price).toBeLessThan(86);
+    await expectNoDates(page);
+  });
+  test("a name left behind the day clock comes back at the clock: from the strip and from Resume Day, and a mark is accepted", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const dayList = await openNextDay(context, threadId);
+    await send(context, "PATCH", `/day-lists/${dayList}`, { watch: ["S01", "S02"] });
+    await openDesk(page, `/practice/day?id=${dayList}`);
+    await page.getByRole("button", { name: "Start Day 1" }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
+    const strip = page.getByRole("region", { name: "Day strip" });
+    const jumpTo = async (hhmm: string) => {
+      await page.getByRole("button", { name: /^Jump/ }).click();
+      await page.getByLabel("To a time (ET)").fill(hhmm);
+      await page.getByRole("button", { name: "Go", exact: true }).click();
+    };
+
+    // S01 to 10:00; S02 opens at that clock and runs on to 11:00; S01 is then an hour behind.
+    await jumpTo("10:00");
+    await expect(playhead(page)).toContainText("10:00");
+    await strip.getByRole("button", { name: /^S02, focus name/ }).click();
+    await expect(page.getByRole("heading", { name: "S02", level: 1 })).toBeVisible();
+    await expect(playhead(page)).toContainText("10:00");
+    await jumpTo("11:00");
+    await expect(playhead(page)).toContainText("11:00");
+
+    // Back on S01 from the strip: its header reads the day clock and a mark is accepted.
+    await strip.getByRole("button", { name: /^S01, focus name/ }).click();
+    await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
+    await expect(playhead(page)).toContainText("11:00");
+    const practice = await replayRail(page, "Practice");
+    await practice.getByLabel("Shares").fill("100");
+    await practice.getByRole("button", { name: "Long (B)" }).click();
+    await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
+
+    // S02 runs on to 12:00; Resume Day 1 on the board asks for S01's session at the clock and a mark is accepted there too.
+    await strip.getByRole("button", { name: /^S02, focus name/ }).click();
+    await expect(page.getByRole("heading", { name: "S02", level: 1 })).toBeVisible();
+    await jumpTo("12:00");
+    await expect(playhead(page)).toContainText("12:00");
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(BOARD_URL);
+    await page.getByRole("button", { name: "Resume Day 1" }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
+    await expect(playhead(page)).toContainText("12:00");
+    const practiceAgain = await replayRail(page, "Practice");
+    await practiceAgain.getByRole("button", { name: "Exit (X)" }).click();
+    await expect(practiceAgain.getByText("No open practice hold")).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
+    const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];
+    expect(closed.map((hold) => hold.symbol)).toEqual(["S01"]);
     await expectNoDates(page);
   });
 });

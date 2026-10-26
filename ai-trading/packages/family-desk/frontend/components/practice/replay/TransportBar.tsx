@@ -10,6 +10,8 @@ import styles from "./replay.module.css";
 
 export type TransportBarProps = {
   status: PlayerStatus;
+  /** A request is in flight: Step waits for its answer (a second press would queue behind it, past a stop pause). */
+  busy: boolean;
   speed: Speed;
   error: string | null;
   windowStart: string;
@@ -43,7 +45,7 @@ export function TransportBar(props: TransportBarProps) {
         <button type="button" className={`${styles.button} ${styles.primary}`} disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
           {status === "playing" ? "Pause" : "Play"}
         </button>
-        <button type="button" className={styles.button} disabled={locked} title="Step one bar (→)" onClick={props.onStep}>Step</button>
+        <button type="button" className={styles.button} disabled={locked || props.busy} title="Step one bar (→)" onClick={props.onStep}>Step</button>
         <SpeedChips speed={speed} onSpeed={props.onSpeed} />
         <JumpMenu
           revealedThrough={revealedThrough}

@@ -11,6 +11,7 @@
 
 /* Day strip (left rail) */
 .strip { display: flex; flex-direction: column; gap: var(--space-2); }
+.stripHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .stripTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .stripList { display: flex; margin: 0; flex-direction: column; gap: 2px; padding: 0; list-style: none; }
 .stripRow { display: grid; width: 100%; min-height: 40px; grid-template-columns: 1fr auto auto; align-items: center; gap: 0 var(--space-2); border: 1px solid transparent; border-left: 3px solid transparent; border-radius: var(--radius-sm); background: transparent; padding: 4px var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }

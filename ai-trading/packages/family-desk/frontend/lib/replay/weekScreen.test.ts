@@ -59,7 +59,7 @@ test("the button starts the next week only when this week just ended and the thr
 });
 
 test("the final week, an old week and an unloaded thread read 'Back to your thread'", () => {
-  const link = { kind: "link", label: "Back to your thread" };
+  const link = { kind: "link", label: "Back to your thread", href: null };
   assert.deepEqual(weekAction({ weekNo: 4, toDate: false, lastDayNo: 20, state: swingThreadFinished.swing }), link);
   // Week 1 again after week 2 is under way.
   assert.deepEqual(weekAction({ weekNo: 1, toDate: false, lastDayNo: 5, state: swingState }), link);
@@ -67,9 +67,16 @@ test("the final week, an old week and an unloaded thread read 'Back to your thre
   assert.deepEqual(weekAction({ weekNo: 1, toDate: false, lastDayNo: 5, state: undefined }), link);
 });
 
-test("the open week reads 'Back to Day N' with the day she is on, else the day it is through", () => {
-  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: swingState }), { kind: "link", label: "Back to Day 7" });
-  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: null }), { kind: "link", label: "Back to Day 6" });
+test("the open week reads 'Back to Day N' and goes to that day's board; with no board to go to it says 'Back to your thread' (M2)", () => {
+  const daily = [{ n: 5, day_list_id: 65 }, { n: 6, day_list_id: 66 }];
+  const today = { day_no: 7, day_list_id: 67 };
+  // The day she is on is open: its board.
+  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: swingState, daily, today }), { kind: "link", label: "Back to Day 7", href: "/practice/day?id=67" });
+  // The thread cannot be read: the day the week is through (an ended day has its board in the thread's days).
+  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: null, daily, today: null }), { kind: "link", label: "Back to Day 6", href: "/practice/day?id=66" });
+  // Day 7 has not been opened yet (she has not pressed Continue): no board, so the label does not name a day.
+  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: swingState, daily, today: null }), { kind: "link", label: "Back to your thread", href: null });
+  assert.deepEqual(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: swingState }), { kind: "link", label: "Back to your thread", href: null }, "no thread at all");
   // Never a Start button for the open week, even when the state says a review is next.
   assert.equal(weekAction({ weekNo: 2, toDate: true, lastDayNo: 6, state: { ...swingState, next: "week_review", week_no: 3 } }).kind, "link");
 });

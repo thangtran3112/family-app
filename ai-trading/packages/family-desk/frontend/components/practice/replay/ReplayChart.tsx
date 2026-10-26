@@ -64,6 +64,7 @@ function DailyChart({ symbol, view, hideDates, dimmed }: ReplayChartProps) {
           chrome="bare"
           height="fill"
           hideDates={hideDates}
+          rowLabels={model.offsets ?? undefined}
           dimmed={dimmed}
         />
         <div className={styles.legend}><ChartLegend model={legend} /></div>

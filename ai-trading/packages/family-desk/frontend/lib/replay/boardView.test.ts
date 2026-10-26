@@ -13,9 +13,13 @@ import {
   lateStars,
   lateStarsText,
   resumeDayLabel,
+  prepStep,
   starEntry,
+  trustedSwingState,
 } from "./boardView.ts";
-import { amdHold, boardColumns as apiColumns, boardRows, closedHold, nvdaHold, swingDayList, swingState } from "./swingFixtures.ts";
+import { PREVIEW_POLL_MAX_MS } from "./hubSwing.ts";
+import type { SwingState } from "./threads.ts";
+import { amdHold, boardColumns as apiColumns, boardRows, closedHold, nvdaHold, swingDayList, swingOpenNext, swingOpenNextWaiting, swingState } from "./swingFixtures.ts";
 
 test("the columns are the API's, then Earnings; text columns read left, numbers right; the lowest-value ones drop at 1180", () => {
   const columns = boardColumns(apiColumns);
@@ -71,8 +75,8 @@ test("Start Day opens on a focus name or a hold; a day under way resumes its ope
     { id: 90, symbol: "AMD", status: "active" as const },
     { id: 91, symbol: "NVDA", status: "active" as const },
   ];
-  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions }), { kind: "resume", sessionId: 91 }, "the first focus name's session");
-  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [sessions[0]!] }), { kind: "resume", sessionId: 90 }, "else any open one");
+  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions }), { kind: "resume", symbol: "NVDA" }, "the first focus name's session");
+  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [sessions[0]!] }), { kind: "resume", symbol: "AMD" }, "else any open one");
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [{ id: 90, symbol: "NVDA", status: "ended" }] }), { kind: "start", symbol: "NVDA" });
   assert.equal(resumeDayLabel(7), "Resume Day 7");
 });
@@ -98,8 +102,14 @@ test("an ended day links its week, says when the review is ready, and offers the
   assert.deepEqual(lastOfWeek.next, { kind: "review" }, "the review comes before the next day");
   assert.equal(lastOfWeek.reviewLabel, "Open Week 1 review");
 
+  assert.equal(lastOfWeek.waiting, null, "the day's own week is the one waiting: its link already goes there");
+
+  // M6: an older ended day while the thread waits on Week 2's review still says so and links to it, beside its own week.
   const older = endedDayView({ day_no: 3, of: 20, week_no: 1 }, { ...swingState, day_no: 11, days_ended: 10, week_no: 3, next: "week_review" });
-  assert.equal(older.notice, null, "the review waiting is another week's");
+  assert.equal(older.notice, "Week 2 review ready");
+  assert.deepEqual(older.waiting, { weekNo: 2, label: "Open Week 2 review" });
+  assert.deepEqual([older.reviewLabel, older.reviewWeekNo], ["Open Week 1 review", 1]);
+  assert.equal(next.waiting, null, "nothing waits when the next step is a day");
 
   const done = endedDayView({ day_no: 20, of: 20, week_no: 4 }, { ...swingState, day_no: 20, days_ended: 20, week_no: 4, next: "finished" });
   assert.deepEqual(done.next, { kind: "finished", text: "Thread finished · every hold closed at the last close" });
@@ -116,4 +126,29 @@ test("the strings the board builds contain no banned word", () => {
     endedDayView({ day_no: 5, of: 20, week_no: 1 }, { ...swingState, week_no: 2, next: "week_review" }).notice!,
   ];
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
+});
+
+test("right after Pass the board trusts no thread state until the refresh lands, so it never offers the day just passed (M1)", () => {
+  const stale: SwingState = { ...swingState, day_no: 7, days_ended: 6, week_no: 2, next: "day" };
+  const thread = (swing: SwingState | null) => ({ swing });
+  assert.equal(trustedSwingState({ data: thread(stale), error: null, updating: true }), undefined, "refreshing: wait");
+  assert.deepEqual(trustedSwingState({ data: thread(stale), error: null, updating: false }), stale);
+  assert.equal(trustedSwingState({ data: null, error: null, updating: false }), undefined, "first load");
+  assert.equal(trustedSwingState({ data: null, error: new Error("x"), updating: false }), null, "unreadable: the server decides");
+  assert.equal(trustedSwingState({ data: thread(stale), error: new Error("x"), updating: false }), null, "a failed refresh leaves an answer older than the pass");
+  assert.equal(trustedSwingState({ data: thread(null), error: null, updating: false }), null, "a thread without swing state");
+  // What the board reads from it: nothing to continue to while it waits.
+  assert.equal(endedDayView({ day_no: 7, of: 20, week_no: 2 }, trustedSwingState({ data: thread(stale), error: null, updating: true })).next, null);
+});
+
+test("waiting for the next day's data: open, back to the hub, keep asking, or give up after the preview's ten minutes (M3)", () => {
+  const waiting = swingOpenNextWaiting;
+  const t0 = 1_000;
+  assert.deepEqual(prepStep(swingOpenNext, t0, t0), { kind: "open", href: "/practice/day?id=71" });
+  assert.deepEqual(prepStep(waiting, t0, t0 + 3_000), { kind: "wait", prep: waiting.plan.prep });
+  assert.deepEqual(prepStep(waiting, t0, t0 + PREVIEW_POLL_MAX_MS - 1), { kind: "wait", prep: waiting.plan.prep });
+  assert.deepEqual(prepStep(waiting, t0, t0 + PREVIEW_POLL_MAX_MS), { kind: "expired" });
+  assert.deepEqual(prepStep({ ...waiting, plan: { ...waiting.plan, finished: true } }, t0, t0), { kind: "hub" });
+  assert.deepEqual(prepStep({ ...waiting, plan: { ...waiting.plan, prep: { ...waiting.plan.prep, state: "done" } } }, t0, t0), { kind: "hub" }, "nothing to wait for");
+  assert.deepEqual(prepStep(swingOpenNext, t0, t0 + PREVIEW_POLL_MAX_MS * 2), { kind: "open", href: "/practice/day?id=71" }, "a day that opened beats the clock");
 });

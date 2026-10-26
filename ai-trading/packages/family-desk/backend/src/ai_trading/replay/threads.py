@@ -206,8 +206,12 @@ def close_thread(
     row = get_thread(db, user_id, thread_id, lock=True)
     if row.status == "closed":
         return row
-    if open_day(db, row.id) is not None:
-        raise ReplayProblem(DAY_OPEN, path="status", status=409)
+    under_way = open_day(db, row.id)
+    if under_way is not None:
+        # 02p b7: a swing thread names the day ("scored weekly" makes the day thread's sentence wrong for it).
+        raise ReplayProblem(
+            f"End Day {under_way.day_no} first" if row.mode == "swing" else DAY_OPEN, path="status", status=409
+        )
     if row.mode == "swing":
         _swing().close_thread(db, row, now, svc)
     for plan in db.execute(
