@@ -7,15 +7,18 @@ import styles from "./panels.module.css";
 const MARK = { ok: "✓", warn: "!", pending: "•" } as const;
 const STATE_WORDS = { ok: "Met", warn: "Needs attention", pending: "Not yet" } as const;
 
-export function PlanChecklist({ items, shares }: { items: PlanItem[]; shares: number }) {
+/** `shares: null` leaves the "Shares per trade" row off (a swing session sizes each entry; its own plan rows follow). */
+export function PlanChecklist({ items, shares }: { items: PlanItem[]; shares: number | null }) {
   return (
     <div>
       <ul className={styles.list}>
-        <li className={styles.row}>
-          <span className={styles.mark} aria-hidden="true" />
-          <span className={styles.label}>Shares per trade</span>
-          <span className={styles.detail}>{formatNumber(shares, 0)}</span>
-        </li>
+        {shares !== null && (
+          <li className={styles.row}>
+            <span className={styles.mark} aria-hidden="true" />
+            <span className={styles.label}>Shares per trade</span>
+            <span className={styles.detail}>{formatNumber(shares, 0)}</span>
+          </li>
+        )}
         {items.map((item) => (
           <li key={item.id} className={styles.row}>
             <span className={styles.mark} data-state={item.state} aria-hidden="true">{MARK[item.state]}</span>

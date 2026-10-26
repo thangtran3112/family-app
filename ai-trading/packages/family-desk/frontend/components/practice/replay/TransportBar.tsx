@@ -28,6 +28,9 @@ export type TransportBarProps = {
   onJumpEnd: () => void;
   /** At the 1180 band the practice buttons live here so they work with the drawer closed. */
   quick?: ReactNode;
+  /** A swing session (02p): "+1 hour" and "To the close" in the Jump menu, and `chartToggle` in place of the 1m 5m 15m chips. */
+  swing?: boolean;
+  chartToggle?: ReactNode;
 };
 
 /** Forward-only controls under the chart (02o §a3): play or pause, step, speed, jump, and the timeline. */
@@ -50,15 +53,18 @@ export function TransportBar(props: TransportBarProps) {
           onJumpToTime={props.onJumpToTime}
           onNextSignal={props.onNextSignal}
           onJumpEnd={props.onJumpEnd}
+          swing={props.swing}
         />
         {props.quick}
-        <div className={styles.chips} role="group" aria-label="Chart interval">
-          {INTERVALS.map((value) => (
-            <button key={value} type="button" className={styles.chipButton} aria-pressed={props.interval === value} title={`${value} candles`} onClick={() => props.onInterval(value)}>
-              {value}
-            </button>
-          ))}
-        </div>
+        {props.chartToggle ?? (
+          <div className={styles.chips} role="group" aria-label="Chart interval">
+            {INTERVALS.map((value) => (
+              <button key={value} type="button" className={styles.chipButton} aria-pressed={props.interval === value} title={`${value} candles`} onClick={() => props.onInterval(value)}>
+                {value}
+              </button>
+            ))}
+          </div>
+        )}
         <p className={styles.status} role="status" aria-live="polite">{statusLine(status, speed, revealedThrough, windowStart)}</p>
       </div>
       {error && (
