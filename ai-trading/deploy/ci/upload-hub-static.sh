@@ -64,7 +64,7 @@ validate_desk_path() {
   case "$rel" in
     index.html|index.txt|404.html|favicon.ico|icon.svg|_next/static/*) return 0 ;;
   esac
-  for route in '' _not-found today screener screener/filters strategies strategies/new strategies/library watchlists technicals alerts alerts/new futures futures/specs settings more paper holdings ask covered-calls stocks backtests practice practice/replay practice/journal practice/day practice/week feedback feedback/new; do
+  for route in '' _not-found today screener screener/filters strategies strategies/new strategies/library watchlists technicals alerts alerts/new futures futures/specs settings more paper holdings ask covered-calls stocks backtests practice practice/replay practice/journal practice/day practice/week practice/thread feedback feedback/new; do
     prefix="${route:+$route/}"; dotted="${route//\//.}"
     if [[ -n "$route" && ( "$rel" == "$route.html" || "$rel" == "$route.txt" ) ]]; then return 0; fi
     case "$rel" in

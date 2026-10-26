@@ -2,7 +2,8 @@ import type { Page } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
-import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, railSection, replayRail, send, shot, watchSwingAnswers, type Json } from "./swing-helpers";
+import { clickNewPlan, createThreadByApi, openNewPlan, THREAD_URL } from "./hub-helpers";
+import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
@@ -13,63 +14,69 @@ test.describe("Swing practice", () => {
     await prepareDesk(context);
   });
 
-  test("a swing thread is created through the hub, beside a day thread, and the hub asks for a universe only when Swing is picked", async ({ page }) => {
+  test("a swing thread is created through the New plan modal, beside a day thread, and the modal asks for a universe only when Swing is picked", async ({ page, context }) => {
     const api = watchApi(page);
     const swingCalls = () => api.paths().filter((path) => path.includes("/swing-universe"));
-    const threads = page.locator("#threads");
 
-    // A plain hub load never asks for a universe (it would start the data prep).
+    // A plain landing load, and the modal open in Day mode, never ask for a universe (it would start the data prep).
+    let dialog = await openNewPlan(page);
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "false");
+    await page.waitForTimeout(1_200);
+    expect(swingCalls()).toEqual([]);
+    await page.keyboard.press("Escape");
+
+    // The day thread first (made by API: this spec is about the swing thread): the modal then offers Swing only, already open in it.
+    await createThreadByApi(context);
     await openDesk(page, "/practice");
-    await expect(threads.getByRole("form", { name: "New thread" })).toBeVisible();
-    await page.waitForTimeout(1_200);
-    expect(swingCalls()).toEqual([]);
-
-    // The day thread first: the form then offers Swing only, and still asks for nothing until she picks it.
-    await threads.getByRole("form", { name: "New thread" }).getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
-    await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
-    const form = threads.getByRole("form", { name: "New thread" });
-    await expect(form.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeDisabled();
-    await expect(form.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "false");
-    await expect(form.getByText("Pick Swing to build a universe")).toBeVisible();
-    await expect(form.getByRole("button", { name: PRACTICE_COPY.swingStartThread })).toHaveCount(0);
-    await page.reload();
-    await expect(threads.getByRole("form", { name: "New thread" }).getByText("Pick Swing to build a universe")).toBeVisible();
-    await page.waitForTimeout(1_200);
-    expect(swingCalls()).toEqual([]);
+    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+    await expect(table.getByRole("row", { name: /Day trading/ })).toContainText("$50,000");
+    dialog = await clickNewPlan(page);
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByText("A day thread is already active")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingStartThread })).toBeDisabled(); // no universe yet
     await expectCleanScreen(page);
 
     // Swing: the first day, 15 sessions, the twelve names by hand (liquidity off, so only her adds).
-    await form.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await form.getByLabel("First day").fill(FIRST_DAY);
-    await form.getByLabel("Sessions").fill("15");
-    await form.getByRole("checkbox", { name: "Add by liquidity" }).uncheck();
-    const adds = form.getByRole("group", { name: "Add symbols" });
+    await dialog.getByLabel("First day").fill(FIRST_DAY);
+    await dialog.getByLabel("Sessions").fill("15");
+    await dialog.getByRole("checkbox", { name: "Add by liquidity" }).uncheck();
+    const adds = dialog.getByRole("group", { name: "Add symbols" });
     for (const symbol of SYMBOLS) {
       await adds.getByRole("combobox").fill(symbol);
       await adds.getByRole("combobox").press("Enter");
     }
-    const table = form.getByRole("table", { name: "Swing universe" });
-    await expect(table.getByRole("row")).toHaveCount(13, { timeout: 30_000 }); // header + twelve names
-    await expect(form.getByText("As-of data is ready")).toBeVisible();
-    await expect(form.getByText("12 symbols · 12 manual")).toBeVisible();
-    await expect(form.getByText(/^Fixed universe · 12 symbols chosen today/)).toBeVisible(); // the survivorship label
-    for (const symbol of SYMBOLS) await expect(table.getByRole("row", { name: new RegExp(`^${symbol}\\b`) })).toContainText("Manual");
+    const universe = dialog.getByRole("table", { name: "Swing universe" });
+    await expect(universe.getByRole("row")).toHaveCount(13, { timeout: 30_000 }); // header + twelve names
+    await expect(dialog.getByText("As-of data is ready")).toBeVisible();
+    await expect(dialog.getByText("12 symbols · 12 manual")).toBeVisible();
+    await expect(dialog.getByText(/^Fixed universe · 12 symbols chosen today/)).toBeVisible(); // the survivorship label
+    for (const symbol of SYMBOLS) await expect(universe.getByRole("row", { name: new RegExp(`^${symbol}\\b`) })).toContainText("Manual");
     expect(swingCalls().length).toBeGreaterThan(0);
     await shot(page, "swing-create");
     await expectCleanScreen(page);
 
-    await form.getByRole("button", { name: PRACTICE_COPY.swingStartThread }).click();
-    const card = threads.getByRole("article", { name: "Active swing thread" });
-    await expect(card).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
-    await expect(card).toContainText("Balance $50,000");
-    await expect(card).toContainText("Equity $50,000");
-    await expect(card).toContainText(PRACTICE_COPY.threadSimulated);
-    await expect(threads.getByRole("article", { name: "Active practice thread" })).toBeVisible(); // both cards at once
+    // Start swing thread lands on the thread page: the swing line with SIMULATED, and the day thread still has its row.
+    await dialog.getByRole("button", { name: PRACTICE_COPY.swingStartThread }).click();
+    await page.waitForURL(THREAD_URL);
+    const balance = page.getByRole("region", { name: "Thread balance" });
+    await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(balance).toContainText("Balance $50,000");
+    await expect(balance).toContainText("Equity $50,000");
+    await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
+    await openDesk(page, "/practice");
+    const row = swingRow(page);
+    await expect(row).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(row).toContainText("Balance $50,000");
+    await expect(row).toContainText("Equity $50,000");
+    await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
+    await expect(table.getByRole("row", { name: /Day trading/ })).toBeVisible(); // both threads at once
     await shot(page, "swing-hub");
     await expectCleanScreen(page);
 
-    // Start Day 1: the thread's data is still being prepared in the background, and the card says so until the day can open.
-    const start = card.getByRole("button", { name: "Start Day 1" });
+    // Start Day 1: the thread's data is still being prepared in the background, and the row says so until the day can open.
+    const start = row.getByRole("button", { name: "Start Day 1" });
     await expect
       .poll(
         async () => {
@@ -90,8 +97,7 @@ test.describe("Swing practice", () => {
     const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
     await openNextDay(context, threadId);
     await openDesk(page, "/practice");
-    const card = page.locator("#threads").getByRole("article", { name: "Active swing thread" });
-    await card.getByRole("button", { name: "Continue Day 1" }).click();
+    await swingRow(page).getByRole("button", { name: "Continue Day 1" }).click();
     await page.waitForURL(BOARD_URL);
 
     // The board: 12 names with their source tags, the survivorship label, no review, no list chips, no dates.
@@ -212,10 +218,10 @@ test.describe("Swing practice", () => {
     expect(afterOne.balance_usd ?? 50_000).toBe(50_000);
 
     await openDesk(page, "/practice");
-    const card = page.locator("#threads").getByRole("article", { name: "Active swing thread" });
-    await expect(card).toContainText("Day 2 of 15");
-    await expect(card).toContainText("2 holds open");
-    await card.getByRole("button", { name: "Continue Day 2" }).click();
+    const row = swingRow(page);
+    await expect(row).toContainText("Day 2 of 15");
+    await expect(row).toContainText("2 holds open");
+    await row.getByRole("button", { name: "Continue Day 2" }).click();
     await page.waitForURL(BOARD_URL);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 15 · Week 1 · Tue");
     const holds = page.getByRole("table", { name: "Practice holds" });
@@ -281,12 +287,10 @@ test.describe("Swing practice", () => {
     await expectNoDates(page);
     await shot(page, "swing-day-exit");
 
-    // C1: Day 3 has ended but the thread goes on. Its journal (opened from the hub's recent sessions) names the day by number
-    // and weekday, in the title, the Practice band and the badge: one date would give every later day's.
-    await openDesk(page, "/practice");
-    const recent = await railSection(page, "Practice sessions", "Recent");
-    await recent.getByRole("table", { name: "Recent practice sessions" }).getByRole("row", { name: /S01/ }).first().click();
-    await page.waitForURL(/\/practice\/journal\?id=\d+/);
+    // C1: Day 3 has ended but the thread goes on. Its journal (the landing no longer lists sessions: opened by id, the newest S01
+    // one) names the day by number and weekday, in the title, the Practice band and the badge: one date would give every later day's.
+    const sessions = (await get(context, "/sessions?limit=20")) as Json[];
+    await openDesk(page, `/practice/journal?id=${sessions.find((row) => row.symbol === "S01")!.id}`);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/^S01 · Day \d of 15 · Week 1 · (Mon|Tue|Wed) · attempt 1 · Practice journal$/);
     await expect(page.getByRole("heading", { name: "Chart", level: 2 })).toBeVisible();
     await expectNoDates(page);
@@ -378,14 +382,17 @@ test.describe("Swing practice", () => {
       await send(context, "POST", `/day-lists/${list}/end`);
     }
 
-    // The hub: the week is ready, there is no Continue until she has seen it.
+    // The landing: the week is ready, there is no Continue until she has seen it. The thread page says so too.
     await openDesk(page, "/practice");
-    const card = page.locator("#threads").getByRole("article", { name: "Active swing thread" });
-    await expect(card).toContainText("Week 1 review ready");
-    await expect(card.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
-    await expect(page.locator("#daily-list").getByText(PRACTICE_COPY.threadNeededDay)).toBeVisible(); // only a swing thread: the daily list needs a day thread
+    const row = swingRow(page);
+    await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
+    await expect(row.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
+    await row.getByRole("link", { name: "Overview" }).click();
+    await page.waitForURL(THREAD_URL);
+    await expect(page.getByRole("status").filter({ hasText: "Week 1 review ready" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
     await shot(page, "swing-hub-review-ready");
-    await card.getByRole("link", { name: "Open Week 1 review" }).click();
+    await page.getByRole("link", { name: "Open Week 1 review" }).click();
     await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 1 · 5 days");
     await expect(page.getByText("Final", { exact: true })).toBeVisible();
@@ -478,7 +485,7 @@ test.describe("Swing practice", () => {
     const answers = watchSwingAnswers(page);
     const api = watchApi(page);
     await openDesk(page, "/practice");
-    await page.locator("#threads").getByRole("article", { name: "Active swing thread" }).getByRole("button", { name: "Continue Day 3" }).click();
+    await swingRow(page).getByRole("button", { name: "Continue Day 3" }).click();
     await page.waitForURL(BOARD_URL);
     // Peek at a name before the open: daily bars through the prior close only.
     await page.getByRole("table", { name: "Universe" }).getByRole("row", { name: /S05/ }).getByText("S05", { exact: true }).click();
