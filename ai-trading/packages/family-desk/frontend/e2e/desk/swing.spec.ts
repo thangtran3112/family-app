@@ -96,7 +96,7 @@ test.describe("Swing practice", () => {
 
     // The board: 12 names with their source tags, the survivorship label, no review, no list chips, no dates.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Day 1 of 15 · Week 1 · Mon · as of the prior close · Balance $50,000 · Equity $50,000 · SIMULATED",
+      "Day 1 of 15 · Week 1 · Mon · as of the prior close · Balance $50,000.00 · Equity $50,000.00 · SIMULATED",
     );
     const universe = page.getByRole("table", { name: "Universe" });
     await expect(universe.getByRole("row")).toHaveCount(13);
@@ -127,7 +127,7 @@ test.describe("Swing practice", () => {
     await expect(strip.getByRole("button", { name: /^S04, focus name/ })).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.swingTapeOff).first()).toBeVisible();
     await expect(page.getByText("Day 1 of 15 · Week 1 · Mon")).toBeVisible();
-    await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Balance $50,000 · Equity $50,000 · Free cash $50,000");
+    await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Balance $50,000.00 · Equity $50,000.00 · Free cash $50,000.00");
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText(PRACTICE_COPY.threadSimulated);
     // M5: every rail section with dollars is labelled SIMULATED (the strip's hold P/L, the plan's week limits).
     await expect(strip.getByText(PRACTICE_COPY.threadSimulated, { exact: true })).toBeVisible();
@@ -245,14 +245,14 @@ test.describe("Swing practice", () => {
     await expect(strip.getByRole("button")).toHaveCount(2);
     await page.getByRole("button", { name: "Step", exact: true }).click();
     const money = page.getByRole("group", { name: "Practice thread" });
-    await expect(money).toContainText("Balance $50,000 · Equity $50,183");
+    await expect(money).toContainText("Balance $50,000.00 · Equity $50,183");
     const practice = await replayRail(page, "Practice");
     await practice.getByRole("button", { name: "Exit (X)" }).click();
     await expect(practice.getByText("No open practice hold")).toBeVisible();
     // The ledger rule: an exit credits the balance only when its day ends. Free cash is back at once; the strip drops the exited name.
     await expect(strip.getByRole("button")).toHaveCount(1);
     await expect(strip.getByRole("button", { name: /^S04, practice hold/ })).toBeVisible();
-    await expect(money).toContainText("Balance $50,000 · Equity $50,183");
+    await expect(money).toContainText("Balance $50,000.00 · Equity $50,183");
     await expect(money).not.toContainText("Free cash $31,");
     const mid = await get(context, `/threads/${threadId}`);
     expect(mid.thread.stats.balance).toBe(50_000);
@@ -591,10 +591,10 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
     await shot(page, "swing-journal");
-    const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
-    await plan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
-    await plan.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
-    await expect(plan.getByText("End Day 3 first")).toBeVisible();
+    const refusing = await railSection(page, "Thread details", PRACTICE_COPY.threadClose); // D-040: Close thread is its own section of the rail
+    await refusing.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
+    await refusing.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
+    await expect(refusing.getByText("End Day 3 first")).toBeVisible();
     expect((await get(context, `/threads/${threadId}`)).thread.status).toBe("active");
     await shot(page, "swing-journal-close-refused");
 
@@ -609,7 +609,7 @@ test.describe("Swing practice", () => {
     await page.waitForURL(BOARD_URL);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day over");
     await openDesk(page, `/practice/journal?thread=${threadId}`);
-    const closePlan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
+    const closePlan = await railSection(page, "Thread details", PRACTICE_COPY.threadClose);
     await closePlan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
     await closePlan.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
     await expect(page.getByRole("status").filter({ hasText: "This thread is closed" })).toBeVisible();
