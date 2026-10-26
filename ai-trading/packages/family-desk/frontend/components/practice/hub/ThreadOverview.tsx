@@ -9,6 +9,7 @@ import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { planArmedText, planCard } from "@/lib/replay/dayView";
 import { swingCardView } from "@/lib/replay/swing";
 import { adherenceTrendText, formatBalance, startedWithText, threadModeLabel, threadName, todayView, winRateText } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
@@ -61,7 +62,11 @@ export function ThreadOverview() {
   const swing = swingCardView(summary);
   const view = todayView(today, lastDay);
   const canReplace = !closed && thread.mode === "day" && planOpensIn(plan, thread);
-  const fresh = !closed && thread.mode === "day" && today !== null && lastDay === null && stats.daysPracticed === 0;
+  // The plan of this thread (a plan bound to another thread is not shown here), with its cursor: "Day 2 of 5 · next: Mon".
+  const planHere = plan !== null && plan.thread_id === thread.id ? plan : null;
+  const card = planCard(planHere);
+  // A thread with a plan and no day yet: nothing to resume, so it says what comes next instead of "no day open".
+  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread);
 
   return (
     <Shell
@@ -112,10 +117,7 @@ export function ThreadOverview() {
           <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
         ) : (
           <>
-            <p className={styles.dayLine}>
-              <ResultLine pnl={view.pnl} line={view.line} />
-            </p>
-            {fresh && <p className={hub.muted}>{PRACTICE_COPY.threadPageFresh}</p>}
+            <p className={styles.dayLine}>{fresh ? PRACTICE_COPY.threadPageFresh : <ResultLine pnl={view.pnl} line={view.line} />}</p>
             {swing?.notice && <p className={hub.swingNotice} role="status">{swing.notice}</p>}
             <div className={styles.dayActions}>
               <ThreadAction summary={summary} plan={plan} nextLabel={PRACTICE_COPY.threadPageNextDay} onChanged={changed} onNewPlan={() => setReplacing(true)} />
@@ -125,6 +127,16 @@ export function ThreadOverview() {
         )}
         <Link href={`/practice/journal?thread=${thread.id}`} className={hub.threadLink}>{PRACTICE_COPY.threadJournal}</Link>
       </section>
+
+      {planHere && !closed && (
+        <section className={styles.panel} aria-label="Daily list plan">
+          <h2 className={styles.panelTitle}>{PRACTICE_COPY.planTitle}</h2>
+          <p className={styles.dayLine}>{card.headline}</p>
+          {card.detail && <p className={hub.muted}>{card.detail}</p>}
+          <p className={hub.muted}>{planHere.filters.map((filter) => filter.name).join(" · ")}</p>
+          <p className={hub.muted}>{planArmedText(planHere)}</p>
+        </section>
+      )}
 
       {replacing && (
         <NewPlanModal

@@ -731,7 +731,7 @@ export const PRACTICE_COPY = {
   threadPageWeek: "Week {week} of {weeks}",
   threadPageReplace: "Replace plan",
   threadPageClosed: "This thread is closed · its journal and final balance stay",
-  threadPageFresh: "Your thread is ready · open Day 1 when you are",
+  threadPageFresh: "Your thread is ready · Day 1 is next",
 } as const;
 
 /** Words that must not appear in Practice copy: there is no order, position, fill or broker in this lane (02o §a5). */

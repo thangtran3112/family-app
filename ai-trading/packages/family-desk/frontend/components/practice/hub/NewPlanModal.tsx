@@ -184,7 +184,7 @@ export function NewPlanModal({
         </header>
 
         <div className={modal.dialogBody}>
-          <p className={styles.muted}>{planOnly ? PRACTICE_COPY.newPlanIntroPlan : PRACTICE_COPY.newPlanIntroThread}</p>
+          <p className={styles.muted}>{planOnly ? PRACTICE_COPY.newPlanIntroPlan : swing ? PRACTICE_COPY.newPlanSwingNote : PRACTICE_COPY.newPlanIntroThread}</p>
 
           {!planOnly && (
             <div className={styles.threadTopRow}>

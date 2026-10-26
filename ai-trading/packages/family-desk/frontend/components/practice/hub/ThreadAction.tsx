@@ -60,7 +60,7 @@ export function ThreadAction({
   // The plan's data is still being prepared: the first list opens when it is ready.
   const card = planCard(plan);
   if (card.action === "none") return <p role="status" className={styles.muted}>{card.headline}</p>;
-  return <OpenNextDay label={nextLabel} onChanged={onChanged} />;
+  return <OpenNextDay label={card.action === "start" ? PRACTICE_COPY.planStart : nextLabel} onChanged={onChanged} />;
 }
 
 /** Opens the plan's next day and goes to it; with the data not ready yet the answer has no day and the screen refetches. */
