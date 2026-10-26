@@ -1,7 +1,7 @@
 # 02p: Family Desk swing practice: a fixed universe, multi-day practice holds, and a weekly review
 
-Status: **PLANNED (owner-scheduled). Design complete 2026-10-25.** Docs only: no code, migration, or routes exist yet.
-Implementation starts after [02r](02r-desk-practice-threads.md) lands **and** the owner says go (STATUS row 5K).
+Status: **IMPLEMENTED 2026-10-25** on `feature/desk-swing-impl` (backend, API, web; not pushed, PR pending; shipped note at the end).
+The Paper boards (§i, PS1 to PS7), the real-data R0s run (§j step 1), and the owner gates G2 and G3 were not part of this phase.
 [02q](02q-laptop-migration.md) reserves the number `02p` for this amendment.
 
 Author: design lead (Opus). Implementers: Sonnet and Haiku (§j).
@@ -560,3 +560,52 @@ Paper runs wait for the Paper writer and G2, and the user-facing activation wait
    nothing stops a $500,000 day-trade entry on a $50,000 balance. This is decided in 02r.
 3. **Confirm with your wife at the G2 review:** regular-hours-only holds, tape off by default, and one universe frozen for
    the whole thread. Recommend all three. Each is a small switch later, not a redesign.
+
+## Shipped note (implemented 2026-10-25)
+
+`feature/desk-swing-impl` (17 commits on top of `origin/dev` `847b89af`; hashes in `plans/STATUS.md` row 5K).
+
+**Contract** (`contracts/src/practice-thread-v1.ts`): `SwingSetupV1` as in §f3; `PracticeThreadCreateV1` and `PracticeThreadV1` carry an optional `swing`
+(required exactly when `mode` is `swing`, rule `swing-block-matches-mode`); `PracticeLedgerEntryV1.sessionId`/`markId` became optional and `holdId` was
+added (a hold that auto-exits at a close has neither). Zod, JSON Schema, Pydantic, 40 new fixtures, crosscheck. **Migration** `0008_swing_practice`: `practice_holds`,
+`practice_weeks`, `practice_ledger.hold_id` (session and mark nullable), one active plan per THREAD (`uq_practice_plans_thread_id_active`), reversible with swing data present.
+**Routes** (+5, 80 `/api/desk` routes): `POST /replay/threads/swing-universe`, `GET /threads/{id}/holds`, `GET /threads/{id}/weeks`, `GET` and `PATCH /threads/{id}/weeks/{n}`;
+additive swing branches on `POST /threads`, `GET /threads*`, `POST /daily/next` (`{"threadId"}` alone continues a swing calendar), the day-list routes (they answer
+`DayListOut | SwingDayListOut`, narrow on `kind: "swing"`), and the session routes (`paused`, `strip`, `daily_forming`, `daily`, `hold`). Day payloads are byte for byte unchanged
+(swing-only keys are absent, not null). **Modules**: `replay/holds.py` and `replay/week.py` (pure), `hold_rows.py`, `swing.py`, `swing_play.py`, `swing_weeks.py`, swing branches in
+`session.py`/`plan.py`/`threads.py`. **Web**: swing mode in the New thread form with the universe builder, the hub swing card, the swing thread journal, the swing board (`SwingBoard`,
+`HoldsTable`), the swing workspace (day strip, Daily/15m/5m chart, stop-pause toast, `+1 hour`/`to the close`), and `/practice/week`.
+
+**Decisions and deviations** (where the plan was ambiguous or the landed code differed):
+- The landed thread plan names win (`stopNoteOnEntry`, `tradeOnlyOnSignal`, `maxLossUsd`, `maxTrades`, `planNote`); `maxLossUsd` and `maxTrades` count per week in a swing thread.
+- Swing day-list, open-next and plan responses are separate models (the existing `DayListOut`, `OpenNextOut`, `PracticePlanOut` did not change). No dates inside swing payloads except the
+  day list's own `day` and the preview's `basis_day`; holds, weeks and days use day and week numbers.
+- Selection edge is `side * (return - universe median)` (a short scores positive when the stock fell more than the median); rank is by side-signed return.
+- Board daily RVOL is the shared `metric_row`'s 10-session ratio (not 20). The preview text says "Add from a filter" / "Add by liquidity" (the Practice banned list contains "fill").
+- A reverse split that rounds a hold to 0 shares closes it flat (`practice_holds.shares >= 1`): P/L 0, "cash in lieu is not modeled".
+- A mark is also sealed (409 on undo) once another name moves the shared day clock past it; undoing an exit that would break the cap or the cash rule is refused; a name left behind
+  the day clock is lifted to it when she returns (`start_session`), as an advance would.
+- Ledger credit is written when the exit day ends, never on the mark; an early thread close auto-exits at the last ended close; closing mid-day is 409 "End Day N first".
+- The gap in a day summary and for passed days uses the 09:30 one-minute bar's close (the opening print, with the tape on, differs by cents; ceiling noted in the code).
+- The universe preview is time-budgeted (8 s); the rest is `pending` and fetched by a background pool prep, so "instant" holds for cached symbols only. The pool and coverage checks fetch the whole
+  range (two requests per symbol).
+- The Playwright and API-smoke backend runs on a deterministic synthetic world (`tests/e2e/swing_services.py`, 12 stocks and SPY: a gap-up morning, a gap-down-through-a-stop morning, a 2-for-1 split),
+  not a trim of the real-data R0s run, which needs the Alpaca keys and was not run. SPY's e2e volume is below the floor so it never appears on a day list.
+- Parked (independent review, owner may tighten): own picks under the live floor never match a filter on the board; an early close right after a frozen week books its exit in no week's realized P/L
+  (equity and balance agree); standalone sessions can still replay a future day of an active swing thread (the plan only blocks an active same-symbol-day session).
+
+**Integration (2026-10-25, `feature/desk-swing-integration`).** The swing branch met 02o-b2 (`0009_replay_switch_rescan`, one alembic head after `0008`) and
+the walkthrough fixes (STATUS 5M, D-008..D-045), then three defects found in review closed (STATUS 5N).
+- **Prices.** The swing paths now price every fill in whole cents like the day paths (D-033): the first revealed price of a day, the stop pause's price and the
+  strip rows go through `journal.fill_price` (only the last price did). The day summary's gap stays the raw one-minute close (`swing._first_regular_close`), so it
+  can differ from the hold's fill by under a cent a share.
+- **Thread list.** `GET /replay/threads` rows answer `last_day` (the last ended day of the balance's own series) beside `today`, so a card shows its own last-day figure
+  with no day open (D-048). `PracticePlanOut.day_offset` gives a day one number in its thread after a plan replacement (D-047); a swing thread has one plan, so its
+  offset is 0 and its numbers did not change.
+- **Hub.** The New thread form keeps the 02p rule (one active thread per mode: the taken mode's segment turns off with the reason, Swing stays open) over the
+  walkthrough fix that disabled the whole form (D-009, D-016, which assumed one thread). Money reads in cents everywhere (D-044), and Close thread is its own section
+  of the journal's rail (D-040); the swing specs follow both.
+- **Tests.** The swing play tests price their expectations as fills; the migration downgrade test seeds at head; 16 swing Playwright tests pass at 1440 and 1180.
+
+**Not built**: Paper boards PS1 to PS7 (G2), the R0s real-data run, the acceptance week with the wife (G3), a ledger list in the swing journal (there is no ledger list component to reuse),
+rerouting the hub's recent-sessions rows of swing days to the board.

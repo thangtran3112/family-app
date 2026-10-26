@@ -9,7 +9,7 @@ import {
   ReplaySessionsSchema,
   type ReplayInterval,
 } from "../replay/schemas.ts";
-import { DailySchema, DayListSchema, OpenNextSchema } from "../replay/daily.ts";
+import { DailySchema, DayListSchema, OpenNextSchema, UniverseDaysSchema } from "../replay/daily.ts";
 import { ThreadSchema, ThreadsSchema } from "../replay/threads.ts";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
 
@@ -64,6 +64,10 @@ export const undoMark = (id: number, markId: number, options?: RequestOptions) =
 export const endReplay = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/sessions/${id}/end`), ReplaySessionSchema, jsonInit("POST", {}, options));
 
+/** The recorded universe (02o-b2): coverage, the first day a new plan defaults to, and with `day` that morning's names. */
+export const loadUniverseDays = (params: { day?: string } = {}, options?: RequestOptions) =>
+  clientOf(options)(deskPath("/replay/universe-days", { day: params.day }), UniverseDaysSchema, readInit(options));
+
 // ---- daily-list practice (02o-b v1) -----------------------------------------------------------------------------
 
 /** The hub card: her plan and its cursor, or `{ plan: null }`. */
@@ -93,6 +97,11 @@ export const relistDay = (id: number, listAt: string, options?: RequestOptions) 
 /** Starts the day's practice session on a name from the list (the plan's setup, from the day clock). */
 export const startDaySession = (id: number, symbol: string, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}/sessions`), ReplaySessionSchema, jsonInit("POST", { symbol }, options));
+
+/** Re-runs the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set; the frozen list is unchanged.
+ *  A 409 before the first name is practised and after the day ends. A second scan at the same clock is the first. */
+export const rescanDay = (id: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}/rescan`), DayListSchema, jsonInit("POST", {}, options));
 
 /** Ends the day: the open practice trade exits at the last price and the list review unseals. Idempotent. */
 export const endDay = (id: number, options?: RequestOptions) =>

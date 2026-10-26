@@ -6,6 +6,9 @@ Real Postgres (`scripts/test-db.sh`); the history is the synthetic world of `tes
 The world: GAPPER sits at 106 in the premarket and 110 from the open, so a long entered at 09:30 and exited after
 10:00 wins 4 a share and the same short loses 4 a share. SPLITTER sits at 100 all day."""
 
+import json
+from pathlib import Path
+
 import pytest
 from daily_world import DAYS, NOW, make_thread
 from sqlalchemy import select, update
@@ -34,11 +37,19 @@ from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.session import ReplayProblem, SessionNotFound
 
+# A swing thread is created with a swing block (the contract), so this is the block of a valid swing create.
+_SWING_CREATE = (
+    Path(__file__).resolve().parents[3] / "contracts/fixtures/practice-thread-create-v1/valid/swing-10-symbols.json"
+)
+SWING = json.loads(_SWING_CREATE.read_text())["swing"]
+
 
 def _create(mode="day", balance=None, **plan):
     body = {"schemaVersion": 1, "mode": mode, "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", **plan}}
     if balance is not None:
         body["startingBalance"] = balance
+    if mode == "swing":
+        body["swing"] = SWING
     return PracticeThreadCreateV1.model_validate(body)
 
 
@@ -84,12 +95,13 @@ def test_a_thread_starts_with_the_default_balance_and_the_contract_reads_back(db
     assert "Simulated" in out["label"]
 
 
-def test_one_active_day_thread_per_owner_and_swing_is_not_open(db_session, user_id) -> None:
+def test_one_active_day_thread_per_owner_and_a_swing_create_is_not_served_by_the_day_path(db_session, user_id) -> None:
     threads_mod.create_thread(db_session, user_id, _create(), NOW)
     with pytest.raises(ReplayProblem) as second:
         threads_mod.create_thread(db_session, user_id, _create(), NOW)
     assert (second.value.status, second.value.path) == (409, "mode")
     assert second.value.message == "You already have an active day thread · close it before starting another"
+    # A valid swing create (it carries its swing block) still belongs to `swing.create_thread`, not to this path.
     with pytest.raises(ReplayProblem) as swing:
         threads_mod.create_thread(db_session, user_id, _create(mode="swing"), NOW)
     assert (swing.value.status, swing.value.path) == (422, "mode")
@@ -217,6 +229,55 @@ def test_replacing_a_plan_ends_its_half_practised_day_so_one_day_is_open_and_the
     assert threads_mod.brief(db_session, thread.id, row.id)["today_pnl_usd"] == 40.0  # the old day keeps its own header
     assert threads_mod.brief(db_session, thread.id)["balance"] == 50_040.0
     assert _stats(db_session, thread).bestDayUsd == _stats(db_session, thread).worstDayUsd == 40.0
+
+
+def test_a_day_has_one_number_in_its_thread_after_a_plan_replacement(db_session, user_id, svc) -> None:
+    """D-047: the replaced plan's Day 1 and the new plan's Day 1 both read `day_no` 1, and the journal called the second
+    one D2. A plan carries the days the thread ended before it (`day_offset`), so `day_no + day_offset` is the one
+    number of a day in the thread, and it is the journal's `n`."""
+    row, session, thread = _day_one(db_session, user_id, svc)
+    _trade(db_session, user_id, svc, session.id, "long", shares=10)
+    _ready(db_session, user_id, svc)  # a new plan; the half-practised day ends with the old one
+    opened = _open(db_session, user_id, svc).day_list
+    assert (row.day_no, opened.day_no) == (1, 1)  # the list rows alone cannot tell the days apart
+
+    def number(day_list_id: int) -> int:
+        out = plan_mod.day_list_out(db_session, user_id, day_list_id, svc)
+        return out["day_no"] + out["plan"]["day_offset"]
+
+    assert (number(row.id), number(opened.id)) == (1, 2)
+    assert plan_mod.plan_out(db_session, db_session.get(PracticePlan, opened.plan_id))["current"]["day_no"] == 1
+    plan_mod.end_day(db_session, user_id, opened.id, svc)
+    second = _open(db_session, user_id, svc).day_list
+    assert (second.day_no, number(second.id)) == (2, 3)
+    plan_mod.end_day(db_session, user_id, second.id, svc)
+    journal = {day["day_list_id"]: day["n"] for day in threads_mod.detail(db_session, thread)["daily"]}
+    assert journal == {row.id: 1, opened.id: 2, second.id: 3}
+    assert [number(day_id) for day_id in journal] == [1, 2, 3]
+
+
+def test_a_plan_after_a_listed_only_day_does_not_count_it(db_session, user_id, svc) -> None:
+    """A replaced plan's day that was only listed never ends: the journal never numbers it, and nor does the offset."""
+    row = _first_list(db_session, user_id, svc)
+    thread = threads_mod.active_thread(db_session, user_id)
+    _plan(db_session, user_id, svc)
+    opened = _open(db_session, user_id, svc).day_list
+    assert opened.id != row.id
+    assert plan_mod.day_list_out(db_session, user_id, opened.id, svc)["plan"]["day_offset"] == 0
+    assert threads_mod.detail(db_session, thread)["daily"] == []
+
+
+def test_the_card_row_reads_the_last_ended_day_from_the_balances_own_series(db_session, user_id, svc) -> None:
+    """The thread list answers the last ended day beside `today`, so the hub card shows a figure with no day open."""
+    row, session, thread = _day_one(db_session, user_id, svc)
+    assert threads_mod.summary(db_session, thread)["last_day"] is None
+    _trade(db_session, user_id, svc, session.id, "long", shares=10)
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+    summary = threads_mod.summary(db_session, thread)
+    assert summary["today"] is None
+    assert summary["last_day"]["pnl_usd"] == 40.0 and summary["last_day"]["trades"] == 1
+    assert summary["last_day"] == threads_mod.detail(db_session, thread)["daily"][-1]
+    assert summary["last_day"]["balance"] == summary["thread"].stats.balance == 50_040.0
 
 
 def test_replacing_a_plan_exits_an_open_trade_at_the_last_price_and_books_it(db_session, user_id, svc) -> None:
@@ -532,8 +593,8 @@ def test_a_thread_session_belongs_to_the_thread_row(db_session, user_id, svc) ->
 
 
 def _second_name(db_session, user_id, svc, row, thread, symbol="SPLITTER"):
-    """A second session on the same day list (the switch protocol is 02o-b2: v1 refuses a second name at the route,
-    so the day rules are exercised through the service)."""
+    """A second session on the same day list, through the service (the route's cap and open-trade checks are in
+    test_replay_switch.py)."""
     plan = db_session.get(PracticePlan, row.plan_id)
     spec = plan_mod._session_spec(plan, row.day, symbol, thread)
     return session_mod.create(db_session, user_id, spec, svc, day_list=row, thread_id=thread.id)
@@ -614,6 +675,7 @@ def test_the_watch_check_lists_starred_traded_and_off_watch_names(db_session, us
     on = plan_mod.day_list_out(db_session, user_id, row.id, svc)["watch_check"]
     assert (on["starred"], on["traded"], on["off_watch"], on["verdict"]) == (["GAPPER"], ["GAPPER"], [], "on_watch")
     assert on["label"] == "Traded only names on your watch"
+    _mark(db_session, user_id, svc, a.id, "long_exit")  # one open trade a day: GAPPER closes before the next name
     b = _second_name(db_session, user_id, svc, row, thread)
     _mark(db_session, user_id, svc, b.id, "long_entry", shares=1)
     off = plan_mod.day_list_out(db_session, user_id, row.id, svc)["watch_check"]

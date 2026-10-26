@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { DayList } from "@/lib/replay/daily";
-import { blockLadder, MAX_STARS, riskPlanText } from "@/lib/replay/dayView";
+import { blockLadder, nameCap, riskPlanText, stripRows } from "@/lib/replay/dayView";
 import { dayResultTone, formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./day.module.css";
@@ -18,13 +19,13 @@ export type DayLeftPanelProps = {
   onPractice: (symbol: string) => void;
   onUnstar: (symbol: string) => void;
   busy: boolean;
-  /** The name already being practiced today: v1 practices one name a day. */
-  practicing: string | null;
+  /** The names she has opened today: each shows Resume (the day switches names on one clock, 02o-b2). */
+  opened: ReadonlySet<string>;
   ended: boolean;
 };
 
 /** The day list's left rail (P7): the block's days, the thread box with its risk plan, and the starred names. */
-export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUnstar, busy, practicing, ended }: DayLeftPanelProps) {
+export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUnstar, busy, opened, ended }: DayLeftPanelProps) {
   const brief = list.thread;
   return (
     <LeftRailPortal>
@@ -32,10 +33,10 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
         <section className={styles.sideSection} aria-label={practiceText("dayBlockTitle", { of: list.of })}>
           <h2 className={styles.sideTitle}>{practiceText("dayBlockTitle", { of: list.of })}</h2>
           <ul className={styles.ladder}>
-            {blockLadder(list).map((row) => (
+            {blockLadder(list, list.plan.day_offset).map((row) => (
               <li key={row.n} className={styles.ladderRow} data-state={row.state}>
                 <span className={styles.ladderMark} aria-hidden="true">{row.state === "ended" ? "✓" : row.state === "open" ? "●" : "○"}</span>
-                <span className={styles.ladderDay}>{row.weekday ? `Day ${row.n} · ${row.weekday}` : `Day ${row.n}`}</span>
+                <span className={styles.ladderDay}>{row.weekday ? `Day ${row.n + list.plan.day_offset} · ${row.weekday}` : `Day ${row.n + list.plan.day_offset}`}</span>
                 <span className={styles.ladderDetail}>{row.detail}</span>
               </li>
             ))}
@@ -60,7 +61,7 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
 
         <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayWatch}>
           <div className={styles.sideHead}>
-            <h2 className={styles.sideTitle}>{practiceText("dayStarred", { n: list.watch.length, max: MAX_STARS })}</h2>
+            <h2 className={styles.sideTitle}>{practiceText("dayStarred", { n: list.watch.length, max: nameCap(list.plan) })}</h2>
             <span className={styles.sideHint}>click to peek</span>
           </div>
           {list.watch.length === 0 ? (
@@ -76,8 +77,8 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
                   </button>
                   {!ended && (
                     <span className={styles.actions}>
-                      <button type="button" className={styles.small} disabled={busy || (practicing !== null && practicing !== entry.symbol)} aria-label={practiceText("dayPractice", { symbol: entry.symbol })} onClick={() => onPractice(entry.symbol)}>
-                        {practicing === entry.symbol ? "Resume" : "Practice"}
+                      <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayPractice", { symbol: entry.symbol })} onClick={() => onPractice(entry.symbol)}>
+                        {opened.has(entry.symbol) ? "Resume" : "Practice"}
                       </button>
                       <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => onUnstar(entry.symbol)}>Unstar</button>
                     </span>
@@ -88,6 +89,26 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
           )}
           {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayPracticeHint}</p>}
         </section>
+
+        {list.sessions.length > 0 && (
+          <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayNamesTitle}>
+            <h2 className={styles.sideTitle}>{PRACTICE_COPY.dayNamesTitle}</h2>
+            <ul className={styles.watchList} aria-label={PRACTICE_COPY.dayNamesTitle}>
+              {stripRows(list).map((row) => (
+                <li key={row.symbol} className={styles.watchRow} data-symbol={row.symbol}>
+                  <span className={styles.symbol}>{row.symbol}</span>
+                  <span className={styles.actions}>
+                    {row.holding && <span className={`${styles.chip} ${styles.chipAmber}`}>{PRACTICE_COPY.dayHolding}</span>}
+                    {row.behind && <span className={styles.chip}>{PRACTICE_COPY.dayBehind}</span>}
+                    {row.sessionId !== null && !ended && (
+                      <Link href={`/practice/replay?id=${row.sessionId}`} className={styles.small} aria-label={practiceText("daySwitch", { symbol: row.symbol })}>Open</Link>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </LeftRailPortal>
   );

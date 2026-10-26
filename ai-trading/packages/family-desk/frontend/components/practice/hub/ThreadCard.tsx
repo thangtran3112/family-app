@@ -7,7 +7,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { openNextDay } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
-import type { PracticeThread, ThreadDay, ThreadSummary, ThreadToday } from "@/lib/replay/threads";
+import type { PracticeThread, ThreadSummary, ThreadToday } from "@/lib/replay/threads";
 import {
   adherenceTrendText,
   dayResultTone,
@@ -21,9 +21,10 @@ import {
 } from "@/lib/replay/threadView";
 import styles from "./hub.module.css";
 
-/** The active thread's card (02r): balance with SIMULATED, the stats, today's open day (or the last ended day) and the resume control. */
-export function ThreadCard({ summary, lastDay, planOpen, onChanged }: { summary: ThreadSummary; lastDay: ThreadDay | null; planOpen: boolean; onChanged: () => void }) {
-  const { thread, today } = summary;
+/** The active thread's card (02r): balance with SIMULATED, the stats, today's open day (or the last ended day) and the resume control.
+ *  The row below the stats reads the thread's own answer (`today`, else `last_day`), so it is there with no day open (D-048). */
+export function ThreadCard({ summary, planOpen, onChanged }: { summary: ThreadSummary; planOpen: boolean; onChanged: () => void }) {
+  const { thread, today, last_day: lastDay } = summary;
   const { stats } = thread;
   const view = todayView(today, lastDay);
   return (
@@ -154,7 +155,7 @@ function ThreadResume({ today, planOpen, onChanged }: { today: ThreadToday | nul
         {today !== null ? (
           <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink}>{PRACTICE_COPY.threadResume}</Link>
         ) : (
-          <button type="button" className={styles.primary} disabled={busy} onClick={() => void open()}>{PRACTICE_COPY.threadResume}</button>
+          <button type="button" className={styles.primary} disabled={busy} onClick={() => void open()}>{busy ? PRACTICE_COPY.planOpening : PRACTICE_COPY.threadResume}</button>
         )}
         <p className={styles.hint}>{PRACTICE_COPY.threadResumeHint}</p>
       </div>

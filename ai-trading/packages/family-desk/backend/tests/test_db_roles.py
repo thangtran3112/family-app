@@ -133,6 +133,9 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "universe_days",
         "practice_threads",
         "practice_ledger",
+        "practice_holds",
+        "practice_weeks",
+        "replay_day_scans",
     }
 
 
@@ -241,6 +244,80 @@ def test_desk_runtime_can_use_the_daily_list_tables(role_split_urls: RoleSplitUr
                     "+ (SELECT COUNT(*) FROM replay_day_lists WHERE id = :l)"
                 ),
                 {"p": plan_id, "l": list_id},
+            ).scalar_one()
+            assert remaining == 0
+    finally:
+        runtime_engine.dispose()
+
+
+def test_desk_runtime_can_use_the_swing_tables(role_split_urls: RoleSplitUrls) -> None:
+    # 0008's tables, like 0005-0007's, are reachable through the zz-20 script's default privileges (tables and the
+    # `practice_holds` id sequence), so this round trip is what proves it.
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            user_id = conn.execute(
+                text("INSERT INTO users (email) VALUES (:email) RETURNING id"), {"email": "swing-roles@example.test"}
+            ).scalar_one()
+            thread_id = conn.execute(
+                text(
+                    "INSERT INTO practice_threads (owner_user_id, mode, starting_balance, stop_note_on_entry, "
+                    "trade_only_on_signal, status, created_at, updated_at) VALUES (:u, 'swing', 50000, 'yes', 'no', "
+                    "'active', now(), now()) RETURNING id"
+                ),
+                {"u": user_id},
+            ).scalar_one()
+            hold_id = conn.execute(
+                text(
+                    "INSERT INTO practice_holds (thread_id, owner_user_id, symbol, side, shares, entry_day, entry_at, "
+                    "entry_price, status, created_at, updated_at) VALUES (:t, :u, 'ROLES', 'long', 10, '2026-10-19', "
+                    "now(), 10.25, 'open', now(), now()) RETURNING id"
+                ),
+                {"t": thread_id, "u": user_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "UPDATE practice_holds SET status = 'closed', exit_day = '2026-10-21', exit_at = now(), "
+                    "exit_price = 11.5, exit_source = 'auto' WHERE id = :h"
+                ),
+                {"h": hold_id},
+            )
+            # A swing ledger row: its hold, no session, no mark.
+            conn.execute(
+                text(
+                    "INSERT INTO practice_ledger (thread_id, hold_id, day, symbol, side, shares, entry_price, "
+                    "exit_price, pnl_usd, realized_at, created_at) VALUES (:t, :h, '2026-10-21', 'ROLES', 'long', 10, "
+                    "10.25, 11.5, 12.5, now(), now())"
+                ),
+                {"t": thread_id, "h": hold_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO practice_weeks (thread_id, owner_user_id, week_no, first_day, last_day, status, "
+                    "created_at) VALUES (:t, :u, 1, '2026-10-19', '2026-10-23', 'open', now())"
+                ),
+                {"t": thread_id, "u": user_id},
+            )
+            conn.execute(
+                text(
+                    "UPDATE practice_weeks SET status = 'closed', closed_at = now(), rating = 4, "
+                    "review = '{}'::jsonb WHERE thread_id = :t AND week_no = 1"
+                ),
+                {"t": thread_id},
+            )
+            rating = conn.execute(
+                text("SELECT rating FROM practice_weeks WHERE thread_id = :t AND week_no = 1"), {"t": thread_id}
+            ).scalar_one()
+            assert rating == 4
+            # Deleting the user cascades through the thread to its holds, weeks, and the hold-keyed ledger row.
+            conn.execute(text("DELETE FROM users WHERE id = :u"), {"u": user_id})
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM practice_holds WHERE id = :h) "
+                    "+ (SELECT COUNT(*) FROM practice_weeks WHERE thread_id = :t) "
+                    "+ (SELECT COUNT(*) FROM practice_ledger WHERE thread_id = :t)"
+                ),
+                {"h": hold_id, "t": thread_id},
             ).scalar_one()
             assert remaining == 0
     finally:

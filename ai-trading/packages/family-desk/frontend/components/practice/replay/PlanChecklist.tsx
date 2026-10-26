@@ -15,7 +15,8 @@ export function PlanChecklist({
   onAddStop,
 }: {
   items: PlanItem[];
-  shares: number;
+  /** `null` leaves the "Shares per trade" row off (a swing session sizes each entry; its own plan rows follow). */
+  shares: number | null;
   /** The plan note, if she wrote one. */
   note?: string | null;
   /** Opens the stop note for the open entry; offered beside a missing stop and never blocks the entry (D-022). */
@@ -24,11 +25,13 @@ export function PlanChecklist({
   return (
     <div>
       <ul className={styles.list}>
-        <li className={styles.row}>
-          <span className={styles.mark} aria-hidden="true" />
-          <span className={styles.label}>Shares per trade</span>
-          <span className={styles.detail}>{formatNumber(shares, 0)}</span>
-        </li>
+        {shares !== null && (
+          <li className={styles.row}>
+            <span className={styles.mark} aria-hidden="true" />
+            <span className={styles.label}>Shares per trade</span>
+            <span className={styles.detail}>{formatNumber(shares, 0)}</span>
+          </li>
+        )}
         {items.map((item) => (
           <li key={item.id} className={`${styles.row} ${item.action && onAddStop ? styles.wrap : ""}`} data-state={item.state}>
             <span className={styles.mark} data-state={item.state} aria-hidden="true">{MARK[item.state]}</span>

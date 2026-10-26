@@ -166,6 +166,32 @@
             "title": "Bars",
             "type": "array"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "daily_forming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyBarOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
+          },
           "forming": {
             "anyOf": [
               {
@@ -193,6 +219,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PausedOut"
               },
               {
                 "type": "null"
@@ -227,10 +263,26 @@
           },
           "stamp": {
             "$ref": "#/components/schemas/Stamp"
+          },
+          "strip": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StripRowOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strip"
           }
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -1497,6 +1549,170 @@
         "title": "BiasHistoryOut",
         "type": "object"
       },
+      "BoardRowOut": {
+        "description": "One name of the board, every figure read from daily bars through the prior close. A row with no data keeps its\nplace with empty figures.",
+        "properties": {
+          "atr_pct_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Pct 14"
+          },
+          "avg_dollar_volume_20d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Dollar Volume 20D"
+          },
+          "chg_1d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 1D Pct"
+          },
+          "chg_20d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 20D Pct"
+          },
+          "chg_5d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 5D Pct"
+          },
+          "earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarningsChipOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "matches": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "pct_from_20d_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct From 20D High"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "rsi_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi 14"
+          },
+          "rvol_10d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rvol 10D"
+          },
+          "source": {
+            "enum": [
+              "watchlist",
+              "manual",
+              "filter",
+              "liquidity"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "vs_50d_avg_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vs 50D Avg Pct"
+          }
+        },
+        "required": [
+          "symbol",
+          "source",
+          "prior_close",
+          "chg_1d_pct",
+          "chg_5d_pct",
+          "chg_20d_pct",
+          "atr_pct_14",
+          "rsi_14",
+          "rvol_10d",
+          "pct_from_20d_high",
+          "vs_50d_avg_pct",
+          "avg_dollar_volume_20d",
+          "matches",
+          "earnings"
+        ],
+        "title": "BoardRowOut",
+        "type": "object"
+      },
       "CandidateOut": {
         "description": "One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.",
         "properties": {
@@ -1722,6 +1938,121 @@
           "balance"
         ],
         "title": "CurvePointOut",
+        "type": "object"
+      },
+      "DailyBarOut": {
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "t": {
+            "format": "date",
+            "title": "T",
+            "type": "string"
+          },
+          "v": {
+            "title": "V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "o",
+          "h",
+          "l",
+          "c",
+          "v"
+        ],
+        "title": "DailyBarOut",
+        "type": "object"
+      },
+      "DailyBlockOut": {
+        "description": "The Daily chart: the rebased bars through the session before the day (never the day's own), the forming candle\nbuilt from revealed one-minute bars, and this name's open hold for the entry marker and the stop line.",
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/DailyBarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "forming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyBarOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/DailyHoldMarkerOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bars",
+          "forming",
+          "holds"
+        ],
+        "title": "DailyBlockOut",
+        "type": "object"
+      },
+      "DailyHoldMarkerOut": {
+        "properties": {
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "entry_t": {
+            "format": "date",
+            "title": "Entry T",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          }
+        },
+        "required": [
+          "entry_t",
+          "side",
+          "entry_price",
+          "stop_price"
+        ],
+        "title": "DailyHoldMarkerOut",
         "type": "object"
       },
       "DailyOut": {
@@ -2344,6 +2675,16 @@
               }
             ]
           },
+          "rescan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RescanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review": {
             "anyOf": [
               {
@@ -2439,6 +2780,7 @@
           "thread",
           "warnings",
           "relist",
+          "rescan",
           "peek",
           "journal",
           "review",
@@ -2554,10 +2896,24 @@
         "type": "object"
       },
       "DaySessionOut": {
+        "description": "A name she has practised today: the day strip's row.",
         "properties": {
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "has_open_trade": {
+            "title": "Has Open Trade",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -2575,7 +2931,10 @@
         "required": [
           "id",
           "symbol",
-          "status"
+          "status",
+          "revealed_through",
+          "behind_clock",
+          "has_open_trade"
         ],
         "title": "DaySessionOut",
         "type": "object"
@@ -2678,6 +3037,29 @@
         "title": "DayTradeLineOut",
         "type": "object"
       },
+      "EarningsChipOut": {
+        "description": "An explicit report date and timing within the next ten sessions. Never a guess from a gap (02p a3 rule 9).",
+        "properties": {
+          "in_sessions": {
+            "title": "In Sessions",
+            "type": "integer"
+          },
+          "timing": {
+            "enum": [
+              "before open",
+              "after close"
+            ],
+            "title": "Timing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "in_sessions",
+          "timing"
+        ],
+        "title": "EarningsChipOut",
+        "type": "object"
+      },
       "FeedOut": {
         "description": "Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior\nsessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);\n`signals` is every released signal (the whole list after `end`).",
         "properties": {
@@ -2691,6 +3073,42 @@
             },
             "title": "Bars",
             "type": "array"
+          },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "daily": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyBlockOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "daily_forming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyBarOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "forming": {
             "anyOf": [
@@ -2734,6 +3152,16 @@
               }
             ]
           },
+          "paused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PausedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "prints": {
             "$ref": "#/components/schemas/PrintsOut"
           },
@@ -2763,6 +3191,20 @@
           "stamp": {
             "$ref": "#/components/schemas/Stamp"
           },
+          "strip": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StripRowOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strip"
+          },
           "window_start": {
             "format": "date-time",
             "title": "Window Start",
@@ -2771,6 +3213,8 @@
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -2803,6 +3247,34 @@
         "title": "Filter",
         "type": "object"
       },
+      "FilterQualityOut": {
+        "properties": {
+          "edge_pts": {
+            "title": "Edge Pts",
+            "type": "number"
+          },
+          "median_return_pct": {
+            "title": "Median Return Pct",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "universe_median_pct": {
+            "title": "Universe Median Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "n",
+          "median_return_pct",
+          "universe_median_pct",
+          "edge_pts"
+        ],
+        "title": "FilterQualityOut",
+        "type": "object"
+      },
       "FireMarkerOut": {
         "properties": {
           "bar_time": {
@@ -2825,6 +3297,35 @@
           "bar_time"
         ],
         "title": "FireMarkerOut",
+        "type": "object"
+      },
+      "FocusUntradedOut": {
+        "description": "A name she starred and never held: where it would have ranked as a long from the star day on.",
+        "properties": {
+          "of": {
+            "title": "Of",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "rank",
+          "of",
+          "return_pct"
+        ],
+        "title": "FocusUntradedOut",
         "type": "object"
       },
       "FormingBarOut": {
@@ -3024,6 +3525,286 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HoldOut": {
+        "description": "A practice hold as the screens read it. Days are numbers and weekdays, never dates. An open hold carries\n`unrealized_usd`, a closed one `pnl_usd`; `price_basis` says which price an open one is valued at.",
+        "properties": {
+          "days_held": {
+            "title": "Days Held",
+            "type": "integer"
+          },
+          "earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarningsChipOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entry_day_no": {
+            "title": "Entry Day No",
+            "type": "integer"
+          },
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "entry_weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Entry Weekday",
+            "type": "string"
+          },
+          "exit_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Day No"
+          },
+          "exit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Price"
+          },
+          "exit_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "her",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Source"
+          },
+          "gap_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Usd"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Close"
+          },
+          "pnl_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnl Usd"
+          },
+          "price_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "prior_close",
+                  "last"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Basis"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "split_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Note"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_at_entry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop At Entry"
+          },
+          "stop_hit": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Stop Hit",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "unrealized_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Usd"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "side",
+          "shares",
+          "entry_day_no",
+          "entry_weekday",
+          "entry_price",
+          "days_held",
+          "stop_at_entry",
+          "stop_price",
+          "stop_hit",
+          "status",
+          "exit_day_no",
+          "exit_price",
+          "exit_source",
+          "last_close",
+          "price_basis",
+          "unrealized_usd",
+          "pnl_usd",
+          "r",
+          "gap_usd",
+          "earnings",
+          "split_note"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
+      "HoldsOut": {
+        "description": "The thread's holds. Open ones are marked at the LAST ENDED day's close, never later (`as_of_day_no`).",
+        "properties": {
+          "as_of_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Day No"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/HoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "as_of_day_no",
+          "holds",
+          "label"
+        ],
+        "title": "HoldsOut",
         "type": "object"
       },
       "JournalOut": {
@@ -3850,6 +4631,16 @@
             "title": "Matches Total",
             "type": "integer"
           },
+          "membership": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UniverseMembershipOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "no_data": {
             "title": "No Data",
             "type": "integer"
@@ -4044,6 +4835,16 @@
       },
       "MarkResultOut": {
         "properties": {
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "journal": {
             "$ref": "#/components/schemas/JournalOut"
           },
@@ -4093,6 +4894,16 @@
       },
       "MarkUndoOut": {
         "properties": {
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "journal": {
             "$ref": "#/components/schemas/JournalOut"
           },
@@ -4394,14 +5205,63 @@
         "type": "object"
       },
       "OpenTradeOut": {
+        "description": "The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the\nfour last fields say how long it has been held and which price it is valued at; a day session leaves them out.",
         "properties": {
+          "days_held": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Held"
+          },
           "entry_price": {
             "title": "Entry Price",
             "type": "number"
           },
+          "gap_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Usd"
+          },
           "last_price": {
             "title": "Last Price",
             "type": "number"
+          },
+          "opened_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened Day No"
+          },
+          "price_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "prior_close",
+                  "last"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Basis"
           },
           "r": {
             "anyOf": [
@@ -4551,6 +5411,53 @@
           "ohlc"
         ],
         "title": "PatternMarkerOut",
+        "type": "object"
+      },
+      "PausedOut": {
+        "description": "A stop was crossed: the playhead stopped at the close of the first one-minute bar that did (02p b5). It is a\npause, never an exit. `also` lists every other hold crossed in the same minute.",
+        "properties": {
+          "also": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Also",
+            "type": "array"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "cross",
+              "gap"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "stop_price": {
+            "title": "Stop Price",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "stop_price",
+          "at",
+          "price",
+          "kind",
+          "also"
+        ],
+        "title": "PausedOut",
         "type": "object"
       },
       "PeekDailyBarOut": {
@@ -5001,6 +5908,19 @@
             "title": "Hidedates",
             "type": "string"
           },
+          "maxSymbols": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxsymbols"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -5050,6 +5970,19 @@
             "title": "Exitprice",
             "type": "number"
           },
+          "holdId": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holdid"
+          },
           "id": {
             "maximum": 9007199254740991.0,
             "minimum": 1.0,
@@ -5057,10 +5990,17 @@
             "type": "integer"
           },
           "markId": {
-            "maximum": 9007199254740991.0,
-            "minimum": 1.0,
-            "title": "Markid",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markid"
           },
           "pnlUsd": {
             "maximum": 1000000000.0,
@@ -5092,10 +6032,17 @@
             "type": "integer"
           },
           "sessionId": {
-            "maximum": 9007199254740991.0,
-            "minimum": 1.0,
-            "title": "Sessionid",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
           },
           "shares": {
             "maximum": 10000.0,
@@ -5128,11 +6075,9 @@
           "entryPrice",
           "exitPrice",
           "id",
-          "markId",
           "pnlUsd",
           "realizedAt",
           "schemaVersion",
-          "sessionId",
           "shares",
           "side",
           "symbol",
@@ -5154,6 +6099,10 @@
               }
             ]
           },
+          "day_offset": {
+            "title": "Day Offset",
+            "type": "integer"
+          },
           "days_opened": {
             "title": "Days Opened",
             "type": "integer"
@@ -5171,6 +6120,10 @@
           },
           "id": {
             "title": "Id",
+            "type": "integer"
+          },
+          "max_symbols": {
+            "title": "Max Symbols",
             "type": "integer"
           },
           "next_day": {
@@ -5241,7 +6194,9 @@
           "thread_id",
           "spec",
           "sessions",
+          "max_symbols",
           "days_opened",
+          "day_offset",
           "filters",
           "current",
           "next_day",
@@ -5586,6 +6541,16 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "swing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingSetupV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -5635,7 +6600,8 @@
           "feed": {
             "enum": [
               "sip",
-              "iex"
+              "iex",
+              "off"
             ],
             "title": "Feed",
             "type": "string"
@@ -5973,10 +6939,26 @@
             "title": "Attempt",
             "type": "integer"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "day_list_id": {
             "anyOf": [
@@ -6069,7 +7051,8 @@
           "tape_feed": {
             "enum": [
               "sip",
-              "iex"
+              "iex",
+              "off"
             ],
             "title": "Tape Feed",
             "type": "string"
@@ -6116,6 +7099,8 @@
           "window_start",
           "window_end",
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "tape_feed",
           "armed",
           "marks",
@@ -6407,6 +7392,10 @@
             "title": "Name",
             "type": "string"
           },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
           "source": {
             "enum": [
               "alert_strategy",
@@ -6424,9 +7413,175 @@
           "bar_time",
           "bar_close",
           "close",
-          "evidence"
+          "evidence",
+          "seen"
         ],
         "title": "ReplaySignalOut",
+        "type": "object"
+      },
+      "RescanCandidateOut": {
+        "description": "A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised).",
+        "properties": {
+          "filters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "list_price": {
+            "title": "List Price",
+            "type": "number"
+          },
+          "matched_since": {
+            "format": "date-time",
+            "title": "Matched Since",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "new_since_list": {
+            "title": "New Since List",
+            "type": "boolean"
+          },
+          "operands": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Operands",
+            "type": "object"
+          },
+          "price_at": {
+            "format": "date-time",
+            "title": "Price At",
+            "type": "string"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rank_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Value"
+          },
+          "reported_before_open": {
+            "title": "Reported Before Open",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "symbol",
+          "filters",
+          "rank_value",
+          "matched_since",
+          "operands",
+          "list_price",
+          "price_at",
+          "prior_close",
+          "reported_before_open",
+          "metrics",
+          "new_since_list"
+        ],
+        "title": "RescanCandidateOut",
+        "type": "object"
+      },
+      "RescanOut": {
+        "description": "The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.\nIt is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RescanCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ListColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
+          "new_count": {
+            "title": "New Count",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/ListUniverseOut"
+          }
+        },
+        "required": [
+          "seq",
+          "as_of",
+          "data_through",
+          "universe",
+          "columns",
+          "candidates",
+          "new_count",
+          "created_at"
+        ],
+        "title": "RescanOut",
         "type": "object"
       },
       "ReviewOut": {
@@ -7488,6 +8643,29 @@
         "title": "SignalVsTradeOut",
         "type": "object"
       },
+      "SourceQualityOut": {
+        "properties": {
+          "median_return_pct": {
+            "title": "Median Return Pct",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "median_return_pct",
+          "n"
+        ],
+        "title": "SourceQualityOut",
+        "type": "object"
+      },
       "StageUpdate": {
         "properties": {
           "confirm": {
@@ -7770,6 +8948,33 @@
         "title": "StatusScansOut",
         "type": "object"
       },
+      "StopHitOut": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "watched": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Watched",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "at",
+          "watched"
+        ],
+        "title": "StopHitOut",
+        "type": "object"
+      },
       "StrategiesGaugeOut": {
         "properties": {
           "counts": {
@@ -8016,6 +9221,986 @@
         "title": "StreamingSlotsOut",
         "type": "object"
       },
+      "StripHoldOut": {
+        "properties": {
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_distance_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Distance Pct"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "stopped": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Stopped",
+            "type": "string"
+          },
+          "unrealized_usd": {
+            "title": "Unrealized Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "side",
+          "shares",
+          "unrealized_usd",
+          "stop_price",
+          "stop_distance_pct",
+          "stopped"
+        ],
+        "title": "StripHoldOut",
+        "type": "object"
+      },
+      "StripRowOut": {
+        "description": "A row of the day strip: every open hold, then the focus names, at most ten. `last` is the last revealed regular\nsession price at the DAY CLOCK; `chg_pct` is against the restated prior close.",
+        "properties": {
+          "chg_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg Pct"
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StripHoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "source": {
+            "enum": [
+              "hold",
+              "focus"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "source",
+          "last",
+          "chg_pct",
+          "hold"
+        ],
+        "title": "StripRowOut",
+        "type": "object"
+      },
+      "SwingDayListOut": {
+        "description": "One swing day: the board as of the prior close, her focus names, the holds pinned above it and the day clock.\n`kind` is always `\"swing\"`: it tells this model from `DayListOut`. Nothing here is later than the prior close or the\nday clock until `status` is `ended`, when `journal` carries the day's summary.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/BoardRowOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ListColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "free_cash_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Cash Usd"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/HoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingDaySummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "swing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "of": {
+            "title": "Of",
+            "type": "integer"
+          },
+          "peek": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingPeekOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SwingPlanOut"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/DaySessionOut"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "status": {
+            "enum": [
+              "listed",
+              "practicing",
+              "ended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "universe": {
+            "$ref": "#/components/schemas/SwingUniverseOut"
+          },
+          "watch": {
+            "items": {
+              "$ref": "#/components/schemas/StarOut"
+            },
+            "title": "Watch",
+            "type": "array"
+          },
+          "week_label": {
+            "title": "Week Label",
+            "type": "string"
+          },
+          "week_no": {
+            "title": "Week No",
+            "type": "integer"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "plan",
+          "thread",
+          "day",
+          "weekday",
+          "day_no",
+          "of",
+          "week_no",
+          "week_label",
+          "status",
+          "clock",
+          "watch",
+          "columns",
+          "candidates",
+          "holds",
+          "free_cash_usd",
+          "sessions",
+          "universe",
+          "label",
+          "peek",
+          "journal",
+          "notes",
+          "rating",
+          "created_at",
+          "ended_at",
+          "stamp"
+        ],
+        "title": "SwingDayListOut",
+        "type": "object"
+      },
+      "SwingDaySummaryOut": {
+        "description": "The strip of tiles an ended day serves (02p b6): the equity change split into realized, overnight gap and\nintraday, with the holds as they stood at the close.",
+        "properties": {
+          "balance_usd": {
+            "title": "Balance Usd",
+            "type": "number"
+          },
+          "entries": {
+            "title": "Entries",
+            "type": "integer"
+          },
+          "equity_change_usd": {
+            "title": "Equity Change Usd",
+            "type": "number"
+          },
+          "equity_usd": {
+            "title": "Equity Usd",
+            "type": "number"
+          },
+          "exits": {
+            "title": "Exits",
+            "type": "integer"
+          },
+          "free_cash_usd": {
+            "title": "Free Cash Usd",
+            "type": "number"
+          },
+          "gap_usd": {
+            "title": "Gap Usd",
+            "type": "number"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/HoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "intraday_usd": {
+            "title": "Intraday Usd",
+            "type": "number"
+          },
+          "late_stars": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Late Stars",
+            "type": "array"
+          },
+          "max_open_seen": {
+            "title": "Max Open Seen",
+            "type": "integer"
+          },
+          "passed": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Passed",
+            "type": "string"
+          },
+          "realized_usd": {
+            "title": "Realized Usd",
+            "type": "number"
+          },
+          "stop_hits": {
+            "items": {
+              "$ref": "#/components/schemas/StopHitOut"
+            },
+            "title": "Stop Hits",
+            "type": "array"
+          },
+          "unrealized_change_usd": {
+            "title": "Unrealized Change Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "passed",
+          "realized_usd",
+          "gap_usd",
+          "intraday_usd",
+          "unrealized_change_usd",
+          "equity_change_usd",
+          "balance_usd",
+          "equity_usd",
+          "free_cash_usd",
+          "holds",
+          "stop_hits",
+          "late_stars",
+          "entries",
+          "exits",
+          "max_open_seen"
+        ],
+        "title": "SwingDaySummaryOut",
+        "type": "object"
+      },
+      "SwingEquityPointOut": {
+        "description": "One ended swing day of the equity series: numbers and a weekday only, no dates (the web hides them).",
+        "properties": {
+          "balance_usd": {
+            "title": "Balance Usd",
+            "type": "number"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "equity_usd": {
+            "title": "Equity Usd",
+            "type": "number"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day_no",
+          "weekday",
+          "balance_usd",
+          "equity_usd"
+        ],
+        "title": "SwingEquityPointOut",
+        "type": "object"
+      },
+      "SwingOpenNextOut": {
+        "description": "`POST /daily/next` for a swing thread. `day_list_id` is null while the prep runs (poll `GET /threads/{id}`) and\nonce every day is done.",
+        "properties": {
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
+          "kind": {
+            "const": "swing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SwingPlanOut"
+          }
+        },
+        "required": [
+          "kind",
+          "plan",
+          "day_list_id"
+        ],
+        "title": "SwingOpenNextOut",
+        "type": "object"
+      },
+      "SwingPeekOut": {
+        "description": "Pre-open chart data for one name: daily bars through the prior close, never a minute of the day.",
+        "properties": {
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/PeekDailyBarOut"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "levels": {
+            "$ref": "#/components/schemas/PeekLevelsOut"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "daily",
+          "levels"
+        ],
+        "title": "SwingPeekOut",
+        "type": "object"
+      },
+      "SwingPlanOut": {
+        "description": "A swing thread's calendar cursor and prep. No dates: `next_day_no` and `next_weekday` only.",
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanCurrentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days_opened": {
+            "title": "Days Opened",
+            "type": "integer"
+          },
+          "finished": {
+            "title": "Finished",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mode": {
+            "const": "swing",
+            "title": "Mode",
+            "type": "string"
+          },
+          "next_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Day No"
+          },
+          "next_weekday": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Mon",
+                  "Tue",
+                  "Wed",
+                  "Thu",
+                  "Fri"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Weekday"
+          },
+          "prep": {
+            "$ref": "#/components/schemas/PlanPrepOut"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          }
+        },
+        "required": [
+          "id",
+          "thread_id",
+          "mode",
+          "sessions",
+          "days_opened",
+          "current",
+          "next_day_no",
+          "next_weekday",
+          "finished",
+          "prep"
+        ],
+        "title": "SwingPlanOut",
+        "type": "object"
+      },
+      "SwingSetupV1": {
+        "additionalProperties": false,
+        "properties": {
+          "armed": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeArmedV1"
+            },
+            "maxItems": 5,
+            "title": "Armed",
+            "type": "array"
+          },
+          "firstDay": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+            "title": "Firstday",
+            "type": "string"
+          },
+          "hideDates": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Hidedates",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "maxOpenHolds": {
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Maxopenholds",
+            "type": "integer"
+          },
+          "riskPerHoldUsd": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Riskperholdusd"
+          },
+          "sessions": {
+            "maximum": 23.0,
+            "minimum": 15.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "tape": {
+            "enum": [
+              "off",
+              "on"
+            ],
+            "title": "Tape",
+            "type": "string"
+          },
+          "universe": {
+            "items": {
+              "$ref": "#/components/schemas/SwingUniverseEntryV1"
+            },
+            "maxItems": 50,
+            "minItems": 10,
+            "title": "Universe",
+            "type": "array"
+          }
+        },
+        "required": [
+          "armed",
+          "firstDay",
+          "hideDates",
+          "interval",
+          "maxOpenHolds",
+          "sessions",
+          "tape",
+          "universe"
+        ],
+        "title": "SwingSetupV1",
+        "type": "object"
+      },
+      "SwingStateOut": {
+        "description": "Where a swing thread is (02p f2): the day under way (else the next to open), its week, the open holds with free\ncash and equity, and the equity series, which stops at the last ended day. All SIMULATED.",
+        "properties": {
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "days_ended": {
+            "title": "Days Ended",
+            "type": "integer"
+          },
+          "equity_series": {
+            "items": {
+              "$ref": "#/components/schemas/SwingEquityPointOut"
+            },
+            "title": "Equity Series",
+            "type": "array"
+          },
+          "equity_usd": {
+            "title": "Equity Usd",
+            "type": "number"
+          },
+          "free_cash_usd": {
+            "title": "Free Cash Usd",
+            "type": "number"
+          },
+          "holds_open": {
+            "title": "Holds Open",
+            "type": "integer"
+          },
+          "next": {
+            "enum": [
+              "day",
+              "week_review",
+              "finished"
+            ],
+            "title": "Next",
+            "type": "string"
+          },
+          "week_no": {
+            "title": "Week No",
+            "type": "integer"
+          },
+          "weeks": {
+            "title": "Weeks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day_no",
+          "days",
+          "days_ended",
+          "week_no",
+          "weeks",
+          "holds_open",
+          "free_cash_usd",
+          "equity_usd",
+          "equity_series",
+          "next"
+        ],
+        "title": "SwingStateOut",
+        "type": "object"
+      },
+      "SwingUniverseEntryV1": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "enum": [
+              "watchlist",
+              "manual",
+              "filter",
+              "liquidity"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "symbol"
+        ],
+        "title": "SwingUniverseEntryV1",
+        "type": "object"
+      },
+      "SwingUniverseOut": {
+        "properties": {
+          "footnote": {
+            "title": "Footnote",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Mix",
+            "type": "object"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "source": {
+            "const": "swing",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "size",
+          "mix",
+          "label",
+          "footnote"
+        ],
+        "title": "SwingUniverseOut",
+        "type": "object"
+      },
+      "SwingUniversePreviewIn": {
+        "description": "What the setup form sends: the dates, her lists and filters, the fill rule, the hand edits and the target size.\nNothing is written; the first call starts the data prep for the symbols still missing.",
+        "properties": {
+          "add": {
+            "items": {
+              "maxLength": 12,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Add",
+            "type": "array"
+          },
+          "fill": {
+            "default": "liquidity",
+            "enum": [
+              "liquidity",
+              "none"
+            ],
+            "title": "Fill",
+            "type": "string"
+          },
+          "filter_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 3,
+            "title": "Filter Ids",
+            "type": "array"
+          },
+          "first_day": {
+            "format": "date",
+            "title": "First Day",
+            "type": "string"
+          },
+          "remove": {
+            "items": {
+              "maxLength": 12,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Remove",
+            "type": "array"
+          },
+          "sessions": {
+            "maximum": 23.0,
+            "minimum": 15.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "target": {
+            "default": 50,
+            "maximum": 50.0,
+            "minimum": 10.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "watchlist_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "title": "Watchlist Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "first_day",
+          "sessions"
+        ],
+        "title": "SwingUniversePreviewIn",
+        "type": "object"
+      },
+      "SwingUniversePreviewOut": {
+        "description": "The table she edits. `state` is `preparing` while symbols are still being fetched (`pending_symbols` of them);\nthe rows already shown do not change when the rest arrive. `label` is the survivorship text: show it beside the\ntable.",
+        "properties": {
+          "basis_day": {
+            "format": "date",
+            "title": "Basis Day",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/UniverseCountsOut"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/components/schemas/UniverseExcludedOut"
+            },
+            "title": "Excluded",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "pending_symbols": {
+            "title": "Pending Symbols",
+            "type": "integer"
+          },
+          "prep": {
+            "$ref": "#/components/schemas/UniversePrepOut"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/UniverseRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "preparing"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "survivorship": {
+            "title": "Survivorship",
+            "type": "string"
+          }
+        },
+        "required": [
+          "basis_day",
+          "state",
+          "prep",
+          "rows",
+          "excluded",
+          "counts",
+          "survivorship",
+          "label",
+          "pending_symbols"
+        ],
+        "title": "SwingUniversePreviewOut",
+        "type": "object"
+      },
       "SymbolSearchOut": {
         "properties": {
           "asset_type": {
@@ -8226,11 +10411,55 @@
         "type": "object"
       },
       "ThreadBriefOut": {
-        "description": "The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no\npractice day is under way; an open trade is not realized).",
+        "description": "The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no\npractice day is under way; an open trade is not realized). A swing thread adds its equity, free cash and where it\nis in its calendar (02p); a day thread leaves those null.",
         "properties": {
           "balance": {
             "title": "Balance",
             "type": "number"
+          },
+          "day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day No"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "equity_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equity Usd"
+          },
+          "free_cash_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Cash Usd"
           },
           "id": {
             "title": "Id",
@@ -8266,6 +10495,17 @@
               }
             ],
             "title": "Today Pnl Usd"
+          },
+          "week_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Week No"
           }
         },
         "required": [
@@ -8404,6 +10644,26 @@
             "title": "Label",
             "type": "string"
           },
+          "last_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "swing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "thread": {
             "$ref": "#/components/schemas/PracticeThreadV1"
           },
@@ -8421,6 +10681,7 @@
         "required": [
           "thread",
           "today",
+          "last_day",
           "label",
           "daily",
           "curve"
@@ -8429,11 +10690,31 @@
         "type": "object"
       },
       "ThreadSummaryOut": {
-        "description": "A thread with its plan and stats (the contract), and today. A row of the hub's \"Your threads\" list.",
+        "description": "A thread with its plan and stats (the contract), and today. A row of the hub's \"Your threads\" list. A swing\nthread also carries its `swing` state (its setup is `thread.swing`, the contract's echo).",
         "properties": {
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "last_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "swing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SwingStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "thread": {
             "$ref": "#/components/schemas/PracticeThreadV1"
@@ -8452,6 +10733,7 @@
         "required": [
           "thread",
           "today",
+          "last_day",
           "label"
         ],
         "title": "ThreadSummaryOut",
@@ -8511,6 +10793,317 @@
           "pnl_usd"
         ],
         "title": "ThreadTodayOut",
+        "type": "object"
+      },
+      "UniverseCountsOut": {
+        "properties": {
+          "filter": {
+            "title": "Filter",
+            "type": "integer"
+          },
+          "liquidity": {
+            "title": "Liquidity",
+            "type": "integer"
+          },
+          "manual": {
+            "title": "Manual",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "watchlist": {
+            "title": "Watchlist",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "watchlist",
+          "manual",
+          "filter",
+          "liquidity",
+          "total"
+        ],
+        "title": "UniverseCountsOut",
+        "type": "object"
+      },
+      "UniverseCoverageOut": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "first_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Day"
+          },
+          "last_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Day"
+          }
+        },
+        "required": [
+          "first_day",
+          "last_day",
+          "days"
+        ],
+        "title": "UniverseCoverageOut",
+        "type": "object"
+      },
+      "UniverseDayOut": {
+        "description": "One morning's recorded membership. `recorded` false: no pass wrote it, so that day's list scans today's set.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "day",
+          "recorded",
+          "size",
+          "symbols",
+          "note"
+        ],
+        "title": "UniverseDayOut",
+        "type": "object"
+      },
+      "UniverseDaysOut": {
+        "description": "The `universe_days` read path: its coverage, the first day a new plan should default to (null until 20 finished\ndays have been recorded), and with `?day=` that morning's membership.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/UniverseCoverageOut"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UniverseDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_day_default": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Day Default"
+          },
+          "first_day_note": {
+            "title": "First Day Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "coverage",
+          "first_day_default",
+          "first_day_note",
+          "day"
+        ],
+        "title": "UniverseDaysOut",
+        "type": "object"
+      },
+      "UniverseExcludedOut": {
+        "description": "One neutral reason that names no date, so the list reveals nothing about what happened later.",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "reason"
+        ],
+        "title": "UniverseExcludedOut",
+        "type": "object"
+      },
+      "UniverseMembershipOut": {
+        "description": "Where the scanned names came from (02o-b2): the symbols the Desk recorded for that morning (`universe_days`), or\ntoday's Desk set for a day before the recording began. `note` says so in plain words.",
+        "properties": {
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "recorded_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Size"
+          },
+          "scanned_size": {
+            "title": "Scanned Size",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "universe_days",
+              "today"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "recorded_size",
+          "scanned_size",
+          "note"
+        ],
+        "title": "UniverseMembershipOut",
+        "type": "object"
+      },
+      "UniversePrepOut": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "total"
+        ],
+        "title": "UniversePrepOut",
+        "type": "object"
+      },
+      "UniverseRowOut": {
+        "description": "A symbol of the table, every figure as of `basis_day`. `warnings` is plain words (\"below floor\").",
+        "properties": {
+          "atr_pct_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Pct 14"
+          },
+          "avg_dollar_volume_20d": {
+            "title": "Avg Dollar Volume 20D",
+            "type": "number"
+          },
+          "chg_20d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chg 20D Pct"
+          },
+          "matched": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched",
+            "type": "array"
+          },
+          "prior_close": {
+            "title": "Prior Close",
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "watchlist",
+              "manual",
+              "filter",
+              "liquidity"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbol",
+          "source",
+          "prior_close",
+          "chg_20d_pct",
+          "avg_dollar_volume_20d",
+          "atr_pct_14",
+          "matched",
+          "warnings"
+        ],
+        "title": "UniverseRowOut",
         "type": "object"
       },
       "ValidationError": {
@@ -9051,6 +11644,946 @@
           "at"
         ],
         "title": "WatchlistTableTag",
+        "type": "object"
+      },
+      "WeekAdherenceOut": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/WeekCheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "score_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Pct"
+          }
+        },
+        "required": [
+          "score_pct",
+          "checks"
+        ],
+        "title": "WeekAdherenceOut",
+        "type": "object"
+      },
+      "WeekCheckOut": {
+        "properties": {
+          "applicable": {
+            "title": "Applicable",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "stop_set",
+              "stop_honored",
+              "risk_per_hold",
+              "open_holds_within_plan",
+              "week_loss_limit",
+              "entries_per_week",
+              "on_signal",
+              "focus_before_open"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "applicable",
+          "passed",
+          "detail"
+        ],
+        "title": "WeekCheckOut",
+        "type": "object"
+      },
+      "WeekDayOut": {
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "entries": {
+            "title": "Entries",
+            "type": "integer"
+          },
+          "exits": {
+            "title": "Exits",
+            "type": "integer"
+          },
+          "gap_usd": {
+            "title": "Gap Usd",
+            "type": "number"
+          },
+          "intraday_usd": {
+            "title": "Intraday Usd",
+            "type": "number"
+          },
+          "realized_usd": {
+            "title": "Realized Usd",
+            "type": "number"
+          },
+          "watched": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Watched",
+            "type": "string"
+          },
+          "weekday": {
+            "enum": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "title": "Weekday",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day_no",
+          "weekday",
+          "watched",
+          "entries",
+          "exits",
+          "realized_usd",
+          "gap_usd",
+          "intraday_usd",
+          "adherence_pct"
+        ],
+        "title": "WeekDayOut",
+        "type": "object"
+      },
+      "WeekEquityPointOut": {
+        "properties": {
+          "balance_usd": {
+            "title": "Balance Usd",
+            "type": "number"
+          },
+          "day_no": {
+            "title": "Day No",
+            "type": "integer"
+          },
+          "equity_usd": {
+            "title": "Equity Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "day_no",
+          "balance_usd",
+          "equity_usd"
+        ],
+        "title": "WeekEquityPointOut",
+        "type": "object"
+      },
+      "WeekHeatOut": {
+        "properties": {
+          "focus": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Focus",
+            "type": "string"
+          },
+          "held": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Held",
+            "type": "string"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "watchlist",
+                  "manual",
+                  "filter",
+                  "liquidity"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "source",
+          "return_pct",
+          "held",
+          "focus"
+        ],
+        "title": "WeekHeatOut",
+        "type": "object"
+      },
+      "WeekHoldOut": {
+        "description": "A hold active in the week, scored against the universe over its span (02p e2).",
+        "properties": {
+          "days_held": {
+            "title": "Days Held",
+            "type": "integer"
+          },
+          "entry_day_no": {
+            "title": "Entry Day No",
+            "type": "integer"
+          },
+          "entry_price": {
+            "title": "Entry Price",
+            "type": "number"
+          },
+          "exit_day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Day No"
+          },
+          "exit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Price"
+          },
+          "gap_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Usd"
+          },
+          "hold_id": {
+            "title": "Hold Id",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R"
+          },
+          "selection_edge_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Edge Pts"
+          },
+          "selection_of": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Of"
+          },
+          "selection_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Rank"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop": {
+            "enum": [
+              "none",
+              "set",
+              "honored",
+              "away"
+            ],
+            "title": "Stop",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timing_edge_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing Edge Pts"
+          }
+        },
+        "required": [
+          "hold_id",
+          "symbol",
+          "side",
+          "shares",
+          "entry_day_no",
+          "entry_price",
+          "status",
+          "exit_day_no",
+          "exit_price",
+          "days_held",
+          "pnl_usd",
+          "r",
+          "gap_usd",
+          "stop",
+          "selection_rank",
+          "selection_of",
+          "selection_edge_pts",
+          "timing_edge_pts"
+        ],
+        "title": "WeekHoldOut",
+        "type": "object"
+      },
+      "WeekMetaOut": {
+        "properties": {
+          "first_day_no": {
+            "title": "First Day No",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_day_no": {
+            "title": "Last Day No",
+            "type": "integer"
+          },
+          "week_no": {
+            "title": "Week No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "week_no",
+          "label",
+          "first_day_no",
+          "last_day_no"
+        ],
+        "title": "WeekMetaOut",
+        "type": "object"
+      },
+      "WeekOut": {
+        "description": "A frozen review, or \"Week to date\" (`to_date` yes) for the open week through the last ended close.",
+        "properties": {
+          "footnote": {
+            "title": "Footnote",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "review": {
+            "$ref": "#/components/schemas/WeekReviewOut"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_date": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "To Date",
+            "type": "string"
+          },
+          "universe_label": {
+            "title": "Universe Label",
+            "type": "string"
+          },
+          "week_no": {
+            "title": "Week No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "week_no",
+          "label",
+          "status",
+          "to_date",
+          "review",
+          "notes",
+          "rating",
+          "universe_label",
+          "footnote"
+        ],
+        "title": "WeekOut",
+        "type": "object"
+      },
+      "WeekPatch": {
+        "description": "PATCH body: notes and the self-rating only. A key left out is left alone; `null` clears it.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          }
+        },
+        "title": "WeekPatch",
+        "type": "object"
+      },
+      "WeekReviewOut": {
+        "description": "The review of one week (02p e1), as `week.compute_review` builds it. `lines` is the key `copy` on the wire (a\nfield cannot be called `copy`): the sentences the screen shows under the tiles.",
+        "properties": {
+          "adherence": {
+            "$ref": "#/components/schemas/WeekAdherenceOut"
+          },
+          "copy": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Copy",
+            "type": "array"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/WeekDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "equity": {
+            "items": {
+              "$ref": "#/components/schemas/WeekEquityPointOut"
+            },
+            "title": "Equity",
+            "type": "array"
+          },
+          "filter_quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilterQualityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "focus_untraded": {
+            "items": {
+              "$ref": "#/components/schemas/FocusUntradedOut"
+            },
+            "title": "Focus Untraded",
+            "type": "array"
+          },
+          "heat": {
+            "items": {
+              "$ref": "#/components/schemas/WeekHeatOut"
+            },
+            "title": "Heat",
+            "type": "array"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/WeekHoldOut"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "source_quality": {
+            "items": {
+              "$ref": "#/components/schemas/SourceQualityOut"
+            },
+            "title": "Source Quality",
+            "type": "array"
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/WeekTilesOut"
+          },
+          "week": {
+            "$ref": "#/components/schemas/WeekMetaOut"
+          }
+        },
+        "required": [
+          "week",
+          "tiles",
+          "equity",
+          "days",
+          "holds",
+          "heat",
+          "adherence",
+          "filter_quality",
+          "source_quality",
+          "focus_untraded",
+          "copy"
+        ],
+        "title": "WeekReviewOut",
+        "type": "object"
+      },
+      "WeekRowOut": {
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "equity_change_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equity Change Usd"
+          },
+          "first_day_no": {
+            "title": "First Day No",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_day_no": {
+            "title": "Last Day No",
+            "type": "integer"
+          },
+          "realized_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Usd"
+          },
+          "selection_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Pts"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timing_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing Pts"
+          },
+          "week_no": {
+            "title": "Week No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "week_no",
+          "label",
+          "days",
+          "first_day_no",
+          "last_day_no",
+          "status",
+          "realized_usd",
+          "equity_change_usd",
+          "adherence_pct",
+          "selection_pts",
+          "timing_pts"
+        ],
+        "title": "WeekRowOut",
+        "type": "object"
+      },
+      "WeekTilesOut": {
+        "description": "The review's tiles. A figure that cannot be computed is null, never a guess.",
+        "properties": {
+          "adherence_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adherence Pct"
+          },
+          "avg_days_held": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Days Held"
+          },
+          "avg_loss_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Loss Usd"
+          },
+          "avg_win_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Win Usd"
+          },
+          "balance_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance Usd"
+          },
+          "equity_change_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equity Change Usd"
+          },
+          "gap_share_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Share Pct"
+          },
+          "gap_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Usd"
+          },
+          "realized_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Usd"
+          },
+          "selection_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Pts"
+          },
+          "spy_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spy Return Pct"
+          },
+          "timing_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing Pts"
+          },
+          "universe_mean_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Mean Return Pct"
+          },
+          "universe_median_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Median Return Pct"
+          },
+          "unrealized_change_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Change Usd"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "required": [
+          "realized_usd",
+          "unrealized_change_usd",
+          "equity_change_usd",
+          "balance_usd",
+          "win_rate",
+          "avg_win_usd",
+          "avg_loss_usd",
+          "avg_days_held",
+          "gap_usd",
+          "gap_share_pct",
+          "adherence_pct",
+          "selection_pts",
+          "timing_pts",
+          "spy_return_pct",
+          "universe_median_return_pct",
+          "universe_mean_return_pct"
+        ],
+        "title": "WeekTilesOut",
+        "type": "object"
+      },
+      "WeeksOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          },
+          "weeks": {
+            "items": {
+              "$ref": "#/components/schemas/WeekRowOut"
+            },
+            "title": "Weeks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "thread_id",
+          "weeks",
+          "label"
+        ],
+        "title": "WeeksOut",
         "type": "object"
       },
       "Window": {
@@ -10377,7 +13910,7 @@
     },
     "/api/desk/replay/daily/next": {
       "post": {
-        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.\n\nA new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409\nin plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an\nold client are ignored.",
+        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.\n\nA new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409\nin plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an\nold client are ignored.\n\n`{\"threadId\": n}` alone continues a SWING thread's calendar (it has no plan to send: its universe is frozen with the\nthread) and answers `kind: \"swing\"`; with a day thread it is the same plain 422 as before.",
         "operationId": "open_next_api_desk_replay_daily_next_post",
         "requestBody": {
           "content": {
@@ -10404,7 +13937,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenNextOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OpenNextOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SwingOpenNextOut"
+                    }
+                  ],
+                  "title": "Response Open Next Api Desk Replay Daily Next Post"
                 }
               }
             },
@@ -10419,7 +13960,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}": {
       "get": {
-        "description": "One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's\nsession, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null\nuntil the day has ended.",
+        "description": "One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's\nsession, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null\nuntil the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).",
         "operationId": "get_day_list_api_desk_replay_day_lists__day_list_id__get",
         "parameters": [
           {
@@ -10455,7 +13996,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DayListOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DayListOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SwingDayListOut"
+                    }
+                  ],
+                  "title": "Response Get Day List Api Desk Replay Day Lists  Day List Id  Get"
                 }
               }
             },
@@ -10506,7 +14055,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DayListOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DayListOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SwingDayListOut"
+                    }
+                  ],
+                  "title": "Response Patch Day List Api Desk Replay Day Lists  Day List Id  Patch"
                 }
               }
             },
@@ -10531,7 +14088,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}/end": {
       "post": {
-        "description": "End the day: the open practice trade exits at the last price, the window unseals, and the list review\n(every candidate's move from its list price) is stored and served. Idempotent.",
+        "description": "End the day: the open practice trade exits at the last price, the window unseals, and the list review\n(every candidate's move from its list price) is stored and served. Idempotent. A swing day exits nothing: the open\nholds are marked at the close, and a day with no session is a Pass.",
         "operationId": "end_day_api_desk_replay_day_lists__day_list_id__end_post",
         "parameters": [
           {
@@ -10549,7 +14106,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DayListOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DayListOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SwingDayListOut"
+                    }
+                  ],
+                  "title": "Response End Day Api Desk Replay Day Lists  Day List Id  End Post"
                 }
               }
             },
@@ -10625,9 +14190,52 @@
         ]
       }
     },
+    "/api/desk/replay/day-lists/{day_list_id}/rescan": {
+      "post": {
+        "description": "Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,\nlabelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is\npractised (no clock yet) and after the day ends. A second scan at the same clock returns the first.",
+        "operationId": "rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rescan Day",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
       "post": {
-        "description": "Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in\nv1: another name is a 409 until the day ends.",
+        "description": "Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in\nv1: another name is a 409 until the day ends. A swing day allows several names on its shared clock.",
         "operationId": "start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post",
         "parameters": [
           {
@@ -11247,7 +14855,7 @@
         ]
       },
       "post": {
-        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`; `swing` is not open yet). One active thread per mode: a second is a 409.",
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). One active thread per mode: a second is a 409.\nA swing thread freezes its universe and calendar here, after the days, the data and the arms check out (every\nrejection is a plain problem), and starts preparing its bars in the background.",
         "operationId": "create_thread_api_desk_replay_threads_post",
         "requestBody": {
           "content": {
@@ -11273,6 +14881,48 @@
           }
         },
         "summary": "Create Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/swing-universe": {
+      "post": {
+        "description": "The universe table of a swing thread's setup form (02p c1), every figure as of the close before the first day.\nNothing is saved but the bar cache. Her own picks are fetched first; what the request's time budget could not reach\nis `pending` and fetched in the background, so the form calls this again while `state` is `preparing`.",
+        "operationId": "preview_swing_universe_api_desk_replay_threads_swing_universe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwingUniversePreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwingUniversePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Swing Universe",
         "tags": [
           "replay"
         ]
@@ -11375,7 +15025,7 @@
     },
     "/api/desk/replay/threads/{thread_id}/close": {
       "post": {
-        "description": "Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end\nit first). Idempotent.",
+        "description": "Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end\nit first). A swing thread's open holds exit at the last ended close and its open week is frozen with its review.\nIdempotent.",
         "operationId": "close_thread_api_desk_replay_threads__thread_id__close_post",
         "parameters": [
           {
@@ -11411,6 +15061,64 @@
           }
         },
         "summary": "Close Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/holds": {
+      "get": {
+        "description": "The thread's practice holds in entry order, each with its P/L. An open hold is marked at the LAST ENDED day's\nclose, never at a later price.",
+        "operationId": "get_thread_holds_api_desk_replay_threads__thread_id__holds_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "open",
+                "closed",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Holds",
         "tags": [
           "replay"
         ]
@@ -11466,6 +15174,212 @@
           }
         },
         "summary": "Get Thread Ledger",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/weeks": {
+      "get": {
+        "description": "One row per week opened so far: its days, status and the headline figures of its review.",
+        "operationId": "get_thread_weeks_api_desk_replay_threads__thread_id__weeks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeksOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Weeks",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/weeks/{week_no}": {
+      "get": {
+        "description": "The frozen review of a finished week, or \"Week to date\" (`to_date` is `yes`) for the open one, computed on read\nthrough the last ended close. A week that has not started, or has no finished day yet, is a 404.",
+        "operationId": "get_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_no",
+            "required": true,
+            "schema": {
+              "title": "Week No",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeekOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Week",
+        "tags": [
+          "replay"
+        ]
+      },
+      "patch": {
+        "description": "Notes and the self-rating of a week; a key left out is left alone, `null` clears it.",
+        "operationId": "patch_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_no",
+            "required": true,
+            "schema": {
+              "title": "Week No",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeekPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeekOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Thread Week",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/universe-days": {
+      "get": {
+        "description": "The recorded universe (02o-b2): which mornings the Desk recorded the names it scanned, the first day a new plan\ndefaults to once 20 finished days are recorded, and with `day` that morning's membership. A day without a recording\nscans today's Desk set, and says so.",
+        "operationId": "get_universe_days_api_desk_replay_universe_days_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UniverseDaysOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Universe Days",
         "tags": [
           "replay"
         ]

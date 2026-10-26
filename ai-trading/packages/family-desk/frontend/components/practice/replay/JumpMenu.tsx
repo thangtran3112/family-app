@@ -13,10 +13,12 @@ export type JumpMenuProps = {
   onJumpToTime: (hhmm: string) => void;
   onNextSignal: () => void;
   onJumpEnd: () => void;
+  /** A swing session (02p d2) adds "+1 hour" and names the window end "the close". */
+  swing?: boolean;
 };
 
-/** Jump forward: +5 min, +15 min, to a time, to the next signal, to the window end. Never backward (02o decision 1). */
-export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJumpToTime, onNextSignal, onJumpEnd }: JumpMenuProps) {
+/** Jump forward: +5 min, +15 min, (+1 hour for a swing session), to a time, to the next signal, to the window end. Never backward (02o decision 1). */
+export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJumpToTime, onNextSignal, onJumpEnd, swing = false }: JumpMenuProps) {
   const [open, setOpen] = useState(false);
   const [time, setTime] = useState("");
   const root = useRef<HTMLDivElement>(null);
@@ -53,6 +55,7 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
         <div id={menuId} className={styles.menu} role="menu" aria-label="Jump forward">
           <button type="button" role="menuitem" className={styles.menuItem} onClick={run(() => onJumpBy(5))}>+5 min</button>
           <button type="button" role="menuitem" className={styles.menuItem} onClick={run(() => onJumpBy(15))}>+15 min</button>
+          {swing && <button type="button" role="menuitem" className={styles.menuItem} onClick={run(() => onJumpBy(60))}>+1 hour</button>}
           <form
             className={styles.menuRow}
             onSubmit={(event) => {
@@ -75,7 +78,9 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
           >
             To the next signal
           </button>
-          <button type="button" role="menuitem" className={styles.menuItem} onClick={run(onJumpEnd)}>To the window end · {formatEtTimeZone(windowEnd)}</button>
+          <button type="button" role="menuitem" className={styles.menuItem} title={swing ? `Reveals through ${formatEtTimeZone(windowEnd)}` : undefined} onClick={run(onJumpEnd)}>
+            {swing ? "To the close" : <>To the window end · {formatEtTimeZone(windowEnd)}</>}
+          </button>
         </div>
       )}
     </div>

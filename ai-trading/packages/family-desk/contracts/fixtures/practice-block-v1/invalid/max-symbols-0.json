@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "firstDay": "2026-03-02",
+  "sessions": 5,
+  "hideDates": "no",
+  "maxSymbols": 0,
+  "screen": { "filters": [{ "id": 1 }], "listAt": "09:30", "maxList": 20 },
+  "setup": {
+    "window": { "from": "09:30", "to": "10:30" },
+    "session": "regular",
+    "interval": "5m",
+    "armed": []
+  }
+}

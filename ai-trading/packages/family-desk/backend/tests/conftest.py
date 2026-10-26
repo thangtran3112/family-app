@@ -33,6 +33,7 @@ _TABLES = (
     "practice_marks",
     "replay_sessions",
     "practice_threads",
+    "replay_day_scans",
     "replay_day_lists",
     "practice_plans",
     "universe_days",

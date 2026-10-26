@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import play from "@/components/practice/swing/play.module.css";
+import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -8,9 +10,21 @@ import type { OpenSide } from "@/lib/replay/keys";
 import { formatR, formatUsd } from "@/lib/replay/journalView";
 import type { MarkDraft } from "@/lib/replay/markInput";
 import type { OpenTrade } from "@/lib/replay/schemas";
+import type { SizingHint } from "@/lib/replay/swing";
 import styles from "./replay.module.css";
 
 export type Composer = "stop" | "note" | null;
+
+/** Swing session only (02p b2): the practice-hold card, the cash line, the sizing hint and the shares default. */
+export type SwingControls = {
+  tape: "on" | "off";
+  /** "Free cash $24,720" */
+  cash: string;
+  /** Risk ÷ |last − stop|, capped by free cash; a hint only, shown while she is flat. */
+  hint: SizingHint | null;
+  /** The shares field's value until she types in it: the hint's size, else 100. */
+  defaultShares: string;
+};
 
 export type PracticeControlsProps = {
   side: OpenSide;
@@ -37,6 +51,7 @@ export type PracticeControlsProps = {
   onNote: (text: string) => void;
   /** No session to mark: loading, or the session already ended. */
   disabled: boolean;
+  swing?: SwingControls;
 };
 
 function OpenTradeCard({ trade, since, realized, pnl }: { trade: OpenTrade | null; since: string | null; realized: number; pnl: number }) {
@@ -98,11 +113,13 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
 
 /** Open-trade card, shares and stop fields, and the practice buttons (02o §a3). Marks are priced by the server at the playhead. */
 export function PracticeControls(props: PracticeControlsProps) {
-  const { side, openTrade, lastPrice, draft, onDraft, composer, onComposer, disabled } = props;
+  const { side, openTrade, lastPrice, draft, onDraft, composer, onComposer, disabled, swing } = props;
   const entering = side === "flat";
   return (
     <div className={styles.controls}>
-      <OpenTradeCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />
+      {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <OpenTradeCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
+      {swing && <p className={play.cash}>{swing.cash}</p>}
+      {swing?.hint && entering && <p className={play.hint}>{swing.hint.text}</p>}
       {props.stopMissing && (
         <p className={styles.nudgeLine} role="status">
           {"This entry has no stop note, and your plan asks for one. "}
@@ -112,7 +129,7 @@ export function PracticeControls(props: PracticeControlsProps) {
       <div className={styles.fields}>
         <label className={styles.field}>
           Shares
-          <input className={styles.control} inputMode="numeric" value={draft.shares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
+          <input className={styles.control} inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
         </label>
         <label className={styles.field}>
           Stop price (optional)
@@ -130,7 +147,7 @@ export function PracticeControls(props: PracticeControlsProps) {
         <button type="button" className={styles.button} disabled={disabled} title="Note (N)" onClick={() => onComposer("note")}>Note (N)</button>
       </div>
       {composer && <ComposerForm key={composer} composer={composer} lastPrice={lastPrice} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
-      <p className={styles.footnote}>{PRACTICE_COPY.priceFootnote}</p>
+      <p className={styles.footnote}>{swing?.tape === "off" ? PRACTICE_COPY.swingTapeOffFootnote : PRACTICE_COPY.priceFootnote}</p>
     </div>
   );
 }

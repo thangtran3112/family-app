@@ -22,6 +22,7 @@ test("the replay line names the session's own feed and the replay clock", () => 
   assert.deepEqual(sip.left, ["Prices: Alpaca SIP · replay", "Consolidated tape · all US exchanges"]);
   assert.equal(sip.right[0], "Replay clock 10:07:00 AM ET");
   assert.equal(replayStatusLine("iex", "2026-10-23T14:07:00Z").left[0], "Prices: Alpaca IEX · replay", "an IEX session never claims SIP");
+  assert.equal(replayStatusLine("off", "2026-10-23T14:07:00Z").left[1], "Tape off · swing prices are one-minute closes", "a swing session with the tape off says its prices are closes");
 });
 
 test("no status line carries a banned term", () => {

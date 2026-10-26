@@ -23,10 +23,11 @@ export function journalStatusLine(daily: ReadonlyArray<{ n: number }>): Practice
   };
 }
 
-/** The replay workspace: "Prices: Alpaca SIP · replay | Consolidated tape ... Replay clock 10:07:00 AM ET | Would-fire signals only". The feed is the session's own. */
-export function replayStatusLine(feed: "sip" | "iex", playhead: string): PracticeStatusLine {
+/** The replay workspace: "Prices: Alpaca SIP · replay | Consolidated tape ... Replay clock 10:07:00 AM ET | Would-fire signals only". The feed is the session's own; a swing session with the tape off prices from one-minute closes. */
+export function replayStatusLine(feed: "sip" | "iex" | "off", playhead: string): PracticeStatusLine {
+  const feedNote = { sip: PRACTICE_COPY.feedSip, iex: PRACTICE_COPY.feedIex, off: PRACTICE_COPY.swingTapeOff }[feed];
   return {
-    left: [feed === "sip" ? PRACTICE_COPY.statusPricesReplay : PRACTICE_COPY.statusPricesReplayIex, feed === "sip" ? PRACTICE_COPY.feedSip : PRACTICE_COPY.feedIex],
+    left: [feed === "iex" ? PRACTICE_COPY.statusPricesReplayIex : PRACTICE_COPY.statusPricesReplay, feedNote],
     right: [practiceText("statusReplayClock", { time: formatEtClock(playhead) }), PRACTICE_COPY.statusSignals],
   };
 }
