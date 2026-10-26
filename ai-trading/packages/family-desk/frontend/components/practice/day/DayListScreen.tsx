@@ -15,7 +15,9 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import { cellText, cellTone, datesHidden, dayTitle, filtersText, isStarred, listHeaderText, listWarning, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
+import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { SwingBoard } from "@/components/practice/swing/SwingBoard";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { dayResultTone, formatBalance, formatDayResult, planRows } from "@/lib/replay/threadView";
 import { PeekPanel } from "./PeekPanel";
@@ -28,7 +30,7 @@ export function DayListScreen() {
   const router = useRouter();
   const raw = useSearchParams().get("id");
   const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
-  const list = useDeskQuery(`day-list:${id}`, (signal) => loadDayList(id ?? 0, {}, { signal }), { enabled: id !== null });
+  const list = useDeskQuery(`day-list:${id}`, (signal) => loadAnyDayList(id ?? 0, {}, { signal }), { enabled: id !== null });
   // No id: the day she has open, if any, is the one she means (a bookmark or the bare route).
   const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { enabled: id === null });
   const openDay = daily.data?.plan?.current ?? null;
@@ -58,6 +60,8 @@ export function DayListScreen() {
       </div>
     );
   }
+  // A swing thread's day answers the swing board (02p d1); a day thread's list is the screen below.
+  if (isSwingDayList(list.data)) return <SwingBoard key={list.data.id} initial={list.data} />;
   return <DayList key={list.data.id} list={list.data} onChanged={list.refresh} />;
 }
 
