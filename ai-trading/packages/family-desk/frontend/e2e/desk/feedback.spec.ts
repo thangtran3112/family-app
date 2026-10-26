@@ -518,6 +518,45 @@ test.describe("the filing form", () => {
     await expectCleanScreen(page);
   });
 
+  test("removing an uploaded screenshot deletes it on the server, and the row, the counter and Send follow", async ({ page }) => {
+    const api = watchApi(page);
+    await openDesk(page, "/feedback/new");
+    await page.getByRole("textbox", { name: /^Title/ }).fill("Chart looks wrong");
+    await page.getByRole("textbox", { name: "What happened?" }).fill("The weekly bars overlap.");
+    const uploaded = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/desk/feedback/attachments"));
+    await page.getByLabel("Choose screenshots").setInputFiles({ name: "day-list.png", mimeType: "image/png", buffer: PNG });
+    const { id } = (await (await uploaded).json()) as { id: number };
+    const row = page.getByRole("listitem").filter({ hasText: "day-list.png" });
+    await expect(row.getByText(/· PNG · uploaded/)).toBeVisible();
+    await expect(page.getByText("1 of 6")).toBeVisible();
+
+    await row.getByRole("button", { name: "Remove day-list.png" }).click();
+    await expect(row).toHaveCount(0);
+    await expect(page.getByText("0 of 6")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send report" })).toBeEnabled();
+    expect(api.paths().filter((path) => path.startsWith("DELETE"))).toEqual([`DELETE /api/desk/feedback/attachments/${id}`]);
+    await expectCleanScreen(page);
+  });
+
+  test("a refused removal keeps the screenshot and says why in plain words", async ({ page }) => {
+    await page.route("**/api/desk/feedback/attachments/*", async (route) => {
+      if (route.request().method() !== "DELETE") return route.fallback();
+      return route.fulfill({ status: 409, json: { detail: "This file is already on a report." } });
+    });
+    await openDesk(page, "/feedback/new");
+    await page.getByRole("textbox", { name: /^Title/ }).fill("Chart looks wrong");
+    await page.getByRole("textbox", { name: "What happened?" }).fill("The weekly bars overlap.");
+    await page.getByLabel("Choose screenshots").setInputFiles({ name: "day-list.png", mimeType: "image/png", buffer: PNG });
+    const row = page.getByRole("listitem").filter({ hasText: "day-list.png" });
+    await expect(row.getByText(/· PNG · uploaded/)).toBeVisible();
+
+    await row.getByRole("button", { name: "Remove day-list.png" }).click();
+    await expect(row.getByRole("alert")).toHaveText("Could not remove this screenshot · it is already on a report and stays with it");
+    await expect(row).toHaveCount(1);
+    await expect(page.getByText("1 of 6")).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
   test("a link without a web address blocks Send with the reason, and links can be added and removed", async ({ page }) => {
     await openDesk(page, "/feedback/new");
     await page.getByRole("textbox", { name: /^Title/ }).fill("Wrong colour");
