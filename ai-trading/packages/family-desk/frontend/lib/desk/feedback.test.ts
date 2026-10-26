@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDeskApiClient, DeskApiError } from "../api/client.ts";
 import { FeedbackDetailSchema, FeedbackListSchema, FeedbackUploadSchema } from "../feedback/schemas.ts";
-import { createFeedbackReport, feedbackListPath, loadFeedback, loadFeedbackReport, screenshotUrl } from "./feedback.ts";
+import { createFeedbackReport, deleteStagedScreenshot, feedbackListPath, loadFeedback, loadFeedbackReport, screenshotUrl } from "./feedback.ts";
 
 type Call = { method: string; path: string; body: unknown };
 
@@ -13,7 +13,7 @@ function fakeDesk(answer: unknown, status = 200) {
     async (input, init) => {
       const url = input as URL;
       calls.push({ method: init?.method ?? "GET", path: url.pathname + url.search, body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
-      return Response.json(answer, { status });
+      return status === 204 ? new Response(null, { status }) : Response.json(answer, { status });
     },
     () => ({ href: "https://trading.test/" }),
   );
@@ -112,6 +112,14 @@ test("the schemas accept the API's shapes, an empty log, and a staged upload, an
   assert.deepEqual(FeedbackUploadSchema.parse({ id: 4, filename: "a.png", size_bytes: 10, content_type: "image/png", report_id: null }).report_id, null);
   assert.throws(() => FeedbackListSchema.parse({ ...list, items: [{ ...item, status: "closed" }] }));
   assert.throws(() => FeedbackDetailSchema.parse({ ...detail, events: [{ ...detail.events[0], actor: "stranger" }] }));
+});
+
+test("removing a staged screenshot DELETEs it and accepts the empty 204; a refusal reaches the caller", async () => {
+  const d = fakeDesk(null, 204);
+  await deleteStagedScreenshot(7, { client: d.client });
+  assert.deepEqual(d.calls[0], { method: "DELETE", path: "/api/desk/feedback/attachments/7", body: undefined });
+  const attached = fakeDesk({ detail: "This screenshot is already on a report and stays with it" }, 409);
+  await assert.rejects(deleteStagedScreenshot(7, { client: attached.client }), (error: unknown) => error instanceof DeskApiError && error.status === 409);
 });
 
 test("a screenshot is read from the Desk's own API, never a third-party host", () => {

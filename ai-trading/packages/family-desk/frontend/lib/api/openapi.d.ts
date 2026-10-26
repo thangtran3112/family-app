@@ -296,7 +296,11 @@ export interface paths {
         get: operations["get_screenshot_api_desk_feedback_attachments__attachment_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove Staged Screenshot
+         * @description Remove one of the caller's own staged screenshots (the form's Remove). A file already on a report stays: 409.
+         */
+        delete: operations["remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6601,6 +6605,35 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

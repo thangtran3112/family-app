@@ -124,6 +124,7 @@ function UploadRow({ item, onRetry, onRemove }: { item: UploadItem; onRetry: () 
       <div className={styles.upBody}>
         <span className={styles.upName}>{item.filename}</span>
         <span className={styles.upMeta}>{formatBytes(item.size)} · {typeLabel(item.contentType)} · uploaded</span>
+        {item.failure && <p className={styles.failText} role="alert">{item.failure}</p>}
       </div>
       <button type="button" className={styles.iconButton} aria-label={`Remove ${item.filename}`} onClick={onRemove}><CrossIcon /></button>
     </li>

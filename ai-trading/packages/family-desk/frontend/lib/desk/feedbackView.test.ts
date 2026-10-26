@@ -22,6 +22,7 @@ import {
   listFootnote,
   READY_TEXT,
   refOf,
+  removeFailureText,
   safeHref,
   sendError,
   sendReason,
@@ -194,6 +195,14 @@ test("a refused upload says why in plain words, and every failure starts with Up
   assert.equal(uploadFailureText(new DeskApiError("unauthenticated", 401)), "Upload failed · you were signed out, sign in again and retry");
   assert.equal(uploadFailureText(new DeskApiError("http", 500, {})), "Upload failed · the connection dropped, try again");
   assert.equal(uploadFailureText(new Error("boom")), "Upload failed · the connection dropped, try again");
+});
+
+test("a failed remove says plainly that the screenshot is still there", () => {
+  assert.equal(removeFailureText(new DeskApiError("http", 409, {})), "Could not remove this screenshot · it is already on a report and stays with it");
+  assert.equal(removeFailureText(new DeskApiError("http", 404, {})), "Could not remove this screenshot · it is no longer in your uploads, so it cannot be removed here");
+  assert.equal(removeFailureText(new DeskApiError("unauthenticated", 401)), "Could not remove this screenshot · you were signed out, sign in again and retry");
+  assert.equal(removeFailureText(new DeskApiError("http", 500, {})), "Could not remove this screenshot · the connection dropped, try again");
+  assert.equal(removeFailureText(new Error("boom")), "Could not remove this screenshot · the connection dropped, try again");
 });
 
 const upload = (status: UploadItem["status"], extra: Partial<UploadItem> = {}): UploadItem => ({

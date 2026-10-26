@@ -261,6 +261,16 @@ export function uploadFailureText(error: unknown): string {
   return "Upload failed · the connection dropped, try again";
 }
 
+/** Why a staged screenshot could not be removed; the row stays on the form, so the sentence never claims it is gone. */
+export function removeFailureText(error: unknown): string {
+  if (error instanceof DeskApiError) {
+    if (error.kind === "unauthenticated") return "Could not remove this screenshot · you were signed out, sign in again and retry";
+    if (error.status === 404) return "Could not remove this screenshot · it is no longer in your uploads, so it cannot be removed here";
+    if (error.status === 409) return "Could not remove this screenshot · it is already on a report and stays with it";
+  }
+  return "Could not remove this screenshot · the connection dropped, try again";
+}
+
 // ---- the filing form ----------------------------------------------------------------------------------------------------
 
 export type UploadItem = {

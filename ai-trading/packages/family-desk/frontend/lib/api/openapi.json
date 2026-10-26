@@ -14593,6 +14593,40 @@
       }
     },
     "/api/desk/feedback/attachments/{attachment_id}": {
+      "delete": {
+        "description": "Remove one of the caller's own staged screenshots (the form's Remove). A file already on a report stays: 409.",
+        "operationId": "remove_staged_screenshot_api_desk_feedback_attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Staged Screenshot",
+        "tags": [
+          "feedback"
+        ]
+      },
       "get": {
         "description": "The bytes. A staged file is its uploader's alone; an attached one is every signed-in user's.",
         "operationId": "get_screenshot_api_desk_feedback_attachments__attachment_id__get",

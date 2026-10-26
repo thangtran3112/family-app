@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { deleteStagedScreenshot } from "@/lib/desk/feedback";
 import { uploadScreenshot } from "@/lib/desk/feedbackUpload";
-import { checkScreenshot, MAX_SCREENSHOTS, uploadFailureText, type UploadItem } from "@/lib/desk/feedbackView";
+import { checkScreenshot, MAX_SCREENSHOTS, removeFailureText, uploadFailureText, type UploadItem } from "@/lib/desk/feedbackView";
 
 export type ScreenshotUploads = {
   uploads: readonly UploadItem[];
@@ -10,7 +11,8 @@ export type ScreenshotUploads = {
   notice: string | null;
   add: (files: readonly File[]) => void;
   retry: (key: string) => void;
-  remove: (key: string) => void;
+  /** Cancels an upload, or deletes a staged file on the server; a refused delete leaves the row with a sentence in `failure`. */
+  remove: (key: string) => void | Promise<void>;
 };
 
 /**
@@ -22,6 +24,7 @@ export function useScreenshotUploads(): ScreenshotUploads {
   const [notice, setNotice] = useState<string | null>(null);
   const files = useRef(new Map<string, File>());
   const controllers = useRef(new Map<string, AbortController>());
+  const removing = useRef(new Set<string>());
   const counter = useRef(0);
 
   const patch = useCallback((key: string, change: Partial<UploadItem>) => {
@@ -94,13 +97,34 @@ export function useScreenshotUploads(): ScreenshotUploads {
     [patch, start],
   );
 
-  const remove = useCallback((key: string) => {
+  const drop = useCallback((key: string) => {
     controllers.current.get(key)?.abort();
     controllers.current.delete(key);
     files.current.delete(key);
     setUploads((current) => current.filter((item) => item.key !== key));
     setNotice(null);
   }, []);
+
+  // A file that reached the server is staged there until the report is sent (or 24 hours pass), so Remove deletes it on the
+  // server first and the row goes only when the server says it is gone. Any other row never left this browser.
+  const remove = useCallback(
+    async (key: string) => {
+      const item = uploads.find((candidate) => candidate.key === key);
+      if (item?.status !== "done" || item.attachmentId === null) return drop(key);
+      if (removing.current.has(key)) return;
+      removing.current.add(key);
+      patch(key, { failure: null });
+      try {
+        await deleteStagedScreenshot(item.attachmentId);
+        drop(key);
+      } catch (error) {
+        patch(key, { failure: removeFailureText(error) });
+      } finally {
+        removing.current.delete(key);
+      }
+    },
+    [uploads, drop, patch],
+  );
 
   // A screenshot pasted anywhere on the form joins the list (the clipboard's image files only; pasted text is left alone).
   useEffect(() => {

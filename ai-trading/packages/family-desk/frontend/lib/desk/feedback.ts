@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { FeedbackDetailSchema, FeedbackListSchema, type FeedbackKind, type FeedbackStatus } from "../feedback/schemas.ts";
 import type { CreateBody } from "./feedbackView.ts";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
@@ -25,6 +26,10 @@ export const loadFeedbackReport = (id: number, options?: RequestOptions) =>
 /** Files a report. The answer is the new report, with its `F-nnn` id. */
 export const createFeedbackReport = (body: CreateBody, options?: RequestOptions) =>
   clientOf(options)(deskPath("/feedback"), FeedbackDetailSchema, jsonInit("POST", body, options));
+
+/** Removes a staged screenshot (the form's Remove). The answer is an empty 204; a file already on a report is a 409. */
+export const deleteStagedScreenshot = (attachmentId: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/feedback/attachments/${attachmentId}`), z.undefined(), { method: "DELETE", signal: options?.signal });
 
 /** The screenshot's bytes (an `<img>` or a link): same origin, behind the Desk's own sign-in, never a third-party host. */
 export const screenshotUrl = (attachmentId: number): string => `/api/desk/feedback/attachments/${attachmentId}`;
