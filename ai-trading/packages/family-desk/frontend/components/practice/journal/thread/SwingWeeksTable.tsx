@@ -36,7 +36,7 @@ export function SwingWeeksTable({ threadId, weeks, daysEnded }: { threadId: numb
   ];
   return (
     <div className={styles.tableWrap}>
-      <DenseTable caption="Weeks" columns={columns} rows={rows} rowKey={({ view }) => String(view.weekNo)} empty={PRACTICE_COPY.swingWeeksNone} />
+      <DenseTable caption="Weeks" columns={columns} rows={rows} rowKey={({ view }) => String(view.weekNo)} density="compact" scrollX empty={PRACTICE_COPY.swingWeeksNone} />
     </div>
   );
 }

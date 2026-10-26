@@ -431,6 +431,7 @@ export function MarketChart({
         priceLineVisible: false,
       });
       shadeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+      shadeSeries.current.setSeriesOrder(0); // behind the candles and lines (a later series is drawn on top: the week shading hid the equity lines)
     } else if (!sessionShading && shadeSeries.current) {
       currentChart.removeSeries(shadeSeries.current);
       shadeSeries.current = null;

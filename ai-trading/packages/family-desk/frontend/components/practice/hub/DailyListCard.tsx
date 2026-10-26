@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { loadDaily, openNextDay } from "@/lib/desk/replay";
+import { loadDaily, loadThreads, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { planArmedText, planCard } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
@@ -24,6 +24,10 @@ export function DailyListCard({ revision }: { revision?: number }) {
 
   const plan = daily.data?.plan ?? null;
   const thread = daily.data?.thread ?? null;
+  // Only the empty state needs to know whether a swing thread exists (it changes the wording, not the rule).
+  const needsThread = daily.data !== null && thread === null;
+  const threads = useDeskQuery("replay-threads-for-daily", (signal) => loadThreads({ signal }), { revision, enabled: needsThread });
+  const swingOnly = (threads.data ?? []).some((row) => row.thread.status === "active" && row.thread.mode === "swing");
   const preparing = plan?.prep.state === "running";
   const { refresh } = daily;
   useEffect(() => {
@@ -56,7 +60,7 @@ export function DailyListCard({ revision }: { revision?: number }) {
     if (thread === null) {
       return (
         <div className={styles.threadEmpty}>
-          <p className={styles.muted}>{PRACTICE_COPY.threadNeeded}</p>
+          <p className={styles.muted}>{swingOnly ? PRACTICE_COPY.threadNeededDay : PRACTICE_COPY.threadNeeded}</p>
           {plan !== null && <button type="button" className={styles.button} onClick={() => setEditing(false)}>Cancel</button>}
         </div>
       );

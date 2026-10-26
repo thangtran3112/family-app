@@ -27,6 +27,8 @@ export function NewThreadForm({ open, wide = false, onCreated }: { open: OpenMod
   const [problems, setProblems] = useState<SwingProblems>({});
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  // Opening the hub never asks for a universe (the preview starts the data prep): the Swing section opens on her pick.
+  const [swingPicked, setSwingPicked] = useState(false);
 
   // An edit clears the messages of the last try; the live ones (first day, sessions, target) come from the preview.
   const editSwing = (next: SwingDraft) => {
@@ -35,7 +37,8 @@ export function NewThreadForm({ open, wide = false, onCreated }: { open: OpenMod
   };
 
   const mode: ThreadMode = effectiveMode(open, draft.mode);
-  const swing = mode === "swing";
+  const waiting = mode === "swing" && !open.day && !swingPicked;
+  const swing = mode === "swing" && !waiting;
   const preview = useUniversePreview(swingDraft, swing, now);
   const blocker = swing ? startBlockedBy({ preview: preview.preview, fresh: preview.fresh, problems: preview.problems }) : null;
 
@@ -117,10 +120,13 @@ export function NewThreadForm({ open, wide = false, onCreated }: { open: OpenMod
             <button
               type="button"
               className={styles.segment}
-              aria-pressed={mode === "swing"}
+              aria-pressed={swing}
               aria-describedby={modeReason && !open.swing ? "thread-mode-reason" : undefined}
               disabled={!open.swing}
-              onClick={() => setDraft({ ...draft, mode: "swing" })}
+              onClick={() => {
+                setSwingPicked(true);
+                setDraft({ ...draft, mode: "swing" });
+              }}
             >
               {PRACTICE_COPY.swingModeLabel}
             </button>
@@ -129,7 +135,9 @@ export function NewThreadForm({ open, wide = false, onCreated }: { open: OpenMod
         </div>
       </div>
 
-      {swing ? (
+      {waiting ? (
+        <p className={styles.hint}>{HUB_SWING_COPY.pickSwing}</p>
+      ) : swing ? (
         <SwingSetupSection draft={swingDraft} onDraft={editSwing} preview={preview} problems={shownProblems} now={now}>
           {riskFields}
         </SwingSetupSection>
@@ -137,21 +145,23 @@ export function NewThreadForm({ open, wide = false, onCreated }: { open: OpenMod
         riskFields
       )}
 
-      <div className={styles.inline}>
-        <button
-          type="submit"
-          className={styles.primary}
-          disabled={submitting || blocker !== null}
-          aria-describedby={swing ? "thread-submit-note" : undefined}
-        >
-          {swing ? PRACTICE_COPY.swingStartThread : PRACTICE_COPY.threadSubmit}
-        </button>
-        <p id="thread-submit-note" className={styles.hint}>
-          {!swing
-            ? practiceText("threadSubmitHint", { balance: formatBalance(shownBalance) })
-            : (blocker ?? hubSwingText("startsWith", { balance: formatBalance(shownBalance), n: preview.preview?.rows.length ?? 0 }))}
-        </p>
-      </div>
+      {!waiting && (
+        <div className={styles.inline}>
+          <button
+            type="submit"
+            className={styles.primary}
+            disabled={submitting || blocker !== null}
+            aria-describedby={swing ? "thread-submit-note" : undefined}
+          >
+            {swing ? PRACTICE_COPY.swingStartThread : PRACTICE_COPY.threadSubmit}
+          </button>
+          <p id="thread-submit-note" className={styles.hint}>
+            {!swing
+              ? practiceText("threadSubmitHint", { balance: formatBalance(shownBalance) })
+              : (blocker ?? hubSwingText("startsWith", { balance: formatBalance(shownBalance), n: preview.preview?.rows.length ?? 0 }))}
+          </p>
+        </div>
+      )}
       {formError && <p role="alert" className={styles.fieldError}>{formError}</p>}
     </form>
   );

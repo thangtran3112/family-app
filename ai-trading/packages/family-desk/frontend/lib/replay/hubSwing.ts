@@ -34,6 +34,7 @@ export const HUB_SWING_COPY = {
   dayTaken: "A day thread is already active · close it in its journal to start another",
   swingTaken: "A swing thread is already active · close it in its journal to start another",
   bothActive: "A day thread and a swing thread are both active · close one in its journal to start another",
+  pickSwing: "Pick Swing to build a universe and start a swing thread",
   noWatchlists: "No watchlists yet · you can still add symbols by hand",
   noDailyFilters: "No daily filters yet · a swing board reads daily bars, so only daily filters are offered",
   updatingList: "Updating the list…",

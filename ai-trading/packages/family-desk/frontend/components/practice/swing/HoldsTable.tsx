@@ -27,13 +27,16 @@ const tone = (value: HoldRowView["resultTone"]) => styles[value];
 
 /**
  * Practice holds as a dense table (02p d1): symbol, side, shares, entry ("Day 3 · 184.20"), days held, stop, price,
- * unrealized P/L, R, the earnings chip and the split note. An Exit column appears when a hold has closed, a Gap column
+ * unrealized P/L and R, then the earnings chip and the split note when a hold has one. An Exit column appears when a hold has closed, a Gap column
  * once a carried hold has a first price. Every figure is SIMULATED. Scrolls sideways at the 1180 band.
  */
 export function HoldsTable({ holds, caption = PRACTICE_COPY.swingBoardHolds, tape = "on", selectedSymbol = null, onSelect, empty, simulatedLabel = true }: HoldsTableProps) {
   const rows = useMemo(() => holds.map((hold) => ({ hold, view: holdRowView(hold, tape) })), [holds, tape]);
   const anyClosed = rows.some((row) => row.view.status === "closed");
   const anyGap = rows.some((row) => row.view.gap !== null);
+  // A column of dashes only costs width (the board's centre is about 800 px at 1440): it shows when a hold has something to say.
+  const anyEarnings = rows.some((row) => row.view.earnings);
+  const anySplit = rows.some((row) => row.view.splitNote);
   const selectedKey = rows.find((row) => row.view.symbol === selectedSymbol)?.view.id;
 
   type Row = (typeof rows)[number];
@@ -54,8 +57,8 @@ export function HoldsTable({ holds, caption = PRACTICE_COPY.swingBoardHolds, tap
     },
     { key: "r", label: "R", align: "right", render: ({ view }) => view.r },
     ...(anyClosed ? [{ key: "exit", label: "Exit", render: ({ view }: Row) => view.exit ?? "—" }] : []),
-    { key: "earnings", label: "Earnings", render: ({ view }) => (view.earnings ? <span className={`${styles.chip} ${styles.chipAmber}`}>{view.earnings}</span> : "—") },
-    { key: "split", label: "Split", render: ({ view }) => (view.splitNote ? <span className={styles.note}>{view.splitNote}</span> : "—") },
+    ...(anyEarnings ? [{ key: "earnings", label: "Earnings", render: ({ view }: Row) => (view.earnings ? <span className={`${styles.chip} ${styles.chipAmber}`}>{view.earnings}</span> : "—") }] : []),
+    ...(anySplit ? [{ key: "split", label: "Split", render: ({ view }: Row) => (view.splitNote ? <span className={styles.note}>{view.splitNote}</span> : "—") }] : []),
   ];
 
   return (
@@ -67,6 +70,7 @@ export function HoldsTable({ holds, caption = PRACTICE_COPY.swingBoardHolds, tap
         rowKey={({ view }) => String(view.id)}
         selectedKey={selectedKey === undefined ? null : String(selectedKey)}
         onSelect={onSelect ? ({ view }) => onSelect(view.symbol) : undefined}
+        density="compact"
         scrollX
         empty={empty ?? <span>{PRACTICE_COPY.swingBoardNoHolds}</span>}
       />

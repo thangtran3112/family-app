@@ -111,10 +111,23 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const loaded = await loadReplaySession(id, { signal: controller.signal });
         const feed = await loadReplayFeed(id, { interval: loaded.spec.interval }, { signal: controller.signal });
         if (controller.signal.aborted) return;
+        let shown = viewFromFeed(feed, loaded.spec.interval);
+        let atEnd = feed.at_end || loaded.status === "ended";
+        if (loaded.thread?.mode === "swing" && loaded.status === "active") {
+          // The day clock is shared: a name left behind it is lifted to it by its next advance (and cannot be marked
+          // before). An advance to where it already is does exactly that, so a name opened from the strip or the board
+          // shows the clock the strip shows.
+          const delta = await advanceReplay(id, { to: feed.revealed_through }, { interval: loaded.spec.interval }, { signal: controller.signal }).catch(() => null);
+          if (controller.signal.aborted) return;
+          if (delta) {
+            shown = applyAdvance(shown, delta);
+            atEnd = atEnd || delta.at_end;
+          }
+        }
         setSession(loaded);
         setIntervalState(loaded.spec.interval);
-        setView(viewFromFeed(feed, loaded.spec.interval));
-        dispatch({ type: "loaded", atEnd: feed.at_end || loaded.status === "ended" });
+        setView(shown);
+        dispatch({ type: "loaded", atEnd });
       } catch {
         if (!controller.signal.aborted) setLoadError(true);
       }

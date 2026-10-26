@@ -94,7 +94,7 @@ test.describe("Practice", () => {
     const newThread = page.locator("#threads").getByRole("form", { name: "New thread" });
     await expect(newThread.getByLabel("Starting balance")).toHaveValue("50000");
     await expect(newThread.getByRole("button", { name: "Day trading" })).toHaveAttribute("aria-pressed", "true");
-    await expect(newThread.getByRole("button", { name: PRACTICE_COPY.threadModeSwing })).toBeDisabled();
+    await expect(newThread.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
     await expect(page.locator("#daily-list").getByText(PRACTICE_COPY.threadNeeded)).toBeVisible();
     await expect(page.locator("#daily-list").getByRole("form", { name: "Daily list plan" })).toHaveCount(0);
 

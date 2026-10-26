@@ -17,7 +17,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useShellBand } from "@/lib/desk/useViewportBand";
-import { endDay, placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
+import { advanceReplay, endDay, placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { briefLine } from "@/lib/replay/threadView";
 import { actionForKey, markActionFor, type ReplayAction } from "@/lib/replay/keys";
@@ -226,6 +226,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     setOpening(target.symbol);
     startDaySession(dayListId, target.symbol)
       .then(async (other) => {
+        // A name left behind the shared day clock cannot be marked until an advance has lifted it to the clock.
+        await advanceReplay(other.id, { to: view.revealedThrough });
         await sendMark(other.id, built.mark);
         router.replace(`/practice/replay?id=${other.id}`);
       })
