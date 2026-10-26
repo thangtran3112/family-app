@@ -66,15 +66,6 @@ export const SwingStateSchema = z.object({
   next: z.enum(["day", "week_review", "finished"]),
 }) satisfies z.ZodType<components["schemas"]["SwingStateOut"]>;
 
-/** A row of the hub's "Your practice threads": the contract thread, today's open day, and a SIMULATED label. A swing
- *  thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo); the key is absent for a day thread. */
-export const ThreadSummarySchema = z.object({
-  thread: PracticeThreadV1Schema,
-  today: ThreadTodaySchema.nullable(),
-  label: z.string(),
-  swing: SwingStateSchema.nullish(),
-}) satisfies z.ZodType<components["schemas"]["ThreadSummaryOut"]>;
-
 /** One ended practice day: `skipped` ended with no session, so the balance carried. `balance` is at the day's end. */
 export const ThreadDaySchema = z.object({
   n: finite.int(),
@@ -87,6 +78,17 @@ export const ThreadDaySchema = z.object({
   adherence_pct: finite.int().nullable(),
   balance: finite,
 }) satisfies z.ZodType<components["schemas"]["ThreadDayOut"]>;
+
+/** A row of the hub's "Your practice threads": the contract thread, today's open day, and a SIMULATED label. A swing
+ *  thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo); the key is absent for a day thread. */
+export const ThreadSummarySchema = z.object({
+  thread: PracticeThreadV1Schema,
+  today: ThreadTodaySchema.nullable(),
+  /** The last ended day, from the balance's own series: the card's row while no day is open (D-048). */
+  last_day: ThreadDaySchema.nullable(),
+  label: z.string(),
+  swing: SwingStateSchema.nullish(),
+}) satisfies z.ZodType<components["schemas"]["ThreadSummaryOut"]>;
 
 /** `n` 0 is the starting balance (no day), then one point per ended day. */
 export const CurvePointSchema = z.object({ n: finite.int(), day: z.iso.date().nullable(), balance: finite }) satisfies z.ZodType<components["schemas"]["CurvePointOut"]>;

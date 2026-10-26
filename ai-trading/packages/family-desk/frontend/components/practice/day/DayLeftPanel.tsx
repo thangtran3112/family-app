@@ -33,10 +33,10 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
         <section className={styles.sideSection} aria-label={practiceText("dayBlockTitle", { of: list.of })}>
           <h2 className={styles.sideTitle}>{practiceText("dayBlockTitle", { of: list.of })}</h2>
           <ul className={styles.ladder}>
-            {blockLadder(list).map((row) => (
+            {blockLadder(list, list.plan.day_offset).map((row) => (
               <li key={row.n} className={styles.ladderRow} data-state={row.state}>
                 <span className={styles.ladderMark} aria-hidden="true">{row.state === "ended" ? "✓" : row.state === "open" ? "●" : "○"}</span>
-                <span className={styles.ladderDay}>{row.weekday ? `Day ${row.n} · ${row.weekday}` : `Day ${row.n}`}</span>
+                <span className={styles.ladderDay}>{row.weekday ? `Day ${row.n + list.plan.day_offset} · ${row.weekday}` : `Day ${row.n + list.plan.day_offset}`}</span>
                 <span className={styles.ladderDetail}>{row.detail}</span>
               </li>
             ))}

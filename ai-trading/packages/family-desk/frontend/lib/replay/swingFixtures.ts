@@ -81,6 +81,7 @@ export const swingThreadSummary: ThreadSummary = {
     stats: { balance: 51240, daysPracticed: 5, daysSkipped: 1, wins: 2, losses: 1, winRate: 0.67, avgWinUsd: 620, avgLossUsd: -160 },
   },
   today: { day_list_id: 71, day: "2026-07-14", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 },
+  last_day: null,
   label: SIMULATED,
   swing: swingState,
 };
@@ -89,12 +90,14 @@ export const swingThreadSummary: ThreadSummary = {
 export const swingThreadReviewReady: ThreadSummary = {
   ...swingThreadSummary,
   today: null,
+  last_day: null,
   swing: { ...swingState, day_no: 6, days_ended: 5, week_no: 2, holds_open: 1, next: "week_review", equity_series: swingState.equity_series.slice(0, 5) },
 };
 
 export const swingThreadFinished: ThreadSummary = {
   ...swingThreadSummary,
   today: null,
+  last_day: null,
   swing: { ...swingState, day_no: 20, days_ended: 20, week_no: 4, holds_open: 0, next: "finished" },
 };
 

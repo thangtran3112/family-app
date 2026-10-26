@@ -292,9 +292,12 @@ export const PRACTICE_COPY = {
   planIntro: "Each day your own filters build a list for the past day you are about to replay. Pick a few names, practice one, then see how every name moved.",
   planNone: "No daily plan yet · set one up to start Day 1",
   planDay: "Day {day} of {of}",
+  // D-047: a plan that replaced another starts at its own Day 1, so the thread's day number comes first and the plan's own
+  // count follows it: "Day 3 · plan day 2 of 5". With no earlier plan the two agree and the line is "Day 2 of 5".
+  planDayInThread: "Day {day} · plan day {planDay} of {of}",
   planNext: "next: {weekday}",
-  planInProgress: "Day {day} of {of} · in progress",
-  planListed: "Day {day} of {of} · list ready",
+  planStateInProgress: "in progress",
+  planStateListed: "list ready",
   planDayDone: "Day {day} done",
   planDone: "All {of} days done",
   planPreparing: "Preparing data · {done} of {total}",
@@ -313,6 +316,7 @@ export const PRACTICE_COPY = {
   planStartDay: "First day",
   planSubmit: "Start day",
   planSubmitting: "Starting…",
+  planOpening: "Opening the day…",
   planListAtNeeds: "{filters} needs a list time of {time} or later · before then none of its bars of the day has closed",
   planArmed: "Armed on practice days: {names}",
   planArmedNone: "Nothing armed · no would-fire signals while you practice",
@@ -405,6 +409,7 @@ export const PRACTICE_COPY = {
   reviewEmpty: "No moves to show for this day",
   backToList: "Back to the list",
   dayAfter: "Next day",
+  dayAfterOpening: "Opening the next day…",
   dayFinished: "You have finished every day of this plan",
   // Practice threads (02r): the pretend account she practices in across days. Every dollar is SIMULATED.
   threadsTitle: "Your practice threads",

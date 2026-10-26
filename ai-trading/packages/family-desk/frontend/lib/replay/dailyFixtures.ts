@@ -26,6 +26,7 @@ export const plan: PracticePlan = {
   sessions: 20,
   max_symbols: 5,
   days_opened: 6,
+  day_offset: 0,
   filters: [{ id: 4, name: "Gap up" }, { id: 9, name: "Abnormal volume" }],
   current: { id: 41, day_no: 6, status: "ended" },
   next_day: "2026-03-10",

@@ -14,6 +14,7 @@ import {
   dayCellText,
   dayCellTone,
   dayColumns,
+  dayNumberText,
   dayTitle,
   filtersNote,
   filtersText,
@@ -40,6 +41,7 @@ import {
   starsFullText,
   stripRows,
   syntheticDays,
+  threadDayNo,
   toggledStars,
   tradeLineRows,
   universeNote,
@@ -90,6 +92,21 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131", "none"]);
   const done = planCard({ ...plan, finished: true, next_day: null, next_weekday: null, next_day_no: null });
   assert.equal(done.headline, "All 20 days done");
+});
+
+test("D-047: a plan after another plan names each day by its place in the thread, and the plan's own count follows", () => {
+  const after = { ...plan, day_offset: 2 };
+  assert.equal(threadDayNo(after, 1), 3, "the plan's Day 1 is the thread's third day");
+  assert.equal(dayNumberText(plan, 7), "Day 7 of 20", "with no earlier plan the two numbers agree and one is said");
+  assert.equal(dayNumberText(after, 1), "Day 3 · plan day 1 of 20");
+  assert.equal(dayTitle({ ...dayList, plan: after }, true), "Day 9 · plan day 7 of 20 · Tue");
+  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "practicing" } }).headline, "Day 9 · plan day 7 of 20 · in progress");
+  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "listed" } }).headline, "Day 9 · plan day 7 of 20 · list ready");
+  const between = planCard(after);
+  assert.equal(between.headline, "Day 9 · plan day 7 of 20 · next: Tue");
+  assert.equal(between.detail?.startsWith("Day 8 done"), true, "the day that ended is the thread's day too");
+  const rows = blockLadder({ day_no: 2, of: 5, status: "listed", weekday: "Wed" }, 2);
+  assert.deepEqual(rows.map((row) => row.detail), ["Ended · review", "Open now", "Opens after day 4", "Locked", "Locked"]);
 });
 
 test("cells use the column's format and never print null; the since column is a time", () => {

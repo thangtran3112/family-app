@@ -37,9 +37,20 @@ export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): bool
 
 const dayName = (weekday: string, day: string | null, hidden: boolean): string => (hidden || day === null ? weekday : formatEtDay(day));
 
+/** A day's number in its thread (D-047): a plan counts its own days from 1, and a plan that replaced another comes after the
+ *  days the thread had already ended. This is the number the journal gives the same day (`n`). */
+export const threadDayNo = (plan: Pick<PracticePlan, "day_offset">, planDayNo: number): number => planDayNo + plan.day_offset;
+
+/** "Day 7 of 20", or "Day 7 · plan day 2 of 5" when an earlier plan's days came first: one number for the day on every screen. */
+export function dayNumberText(plan: Pick<PracticePlan, "day_offset" | "sessions">, planDayNo: number): string {
+  return plan.day_offset === 0
+    ? practiceText("planDay", { day: planDayNo, of: plan.sessions })
+    : practiceText("planDayInThread", { day: threadDayNo(plan, planDayNo), planDay: planDayNo, of: plan.sessions });
+}
+
 /** "Day 7 of 20 · Tue", or "Day 7 of 20 · Tue 2026-03-03" with dates shown. */
-export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day">, hidden: boolean): string {
-  return `${practiceText("planDay", { day: list.day_no, of: list.of })} · ${dayName(list.weekday, list.day, hidden)}`;
+export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }, hidden: boolean): string {
+  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day, hidden)}`;
 }
 
 /** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30" (kept whole for the plain-text reads). */
@@ -95,14 +106,15 @@ export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOn
 
 export type LadderRow = { n: number; weekday: string | null; state: "ended" | "open" | "opens_after" | "locked"; detail: string };
 
-/** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked. */
-export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">): LadderRow[] {
+/** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked.
+ *  `n` is the plan's own count; `offset` (the plan's `day_offset`) turns it into the thread's number for the labels (D-047). */
+export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">, offset = 0): LadderRow[] {
   const ended = list.status === "ended";
   return Array.from({ length: list.of }, (_, index): LadderRow => {
     const n = index + 1;
     if (n < list.day_no || (n === list.day_no && ended)) return { n, weekday: n === list.day_no ? list.weekday : null, state: "ended", detail: PRACTICE_COPY.dayLadderEnded };
     if (n === list.day_no) return { n, weekday: list.weekday, state: "open", detail: PRACTICE_COPY.dayLadderOpen };
-    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no }) };
+    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no + offset }) };
     return { n, weekday: null, state: "locked", detail: PRACTICE_COPY.dayLadderLocked };
   });
 }
@@ -132,7 +144,7 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   if (current !== null && current.status !== "ended") {
     // A listed day has not been practiced yet; only a practicing one is "in progress" (D-035).
     return {
-      headline: practiceText(current.status === "practicing" ? "planInProgress" : "planListed", { day: current.day_no, of: plan.sessions }),
+      headline: `${dayNumberText(plan, current.day_no)} · ${PRACTICE_COPY[current.status === "practicing" ? "planStateInProgress" : "planStateListed"]}`,
       detail: failed,
       action: "continue",
     };
@@ -146,9 +158,9 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   }
   const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day, hidden) })}`;
   // The day just ended is said as done, and Continue opens the next one: the same list the review's "Next day" opens.
-  const done = current === null ? null : practiceText("planDayDone", { day: current.day_no });
+  const done = current === null ? null : practiceText("planDayDone", { day: threadDayNo(plan, current.day_no) });
   return {
-    headline: `${practiceText("planDay", { day: plan.next_day_no ?? plan.days_opened + 1, of: plan.sessions })}${next}`,
+    headline: `${dayNumberText(plan, plan.next_day_no ?? plan.days_opened + 1)}${next}`,
     detail: [done, failed].filter(Boolean).join(" · ") || null,
     action: plan.days_opened === 0 ? "start" : "continue",
   };

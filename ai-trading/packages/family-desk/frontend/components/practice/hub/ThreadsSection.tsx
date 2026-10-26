@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { loadDaily, loadThread, loadThreads } from "@/lib/desk/replay";
+import { loadDaily, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { activeThreads, HUB_SWING_COPY, openModes } from "@/lib/replay/hubSwing";
 import type { ThreadSummary } from "@/lib/replay/threads";
@@ -26,10 +26,6 @@ export function ThreadsSection({ revision, onChanged }: { revision?: number; onC
   const active = activeThreads(list);
   const open = openModes(active);
   const actives = [active.day, active.swing].filter((row): row is ThreadSummary => row !== null);
-  // The day card's TODAY row falls back to the last ended day (D-030), which only the thread's day series holds.
-  const dayId = active.day?.thread.id ?? null;
-  const detail = useDeskQuery(`replay-thread-days:${dayId}`, (signal) => loadThread(dayId ?? 0, { signal }), { enabled: dayId !== null, revision });
-  const lastDay = detail.data?.daily.at(-1) ?? null;
   const closed = list.filter((row) => row.thread.status === "closed");
   const picked = closed.find((row) => row.thread.id === pickedId) ?? null;
   const cards = actives.length > 0 ? (picked ? [...actives, picked] : actives) : [picked ?? list[0]].filter((row): row is ThreadSummary => row !== undefined);
@@ -47,7 +43,7 @@ export function ThreadsSection({ revision, onChanged }: { revision?: number; onC
         <h2 id="threads-title" className={styles.sectionTitle}>{PRACTICE_COPY.threadsTitle}</h2>
         <p className={styles.hint}>{PRACTICE_COPY.threadsHint}</p>
       </div>
-      {threads.loading || detail.loading ? (
+      {threads.loading ? (
         <LoadingBlock label={PRACTICE_COPY.threadsLoading} height={180} />
       ) : threads.data === null ? (
         <ErrorBlock message={PRACTICE_COPY.threadsLoadError} onRetry={threads.refresh} />
@@ -76,7 +72,7 @@ export function ThreadsSection({ revision, onChanged }: { revision?: number; onC
               ) : row.thread.mode === "swing" ? (
                 <SwingThreadCard key={row.thread.id} summary={row} onChanged={onChanged} />
               ) : (
-                <ThreadCard key={row.thread.id} summary={row} lastDay={lastDay} planOpen={planOpen} onChanged={onChanged} />
+                <ThreadCard key={row.thread.id} summary={row} planOpen={planOpen} onChanged={onChanged} />
               ),
             )}
             {open.day || open.swing ? (
