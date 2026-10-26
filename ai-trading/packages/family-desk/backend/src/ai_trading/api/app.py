@@ -33,6 +33,7 @@ from ai_trading.api import (
     bars,
     charts,
     dashboard,
+    feedback,
     futures,
     library,
     me,
@@ -161,6 +162,7 @@ for _router_module in (
     library,
     alert_strategies,
     replay,
+    feedback,
 ):
     app.include_router(_router_module.router)
 

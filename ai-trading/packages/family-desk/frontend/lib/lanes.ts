@@ -17,6 +17,7 @@ const ROUTE_LANES: ReadonlyArray<readonly [string, Lane]> = [
   ["/futures", "technical"],
   ["/settings", "technical"],
   ["/more", "technical"],
+  ["/feedback", "technical"],
   ["/holdings", "fundamental"],
   ["/covered-calls", "fundamental"],
   ["/stocks", "fundamental"],
@@ -71,6 +72,7 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
 export const AVATAR_MENU: readonly NavItem[] = [
   { label: "Settings", href: "/settings" },
   { label: "More", href: "/more" },
+  { label: "Feedback", href: "/feedback" },
 ];
 
 export function isNavActive(href: string, pathname: string, match: string = href): boolean {
@@ -110,3 +112,25 @@ export const isReplayWorkspacePath = (pathname: string): boolean => normalize(pa
 
 /** The replay, the day list and the thread journal fill the left rail themselves (D-013, D-039) instead of showing the watchlists. */
 export const hasPracticeLeftRail = (pathname: string): boolean => ["/practice/replay", "/practice/day", "/practice/journal"].includes(normalize(pathname));
+
+/** The More group (Settings, More and the Feedback log, 02s) swaps the watchlists for the "Settings & More" section list (board `KSZ-0`). */
+export const hasMoreLeftRail = (pathname: string): boolean => ["/settings", "/more", "/feedback", "/feedback/new"].includes(normalize(pathname));
+
+export type MoreSection = { id: string; label: string; href: string; hash?: string };
+// The Settings sections jump to their card on /settings; Feedback is its own route. "Strategies" is the Pause-all row, which the
+// live Settings screen keeps inside its Alerts card.
+export const MORE_SECTIONS: readonly MoreSection[] = [
+  { id: "defaults", label: "Defaults", href: "/settings#settings-default-view", hash: "#settings-default-view" },
+  { id: "channels", label: "Alert channels", href: "/settings#settings-alerts", hash: "#settings-alerts" },
+  { id: "sources", label: "Data sources", href: "/settings#settings-market-data", hash: "#settings-market-data" },
+  { id: "brokers", label: "Brokers", href: "/settings#settings-trading", hash: "#settings-trading" },
+  { id: "strategies", label: "Strategies", href: "/settings#settings-strategies", hash: "#settings-strategies" },
+  { id: "feedback", label: "Feedback", href: "/feedback" },
+];
+
+/** The selected section: Feedback on its routes; on Settings and More the one whose card the address points at (Defaults before any). */
+export function moreSectionFor(pathname: string, hash: string): string {
+  const path = normalize(pathname);
+  if (path === "/feedback" || path.startsWith("/feedback/")) return "feedback";
+  return MORE_SECTIONS.find((section) => section.hash === hash)?.id ?? "defaults";
+}

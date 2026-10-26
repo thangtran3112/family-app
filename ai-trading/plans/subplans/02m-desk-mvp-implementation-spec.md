@@ -53,6 +53,7 @@ Inputs read: 02l §d1/§e, 02j, the backend and frontend as of `dev` (21 routes 
 - **Lists** are plain arrays unless a response needs more than rows; no pagination except `GET /signals` (existing `limit/offset`) and
   `GET /alerts/log` (same parameters).
 - **Cache:** all reads are `Cache-Control: no-store`; the frontend refetches (§c4), so no ETag work in the MVP.
+- **Later additions to this surface:** the Desk feedback log (`/api/desk/feedback/*` and the `/feedback` and `/feedback/new` routes) is specified in [02s](02s-desk-feedback-log.md).
 
 ### a2. Endpoint inventory (47 MVP endpoints + 6 legacy)
 
