@@ -25,6 +25,7 @@ import {
   noMatchText,
   ordinal,
   peekDailyBars,
+  peekOffsets,
   planArmedText,
   planCard,
   riskPlanText,
@@ -285,4 +286,9 @@ test("D-018: a list built after the open has no previous-session RVOL or change,
   assert.equal(dayCellText(byKey.prev_change_pct!, smci), "—");
   assert.equal(byKey.prev_rvol!.missing, true);
   assert.equal(dayCellText(byKey.rvol_10d!, smci), "2.50×");
+});
+
+test("hidden Peek bars are named by how many sessions back they are: D-12 up to D-1, the prior close (M4)", () => {
+  assert.deepEqual(peekOffsets(3), ["D-3", "D-2", "D-1"]);
+  assert.deepEqual(peekOffsets(0), []);
 });

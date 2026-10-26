@@ -3,13 +3,30 @@ shared per-symbol metric row. `Freshness` and `MarketSession` are the same liter
 computes, so the API can never return a value the core does not produce."""
 
 from datetime import datetime
+from typing import Any, ClassVar
 
 from ai_trading_common.quality import Quality
-from pydantic import BaseModel, FiniteFloat
+from pydantic import BaseModel, FiniteFloat, SerializerFunctionWrapHandler, model_serializer
 
 from ai_trading.core.freshness import Freshness, MarketSession
 
-__all__ = ["Freshness", "MarketSession", "Metrics", "Problem", "ProblemsOut", "Stamp"]
+__all__ = ["Freshness", "MarketSession", "Metrics", "Problem", "ProblemsOut", "Stamp", "SwingOptional"]
+
+
+class SwingOptional(BaseModel):
+    """Base of a response model that gained swing-only fields (02p, R10). A field named in `swing_only` that is empty is
+    left out of the JSON, so a day thread's responses are byte for byte what they were before swing; the generated
+    schema still lists the field, as optional."""
+
+    swing_only: ClassVar[tuple[str, ...]] = ()
+
+    @model_serializer(mode="wrap")
+    def _leave_out_empty_swing_fields(self, handler: SerializerFunctionWrapHandler):  # no annotation: schema unchanged
+        data: dict[str, Any] = handler(self)
+        for name in self.swing_only:
+            if data.get(name) is None:
+                data.pop(name, None)
+        return data
 
 
 class Stamp(BaseModel):

@@ -5,14 +5,15 @@ plan binds to one thread; every realized practice trade books a ledger row (`rep
 stored**: the balance is `starting_balance` plus the ledger, the day series and the stats are read back from the
 ledger and the ended day lists, so the numbers cannot drift from the trades (the reconciliation tests pin this).
 
-- **One active thread per owner and mode.** A second `day` thread is a 409 until the first is closed. Swing is in the
-  contract but not open yet (02p).
+- **One active thread per owner and mode.** A second `day` thread is a 409 until the first is closed. A swing thread is
+  created by `swing.create_thread` (02p), which shares the checks and the insert below.
 - **Plan edits apply from the next session.** A session snapshots the plan when it starts, so a day already under way
   is scored against the plan it began with. The starting balance and the mode never change.
 - **Closing** archives the daily plan and freezes the thread (no plan edits, no new days). It waits for an open
-  practice day: that day holds trades that are not scored yet.
+  practice day: that day holds trades that are not scored yet. A swing thread's open holds exit at the last ended
+  day's close first (`swing.close_thread`).
 - **A practised day** is an ended day list that had a session; a **skipped day** ended with none, and the balance
-  simply carries.
+  simply carries. In a swing thread a ledger row belongs to the ended day it exited on (it may have no session).
 
 All money here is SIMULATED and every sentence that mentions it says so.
 """
@@ -28,7 +29,7 @@ from sqlalchemy.orm import Session
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1, PracticeThreadV1
 from ai_trading.db.models import PracticeLedger, PracticePlan, PracticeThread, ReplayDayList, ReplaySession
 from ai_trading.replay.ledger import entry_out, utc_z
-from ai_trading.replay.session import ReplayProblem
+from ai_trading.replay.session import ReplayProblem, Services
 
 SIMULATED_LABEL = "Simulated money · practice only, never a real account"
 SWING_CLOSED = "Swing threads are not open yet · start a day thread"
@@ -40,6 +41,13 @@ LEDGER_LIMIT = 500
 
 class ThreadNotFound(Exception):
     pass
+
+
+def _swing() -> Any:
+    """The swing module, imported on first use: it imports this module."""
+    from ai_trading.replay import swing
+
+    return swing
 
 
 # -- reading -------------------------------------------------------------------------------------------------
@@ -104,13 +112,27 @@ def _check_plan(plan: dict[str, Any], balance: int | Decimal) -> None:
 
 
 def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: datetime) -> PracticeThread:
+    """A DAY thread. A swing body is not served here: swing threads are created by `swing.create_thread`, which checks
+    the days, the universe and the arms first and then calls `check_new_thread` and `add_thread` below. The 422 stays
+    for a swing body that reaches this path."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     if dumped["mode"] != "day":
         raise ReplayProblem(SWING_CLOSED, path="mode")
-    plan = dumped["plan"]
-    _check_plan(plan, dumped["startingBalance"])
+    check_new_thread(db, user_id, dumped)
+    return add_thread(db, user_id, dumped, now)
+
+
+def check_new_thread(db: Session, user_id: int, dumped: dict[str, Any]) -> None:
+    """The create rules on top of the contract: the plan fits the balance, no other thread of the mode is active."""
+    _check_plan(dumped["plan"], dumped["startingBalance"])
     if active_thread(db, user_id, dumped["mode"], lock=True) is not None:
         raise _already_active(dumped["mode"])
+
+
+def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime) -> PracticeThread:
+    """Write the thread row (`dumped` passed `check_new_thread`). The unique index is the backstop for a concurrent
+    create of the same mode."""
+    plan = dumped["plan"]
     row = PracticeThread(
         owner_user_id=user_id,
         mode=dumped["mode"],
@@ -177,13 +199,22 @@ def open_day(db: Session, thread_id: int) -> ReplayDayList | None:
     ).scalar_one_or_none()
 
 
-def close_thread(db: Session, user_id: int, thread_id: int, now: datetime) -> PracticeThread:
-    """Freeze the thread: archive its daily plan, stamp `closed_at`. Idempotent."""
+def close_thread(
+    db: Session, user_id: int, thread_id: int, now: datetime, svc: Services | None = None
+) -> PracticeThread:
+    """Freeze the thread: archive its daily plan, stamp `closed_at`. A swing thread's open holds exit at the last ended
+    close and its open week is frozen first (with its review when `svc` is given). Idempotent."""
     row = get_thread(db, user_id, thread_id, lock=True)
     if row.status == "closed":
         return row
-    if open_day(db, row.id) is not None:
-        raise ReplayProblem(DAY_OPEN, path="status", status=409)
+    under_way = open_day(db, row.id)
+    if under_way is not None:
+        # 02p b7: a swing thread names the day ("scored weekly" makes the day thread's sentence wrong for it).
+        raise ReplayProblem(
+            f"End Day {under_way.day_no} first" if row.mode == "swing" else DAY_OPEN, path="status", status=409
+        )
+    if row.mode == "swing":
+        _swing().close_thread(db, row, now, svc)
     for plan in db.execute(
         select(PracticePlan).where(PracticePlan.thread_id == row.id, PracticePlan.status == "active")
     ).scalars():
@@ -270,8 +301,10 @@ def _series(db: Session, thread: PracticeThread, ledger: list[PracticeLedger]) -
     )
     pnl: dict[int, Decimal] = {}
     trades: dict[int, int] = {}
+    by_date = {day.day: day.id for day in days} if thread.mode == "swing" else {}
     for entry in ledger:
-        day_list_id = session_day.get(entry.session_id)
+        # a swing row may have no session (an auto exit at a close): it belongs to the ended day it exited on
+        day_list_id = by_date.get(entry.day) if thread.mode == "swing" else session_day.get(entry.session_id)
         if day_list_id is not None:
             pnl[day_list_id] = pnl.get(day_list_id, Decimal(0)) + entry.pnl_usd
             trades[day_list_id] = trades.get(day_list_id, 0) + 1
@@ -330,7 +363,7 @@ def _stats(thread: PracticeThread, ledger: list[PracticeLedger], series: list[di
     return {**stats, **{key: value for key, value in optional.items() if value is not None}}
 
 
-def _contract(thread: PracticeThread, stats: dict[str, Any]) -> PracticeThreadV1:
+def _contract(db: Session, thread: PracticeThread, stats: dict[str, Any]) -> PracticeThreadV1:
     doc: dict[str, Any] = {
         "schemaVersion": 1,
         "id": thread.id,
@@ -343,15 +376,30 @@ def _contract(thread: PracticeThread, stats: dict[str, Any]) -> PracticeThreadV1
     }
     if thread.closed_at is not None:
         doc["closedAt"] = utc_z(thread.closed_at)
+    if thread.mode == "swing":  # the contract's `swing` block is the setup the plan row froze (R2)
+        spec = db.execute(
+            select(PracticePlan.spec)
+            .where(PracticePlan.thread_id == thread.id)
+            .order_by(PracticePlan.id.desc())
+            .limit(1)
+        ).scalar_one()
+        doc["swing"] = {key: value for key, value in spec.items() if key != "mode"}
     return PracticeThreadV1.model_validate(doc)
 
 
-def _realized(db: Session, day_list_id: int) -> tuple[int, Decimal]:
-    count, total = db.execute(
-        select(func.count(PracticeLedger.id), func.coalesce(func.sum(PracticeLedger.pnl_usd), 0))
-        .join(ReplaySession, ReplaySession.id == PracticeLedger.session_id)
-        .where(ReplaySession.day_list_id == day_list_id)
-    ).one()
+def _realized(db: Session, thread: PracticeThread, day: ReplayDayList | None) -> tuple[int, Decimal]:
+    """What the day's trades have credited to the ledger. A swing hold credits when its exit day ENDS, so a day under
+    way reads zero; its rows have no session, so they are found by date."""
+    if day is None:
+        return 0, Decimal(0)
+    query = select(func.count(PracticeLedger.id), func.coalesce(func.sum(PracticeLedger.pnl_usd), 0))
+    if thread.mode == "swing":
+        query = query.where(PracticeLedger.thread_id == thread.id, PracticeLedger.day == day.day)
+    else:
+        query = query.join(ReplaySession, ReplaySession.id == PracticeLedger.session_id).where(
+            ReplaySession.day_list_id == day.id
+        )
+    count, total = db.execute(query).one()
     return count, Decimal(total)
 
 
@@ -360,7 +408,7 @@ def _today(db: Session, thread: PracticeThread) -> dict[str, Any] | None:
     day = open_day(db, thread.id)
     if day is None:
         return None
-    trades, pnl = _realized(db, day.id)
+    trades, pnl = _realized(db, thread, day)
     return {
         "day_list_id": day.id,
         "day": day.day,
@@ -375,7 +423,10 @@ def _today(db: Session, thread: PracticeThread) -> dict[str, Any] | None:
 def summary(db: Session, thread: PracticeThread) -> dict[str, Any]:
     ledger = _ledger(db, thread.id)
     stats = _stats(thread, ledger, _series(db, thread, ledger))
-    return {"thread": _contract(thread, stats), "today": _today(db, thread), "label": SIMULATED_LABEL}
+    out = {"thread": _contract(db, thread, stats), "today": _today(db, thread), "label": SIMULATED_LABEL}
+    if thread.mode == "swing":
+        out["swing"] = _swing().state(db, thread)
+    return out
 
 
 def detail(db: Session, thread: PracticeThread) -> dict[str, Any]:
@@ -385,13 +436,16 @@ def detail(db: Session, thread: PracticeThread) -> dict[str, Any]:
     curve = [{"n": 0, "day": None, "balance": _money(thread.starting_balance)}] + [
         {"n": row["n"], "day": row["day"], "balance": row["balance"]} for row in series
     ]
-    return {
-        "thread": _contract(thread, _stats(thread, ledger, series)),
+    out = {
+        "thread": _contract(db, thread, _stats(thread, ledger, series)),
         "today": _today(db, thread),
         "label": SIMULATED_LABEL,
         "daily": series,
         "curve": curve,
     }
+    if thread.mode == "swing":
+        out["swing"] = _swing().state(db, thread)
+    return out
 
 
 def list_threads(db: Session, user_id: int) -> list[dict[str, Any]]:
@@ -438,11 +492,11 @@ def brief(db: Session, thread_id: int | None, day_list_id: int | None = None) ->
         select(func.coalesce(func.sum(PracticeLedger.pnl_usd), 0)).where(PracticeLedger.thread_id == thread.id)
     ).scalar_one()
     if day_list_id is not None:
-        today_pnl: float | None = _money(_realized(db, day_list_id)[1])
+        today_pnl: float | None = _money(_realized(db, thread, db.get(ReplayDayList, day_list_id))[1])
     else:
         today = _today(db, thread)
         today_pnl = None if today is None else today["pnl_usd"]
-    return {
+    out = {
         "id": thread.id,
         "mode": thread.mode,
         "status": thread.status,
@@ -450,12 +504,18 @@ def brief(db: Session, thread_id: int | None, day_list_id: int | None = None) ->
         "today_pnl_usd": today_pnl,
         "label": SIMULATED_LABEL,
     }
+    if thread.mode == "swing":
+        state = _swing().state(db, thread)
+        out |= {key: state[key] for key in ("equity_usd", "free_cash_usd", "day_no", "days", "week_no")}
+    return out
 
 
 __all__ = (
     "ThreadNotFound",
     "active_thread",
+    "add_thread",
     "brief",
+    "check_new_thread",
     "close_thread",
     "create_thread",
     "day_balances",

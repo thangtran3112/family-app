@@ -24,7 +24,7 @@ from typing import Any
 import pandas as pd
 from ai_trading_common.errors import ProviderError
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -100,8 +100,39 @@ def plan_days(first_day: date, count: int) -> list[date]:
     return out
 
 
+def check_range(first: date, sessions: int, now: datetime, *, path: str = "firstDay") -> list[date]:
+    """The days of a plan or a swing thread, or the plain 422 that says why `first` and `sessions` cannot run."""
+    if first < EARLIEST_LIST_DAY:
+        raise ReplayProblem("Daily lists start on Jan 3, 2017 · pick a later day", path=path)
+    past_the_end = ReplayProblem(
+        f"{sessions} sessions from {first:%a %Y-%m-%d} run past the last finished day · pick an earlier start",
+        path=path,
+    )
+    if first > now.date():  # also keeps the calendar lookup below inside the years the calendar covers
+        raise past_the_end
+    if trading_session("stock", first) is None:
+        raise ReplayProblem(f"No trading on {first:%a %Y-%m-%d} · pick a weekday", path=path)
+    days = plan_days(first, sessions)
+    try:
+        check_day(days[-1], now)
+    except ReplayDayError:
+        raise past_the_end from None
+    return days
+
+
 def _weekday(day: date) -> str:
     return day.strftime("%a")
+
+
+def _is_swing(plan: PracticePlan) -> bool:
+    return plan.spec.get("mode") == "swing"
+
+
+def _swing() -> Any:
+    """The swing module, imported on first use: it imports this module."""
+    from ai_trading.replay import swing
+
+    return swing
 
 
 # -- the universe --------------------------------------------------------------------------------------------
@@ -134,8 +165,15 @@ def practice_universe(db: Session, user_id: int) -> tuple[list[str], bool]:
 # -- the plan ------------------------------------------------------------------------------------------------
 
 
-def active_plan(db: Session, user_id: int, *, lock: bool = False) -> PracticePlan | None:
+def active_plan(db: Session, user_id: int, *, thread_id: int | None = None, lock: bool = False) -> PracticePlan | None:
+    """The active plan of thread `thread_id`, else of her DAY thread (a plan saved before 0007 has no thread and counts
+    as a day plan). A swing thread has its own plan beside it, so every daily-list caller keeps the day meaning."""
     query = select(PracticePlan).where(PracticePlan.owner_user_id == user_id, PracticePlan.status == "active")
+    if thread_id is not None:
+        query = query.where(PracticePlan.thread_id == thread_id)
+    else:
+        day_threads = select(PracticeThread.id).where(PracticeThread.mode == "day")
+        query = query.where(or_(PracticePlan.thread_id.is_(None), PracticePlan.thread_id.in_(day_threads)))
     return db.execute(query.with_for_update() if lock else query).scalar_one_or_none()
 
 
@@ -197,19 +235,7 @@ def create_plan(
     The plan binds to `thread`, which carries the risk plan (D-007): the block's own plan fields are never read."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     first = date.fromisoformat(dumped["firstDay"])
-    if first < EARLIEST_LIST_DAY:
-        raise ReplayProblem("Daily lists start on Jan 3, 2017 · pick a later day", path="firstDay")
-    if trading_session("stock", first) is None:
-        raise ReplayProblem(f"No trading on {first:%a %Y-%m-%d} · pick a weekday", path="firstDay")
-    days = plan_days(first, dumped["sessions"])
-    try:
-        check_day(days[-1], svc.now())
-    except ReplayDayError:
-        raise ReplayProblem(
-            f"{dumped['sessions']} sessions from {first:%a %Y-%m-%d} run past the last finished day"
-            " · pick an earlier start",
-            path="firstDay",
-        ) from None
+    check_range(first, dumped["sessions"], svc.now())
     resolved = _resolve_filters(db, user_id, dumped["screen"]["filters"])
     for row, spec, _ in resolved:
         need = screen.earliest_list_at(spec)
@@ -217,7 +243,7 @@ def create_plan(
             raise ReplayProblem(_early_list_message(row.name, spec, need), path="screen.listAt")
 
     now = svc.now()
-    old = active_plan(db, user_id, lock=True)
+    old = active_plan(db, user_id, thread_id=thread.id, lock=True)
     if old is not None:
         # One open day at a time (D-030): a day the old plan left half practised ends with the plan. Its trades are
         # already booked in the thread's ledger, so ending it keeps its P/L, and the new plan's Day 1 is the only day
@@ -225,7 +251,7 @@ def create_plan(
         under_way = _latest(db, old.id)
         if under_way is not None and under_way.status == "practicing":
             end_day(db, user_id, under_way.id, svc)
-        old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live at a time
+        old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live per thread
         db.flush()
     _ensure_desk_universe(db, svc, now)
     symbols, capped = practice_universe(db, user_id)
@@ -260,6 +286,8 @@ def run_prep(db: Session, svc: Services, plan_id: int) -> dict[str, Any]:
     if plan is None:
         log.warning("daily-list prep: plan %s is not visible", plan_id)
         return {}
+    if _is_swing(plan):  # a swing thread's plan: its universe is fixed and it loads SPY too
+        return _swing().run_prep(db, svc, plan_id)
     days = plan_days(plan.first_day, plan.spec["sessions"])
     store = svc.store_factory(db)
     symbols = list(plan.universe["symbols"])
@@ -319,6 +347,8 @@ def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
 
 
 def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
+    if _is_swing(plan):
+        return _swing().plan_out(db, plan)
     spec = without_legacy_plan_fields(plan.spec)
     days = plan_days(plan.first_day, spec["sessions"])
     latest = _latest(db, plan.id)
@@ -492,10 +522,12 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
     }
 
 
-def open_next(db: Session, user_id: int, svc: Services) -> Opened:
+def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = None) -> Opened:
     """The current day list while it is not over; else the next day's list, built now on today's Desk universe
     (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
-    Every day done: no list."""
+    Every day done: no list. A swing thread (`thread_id`) continues its own calendar (`swing.open_next`)."""
+    if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
+        return _swing().open_next(db, user_id, svc, thread_id)
     plan = active_plan(db, user_id, lock=True)
     if plan is None:
         raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
@@ -768,6 +800,8 @@ def day_list_out(
     row = get_day_list(db, user_id, day_list_id)
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
+    if _is_swing(plan):
+        return _swing().day_list_out(db, user_id, day_list_id, svc, peek=peek)
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
     universe = row.universe
@@ -877,6 +911,10 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     """The day's practice session on a name from the list, built from the plan's setup. v1 practises one name a
     day: a second name is a 409 until the day ends (switching on the shared clock is 02o-b2)."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
+    if _is_swing(plan):
+        return _swing().start_session(db, user_id, day_list_id, symbol, svc)
     if row.status == "ended":
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
     if symbol not in {c["symbol"] for c in row.candidates}:
@@ -889,8 +927,6 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
             path="symbol",
             status=409,
         )
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
     thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
     if thread is None:
         raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)
@@ -955,6 +991,8 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         return row
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
+    if _is_swing(plan):
+        return _swing().end_day(db, user_id, day_list_id, svc)
     sessions = _sessions_of(db, row.id)
     for s in sessions:
         if s.status == "active":
@@ -998,6 +1036,7 @@ def hub(db: Session, user_id: int) -> dict[str, Any]:
 __all__ = (
     "Opened",
     "active_plan",
+    "check_range",
     "create_plan",
     "day_list_out",
     "earnings_flags",

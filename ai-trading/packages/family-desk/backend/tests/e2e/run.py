@@ -2,9 +2,11 @@
 
     uv run python tests/e2e/run.py                                  # everything (CI)
     uv run python tests/e2e/run.py --browser -- --project=desktop-1440 e2e/desk/shell.spec.ts
+    uv run python tests/e2e/run.py --checks                         # only the real-HTTP and alert-path checks
 
-`--browser` runs only Playwright; whatever follows `--` goes to `playwright test`. Needs the static export
-(`pnpm build`) and `DESK_E2E_ADMIN_DATABASE_URL`, a loopback Postgres maintenance database."""
+`--browser` runs only Playwright; whatever follows `--` goes to `playwright test`. `--checks` runs only the checks
+(`http_check.py`, `technical_check.py`, `swing_flow_check.py`). Needs the static export (`pnpm build`) and
+`DESK_E2E_ADMIN_DATABASE_URL`, a loopback Postgres maintenance database."""
 
 import argparse
 import os
@@ -53,6 +55,7 @@ def _run_in_database(admin_engine, admin, command) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--browser", action="store_true", help="run only the Playwright suite")
+    parser.add_argument("--checks", action="store_true", help="run only the real-HTTP and alert-path checks")
     parser.add_argument("playwright_args", nargs="*", help="after `--`: passed to `playwright test`")
     args = parser.parse_args(argv)
     if not (FRONTEND / "out" / "index.html").is_file():
@@ -60,18 +63,19 @@ def main(argv: list[str] | None = None) -> int:
     admin = admin_url(os.environ["DESK_E2E_ADMIN_DATABASE_URL"])
     admin_engine = create_engine(admin.render_as_string(hide_password=False), isolation_level="AUTOCOMMIT")
     try:
-        if not args.browser:
+        if not (args.browser or args.checks):
             subprocess.run(["node", "--test", "e2e/proxy.test.mjs"], cwd=FRONTEND, check=True)
 
         def browser_suite() -> int:
             command = ["pnpm", "exec", "playwright", "test", *args.playwright_args]
             return subprocess.run(command, cwd=FRONTEND, env=os.environ.copy()).returncode
 
-        browser_result = _run_in_database(admin_engine, admin, browser_suite)
-        if browser_result or args.browser:
-            return browser_result
+        if not args.checks:
+            browser_result = _run_in_database(admin_engine, admin, browser_suite)
+            if browser_result or args.browser:
+                return browser_result
 
-        for check in ("http_check.py", "technical_check.py"):
+        for check in ("http_check.py", "technical_check.py", "swing_flow_check.py"):
             result = _run_in_database(
                 admin_engine,
                 admin,

@@ -31,7 +31,7 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
   ]);
 });
 
-import { crosshairPoint, formatChartClock, replayTickLabel, seriesMarkers, shadingData, volumeData } from "./chart-data.ts";
+import { crosshairPoint, formatChartClock, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -136,4 +136,13 @@ test("replay axes read as time of day, with the date only on day ticks and never
   assert.equal(replayTickLabel(time, 2, false), "Oct 23");
   assert.equal(replayTickLabel(time, 2, true), "");
   assert.equal(replayTickLabel({ year: 2026, month: 10, day: 23 }, 2, false), "");
+});
+
+test("the data table's source time: the bar's own time, the caller's label while dates are hidden, else the clock (M4)", () => {
+  const stamp = "2001-01-02"; // a stand-in date: its clock time reads "07:00 PM" and says nothing
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false), "2026-10-23T14:07:00Z", "dates shown: unchanged");
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false, ["D-1"]), "2026-10-23T14:07:00Z", "labels are for hidden dates only");
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, true), "10:07 AM", "hidden, no labels: the time of day, as intraday charts keep it");
+  assert.equal(sourceTimeLabel(stamp, 1, true, ["D-2", "D-1"]), "D-1");
+  assert.equal(sourceTimeLabel(stamp, 2, true, ["D-2", "D-1"]), formatChartClock(chartTime(`${stamp}T00:00:00Z`)), "a row without a label falls back");
 });

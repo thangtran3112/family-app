@@ -386,6 +386,9 @@ export interface paths {
          *     A new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409
          *     in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
          *     old client are ignored.
+         *
+         *     `{"threadId": n}` alone continues a SWING thread's calendar (it has no plan to send: its universe is frozen with the
+         *     thread) and answers `kind: "swing"`; with a day thread it is the same plain 422 as before.
          */
         post: operations["open_next_api_desk_replay_daily_next_post"];
         delete?: never;
@@ -405,7 +408,7 @@ export interface paths {
          * Get Day List
          * @description One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's
          *     session, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null
-         *     until the day has ended.
+         *     until the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).
          */
         get: operations["get_day_list_api_desk_replay_day_lists__day_list_id__get"];
         put?: never;
@@ -432,7 +435,8 @@ export interface paths {
         /**
          * End Day
          * @description End the day: the open practice trade exits at the last price, the window unseals, and the list review
-         *     (every candidate's move from its list price) is stored and served. Idempotent.
+         *     (every candidate's move from its list price) is stored and served. Idempotent. A swing day exits nothing: the open
+         *     holds are marked at the close, and a day with no session is a Pass.
          */
         post: operations["end_day_api_desk_replay_day_lists__day_list_id__end_post"];
         delete?: never;
@@ -476,7 +480,7 @@ export interface paths {
         /**
          * Start Day Session
          * @description Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in
-         *     v1: another name is a 409 until the day ends.
+         *     v1: another name is a 409 until the day ends. A swing day allows several names on its shared clock.
          */
         post: operations["start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post"];
         delete?: never;
@@ -656,9 +660,33 @@ export interface paths {
         /**
          * Create Thread
          * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-         *     risk plan, and the mode (`day`; `swing` is not open yet). One active thread per mode: a second is a 409.
+         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). One active thread per mode: a second is a 409.
+         *     A swing thread freezes its universe and calendar here, after the days, the data and the arms check out (every
+         *     rejection is a plain problem), and starts preparing its bars in the background.
          */
         post: operations["create_thread_api_desk_replay_threads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/swing-universe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Swing Universe
+         * @description The universe table of a swing thread's setup form (02p c1), every figure as of the close before the first day.
+         *     Nothing is saved but the bar cache. Her own picks are fetched first; what the request's time budget could not reach
+         *     is `pending` and fetched in the background, so the form calls this again while `state` is `preparing`.
+         */
+        post: operations["preview_swing_universe_api_desk_replay_threads_swing_universe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -703,9 +731,31 @@ export interface paths {
         /**
          * Close Thread
          * @description Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end
-         *     it first). Idempotent.
+         *     it first). A swing thread's open holds exit at the last ended close and its open week is frozen with its review.
+         *     Idempotent.
          */
         post: operations["close_thread_api_desk_replay_threads__thread_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Holds
+         * @description The thread's practice holds in entry order, each with its P/L. An open hold is marked at the LAST ENDED day's
+         *     close, never at a later price.
+         */
+        get: operations["get_thread_holds_api_desk_replay_threads__thread_id__holds_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -730,6 +780,51 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/weeks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Weeks
+         * @description One row per week opened so far: its days, status and the headline figures of its review.
+         */
+        get: operations["get_thread_weeks_api_desk_replay_threads__thread_id__weeks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/weeks/{week_no}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Week
+         * @description The frozen review of a finished week, or "Week to date" (`to_date` is `yes`) for the open one, computed on read
+         *     through the last ended close. A week that has not started, or has no finished day yet, is a 404.
+         */
+        get: operations["get_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Thread Week
+         * @description Notes and the self-rating of a week; a key left out is left alone, `null` clears it.
+         */
+        patch: operations["patch_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__patch"];
         trace?: never;
     };
     "/api/desk/screener/filters": {
@@ -1215,10 +1310,12 @@ export interface components {
             at_end: boolean;
             /** Bars */
             bars: components["schemas"]["ReplayBarOut"][];
+            daily_forming?: components["schemas"]["DailyBarOut"] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            paused?: components["schemas"]["PausedOut"] | null;
             prints: components["schemas"]["PrintsOut"];
             /** Quiet S */
             quiet_s: number | null;
@@ -1230,6 +1327,8 @@ export interface components {
             /** Signals */
             signals: components["schemas"]["ReplaySignalOut"][];
             stamp: components["schemas"]["Stamp"];
+            /** Strip */
+            strip?: components["schemas"]["StripRowOut"][] | null;
         };
         /** AlertLogOut */
         AlertLogOut: {
@@ -1658,6 +1757,43 @@ export interface components {
             last_change_in_window: components["schemas"]["BiasChangeOut"] | null;
         };
         /**
+         * BoardRowOut
+         * @description One name of the board, every figure read from daily bars through the prior close. A row with no data keeps its
+         *     place with empty figures.
+         */
+        BoardRowOut: {
+            /** Atr Pct 14 */
+            atr_pct_14: number | null;
+            /** Avg Dollar Volume 20D */
+            avg_dollar_volume_20d: number | null;
+            /** Chg 1D Pct */
+            chg_1d_pct: number | null;
+            /** Chg 20D Pct */
+            chg_20d_pct: number | null;
+            /** Chg 5D Pct */
+            chg_5d_pct: number | null;
+            earnings: components["schemas"]["EarningsChipOut"] | null;
+            /** Matches */
+            matches: string[];
+            /** Pct From 20D High */
+            pct_from_20d_high: number | null;
+            /** Prior Close */
+            prior_close: number | null;
+            /** Rsi 14 */
+            rsi_14: number | null;
+            /** Rvol 10D */
+            rvol_10d: number | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "watchlist" | "manual" | "filter" | "liquidity";
+            /** Symbol */
+            symbol: string;
+            /** Vs 50D Avg Pct */
+            vs_50d_avg_pct: number | null;
+        };
+        /**
          * CandidateOut
          * @description One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.
          */
@@ -1731,6 +1867,53 @@ export interface components {
             day: string | null;
             /** N */
             n: number;
+        };
+        /** DailyBarOut */
+        DailyBarOut: {
+            /** C */
+            c: number;
+            /** H */
+            h: number;
+            /** L */
+            l: number;
+            /** O */
+            o: number;
+            /**
+             * T
+             * Format: date
+             */
+            t: string;
+            /** V */
+            v: number;
+        };
+        /**
+         * DailyBlockOut
+         * @description The Daily chart: the rebased bars through the session before the day (never the day's own), the forming candle
+         *     built from revealed one-minute bars, and this name's open hold for the entry marker and the stop line.
+         */
+        DailyBlockOut: {
+            /** Bars */
+            bars: components["schemas"]["DailyBarOut"][];
+            forming: components["schemas"]["DailyBarOut"] | null;
+            /** Holds */
+            holds: components["schemas"]["DailyHoldMarkerOut"][];
+        };
+        /** DailyHoldMarkerOut */
+        DailyHoldMarkerOut: {
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Entry T
+             * Format: date
+             */
+            entry_t: string;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Stop Price */
+            stop_price: number | null;
         };
         /**
          * DailyOut
@@ -2068,6 +2251,19 @@ export interface components {
             symbol: string;
         };
         /**
+         * EarningsChipOut
+         * @description An explicit report date and timing within the next ten sessions. Never a guess from a gap (02p a3 rule 9).
+         */
+        EarningsChipOut: {
+            /** In Sessions */
+            in_sessions: number;
+            /**
+             * Timing
+             * @enum {string}
+             */
+            timing: "before open" | "after close";
+        };
+        /**
          * FeedOut
          * @description Everything revealed so far, for resume and interval switches: `bars` is the lookback (up to 10 prior
          *     sessions, at `interval`) plus the revealed window; `prints` is the last minute's prints (at most 200);
@@ -2078,6 +2274,8 @@ export interface components {
             at_end: boolean;
             /** Bars */
             bars: components["schemas"]["ReplayBarOut"][];
+            daily?: components["schemas"]["DailyBlockOut"] | null;
+            daily_forming?: components["schemas"]["DailyBarOut"] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             /**
              * Interval
@@ -2087,6 +2285,7 @@ export interface components {
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            paused?: components["schemas"]["PausedOut"] | null;
             prints: components["schemas"]["PrintsOut"];
             /** Quiet S */
             quiet_s: number | null;
@@ -2098,6 +2297,8 @@ export interface components {
             /** Signals */
             signals: components["schemas"]["ReplaySignalOut"][];
             stamp: components["schemas"]["Stamp"];
+            /** Strip */
+            strip?: components["schemas"]["StripRowOut"][] | null;
             /**
              * Window Start
              * Format: date-time
@@ -2108,6 +2309,17 @@ export interface components {
         Filter: {
             /** Id */
             id: number;
+        };
+        /** FilterQualityOut */
+        FilterQualityOut: {
+            /** Edge Pts */
+            edge_pts: number;
+            /** Median Return Pct */
+            median_return_pct: number;
+            /** N */
+            n: number;
+            /** Universe Median Pct */
+            universe_median_pct: number;
         };
         /** FireMarkerOut */
         FireMarkerOut: {
@@ -2120,6 +2332,20 @@ export interface components {
             signal_id: number;
             /** Strategy Name */
             strategy_name: string;
+        };
+        /**
+         * FocusUntradedOut
+         * @description A name she starred and never held: where it would have ranked as a long from the star day on.
+         */
+        FocusUntradedOut: {
+            /** Of */
+            of: number;
+            /** Rank */
+            rank: number;
+            /** Return Pct */
+            return_pct: number;
+            /** Symbol */
+            symbol: string;
         };
         /**
          * FormingBarOut
@@ -2184,6 +2410,84 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HoldOut
+         * @description A practice hold as the screens read it. Days are numbers and weekdays, never dates. An open hold carries
+         *     `unrealized_usd`, a closed one `pnl_usd`; `price_basis` says which price an open one is valued at.
+         */
+        HoldOut: {
+            /** Days Held */
+            days_held: number;
+            earnings: components["schemas"]["EarningsChipOut"] | null;
+            /** Entry Day No */
+            entry_day_no: number;
+            /** Entry Price */
+            entry_price: number;
+            /**
+             * Entry Weekday
+             * @enum {string}
+             */
+            entry_weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+            /** Exit Day No */
+            exit_day_no: number | null;
+            /** Exit Price */
+            exit_price: number | null;
+            /** Exit Source */
+            exit_source: ("her" | "auto") | null;
+            /** Gap Usd */
+            gap_usd: number | null;
+            /** Id */
+            id: number;
+            /** Last Close */
+            last_close: number | null;
+            /** Pnl Usd */
+            pnl_usd: number | null;
+            /** Price Basis */
+            price_basis: ("prior_close" | "last") | null;
+            /** R */
+            r: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Split Note */
+            split_note: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /** Stop At Entry */
+            stop_at_entry: number | null;
+            /**
+             * Stop Hit
+             * @enum {string}
+             */
+            stop_hit: "yes" | "no";
+            /** Stop Price */
+            stop_price: number | null;
+            /** Symbol */
+            symbol: string;
+            /** Unrealized Usd */
+            unrealized_usd: number | null;
+        };
+        /**
+         * HoldsOut
+         * @description The thread's holds. Open ones are marked at the LAST ENDED day's close, never later (`as_of_day_no`).
+         */
+        HoldsOut: {
+            /** As Of Day No */
+            as_of_day_no: number | null;
+            /** Holds */
+            holds: components["schemas"]["HoldOut"][];
+            /** Label */
+            label: string;
+            /** Thread Id */
+            thread_id: number;
         };
         /**
          * JournalOut
@@ -2568,6 +2872,7 @@ export interface components {
         };
         /** MarkResultOut */
         MarkResultOut: {
+            hold?: components["schemas"]["HoldOut"] | null;
             journal: components["schemas"]["JournalOut"];
             mark: components["schemas"]["MarkOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
@@ -2577,6 +2882,7 @@ export interface components {
         };
         /** MarkUndoOut */
         MarkUndoOut: {
+            hold?: components["schemas"]["HoldOut"] | null;
             journal: components["schemas"]["JournalOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             /** Removed Mark Id */
@@ -2649,12 +2955,24 @@ export interface components {
             day_list_id: number | null;
             plan: components["schemas"]["PracticePlanOut"];
         };
-        /** OpenTradeOut */
+        /**
+         * OpenTradeOut
+         * @description The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
+         *     four last fields say how long it has been held and which price it is valued at; a day session leaves them out.
+         */
         OpenTradeOut: {
+            /** Days Held */
+            days_held?: number | null;
             /** Entry Price */
             entry_price: number;
+            /** Gap Usd */
+            gap_usd?: number | null;
             /** Last Price */
             last_price: number;
+            /** Opened Day No */
+            opened_day_no?: number | null;
+            /** Price Basis */
+            price_basis?: ("prior_close" | "last") | null;
             /** R */
             r: number | null;
             /** Shares */
@@ -2705,6 +3023,31 @@ export interface components {
             pattern: string;
             /** Template */
             template: string;
+        };
+        /**
+         * PausedOut
+         * @description A stop was crossed: the playhead stopped at the close of the first one-minute bar that did (02p b5). It is a
+         *     pause, never an exit. `also` lists every other hold crossed in the same minute.
+         */
+        PausedOut: {
+            /** Also */
+            also: string[];
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "cross" | "gap";
+            /** Price */
+            price: number;
+            /** Stop Price */
+            stop_price: number;
+            /** Symbol */
+            symbol: string;
         };
         /** PeekDailyBarOut */
         PeekDailyBarOut: {
@@ -2890,10 +3233,12 @@ export interface components {
             entryPrice: number;
             /** Exitprice */
             exitPrice: number;
+            /** Holdid */
+            holdId?: number | null;
             /** Id */
             id: number;
             /** Markid */
-            markId: number;
+            markId?: number | null;
             /** Pnlusd */
             pnlUsd: number;
             /** R */
@@ -2906,7 +3251,7 @@ export interface components {
              */
             schemaVersion: 1;
             /** Sessionid */
-            sessionId: number;
+            sessionId?: number | null;
             /** Shares */
             shares: number;
             /**
@@ -3045,6 +3390,7 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "closed";
+            swing?: components["schemas"]["SwingSetupV1"] | null;
         };
         /** PracticeWindowV1 */
         PracticeWindowV1: {
@@ -3063,7 +3409,7 @@ export interface components {
              * Feed
              * @enum {string}
              */
-            feed: "sip" | "iex";
+            feed: "sip" | "iex" | "off";
             pace: components["schemas"]["PaceOut"] | null;
             /** Rows */
             rows: [
@@ -3210,7 +3556,7 @@ export interface components {
              * Tape Feed
              * @enum {string}
              */
-            tape_feed: "sip" | "iex";
+            tape_feed: "sip" | "iex" | "off";
             thread?: components["schemas"]["ThreadBriefOut"] | null;
             /** Thread Id */
             thread_id: number | null;
@@ -3740,6 +4086,15 @@ export interface components {
              */
             time: string;
         };
+        /** SourceQualityOut */
+        SourceQualityOut: {
+            /** Median Return Pct */
+            median_return_pct: number;
+            /** N */
+            n: number;
+            /** Source */
+            source: string;
+        };
         /** StageUpdate */
         StageUpdate: {
             /**
@@ -3849,6 +4204,18 @@ export interface components {
             /** Source */
             source: string | null;
         };
+        /** StopHitOut */
+        StopHitOut: {
+            /** At */
+            at: string;
+            /** Symbol */
+            symbol: string;
+            /**
+             * Watched
+             * @enum {string}
+             */
+            watched: "yes" | "no";
+        };
         /** StrategiesGaugeOut */
         StrategiesGaugeOut: {
             counts: components["schemas"]["VoteCountsOut"];
@@ -3937,6 +4304,378 @@ export interface components {
             /** Used */
             used: number;
         };
+        /** StripHoldOut */
+        StripHoldOut: {
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Stop Distance Pct */
+            stop_distance_pct: number | null;
+            /** Stop Price */
+            stop_price: number | null;
+            /**
+             * Stopped
+             * @enum {string}
+             */
+            stopped: "yes" | "no";
+            /** Unrealized Usd */
+            unrealized_usd: number;
+        };
+        /**
+         * StripRowOut
+         * @description A row of the day strip: every open hold, then the focus names, at most ten. `last` is the last revealed regular
+         *     session price at the DAY CLOCK; `chg_pct` is against the restated prior close.
+         */
+        StripRowOut: {
+            /** Chg Pct */
+            chg_pct: number | null;
+            hold: components["schemas"]["StripHoldOut"] | null;
+            /** Last */
+            last: number | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "hold" | "focus";
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * SwingDayListOut
+         * @description One swing day: the board as of the prior close, her focus names, the holds pinned above it and the day clock.
+         *     `kind` is always `"swing"`: it tells this model from `DayListOut`. Nothing here is later than the prior close or the
+         *     day clock until `status` is `ended`, when `journal` carries the day's summary.
+         */
+        SwingDayListOut: {
+            /** Candidates */
+            candidates: components["schemas"]["BoardRowOut"][];
+            /** Clock */
+            clock: string | null;
+            /** Columns */
+            columns: components["schemas"]["ListColumnOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Day No */
+            day_no: number;
+            /** Ended At */
+            ended_at: string | null;
+            /** Free Cash Usd */
+            free_cash_usd: number | null;
+            /** Holds */
+            holds: components["schemas"]["HoldOut"][];
+            /** Id */
+            id: number;
+            journal: components["schemas"]["SwingDaySummaryOut"] | null;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "swing";
+            /** Label */
+            label: string;
+            /** Notes */
+            notes: string | null;
+            /** Of */
+            of: number;
+            peek: components["schemas"]["SwingPeekOut"] | null;
+            plan: components["schemas"]["SwingPlanOut"];
+            /** Rating */
+            rating: number | null;
+            /** Sessions */
+            sessions: components["schemas"]["DaySessionOut"][];
+            stamp: components["schemas"]["Stamp"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "listed" | "practicing" | "ended";
+            thread: components["schemas"]["ThreadBriefOut"] | null;
+            universe: components["schemas"]["SwingUniverseOut"];
+            /** Watch */
+            watch: components["schemas"]["StarOut"][];
+            /** Week Label */
+            week_label: string;
+            /** Week No */
+            week_no: number;
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /**
+         * SwingDaySummaryOut
+         * @description The strip of tiles an ended day serves (02p b6): the equity change split into realized, overnight gap and
+         *     intraday, with the holds as they stood at the close.
+         */
+        SwingDaySummaryOut: {
+            /** Balance Usd */
+            balance_usd: number;
+            /** Entries */
+            entries: number;
+            /** Equity Change Usd */
+            equity_change_usd: number;
+            /** Equity Usd */
+            equity_usd: number;
+            /** Exits */
+            exits: number;
+            /** Free Cash Usd */
+            free_cash_usd: number;
+            /** Gap Usd */
+            gap_usd: number;
+            /** Holds */
+            holds: components["schemas"]["HoldOut"][];
+            /** Intraday Usd */
+            intraday_usd: number;
+            /** Late Stars */
+            late_stars: string[];
+            /** Max Open Seen */
+            max_open_seen: number;
+            /**
+             * Passed
+             * @enum {string}
+             */
+            passed: "yes" | "no";
+            /** Realized Usd */
+            realized_usd: number;
+            /** Stop Hits */
+            stop_hits: components["schemas"]["StopHitOut"][];
+            /** Unrealized Change Usd */
+            unrealized_change_usd: number;
+        };
+        /**
+         * SwingEquityPointOut
+         * @description One ended swing day of the equity series: numbers and a weekday only, no dates (the web hides them).
+         */
+        SwingEquityPointOut: {
+            /** Balance Usd */
+            balance_usd: number;
+            /** Day No */
+            day_no: number;
+            /** Equity Usd */
+            equity_usd: number;
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /**
+         * SwingOpenNextOut
+         * @description `POST /daily/next` for a swing thread. `day_list_id` is null while the prep runs (poll `GET /threads/{id}`) and
+         *     once every day is done.
+         */
+        SwingOpenNextOut: {
+            /** Day List Id */
+            day_list_id: number | null;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "swing";
+            plan: components["schemas"]["SwingPlanOut"];
+        };
+        /**
+         * SwingPeekOut
+         * @description Pre-open chart data for one name: daily bars through the prior close, never a minute of the day.
+         */
+        SwingPeekOut: {
+            /** Daily */
+            daily: components["schemas"]["PeekDailyBarOut"][];
+            levels: components["schemas"]["PeekLevelsOut"];
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * SwingPlanOut
+         * @description A swing thread's calendar cursor and prep. No dates: `next_day_no` and `next_weekday` only.
+         */
+        SwingPlanOut: {
+            current: components["schemas"]["PlanCurrentOut"] | null;
+            /** Days Opened */
+            days_opened: number;
+            /** Finished */
+            finished: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "swing";
+            /** Next Day No */
+            next_day_no: number | null;
+            /** Next Weekday */
+            next_weekday: ("Mon" | "Tue" | "Wed" | "Thu" | "Fri") | null;
+            prep: components["schemas"]["PlanPrepOut"];
+            /** Sessions */
+            sessions: number;
+            /** Thread Id */
+            thread_id: number | null;
+        };
+        /** SwingSetupV1 */
+        SwingSetupV1: {
+            /** Armed */
+            armed: components["schemas"]["PracticeArmedV1"][];
+            /** Firstday */
+            firstDay: string;
+            /**
+             * Hidedates
+             * @enum {string}
+             */
+            hideDates: "yes" | "no";
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "5m" | "15m";
+            /** Maxopenholds */
+            maxOpenHolds: number;
+            /** Riskperholdusd */
+            riskPerHoldUsd?: number | null;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Tape
+             * @enum {string}
+             */
+            tape: "off" | "on";
+            /** Universe */
+            universe: components["schemas"]["SwingUniverseEntryV1"][];
+        };
+        /**
+         * SwingStateOut
+         * @description Where a swing thread is (02p f2): the day under way (else the next to open), its week, the open holds with free
+         *     cash and equity, and the equity series, which stops at the last ended day. All SIMULATED.
+         */
+        SwingStateOut: {
+            /** Day No */
+            day_no: number;
+            /** Days */
+            days: number;
+            /** Days Ended */
+            days_ended: number;
+            /** Equity Series */
+            equity_series: components["schemas"]["SwingEquityPointOut"][];
+            /** Equity Usd */
+            equity_usd: number;
+            /** Free Cash Usd */
+            free_cash_usd: number;
+            /** Holds Open */
+            holds_open: number;
+            /**
+             * Next
+             * @enum {string}
+             */
+            next: "day" | "week_review" | "finished";
+            /** Week No */
+            week_no: number;
+            /** Weeks */
+            weeks: number;
+        };
+        /** SwingUniverseEntryV1 */
+        SwingUniverseEntryV1: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "watchlist" | "manual" | "filter" | "liquidity";
+            /** Symbol */
+            symbol: string;
+        };
+        /** SwingUniverseOut */
+        SwingUniverseOut: {
+            /** Footnote */
+            footnote: string;
+            /** Label */
+            label: string;
+            /** Mix */
+            mix: {
+                [key: string]: number;
+            };
+            /** Size */
+            size: number;
+            /**
+             * Source
+             * @constant
+             */
+            source: "swing";
+        };
+        /**
+         * SwingUniversePreviewIn
+         * @description What the setup form sends: the dates, her lists and filters, the fill rule, the hand edits and the target size.
+         *     Nothing is written; the first call starts the data prep for the symbols still missing.
+         */
+        SwingUniversePreviewIn: {
+            /** Add */
+            add?: string[];
+            /**
+             * Fill
+             * @default liquidity
+             * @enum {string}
+             */
+            fill: "liquidity" | "none";
+            /** Filter Ids */
+            filter_ids?: number[];
+            /**
+             * First Day
+             * Format: date
+             */
+            first_day: string;
+            /** Remove */
+            remove?: string[];
+            /** Sessions */
+            sessions: number;
+            /**
+             * Target
+             * @default 50
+             */
+            target: number;
+            /** Watchlist Ids */
+            watchlist_ids?: number[];
+        };
+        /**
+         * SwingUniversePreviewOut
+         * @description The table she edits. `state` is `preparing` while symbols are still being fetched (`pending_symbols` of them);
+         *     the rows already shown do not change when the rest arrive. `label` is the survivorship text: show it beside the
+         *     table.
+         */
+        SwingUniversePreviewOut: {
+            /**
+             * Basis Day
+             * Format: date
+             */
+            basis_day: string;
+            counts: components["schemas"]["UniverseCountsOut"];
+            /** Excluded */
+            excluded: components["schemas"]["UniverseExcludedOut"][];
+            /** Label */
+            label: string;
+            /** Pending Symbols */
+            pending_symbols: number;
+            prep: components["schemas"]["UniversePrepOut"];
+            /** Rows */
+            rows: components["schemas"]["UniverseRowOut"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "preparing";
+            /** Survivorship */
+            survivorship: string;
+        };
         /** SymbolSearchOut */
         SymbolSearchOut: {
             /**
@@ -3998,11 +4737,20 @@ export interface components {
         /**
          * ThreadBriefOut
          * @description The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no
-         *     practice day is under way; an open trade is not realized).
+         *     practice day is under way; an open trade is not realized). A swing thread adds its equity, free cash and where it
+         *     is in its calendar (02p); a day thread leaves those null.
          */
         ThreadBriefOut: {
             /** Balance */
             balance: number;
+            /** Day No */
+            day_no?: number | null;
+            /** Days */
+            days?: number | null;
+            /** Equity Usd */
+            equity_usd?: number | null;
+            /** Free Cash Usd */
+            free_cash_usd?: number | null;
             /** Id */
             id: number;
             /** Label */
@@ -4019,6 +4767,8 @@ export interface components {
             status: "active" | "closed";
             /** Today Pnl Usd */
             today_pnl_usd: number | null;
+            /** Week No */
+            week_no?: number | null;
         };
         /**
          * ThreadDayOut
@@ -4075,16 +4825,19 @@ export interface components {
             daily: components["schemas"]["ThreadDayOut"][];
             /** Label */
             label: string;
+            swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];
             today: components["schemas"]["ThreadTodayOut"] | null;
         };
         /**
          * ThreadSummaryOut
-         * @description A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list.
+         * @description A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list. A swing
+         *     thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo).
          */
         ThreadSummaryOut: {
             /** Label */
             label: string;
+            swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];
             today: components["schemas"]["ThreadTodayOut"] | null;
         };
@@ -4116,6 +4869,61 @@ export interface components {
              * @enum {string}
              */
             weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /** UniverseCountsOut */
+        UniverseCountsOut: {
+            /** Filter */
+            filter: number;
+            /** Liquidity */
+            liquidity: number;
+            /** Manual */
+            manual: number;
+            /** Total */
+            total: number;
+            /** Watchlist */
+            watchlist: number;
+        };
+        /**
+         * UniverseExcludedOut
+         * @description One neutral reason that names no date, so the list reveals nothing about what happened later.
+         */
+        UniverseExcludedOut: {
+            /** Reason */
+            reason: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /** UniversePrepOut */
+        UniversePrepOut: {
+            /** Done */
+            done: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * UniverseRowOut
+         * @description A symbol of the table, every figure as of `basis_day`. `warnings` is plain words ("below floor").
+         */
+        UniverseRowOut: {
+            /** Atr Pct 14 */
+            atr_pct_14: number | null;
+            /** Avg Dollar Volume 20D */
+            avg_dollar_volume_20d: number;
+            /** Chg 20D Pct */
+            chg_20d_pct: number | null;
+            /** Matched */
+            matched: string[];
+            /** Prior Close */
+            prior_close: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "watchlist" | "manual" | "filter" | "liquidity";
+            /** Symbol */
+            symbol: string;
+            /** Warnings */
+            warnings: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -4302,6 +5110,285 @@ export interface components {
             kind: "pattern" | "armed";
             /** Label */
             label: string;
+        };
+        /** WeekAdherenceOut */
+        WeekAdherenceOut: {
+            /** Checks */
+            checks: components["schemas"]["WeekCheckOut"][];
+            /** Score Pct */
+            score_pct: number | null;
+        };
+        /** WeekCheckOut */
+        WeekCheckOut: {
+            /** Applicable */
+            applicable: boolean;
+            /** Detail */
+            detail: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "stop_set" | "stop_honored" | "risk_per_hold" | "open_holds_within_plan" | "week_loss_limit" | "entries_per_week" | "on_signal" | "focus_before_open";
+            /** Label */
+            label: string;
+            /** Passed */
+            passed: boolean;
+        };
+        /** WeekDayOut */
+        WeekDayOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Day No */
+            day_no: number;
+            /** Entries */
+            entries: number;
+            /** Exits */
+            exits: number;
+            /** Gap Usd */
+            gap_usd: number;
+            /** Intraday Usd */
+            intraday_usd: number;
+            /** Realized Usd */
+            realized_usd: number;
+            /**
+             * Watched
+             * @enum {string}
+             */
+            watched: "yes" | "no";
+            /**
+             * Weekday
+             * @enum {string}
+             */
+            weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+        };
+        /** WeekEquityPointOut */
+        WeekEquityPointOut: {
+            /** Balance Usd */
+            balance_usd: number;
+            /** Day No */
+            day_no: number;
+            /** Equity Usd */
+            equity_usd: number;
+        };
+        /** WeekHeatOut */
+        WeekHeatOut: {
+            /**
+             * Focus
+             * @enum {string}
+             */
+            focus: "yes" | "no";
+            /**
+             * Held
+             * @enum {string}
+             */
+            held: "yes" | "no";
+            /** Return Pct */
+            return_pct: number;
+            /** Source */
+            source: ("watchlist" | "manual" | "filter" | "liquidity") | null;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * WeekHoldOut
+         * @description A hold active in the week, scored against the universe over its span (02p e2).
+         */
+        WeekHoldOut: {
+            /** Days Held */
+            days_held: number;
+            /** Entry Day No */
+            entry_day_no: number;
+            /** Entry Price */
+            entry_price: number;
+            /** Exit Day No */
+            exit_day_no: number | null;
+            /** Exit Price */
+            exit_price: number | null;
+            /** Gap Usd */
+            gap_usd: number | null;
+            /** Hold Id */
+            hold_id: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** R */
+            r: number | null;
+            /** Selection Edge Pts */
+            selection_edge_pts: number | null;
+            /** Selection Of */
+            selection_of: number | null;
+            /** Selection Rank */
+            selection_rank: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /**
+             * Stop
+             * @enum {string}
+             */
+            stop: "none" | "set" | "honored" | "away";
+            /** Symbol */
+            symbol: string;
+            /** Timing Edge Pts */
+            timing_edge_pts: number | null;
+        };
+        /** WeekMetaOut */
+        WeekMetaOut: {
+            /** First Day No */
+            first_day_no: number;
+            /** Label */
+            label: string;
+            /** Last Day No */
+            last_day_no: number;
+            /** Week No */
+            week_no: number;
+        };
+        /**
+         * WeekOut
+         * @description A frozen review, or "Week to date" (`to_date` yes) for the open week through the last ended close.
+         */
+        WeekOut: {
+            /** Footnote */
+            footnote: string;
+            /** Label */
+            label: string;
+            /** Notes */
+            notes: string | null;
+            /** Rating */
+            rating: number | null;
+            review: components["schemas"]["WeekReviewOut"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /**
+             * To Date
+             * @enum {string}
+             */
+            to_date: "yes" | "no";
+            /** Universe Label */
+            universe_label: string;
+            /** Week No */
+            week_no: number;
+        };
+        /**
+         * WeekPatch
+         * @description PATCH body: notes and the self-rating only. A key left out is left alone; `null` clears it.
+         */
+        WeekPatch: {
+            /** Notes */
+            notes?: string | null;
+            /** Rating */
+            rating?: number | null;
+        };
+        /**
+         * WeekReviewOut
+         * @description The review of one week (02p e1), as `week.compute_review` builds it. `lines` is the key `copy` on the wire (a
+         *     field cannot be called `copy`): the sentences the screen shows under the tiles.
+         */
+        WeekReviewOut: {
+            adherence: components["schemas"]["WeekAdherenceOut"];
+            /** Copy */
+            copy: string[];
+            /** Days */
+            days: components["schemas"]["WeekDayOut"][];
+            /** Equity */
+            equity: components["schemas"]["WeekEquityPointOut"][];
+            filter_quality: components["schemas"]["FilterQualityOut"] | null;
+            /** Focus Untraded */
+            focus_untraded: components["schemas"]["FocusUntradedOut"][];
+            /** Heat */
+            heat: components["schemas"]["WeekHeatOut"][];
+            /** Holds */
+            holds: components["schemas"]["WeekHoldOut"][];
+            /** Source Quality */
+            source_quality: components["schemas"]["SourceQualityOut"][];
+            tiles: components["schemas"]["WeekTilesOut"];
+            week: components["schemas"]["WeekMetaOut"];
+        };
+        /** WeekRowOut */
+        WeekRowOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Days */
+            days: number;
+            /** Equity Change Usd */
+            equity_change_usd: number | null;
+            /** First Day No */
+            first_day_no: number;
+            /** Label */
+            label: string;
+            /** Last Day No */
+            last_day_no: number;
+            /** Realized Usd */
+            realized_usd: number | null;
+            /** Selection Pts */
+            selection_pts: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /** Timing Pts */
+            timing_pts: number | null;
+            /** Week No */
+            week_no: number;
+        };
+        /**
+         * WeekTilesOut
+         * @description The review's tiles. A figure that cannot be computed is null, never a guess.
+         */
+        WeekTilesOut: {
+            /** Adherence Pct */
+            adherence_pct: number | null;
+            /** Avg Days Held */
+            avg_days_held: number | null;
+            /** Avg Loss Usd */
+            avg_loss_usd: number | null;
+            /** Avg Win Usd */
+            avg_win_usd: number | null;
+            /** Balance Usd */
+            balance_usd: number | null;
+            /** Equity Change Usd */
+            equity_change_usd: number | null;
+            /** Gap Share Pct */
+            gap_share_pct: number | null;
+            /** Gap Usd */
+            gap_usd: number | null;
+            /** Realized Usd */
+            realized_usd: number | null;
+            /** Selection Pts */
+            selection_pts: number | null;
+            /** Spy Return Pct */
+            spy_return_pct: number | null;
+            /** Timing Pts */
+            timing_pts: number | null;
+            /** Universe Mean Return Pct */
+            universe_mean_return_pct: number | null;
+            /** Universe Median Return Pct */
+            universe_median_return_pct: number | null;
+            /** Unrealized Change Usd */
+            unrealized_change_usd: number | null;
+            /** Win Rate */
+            win_rate: number | null;
+        };
+        /** WeeksOut */
+        WeeksOut: {
+            /** Label */
+            label: string;
+            /** Thread Id */
+            thread_id: number;
+            /** Weeks */
+            weeks: components["schemas"]["WeekRowOut"][];
         };
         /** Window */
         Window: {
@@ -5049,7 +6136,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OpenNextOut"];
+                    "application/json": components["schemas"]["OpenNextOut"] | components["schemas"]["SwingOpenNextOut"];
                 };
             };
         };
@@ -5073,7 +6160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DayListOut"];
+                    "application/json": components["schemas"]["DayListOut"] | components["schemas"]["SwingDayListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5108,7 +6195,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DayListOut"];
+                    "application/json": components["schemas"]["DayListOut"] | components["schemas"]["SwingDayListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5139,7 +6226,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DayListOut"];
+                    "application/json": components["schemas"]["DayListOut"] | components["schemas"]["SwingDayListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5589,6 +6676,39 @@ export interface operations {
             };
         };
     };
+    preview_swing_universe_api_desk_replay_threads_swing_universe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwingUniversePreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwingUniversePreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_thread_api_desk_replay_threads__thread_id__get: {
         parameters: {
             query?: never;
@@ -5686,6 +6806,39 @@ export interface operations {
             };
         };
     };
+    get_thread_holds_api_desk_replay_threads__thread_id__holds_get: {
+        parameters: {
+            query?: {
+                status?: "open" | "closed" | "all";
+            };
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get: {
         parameters: {
             query?: {
@@ -5706,6 +6859,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadLedgerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thread_weeks_api_desk_replay_threads__thread_id__weeks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeksOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+                week_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeekOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_thread_week_api_desk_replay_threads__thread_id__weeks__week_no__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+                week_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WeekPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeekOut"];
                 };
             };
             /** @description Validation Error */

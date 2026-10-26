@@ -7,6 +7,7 @@ import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { closeThread, patchThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
+import { HUB_SWING_COPY, weeklyPlanRows } from "@/lib/replay/hubSwing";
 import { planRows } from "@/lib/replay/threadView";
 import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { Thread } from "@/lib/replay/threads";
@@ -14,7 +15,8 @@ import styles from "./threadJournal.module.css";
 
 /** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
-  const { id, plan, startingBalance, status } = thread.thread;
+  const { id, plan, startingBalance, status, mode } = thread.thread;
+  const swing = mode === "swing";
   const closed = status === "closed";
   const [draft, setDraft] = useState<ThreadDraft | null>(null);
   const [problems, setProblems] = useState<ThreadProblems>({});
@@ -74,7 +76,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
             void save();
           }}
         >
-          <ThreadPlanFields draft={draft} onDraft={setDraft} problems={problems} idPrefix="edit-plan" />
+          <ThreadPlanFields draft={draft} onDraft={setDraft} problems={problems} idPrefix="edit-plan" perWeek={swing} />
           <p className={styles.muted}>{PRACTICE_COPY.threadPlanApplies}</p>
           {saveError && <p role="alert" className={styles.alert}>{saveError}</p>}
           <div className={styles.actions}>
@@ -85,7 +87,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
       ) : (
         <>
           <dl className={styles.planList}>
-            {planRows(plan).map((row) => (
+            {(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => (
               <div key={row.id} className={styles.planRow}>
                 <dt className={styles.planLabel}>{row.label}</dt>
                 <dd className={styles.planValue}>
@@ -95,6 +97,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
               </div>
             ))}
           </dl>
+          {swing && <p className={styles.planNote}>{PRACTICE_COPY.swingPerWeekNote}</p>}
           <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote ?? PRACTICE_COPY.threadPlanNoteNone}`}</p>
         </>
       )}
@@ -105,7 +108,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
 
 /** Close thread (02r), in its own section of the rail (D-040): the caption, the reason and a confirmation before anything closes. */
 export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
-  const { id, status } = thread.thread;
+  const { id, status, mode } = thread.thread;
   const [confirming, setConfirming] = useState(false);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -129,6 +132,7 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
     <div className={styles.stack}>
       <button type="button" className={styles.button} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
+      {mode === "swing" && <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p>}
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
       {confirming && (
         <div role="group" aria-label="Confirm closing the thread" className={styles.confirm}>

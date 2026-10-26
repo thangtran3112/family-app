@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyAdvance, chartBars, isQuietTape, mergeBars, paceOf, TAPE_CAP, viewFromFeed } from "./feedState.ts";
+import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, TAPE_CAP, viewFromFeed, withHoldMarker } from "./feedState.ts";
 import { delta, feed } from "./fixtures.ts";
 import { ReplayDeltaSchema, ReplayFeedSchema } from "./schemas.ts";
+import { amdHold, closedHold, nvdaHold, pausedCross, stripRows, swingDelta, swingDeltaQuiet, swingFeed } from "./swingFixtures.ts";
 
 const base = () => viewFromFeed(ReplayFeedSchema.parse({ ...feed, bars: [], prints: { ...feed.prints, rows: [] }, signals: [] }), "5m");
 const next = (overrides: Record<string, unknown>) => ReplayDeltaSchema.parse({ ...delta, ...overrides });
@@ -82,4 +83,89 @@ test("a quiet tape is 30 market seconds without a print", () => {
   assert.equal(isQuietTape({ ...view, revealedThrough: "2026-04-07T14:07:42Z" }), true);
   assert.equal(isQuietTape({ tape: [], revealedThrough: "2026-04-07T13:30:10Z", windowStart: "2026-04-07T13:30:00Z" }), false);
   assert.equal(isQuietTape({ tape: [], revealedThrough: "2026-04-07T13:31:00Z", windowStart: "2026-04-07T13:30:00Z" }), true);
+});
+
+// ---- swing (02p): the day strip, the Daily block and the stop pause ---------------------------------------------
+
+const swingBase = () => viewFromFeed(swingFeed, "15m");
+
+test("a day session's view has no swing data", () => {
+  const view = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
+  assert.deepEqual([view.strip, view.daily, view.dailyForming, view.paused], [null, null, null, null]);
+  const advanced = applyAdvance(view, ReplayDeltaSchema.parse(delta));
+  assert.deepEqual([advanced.strip, advanced.dailyForming, advanced.paused], [null, null, null]);
+  assert.equal(dailyBlock(advanced), null);
+});
+
+test("a feed answer brings the strip and the Daily block", () => {
+  const view = swingBase();
+  assert.equal(view.strip?.length, 4);
+  assert.equal(view.daily?.bars.length, 3);
+  assert.equal(view.dailyForming?.c, 191.4);
+  assert.equal(view.paused, null);
+});
+
+test("an advance that found a crossed stop keeps the pause for the toast, and the next advance clears it", () => {
+  const paused = applyAdvance(swingBase(), swingDelta);
+  assert.deepEqual(paused.paused, pausedCross);
+  assert.equal(paused.revealedThrough, "2026-07-14T15:42:00Z");
+  const next = applyAdvance(paused, swingDeltaQuiet);
+  assert.equal(next.paused, null);
+  assert.equal(next.revealedThrough, "2026-07-14T15:43:00Z");
+});
+
+test("the strip and the forming candle are the latest answer; an answer without them leaves what the view had", () => {
+  const moved = applyAdvance(swingBase(), { ...swingDelta, paused: null, strip: [stripRows[2]!], daily_forming: { t: "2026-07-14", o: 190.3, h: 192, l: 189.8, c: 192, v: 7_000_000 } });
+  assert.deepEqual(moved.strip?.map((row) => row.symbol), ["COIN"]);
+  assert.equal(moved.dailyForming?.c, 192);
+  const kept = applyAdvance(moved, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-07-14T15:50:00Z" }));
+  assert.deepEqual(kept.strip?.map((row) => row.symbol), ["COIN"]);
+  assert.equal(kept.dailyForming?.c, 192);
+});
+
+test("a late answer changes nothing, the pause included", () => {
+  const paused = applyAdvance(swingBase(), swingDelta);
+  assert.equal(applyAdvance(paused, { ...swingDeltaQuiet, revealed_through: "2026-07-14T15:30:00Z" }), paused);
+});
+
+test("dismissing the pause clears only the pause", () => {
+  const paused = applyAdvance(swingBase(), swingDelta);
+  const cleared = dismissPause(paused);
+  assert.equal(cleared.paused, null);
+  assert.equal(cleared.strip, paused.strip);
+  assert.equal(cleared.revealedThrough, paused.revealedThrough);
+  assert.equal(dismissPause(cleared), cleared, "nothing to clear, same view");
+});
+
+test("the Daily chart's data carries the newest forming candle over the feed's", () => {
+  const moved = applyAdvance(swingBase(), { ...swingDelta, daily_forming: { t: "2026-07-14", o: 190.3, h: 193, l: 189.8, c: 193, v: 8_000_000 } });
+  const block = dailyBlock(moved)!;
+  assert.equal(block.forming?.c, 193);
+  assert.equal(block.bars.length, 3);
+  assert.equal(block.holds.length, 1);
+  assert.equal(moved.daily?.forming?.c, 191.4, "the stored block is not rewritten");
+});
+
+test("a fresh feed answer replaces the strip and the Daily block but not the playhead, and an older one is ignored", () => {
+  const view = applyAdvance(swingBase(), swingDelta);
+  const refreshed = applyFeedSwing(view, ReplayFeedSchema.parse({ ...swingFeed, revealed_through: "2026-07-14T15:43:00Z", strip: [stripRows[2]], daily: { ...swingFeed.daily, holds: [] } }));
+  assert.deepEqual(refreshed.strip?.map((row) => row.symbol), ["COIN"]);
+  assert.deepEqual(refreshed.daily?.holds, []);
+  assert.equal(refreshed.revealedThrough, view.revealedThrough, "only an advance moves the playhead");
+  assert.deepEqual(refreshed.paused, view.paused);
+  assert.equal(applyFeedSwing(view, swingFeed), view, "an older answer changes nothing");
+});
+
+test("a mark moves this name's hold marker on the Daily chart", () => {
+  const view = swingBase();
+  const entered = withHoldMarker(view, { ...amdHold, stop_price: 168 }, "2026-07-14");
+  assert.deepEqual(entered.daily?.holds, [{ entry_t: "2026-07-10", side: "short", entry_price: 162, stop_price: 168 }], "a carried hold keeps its entry date");
+  const first = withHoldMarker({ ...view, daily: { ...view.daily!, holds: [] } }, amdHold, "2026-07-14");
+  assert.equal(first.daily?.holds[0]?.entry_t, "2026-07-14", "a hold entered today starts today");
+  const moved = withHoldMarker(view, { ...nvdaHold, stop_price: 181 }, "2026-07-14");
+  assert.equal(moved.daily?.holds[0]?.stop_price, 181);
+  assert.deepEqual(withHoldMarker(view, closedHold, "2026-07-14").daily?.holds, []);
+  assert.deepEqual(withHoldMarker(view, null, "2026-07-14").daily?.holds, []);
+  const day = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
+  assert.equal(withHoldMarker(day, nvdaHold, "2026-07-14"), day, "a day session has no Daily block");
 });

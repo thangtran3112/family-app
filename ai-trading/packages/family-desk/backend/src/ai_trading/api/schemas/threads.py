@@ -6,10 +6,11 @@ plain Pydantic. Every dollar figure is SIMULATED: `label` says so in words where
 """
 
 from datetime import date
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, FiniteFloat, field_serializer
 
+from ai_trading.api.schemas.common import SwingOptional
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1, PracticeThreadV1
 
 ThreadMode = Literal["day", "swing"]
@@ -17,9 +18,10 @@ ThreadStatus = Literal["active", "closed"]
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri"]
 
 
-class ThreadBriefOut(BaseModel):
+class ThreadBriefOut(SwingOptional):
     """The header strip of a day screen or the workspace: the SIMULATED balance and today's realized P/L (null when no
-    practice day is under way; an open trade is not realized)."""
+    practice day is under way; an open trade is not realized). A swing thread adds its equity, free cash and where it
+    is in its calendar (02p); a day thread leaves those null."""
 
     id: int
     mode: ThreadMode
@@ -27,6 +29,13 @@ class ThreadBriefOut(BaseModel):
     balance: FiniteFloat
     today_pnl_usd: FiniteFloat | None
     label: str
+    swing_only: ClassVar[tuple[str, ...]] = ("equity_usd", "free_cash_usd", "day_no", "days", "week_no")
+
+    equity_usd: FiniteFloat | None = None  # balance plus the open holds at their last official close
+    free_cash_usd: FiniteFloat | None = None
+    day_no: int | None = None
+    days: int | None = None
+    week_no: int | None = None
 
 
 class ThreadTodayOut(BaseModel):
@@ -41,12 +50,41 @@ class ThreadTodayOut(BaseModel):
     pnl_usd: FiniteFloat
 
 
-class ThreadSummaryOut(BaseModel):
-    """A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list."""
+class SwingEquityPointOut(BaseModel):
+    """One ended swing day of the equity series: numbers and a weekday only, no dates (the web hides them)."""
+
+    day_no: int
+    weekday: Weekday
+    balance_usd: FiniteFloat
+    equity_usd: FiniteFloat
+
+
+class SwingStateOut(BaseModel):
+    """Where a swing thread is (02p f2): the day under way (else the next to open), its week, the open holds with free
+    cash and equity, and the equity series, which stops at the last ended day. All SIMULATED."""
+
+    day_no: int
+    days: int
+    days_ended: int
+    week_no: int
+    weeks: int
+    holds_open: int
+    free_cash_usd: FiniteFloat
+    equity_usd: FiniteFloat
+    equity_series: list[SwingEquityPointOut]
+    next: Literal["day", "week_review", "finished"]
+
+
+class ThreadSummaryOut(SwingOptional):
+    """A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list. A swing
+    thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo)."""
+
+    swing_only: ClassVar[tuple[str, ...]] = ("swing",)
 
     thread: PracticeThreadV1
     today: ThreadTodayOut | None
     label: str
+    swing: SwingStateOut | None = None
 
     @field_serializer("thread")
     def _thread_as_authored(

@@ -335,3 +335,6 @@ export function peekDailyBars(bars: readonly PeekDaily[], hidden: boolean): Peek
   const days = syntheticDays(bars.length);
   return bars.map((bar, index) => ({ ...bar, t: days[index]! }));
 }
+
+/** A hidden Peek chart's row labels for a screen reader: "D-3", "D-2", "D-1" (every bar is before the day; the last is the prior close). */
+export const peekOffsets = (count: number): string[] => Array.from({ length: count }, (_, index) => `D-${count - index}`);

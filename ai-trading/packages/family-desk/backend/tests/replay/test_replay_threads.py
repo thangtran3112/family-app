@@ -6,6 +6,9 @@ Real Postgres (`scripts/test-db.sh`); the history is the synthetic world of `tes
 The world: GAPPER sits at 106 in the premarket and 110 from the open, so a long entered at 09:30 and exited after
 10:00 wins 4 a share and the same short loses 4 a share. SPLITTER sits at 100 all day."""
 
+import json
+from pathlib import Path
+
 import pytest
 from daily_world import DAYS, NOW, make_thread
 from sqlalchemy import select, update
@@ -34,11 +37,19 @@ from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
 from ai_trading.replay.session import ReplayProblem, SessionNotFound
 
+# A swing thread is created with a swing block (the contract), so this is the block of a valid swing create.
+_SWING_CREATE = (
+    Path(__file__).resolve().parents[3] / "contracts/fixtures/practice-thread-create-v1/valid/swing-10-symbols.json"
+)
+SWING = json.loads(_SWING_CREATE.read_text())["swing"]
+
 
 def _create(mode="day", balance=None, **plan):
     body = {"schemaVersion": 1, "mode": mode, "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", **plan}}
     if balance is not None:
         body["startingBalance"] = balance
+    if mode == "swing":
+        body["swing"] = SWING
     return PracticeThreadCreateV1.model_validate(body)
 
 
@@ -84,12 +95,13 @@ def test_a_thread_starts_with_the_default_balance_and_the_contract_reads_back(db
     assert "Simulated" in out["label"]
 
 
-def test_one_active_day_thread_per_owner_and_swing_is_not_open(db_session, user_id) -> None:
+def test_one_active_day_thread_per_owner_and_a_swing_create_is_not_served_by_the_day_path(db_session, user_id) -> None:
     threads_mod.create_thread(db_session, user_id, _create(), NOW)
     with pytest.raises(ReplayProblem) as second:
         threads_mod.create_thread(db_session, user_id, _create(), NOW)
     assert (second.value.status, second.value.path) == (409, "mode")
     assert second.value.message == "You already have an active day thread · close it before starting another"
+    # A valid swing create (it carries its swing block) still belongs to `swing.create_thread`, not to this path.
     with pytest.raises(ReplayProblem) as swing:
         threads_mod.create_thread(db_session, user_id, _create(mode="swing"), NOW)
     assert (swing.value.status, swing.value.path) == (422, "mode")

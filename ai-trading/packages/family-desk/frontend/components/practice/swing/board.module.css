@@ -1,0 +1,32 @@
+/* Swing board (02p d1): the thread strip, the holds table, the ended-day tiles, the after-day actions. Tokens only. */
+
+.strip { display: flex; min-width: 0; min-height: 28px; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); border-bottom: 1px solid var(--color-hairline); padding: 0 var(--space-4); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.stripMain { display: inline-flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.stripLink { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
+.stripLink:hover { text-decoration: underline; }
+.stripLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+/* Holds table (also used by the thread page) */
+.holds { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.symbol { font-weight: var(--weight-bold); }
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.flat { color: var(--color-muted); }
+.amber { color: var(--color-amber); font-weight: var(--weight-semibold); }
+.chip { display: inline-flex; min-height: 20px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
+.chipAmber { border-color: var(--color-amber); color: var(--color-amber); }
+.tag { margin-left: 6px; }
+.note { display: inline-block; max-width: 40ch; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); white-space: normal; }
+.holdsFoot { display: flex; align-items: center; gap: var(--space-2); }
+
+/* Ended day: one strip of tiles, then what comes next */
+.summary { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.summaryHead { display: flex; align-items: center; gap: var(--space-2); }
+.summaryTiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.summaryTile { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
+.tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.tileValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.tileHint { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.lines { display: flex; margin: 0; padding: 0; flex-direction: column; gap: 2px; list-style: none; color: var(--color-muted); font-size: var(--text-label); }
+.after { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.notice { margin: 0; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); }

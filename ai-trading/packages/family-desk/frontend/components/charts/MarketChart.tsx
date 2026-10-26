@@ -17,6 +17,7 @@ import {
   chartTime,
   crosshairPoint,
   formatChartClock,
+  sourceTimeLabel,
   replayTickLabel,
   currentValue,
   lineData,
@@ -89,6 +90,8 @@ export type MarketChartProps = {
   hideDates?: boolean;
   /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed and hidden-date charts. */
   clockTicks?: boolean;
+  /** One label per bar for the data table while dates are hidden ("D-3", "Day 6"): a stand-in timeline's own times say nothing. */
+  rowLabels?: readonly string[];
   /** Start time of a bar to bring into view with the crosshair on it (a click in the signals rail). `at` changes on every click, so the same bar can be asked for twice. */
   focus?: { time: string; at: number } | null;
 };
@@ -170,6 +173,7 @@ export function MarketChart({
   follow = false,
   hideDates = false,
   clockTicks = false,
+  rowLabels,
   focus = null,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -431,6 +435,7 @@ export function MarketChart({
         priceLineVisible: false,
       });
       shadeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+      shadeSeries.current.setSeriesOrder(0); // behind the candles and lines (a later series is drawn on top: the week shading hid the equity lines)
     } else if (!sessionShading && shadeSeries.current) {
       currentChart.removeSeries(shadeSeries.current);
       shadeSeries.current = null;
@@ -508,7 +513,7 @@ export function MarketChart({
           <table>
             <thead><tr><th scope="col">Source time</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
             <tbody>{bars.map((bar, index) => (
-              <tr key={`${bar.t}-${index}`}><th scope="row">{hideDates ? formatChartClock(Math.floor(Date.parse(bar.t) / 1000) as UTCTimestamp) : bar.t}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
+              <tr key={`${bar.t}-${index}`}><th scope="row">{sourceTimeLabel(bar.t, index, hideDates, rowLabels)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
             ))}</tbody>
           </table>
         </div>
