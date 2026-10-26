@@ -756,8 +756,8 @@ def _peek(db: Session, svc: Services, row: ReplayDayList, symbol: str) -> dict[s
     }
 
 
-def _join(names: list[str]) -> str:
-    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+def _join(names: list[str], word: str = "and") -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} {word} {names[-1]}"
 
 
 def _early_filters(db: Session, row: ReplayDayList) -> list[tuple[str, str]]:
@@ -771,6 +771,9 @@ def _early_filters(db: Session, row: ReplayDayList) -> list[tuple[str, str]]:
     return early
 
 
+LIST_TIMES = ("08:30", "10:00", "10:45")  # the list times the plan form offers (frontend `LIST_TIMES`)
+
+
 def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | None:
     """The in-screen remedy for an early list (D-012): the list time that lets every filter read the day, when the
     practice window can still follow it. Only a day not yet started on the live plan can move."""
@@ -779,6 +782,10 @@ def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[s
     early = _early_filters(db, row)
     window = plan.spec["setup"]["window"]
     need = max((time for _, time in early), default=None)
+    if need is None and not row.candidates:
+        # D-054: an empty list at a time every filter can read is still a dead end (End day is the only other button).
+        # Later, more bars of the day have closed: offer the next list time the form offers.
+        need = next((time for time in LIST_TIMES if time > row.screen["listAt"]), None)
     if need is None or need >= window["to"]:
         return None
     return {
@@ -812,7 +819,7 @@ def _few_names_reason(db: Session, row: ReplayDayList) -> str:
             f"No bars to read at {clock12(list_at)} for any of the {universe['scanned']} symbols that passed the "
             "floor · the data for this day may be missing"
         )
-    names = _join([item["name"] for item in filters])
+    names = _join([item["name"] for item in filters], "or")  # a name that passes either filter is listed (D-061)
     met = f"Only {count}" if count else "None"
     return (
         f"{met} of the {universe['scanned']} scanned symbols met {names}"

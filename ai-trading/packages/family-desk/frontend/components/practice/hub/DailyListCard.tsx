@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
 import { loadDaily, loadThreads, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { planArmedText, planCard } from "@/lib/replay/dayView";
@@ -22,6 +23,8 @@ export function DailyListCard({ revision, onChanged }: { revision?: number; onCh
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Set while the gateway has cut a slow open short and the screen is asking again (D-058).
+  const [still, setStill] = useState(false);
 
   const plan = daily.data?.plan ?? null;
   const thread = daily.data?.thread ?? null;
@@ -38,16 +41,19 @@ export function DailyListCard({ revision, onChanged }: { revision?: number; onCh
 
   async function open() {
     setBusy(true);
+    setStill(false);
     setMessage(null);
     try {
-      const result = await openNextDay();
+      const result = await whenReady(() => openNextDay(), { onWaiting: () => setStill(true) });
       if (result.day_list_id !== null) router.push(`/practice/day?id=${result.day_list_id}`);
       else {
         setBusy(false);
+        setStill(false);
         onChanged();
       }
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.planStartError));
+      setStill(false);
       setBusy(false);
     }
   }
@@ -87,7 +93,8 @@ export function DailyListCard({ revision, onChanged }: { revision?: number; onCh
       </div>
       {card.detail && <p className={styles.muted}>{card.detail}</p>}
       <p className={styles.muted}>{planArmedText(plan)}</p>
-      {message && <p role="alert" className={styles.fieldError}>{message}</p>}
+      {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
+      {message && <ErrorBlock message={message} onRetry={() => void open()} />}
       <div className={styles.inline}>
         {(card.action === "continue" || card.action === "start") && (
           <button type="button" className={styles.primary} disabled={busy} onClick={() => void open()}>

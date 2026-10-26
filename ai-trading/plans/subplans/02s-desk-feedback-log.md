@@ -125,7 +125,7 @@ Paper file TobyTest (`01M4K3AXAKQC8Z6JTW03YR5HEG`), page "Family Desk · R2 mock
 
 Fixture caveat: the boards first showed `commit c42e4eb6`, which is a **real** commit in this repository (the hub fixes of STATUS 5M: D-008, D-009, D-016, D-017, D-030, D-035), not a fix for `F-014`. Corrected 2026-10-26: the three occurrences now read `commit 1a2b3c4`, which `git cat-file -e 1a2b3c4^{commit}` shows is **not** a commit in this repository, and the three hostname fixtures now read `trading.tobytran.dev`, the Desk's real hostname. These were the only two corrections; nothing else on the boards changed and the page node count stayed 30644.
 
-Sync rule: this plan, `plans/STATUS.md` (row 5O) and the affected subplans (02l, 02m) move together in the same commit whenever the feature or the boards change.
+Sync rule: this plan, `plans/STATUS.md` (row 5P) and the affected subplans (02l, 02m) move together in the same commit whenever the feature or the boards change.
 
 ## Phases
 

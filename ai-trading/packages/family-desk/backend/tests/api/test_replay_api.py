@@ -304,8 +304,8 @@ def test_mark_state_rules_answer_422(replay: TestClient) -> None:
     assert no_trade.status_code == 422
     assert no_trade.json()["detail"]["problems"][0] == {"path": "kind", "message": "No open practice trade to exit"}
     assert mark(replay, sid, {"kind": "stop", "stopPrice": 5.0}).status_code == 422  # no trade to stop
-    assert mark(replay, sid, {"kind": "long_entry", "shares": 10}).status_code == 200
-    again = mark(replay, sid, {"kind": "short_entry"})
+    assert mark(replay, sid, {"kind": "long_entry", "shares": 10, "stopPrice": 1.0}).status_code == 200
+    again = mark(replay, sid, {"kind": "short_entry", "stopPrice": 999999.0})
     assert again.status_code == 422 and again.json()["detail"]["problems"][0]["path"] == "kind"  # one open trade
     wrong_exit = mark(replay, sid, {"kind": "short_exit"})
     assert wrong_exit.status_code == 422
@@ -314,6 +314,19 @@ def test_mark_state_rules_answer_422(replay: TestClient) -> None:
     assert high_stop.json()["detail"]["problems"][0]["path"] == "stopPrice"  # above a long's last price
     assert mark(replay, sid, {"kind": "stop", "stopPrice": 1.0}).status_code == 200
     assert mark(replay, sid, {"kind": "note", "note": "watching the tape"}).status_code == 200
+
+
+def test_an_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(replay: TestClient) -> None:
+    sid = start(replay)["id"]  # the session's plan says stopRequired: yes
+    advance(replay, sid, 120)
+    refused = mark(replay, sid, {"kind": "long_entry", "shares": 10})
+    assert refused.status_code == 422
+    assert refused.json()["detail"]["problems"][0] == {
+        "path": "stopPrice",
+        "message": "Your plan asks for a stop on every entry · type a stop price first",
+    }
+    assert replay.get(f"{BASE}/sessions/{sid}", headers=OWNER).json()["marks"] == []
+    assert mark(replay, sid, {"kind": "long_entry", "shares": 10, "stopPrice": 1.0}).status_code == 200
 
 
 def test_a_bad_mark_body_is_the_plain_problems_list(replay: TestClient) -> None:
@@ -332,7 +345,7 @@ def test_a_bad_mark_body_is_the_plain_problems_list(replay: TestClient) -> None:
 def test_a_short_pays_entry_minus_exit(replay: TestClient) -> None:
     sid = start(replay)["id"]
     advance(replay, sid, 120)
-    entry = mark(replay, sid, {"kind": "short_entry", "shares": 50}).json()["mark"]
+    entry = mark(replay, sid, {"kind": "short_entry", "shares": 50, "stopPrice": 999999.0}).json()["mark"]
     advance(replay, sid, 600)
     result = mark(replay, sid, {"kind": "short_exit"}).json()
     trade = result["journal"]["trades"][0]
@@ -342,11 +355,11 @@ def test_a_short_pays_entry_minus_exit(replay: TestClient) -> None:
 def test_undo_only_before_the_playhead_moves(replay: TestClient) -> None:
     sid = start(replay)["id"]
     advance(replay, sid, 120)
-    placed = mark(replay, sid, {"kind": "long_entry"}).json()["mark"]
+    placed = mark(replay, sid, {"kind": "long_entry", "stopPrice": 1.0}).json()["mark"]
     undone = replay.delete(f"{BASE}/sessions/{sid}/marks/{placed['id']}", headers=OWNER)
     assert undone.status_code == 200 and undone.json()["open_trade"] is None
     assert replay.get(f"{BASE}/sessions/{sid}", headers=OWNER).json()["marks"] == []
-    again = mark(replay, sid, {"kind": "long_entry"}).json()["mark"]
+    again = mark(replay, sid, {"kind": "long_entry", "stopPrice": 1.0}).json()["mark"]
     advance(replay, sid, 180)
     late = replay.delete(f"{BASE}/sessions/{sid}/marks/{again['id']}", headers=OWNER)
     assert late.status_code == 409
@@ -410,7 +423,7 @@ def test_another_user_gets_404_for_everything(replay: TestClient) -> None:
 def test_sessions_list_has_the_resume_and_recent_fields(replay: TestClient) -> None:
     sid = start(replay)["id"]
     advance(replay, sid, 240)
-    mark(replay, sid, {"kind": "long_entry"})
+    mark(replay, sid, {"kind": "long_entry", "stopPrice": 1.0})
     advance(replay, sid, 300)
     mark(replay, sid, {"kind": "long_exit"})
     rows = replay.get(f"{BASE}/sessions?status=active", headers=OWNER).json()
@@ -455,7 +468,7 @@ def test_a_session_writes_nothing_to_signals_alerts_or_the_outbox(replay: TestCl
     before = [db_session.execute(select(func.count()).select_from(t)).scalar_one() for t in (Signal, Alert, Delivery)]
     sid = start(replay)["id"]
     advance(replay, sid, 1800)
-    mark(replay, sid, {"kind": "long_entry"})
+    mark(replay, sid, {"kind": "long_entry", "stopPrice": 1.0})
     replay.post(f"{BASE}/sessions/{sid}/end", headers=OWNER)
     after = [db_session.execute(select(func.count()).select_from(t)).scalar_one() for t in (Signal, Alert, Delivery)]
     assert before == after

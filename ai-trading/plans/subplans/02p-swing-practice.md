@@ -607,5 +607,20 @@ the walkthrough fixes (STATUS 5M, D-008..D-045), then three defects found in rev
   of the journal's rail (D-040); the swing specs follow both.
 - **Tests.** The swing play tests price their expectations as fills; the migration downgrade test seeds at head; 16 swing Playwright tests pass at 1440 and 1180.
 
+**Fix wave 2 (2026-10-26, `feature/desk-fix-wave2`, defects D-049..D-070 in `DEFECTS.md`).**
+- **One closing price (D-064).** `swing.end_day` marked every open hold at the raw daily bar's close, while the live session priced it at the last
+  one-minute close (or the last print), so the same hold read two P/L figures for one day ($6 to $12 on 100 shares). Both now use one price, the day's
+  **official close**, in whole cents (`swing_play.official_close`): `end_day` marks the hold at it, and once the clock has reached the regular close the
+  live price (`last_price`, the strip) is it too. Before the close the live price is unchanged (§a4). So the hold card, the strip, the day summary, the
+  equity series, the thread's equity and the week review agree to the cent. The gap runs from a whole-cent close to a whole-cent first price.
+- **Fills stay at revealed prices (D-063).** A walkthrough note expected a swing entry at the prior close. §a4 and decision 4 say the opposite: the prior
+  close is never a trade price, a fill is a revealed regular-session price. Unchanged; the gap to the prior close is its own figure (Gap).
+- **Selection from her price in (D-065).** A hold's selection edge and rank use her return from her own price in to her price out (or the week's last
+  close if it is open); a hold carried in starts at the week's opening close. The universe median stays close to close. It can no longer credit a gap
+  she did not trade. Timing is unchanged (her return minus the symbol's close to close).
+- **Stop on every entry (D-060, D-067).** With the thread's plan asking for it, `place_mark` refuses an entry without a stop price (422 on `stopPrice`).
+- **No lookahead on the chart (D-062).** Checked, not a leak: the feed serves only bars closed by the playhead; the 09:45 and 10:00 rows at 09:30 are
+  bars of earlier sessions (a test pins it).
+
 **Not built**: Paper boards PS1 to PS7 (G2), the R0s real-data run, the acceptance week with the wife (G3), a ledger list in the swing journal (there is no ledger list component to reuse),
 rerouting the hub's recent-sessions rows of swing days to the board.

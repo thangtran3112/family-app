@@ -8,6 +8,7 @@ import { NotesAndRating } from "@/components/practice/journal/NotesAndRating";
 import { ThreadTiles } from "@/components/practice/journal/thread/ThreadTiles";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
 import { continueSwingThread, patchWeek, type WeekOut } from "@/lib/replay/swingApi";
 import { problemMessage } from "@/lib/replay/setup";
 import type { Thread } from "@/lib/replay/threads";
@@ -97,7 +98,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
   const [start, setStart] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
   const startWeek = () => {
     setStart({ busy: true, message: null });
-    continueSwingThread(threadId)
+    whenReady(() => continueSwingThread(threadId))
       .then((next) => {
         const outcome = startOutcome(next);
         if (outcome.kind === "open") router.push(outcome.href);

@@ -9,10 +9,13 @@ A price she traded at must be on that same basis: `to_adjusted(price, raw_close,
 using the raw and adjusted close of the price's own day. Dividends are excluded, as everywhere else in practice.
 
 **Sign conventions** (percent points are plain numbers x100 rounded to 2 dp, so `+1.8` means 1.8 points):
-- `selection_edge(side, r, m) = sign * (r - m)` with `sign` +1 long, -1 short, `r` the symbol's close-to-close return
-  over the hold's span and `m` the UNsigned universe median over the same span. A long scores positive when the stock
+- `selection_edge(side, r, m) = sign * (r - m)` with `sign` +1 long, -1 short, `r` her hold's return from her own price
+  in (a hold carried in starts at the week's opening close) to her price out (or the week's last close if it is open),
+  and `m` the UNsigned close-to-close universe median over the hold's span. Selection is scored from HER price in, never
+  from the close before it, so it cannot credit a gap she did not trade (D-065). A long scores positive when the stock
   beat the median; a short scores positive when the stock fell MORE than the median fell (or rose less), the mirror
-  image. `selection_rank` orders the universe by the same side-signed return: 1 is the best pick for that side.
+  image. `selection_rank` orders the universe by the same side-signed return, with her hold's return standing in for the
+  symbol's: 1 is the best pick for that side.
 - `timing_edge(...) = sign * (exit/entry - close_at_exit/close_before_entry)`: her side-signed return over the span
   minus the symbol's side-signed close-to-close return over it. Positive means her entry and exit beat simply holding
   close to close.
@@ -401,13 +404,17 @@ def _hold_row(
         return row
     universe_median = median(returns.values())
     assert universe_median is not None
-    row["selection_rank"], row["selection_of"] = selection_rank(h.side, h.symbol, returns)
-    row["selection_edge_pts"] = selection_edge(h.side, returns[h.symbol], universe_median)
     c0, c1 = _close(closes.get(h.symbol), start), _close(closes.get(h.symbol), end)
     entry_leg = h.entry_price_adj if h.entry_day >= first else c0  # carried in: her leg starts at the week
     exit_leg = h.exit_price_adj if exited else c1
-    if entry_leg is not None and exit_leg is not None and c0 is not None and c1 is not None:
-        row["timing_edge_pts"] = timing_edge(h.side, entry_leg, exit_leg, c0, c1)
+    if entry_leg is None or exit_leg is None or c0 is None or c1 is None:
+        return row
+    # D-065: the pick is scored from her own price in, never from the close before it, so it cannot credit a move
+    # (a gap she did not trade) that the hold never made. The rest of the universe stays close to close.
+    hers = exit_leg / entry_leg - 1
+    row["selection_rank"], row["selection_of"] = selection_rank(h.side, h.symbol, {**returns, h.symbol: hers})
+    row["selection_edge_pts"] = selection_edge(h.side, hers, universe_median)
+    row["timing_edge_pts"] = timing_edge(h.side, entry_leg, exit_leg, c0, c1)
     return row
 
 

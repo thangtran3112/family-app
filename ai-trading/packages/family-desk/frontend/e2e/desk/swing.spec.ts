@@ -245,14 +245,14 @@ test.describe("Swing practice", () => {
     await expect(strip.getByRole("button")).toHaveCount(2);
     await page.getByRole("button", { name: "Step", exact: true }).click();
     const money = page.getByRole("group", { name: "Practice thread" });
-    await expect(money).toContainText("Balance $50,000.00 · Equity $50,183");
+    await expect(money).toContainText("Balance $50,000.00 · Equity $50,184");
     const practice = await replayRail(page, "Practice");
     await practice.getByRole("button", { name: "Exit (X)" }).click();
     await expect(practice.getByText("No open practice hold")).toBeVisible();
     // The ledger rule: an exit credits the balance only when its day ends. Free cash is back at once; the strip drops the exited name.
     await expect(strip.getByRole("button")).toHaveCount(1);
     await expect(strip.getByRole("button", { name: /^S04, practice hold/ })).toBeVisible();
-    await expect(money).toContainText("Balance $50,000.00 · Equity $50,183");
+    await expect(money).toContainText("Balance $50,000.00 · Equity $50,184");
     await expect(money).not.toContainText("Free cash $31,");
     const mid = await get(context, `/threads/${threadId}`);
     expect(mid.thread.stats.balance).toBe(50_000);
@@ -565,7 +565,7 @@ test.describe("Swing practice", () => {
     const s04 = ((await get(context, `/threads/${threadId}/holds?status=open`)).holds as Json[]).find((hold) => hold.symbol === "S04")!;
     expect(s04.price_basis).toBe("prior_close");
     expect(s04.last_close).toBeCloseTo(priorClose, 2);
-    expect(s04.unrealized_usd).toBeCloseTo(carried.shares * (priorClose - carried.entry_price), 1);
+    expect(s04.unrealized_usd).toBeCloseTo(carried.shares * (s04.last_close - carried.entry_price), 2); // the mark is the close in whole cents (D-064)
     expect(priorClose).toBeGreaterThan(carried.entry_price); // S04 rises a little each day
 
     // Run the day to the close: both holds have a last price there, which is the close they leave at.
