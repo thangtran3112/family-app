@@ -14,6 +14,29 @@ const runDir = "/Users/tobytran/personal/local-llm/hermes/hermes-setup/runs/desk
 const testUsername = process.env.FAMILY_DESK_TEST_USERNAME;
 const testPassword = process.env.FAMILY_DESK_TEST_PASSWORD;
 const trustCode = process.env.FAMILY_DESK_TEST_TRUST_CODE;
+const trustCodeFile = process.env.FAMILY_DESK_TEST_TRUST_CODE_FILE;
+const TRUST_CODE_WAIT_MS = 150_000;
+
+// The direct value if set, else the first usable (4-8 digit) content of the code file that is not `stale` (a code Clerk already
+// refused), re-read every second until the wait ends.
+// `nudge` runs once after 20 s without a code (Clerk does not always send the email when the code page opens).
+async function waitForTrustCode(stale?: string, nudge?: () => Promise<void>): Promise<string | undefined> {
+  if (trustCode) return stale ? undefined : trustCode;
+  if (!trustCodeFile) return undefined;
+  const started = Date.now();
+  const deadline = started + TRUST_CODE_WAIT_MS;
+  let nudged = false;
+  while (Date.now() < deadline) {
+    if (nudge && !nudged && Date.now() - started > 20_000) {
+      nudged = true;
+      await nudge();
+    }
+    const value = existsSync(trustCodeFile) ? readFileSync(trustCodeFile, "utf8").trim() : "";
+    if (/^\d{4,8}$/.test(value) && value !== stale) return value;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return undefined;
+}
 
 const REQUEST = {
   title: "Show the open report count on the Feedback menu item",
@@ -37,6 +60,7 @@ test.describe("production test user · feedback log", () => {
 
   test.beforeAll(async ({ browser }, testInfo) => {
     if (!testUsername || !testPassword || !testInfo.config.metadata.production) return;
+    test.setTimeout(2 * TRUST_CODE_WAIT_MS + 240_000);
     mkdirSync(runDir, { recursive: true });
     context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     page = await context.newPage();
@@ -51,14 +75,29 @@ test.describe("production test user · feedback log", () => {
       page.waitForURL(`${deskOrigin}/**`, { timeout: 45_000 }).catch(() => undefined),
       blocked.waitFor({ timeout: 45_000 }).catch(() => undefined),
     ]);
-    // Client Trust (new-device email check): when FAMILY_DESK_TEST_TRUST_CODE is set, fill it into the ordinary code form and
-    // continue. Without it the check below still fails with the named blocker. The code is never printed.
-    if (trustCode && /client-trust/.test(page.url())) {
-      await page.locator("input[name=code], input[autocomplete=one-time-code]").first().fill(trustCode);
-      await Promise.race([
-        page.waitForURL(`${deskOrigin}/**`, { timeout: 45_000 }).catch(() => undefined),
-        page.getByText(/incorrect|expired|invalid/i).first().waitFor({ timeout: 45_000 }).catch(() => undefined),
-      ]);
+    // Client Trust (new-device email check): Clerk emails a code tied to this very sign-in attempt, so a driver writes it to
+    // FAMILY_DESK_TEST_TRUST_CODE_FILE only after this step is reached; FAMILY_DESK_TEST_TRUST_CODE works as a direct value.
+    // Without a code the check below still fails with the named blocker. The code is never printed, and the file is the
+    // driver's to delete.
+    if (/client-trust/.test(page.url())) {
+      const codeInput = page.locator("input[name=code], input[autocomplete=one-time-code]").first();
+      const refused = page.getByText(/incorrect|expired|invalid|send a verification code/i).first();
+      const resend = () => page.getByRole("button", { name: /Resend/ }).click({ timeout: 5_000 }).catch(() => undefined);
+      let code = await waitForTrustCode(undefined, resend);
+      // One retry: when Clerk refuses the first code ("send a verification code before attempting to verify" = it had not sent
+      // one for this attempt), Resend makes it send a fresh one for the driver to put in the file.
+      for (let attempt = 0; code && attempt < 2; attempt++) {
+        await codeInput.fill(code);
+        await Promise.race([
+          page.waitForURL(`${deskOrigin}/**`, { timeout: 45_000 }).catch(() => undefined),
+          refused.waitFor({ timeout: 45_000 }).catch(() => undefined),
+        ]);
+        if (!/client-trust/.test(page.url())) break;
+        if (attempt === 0) {
+          await resend();
+          code = await waitForTrustCode(code);
+        }
+      }
     }
     await expect(
       blocked,
@@ -77,6 +116,35 @@ test.describe("production test user · feedback log", () => {
     await page.getByRole("textbox", { name: /^(What happened\?|What should it do\?)$/ }).fill(fields.body);
     if (fields.expected) await page.getByRole("textbox", { name: "What did you expect?" }).fill(fields.expected);
   }
+
+  // Walk of the signed-in Desk, so a defect is found by looking, not guessed: per route a screenshot, the h1, console errors,
+  // failed requests and horizontal overflow go to `walk/` in the run directory.
+  test("walks the signed-in Desk and records what each screen shows", async () => {
+    const routes = ["/", "/today", "/holdings", "/stocks", "/watchlists", "/screener", "/strategies", "/backtests", "/alerts", "/ask", "/paper", "/practice", "/futures", "/covered-calls", "/technicals", "/more", "/settings", "/feedback"];
+    mkdirSync(`${runDir}/walk`, { recursive: true });
+    const report: Record<string, unknown>[] = [];
+    for (const route of routes) {
+      const errors: string[] = [];
+      const onConsole = (m: { type(): string; text(): string }) => m.type() === "error" && errors.push(m.text().slice(0, 200));
+      const onFail = (r: { url(): string; failure(): { errorText: string } | null }) => errors.push(`requestfailed ${new URL(r.url()).pathname} ${r.failure()?.errorText}`);
+      page.on("console", onConsole);
+      page.on("requestfailed", onFail);
+      const response = await page.goto(`${deskOrigin}${route}`).catch(() => null);
+      await page.waitForLoadState("networkidle").catch(() => undefined);
+      await page.screenshot({ path: `${runDir}/walk/${route === "/" ? "root" : route.slice(1).replaceAll("/", "-")}.png` });
+      report.push({
+        route,
+        status: response?.status(),
+        finalUrl: page.url().replace(deskOrigin, ""),
+        h1: await page.locator("h1").allTextContents(),
+        overflowX: await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+        errors,
+      });
+      page.off("console", onConsole);
+      page.off("requestfailed", onFail);
+    }
+    writeFileSync(`${runDir}/walk/walk.json`, `${JSON.stringify(report, null, 2)}\n`);
+  });
 
   test("files a real bug at 1440 x 900 with the captured context and a real PNG screenshot", async () => {
     expect(existsSync(`${runDir}/bug-finding.json`), `write ${runDir}/bug-finding.json from a defect actually seen on the Desk`).toBe(true);
