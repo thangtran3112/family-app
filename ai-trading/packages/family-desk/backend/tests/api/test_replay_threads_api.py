@@ -136,11 +136,9 @@ def test_thread_requests_are_the_contracts_and_rejections_are_plain_problems(wor
     bool_flag = _create(client, plan={**PLAN, "tradeOnlyOnSignal": True})
     assert bool_flag.status_code == 422
     assert _create(client, mode="swing").status_code == 422  # the contract: swing needs its block
-    swing = _create(client, mode="swing", swing=SWING)
-    assert swing.status_code == 422 and _problems(swing)[0] == {
-        "path": "mode",
-        "message": "Swing threads are not open yet · start a day thread",
-    }
+    swing = _create(client, mode="swing", swing=SWING)  # a valid block, but the daily world holds none of its symbols
+    assert swing.status_code == 422 and _problems(swing)[0]["path"] == "swing.universe.0.symbol"
+    assert "not enough price history" in _problems(swing)[0]["message"]
     rich = _create(client, startingBalance=1000, plan={**PLAN, "maxLossUsd": 5000})
     assert rich.status_code == 422 and "simulated starting balance ($1,000)" in _problems(rich)[0]["message"]
     not_json = client.post(f"{BASE}/threads", content="nope", headers=auth_headers())

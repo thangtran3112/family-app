@@ -102,16 +102,19 @@ def check_range(first: date, sessions: int, now: datetime, *, path: str = "first
     """The days of a plan or a swing thread, or the plain 422 that says why `first` and `sessions` cannot run."""
     if first < EARLIEST_LIST_DAY:
         raise ReplayProblem("Daily lists start on Jan 3, 2017 · pick a later day", path=path)
+    past_the_end = ReplayProblem(
+        f"{sessions} sessions from {first:%a %Y-%m-%d} run past the last finished day · pick an earlier start",
+        path=path,
+    )
+    if first > now.date():  # also keeps the calendar lookup below inside the years the calendar covers
+        raise past_the_end
     if trading_session("stock", first) is None:
         raise ReplayProblem(f"No trading on {first:%a %Y-%m-%d} · pick a weekday", path=path)
     days = plan_days(first, sessions)
     try:
         check_day(days[-1], now)
     except ReplayDayError:
-        raise ReplayProblem(
-            f"{sessions} sessions from {first:%a %Y-%m-%d} run past the last finished day · pick an earlier start",
-            path=path,
-        ) from None
+        raise past_the_end from None
     return days
 
 
