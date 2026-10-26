@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRegisterSymbolPicker } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { loadReplayDays, loadReplaySessions } from "@/lib/desk/replay";
+import { loadDaily, loadReplayDays, loadReplaySessions } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { withNotableDay, defaultDraft, type SetupDraft } from "@/lib/replay/setup";
 import type { ReplayDay } from "@/lib/replay/schemas";
@@ -25,6 +25,22 @@ export function PracticeHub() {
   const [threadRevision, setThreadRevision] = useState(0);
   const changed = useCallback(() => setThreadRevision((n) => n + 1), []);
   useRegisterSymbolPicker((symbol) => setDraft((current) => ({ ...current, symbol })));
+
+  // The arm rail starts from what the daily plan has armed, so the card and the rail say the same thing (D-049). Once she
+  // ticks or unticks a box herself the rail is hers and the plan no longer overwrites it.
+  const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { revision: threadRevision });
+  const planArmed = daily.data?.plan?.spec.setup.armed ?? null;
+  const planArmedKey = planArmed === null ? null : JSON.stringify(planArmed);
+  const armedTouched = useRef(false);
+  useEffect(() => {
+    if (planArmed === null || armedTouched.current) return;
+    setDraft((current) => (JSON.stringify(current.armed) === JSON.stringify(planArmed) ? current : { ...current, armed: planArmed.map(({ source, id }) => ({ source, id })) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- planArmedKey is planArmed's content
+  }, [planArmedKey]);
+  const onDraft = (next: SetupDraft) => {
+    if (JSON.stringify(next.armed) !== JSON.stringify(draft.armed)) armedTouched.current = true;
+    setDraft(next);
+  };
 
   // All notable days first: the answer also says which symbols are on her watchlists. A typed symbol on that list
   // gets its own query (its days, not just the top 20 overall); any other symbol sees the full list plus a hint.
@@ -58,7 +74,7 @@ export function PracticeHub() {
         </section>
         <section id="start-practice" aria-labelledby="start-title" className={styles.section}>
           <h2 id="start-title" className={styles.sectionTitle}>Start a practice session</h2>
-          <SessionSetup draft={draft} onDraft={setDraft} />
+          <SessionSetup draft={draft} onDraft={onDraft} />
         </section>
         <NotableDaysTable
           days={days.data?.days ?? []}

@@ -359,7 +359,7 @@ def test_golden_review_numbers():
     assert t["gap_usd"] == 5.0  # 0 + 10 + 5 - 5 - 5
     assert t["gap_share_pct"] == 7.1  # 5 / 70
     assert t["adherence_pct"] == 50
-    assert t["selection_pts"] == 1.22  # mean of the table's 1.80, 2.61, -0.75
+    assert t["selection_pts"] == 0.05  # mean of the table's 1.40, -0.61, -0.65 (from her prices in, D-065)
     assert t["timing_pts"] == -1.17  # mean of -0.40, -3.22, +0.10
     assert t["spy_return_pct"] == 1.0  # 101 / 100 - 1
     assert t["universe_median_return_pct"] == 0.25  # (GGG +0.5% + FFF 0.0%) / 2
@@ -393,7 +393,7 @@ def test_golden_review_numbers():
 
     assert r["adherence"]["score_pct"] == 50 and len(r["adherence"]["checks"]) == 8
     assert r["copy"] == [
-        "Selection +1.2 pts vs the universe median · your holds ranked 4th, 3rd and 8th of 12 · Timing −1.2 pts"
+        "Selection +0.1 pts vs the universe median · your holds ranked 4th, 8th and 8th of 12 · Timing −1.2 pts"
     ]
 
 
@@ -401,22 +401,23 @@ def test_golden_review_hold_rows():
     rows = {row["symbol"]: row for row in compute_review(golden())["holds"]}
     assert list(rows) == ["DDD", "JJJ", "HHH"]  # in entry order
 
-    ddd = rows["DDD"]  # long, span: basis close 100 -> Thu close 102 (+2.00%); median of the span 0.2%; rank 4th
+    # Selection is scored from HER price in to her price out (D-065), the median close to close over the span.
+    ddd = rows["DDD"]  # long, in 100.2 -> out 101.8 (+1.60%); median of the span 0.2%; rank 4th
     assert (ddd["side"], ddd["shares"], ddd["entry_day_no"], ddd["entry_price"]) == ("long", 100, 1, 100.2)
     assert (ddd["status"], ddd["exit_day_no"], ddd["exit_price"], ddd["days_held"]) == ("closed", 4, 101.8, 4)
     assert (ddd["pnl_usd"], ddd["r"], ddd["gap_usd"], ddd["stop"]) == (160.0, 1.6, 30.0, "set")
-    assert (ddd["selection_rank"], ddd["selection_of"], ddd["selection_edge_pts"]) == (4, 12, 1.8)  # 2.0 - 0.2
+    assert (ddd["selection_rank"], ddd["selection_of"], ddd["selection_edge_pts"]) == (4, 12, 1.4)  # 1.597 - 0.2
     assert ddd["timing_edge_pts"] == -0.4  # (101.8 / 100.2 - 1) - (102 / 100 - 1) = 1.597% - 2.0%
 
-    jjj = rows["JJJ"]  # short, span: Mon close 99.4 -> Fri close 97.0 (-2.41%); median 0.20%; 3rd of 12 for a short
+    jjj = rows["JJJ"]  # short, in 99.0 -> out 99.8 (+0.81%, a losing short); median 0.20%; 8th of 12 for a short
     assert (jjj["status"], jjj["entry_day_no"], jjj["exit_day_no"], jjj["days_held"]) == ("closed", 2, 5, 4)
-    assert (jjj["selection_rank"], jjj["selection_of"], jjj["selection_edge_pts"]) == (3, 12, 2.61)  # -(-2.41 - 0.20)
+    assert (jjj["selection_rank"], jjj["selection_of"], jjj["selection_edge_pts"]) == (8, 12, -0.61)  # -(0.81 - 0.20)
     assert jjj["timing_edge_pts"] == -3.22  # -(99.8 / 99.0 - 97.0 / 99.4) x 100: covered 3 points too high
     assert (jjj["pnl_usd"], jjj["r"], jjj["gap_usd"]) == (-40.0, -0.8, -5.0)
 
-    hhh = rows["HHH"]  # long, open at Fri: span Tue close 99.6 -> Fri close 99.0 (-0.60%); median 0.15%; 8th
+    hhh = rows["HHH"]  # long, open at Fri: in 99.5 -> Fri close 99.0 (-0.50%); median 0.15%; 8th
     assert (hhh["status"], hhh["exit_day_no"], hhh["exit_price"], hhh["days_held"]) == ("open", None, None, 3)
-    assert (hhh["selection_rank"], hhh["selection_edge_pts"]) == (8, -0.75)  # -0.60 - 0.15
+    assert (hhh["selection_rank"], hhh["selection_edge_pts"]) == (8, -0.65)  # -0.50 - 0.15
     assert hhh["timing_edge_pts"] == 0.1  # (99.0 / 99.5 - 1) - (99.0 / 99.6 - 1) = -0.503% + 0.602%
     assert hhh["pnl_usd"] == -50.0 and hhh["r"] is None and hhh["stop"] == "none"
 
@@ -460,16 +461,27 @@ def test_golden_review_universe_pictures():
 
 
 def test_a_short_is_scored_with_the_opposite_sign_of_a_long_on_the_same_name():
-    # LLL fell 8% over the week (100 -> 92) while the universe median rose 0.25%
+    # LLL fell 8% over the week (100 -> 92) while the universe median rose 0.25%; she was in at 98.4 (-6.50% to 92)
     def review_of(side):
         hold = HoldFact(9, "LLL", side, 10, DAYS[0], 98.4, 98.4, DAYS[4], 92.0, 92.0, 0.0, None, None, "none")
         return compute_review(golden(holds=[hold], entries=(), focus={}))["holds"][0]
 
     short, long_ = review_of("short"), review_of("long")
     assert (short["selection_rank"], long_["selection_rank"]) == (1, 12)  # the biggest faller is the best short
-    assert short["selection_edge_pts"] == 8.25 and long_["selection_edge_pts"] == -8.25  # -(-8 - 0.25) and (-8 - 0.25)
+    # from her 98.40: -(-6.50 - 0.25) for the short and (-6.50 - 0.25) for the long
+    assert short["selection_edge_pts"] == 6.75 and long_["selection_edge_pts"] == -6.75
     # entered Monday at 98.40 (the close was 98.40), out at 92.00: 92 / 98.4 - 92 / 100 = +1.50 points for a long
     assert long_["timing_edge_pts"] == 1.5 and short["timing_edge_pts"] == -1.5
+
+
+def test_a_long_bought_after_a_gap_up_is_not_credited_the_gap_it_never_traded():
+    # D-065: AAA closed 100 -> 104 over the span (+4.0% close to close, ranked 1st), but she bought at 104 after a gap
+    # up and sold at 102: she lost money, so the pick must not score a gain.
+    hold = HoldFact(9, "AAA", "long", 10, DAYS[0], 104.0, 104.0, DAYS[1], 102.0, 102.0, -20.0, None, None, "none")
+    (row,) = compute_review(golden(holds=[hold], entries=(), focus={}))["holds"]
+    assert row["pnl_usd"] < 0
+    assert row["selection_edge_pts"] < 0  # 102 / 104 - 1 = -1.92% against a positive median (close to close it was +4%)
+    assert row["timing_edge_pts"] == pytest.approx(-5.92, abs=0.01)  # the gap she paid for shows as timing
 
 
 def test_a_hold_opened_last_week_is_scored_over_this_weeks_span_only():
@@ -498,9 +510,9 @@ def test_a_hold_opened_last_week_is_scored_over_this_weeks_span_only():
 
     assert r["week"] == {"week_no": 2, "label": "Week 2", "first_day_no": 6, "last_day_no": 10}
     (row,) = r["holds"]
-    # span: Fri close 103.0 (the week's prior close) -> Tue close 104.2 (+1.165%); median of that span 0.0995%
+    # her leg: Fri close 103.0 (the week's prior close) -> out at 104.0 (+0.971%); median of the span 0.0995%
     assert (row["entry_day_no"], row["exit_day_no"], row["status"], row["days_held"]) == (3, 7, "closed", 5)
-    assert (row["selection_rank"], row["selection_of"], row["selection_edge_pts"]) == (3, 12, 1.07)  # 1.165 - 0.0995
+    assert (row["selection_rank"], row["selection_of"], row["selection_edge_pts"]) == (4, 12, 0.87)  # 0.971 - 0.0995
     # her leg starts at the week's prior close 103.0, not at her entry 101.0: 104/103 - 1 = 0.971% against 1.165%
     assert row["timing_edge_pts"] == -0.19
 

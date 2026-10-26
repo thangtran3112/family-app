@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
 import { openNextDay } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
 import type { PracticeThread, ThreadSummary, ThreadToday } from "@/lib/replay/threads";
@@ -129,20 +131,24 @@ function ThreadResume({ today, planOpen, onChanged }: { today: ThreadToday | nul
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [still, setStill] = useState(false);
 
   async function open() {
     setBusy(true);
+    setStill(false);
     setMessage(null);
     try {
-      const result = await openNextDay();
+      const result = await whenReady(() => openNextDay(), { onWaiting: () => setStill(true) });
       if (result.day_list_id !== null) {
         router.push(`/practice/day?id=${result.day_list_id}`);
         return;
       }
       setBusy(false);
+      setStill(false);
       onChanged();
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.threadResumeError));
+      setStill(false);
       setBusy(false);
     }
   }
@@ -159,7 +165,8 @@ function ThreadResume({ today, planOpen, onChanged }: { today: ThreadToday | nul
         )}
         <p className={styles.hint}>{PRACTICE_COPY.threadResumeHint}</p>
       </div>
-      {message && <p role="alert" className={styles.fieldError}>{message}</p>}
+      {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
+      {message && <ErrorBlock message={message} onRetry={() => void open()} />}
     </>
   );
 }

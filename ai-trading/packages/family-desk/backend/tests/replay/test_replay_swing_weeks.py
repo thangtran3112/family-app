@@ -30,6 +30,7 @@ from ai_trading.core.calendar import et, previous_session
 from ai_trading.db.models import PracticeWeek
 from ai_trading.replay import hold_rows, swing, swing_weeks
 from ai_trading.replay import holds as holds_mod
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import threads as threads_mod
 from ai_trading.replay import week as week_mod
@@ -67,12 +68,22 @@ def _returns(world, a: date, b: date) -> dict[str, float]:
     return {s: _adj(world, s, b) / _adj(world, s, a) - 1 for s in SYMBOLS}
 
 
-def _selection(world, symbol: str, sign: int, a: date, b: date) -> tuple[float, int]:
-    """(selection edge in points, rank of 12) of `symbol` over a..b: the side-signed excess return over the median."""
+def _selection(world, symbol: str, sign: int, a: date, b: date, hers: float | None = None) -> tuple[float, int]:
+    """(selection edge in points, rank of 12) of `symbol` over a..b: the side-signed excess return over the close to
+    close median. `hers` is her own return from her price in to her price out (D-065); the symbol's close to close
+    return stands in for it when None."""
     returns = _returns(world, a, b)
-    edge = sign * (returns[symbol] - statistics.median(returns.values())) * 100
+    median = statistics.median(returns.values())
+    mine = returns[symbol] if hers is None else hers
+    returns = {**returns, symbol: mine}
+    edge = sign * (mine - median) * 100
     order = sorted(SYMBOLS, key=lambda s: (-sign * returns[s], s))
     return round(edge, 2), order.index(symbol) + 1
+
+
+def _closed(world, symbol: str, day: date) -> float:
+    """The official close a hold is marked at: the raw daily close in whole cents (D-064)."""
+    return journal_mod.fill_price(float(world.raw[symbol].loc[day, "close"]))
 
 
 def _timing(sign: int, entry_adj: float, exit_adj: float, close_before: float, close_after: float) -> float:
@@ -148,8 +159,8 @@ def test_week_one_freezes_with_a_review_whose_selection_and_timing_match_hand_ca
 
     # S04, a long that stays open: the span runs from the close before its entry to the week's last close
     long = _row(review, "S04")
-    edge, rank = _selection(world, "S04", +1, BASIS, W1[-1])
     entry = bar_close(world, "S04", W1[0], "10:00")  # S04 has no split: raw is adjusted
+    edge, rank = _selection(world, "S04", +1, BASIS, W1[-1], hers=_adj(world, "S04", W1[-1]) / entry - 1)
     assert (long["status"], long["exit_day_no"], long["selection_edge_pts"], long["selection_rank"]) == (
         "open",
         None,
@@ -164,8 +175,8 @@ def test_week_one_freezes_with_a_review_whose_selection_and_timing_match_hand_ca
 
     # S05, a short that exits Friday at 14:00: -1% a day is the best short in the universe
     short = _row(review, "S05")
-    edge, rank = _selection(world, "S05", -1, BASIS, W1[-1])
     p_in, p_out = bar_close(world, "S05", W1[0], "10:00"), bar_close(world, "S05", W1[2], "14:00")
+    edge, rank = _selection(world, "S05", -1, BASIS, W1[-1], hers=p_out / p_in - 1)
     assert (short["status"], short["exit_day_no"], short["days_held"]) == ("closed", 3, 3)
     assert short["exit_price"] == pytest.approx(p_out, abs=1e-5)
     assert short["selection_edge_pts"] == _approx(edge) and short["selection_rank"] == rank == 1
@@ -178,7 +189,7 @@ def test_week_one_freezes_with_a_review_whose_selection_and_timing_match_hand_ca
     split = _row(review, "S03")
     entry_raw = bar_close(world, "S03", W1[1], "11:00")
     assert entry_raw == pytest.approx(2 * _adj(world, "S03", W1[1]), rel=0.01)  # still 2x raw in Week 1
-    edge, _ = _selection(world, "S03", +1, W1[0], W1[-1])
+    edge, _ = _selection(world, "S03", +1, W1[0], W1[-1], hers=_adj(world, "S03", W1[-1]) / (entry_raw / 2) - 1)
     assert split["selection_edge_pts"] == _approx(edge)
     assert split["timing_edge_pts"] == _approx(
         _timing(+1, entry_raw / 2, _adj(world, "S03", W1[-1]), _adj(world, "S03", W1[0]), _adj(world, "S03", W1[-1]))
@@ -212,8 +223,13 @@ def test_week_one_freezes_with_a_review_whose_selection_and_timing_match_hand_ca
         {"source": tag, "median_return_pct": _approx(statistics.median(by_source[tag]) * 100), "n": len(by_source[tag])}
         for tag in week_mod.SOURCE_ORDER
     ]
+    hers = {
+        "S04": _adj(world, "S04", W1[-1]) / entry - 1,
+        "S05": p_out / p_in - 1,
+        "S03": _adj(world, "S03", W1[-1]) / (entry_raw / 2) - 1,
+    }
     places = [
-        _selection(world, sym, sign, a, W1[-1])[1]
+        _selection(world, sym, sign, a, W1[-1], hers=hers[sym])[1]
         for sym, sign, a in (("S04", 1, BASIS), ("S05", -1, BASIS), ("S03", 1, W1[0]))
     ]
     ranked = f"{', '.join(week_mod.ordinal(p) for p in places[:2])} and {week_mod.ordinal(places[2])}"
@@ -242,7 +258,7 @@ def test_week_two_scores_holds_carried_in_from_the_opening_close_and_keeps_the_s
     exit_price = bar_close(world, "S04", W2[0], "11:00")
     assert (s04["status"], s04["entry_day_no"], s04["exit_day_no"], s04["days_held"]) == ("closed", 1, 4, 4)
     assert s04["stop"] == "set"
-    edge, rank = _selection(world, "S04", +1, W1[-1], W2[0])
+    edge, rank = _selection(world, "S04", +1, W1[-1], W2[0], hers=exit_price / _adj(world, "S04", W1[-1]) - 1)
     assert (s04["selection_edge_pts"], s04["selection_rank"]) == (_approx(edge), rank)
     assert s04["timing_edge_pts"] == _approx(
         _timing(+1, _adj(world, "S04", W1[-1]), exit_price, _adj(world, "S04", W1[-1]), _adj(world, "S04", W2[0]))
@@ -256,7 +272,7 @@ def test_week_two_scores_holds_carried_in_from_the_opening_close_and_keeps_the_s
     assert (s03["shares"], s03["entry_day_no"], s03["exit_day_no"], s03["days_held"]) == (80, 2, 6, 5)
     assert s03["entry_price"] == pytest.approx(entry_raw / 2, rel=1e-3)
     assert s03["pnl_usd"] == _approx(80 * (exit_price - entry_raw / 2))
-    edge, rank = _selection(world, "S03", +1, W1[-1], W2[2])
+    edge, rank = _selection(world, "S03", +1, W1[-1], W2[2], hers=exit_price / _adj(world, "S03", W1[-1]) - 1)
     assert abs(edge) < 3 and (s03["selection_edge_pts"], s03["selection_rank"]) == (_approx(edge), rank)  # not -50
     assert s03["timing_edge_pts"] == _approx(
         _timing(+1, _adj(world, "S03", W1[-1]), exit_price, _adj(world, "S03", W1[-1]), _adj(world, "S03", W2[2]))
@@ -404,7 +420,7 @@ def test_holds_are_marked_at_the_last_ended_close_and_never_later(db_session, ow
     assert (out["thread_id"], out["as_of_day_no"], out["label"]) == (thread.id, 3, threads_mod.SIMULATED_LABEL)
     by = {h["symbol"]: h for h in out["holds"]}
     assert [h["symbol"] for h in out["holds"]] == ["S04", "S05", "S03", "S01"]  # entry order
-    close = float(world.raw["S04"].loc[W1[-1], "close"])  # the last ended close, nothing later
+    close = _closed(world, "S04", W1[-1])  # the last ended close, nothing later
     entry = bar_close(world, "S04", W1[0], "10:00")
     assert (by["S04"]["status"], by["S04"]["last_close"], by["S04"]["price_basis"], by["S04"]["days_held"]) == (
         "open",
@@ -459,7 +475,7 @@ def test_a_hold_carried_into_the_next_week_reports_only_that_weeks_gaps_and_stop
     _end(db_session, owner, svc, day1)
     _pass_days(db_session, owner, svc, thread, 7)
     one, two = (_row(_week(db_session, thread, n).review, "S01") for n in (1, 2))
-    gap_up = bar_close(world, "S01", DAYS[3], "09:30") - float(world.raw["S01"].loc[DAYS[2], "close"])
+    gap_up = journal_mod.fill_price(bar_close(world, "S01", DAYS[3], "09:30")) - _closed(world, "S01", DAYS[2])
     assert (one["gap_usd"], one["stop"], one["days_held"]) == (_approx(-10 * gap_up), "away", 3)
     assert (two["gap_usd"], two["stop"], two["status"], two["days_held"], two["entry_day_no"]) == (
         0.0,
@@ -468,9 +484,7 @@ def test_a_hold_carried_into_the_next_week_reports_only_that_weeks_gaps_and_stop
         8,
         1,
     )
-    assert two["pnl_usd"] == _approx(
-        10 * (entry - float(world.raw["S01"].loc[W2[-1], "close"]))
-    )  # marked at the Friday close
+    assert two["pnl_usd"] == _approx(10 * (entry - _closed(world, "S01", W2[-1])))  # marked at the Friday close
     (check,) = [c for c in _week(db_session, thread, 2).review["adherence"]["checks"] if c["id"] == "stop_honored"]
     assert check["applicable"] is False
 
@@ -532,7 +546,7 @@ def test_a_stop_crossing_is_honored_by_a_prompt_exit_at_the_moment_she_could_act
     assert (check["applicable"], check["passed"], check["detail"]) == (True, honored, f"{int(honored)} of 1")
     row = _row(review, "S01")
     assert row["stop"] == ("honored" if honored else "set" if watched else "away")
-    gap_up = bar_close(world, "S01", DAYS[3], "09:30") - float(world.raw["S01"].loc[DAYS[2], "close"])
+    gap_up = journal_mod.fill_price(bar_close(world, "S01", DAYS[3], "09:30")) - _closed(world, "S01", DAYS[2])
     assert row["gap_usd"] == _approx(-10 * gap_up) and row["gap_usd"] < -50  # a short loses on a gap up
 
 
@@ -683,7 +697,7 @@ def test_an_early_close_freezes_the_partial_week_and_books_the_exits_in_it(db_se
     assert [d["day_no"] for d in review["days"]] == [4, 5]
 
     s03, s04 = _row(review, "S03"), _row(review, "S04")
-    close = float(world.raw["S03"].loc[W2[1], "close"])  # raw is adjusted after the split
+    close = _closed(world, "S03", W2[1])  # raw is adjusted after the split
     entry = bar_close(world, "S03", W1[1], "11:00") / 2
     assert (s03["status"], s03["exit_day_no"], s03["days_held"]) == ("closed", 5, 4)  # the last ended close, Day 5
     assert s03["exit_price"] == pytest.approx(close, abs=1e-4) and s03["pnl_usd"] == _approx(80 * (close - entry))

@@ -303,7 +303,7 @@ def test_the_first_list_has_the_gapper_priced_at_the_0814_bar_and_counts_what_it
     assert out["data_through"] == et(DAYS[0], "08:15") and out["universe"]["size"] == 3
     assert "Practice universe · 3 symbols the Desk has scanned" in out["universe"]["label"]
     assert out["warnings"] == [
-        "Only 1 of the 3 scanned symbols met Gap up and Gap down"
+        "Only 1 of the 3 scanned symbols met Gap up or Gap down"
         " · loosen a filter in the Screener to widen the next days' lists"
     ]
     assert out["review"] is None and out["journal"] is None and out["clock"] is None
@@ -331,7 +331,7 @@ def test_an_empty_list_says_why_in_the_words_of_the_cause(db_session, user_id, s
     db_session.commit()
     second = _open(db_session, user_id, svc).day_list  # a quiet morning: nothing gaps 3%
     assert plan_mod.day_list_out(db_session, user_id, second.id, svc)["warnings"] == [
-        "None of the 3 scanned symbols met Gap up and Gap down"
+        "None of the 3 scanned symbols met Gap up or Gap down"
         " · loosen a filter in the Screener to widen the next days' lists"
     ]
 

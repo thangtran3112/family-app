@@ -47,7 +47,9 @@ async function startTwoNamePlan(page: Page, context: BrowserContext) {
   expect((await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: all } })).ok()).toBeTruthy();
   await openDesk(page, "/practice");
   const threads = page.locator("#threads");
-  await threads.getByRole("form", { name: "New thread" }).getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
+  const form = threads.getByRole("form", { name: "New thread" });
+  await form.getByRole("group", { name: PRACTICE_COPY.threadStopOnEntry }).getByRole("button", { name: "No", exact: true }).click(); // this spec is not about stops (D-060)
+  await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
   await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText("$50,000");
 
   const daily = page.locator("#daily-list");

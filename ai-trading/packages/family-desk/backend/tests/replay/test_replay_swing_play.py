@@ -274,6 +274,84 @@ def test_a_carried_hold_reads_the_prior_close_until_a_regular_price_is_revealed_
     assert held["gap_usd"] == card["gap_usd"] and held["price_basis"] == "last"
 
 
+def _official_close_off_the_last_bar(world, symbol, day, delta):
+    """Make the official (daily bar) close of `day` differ from the last one-minute close by `delta`, as it does live
+    (D-064): the closing auction prints after the 15:59 bar. The raw and the split-adjusted daily bars both move."""
+    for frames in (world.raw, world.split):
+        frame = frames[symbol].copy()
+        frame.loc[day, "close"] = round(float(frame.loc[day, "close"]) + delta, 4)
+        frames[symbol] = frame
+
+
+@pytest.mark.parametrize("tape", ["off", "on"])
+def test_a_carried_holds_pnl_at_the_window_end_equals_the_day_summary_to_the_cent(
+    db_session, owner, world, svc, tape
+) -> None:
+    """D-064: the 16:00 playhead and the ended day value the same hold at the same price, so the hold card, the strip,
+    the day summary, the equity series and the thread's equity agree. They used to read the last one-minute close live
+    and the daily bar's close after End day (a $6 to $12 gap on 100 shares)."""
+    _official_close_off_the_last_bar(world, "S04", D2, 0.37)
+    thread, _ = ready_thread(db_session, owner, svc, tape=tape)
+    entry = _carry(db_session, owner, svc, world, thread, "S04", 0, shares=100)
+    row, (session,) = _day(db_session, owner, svc, thread, "S04")
+    _advance(db_session, owner, svc, session, "16:00", day=D2)
+
+    card = session_mod.session_out(session_mod.context(db_session, svc, session))["open_trade"]
+    strip = next(r for r in _feed(db_session, owner, svc, session)["strip"] if r["symbol"] == "S04")
+    official = journal_mod.fill_price(float(world.raw["S04"].loc[D2, "close"]))
+    assert card["last_price"] == official != bar_close(world, "S04", D2, "15:59")
+    expected = round((official - float(entry.entry_price)) * 100, 2)
+    assert card["unrealized_usd"] == strip["hold"]["unrealized_usd"] == expected
+
+    _end(db_session, owner, svc, row)
+    summary = row.journal
+    assert summary["holds"][0]["unrealized_usd"] == expected
+    assert summary["holds"][0]["last_close"] == official
+    assert summary["equity_usd"] == round(summary["balance_usd"] + expected, 2)
+    assert swing.state(db_session, thread)["equity_usd"] == summary["equity_usd"]
+    assert swing.state(db_session, thread)["equity_series"][-1]["equity_usd"] == summary["equity_usd"]
+
+
+def test_a_swing_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(db_session, owner, world, svc) -> None:
+    """D-067: the same rule as the day replay. The stop typed with the entry is the hold's stop and its R basis."""
+    thread, _ = ready_thread(db_session, owner, svc, plan={"stopNoteOnEntry": "yes"})
+    _, (session,) = _day(db_session, owner, svc, thread, "S01")
+    _advance(db_session, owner, svc, session, "10:00")
+    problem = _rejected(
+        session_mod.place_mark, db_session, owner, session.id, svc, {"kind": "long_entry", "shares": 10}
+    )
+    assert (problem.message, problem.path, problem.status) == (session_mod.STOP_REQUIRED, "stopPrice", 422)
+    assert (
+        db_session.execute(select(PracticeHold)).first() is None
+        and db_session.execute(select(PracticeMark)).first() is None
+    )
+    price = bar_close(world, "S01", D1, "09:59")
+    out = _mark(db_session, owner, svc, session, "long_entry", shares=10, stopPrice=off(price, -1))
+    assert out["hold"]["stop_price"] == off(price, -1) and out["hold"]["stop_at_entry"] == off(price, -1)
+    moved = _mark(db_session, owner, svc, session, "stop", stopPrice=off(price, -2))  # the Stop key places a stop too
+    assert moved["hold"]["stop_price"] == off(price, -2) and moved["hold"]["stop_at_entry"] == off(price, -1)
+
+
+def test_the_swing_feed_at_the_open_serves_only_bars_that_have_closed_by_the_playhead(
+    db_session, owner, world, svc
+) -> None:
+    """D-062: the chart data table of a swing day carries no dates, and at 09:30 it still lists the 09:45 and 10:00
+    bars of PRIOR sessions. None of those rows is a minute of the day itself: every bar closes at the playhead or
+    before it."""
+    thread, _ = ready_thread(db_session, owner, svc)
+    _, (session,) = _day(db_session, owner, svc, thread, "S01")
+    for interval in ("5m", "15m"):
+        out = session_mod.feed(db_session, owner, session.id, svc, interval=interval)
+        width = pd.Timedelta(minutes=int(interval[:-1]))
+        playhead = pd.Timestamp(out["revealed_through"])
+        assert playhead == et(D1, "09:30") and len(out["bars"]) > 100
+        assert all(pd.Timestamp(bar["t"]) + width <= playhead for bar in out["bars"])  # nothing after the playhead
+        at = [pd.Timestamp(bar["t"]) for bar in out["bars"]]
+        earlier = [t for t in at if t.tz_convert(ET).strftime("%H:%M") in ("09:45", "10:00")]
+        assert earlier and all(t < et(D1, "04:00") for t in earlier)  # from sessions before Day 1
+        assert out["forming"] is None and out["last"] is None
+
+
 # -- marks through the holds (b2) ------------------------------------------------------------------------------------
 
 
@@ -737,7 +815,7 @@ def test_the_strip_measures_a_carried_hold_against_its_restated_prior_close_afte
     hold = _hold(db_session, thread, "S03")
     assert hold.shares == 200 and float(hold.last_close) == pytest.approx(50.0, rel=0.02)  # restated, not the raw 100
     assert abs(row["chg_pct"]) < 2  # the raw prior close would read -50%
-    assert out["levels"]["prior_close"] == float(hold.last_close)
+    assert out["levels"]["prior_close"] == pytest.approx(float(hold.last_close), abs=0.005)  # the mark is whole cents
     raw_prior = float(world.raw["S03"].loc[DAYS[4], "close"])
     assert raw_prior == pytest.approx(100.0, rel=0.02) and out["levels"]["prior_close"] != raw_prior
 

@@ -4,6 +4,7 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { replayRail } from "./swing-helpers";
 
 // The Practice lane (02o §i, step 5): hub to start, play, step, B, T, S/X, end, the journal, and a resumed session.
 // The backend runs with `DESK_REPLAY_STUB=1` (`replay/fixture.py`): the one replayable day is TSLA on Fri 2026-09-25
@@ -52,8 +53,10 @@ async function startStubSession(page: Page) {
   await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
 }
 
-/** Start a practice thread from the hub (02r, D-007): the risk plan lives on the thread, not on the daily-list form. */
-async function startThread(page: Page, plan: { balance?: string; maxLoss?: string; maxTrades?: string; note?: string } = {}) {
+/** Start a practice thread from the hub (02r, D-007): the risk plan lives on the thread, not on the daily-list form. The plan
+ *  asks for a stop on every entry by default and refuses an entry without one (D-060), so a spec that is not about stops sets
+ *  Stop on every entry to No unless it passes `stop: true`. */
+async function startThread(page: Page, plan: { balance?: string; maxLoss?: string; maxTrades?: string; note?: string; stop?: boolean } = {}) {
   await openDesk(page, "/practice");
   const threads = page.locator("#threads");
   const form = threads.getByRole("form", { name: "New thread" });
@@ -62,6 +65,7 @@ async function startThread(page: Page, plan: { balance?: string; maxLoss?: strin
   if (plan.maxLoss) await form.getByLabel("Max loss ($)").fill(plan.maxLoss);
   if (plan.maxTrades) await form.getByLabel("Max trades").fill(plan.maxTrades);
   if (plan.note) await form.getByLabel(/^Plan note/).fill(plan.note);
+  if (!plan.stop) await form.getByRole("group", { name: PRACTICE_COPY.threadStopOnEntry }).getByRole("button", { name: "No", exact: true }).click();
   await form.getByRole("button", { name: PRACTICE_COPY.threadSubmit }).click();
   await expect(threads.getByRole("article", { name: "Active practice thread" })).toContainText(plan.balance ? formatBalance(Number(plan.balance)) : "$50,000");
   return threads;
@@ -338,7 +342,7 @@ test.describe("Practice", () => {
     expect(created.ok()).toBeTruthy();
 
     // The hub: start a thread first (its risk plan: a $600 daily loss, at most 3 trades), then the plan form, since there is no plan yet.
-    const threads = await startThread(page, { maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks." });
+    const threads = await startThread(page, { maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks.", stop: true });
     const daily = page.locator("#daily-list");
     await expect(daily.getByRole("form", { name: "Daily list plan" })).toBeVisible();
     // D-007: the PLAN block left the daily form; the thread carries it.
@@ -424,14 +428,19 @@ test.describe("Practice", () => {
     await expect(side).toContainText("Plan note: Trade only clean pullbacks.");
     await expect(side.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
     // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
+    // D-060: the plan asks for a stop on every entry, so B without a stop price is refused in plain words and nothing is placed.
     await page.keyboard.press("b");
-    // D-022: the entry went in without a stop; the nudge is plain words with one click to the stop note, and nothing was blocked.
-    const nudge = side.getByRole("button", { name: "Add a stop note for this entry" });
-    await expect(nudge).toBeVisible();
-    await nudge.click();
-    await expect(page.getByRole("form", { name: "Stop note" })).toBeVisible();
-    await page.getByRole("form", { name: "Stop note" }).getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: PRACTICE_COPY.stopFirst })).toBeVisible();
+    await page.getByRole("button", { name: "Dismiss message" }).click();
+    const practice = await replayRail(page, "Practice");
+    await expect(practice.getByRole("button", { name: "Long (B)" })).toBeDisabled(); // the buttons wait for the stop price too
+    await practice.getByLabel("Stop price (required)").fill("100");
+    await practice.getByRole("button", { name: "Long (B)" }).click();
+    // D-060: Stop (T) places the stop typed in the field; no second form to save.
+    await practice.getByLabel("Stop price").fill("150");
+    await practice.getByRole("button", { name: "Stop (T)" }).click();
     await marksTab(page).click();
+    await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
     await expect(page.getByRole("tabpanel")).toContainText("Practice long");
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
@@ -737,6 +746,56 @@ test.describe("Practice", () => {
     await page.getByRole("link", { name: "Practice", exact: true }).first().click();
     await page.waitForURL(/\/practice$/);
     await expect(page.locator("#daily-list")).toContainText("Day 2 of 5 · list ready");
+  });
+
+  // D-058: a slow open outlasts the gateway (524) while the server finishes it. The screen says it is still working, asks again,
+  // and the second answer is the day; it never ends on "Couldn't open the list".
+  test("Next day cut short by the gateway asks again and opens the day, saying it is still working", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const anyClose = {
+      schemaVersion: 1,
+      name: "Any close",
+      watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
+      liquidity: { minPrice: 1, minAvgVolume: 1 },
+      when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
+      maxResults: 50,
+    };
+    expect((await context.request.post(`${origin}/api/desk/screener/filters`, { data: { spec: anyClose } })).ok()).toBeTruthy();
+    await startThread(page);
+    const daily = page.locator("#daily-list");
+    const start = daily.getByRole("button", { name: PRACTICE_COPY.planSubmit, exact: true });
+    // D-050: with no filter ticked there is nothing to list, so Start day waits and says why.
+    await expect(start).toBeDisabled();
+    await expect(daily).toContainText(PRACTICE_COPY.planSaveFilterFirst);
+    await daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
+    await expect(start).toBeEnabled();
+    await daily.locator('input[type="date"]').fill(DAY);
+    await daily.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
+    await daily.getByLabel("To", { exact: true }).fill("09:40");
+    await daily.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "1m", exact: true }).click();
+    // D-049: the arm rail of the session form says what the plan armed (the plan arms its filter).
+    await start.click();
+    await expect(daily.getByRole("button", { name: PRACTICE_COPY.planStart })).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator("#start-practice").getByText("Arm up to 5 strategies · 1 armed")).toBeVisible();
+    await daily.getByRole("button", { name: PRACTICE_COPY.planStart }).click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    const dayOne = page.url();
+
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    let cut = 0;
+    await page.route("**/api/desk/replay/daily/next", async (route) => {
+      if (cut === 0) {
+        cut += 1;
+        await route.fulfill({ status: 524, contentType: "text/html", body: "<html>A timeout occurred</html>" });
+      } else await route.continue();
+    });
+    await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
+    await expect(page.getByText(PRACTICE_COPY.planStillWorking)).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.planStartError)).toHaveCount(0);
+    await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== dayOne, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5");
+    expect(cut).toBe(1);
   });
 
   // D-001: a filter that reads bars of the list day itself cannot be listed before its first bar has closed.
