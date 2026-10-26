@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AVATAR_MENU,
+  hasMoreLeftRail,
   hasPracticeLeftRail,
   isNavActive,
   isPracticePath,
@@ -9,6 +10,8 @@ import {
   isWrongLane,
   laneForPath,
   LANE_STORAGE_KEY,
+  MORE_SECTIONS,
+  moreSectionFor,
   otherLane,
   PRIMARY_NAV,
   readLanePreference,
@@ -16,7 +19,7 @@ import {
 } from "./lanes.ts";
 
 test("every desktop route maps to a lane; the MVP routes are technical", () => {
-  for (const path of ["/", "/today", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/practice", "/practice/replay", "/practice/journal", "/technicals", "/futures", "/futures/specs", "/settings", "/more"]) {
+  for (const path of ["/", "/today", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/practice", "/practice/replay", "/practice/journal", "/technicals", "/futures", "/futures/specs", "/settings", "/more", "/feedback", "/feedback/new"]) {
     assert.equal(laneForPath(path), "technical", path);
   }
   for (const path of ["/holdings", "/covered-calls", "/stocks", "/paper", "/backtests", "/ask", "/holdings/"]) {
@@ -35,7 +38,8 @@ test("wrong-lane routes show the interstitial in the other lane only", () => {
 
 test("technical primary nav and the avatar menu match 02l §b2", () => {
   assert.deepEqual(PRIMARY_NAV.technical.map((item) => item.label), ["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
-  assert.deepEqual(AVATAR_MENU.map((item) => item.label), ["Settings", "More"]);
+  assert.deepEqual(AVATAR_MENU.map((item) => item.label), ["Settings", "More", "Feedback"]);
+  assert.equal(AVATAR_MENU.find((item) => item.label === "Feedback")?.href, "/feedback");
   assert.equal(isNavActive("/", "/today"), true);
   assert.equal(isNavActive("/", "/screener"), false);
   assert.equal(isNavActive("/screener", "/screener/filters"), true);
@@ -68,6 +72,25 @@ test("Practice routes: nav highlight, band and the replay-only left rail", () =>
   assert.equal(isReplayWorkspacePath("/practice/replay/"), true);
   assert.equal(isReplayWorkspacePath("/practice/journal"), false);
   assert.equal(isReplayWorkspacePath("/practice"), false);
+});
+
+test("Settings, More and the Feedback log swap the watchlists for the Settings & More sections", () => {
+  for (const path of ["/settings", "/more", "/feedback", "/feedback/new", "/feedback/", "/settings/"]) assert.equal(hasMoreLeftRail(path), true, path);
+  for (const path of ["/", "/alerts", "/practice", "/feedbacks", "/feedback/other", "/holdings"]) assert.equal(hasMoreLeftRail(path), false, path);
+  // The Practice panel and the More sections never both claim one route.
+  for (const path of ["/practice/replay", "/practice/day", "/practice/journal", "/settings", "/more", "/feedback", "/feedback/new"]) {
+    assert.equal(hasPracticeLeftRail(path) && hasMoreLeftRail(path), false, path);
+  }
+});
+
+test("the More rail lists the Settings sections and Feedback, and selects the one the address points at", () => {
+  assert.deepEqual(MORE_SECTIONS.map((section) => section.label), ["Defaults", "Alert channels", "Data sources", "Brokers", "Strategies", "Feedback"]);
+  assert.equal(moreSectionFor("/feedback", ""), "feedback");
+  assert.equal(moreSectionFor("/feedback/new", "#settings-trading"), "feedback");
+  assert.equal(moreSectionFor("/settings", ""), "defaults");
+  assert.equal(moreSectionFor("/settings", "#settings-trading"), "brokers");
+  assert.equal(moreSectionFor("/more", "#settings-strategies"), "strategies");
+  assert.equal(moreSectionFor("/settings", "#unknown"), "defaults");
 });
 
 test("the replay, the day list and the journal own the left rail", () => {

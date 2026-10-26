@@ -1,6 +1,9 @@
 .bar { display: flex; height: 24px; align-items: center; gap: var(--space-4); border-top: 1px solid var(--color-hairline); background: var(--color-ground); padding-inline: var(--space-4); color: var(--color-muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
-.alerts { margin-left: auto; }
 .alerts[data-paused="true"] { color: var(--color-amber); }
 /* A Practice route's own line: items with a hairline between them, the second group pushed right. */
 .item + .item { border-left: 1px solid var(--color-hairline); padding-left: var(--space-4); }
 .right { display: inline-flex; align-items: center; gap: var(--space-4); margin-left: auto; }
+/* "Report a problem" (02s): quiet, at the right end, underlined so it reads as a link at 12 px. */
+.report { color: var(--color-muted); text-decoration: underline; }
+.report:hover { color: var(--color-text); }
+.report:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }

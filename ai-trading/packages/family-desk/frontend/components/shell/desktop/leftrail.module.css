@@ -34,3 +34,11 @@
 .muted { margin: 0; padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-label); }
 .link { color: var(--color-amber); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
+/* "Settings & More" sections (board KSZ-0): 32 px rows, the selected one has the amber left edge. */
+.more { display: flex; flex-direction: column; padding-bottom: var(--space-3); }
+.moreTitle { margin: 0; padding: var(--space-3) var(--space-4) var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.more .list { padding-inline: var(--space-3); }
+.moreLink { display: flex; min-height: 32px; align-items: center; padding: 0 var(--space-3); color: var(--color-muted); font-size: var(--text-label); }
+.moreLink:hover { background: var(--color-raised); color: var(--color-text); }
+.moreLink[aria-current="page"] { background: var(--color-raised); box-shadow: inset 2px 0 0 var(--color-amber); color: var(--color-text); font-weight: var(--weight-semibold); }
+.moreLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
