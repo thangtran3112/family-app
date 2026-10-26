@@ -12,7 +12,7 @@ import swing_world as sw
 from bars import trading_days
 from daily_world import SyntheticBars, make_services
 from swing_world import DAYS, NOW, make_owner, ready_thread, swing_services, swing_world
-from test_replay_swing_lifecycle import _end, _enter, _open, _pass_days
+from test_replay_swing_lifecycle import _end, _enter, _open, _pass_days, _practice
 from test_replay_swing_play import _advance, _carry, _day, _dip, _first_cross, _hold, _mark, _rejected, _undo
 
 from ai_trading.contracts.practice_thread import PracticeThreadPatchV1
@@ -275,3 +275,20 @@ def test_a_day_list_without_a_plan_snapshot_scores_its_week_under_the_live_plan(
     db_session.commit()
     _end(db_session, owner, svc, day1)
     assert _entries_check(db_session, svc, thread, 1) == (True, True, "2 of 5")
+
+
+def test_returning_to_a_name_that_fell_behind_the_day_clock_lifts_it_to_the_clock(db_session) -> None:
+    """A name opened earlier falls behind the shared clock while she plays another one; `start_session` (the strip's
+    switch, Resume, the stop toast's Exit) lifts it, so the next mark is not refused as 'behind the day clock'."""
+    svc = swing_services(swing_world())
+    owner = make_owner(db_session)
+    thread, _ = ready_thread(db_session, owner, svc)
+    row = _open(db_session, owner, svc, thread)
+    a, b = _practice(db_session, owner, svc, row, "S01", "S02")
+    _advance(db_session, owner, svc, a, "10:00", day=DAYS[0])
+    _advance(db_session, owner, svc, b, "11:00", day=DAYS[0])  # the clock is 11:00; S01 is still at 10:00
+    again = swing.start_session(db_session, owner, row.id, "S01", svc)
+    db_session.commit()
+    assert again.id == a.id
+    assert again.revealed_through == b.revealed_through
+    assert _mark(db_session, owner, svc, again, "long_entry", shares=10)["hold"]["symbol"] == "S01"

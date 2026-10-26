@@ -909,6 +909,12 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     row.updated_at = svc.now()
     if row.revealed_through is None or plan_mod._utc(created.revealed_through) > plan_mod._utc(row.revealed_through):
         row.revealed_through = created.revealed_through
+    elif created.status == "active" and plan_mod._utc(created.revealed_through) < plan_mod._utc(row.revealed_through):
+        # A name opened earlier fell behind the shared day clock while she played another one. Returning to it lifts it
+        # to the clock (what lies between is already revealed on the strip and cannot be marked), exactly as an
+        # `advance` would; every advance scanned all holds' stops, so nothing is skipped by the lift.
+        created.revealed_through = row.revealed_through
+        created.updated_at = svc.now()
     db.flush()
     return created
 
