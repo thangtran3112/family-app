@@ -13,6 +13,7 @@ const deskOrigin = "https://trading.tobytran.dev";
 const runDir = "/Users/tobytran/personal/local-llm/hermes/hermes-setup/runs/desk-feedback-log-20261026/p3";
 const testUsername = process.env.FAMILY_DESK_TEST_USERNAME;
 const testPassword = process.env.FAMILY_DESK_TEST_PASSWORD;
+const trustCode = process.env.FAMILY_DESK_TEST_TRUST_CODE;
 
 const REQUEST = {
   title: "Show the open report count on the Feedback menu item",
@@ -50,6 +51,15 @@ test.describe("production test user · feedback log", () => {
       page.waitForURL(`${deskOrigin}/**`, { timeout: 45_000 }).catch(() => undefined),
       blocked.waitFor({ timeout: 45_000 }).catch(() => undefined),
     ]);
+    // Client Trust (new-device email check): when FAMILY_DESK_TEST_TRUST_CODE is set, fill it into the ordinary code form and
+    // continue. Without it the check below still fails with the named blocker. The code is never printed.
+    if (trustCode && /client-trust/.test(page.url())) {
+      await page.locator("input[name=code], input[autocomplete=one-time-code]").first().fill(trustCode);
+      await Promise.race([
+        page.waitForURL(`${deskOrigin}/**`, { timeout: 45_000 }).catch(() => undefined),
+        page.getByText(/incorrect|expired|invalid/i).first().waitFor({ timeout: 45_000 }).catch(() => undefined),
+      ]);
+    }
     await expect(
       blocked,
       '"Check your email" = Clerk Client Trust (new-device verification) is on; "Setup your organization" = the instance requires organization membership',
