@@ -75,25 +75,6 @@ class SwingStateOut(BaseModel):
     next: Literal["day", "week_review", "finished"]
 
 
-class ThreadSummaryOut(SwingOptional):
-    """A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list. A swing
-    thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo)."""
-
-    swing_only: ClassVar[tuple[str, ...]] = ("swing",)
-
-    thread: PracticeThreadV1
-    today: ThreadTodayOut | None
-    label: str
-    swing: SwingStateOut | None = None
-
-    @field_serializer("thread")
-    def _thread_as_authored(
-        self, thread: PracticeThreadV1
-    ):  # no return annotation: the schema stays `PracticeThreadV1`
-        """An empty stat or an unset limit is absent, never null (the Zod contract does not accept null there)."""
-        return thread.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
 class ThreadDayOut(BaseModel):
     """One ended practice day, in the order she practised. `balance` is the SIMULATED balance at the day's end."""
 
@@ -106,6 +87,28 @@ class ThreadDayOut(BaseModel):
     pnl_usd: FiniteFloat
     adherence_pct: int | None
     balance: FiniteFloat
+
+
+class ThreadSummaryOut(SwingOptional):
+    """A thread with its plan and stats (the contract), and today. A row of the hub's "Your threads" list. A swing
+    thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo)."""
+
+    swing_only: ClassVar[tuple[str, ...]] = ("swing",)
+
+    thread: PracticeThreadV1
+    today: ThreadTodayOut | None
+    last_day: (
+        ThreadDayOut | None
+    )  # the last ended day, from the same series as the balance: the card's row with no day open
+    label: str
+    swing: SwingStateOut | None = None
+
+    @field_serializer("thread")
+    def _thread_as_authored(
+        self, thread: PracticeThreadV1
+    ):  # no return annotation: the schema stays `PracticeThreadV1`
+        """An empty stat or an unset limit is absent, never null (the Zod contract does not accept null there)."""
+        return thread.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 class CurvePointOut(BaseModel):

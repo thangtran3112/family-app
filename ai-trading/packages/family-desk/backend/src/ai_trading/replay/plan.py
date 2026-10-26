@@ -30,7 +30,7 @@ from typing import Any
 import pandas as pd
 from ai_trading_common.errors import ProviderError
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -364,6 +364,24 @@ def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
     ).scalar_one_or_none()
 
 
+def _day_offset(db: Session, plan: PracticePlan) -> int:
+    """The days the thread had ended before this plan began (D-047). A plan counts its own days from 1, so a plan that
+    replaced another starts again at 1; the thread's own count (the journal's `n`) is `day_no + offset`, one number
+    for each day of the thread on every screen."""
+    if plan.thread_id is None:
+        return 0
+    return db.execute(
+        select(func.count())
+        .select_from(ReplayDayList)
+        .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
+        .where(
+            PracticePlan.thread_id == plan.thread_id,
+            PracticePlan.id < plan.id,
+            ReplayDayList.status == "ended",
+        )
+    ).scalar_one()
+
+
 def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
     if _is_swing(plan):
         return _swing().plan_out(db, plan)
@@ -390,6 +408,7 @@ def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
         "sessions": spec["sessions"],
         "max_symbols": max_symbols(spec),
         "days_opened": plan.days_opened,
+        "day_offset": _day_offset(db, plan),
         "spec": spec,
         "filters": [{"id": f["id"], "name": names.get(f["id"], "Removed filter")} for f in spec["screen"]["filters"]],
         "current": None if latest is None else {"id": latest.id, "day_no": latest.day_no, "status": latest.status},

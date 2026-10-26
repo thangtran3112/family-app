@@ -506,6 +506,7 @@ class PracticePlanOut(BaseModel):
     sessions: int
     max_symbols: int  # the most names she can star and practise in a day (the plan's `maxSymbols`, else 5)
     days_opened: int
+    day_offset: int  # ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset`
     filters: list[PlanFilterOut]
     current: PlanCurrentOut | None
     next_day: date | None

@@ -6099,6 +6099,10 @@
               }
             ]
           },
+          "day_offset": {
+            "title": "Day Offset",
+            "type": "integer"
+          },
           "days_opened": {
             "title": "Days Opened",
             "type": "integer"
@@ -6192,6 +6196,7 @@
           "sessions",
           "max_symbols",
           "days_opened",
+          "day_offset",
           "filters",
           "current",
           "next_day",
@@ -10639,6 +10644,16 @@
             "title": "Label",
             "type": "string"
           },
+          "last_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "swing": {
             "anyOf": [
               {
@@ -10666,6 +10681,7 @@
         "required": [
           "thread",
           "today",
+          "last_day",
           "label",
           "daily",
           "curve"
@@ -10680,6 +10696,16 @@
             "title": "Label",
             "type": "string"
           },
+          "last_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "swing": {
             "anyOf": [
               {
@@ -10707,6 +10733,7 @@
         "required": [
           "thread",
           "today",
+          "last_day",
           "label"
         ],
         "title": "ThreadSummaryOut",

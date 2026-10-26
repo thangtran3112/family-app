@@ -422,8 +422,13 @@ def _today(db: Session, thread: PracticeThread) -> dict[str, Any] | None:
 
 def summary(db: Session, thread: PracticeThread) -> dict[str, Any]:
     ledger = _ledger(db, thread.id)
-    stats = _stats(thread, ledger, _series(db, thread, ledger))
-    out = {"thread": _contract(db, thread, stats), "today": _today(db, thread), "label": SIMULATED_LABEL}
+    series = _series(db, thread, ledger)
+    out = {
+        "thread": _contract(db, thread, _stats(thread, ledger, series)),
+        "today": _today(db, thread),
+        "last_day": series[-1] if series else None,  # the card's row when no day is open (D-048)
+        "label": SIMULATED_LABEL,
+    }
     if thread.mode == "swing":
         out["swing"] = _swing().state(db, thread)
     return out
@@ -439,6 +444,7 @@ def detail(db: Session, thread: PracticeThread) -> dict[str, Any]:
     out = {
         "thread": _contract(db, thread, _stats(thread, ledger, series)),
         "today": _today(db, thread),
+        "last_day": series[-1] if series else None,
         "label": SIMULATED_LABEL,
         "daily": series,
         "curve": curve,

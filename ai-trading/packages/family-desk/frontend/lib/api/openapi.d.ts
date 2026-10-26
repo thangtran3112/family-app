@@ -3339,6 +3339,8 @@ export interface components {
          */
         PracticePlanOut: {
             current: components["schemas"]["PlanCurrentOut"] | null;
+            /** Day Offset */
+            day_offset: number;
             /** Days Opened */
             days_opened: number;
             /** Filters */
@@ -4972,6 +4974,7 @@ export interface components {
             daily: components["schemas"]["ThreadDayOut"][];
             /** Label */
             label: string;
+            last_day: components["schemas"]["ThreadDayOut"] | null;
             swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];
             today: components["schemas"]["ThreadTodayOut"] | null;
@@ -4984,6 +4987,7 @@ export interface components {
         ThreadSummaryOut: {
             /** Label */
             label: string;
+            last_day: components["schemas"]["ThreadDayOut"] | null;
             swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];
             today: components["schemas"]["ThreadTodayOut"] | null;
