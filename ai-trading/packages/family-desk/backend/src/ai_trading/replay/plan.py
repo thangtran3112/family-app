@@ -473,11 +473,11 @@ def earnings_flags(sources: Any, symbols: list[str], day: date, now: datetime) -
             break
         try:
             events = days_mod.earnings_events(sources, symbol, now)
+            if events and screen.reported_before_open(events, day):
+                flagged.add(symbol)
         except Exception as exc:  # noqa: BLE001 -- never fail a list over a calendar lookup
             log.warning("earnings lookup failed for %s: %s", symbol, type(exc).__name__)
             continue
-        if events and screen.reported_before_open(events, day):
-            flagged.add(symbol)
     return flagged
 
 
