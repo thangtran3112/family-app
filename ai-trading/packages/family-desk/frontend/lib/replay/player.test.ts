@@ -58,3 +58,26 @@ test("the status line reads ready at the open, then paused, playing and window e
   assert.equal(statusLine("at_end", 1, "2026-04-07T20:00:00Z", start), "Window end · 4:00 PM");
   assert.equal(statusLine("loading", 1, start, start), "Preparing the replay…");
 });
+
+test("a stop pause stops playback and never stacks a request", () => {
+  const playing = run([{ type: "loaded", atEnd: false }, { type: "play" }, { type: "request" }]);
+  assert.equal(playing.busy, true);
+  assert.equal(canRequest(playing), false, "nothing starts while the advance is in flight");
+  const stopped = playerReducer(playing, { type: "settled", atEnd: false, paused: true });
+  assert.equal(stopped.status, "paused");
+  assert.equal(stopped.busy, false);
+  assert.equal(stopped.error, null);
+  assert.equal(stopped.speed, playing.speed, "the speed stays");
+  assert.equal(playerReducer(stopped, { type: "play" }).status, "playing", "she presses play when she is ready");
+  assert.equal(playerReducer(stopped, { type: "toggle" }).status, "playing");
+});
+
+test("a pause while stepping keeps the status; no pause keeps playing; the window end wins", () => {
+  const paused = run([{ type: "loaded", atEnd: false }, { type: "request" }]);
+  assert.equal(playerReducer(paused, { type: "settled", atEnd: false, paused: true }).status, "paused");
+  const playing = run([{ type: "loaded", atEnd: false }, { type: "play" }, { type: "request" }]);
+  assert.equal(playerReducer(playing, { type: "settled", atEnd: false, paused: false }).status, "playing");
+  assert.equal(playerReducer(playing, { type: "settled", atEnd: false }).status, "playing");
+  assert.equal(playerReducer(playing, { type: "settled", atEnd: true, paused: true }).status, "at_end");
+  assert.equal(canRequest(playerReducer(playing, { type: "settled", atEnd: false, paused: true })), true, "a step or a jump is still allowed after the pause");
+});

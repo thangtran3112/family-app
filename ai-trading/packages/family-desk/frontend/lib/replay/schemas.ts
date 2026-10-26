@@ -12,7 +12,8 @@ const timestamp = z.iso.datetime({ offset: true });
 const quality = z.enum(["realtime", "delayed-15m", "eod", "fallback", "unavailable"]);
 
 export const ReplayIntervalSchema = z.enum(["1m", "5m", "15m"]);
-export const TapeFeedSchema = z.enum(["sip", "iex"]);
+/** `off` is a swing session with the tape off: no prints are fetched and marks price at one-minute closes (02p). */
+export const TapeFeedSchema = z.enum(["sip", "iex", "off"]);
 export const SessionStatusSchema = z.enum(["active", "ended"]);
 export const ArmedSourceSchema = z.enum(["alert_strategy", "filter"]);
 export const MarkKindSchema = z.enum(["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note"]);
@@ -61,6 +62,10 @@ export const MarkSchema = z.object({
   source: z.enum(["her", "auto"]),
 }) satisfies z.ZodType<components["schemas"]["MarkOut"]>;
 
+export const PriceBasisSchema = z.enum(["prior_close", "last"]);
+
+/** In a swing session the open trade is the name's practice hold (`trade_no` is the hold id). The four swing fields are
+ *  absent for a day session, and a swing one that has no value yet (`gap_usd` before the first price) is absent too. */
 export const OpenTradeSchema = z.object({
   trade_no: finite.int(),
   side: SideSchema,
@@ -70,6 +75,10 @@ export const OpenTradeSchema = z.object({
   last_price: finite,
   unrealized_usd: finite,
   r: finite.nullable(),
+  opened_day_no: finite.int().nullish(),
+  days_held: finite.int().nullish(),
+  gap_usd: finite.nullish(),
+  price_basis: PriceBasisSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["OpenTradeOut"]>;
 
 const JournalTotalsSchema = z.object({
@@ -132,6 +141,88 @@ export const JournalSchema = z.object({
   signals_vs_trades: z.array(SignalVsTradeSchema),
   pnl_series: z.array(PnlPointSchema),
 }) satisfies z.ZodType<components["schemas"]["JournalOut"]>;
+
+// -- swing practice (02p): holds, the day strip, the stop pause and the daily block ----------------------------------------
+// Every swing-only key that has no value is ABSENT in the JSON (the API leaves it out), so those are `.nullish()`.
+
+export const EarningsChipSchema = z.object({
+  in_sessions: finite.int(),
+  timing: z.enum(["before open", "after close"]),
+}) satisfies z.ZodType<components["schemas"]["EarningsChipOut"]>;
+
+/** A practice hold. Day numbers and weekdays only: a swing payload carries no calendar date. */
+export const HoldSchema = z.object({
+  id: finite.int(),
+  symbol: z.string(),
+  side: SideSchema,
+  shares: finite.int(),
+  entry_day_no: finite.int(),
+  entry_weekday: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri"]),
+  entry_price: finite,
+  days_held: finite.int(),
+  stop_at_entry: finite.nullable(),
+  stop_price: finite.nullable(),
+  stop_hit: z.enum(["yes", "no"]),
+  status: z.enum(["open", "closed"]),
+  exit_day_no: finite.int().nullable(),
+  exit_price: finite.nullable(),
+  exit_source: z.enum(["her", "auto"]).nullable(),
+  last_close: finite.nullable(),
+  price_basis: PriceBasisSchema.nullable(),
+  unrealized_usd: finite.nullable(),
+  pnl_usd: finite.nullable(),
+  r: finite.nullable(),
+  gap_usd: finite.nullable(),
+  earnings: EarningsChipSchema.nullable(),
+  split_note: z.string().nullable(),
+}) satisfies z.ZodType<components["schemas"]["HoldOut"]>;
+
+/** Play stopped at the first minute that crossed an open hold's stop (`gap`: the day opened beyond it). */
+export const PausedSchema = z.object({
+  symbol: z.string(),
+  stop_price: finite,
+  at: timestamp,
+  price: finite,
+  kind: z.enum(["cross", "gap"]),
+  also: z.array(z.string()),
+}) satisfies z.ZodType<components["schemas"]["PausedOut"]>;
+
+export const StripHoldSchema = z.object({
+  side: SideSchema,
+  shares: finite.int(),
+  unrealized_usd: finite,
+  stop_price: finite.nullable(),
+  /** Signed in her favour: positive while the price is on the safe side of the stop, negative once it crossed. */
+  stop_distance_pct: finite.nullable(),
+  stopped: z.enum(["yes", "no"]),
+}) satisfies z.ZodType<components["schemas"]["StripHoldOut"]>;
+
+/** A row of the day strip: every open hold first, then the focus names; at most ten. */
+export const StripRowSchema = z.object({
+  symbol: z.string(),
+  source: z.enum(["hold", "focus"]),
+  last: finite.nullable(),
+  chg_pct: finite.nullable(),
+  hold: StripHoldSchema.nullable(),
+}) satisfies z.ZodType<components["schemas"]["StripRowOut"]>;
+
+export const DailyBarSchema = z.object({ t: z.iso.date(), o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
+  components["schemas"]["DailyBarOut"]
+>;
+
+const DailyHoldMarkerSchema = z.object({
+  entry_t: z.iso.date(),
+  side: SideSchema,
+  entry_price: finite,
+  stop_price: finite.nullable(),
+}) satisfies z.ZodType<components["schemas"]["DailyHoldMarkerOut"]>;
+
+/** The Daily chart: rebased bars through the session before the day, the forming candle, and this name's hold marker. */
+export const DailyBlockSchema = z.object({
+  bars: z.array(DailyBarSchema),
+  forming: DailyBarSchema.nullable(),
+  holds: z.array(DailyHoldMarkerSchema),
+}) satisfies z.ZodType<components["schemas"]["DailyBlockOut"]>;
 
 // -- sessions -----------------------------------------------------------------------------------------------
 
@@ -262,11 +353,19 @@ export const ReplayDeltaSchema = z.object({
   quiet_s: finite.int().nullable(),
   open_trade: OpenTradeSchema.nullable(),
   stamp: ReplayStampSchema,
+  /** Swing only: play stopped at a crossed stop (the clock is at that minute's close). */
+  paused: PausedSchema.nullish(),
+  /** Swing only: the day strip at the day clock. */
+  strip: z.array(StripRowSchema).nullish(),
+  /** Swing only: the forming day candle from the revealed one-minute bars. */
+  daily_forming: DailyBarSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["AdvanceOut"]>;
 
 export const ReplayFeedSchema = ReplayDeltaSchema.extend({
   interval: ReplayIntervalSchema,
   window_start: timestamp,
+  /** Swing only: the Daily chart's bars and this name's hold marker. */
+  daily: DailyBlockSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["FeedOut"]>;
 
 // -- marks --------------------------------------------------------------------------------------------------
@@ -279,6 +378,8 @@ export const MarkResultSchema = z.object({
   warning: z.string().nullable(),
   /** An exit mark books its P/L: the thread balance after it. */
   thread: ThreadBriefSchema.nullable(),
+  /** Swing only: the hold the mark opened, moved or closed (the symbol's open hold for a note). */
+  hold: HoldSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["MarkResultOut"]>;
 
 /** Undo answers the new book: the removed mark, the open trade and the journal. */
@@ -288,6 +389,8 @@ export const MarkUndoSchema = z.object({
   journal: JournalSchema,
   /** Undoing an exit takes its P/L back out of the thread balance. */
   thread: ThreadBriefSchema.nullable(),
+  /** Swing only: the hold after the undo (an undone entry leaves none). */
+  hold: HoldSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["MarkUndoOut"]>;
 
 export type ReplayStamp = z.infer<typeof ReplayStampSchema>;
@@ -312,3 +415,10 @@ export type ReplayLevels = z.infer<typeof ReplayDeltaSchema>["levels"];
 export type ReplayDelta = z.infer<typeof ReplayDeltaSchema>;
 export type ReplayFeed = z.infer<typeof ReplayFeedSchema>;
 export type MarkResult = z.infer<typeof MarkResultSchema>;
+export type PriceBasis = z.infer<typeof PriceBasisSchema>;
+export type EarningsChip = z.infer<typeof EarningsChipSchema>;
+export type Hold = z.infer<typeof HoldSchema>;
+export type Paused = z.infer<typeof PausedSchema>;
+export type StripRow = z.infer<typeof StripRowSchema>;
+export type DailyBar = z.infer<typeof DailyBarSchema>;
+export type DailyBlock = z.infer<typeof DailyBlockSchema>;

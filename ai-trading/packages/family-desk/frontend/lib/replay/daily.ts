@@ -19,13 +19,13 @@ const StarKindSchema = z.enum(["traded", "starred"]);
 
 const PlanFilterSchema = z.object({ id: finite.int(), name: z.string() }) satisfies z.ZodType<components["schemas"]["PlanFilterOut"]>;
 
-const PlanCurrentSchema = z.object({
+export const PlanCurrentSchema = z.object({
   id: finite.int(),
   day_no: finite.int(),
   status: DayListStatusSchema,
 }) satisfies z.ZodType<components["schemas"]["PlanCurrentOut"]>;
 
-const PlanPrepSchema = z.object({
+export const PlanPrepSchema = z.object({
   state: z.enum(["running", "done"]),
   done: finite.int(),
   total: finite.int(),
@@ -109,15 +109,15 @@ export const CandidateSchema = z.object({
   metrics: z.record(z.string(), metric),
 }) satisfies z.ZodType<components["schemas"]["CandidateOut"]>;
 
-const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
+export const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
 
-const DaySessionSchema = z.object({ id: finite.int(), symbol: z.string(), status: SessionStatusSchema }) satisfies z.ZodType<
+export const DaySessionSchema = z.object({ id: finite.int(), symbol: z.string(), status: SessionStatusSchema }) satisfies z.ZodType<
   components["schemas"]["DaySessionOut"]
 >;
 
 // -- peek -----------------------------------------------------------------------------------------------------
 
-const PeekDailyBarSchema = z.object({ t: z.iso.date(), o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
+export const PeekDailyBarSchema = z.object({ t: z.iso.date(), o: finite, h: finite, l: finite, c: finite, v: finite }) satisfies z.ZodType<
   components["schemas"]["PeekDailyBarOut"]
 >;
 
@@ -125,7 +125,7 @@ const PeekMinuteBarSchema = z.object({ t: timestamp, o: finite, h: finite, l: fi
   components["schemas"]["PeekMinuteBarOut"]
 >;
 
-const PeekLevelsSchema = z.object({
+export const PeekLevelsSchema = z.object({
   prior_high: metric.optional(),
   prior_low: metric.optional(),
   prior_close: metric.optional(),

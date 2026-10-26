@@ -22,7 +22,8 @@ export type PlayerAction =
   | { type: "toggle" }
   | { type: "speed"; speed: Speed }
   | { type: "request" }
-  | { type: "settled"; atEnd: boolean }
+  /** `paused`: the advance stopped at a crossed stop (swing, 02p); playback stops and waits for her. */
+  | { type: "settled"; atEnd: boolean; paused?: boolean }
   | { type: "failed"; message: string }
   | { type: "dismiss_error" };
 
@@ -44,7 +45,8 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
       return { ...state, busy: true };
     case "settled": {
       if (action.atEnd) return { ...state, status: "at_end", busy: false, error: null };
-      return { ...state, busy: false, error: null };
+      // A stop pause ends playback: no timer starts another request, she presses play (or steps) when she is ready.
+      return { ...state, status: action.paused && state.status === "playing" ? "paused" : state.status, busy: false, error: null };
     }
     case "failed":
       // Playback never keeps going after an error: the trader reads the message and presses play again.
