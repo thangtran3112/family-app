@@ -25,7 +25,7 @@ import logging
 import math
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import numpy as np
@@ -377,10 +377,16 @@ def reported_before_open(events: Sequence[tuple[date, str]], day: date) -> bool:
     """True when a report with an explicit time of day traded `day`'s session and was known by the open: a
     before-the-open report dated `day`, or an after-the-close report dated the session before. A report dated
     `day` after the close trades the next session, so it is not flagged; an undated time is skipped (the
-    notable-days rule would peek at the day's own gap to place it)."""
+    notable-days rule would peek at the day's own gap to place it).
+
+    Only events within a few days of `day` can trade `day`'s session, so events outside that window are
+    dropped before any calendar lookup: providers return full histories whose first reports predate the
+    XNYS calendar (2015-01-02) and would raise DateOutOfBounds out of `reaction_days`."""
     from ai_trading.replay.days import reaction_days
 
-    timed = [(report, timing) for report, timing in events if (timing or "").lower().startswith(("pre", "post"))]
+    window = (day - timedelta(days=7), day + timedelta(days=7))
+    near = [(report, timing) for report, timing in events if window[0] <= report <= window[1]]
+    timed = [(report, timing) for report, timing in near if (timing or "").lower().startswith(("pre", "post"))]
     return day in reaction_days(timed, pd.Series(dtype=float))
 
 

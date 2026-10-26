@@ -372,6 +372,14 @@ def test_reported_before_the_open_flags_pre_and_prior_post_but_not_same_day_post
     assert screen.reported_before_open([(DAY, "")], DAY) is False  # no time of day: never guessed from the gap
 
 
+def test_reported_before_the_open_ignores_ancient_events_outside_the_calendar() -> None:
+    # Providers return full histories: a first-ever report dated before the XNYS calendar's first session
+    # (2015-01-02) must not crash the whole day-open with DateOutOfBounds.
+    ancient = date(2014, 10, 23)
+    assert screen.reported_before_open([(ancient, "pre-market")], DAY) is False
+    assert screen.reported_before_open([(ancient, "pre-market"), (DAY, "pre-market")], DAY) is True
+
+
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
