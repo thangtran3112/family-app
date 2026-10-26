@@ -14,8 +14,9 @@ import styles from "./hub.module.css";
 const POLL_MS = 4000;
 
 /** The hub's daily-list card (02o-b v1): "Day 7 of 20 · next: Tue" with Continue, the data-preparing line while the
- *  plan's bars are fetched, and the plan form. There is no block page: Continue opens the day. */
-export function DailyListCard({ revision }: { revision?: number }) {
+ *  plan's bars are fetched, and the plan form. There is no block page: Continue opens the day. The thread card beside it
+ *  reads the same plan, so every change here goes through `onChanged` and both refetch (D-046). */
+export function DailyListCard({ revision, onChanged }: { revision?: number; onChanged: () => void }) {
   const router = useRouter();
   const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { revision });
   const [editing, setEditing] = useState(false);
@@ -29,12 +30,11 @@ export function DailyListCard({ revision }: { revision?: number }) {
   const threads = useDeskQuery("replay-threads-for-daily", (signal) => loadThreads({ signal }), { revision, enabled: needsThread });
   const swingOnly = (threads.data ?? []).some((row) => row.thread.status === "active" && row.thread.mode === "swing");
   const preparing = plan?.prep.state === "running";
-  const { refresh } = daily;
   useEffect(() => {
     if (!preparing) return;
-    const timer = setInterval(refresh, POLL_MS);
+    const timer = setInterval(onChanged, POLL_MS);
     return () => clearInterval(timer);
-  }, [preparing, refresh]);
+  }, [preparing, onChanged]);
 
   async function open() {
     setBusy(true);
@@ -44,7 +44,7 @@ export function DailyListCard({ revision }: { revision?: number }) {
       if (result.day_list_id !== null) router.push(`/practice/day?id=${result.day_list_id}`);
       else {
         setBusy(false);
-        refresh();
+        onChanged();
       }
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.planStartError));
@@ -72,7 +72,7 @@ export function DailyListCard({ revision }: { revision?: number }) {
         onSaved={(result) => {
           setEditing(false);
           if (result.day_list_id !== null) router.push(`/practice/day?id=${result.day_list_id}`);
-          else refresh();
+          else onChanged();
         }}
       />
     );
@@ -91,7 +91,7 @@ export function DailyListCard({ revision }: { revision?: number }) {
       <div className={styles.inline}>
         {(card.action === "continue" || card.action === "start") && (
           <button type="button" className={styles.primary} disabled={busy} onClick={() => void open()}>
-            {card.action === "start" ? PRACTICE_COPY.planStart : PRACTICE_COPY.planContinue}
+            {busy ? PRACTICE_COPY.planOpening : card.action === "start" ? PRACTICE_COPY.planStart : PRACTICE_COPY.planContinue}
           </button>
         )}
         <button type="button" className={styles.button} onClick={() => setEditing(true)}>{PRACTICE_COPY.planNew}</button>

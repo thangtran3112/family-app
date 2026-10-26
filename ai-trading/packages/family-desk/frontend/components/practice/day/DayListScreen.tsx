@@ -175,11 +175,19 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayRescanError);
 
-  const next = () =>
-    run(async () => {
+  // The server builds the next list before it answers, so the button says it is opening and stays disabled until the new
+  // day's screen replaces this one (D-046): no second click, and no look of nothing happening.
+  async function next() {
+    setBusy(true);
+    setMessage(null);
+    try {
       const result = await openNextDay();
       router.push(result.day_list_id === null ? "/practice" : `/practice/day?id=${result.day_list_id}`);
-    }, PRACTICE_COPY.planStartError);
+    } catch (error) {
+      setMessage(problemMessage(error, PRACTICE_COPY.planStartError));
+      setBusy(false);
+    }
+  }
 
   const warning = listWarning(list);
   const title = dayTitle(list, hidden);
@@ -197,7 +205,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practicing.symbol}</Link>
           )}
           {ended ? (
-            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{PRACTICE_COPY.dayAfter}</button>
+            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</button>
           ) : (
             <button type="button" className={styles.button} disabled={busy} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</button>
           )}
