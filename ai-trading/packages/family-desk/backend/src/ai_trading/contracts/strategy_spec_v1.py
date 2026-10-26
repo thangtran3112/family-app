@@ -231,8 +231,9 @@ class PracticeLedgerEntryV1(SpecModel):
     day: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
     entryPrice: Annotated[float, Field(gt=0.0, le=1000000.0)]
     exitPrice: Annotated[float, Field(gt=0.0, le=1000000.0)]
+    holdId: Annotated[int | None, Field(ge=1, le=9007199254740991)] = None
     id: Annotated[int, Field(ge=1, le=9007199254740991)]
-    markId: Annotated[int, Field(ge=1, le=9007199254740991)]
+    markId: Annotated[int | None, Field(ge=1, le=9007199254740991)] = None
     pnlUsd: Annotated[float, Field(ge=-1000000000.0, le=1000000000.0)]
     r: Annotated[float | None, Field(ge=-1000.0, le=1000.0)] = None
     realizedAt: Annotated[
@@ -240,7 +241,7 @@ class PracticeLedgerEntryV1(SpecModel):
         Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"),
     ]
     schemaVersion: Literal[1]
-    sessionId: Annotated[int, Field(ge=1, le=9007199254740991)]
+    sessionId: Annotated[int | None, Field(ge=1, le=9007199254740991)] = None
     shares: Annotated[int, Field(ge=1, le=10000)]
     side: Literal["long", "short"]
     symbol: Annotated[str, Field(pattern="^[A-Z][A-Z0-9.]{0,9}$")]
@@ -340,27 +341,6 @@ class PracticeThreadStatsV1(SpecModel):
     winRate: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
     wins: Annotated[int, Field(ge=0, le=1000000)]
     worstDayUsd: Annotated[float | None, Field(ge=-1000000000.0, le=1000000000.0)] = None
-
-
-class PracticeThreadV1(SpecModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    closedAt: Annotated[
-        str | None,
-        Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"),
-    ] = None
-    createdAt: Annotated[
-        str,
-        Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"),
-    ]
-    id: Annotated[int, Field(ge=1, le=9007199254740991)]
-    mode: Literal["day", "swing"]
-    plan: PracticeThreadPlanV1
-    schemaVersion: Literal[1]
-    startingBalance: Annotated[int, Field(ge=1000, le=10000000)]
-    stats: PracticeThreadStatsV1
-    status: Literal["active", "closed"]
 
 
 class PracticeWindowV1(SpecModel):
@@ -560,6 +540,14 @@ class SeriesOperand13(SpecModel):
     series: Literal["bias"]
 
 
+class SwingUniverseEntryV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    source: Literal["watchlist", "manual", "filter", "liquidity"]
+    symbol: Annotated[str, Field(pattern="^[A-Z][A-Z0-9.]{0,9}$")]
+
+
 class TimeBetweenCondition(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -602,22 +590,27 @@ class PracticeSetupV1(SpecModel):
     window: PracticeWindowV1
 
 
-class PracticeThreadCreateV1(SpecModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    mode: Literal["day", "swing"]
-    plan: PracticeThreadPlanV1
-    schemaVersion: Literal[1]
-    startingBalance: Annotated[int | None, Field(ge=1000, le=10000000)] = 50000
-
-
 class PracticeThreadPatchV1(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     plan: PracticeThreadPlanV1
     schemaVersion: Literal[1]
+
+
+class SwingSetupV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    armed: Annotated[list[PracticeArmedV1], Field(max_length=5)]
+    firstDay: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
+    hideDates: Literal["yes", "no"]
+    interval: Literal["5m", "15m"]
+    maxOpenHolds: Annotated[int, Field(ge=1, le=5)]
+    riskPerHoldUsd: Annotated[int | None, Field(ge=1, le=100000)] = None
+    sessions: Annotated[int, Field(ge=15, le=23)]
+    tape: Literal["off", "on"]
+    universe: Annotated[list[SwingUniverseEntryV1], Field(max_length=50, min_length=10)]
 
 
 class WithinPctCondition(SpecModel):
@@ -645,10 +638,44 @@ class PracticeBlockV1(SpecModel):
     )
     firstDay: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
     hideDates: Literal["yes", "no"]
+    maxSymbols: Annotated[int | None, Field(ge=1, le=5)] = None
     schemaVersion: Literal[1]
     screen: PracticeScreenV1
     sessions: Annotated[int, Field(ge=5, le=30)]
     setup: PracticeSetupV1
+
+
+class PracticeThreadCreateV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    mode: Literal["day", "swing"]
+    plan: PracticeThreadPlanV1
+    schemaVersion: Literal[1]
+    startingBalance: Annotated[int | None, Field(ge=1000, le=10000000)] = 50000
+    swing: SwingSetupV1 | None = None
+
+
+class PracticeThreadV1(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    closedAt: Annotated[
+        str | None,
+        Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"),
+    ] = None
+    createdAt: Annotated[
+        str,
+        Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"),
+    ]
+    id: Annotated[int, Field(ge=1, le=9007199254740991)]
+    mode: Literal["day", "swing"]
+    plan: PracticeThreadPlanV1
+    schemaVersion: Literal[1]
+    startingBalance: Annotated[int, Field(ge=1000, le=10000000)]
+    stats: PracticeThreadStatsV1
+    status: Literal["active", "closed"]
+    swing: SwingSetupV1 | None = None
 
 
 class StrategySpecV1(SpecModel):

@@ -120,6 +120,7 @@ for route in practice practice/replay practice/journal practice/day; do
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
 printf 'chunk\n' >"$DESK/_next/static/chunks/desk.js"
+printf 'icon\n' >"$DESK/icon.svg"
 printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
 "$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
 cmp -s "$(live_file test-desk strategies.html)" "$DESK/strategies.html" || fail "Desk strategies not published"

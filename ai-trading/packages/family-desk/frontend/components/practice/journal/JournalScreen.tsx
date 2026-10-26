@@ -11,9 +11,11 @@ import { createReplaySession, loadReplayFeed, loadReplaySession, patchReplaySess
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { adherenceHint, noTradesText, signalRows, summaryTiles, tradeRows } from "@/lib/replay/journalView";
+import { adherenceHint, journalDatesHidden, noTradesText, signalRows, summaryTiles, swingJournalDay, tradeRows } from "@/lib/replay/journalView";
+import { isSwingSession } from "@/lib/replay/playView";
 import type { ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
+import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { AdherenceChecklist } from "./AdherenceChecklist";
 import { JournalChart } from "./JournalChart";
 import { NotesAndRating } from "./NotesAndRating";
@@ -49,8 +51,12 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
   const router = useRouter();
   const { spec, journal } = session;
   const ended = session.status === "ended";
-  // The date stays masked while the session is open; once it ends there is nothing left to spoil.
-  const hidden = spec.hideDate === "yes" && !ended;
+  // The date stays masked while the session is open, and for a swing session while its thread goes on (one date names every later day).
+  const hidden = journalDatesHidden(session);
+  const swing = isSwingSession(session);
+  const swingDay = useDeskQuery(`journal-swing-day:${session.day_list_id}`, (signal) => loadAnyDayList(session.day_list_id ?? 0, {}, { signal }), {
+    enabled: hidden && swing && session.day_list_id !== null,
+  });
   const feed = useDeskQuery(`replay-feed:${session.id}:${session.status}`, (signal) => loadReplayFeed(session.id, { interval: spec.interval }, { signal }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -78,7 +84,8 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
       .catch((error: unknown) => setAgain({ busy: false, message: problemMessage(error, PRACTICE_COPY.startError) }));
   };
 
-  const dayLabel = hidden ? PRACTICE_COPY.hiddenDay : formatEtDay(spec.day);
+  const swingList = swingDay.data !== null && isSwingDayList(swingDay.data) ? swingDay.data : null;
+  const dayLabel = hidden ? (swing ? swingJournalDay(swingList) : PRACTICE_COPY.hiddenDay) : formatEtDay(spec.day);
   const tiles = summaryTiles(journal);
   const signalCount = feed.data?.signals.length ?? 0;
 

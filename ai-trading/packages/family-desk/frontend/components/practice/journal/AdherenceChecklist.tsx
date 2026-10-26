@@ -1,12 +1,19 @@
 "use client";
 
-import type { ReplayJournal } from "@/lib/replay/schemas";
 import styles from "./journal.module.css";
 
-export type AdherenceChecklistProps = { adherence: ReplayJournal["adherence"] };
+export type AdherenceChecklistProps = {
+  /** A session's or a week's adherence: any check list of this shape. */
+  adherence: {
+    score_pct: number | null;
+    checks: ReadonlyArray<{ id: string; label: string; applicable: boolean; passed: boolean; detail: string }>;
+  };
+  /** Shown when no check applies; the session journal's wording by default. */
+  empty?: string;
+};
 
 /** The plan's checks that apply to this session, with the score on top. Checks that do not apply are left out. */
-export function AdherenceChecklist({ adherence }: AdherenceChecklistProps) {
+export function AdherenceChecklist({ adherence, empty = "No plan rule applies to this session" }: AdherenceChecklistProps) {
   const checks = adherence.checks.filter((check) => check.applicable);
   const score = adherence.score_pct;
 
@@ -27,7 +34,7 @@ export function AdherenceChecklist({ adherence }: AdherenceChecklistProps) {
           ))}
         </ul>
       ) : (
-        <p className={styles.muted}>No plan rule applies to this session</p>
+        <p className={styles.muted}>{empty}</p>
       )}
     </div>
   );

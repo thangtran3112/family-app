@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adherenceHint, formatR, formatUsd, noTradesText, sessionOverText, signalRows, summaryTiles, tradeRows, tradesCountText } from "./journalView.ts";
+import { adherenceHint, journalDatesHidden, swingJournalDay, formatR, formatUsd, noTradesText, sessionOverText, signalRows, summaryTiles, tradeRows, tradesCountText } from "./journalView.ts";
 import { journal as journalFixture } from "./fixtures.ts";
 import { JournalSchema, type ReplayJournal } from "./schemas.ts";
 
@@ -97,4 +97,20 @@ test("the no-trades and session-over lines pluralise correctly", () => {
   assert.equal(tradesCountText(1), "1 practice trade");
   assert.equal(sessionOverText(3), "Session over · 3 practice trades · See journal");
   assert.equal(sessionOverText(1), "Session over · 1 practice trade · See journal");
+});
+
+test("the journal hides the date while the session is open, and for a swing session while its thread is active (C1)", () => {
+  const base = { status: "ended", spec: { hideDate: "yes" }, thread: null } as const;
+  const swing = (status: "active" | "closed") => ({ ...base, thread: { mode: "swing", status } }) as const;
+  assert.equal(journalDatesHidden({ ...base, status: "active" }), true, "open: the date is the spoiler");
+  assert.equal(journalDatesHidden(base), false, "a standalone session or a day thread reveals once it has ended");
+  assert.equal(journalDatesHidden({ ...base, thread: { mode: "day", status: "active" } }), false);
+  assert.equal(journalDatesHidden(swing("active")), true, "a swing day ending does not end the thread: later days are not spoiled");
+  assert.equal(journalDatesHidden(swing("closed")), false, "a closed thread has nothing left to spoil");
+  assert.equal(journalDatesHidden({ ...swing("active"), spec: { hideDate: "no" } }), false, "dates that were never hidden stay shown");
+});
+
+test("a hidden swing journal names its day by number and weekday, never by date", () => {
+  assert.equal(swingJournalDay({ day_no: 3, of: 15, week_no: 1, weekday: "Wed", day: "2026-09-16" }), "Day 3 of 15 · Week 1 · Wed");
+  assert.equal(swingJournalDay(null), "Hidden day", "until the day list answers");
 });

@@ -59,13 +59,13 @@ def book(db: Session, row: ReplaySession, trades: list[Trade], now: datetime) ->
 
 
 def entry_out(row: PracticeLedger) -> dict[str, Any]:
-    """A `PracticeLedgerEntryV1` as a dict: `r` is absent, never null, when there was no stop."""
+    """A `PracticeLedgerEntryV1` as a dict: `r` is absent, never null, when there was no stop. A swing row (it has a
+    `hold_id`) may have no session or mark, since a hold that auto-exits at a close was never marked: those keys are
+    absent too."""
     out: dict[str, Any] = {
         "schemaVersion": 1,
         "id": row.id,
         "threadId": row.thread_id,
-        "sessionId": row.session_id,
-        "markId": row.mark_id,
         "symbol": row.symbol,
         "day": row.day.isoformat(),
         "side": row.side,
@@ -75,6 +75,9 @@ def entry_out(row: PracticeLedger) -> dict[str, Any]:
         "pnlUsd": float(row.pnl_usd),
         "realizedAt": utc_z(row.realized_at),
     }
+    for key, value in (("sessionId", row.session_id), ("markId", row.mark_id), ("holdId", row.hold_id)):
+        if value is not None:
+            out[key] = value
     if row.r is not None and abs(row.r) <= R_LIMIT:
         out["r"] = float(row.r)
     return out

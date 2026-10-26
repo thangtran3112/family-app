@@ -1,9 +1,16 @@
 """`DESK_MVP_STUB` is a development flag: it must never reach a deployed environment (02m §d2 step 2)."""
 
+import dataclasses
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
+from ai_trading_common.errors import NoData
+from ai_trading_common.registry import DataSources
 
+from ai_trading.api.replay import get_services
 from ai_trading.mvp_stub import STUB_FLAG, stub_enabled
 from ai_trading.replay import fixture
 
@@ -57,3 +64,19 @@ def test_no_deploy_file_sets_the_stub_flag() -> None:
             except OSError:
                 continue
     assert offenders == []
+
+
+def test_the_stub_flag_serves_the_tsla_fixture_and_nothing_else(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The swing world the browser server serves (`tests/e2e/swing_services.py`) is installed by the E2E lifespan only:
+    the flag's own services still answer for TSLA on the fixture day and say `NoData` for a swing symbol."""
+    monkeypatch.setenv(fixture.STUB_FLAG, "1")
+    base = DataSources(**{field.name: object() for field in dataclasses.fields(DataSources)})
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    services = get_services(request, base)  # type: ignore[arg-type]
+    assert request.app.state.replay_services is services and services.sources is None
+    day = pd.Timestamp(fixture.DAY, tz="UTC")
+    bars = services.history._sources.bars  # type: ignore[attr-defined]
+    assert len(bars.bars("TSLA", "1d", day - pd.Timedelta(days=30), day, now=datetime.now(UTC)).frame) > 0
+    for symbol in ("S01", "SPY", "AAPL"):
+        with pytest.raises(NoData):
+            bars.bars(symbol, "1d", day - pd.Timedelta(days=30), day, now=datetime.now(UTC))

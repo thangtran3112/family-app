@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRegisterSymbolPicker } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -20,8 +20,10 @@ import styles from "./hub.module.css";
 export function PracticeHub() {
   const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
   const [showDates, setShowDates] = useState(false);
-  // Bumped when a thread changes (created here), so the threads band and the daily-list card both refetch.
+  // Bumped when a thread or the plan changes (a thread created, a day opened, the data prepared), so the threads band and the
+  // daily-list card both refetch: each reads the plan, and a change seen by one must show in the other (D-046).
   const [threadRevision, setThreadRevision] = useState(0);
+  const changed = useCallback(() => setThreadRevision((n) => n + 1), []);
   useRegisterSymbolPicker((symbol) => setDraft((current) => ({ ...current, symbol })));
 
   // All notable days first: the answer also says which symbols are on her watchlists. A typed symbol on that list
@@ -49,10 +51,10 @@ export function PracticeHub() {
         <h1 className={styles.title}>Practice</h1>
       </header>
       <div className={styles.body}>
-        <ThreadsSection revision={threadRevision} onChanged={() => setThreadRevision((n) => n + 1)} />
+        <ThreadsSection revision={threadRevision} onChanged={changed} />
         <section id="daily-list" aria-labelledby="daily-title" className={styles.section}>
           <h2 id="daily-title" className={styles.sectionTitle}>{PRACTICE_COPY.planTitle}</h2>
-          <DailyListCard revision={threadRevision} />
+          <DailyListCard revision={threadRevision} onChanged={changed} />
         </section>
         <section id="start-practice" aria-labelledby="start-title" className={styles.section}>
           <h2 id="start-title" className={styles.sectionTitle}>Start a practice session</h2>

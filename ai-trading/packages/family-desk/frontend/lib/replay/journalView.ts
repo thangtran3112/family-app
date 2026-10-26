@@ -1,6 +1,8 @@
 import { formatEtTime, formatNumber, formatPrice, formatPct, EMPTY_VALUE, type Tone } from "../desk/format.ts";
 import { practiceText, PRACTICE_COPY } from "../desk/freshness.ts";
 import type { JournalTrade, ReplayJournal, SignalVsTrade } from "./schemas.ts";
+import { swingDayTitle } from "./swing.ts";
+import type { SwingDayList } from "./swingApi.ts";
 
 // Journal screen view logic (02o §a4, §c5): money and R formatting, the summary tiles, and the honest empty states.
 
@@ -100,3 +102,17 @@ export const tradesCountText = (count: number): string => `${count} practice tra
 
 /** "Session over · 3 practice trades · See journal". */
 export const sessionOverText = (tradeCount: number): string => practiceText("sessionOver", { trades: tradesCountText(tradeCount) });
+
+/**
+ * Whether the journal masks the session's date. An open session always does. An ended one reveals it (nothing is left to
+ * spoil) unless it belongs to a swing thread that is still going: a swing day ending does not end the thread, and one
+ * date gives every later day's date.
+ */
+export function journalDatesHidden(session: { status: string; spec: { hideDate: "yes" | "no" }; thread: { mode: string; status: string } | null }): boolean {
+  if (session.spec.hideDate !== "yes") return false;
+  return session.status !== "ended" || (session.thread?.mode === "swing" && session.thread.status === "active");
+}
+
+/** "Day 3 of 15 · Week 1 · Wed" for a swing session's journal while dates are hidden; "Hidden day" until the day list answers. */
+export const swingJournalDay = (list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "weekday" | "day"> | null): string =>
+  list === null ? PRACTICE_COPY.hiddenDay : swingDayTitle(list, true);

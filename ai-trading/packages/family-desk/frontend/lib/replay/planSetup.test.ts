@@ -6,6 +6,7 @@ import {
   clock12,
   defaultFirstDay,
   defaultPlanDraft,
+  effectiveFirstDay,
   earliestListAt,
   listTimeFrom,
   listTimeHeld,
@@ -32,6 +33,14 @@ test("the default start is the first weekday of the month three months back", ()
   assert.equal(defaultFirstDay(new Date("2026-06-15T12:00:00Z")), "2026-03-02"); // March 1 is a Sunday
 });
 
+test("the first day is her pick, else the recorded-universe default when the server has one, else three months back", () => {
+  const draft = defaultPlanDraft(NOW).firstDay;
+  assert.equal(draft, "2026-07-01");
+  assert.equal(effectiveFirstDay(draft, false, null), "2026-07-01");
+  assert.equal(effectiveFirstDay(draft, false, "2026-09-28"), "2026-09-28");
+  assert.equal(effectiveFirstDay("2026-08-03", true, "2026-09-28"), "2026-08-03");
+});
+
 test("a draft becomes the contract's JSON: yes/no words, no null, no shares and no risk plan (the thread's, D-007)", () => {
   const spec = planDraftToSpec(ready()) as Record<string, unknown>;
   assert.deepEqual(spec.screen, { filters: [{ id: 4 }], listAt: "08:30", maxList: 30 });
@@ -39,6 +48,17 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
   assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
   assert.equal(JSON.stringify(spec).includes("null"), false);
+});
+
+test("the names a day go in the block as a whole number from 1 to 5, and the contract refuses the rest", () => {
+  assert.equal((planDraftToSpec(ready()) as Record<string, unknown>).maxSymbols, 3);
+  assert.equal(validatePlanDraft(ready({ maxSymbols: "5" })).ok, true);
+  for (const bad of ["0", "6", "2.5", ""]) {
+    const result = validatePlanDraft(ready({ maxSymbols: bad }));
+    assert.equal(result.ok, false, bad);
+    assert.ok(!result.ok && result.problems.maxSymbols, bad);
+  }
+  assert.equal(planFieldOfPath("maxSymbols"), "maxSymbols");
 });
 
 test("a good draft validates; the window may not begin before the list time", () => {

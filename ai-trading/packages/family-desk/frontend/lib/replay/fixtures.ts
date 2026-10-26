@@ -63,6 +63,8 @@ export const session = {
   window_start: "2026-04-07T13:30:00Z",
   window_end: "2026-04-07T20:00:00Z",
   revealed_through: "2026-04-07T14:07:00Z",
+  day_clock: null,
+  behind_clock: false,
   tape_feed: "sip",
   armed: [{ source: "alert_strategy", id: 7, version_id: 31, name: "ORB 15m", bias: "bullish", fires_so_far: 1 }],
   marks: [mark],
@@ -94,6 +96,8 @@ export const sessionSummary = {
 
 export const delta = {
   revealed_through: "2026-04-07T14:07:12Z",
+  day_clock: null,
+  behind_clock: false,
   at_end: false,
   bars: [{ t: "2026-04-07T14:00:00Z", o: 187.2, h: 187.6, l: 186.95, c: 187.41, v: 1203344, ext: false }],
   forming: { t: "2026-04-07T14:05:00Z", o: 187.41, h: 188.1, l: 187.3, c: 188.05, v: 402118 },
@@ -106,7 +110,7 @@ export const delta = {
     big_print_usd: 200000,
     pace: { window_s: 10, prints_per_s: 12.4, shares_per_s: 3400, x_of_avg: 1.8, band: "busy" },
   },
-  signals: [{ source: "alert_strategy", id: 7, name: "ORB 15m", bias: "bullish", bar_time: "2026-04-07T13:30:00Z", bar_close: "2026-04-07T13:45:00Z", close: 187.1, evidence: { close: 187.1 } }],
+  signals: [{ source: "alert_strategy", id: 7, name: "ORB 15m", bias: "bullish", bar_time: "2026-04-07T13:30:00Z", bar_close: "2026-04-07T13:45:00Z", close: 187.1, evidence: { close: 187.1 }, seen: true }],
   levels: { prior_close: 195.4, session_high: 188.6, session_low: 183.2, opening_range_high: 187.3, opening_range_low: 184.9 },
   last: { price: 188.05, at: "2026-04-07T14:07:11.482Z", age_s: 1 },
   quiet_s: null,

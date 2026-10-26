@@ -660,6 +660,11 @@
           ],
           "type": "string"
         },
+        "maxSymbols": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
         "schemaVersion": {
           "const": 1,
           "type": "number"
@@ -702,6 +707,11 @@
           "exclusiveMinimum": 0,
           "maximum": 1000000,
           "type": "number"
+        },
+        "holdId": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
         },
         "id": {
           "maximum": 9007199254740991,
@@ -762,8 +772,6 @@
         "schemaVersion",
         "id",
         "threadId",
-        "sessionId",
-        "markId",
         "symbol",
         "day",
         "side",
@@ -990,6 +998,9 @@
           "maximum": 10000000,
           "minimum": 1000,
           "type": "integer"
+        },
+        "swing": {
+          "$ref": "#/$defs/SwingSetupV1"
         }
       },
       "required": [
@@ -1173,6 +1184,9 @@
             "closed"
           ],
           "type": "string"
+        },
+        "swing": {
+          "$ref": "#/$defs/SwingSetupV1"
         }
       },
       "required": [
@@ -1829,6 +1843,100 @@
           "type": "object"
         }
       ]
+    },
+    "SwingSetupV1": {
+      "additionalProperties": false,
+      "properties": {
+        "armed": {
+          "items": {
+            "$ref": "#/$defs/PracticeArmedV1"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "firstDay": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "type": "string"
+        },
+        "hideDates": {
+          "enum": [
+            "yes",
+            "no"
+          ],
+          "type": "string"
+        },
+        "interval": {
+          "enum": [
+            "5m",
+            "15m"
+          ],
+          "type": "string"
+        },
+        "maxOpenHolds": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "riskPerHoldUsd": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sessions": {
+          "maximum": 23,
+          "minimum": 15,
+          "type": "integer"
+        },
+        "tape": {
+          "enum": [
+            "off",
+            "on"
+          ],
+          "type": "string"
+        },
+        "universe": {
+          "items": {
+            "$ref": "#/$defs/SwingUniverseEntryV1"
+          },
+          "maxItems": 50,
+          "minItems": 10,
+          "type": "array"
+        }
+      },
+      "required": [
+        "firstDay",
+        "sessions",
+        "hideDates",
+        "universe",
+        "interval",
+        "tape",
+        "armed",
+        "maxOpenHolds"
+      ],
+      "type": "object"
+    },
+    "SwingUniverseEntryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "watchlist",
+            "manual",
+            "filter",
+            "liquidity"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "pattern": "^[A-Z][A-Z0-9.]{0,9}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol",
+        "source"
+      ],
+      "type": "object"
     },
     "TimeBetweenCondition": {
       "additionalProperties": false,

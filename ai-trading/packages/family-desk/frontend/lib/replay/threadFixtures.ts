@@ -39,6 +39,7 @@ export const activeThread: ThreadSummary = {
     },
   },
   today: { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 8, status: "practicing", trades: 1, pnl_usd: 112 },
+  last_day: null,
   label: "Simulated money · practice only, never a real account",
 };
 
@@ -66,7 +67,7 @@ export const threadCurve: CurvePoint[] = [
   ...threadDays.map((day) => ({ n: day.n, day: day.day, balance: day.balance })),
 ];
 
-export const thread: Thread = { ...activeThread, daily: threadDays, curve: threadCurve };
+export const thread: Thread = { ...activeThread, last_day: threadDays.at(-1) ?? null, daily: threadDays, curve: threadCurve };
 
 /** A thread with no ended day yet: the balance is the starting balance and there is nothing to chart. */
 export const freshThread: Thread = {
@@ -76,6 +77,7 @@ export const freshThread: Thread = {
     stats: { balance: 50000, daysPracticed: 0, daysSkipped: 0, wins: 0, losses: 0 },
   },
   today: null,
+  last_day: null,
   daily: [],
   curve: [{ n: 0, day: null, balance: 50000 }],
   label: activeThread.label,
