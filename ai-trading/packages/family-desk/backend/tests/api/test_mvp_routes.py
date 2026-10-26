@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from ai_trading.api.app import app
 
 # (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 (plus the D-012 relist route), 02r rows
-# 70-75, 02p rows 77-81 and 02o-b2 (the recorded universe, the re-scan).
+# 70-75, 02p rows 77-81, 02o-b2 (the recorded universe, the re-scan) and 02s (the feedback log, eight routes).
 # Path parameters are normalised to `{}`.
 INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/me"),
@@ -101,6 +101,15 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/replay/threads/{}/weeks"),
     ("GET", "/api/desk/replay/threads/{}/weeks/{}"),
     ("PATCH", "/api/desk/replay/threads/{}/weeks/{}"),
+    # The feedback log, 02s: the list, filing, one report, its status or edit, and the screenshots.
+    ("GET", "/api/desk/feedback"),
+    ("POST", "/api/desk/feedback"),
+    ("GET", "/api/desk/feedback/{}"),
+    ("PATCH", "/api/desk/feedback/{}"),
+    ("POST", "/api/desk/feedback/attachments"),
+    ("GET", "/api/desk/feedback/attachments/{}"),
+    ("DELETE", "/api/desk/feedback/attachments/{}"),
+    ("POST", "/api/desk/feedback/{}/attachments"),
 ]
 
 #: `PUT /watchlists/{id}/order` reorders symbols (02m §a2 row 25). It is the one route whose path may
@@ -123,7 +132,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 83
+    assert len(INVENTORY) == 91
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

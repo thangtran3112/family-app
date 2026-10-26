@@ -39,6 +39,8 @@ const routes = [
   "ask",
   "futures",
   "futures/specs",
+  "feedback",
+  "feedback/new",
 ];
 
 for (const route of routes) {
