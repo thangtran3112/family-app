@@ -144,10 +144,12 @@ export function planCard(plan: PracticePlan | null): PlanCard {
   if (plan.finished) return { headline: practiceText("planDone", { of: plan.sessions }), detail: failed, action: "new" };
   const current = plan.current;
   if (current !== null && current.status !== "ended") {
-    // A listed day has not been practiced yet; only a practicing one is "in progress" (D-035).
+    // A listed day has not been practiced yet; only a practicing one is "in progress" (D-035). The day before it is done (D-051).
+    const day = threadDayNo(plan, current.day_no);
+    const previous = day > 1 ? practiceText("planDayDoneNext", { done: day - 1, next: day }) : null;
     return {
       headline: `${dayNumberText(plan, current.day_no)} · ${PRACTICE_COPY[current.status === "practicing" ? "planStateInProgress" : "planStateListed"]}`,
-      detail: failed,
+      detail: [current.status === "listed" ? previous : null, failed].filter(Boolean).join(" · ") || null,
       action: "continue",
     };
   }

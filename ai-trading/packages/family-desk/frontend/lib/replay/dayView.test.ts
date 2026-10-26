@@ -83,6 +83,9 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   // D-035: a day that is only listed is not "in progress", and an ended day is never shown as open.
   const listed = planCard({ ...plan, current: { id: 42, day_no: 7, status: "listed" } });
   assert.deepEqual([listed.headline, listed.action], ["Day 7 of 20 · list ready", "continue"]);
+  assert.match(listed.detail ?? "", /^Day 6 done · Day 7 next/, "a listed day says the day before it is done (D-051)");
+  assert.doesNotMatch(open.detail ?? "", /done/);
+  assert.doesNotMatch(planCard({ ...plan, current: { id: 40, day_no: 1, status: "listed" } }).detail ?? "", /done/, "Day 1 has no day before it");
   const ended = planCard({ ...plan, current: { id: 41, day_no: 6, status: "ended" } });
   assert.doesNotMatch(ended.headline, /in progress|list ready/);
   assert.equal(ended.headline, "Day 7 of 20 · next: Tue");
@@ -131,8 +134,8 @@ test("stars toggle, keep order, and refuse a sixth name", () => {
 });
 
 test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
-  assert.equal(listWarning(dayList), "Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists");
-  const why = "None of the 17 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
+  assert.equal(listWarning(dayList), "Only 2 of the 131 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists");
+  const why = "None of the 17 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
   assert.equal(listWarning({ warnings: [why] }), why);
   assert.equal(listWarning({ warnings: [] }), null);
   assert.equal(noMatchText({ universe: { ...dayList.universe, matches_total: 0 } }), "0 of 131 matched");

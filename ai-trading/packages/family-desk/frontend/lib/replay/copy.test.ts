@@ -84,7 +84,7 @@ test("the swing strings the screens quote word for word", () => {
   assert.equal(practiceText("swingEntryLabel", { day: 3, price: "184.20" }), "Day 3 · 184.20");
   assert.equal(practiceText("swingCalendarLine", { sessions: 20, weeks: 4, noun: "weeks" }), "20 sessions · 4 weeks · ends on day 20");
   assert.equal(practiceText("swingFinished", { days: 20 }), "Finished · Day 20 of 20");
-  assert.equal(practiceText("swingPrepProgress", { done: 96, total: 133 }), "Preparing as-of data · 96 of 133 · watchlist and manual picks are ready");
+  assert.equal(practiceText("swingPrepProgress", { done: 96, total: 133, pct: 72 }), "Preparing as-of data · 96 of 133 (72%) · this can take several minutes · watchlist and manual picks are ready");
 });
 
 test("the swing copy never says position, order, filled, broker or execute, in a row or in a quoted spec sentence", () => {

@@ -102,7 +102,7 @@ export const dayList: DayList = {
   clock: null,
   sessions: [],
   thread: threadBrief,
-  warnings: ["Only 2 of the 131 scanned symbols met Gap up and Abnormal volume · loosen a filter in the Screener to widen the next days' lists"],
+  warnings: ["Only 2 of the 131 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists"],
   relist: null,
   rescan: null,
   peek: null,

@@ -10,6 +10,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -101,6 +102,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
+  const [still, setStill] = useState<"open" | "rescan" | null>(null);
+  const [retry, setRetry] = useState<(() => void) | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // At the 1180 band the right rail is a tab strip: a row click opens the Peek drawer and the others stay as they are (D-020).
   const band = useShellBand();
@@ -125,14 +130,17 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     locked: ended,
   });
 
-  async function run(action: () => Promise<void>, fallback: string) {
+  async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
     setMessage(null);
+    setRetry(null);
     try {
       await action();
     } catch (error) {
       setMessage(problemMessage(error, fallback));
+      setRetry(() => again);
     } finally {
+      setStill(null);
       setBusy(false);
     }
   }
@@ -169,22 +177,34 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayRelistError);
 
-  const rescan = () =>
-    run(async () => {
-      await rescanDay(list.id);
-      onChanged();
-    }, PRACTICE_COPY.dayRescanError);
+  const rescan = (): Promise<void> =>
+    run(
+      async () => {
+        setScanning(true);
+        try {
+          await whenReady(() => rescanDay(list.id), { onWaiting: () => setStill("rescan") });
+        } finally {
+          setScanning(false);
+        }
+        onChanged();
+      },
+      PRACTICE_COPY.dayRescanError,
+      () => void rescan(),
+    );
 
   // The server builds the next list before it answers, so the button says it is opening and stays disabled until the new
   // day's screen replaces this one (D-046): no second click, and no look of nothing happening.
   async function next() {
     setBusy(true);
     setMessage(null);
+    setRetry(null);
     try {
-      const result = await openNextDay();
+      const result = await whenReady(() => openNextDay(), { onWaiting: () => setStill("open") });
       router.push(result.day_list_id === null ? "/practice" : `/practice/day?id=${result.day_list_id}`);
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.planStartError));
+      setRetry(() => () => void next());
+      setStill(null);
       setBusy(false);
     }
   }
@@ -237,7 +257,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             {list.relist.window_from && <span className={styles.muted}>{practiceText("dayRelistWindow", { time: formatClock(list.relist.window_from) })}</span>}
           </div>
         )}
-        {message && <p className={styles.banner} role="alert">{message}</p>}
+        {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
+        {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
         {confirmEnd && !ended && (
           <div role="group" aria-label="Confirm ending the day" className={styles.confirm}>
             <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
@@ -265,7 +286,12 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
             }}
             scrollX
-            empty={<EmptyBlock title={noMatchText(list)}>{PRACTICE_COPY.dayNoNames}</EmptyBlock>}
+            empty={
+              <EmptyBlock title={noMatchText(list)}>
+                {PRACTICE_COPY.dayNoNames}
+                {!ended && <> · <Link href="/screener" className={styles.link}>{PRACTICE_COPY.dayNoNamesScreener}</Link></>}
+              </EmptyBlock>
+            }
             rowActions={ended ? undefined : (row) => (
               <button
                 type="button"
@@ -287,8 +313,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
             {!ended && (
               <div className={styles.actions}>
-                <button type="button" className={styles.button} disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{PRACTICE_COPY.dayRescan}</button>
-                <span className={styles.muted}>{canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
+                <button type="button" className={styles.button} disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{scanning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}</button>
+                <span className={styles.muted} role={still === "rescan" ? "status" : undefined}>{still === "rescan" ? PRACTICE_COPY.dayRescanStillWorking : canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
               </div>
             )}
             {list.rescan && (

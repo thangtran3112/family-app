@@ -531,16 +531,40 @@ def _advance_day(db_session, user_id, svc, session_id, day, hhmm):
     )
 
 
-def test_adherence_endpoints_are_the_first_and_latest_scored_day(db_session, user_id, svc) -> None:
+def test_a_day_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(db_session, user_id, svc) -> None:
+    """D-060: "Stop on every entry" is enforced, not just scored. The refusal says what to do; a stop typed with the
+    entry goes through, and the adherence check passes for it."""
     make_thread(db_session, user_id, stopNoteOnEntry="yes")
+    _, session, _ = _day_one(db_session, user_id, svc)
+    _advance(db_session, user_id, svc, session.id, "09:30")
+    with pytest.raises(ReplayProblem) as caught:
+        _mark(db_session, user_id, svc, session.id, "long_entry", shares=10)
+    assert (caught.value.message, caught.value.path, caught.value.status) == (
+        session_mod.STOP_REQUIRED,
+        "stopPrice",
+        422,
+    )
+    assert session_mod._load_marks(db_session, session.id) == []  # nothing was written
+    placed = _mark(db_session, user_id, svc, session.id, "long_entry", shares=10, stopPrice=104.0)
+    assert placed["open_trade"]["stop_price"] == 104.0
+    placed = _mark(db_session, user_id, svc, session.id, "stop", stopPrice=105.0)  # the Stop key moves the line
+    assert placed["open_trade"]["stop_price"] == 105.0
+    _advance(db_session, user_id, svc, session.id, "10:00")
+    done = _mark(db_session, user_id, svc, session.id, "long_exit")
+    (check,) = [c for c in done["journal"]["adherence"]["checks"] if c["id"] == "stop_set"]
+    assert (check["applicable"], check["passed"], check["detail"]) == (True, True, "1 of 1")
+
+
+def test_adherence_endpoints_are_the_first_and_latest_scored_day(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id, stopNoteOnEntry="yes", tradeOnlyOnSignal="yes")
     row, session, thread = _day_one(db_session, user_id, svc)
-    _trade(db_session, user_id, svc, session.id, "long", shares=10)  # no stop note: day 1 scores 0
+    _trade(db_session, user_id, svc, session.id, "long", shares=10, stopPrice=104.0)  # stop set, off a signal: 2 of 3
     plan_mod.end_day(db_session, user_id, row.id, svc)
     second = _open(db_session, user_id, svc).day_list
     plan_mod.end_day(db_session, user_id, second.id, svc)  # skipped: no score
     stats = _stats(db_session, thread)
     day_one = plan_mod.day_list_out(db_session, user_id, row.id, svc)["journal"]["sessions"][0]["adherence_pct"]
-    assert day_one == 0 and (stats.adherenceFirstPct, stats.adherenceLastPct) == (0, 0)
+    assert day_one == 67 and (stats.adherenceFirstPct, stats.adherenceLastPct) == (67, 67)
 
 
 def test_listing_puts_active_threads_first_and_a_closed_thread_keeps_its_numbers(db_session, user_id, svc) -> None:
