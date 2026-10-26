@@ -257,6 +257,13 @@ test("the universe note states the Desk set and its size, then what else the ser
   assert.equal(universeNote(more).endsWith("Gap up scans your Movers list as it is today · capped at 250 by dollar volume."), true);
 });
 
+test("a day the Desk recorded keeps the server's note instead of the line about today's set (02o-b2)", () => {
+  const note = "Practice universe · the 118 symbols the Desk scanned that morning, as recorded";
+  const recorded = { size: 116, label: note, footnote: `${note} · Gap up scans your Movers list as it is today`, membership: { source: "universe_days" as const, recorded_size: 118, scanned_size: 116, note } };
+  assert.equal(universeNote(recorded), recorded.footnote);
+  assert.equal(universeNote({ ...recorded, membership: { ...recorded.membership, source: "today" as const } }).startsWith("Universe: today's Desk set"), true);
+});
+
 test("the risk plan reads as one sentence; no limits says so", () => {
   assert.equal(riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day.");
   assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");

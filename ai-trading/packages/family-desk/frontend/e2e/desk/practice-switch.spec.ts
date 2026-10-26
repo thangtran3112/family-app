@@ -8,6 +8,7 @@ import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helper
 // replays 09:30 to 09:40 ET at 1-minute bars; ArrowRight is one bar.
 
 const DAY = "2026-09-25";
+const FIRST_RECORDED = "2026-09-18"; // 20 finished sessions before the E2E clock
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const DAY_URL = /\/practice\/day\?id=\d+/;
 
@@ -85,11 +86,11 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: "Star PANW" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Your plan limits a day to 2 names · unstar one first" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Star PANW" })).toBeVisible();
-    await expect(page.getByTestId("names-today")).toHaveText("0 of 2 names practised today");
+    await expect(page.getByTestId("names-today")).toHaveText("0 of 2 names practiced today");
     await expectCleanScreen(page);
 
-    // Practise TSLA three bars in, and take a trade.
-    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    // Practice TSLA three bars in, and take a trade.
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
@@ -147,10 +148,10 @@ test.describe("Practice: switching names", () => {
     // The plan's limit holds for names too: a third name is a 409 in plain words, on the list screen.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
-    await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Practise PANW" }).click();
+    await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Practice PANW" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Your plan allows 2 names a day · you are on TSLA and LRCX" })).toBeVisible();
-    await expect(page.getByTestId("names-today")).toHaveText("2 of 2 names practised today");
-    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Practise LRCX" })).toHaveText("Resume"); // a name in hand resumes
+    await expect(page.getByTestId("names-today")).toHaveText("2 of 2 names practiced today");
+    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Practice LRCX" })).toHaveText("Resume"); // a name in hand resumes
     await expectCleanScreen(page);
 
     // The whole day ends together: both names score.
@@ -172,13 +173,13 @@ test.describe("Practice: switching names", () => {
     await expect(list.getByRole("row", { name: /PANW|XOM/ })).toHaveCount(0);
     await expect(page.getByText(/the 2 symbols the Desk scanned that morning, as recorded/)).toBeVisible();
 
-    // No name practised yet, so no day clock: the button waits and says why.
+    // No name practiced yet, so no day clock: the button waits and says why.
     const rescan = page.getByRole("button", { name: PRACTICE_COPY.dayRescan });
     await expect(rescan).toBeDisabled();
     await expect(page.getByText(PRACTICE_COPY.dayRescanNeedsClock)).toBeVisible();
 
-    // Practise TSLA five bars in (the clock reads 9:35), come back, and scan.
-    await page.getByRole("button", { name: "Practise TSLA" }).first().click();
+    // Practice TSLA five bars in (the clock reads 9:35), come back, and scan.
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     for (let bar = 0; bar < 5; bar += 1) await page.keyboard.press("ArrowRight");
@@ -199,7 +200,7 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
 
     // The clock moves on: the old scan says it is older, and a new scan is its own.
-    await page.getByRole("button", { name: "Practise TSLA" }).first().click(); // the name in hand: its button reads Resume
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click(); // the name in hand: its button reads Resume
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await page.keyboard.press("ArrowRight");
@@ -234,11 +235,12 @@ test.describe("Practice: switching names", () => {
     await expect(note).toHaveText("The Desk has not recorded a morning's universe yet · the default start is three months back");
     await expect(firstDay).not.toHaveValue(DAY);
 
-    // The Desk has recorded 20 finished days since Fri 2026-09-25: a new plan starts on it, unless she picks a day.
-    await recordUniverse(context, [{ day: DAY, symbols: ["TSLA"] }]);
+    // The Desk has recorded 20 finished days since Fri 2026-09-18 (the E2E clock is Thu 2026-10-15 after the close): a new plan
+    // starts on it, unless she picks a day.
+    await recordUniverse(context, [{ day: FIRST_RECORDED, symbols: ["TSLA"] }]);
     await openDesk(page, "/practice");
-    await expect(note).toHaveText(/^The first day the Desk recorded its universe · \d+ finished days of it exist$/);
-    await expect(firstDay).toHaveValue(DAY);
+    await expect(note).toHaveText("The first day the Desk recorded its universe · 20 finished days of it exist");
+    await expect(firstDay).toHaveValue(FIRST_RECORDED);
     await firstDay.fill("2026-09-28");
     await expect(firstDay).toHaveValue("2026-09-28");
     await expectCleanScreen(page);

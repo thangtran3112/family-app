@@ -80,8 +80,10 @@ export function listBuiltText(list: Pick<DayList, "list_at" | "data_through">): 
 /** The Desk universe is capped at this many names by dollar volume (the backend's `MAX_UNIVERSE`). */
 export const UNIVERSE_CAP = 250;
 
-/** P7's universe footnote with the list's own size, then whatever else the server said (a watchlist scope, a cap). */
-export function universeNote(universe: Pick<DayList["universe"], "size" | "label" | "footnote">): string {
+/** P7's universe footnote with the list's own size, then whatever else the server said (a watchlist scope, a cap); the recorded morning's own note when the Desk recorded it. */
+export function universeNote(universe: Pick<DayList["universe"], "size" | "label" | "footnote" | "membership">): string {
+  // A day with a recorded morning (02o-b2) says so in the server's own words; the line about today's set is for the days before the recording.
+  if (universe.membership?.source === "universe_days") return universe.footnote;
   const extra = (universe.footnote.startsWith(universe.label) ? universe.footnote.slice(universe.label.length) : "").replace(/^ · /, "").trim();
   const base = practiceText("dayUniverse", { max: UNIVERSE_CAP, size: universe.size });
   return extra ? `${base} ${extra.charAt(0).toUpperCase()}${extra.slice(1)}.` : base;
