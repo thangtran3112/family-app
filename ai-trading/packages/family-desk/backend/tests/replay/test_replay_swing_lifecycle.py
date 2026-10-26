@@ -160,7 +160,12 @@ def test_day_one_board_has_every_universe_name_sorted_with_figures_from_the_prio
     assert keys == sorted(keys)  # matches, then source order, then dollar volume
     prior_close = pd.Timestamp(et(BASIS_DAY, "16:00"))
     assert pd.Timestamp(row.data_through) == prior_close and pd.Timestamp(row.list_at) == prior_close
-    assert row.screen == {"filters": [], "listAt": "04:30", "maxList": 50}
+    assert row.screen == {
+        "filters": [],
+        "listAt": "04:30",
+        "maxList": 50,
+        "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", "maxOpenHolds": 3},  # the week's plan (M3)
+    }
     assert row.columns == swing.BOARD_COLUMNS
     assert row.universe["size"] == 12 and row.universe["source"] == "swing"
     assert row.universe["mix"] == {"watchlist": 4, "manual": 2, "filter": 2, "liquidity": 4}

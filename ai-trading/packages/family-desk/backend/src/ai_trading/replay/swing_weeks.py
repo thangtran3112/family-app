@@ -284,15 +284,19 @@ def _entries(w: _Week, flags: dict[date, list[str]], interval: int) -> list[week
     return out
 
 
-def _week_plan(thread: PracticeThread, plan: PracticePlan) -> week_mod.WeekPlan:
-    """R1: the thread's plan fields under the 02p names (loss and trade limits count per week) and the swing spec's."""
+def _week_plan(thread: PracticeThread, plan: PracticePlan, first: ReplayDayList | None) -> week_mod.WeekPlan:
+    """R1: the plan limits under the 02p names (loss and trade limits count per week). They are the plan the week's days
+    were played under: the snapshot its FIRST day took when it opened, so a plan edit applies from the next week and
+    never re-scores the days already played. A day list from before the snapshot existed reads the live plan."""
+    snapshot = (first.screen or {}).get("plan") if first is not None else None
+    fields = snapshot or swing.plan_snapshot(thread, plan)
     return week_mod.WeekPlan(
-        stop_required=thread.stop_note_on_entry == "yes",
-        risk_per_hold_usd=plan.spec.get("riskPerHoldUsd"),
-        max_open_holds=plan.spec["maxOpenHolds"],
-        max_loss_usd=thread.max_loss_usd,
-        max_trades=thread.max_trades,
-        signal_only=thread.trade_only_on_signal == "yes",
+        stop_required=fields["stopNoteOnEntry"] == "yes",
+        risk_per_hold_usd=fields.get("riskPerHoldUsd"),
+        max_open_holds=fields["maxOpenHolds"],
+        max_loss_usd=fields.get("maxLossUsd"),
+        max_trades=fields.get("maxTrades"),
+        signal_only=fields["tradeOnlyOnSignal"] == "yes",
     )
 
 
@@ -336,7 +340,7 @@ def build_inputs(
         days=days,
         basis_day=basis,
         week_no=week_no,
-        plan=_week_plan(thread, plan),
+        plan=_week_plan(thread, plan, next((r for r in ended if r.day == w.span.days[0]), None)),
         day_facts=_day_facts(w),
         holds=_holds(w, labels),
         entries=_entries(w, flags, interval),

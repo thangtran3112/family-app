@@ -33,7 +33,7 @@ from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import ET, annotate
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.evaluate import _resample
-from ai_trading.db.models import PracticeMark, PracticeThread, ReplayDayList, ReplaySession
+from ai_trading.db.models import PracticeHold, PracticeMark, PracticeThread, ReplayDayList, ReplaySession
 from ai_trading.replay import hold_rows, swing_play
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
@@ -975,9 +975,35 @@ def _place_swing_mark(db: Session, ctx: Ctx, body: dict[str, Any], svc: Services
     }
 
 
+def _check_reopen(
+    db: Session, thread: PracticeThread, rows: list[PracticeHold], reopened: PracticeHold, day: date
+) -> None:
+    """Undoing an exit puts the hold back among the open ones, so it has to pass the cap and the cash rule again
+    against the thread's other holds: another name may have taken the slot or spent the cash since the exit (the shared
+    day clock lets a second name mark at the same moment). 409, and nothing is written."""
+    others = [r for r in rows if r is not reopened]
+    try:
+        holds_mod.check_entry(
+            open_holds=[hold_rows.to_hold(r) for r in others if r.status == "open"],
+            symbol=reopened.symbol,
+            shares=reopened.shares,
+            price=float(reopened.entry_price),
+            free_cash_usd=swing_play.free_cash(db, thread, others, day),
+        )
+    except holds_mod.HoldProblem as exc:
+        if exc.status == 409:  # the cap
+            reason = "take you past five practice holds"
+        elif exc.path == "shares":  # the cash
+            reason = "leave you without enough practice cash"
+        else:
+            raise
+        raise ReplayProblem(f"Can't undo that exit · it would {reason}", path="kind", status=409) from None
+
+
 def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
     """`undo_mark` for a swing session (02p b2): undoing an entry deletes its hold, undoing an exit reopens it (nothing
-    was credited yet), undoing a stop puts the previous stop back and clears the pause flag."""
+    was credited yet, and it must still fit the cap and the cash rule), undoing a stop puts the previous stop back and
+    recomputes whether that stop was already crossed."""
     row = ctx.row
     thread = swing_play.lock_thread(db, row.thread_id)
     rows = hold_rows.load(db, thread.id, lock=True)
@@ -989,11 +1015,13 @@ def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
             mine = None
         elif target.kind in EXIT_KINDS:
             if (mine := next((r for r in rows if r.exit_mark_id == target.id), None)) is not None:
+                _check_reopen(db, thread, rows, mine, row.day)
                 hold_rows.reopen(db, mine)
         elif target.kind == "stop" and mine is not None:
-            restored = replace(
-                hold_rows.to_hold(mine), stop_price=swing_play.previous_stop(db, mine, target.id), stop_hit_at=None
-            )
+            stop, set_at = swing_play.previous_stop(db, mine, target.id)
+            restored = replace(hold_rows.to_hold(mine), stop_price=stop, stop_hit_at=None)
+            if stop is not None:  # play may already have paused on the old stop: it must not pause on it twice
+                restored = replace(restored, stop_hit_at=swing_play.crossing_since(ctx, restored, set_at))
             hold_rows.apply(mine, restored)
     except holds_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None

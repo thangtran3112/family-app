@@ -18,6 +18,7 @@ cannot import `session` (which imports this module) or, at module level, `swing`
 """
 
 import logging
+import math
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -342,9 +343,10 @@ def strip(ctx: "Ctx", clock: pd.Timestamp) -> list[dict[str, Any]]:
 # -- the hold as the screens read it -------------------------------------------------------------------------------
 
 
-def free_cash(db: Any, thread: PracticeThread, rows: list[PracticeHold], day: date) -> float:
+def free_cash(db: Any, thread: PracticeThread, rows: list[PracticeHold], day: date | None) -> float:
     """Free cash on `day` (b2): the ledger balance, plus today's realized P/L of the holds that exited today (credited
-    to the ledger only when the day ends), minus the entry notional of every open hold."""
+    to the ledger only when the day ends), minus the entry notional of every open hold. `day` None: between days,
+    nothing is waiting to be credited."""
     realized = sum(
         holds_mod.closed_pnl(hold_rows.to_hold(r)) for r in rows if r.status == "closed" and r.exit_day == day
     )
@@ -410,9 +412,10 @@ def hold_out(ctx: "Ctx", row: PracticeHold, price: float | None) -> dict[str, An
     return view
 
 
-def previous_stop(db: Any, row: PracticeHold, removed_mark_id: int) -> float | None:
-    """The stop in force before the stop mark `removed_mark_id`: the latest earlier stop mark of this hold, taken to the
-    hold's share basis (a split since divides it), else the stop it entered with."""
+def previous_stop(db: Any, row: PracticeHold, removed_mark_id: int) -> tuple[float | None, pd.Timestamp]:
+    """The stop in force before the stop mark `removed_mark_id` and when it was set: the latest earlier stop mark of
+    this hold (its time), taken to the hold's share basis (a split since divides it), else the stop it entered with
+    (the entry's time)."""
     earlier = db.execute(
         select(PracticeMark)
         .join(ReplaySession, ReplaySession.id == PracticeMark.session_id)
@@ -426,13 +429,40 @@ def previous_stop(db: Any, row: PracticeHold, removed_mark_id: int) -> float | N
         .limit(1)
     ).scalar_one_or_none()
     if earlier is None:
-        return None if row.stop_at_entry is None else float(row.stop_at_entry)
+        return (None if row.stop_at_entry is None else float(row.stop_at_entry)), pd.Timestamp(row.entry_at).tz_convert(
+            "UTC"
+        )
     price = float(earlier.stop_price)
-    set_on = pd.Timestamp(earlier.at).tz_convert(ET).date()
+    set_at = pd.Timestamp(earlier.at).tz_convert("UTC")
     for split in row.splits or ():
-        if date.fromisoformat(split["day"]) > set_on:
+        if date.fromisoformat(split["day"]) > set_at.tz_convert(ET).date():
             price = round(price / split["ratio"], 6)
-    return price
+    return price, set_at
+
+
+def crossing_since(ctx: "Ctx", hold: holds_mod.Hold, since: pd.Timestamp) -> pd.Timestamp | None:
+    """When `hold`'s stop in force was first crossed in the regular one-minute bars closing in `(since, day clock]`, or
+    None. An undone stop note puts an older stop back, and whether play had already paused on it is not stored, so it is
+    read again from the bars of every day from `since` to today (an earlier day's raw bars are taken to the hold's share
+    basis: each split after that day divides them). Nothing later than the day clock is read."""
+    today = ctx.row.day
+    earlier = [d for d in plan_days(ctx) if since.tz_convert(ET).date() <= d < today]
+    frames = []
+    if earlier:
+        try:
+            raw = ctx.svc.history.minute_bars(ctx.store, hold.symbol, earlier)
+        except ProviderError as exc:
+            log.warning("swing: minute bars unavailable for %s: %s", hold.symbol, exc)
+            raw = {}
+        for day, frame in raw.items():
+            ratio = math.prod(split["ratio"] for split in hold.splits if date.fromisoformat(split["day"]) > day)
+            frames.append(_regular(frame, day) / ratio)
+    if (now := day_minutes(ctx, hold.symbol)) is not None:
+        frames.append(now)
+    if not frames:
+        return None
+    found = holds_mod.first_stop_crossing([hold], {hold.symbol: pd.concat(frames)}, since, day_clock(ctx))
+    return None if found is None else found.at
 
 
 # -- the journal ---------------------------------------------------------------------------------------------------
@@ -504,6 +534,7 @@ __all__ = (
     "NOT_OPEN",
     "SCORED_WEEKLY",
     "asof",
+    "crossing_since",
     "daily_block",
     "day_clock",
     "first_price",

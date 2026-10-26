@@ -59,7 +59,7 @@ from ai_trading.db.models import (
     WatchlistItem,
 )
 from ai_trading.replay import days as days_mod
-from ai_trading.replay import hold_rows, screen
+from ai_trading.replay import hold_rows, screen, swing_play
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import prep as prep_mod
@@ -526,6 +526,21 @@ def _thread_plan(db: Session, thread_id: int, *, lock: bool = False) -> Practice
     return db.execute(query.with_for_update() if lock else query).scalar_one()
 
 
+def plan_snapshot(thread: PracticeThread, plan: PracticePlan) -> dict[str, Any]:
+    """The plan fields the weekly review scores, as they stand now (the thread plan's names, R1, and the swing spec's).
+    A day list keeps them in its `screen` when it opens, so a week is scored under the plan its days started with. A
+    limit that is not set is absent."""
+    fields = {
+        "stopNoteOnEntry": thread.stop_note_on_entry,
+        "tradeOnlyOnSignal": thread.trade_only_on_signal,
+        "maxLossUsd": thread.max_loss_usd,
+        "maxTrades": thread.max_trades,
+        "riskPerHoldUsd": plan.spec.get("riskPerHoldUsd"),
+        "maxOpenHolds": plan.spec["maxOpenHolds"],
+    }
+    return {key: value for key, value in fields.items() if value is not None}
+
+
 def _days(plan: PracticePlan) -> list[date]:
     return plan_mod.plan_days(plan.first_day, plan.spec["sessions"])
 
@@ -805,6 +820,7 @@ def open_next(db: Session, user_id: int, svc: Services, thread_id: int) -> plan_
             "filters": [{"id": f.id, "version_id": f.version_id, "name": f.name} for f in filters],
             "listAt": screen.LIST_AT_MIN,
             "maxList": BOARD_ROWS,
+            "plan": plan_snapshot(thread, plan),
         },
         list_at=through.to_pydatetime(),
         data_through=through.to_pydatetime(),
@@ -843,14 +859,17 @@ def open_next(db: Session, user_id: int, svc: Services, thread_id: int) -> plan_
 
 
 def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeThread) -> ReplaySessionV1:
-    """A swing session is built by the server: the regular session 09:30 to 16:00, the plan's interval, 100 shares as
-    the default entry size, the thread's risk plan as it stands now (snapshotted by the session)."""
+    """A swing session is built by the server: the regular session 09:30 to the day's real close (13:00 on a half day,
+    which `session.create` would refuse a later end for), the plan's interval, 100 shares as the default entry size, the
+    thread's risk plan as it stands now (snapshotted by the session)."""
+    found = trading_session("stock", day)
+    assert found is not None
     return ReplaySessionV1.model_validate(
         {
             "schemaVersion": 1,
             "symbol": symbol,
             "day": day.isoformat(),
-            "window": {"from": "09:30", "to": "16:00"},
+            "window": {"from": "09:30", "to": found.regular_close.tz_convert(ET).strftime("%H:%M")},
             "session": "regular",
             "interval": plan.spec["interval"],
             "shares": plan_mod.DAY_SESSION_SHARES,
@@ -1152,6 +1171,17 @@ def hold_view(
     }
 
 
+def live_numbers(db: Session, thread: PracticeThread, day: date | None) -> tuple[float, float]:
+    """`(free cash, equity)` of the thread while `day` is under way (None: between days). Free cash is the entry
+    rule's (`swing_play.free_cash`): a hold she exited today counts as realized, though the ledger credits it when the
+    day ends. Equity values every hold that was open at the last ended close at that close, an exit of today's
+    included (a3 rule 6: the thread's stats move when a day ends), so an exit moves cash and not equity until then."""
+    rows = hold_rows.load(db, thread.id)
+    valued = [hold_rows.to_hold(r) for r in rows if r.status == "open" or r.exit_day == day]
+    equity = _money(balance(db, thread) + sum(holds_mod.pnl(h, _value_price(h)) for h in valued))
+    return swing_play.free_cash(db, thread, rows, day), equity
+
+
 def state(db: Session, thread: PracticeThread) -> dict[str, Any]:
     """The `swing` block of `GET thread` (02p f2), from stored rows only: the day under way (else the next to open),
     the sessions and weeks, the open holds with free cash and equity (holds valued at their last official close, never
@@ -1161,8 +1191,7 @@ def state(db: Session, thread: PracticeThread) -> dict[str, Any]:
     ended = threads_mod._ended_days(db, thread.id)
     under_way = threads_mod.open_day(db, thread.id)
     day_no = under_way.day_no if under_way is not None else min(len(ended) + 1, len(days))
-    held = [hold_rows.to_hold(r) for r in hold_rows.open_holds(db, thread.id)]
-    cash = balance(db, thread)
+    free_cash, equity = live_numbers(db, thread, None if under_way is None else under_way.day)
     if thread.status == "closed" or len(ended) >= len(days):
         upcoming = "finished"
     elif under_way is None and ended and week_mod.is_last_day_of_week(days, ended[-1].day):
@@ -1175,9 +1204,9 @@ def state(db: Session, thread: PracticeThread) -> dict[str, Any]:
         "days_ended": len(ended),
         "week_no": week_mod.span_for(days, days[day_no - 1]).week_no,
         "weeks": len(week_mod.week_spans(days)),
-        "holds_open": len(held),
-        "free_cash_usd": holds_mod.free_cash(cash, 0.0, held),
-        "equity_usd": _money(cash + sum(holds_mod.pnl(h, _value_price(h)) for h in held)),
+        "holds_open": len(hold_rows.open_holds(db, thread.id)),
+        "free_cash_usd": free_cash,
+        "equity_usd": equity,
         "equity_series": [
             {
                 "day_no": d.day_no,
@@ -1283,8 +1312,7 @@ def day_list_out(db: Session, user_id: int, day_list_id: int, svc: Services, pee
             )
             for r in live
         ]
-        held = [hold_rows.to_hold(r) for r in live if r.status == "open"]
-        free_cash = holds_mod.free_cash(balance(db, thread), 0.0, held)
+        free_cash = live_numbers(db, thread, row.day)[0]
     sessions = plan_mod._sessions_of(db, row.id)
     return {
         "kind": "swing",
@@ -1347,6 +1375,7 @@ __all__ = (
     "is_cached",
     "open_next",
     "plan_out",
+    "plan_snapshot",
     "pool_prep",
     "preview",
     "run_prep",
