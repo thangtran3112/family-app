@@ -37,6 +37,7 @@ from ai_trading.core.calendar import ET, et
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.db.models import PracticeHold, PracticeLedger, PracticeMark, ReplaySession
 from ai_trading.replay import hold_rows, screen, swing
+from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
 from ai_trading.replay.session import ReplayProblem
@@ -66,8 +67,8 @@ def owner(db_session) -> int:
 
 
 def bar_close(world, symbol, day, hhmm):
-    """The close of the one-minute bar that STARTS at `hhmm`, to the six decimals the blob cache and the rows keep."""
-    return round(raw_bar_close(world, symbol, day, hhmm), 6)
+    """The close of the one-minute bar that STARTS at `hhmm`, as a practice fill is priced: the whole cent (D-033)."""
+    return journal_mod.fill_price(raw_bar_close(world, symbol, day, hhmm))
 
 
 def off(price, delta):
@@ -1008,7 +1009,7 @@ class _Drive:
             for strip_row in true["strip"]:  # independent of the code under test: the world's own bars
                 frame = world.minutes[strip_row["symbol"]]
                 closed = frame[(frame.index >= et(day, "09:30")) & (frame.index + MINUTE <= clock)]
-                expected = None if closed.empty else round(float(closed["close"].iloc[-1]), 6)
+                expected = None if closed.empty else journal_mod.fill_price(float(closed["close"].iloc[-1]))
                 assert strip_row["last"] == (None if expected is None else pytest.approx(expected, abs=1e-6))
             forming = true["daily"]["forming"]
             if forming is not None:

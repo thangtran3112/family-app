@@ -119,7 +119,7 @@ def test_a_rescan_needs_a_day_clock_and_a_day_that_is_not_over(db_session, user_
     row = _first_list(db_session, user_id, svc)
     with pytest.raises(ReplayProblem) as early:
         plan_mod.rescan(db_session, user_id, row.id, svc)
-    assert early.value.status == 409 and early.value.message.startswith("Practise a name first")
+    assert early.value.status == 409 and early.value.message.startswith("Practice a name first")
     plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     plan_mod.rescan(db_session, user_id, row.id, svc)
     plan_mod.end_day(db_session, user_id, row.id, svc)

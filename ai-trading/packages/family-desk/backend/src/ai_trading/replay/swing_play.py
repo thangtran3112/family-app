@@ -144,8 +144,9 @@ def last_price(ctx: "Ctx", through: pd.Timestamp) -> tuple[float, pd.Timestamp] 
 
 def first_price(ctx: "Ctx", through: pd.Timestamp) -> float | None:
     """The first regular-session price of the day revealed by `through`: the opening print with the tape on (looked for
-    in the first five minutes), else the 09:30 bar's close. ponytail: a tape that has no print in those five minutes
-    reads the bar close; the day summary's gap is always the bar close (`swing._first_regular_close`)."""
+    in the first five minutes), else the 09:30 bar's close; whole cents, as every fill is (D-033). ponytail: a tape that
+    has no print in those five minutes reads the bar close; the day summary's gap is always the raw bar close
+    (`swing._first_regular_close`), so it can differ from this price by under a cent a share."""
     found = trading_session("stock", ctx.row.day)
     assert found is not None
     if ctx.feed != "off":
@@ -161,15 +162,15 @@ def first_price(ctx: "Ctx", through: pd.Timestamp) -> float | None:
             log.warning("tape unavailable for the first price: %s", exc)
             window = None
         if window is not None and len(window):
-            return float(window.p[0])
+            return journal_mod.fill_price(float(window.p[0]))
     closed = _closed(day_minutes(ctx, ctx.symbol), through)
-    return None if closed.empty else float(closed["close"].iloc[0])
+    return None if closed.empty else journal_mod.fill_price(float(closed["close"].iloc[0]))
 
 
 def last_close_at(ctx: "Ctx", symbol: str, clock: pd.Timestamp) -> float | None:
-    """`symbol`'s last revealed regular-session one-minute close at `clock` (strip rows)."""
+    """`symbol`'s last revealed regular-session one-minute close at `clock` (strip rows), in whole cents (D-033)."""
     closed = _closed(day_minutes(ctx, symbol), clock)
-    return None if closed.empty else float(closed["close"].iloc[-1])
+    return None if closed.empty else journal_mod.fill_price(float(closed["close"].iloc[-1]))
 
 
 # -- the daily frame (rebased, through D-1) ------------------------------------------------------------------------
@@ -272,7 +273,7 @@ def stop_pause(ctx: "Ctx", previous: pd.Timestamp, target: pd.Timestamp) -> tupl
         "symbol": crossing.symbol,
         "stop_price": crossing.stop_price,
         "at": crossing.at,
-        "price": crossing.price,
+        "price": journal_mod.fill_price(crossing.price),  # the price an Exit books: whole cents (D-033)
         "kind": crossing.kind,
         "also": list(crossing.also),
     }

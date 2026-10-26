@@ -368,7 +368,7 @@ def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alon
     assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan"] is None
     early = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
     assert early.status_code == 409
-    assert early.json()["detail"]["problems"][0]["message"].startswith("Practise a name first")
+    assert early.json()["detail"]["problems"][0]["message"].startswith("Practice a name first")
 
     session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
     to = et(DAYS[0], "10:00").tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")

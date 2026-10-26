@@ -454,7 +454,7 @@ def test_deleting_a_user_cascades_to_threads_holds_weeks_and_ledger(db_session: 
 
 
 @pytest.fixture
-def at_0008() -> Iterator[tuple[Engine, Config]]:
+def at_head() -> Iterator[tuple[Engine, Config]]:
     server_url = os.environ.get("DESK_TEST_DATABASE_URL")
     if not server_url:
         if os.environ.get("DESK_REQUIRE_DB") == "1":
@@ -467,7 +467,7 @@ def at_0008() -> Iterator[tuple[Engine, Config]]:
     url = make_url(server_url).set(database=name).render_as_string(hide_password=False)
     config = Config(str(_ALEMBIC_INI))
     config.set_main_option("sqlalchemy.url", url)
-    command.upgrade(config, "0008")
+    command.upgrade(config, "head")  # the ORM models carry every column up to head, so the seed rows need that schema
     engine = create_engine(url)
     try:
         yield engine, config
@@ -503,8 +503,8 @@ def _seed_swing_data(db: Session) -> dict[str, int]:
     }
 
 
-def test_downgrade_with_swing_data_leaves_a_0007_database_and_upgrade_works_again(at_0008) -> None:
-    engine, config = at_0008
+def test_downgrade_with_swing_data_leaves_a_0007_database_and_upgrade_works_again(at_head) -> None:
+    engine, config = at_head
     with Session(engine) as db:
         ids = _seed_swing_data(db)
 
