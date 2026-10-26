@@ -113,3 +113,20 @@
 .confirm { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Swing thread (02p): balance and equity header, the two-line curve and its key, the weeks table. */
+.balanceStack { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 2px; }
+.equityValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
+.equityLine { fill: none; stroke: var(--color-amber); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 6 3; }
+.dotEquity { fill: var(--color-amber); }
+.equityLabel { fill: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-bold); }
+.keyList { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+.keyLine { display: inline-block; width: 20px; height: 0; flex-shrink: 0; border-top: 2px solid var(--color-text); }
+.keyBalance { border-top-color: var(--color-text); }
+.keyEquity { border-top-color: var(--color-amber); border-top-style: dashed; }
+.nextRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3); }
+.nextText { display: flex; min-width: 0; flex: 1 1 240px; flex-direction: column; gap: 2px; }
+.primaryLink { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: 0 var(--space-4); color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: none; white-space: nowrap; }
+.primaryLink:hover { background: var(--color-raised); }
+.primaryLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.tableWrap { min-width: 0; }

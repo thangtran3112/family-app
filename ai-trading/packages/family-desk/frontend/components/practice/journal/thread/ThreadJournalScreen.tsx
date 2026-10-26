@@ -13,6 +13,7 @@ import type { Thread } from "@/lib/replay/threads";
 import { BalanceCurve } from "./BalanceCurve";
 import { DayBars } from "./DayBars";
 import { ImprovementPanel } from "./ImprovementPanel";
+import { SwingThreadJournal } from "./SwingThreadJournal";
 import { ThreadPlanPanel } from "./ThreadPlanPanel";
 import { ThreadSidePanel } from "./ThreadSidePanel";
 import { ThreadTiles } from "./ThreadTiles";
@@ -40,6 +41,8 @@ export function ThreadJournalScreen() {
       </div>
     );
   }
+  // A swing thread (02p) has its own journal: balance and equity, weeks, open holds. The day thread's is unchanged.
+  if (query.data.thread.mode === "swing" && query.data.swing) return <SwingThreadJournal key={query.data.thread.id} thread={query.data} onChanged={query.refresh} />;
   return <ThreadJournal key={query.data.thread.id} thread={query.data} onChanged={query.refresh} />;
 }
 
