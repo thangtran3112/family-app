@@ -46,6 +46,9 @@ export type ReplayView = {
   quietS: number | null;
   openTrade: OpenTrade | null;
   revealedThrough: string;
+  /** The day list's shared clock (null for a standalone session) and whether this name's playhead is behind it. */
+  dayClock: string | null;
+  behindClock: boolean;
   atEnd: boolean;
   /** Swing only (null for a day session): the day strip at the day clock, the latest answer wins. */
   strip: StripRow[] | null;
@@ -102,6 +105,8 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
     quietS: feed.quiet_s,
     openTrade: feed.open_trade,
     revealedThrough: feed.revealed_through,
+    dayClock: feed.day_clock,
+    behindClock: feed.behind_clock,
     atEnd: feed.at_end,
     strip: feed.strip ?? null,
     daily: feed.daily ?? null,
@@ -130,6 +135,8 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
     quietS: delta.quiet_s,
     openTrade: delta.open_trade,
     revealedThrough: delta.revealed_through,
+    dayClock: delta.day_clock,
+    behindClock: delta.behind_clock,
     atEnd: delta.at_end,
     // The latest value stands; an answer without a strip (a day session) leaves what the view had.
     strip: delta.strip ?? view.strip,

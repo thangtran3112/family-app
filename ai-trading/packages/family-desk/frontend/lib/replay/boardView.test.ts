@@ -67,24 +67,23 @@ test("a star is stamped with the day clock, else the open; only stars after the 
   assert.equal(lateStarsText([]), null);
 });
 
+const session = <S extends "active" | "ended">(id: number, symbol: string, status: S) => ({ id, symbol, status, revealed_through: "2026-07-14T14:00:00Z", behind_clock: false, has_open_trade: false });
+
 test("Start Day opens on a focus name or a hold; a day under way resumes its open session; nothing to open on disables Start", () => {
   assert.deepEqual(boardStart(swingDayList), { kind: "start", symbol: "NVDA" });
   assert.deepEqual(boardStart({ ...swingDayList, watch: [] }), { kind: "start", symbol: "NVDA" }, "no star: the first hold");
   assert.deepEqual(boardStart({ ...swingDayList, watch: [], holds: [] }), { kind: "none" });
-  const sessions = [
-    { id: 90, symbol: "AMD", status: "active" as const },
-    { id: 91, symbol: "NVDA", status: "active" as const },
-  ];
+  const sessions = [session(90, "AMD", "active"), session(91, "NVDA", "active")];
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions }), { kind: "resume", symbol: "NVDA" }, "the first focus name's session");
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [sessions[0]!] }), { kind: "resume", symbol: "AMD" }, "else any open one");
-  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [{ id: 90, symbol: "NVDA", status: "ended" }] }), { kind: "start", symbol: "NVDA" });
+  assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [session(90, "NVDA", "ended")] }), { kind: "start", symbol: "NVDA" });
   assert.equal(resumeDayLabel(7), "Resume Day 7");
 });
 
 test("Pass is offered only on a day she has not opened", () => {
   assert.equal(canPass(swingDayList), true);
   assert.equal(canPass({ status: "practicing", sessions: [] }), false);
-  assert.equal(canPass({ status: "listed", sessions: [{ id: 1, symbol: "NVDA", status: "active" }] }), false);
+  assert.equal(canPass({ status: "listed", sessions: [session(1, "NVDA", "active")] }), false);
   assert.equal(canPass({ status: "ended", sessions: [] }), false);
 });
 

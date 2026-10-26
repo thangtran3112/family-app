@@ -46,6 +46,8 @@ export type ReplaySessionApi = {
   jumpBy: (minutes: number) => void;
   jumpToTime: (hhmm: string) => void;
   jumpToEnd: () => void;
+  /** Moves a name that is behind the day clock up to it (02o-b2). */
+  catchUp: () => void;
   /** Resolves true when the server accepted the mark. */
   mark: (kind: EntryOrExit, draft: MarkDraft) => Promise<boolean>;
   stopNote: (price: string) => void;
@@ -255,6 +257,11 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     }
   }, [id, tape]);
 
+  const catchUp = useCallback(() => {
+    const clock = viewRef.current?.dayClock;
+    if (clock && guard()) void exec(() => advance({ to: clock }));
+  }, [exec, advance]);
+
   /** Sends a built mark; the server stamps it at the playhead and answers the new book. */
   const send = useCallback(
     async (built: MarkBuild): Promise<boolean> => {
@@ -379,8 +386,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     () => ({
       session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
       paused: view?.paused ?? null, dismissPause,
-      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, mark, stopNote, note, undo, end, setFilter, setInterval,
+      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, mark, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

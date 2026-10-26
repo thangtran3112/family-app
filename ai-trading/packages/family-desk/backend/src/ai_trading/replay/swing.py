@@ -1338,7 +1338,7 @@ def day_list_out(db: Session, user_id: int, day_list_id: int, svc: Services, pee
         "candidates": row.candidates,
         "holds": holds_block,
         "free_cash_usd": free_cash,
-        "sessions": [{"id": s.id, "symbol": s.symbol, "status": s.status} for s in sessions],
+        "sessions": [plan_mod._session_brief(s, row, set()) for s in sessions],  # no one-open-trade rule in swing
         "universe": row.universe,
         "label": row.universe["label"],
         "peek": None if peek is None else _peek(db, svc, row, peek),

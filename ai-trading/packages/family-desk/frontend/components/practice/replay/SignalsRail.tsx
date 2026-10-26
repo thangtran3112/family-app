@@ -31,8 +31,9 @@ export function SignalsRail({ signals, selectedKey = null, onSelect }: SignalsRa
               title="Moves the chart crosshair to this bar · the playhead stays where it is"
               onClick={() => onSelect?.(signal)}
             >
-              <span className={styles.signalText}>
+              <span className={signal.seen ? styles.signalText : `${styles.signalText} ${styles.unseen}`}>
                 {`${formatEtTime(signal.bar_close)} · ${signal.name} · would fire at ${formatPrice(signal.close)}`}
+                {!signal.seen && <span className={styles.unseenNote}>{` · ${PRACTICE_COPY.signalUnseen}`}</span>}
               </span>
             </button>
           </li>

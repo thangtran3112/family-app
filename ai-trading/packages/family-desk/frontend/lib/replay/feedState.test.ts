@@ -169,3 +169,11 @@ test("a mark moves this name's hold marker on the Daily chart", () => {
   const day = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
   assert.equal(withHoldMarker(day, nvdaHold, "2026-07-14"), day, "a day session has no Daily block");
 });
+
+test("the view carries the day clock and whether this name is behind it, from a feed and from an advance", () => {
+  const behind = viewFromFeed(ReplayFeedSchema.parse({ ...feed, day_clock: "2026-04-07T14:30:00Z", behind_clock: true }), "5m");
+  assert.deepEqual([behind.dayClock, behind.behindClock], ["2026-04-07T14:30:00Z", true]);
+  const caught = applyAdvance(behind, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-04-07T14:30:00Z", day_clock: "2026-04-07T14:30:00Z", behind_clock: false }));
+  assert.deepEqual([caught.dayClock, caught.behindClock], ["2026-04-07T14:30:00Z", false]);
+  assert.equal(viewFromFeed(ReplayFeedSchema.parse(feed), "5m").dayClock, null);
+});

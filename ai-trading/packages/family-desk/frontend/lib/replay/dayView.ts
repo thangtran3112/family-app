@@ -11,7 +11,7 @@ import {
   type Tone,
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, ReviewRow } from "./daily.ts";
+import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatUsd } from "./journalView.ts";
 import type { ThreadPlan } from "./threads.ts";
 
@@ -19,6 +19,18 @@ import type { ThreadPlan } from "./threads.ts";
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
 
 export const MAX_STARS = 5;
+
+/** "name" or "names" for a count. */
+export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
+
+/** The most names the plan lets her star and practise in a day (`maxSymbols`; the server sends the effective cap). */
+export const nameCap = (plan: Pick<PracticePlan, "max_symbols">): number => plan.max_symbols;
+
+/** "2 of 3 names practiced today". */
+export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string {
+  const max = nameCap(list.plan);
+  return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
+}
 
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
@@ -227,11 +239,63 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a sixth name is refused. */
-export function toggledStars(watch: readonly { symbol: string }[], symbol: string): string[] | null {
+/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most five). */
+export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
   const symbols = watch.map((star) => star.symbol);
   if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
-  return symbols.length >= MAX_STARS ? null : [...symbols, symbol];
+  return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
+}
+
+/** The message for a refused star: the plain 5-name line, or the plan's own cap. */
+export function starsFullText(cap: number): string {
+  return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
+}
+
+export type StripRow = {
+  symbol: string;
+  /** The session to resume; null for a starred name she has not opened yet. */
+  sessionId: number | null;
+  starred: boolean;
+  behind: boolean;
+  holding: boolean;
+};
+
+/** The day's names: every one she has opened, then the starred ones she has not. `from` is the name she is on and its
+ *  playhead: another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { symbol: string; playhead: string }): StripRow[] {
+  const starred = new Set(list.watch.map((star) => star.symbol));
+  const opened = list.sessions.map((session): StripRow => ({
+    symbol: session.symbol,
+    sessionId: session.id,
+    starred: starred.has(session.symbol),
+    behind:
+      session.behind_clock ||
+      (from !== undefined && session.symbol !== from.symbol && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
+    holding: session.has_open_trade,
+  }));
+  const open = new Set(opened.map((row) => row.symbol));
+  const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
+  return [...opened, ...rest];
+}
+
+// ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
+
+/** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */
+export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): boolean =>
+  list.status !== "ended" && list.clock !== null && Date.parse(list.clock) >= Date.parse(list.list_at);
+
+/** "Scan 2 · run at 10:00 AM ET · data through 9:45 AM": the clock it ran at and the time its data stops. */
+export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
+  practiceText("dayRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
+
+/** "2 of 2 matched · 1 new since your list". */
+export const rescanCounts = (scan: Pick<Rescan, "universe" | "new_count">): string =>
+  practiceText("dayRescanCounts", { shown: scan.universe.shown, matched: scan.universe.matches_total, fresh: scan.new_count });
+
+/** The day clock has moved since the scan ran: the scan is older than the screen's clock. */
+export function rescanStaleText(list: Pick<DayList, "clock" | "rescan">): string | null {
+  if (list.rescan === null || list.clock === null || Date.parse(list.clock) <= Date.parse(list.rescan.as_of)) return null;
+  return practiceText("dayRescanStale", { clock: formatEtTimeZone(list.clock) });
 }
 
 export function listWarning(list: Pick<DayList, "warnings">): string | null {

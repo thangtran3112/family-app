@@ -10,12 +10,15 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, relistDay, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
-import type { Candidate, DayList } from "@/lib/replay/daily";
+import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
 import {
+  canRescan,
+  cellText,
+  cellTone,
   datesHidden,
   dayCellText,
   dayCellTone,
@@ -27,9 +30,14 @@ import {
   listBuiltText,
   listCountsText,
   listWarning,
-  MAX_STARS,
+  nameCap,
+  namesTodayText,
   noMatchText,
+  rescanCounts,
+  rescanLabel,
+  rescanStaleText,
   sourceNote,
+  starsFullText,
   toggledStars,
   universeNote,
 } from "@/lib/replay/dayView";
@@ -107,7 +115,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
 
-  const practicing = list.sessions[0] ?? null;
+  // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
+  const practicing = list.sessions.at(-1) ?? null;
+  const opened = new Set(list.sessions.map((session) => session.symbol));
+  const cap = nameCap(list.plan);
   const columns = columnsOf(list, {
     starred: (symbol) => isStarred(list.watch, symbol),
     onStar: (symbol) => void star(symbol),
@@ -127,9 +138,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   }
 
   async function star(symbol: string) {
-    const next = toggledStars(list.watch, symbol);
+    const next = toggledStars(list.watch, symbol, cap);
     if (next === null) {
-      setMessage(PRACTICE_COPY.dayStarsFull);
+      setMessage(starsFullText(cap));
       return;
     }
     await run(async () => {
@@ -157,6 +168,12 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       if (result.plan.prep.state === "running" && result.screen.list_at !== listAt) setMessage(PRACTICE_COPY.dayRelistPreparing);
       onChanged();
     }, PRACTICE_COPY.dayRelistError);
+
+  const rescan = () =>
+    run(async () => {
+      await rescanDay(list.id);
+      onChanged();
+    }, PRACTICE_COPY.dayRescanError);
 
   const next = () =>
     run(async () => {
@@ -226,8 +243,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         <section className={styles.section} aria-label="Candidates">
           <div className={styles.sectionHead}>
             <h2 className={styles.sectionTitle}>Candidates</h2>
-            <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: MAX_STARS })}</span>
+            <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: cap })}</span>
           </div>
+          {!ended && <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>}
           <DenseTable
             caption="Candidates"
             columns={withPriorities(columns, "practiceList")}
@@ -244,17 +262,46 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               <button
                 type="button"
                 className={styles.small}
-                disabled={busy || (practicing !== null && practicing.symbol !== row.symbol)}
+                disabled={busy}
                 aria-label={practiceText("dayPractice", { symbol: row.symbol })}
                 onClick={() => void practice(row.symbol)}
               >
-                {practicing?.symbol === row.symbol ? "Resume" : "Practice"}
+                {opened.has(row.symbol) ? "Resume" : "Practice"}
               </button>
             )}
           />
           <UniverseFootnote text={universeNote(list.universe)} />
           <UniverseFootnote text={sourceNote(list)} />
         </section>
+
+        {(!ended || list.rescan !== null) && (
+          <section className={styles.section} aria-label="Re-scan">
+            <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
+            {!ended && (
+              <div className={styles.actions}>
+                <button type="button" className={styles.button} disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{PRACTICE_COPY.dayRescan}</button>
+                <span className={styles.muted}>{canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
+              </div>
+            )}
+            {list.rescan && (
+              <>
+                <p className={styles.line} data-testid="rescan-label">{rescanLabel(list.rescan)}</p>
+                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list.rescan)}</p>
+                {!ended && rescanStaleText(list) && <p className={styles.muted} role="status" data-testid="rescan-stale">{rescanStaleText(list)}</p>}
+                <DenseTable
+                  caption="Re-scan"
+                  columns={withPriorities(rescanColumnsOf(list.rescan), "practiceList")}
+                  rows={list.rescan.candidates}
+                  rowKey={(row) => row.symbol}
+                  scrollX
+                  empty={<EmptyBlock title={PRACTICE_COPY.dayNoNames} />}
+                />
+                <UniverseFootnote text={list.rescan.universe.footnote} />
+                {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayRescanReadOnly}</p>}
+              </>
+            )}
+          </section>
+        )}
 
         {ended && list.review && <ReviewPanel review={list.review} journal={list.journal} footnote={list.universe.footnote} />}
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
@@ -270,7 +317,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         onPractice={(symbol) => void practice(symbol)}
         onUnstar={(symbol) => void star(symbol)}
         busy={busy}
-        practicing={practicing?.symbol ?? null}
+        opened={opened}
         ended={ended}
       />
       <RightRail
@@ -323,6 +370,33 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       />
     </div>
   );
+}
+
+/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no star, no practice. */
+function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]>[] {
+  return [
+    {
+      key: "symbol",
+      label: "Symbol",
+      render: (row) => (
+        <span>
+          <span className={styles.symbol}>{row.symbol}</span>
+          {row.new_since_list && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</span>}
+          {row.reported_before_open && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</span>}
+        </span>
+      ),
+    },
+    { key: "filters", label: "Filters", render: (row) => filtersText(row) },
+    ...scan.columns.map((column): DenseColumn<Rescan["candidates"][number]> => ({
+      key: column.key,
+      label: column.label,
+      align: column.format === "time" ? "left" : "right",
+      render: (row) => {
+        const tone = cellTone(column, row);
+        return <span className={tone ? styles[tone] : undefined}>{cellText(column, row)}</span>;
+      },
+    })),
+  ];
 }
 
 function columnsOf(

@@ -15,8 +15,8 @@ import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChro
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { currentValue } from "@/lib/chart-data";
-import { formatEtDay } from "@/lib/desk/format";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { buildChartSeries } from "@/lib/desk/workspace";
@@ -51,6 +51,7 @@ import { endAnyDay } from "@/lib/replay/swingApi";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
+import { DayNames } from "./DayNames";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
@@ -128,6 +129,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const pnl = practicePnl(session.journal, view.openTrade);
   const trades = tradeCount(session.journal, view.openTrade);
   const atEnd = api.player.status === "at_end" || ended;
+  const behind = view.behindClock && !ended;
 
   const masked = hidden && !dateShown;
   useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: view.revealedThrough, status: replayStatusLine(session.tape_feed, view.revealedThrough), onShowDate: masked ? () => setDateShown(true) : null });
@@ -294,7 +296,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       onExit={() => byLetter("x")}
       onStop={api.stopNote}
       onNote={api.note}
-      disabled={ended}
+      disabled={ended || behind}
       swing={swing ? { tape: session.tape_feed === "off" ? "off" : "on", cash: freeCashText(session.thread?.free_cash_usd), hint: sizing, defaultShares } : undefined}
     />
   );
@@ -317,6 +319,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       }}
     />;
 
+  const dayNames = dayListId !== null && !swing ? <DayNames dayListId={dayListId} current={spec.symbol} playhead={view.revealedThrough} revision={session.marks.length * 2 + (behind ? 1 : 0)} /> : null;
+
   const sections: RailSection[] = [
     {
       id: "tape",
@@ -334,14 +338,16 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     },
     { id: "practice", label: "Practice", node: controls },
     ...(band === "1180" ? [{ id: "signals", label: "Signals", node: signalsRail }] : []),
+    // At 1440 the day's names sit in the left rail; at 1180 that rail is a strip, so they open from the right drawer.
+    ...(band === "1180" && dayNames !== null ? [{ id: "names", label: "Names", node: dayNames }] : []),
   ];
   const fires = armed.reduce((sum, item) => sum + item.fires, 0);
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
-      <button type="button" className={`${styles.button} ${styles.long}`} disabled={ended} title="Practice long (B)" onClick={() => byLetter("b")}>Long</button>
-      <button type="button" className={`${styles.button} ${styles.short}`} disabled={ended} title="Practice short (S)" onClick={() => byLetter("s")}>Short</button>
-      <button type="button" className={styles.button} disabled={ended || side === "flat"} title="Exit (X)" onClick={() => byLetter("x")}>Exit</button>
+      <button type="button" className={`${styles.button} ${styles.long}`} disabled={ended || behind} title="Practice long (B)" onClick={() => byLetter("b")}>Long</button>
+      <button type="button" className={`${styles.button} ${styles.short}`} disabled={ended || behind} title="Practice short (S)" onClick={() => byLetter("s")}>Short</button>
+      <button type="button" className={styles.button} disabled={ended || behind || side === "flat"} title="Exit (X)" onClick={() => byLetter("x")}>Exit</button>
     </span>
   ) : null;
 
@@ -371,6 +377,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         <StopPausedToast paused={shownPause} exit={exitTarget} busy={api.player.busy || opening !== null} onExit={() => exitTarget && exitPaused(exitTarget)} onKeep={answerPause} />
       )}
       {lossHit && <p className={styles.warning} role="status">{PRACTICE_COPY.maxLoss}</p>}
+      {behind && view.dayClock && (
+        <p className={styles.warning} role="status" data-testid="behind-clock">
+          <span>{practiceText("replayBehind", { symbol: spec.symbol, clock: formatEtTimeZone(view.dayClock) })}</span>
+          <button type="button" className={styles.linkButton} disabled={api.player.busy} onClick={api.catchUp}>{PRACTICE_COPY.replayCatchUp}</button>
+        </p>
+      )}
       <div className={styles.chartSlot}>
         <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} />
       </div>
@@ -506,6 +518,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
                   onAddStop={() => openComposer("stop")}
                 />
               </section>
+              {band === "1440" && dayNames && (
+                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayNamesTitle}>
+                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayNamesTitle}</h2>
+                  {dayNames}
+                </section>
+              )}
             </>
           )}
           <section className={styles.sessionSection} aria-label="Armed strategies">

@@ -48,7 +48,18 @@ from ai_trading.replay.data import (
     check_window,
     window_bounds,
 )
-from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS, INTERVAL_MINUTES, Fire, Mark, Plan
+from ai_trading.replay.model import (
+    ENTRY_KINDS,
+    EXIT_KINDS,
+    INTERVAL_MINUTES,
+    Fire,
+    Mark,
+    Plan,
+    Span,
+    add_span,
+    spans_of,
+    unseen,
+)
 from ai_trading.replay.tape import BIG_PRINT_USD, PACE_WINDOW_S, Prints, Tape, pace, select_rows, ticks
 
 log = logging.getLogger(__name__)
@@ -107,6 +118,8 @@ class Ctx:
         False  # a session of a swing thread (02p): its holds carry overnight, so the day never auto-exits them
     )
     db: Session | None = field(default=None, repr=False)  # the request's session: a swing session reads its holds
+    day_clock: pd.Timestamp | None = None  # the day list's shared clock; None for a standalone session
+    away: list[Span] = field(default_factory=list)  # the spans she was on another name (02o-b2)
     _cache: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -120,6 +133,12 @@ class Ctx:
     @property
     def feed(self) -> str:
         return self.row.tape_feed
+
+    @property
+    def behind_clock(self) -> bool:
+        """This name's playhead is behind the day's shared clock: it is revealed up to the playhead only, and it cannot
+        be marked until an advance catches it up."""
+        return self.day_clock is not None and self.through < self.day_clock
 
 
 # -- small helpers -------------------------------------------------------------------------------------------
@@ -203,6 +222,18 @@ def get_row(db: Session, user_id: int, session_id: int, *, lock: bool = False) -
     return row
 
 
+def open_trades(db: Session, day_list_id: int) -> list[tuple[int, str]]:
+    """`(session id, symbol)` of every session of the day list that holds an open practice trade. A day thread keeps
+    one open trade a day (02o-b2): she closes it before she moves to another name."""
+    out = []
+    for session_id, symbol in db.execute(
+        select(ReplaySession.id, ReplaySession.symbol).where(ReplaySession.day_list_id == day_list_id)
+    ).all():
+        if journal_mod.assemble(_marks_of(_load_marks(db, session_id)))[1] is not None:
+            out.append((session_id, symbol))
+    return out
+
+
 def _day_trades(db: Session, row: ReplaySession) -> list[journal_mod.Trade]:
     """The closed trades of the other sessions of this session's day list: the max loss and the trade limit count
     every name practised that day (02o-b2)."""
@@ -222,6 +253,7 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
     store = svc.store_factory(db)
     inputs = svc.history.day_inputs(store, row.symbol, row.day)
     swing = _is_swing(db, row)
+    day_list = db.get(ReplayDayList, row.day_list_id) if row.day_list_id is not None else None
     return Ctx(
         row=row,
         svc=svc,
@@ -237,6 +269,8 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         day_trades=[] if swing else _day_trades(db, row),  # a swing journal is scored weekly, not by day rules
         swing=swing,
         db=db,
+        day_clock=None if day_list is None or day_list.revealed_through is None else _ts(day_list.revealed_through),
+        away=spans_of(row.away or []),
     )
 
 
@@ -378,6 +412,7 @@ def _journal(ctx: Ctx, price: float | None, *, final: bool) -> dict[str, Any]:
         last_price=price,
         final=final,
         day_trades=ctx.day_trades,
+        away=ctx.away,
     )
 
 
@@ -403,6 +438,8 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
         "window_start": ctx.window_start,
         "window_end": ctx.window_end,
         "revealed_through": ctx.through,
+        "day_clock": ctx.day_clock,
+        "behind_clock": not ended and ctx.behind_clock,
         "tape_feed": row.tape_feed,
         "armed": [{**ref, "fires_so_far": counts.get((ref["source"], ref["id"]), 0)} for ref in row.armed],
         "marks": [mark_out(m) for m in ctx.marks],
@@ -536,6 +573,13 @@ def create(
         ).scalar_one()
         + 1
     )
+    # Joined mid-day: the session opens at the shared clock, so a would-fire signal that fired before it never
+    # reached her on this name. The signal list keeps it (the chart shows it as history); the journal does not score it.
+    joined = (
+        min(max(start, _ts(day_list.revealed_through)), end)
+        if day_list is not None and day_list.revealed_through
+        else start
+    )
     row = ReplaySession(
         owner_user_id=user_id,
         symbol=symbol,
@@ -547,11 +591,8 @@ def create(
         signals=signals_mod.dump_fires(fires),
         window_start=start.to_pydatetime(),
         window_end=end.to_pydatetime(),
-        revealed_through=(
-            min(max(start, _ts(day_list.revealed_through)), end)
-            if day_list is not None and day_list.revealed_through
-            else start
-        ).to_pydatetime(),
+        revealed_through=joined.to_pydatetime(),
+        away=add_span([], start, joined),
         tape_feed=feed,
         status="active",
         journal=None,
@@ -663,6 +704,8 @@ def _frame(
     price = last_price(ctx, through)
     return {
         "revealed_through": through,
+        "day_clock": ctx.day_clock,
+        "behind_clock": ctx.day_clock is not None and through < ctx.day_clock,
         "at_end": through >= ctx.window_end,
         "bars": bars,
         "forming": _forming(ctx, minutes, through, width),
@@ -677,6 +720,7 @@ def _frame(
                 "bar_close": f.bar_close,
                 "close": f.close,
                 "evidence": f.evidence,
+                "seen": not unseen(ctx.away, f.bar_close),
             }
             for f in signals
         ],
@@ -726,14 +770,20 @@ def advance(
     target = min(max(target, previous), ctx.window_end)  # forward only; clamped to the window end
     scan_from, paused = previous, None
     if day_list is not None and row.status != "ended":
-        if day_list.revealed_through is not None:
-            # A session behind the shared day clock catches up to it: what lies between is revealed, not markable.
-            target = min(max(target, _ts(day_list.revealed_through)), ctx.window_end)
-            scan_from = max(previous, _ts(day_list.revealed_through))
+        clock = ctx.day_clock
+        if clock is not None:
+            # A name behind the shared day clock catches up to it: what lies between is revealed on the chart but was
+            # never in front of her, and the journal does not score a signal that fired inside it (02o-b2).
+            if previous < clock:
+                row.away = add_span(list(row.away or []), previous, clock)
+                ctx.away = spans_of(row.away)
+            target = min(max(target, clock), ctx.window_end)
+            scan_from = max(previous, clock)
         if ctx.swing:  # play stops at the first crossed stop (02p b5): never earlier, never later
             paused, target = swing_play.stop_pause(ctx, scan_from, target)
-        if day_list.revealed_through is None or target > _ts(day_list.revealed_through):
+        if clock is None or target > clock:
             day_list.revealed_through = target.to_pydatetime()
+            ctx.day_clock = target
 
     if target > previous:
         row.revealed_through = target.to_pydatetime()
@@ -808,18 +858,22 @@ def feed(
 
 def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: dict[str, Any]) -> dict[str, Any]:
     """Stamp a practice mark at the playhead. State rules answer 422 with `path: "kind"` or `"stopPrice"`."""
-    day_list = _lock_day_list(db, session_id)
+    _lock_day_list(db, session_id)  # the day list row first, then the session row: one lock order
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
         raise ReplayProblem("This session is over · start a new attempt", path="kind")
     ctx = context(db, svc, row)
-    if day_list is not None and day_list.revealed_through is not None and ctx.through < _ts(day_list.revealed_through):
+    if ctx.behind_clock:
         # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
         # stamped at a time the day has already passed. `advance` catches the name up first.
         raise ReplayProblem("This name is behind the day clock · advance to catch up before you mark", path="kind")
     if ctx.swing:
         return _place_swing_mark(db, ctx, body, svc)
     kind = body["kind"]
+    if kind in ENTRY_KINDS and row.day_list_id is not None:
+        held = next((sym for sid, sym in open_trades(db, row.day_list_id) if sid != row.id), None)
+        if held is not None:
+            raise ReplayProblem(f"Close your open {held} practice trade first · one open trade a day", path="kind")
     closed, open_ = journal_mod.assemble(ctx.marks)
     price = None
     warning = None

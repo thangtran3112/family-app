@@ -135,6 +135,7 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "practice_ledger",
         "practice_holds",
         "practice_weeks",
+        "replay_day_scans",
     }
 
 

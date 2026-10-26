@@ -166,6 +166,10 @@
             "title": "Bars",
             "type": "array"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
           "daily_forming": {
             "anyOf": [
               {
@@ -175,6 +179,18 @@
                 "type": "null"
               }
             ]
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "forming": {
             "anyOf": [
@@ -265,6 +281,8 @@
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -2657,6 +2675,16 @@
               }
             ]
           },
+          "rescan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RescanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review": {
             "anyOf": [
               {
@@ -2752,6 +2780,7 @@
           "thread",
           "warnings",
           "relist",
+          "rescan",
           "peek",
           "journal",
           "review",
@@ -2867,10 +2896,24 @@
         "type": "object"
       },
       "DaySessionOut": {
+        "description": "A name she has practised today: the day strip's row.",
         "properties": {
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
+          "has_open_trade": {
+            "title": "Has Open Trade",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "revealed_through": {
+            "format": "date-time",
+            "title": "Revealed Through",
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -2888,7 +2931,10 @@
         "required": [
           "id",
           "symbol",
-          "status"
+          "status",
+          "revealed_through",
+          "behind_clock",
+          "has_open_trade"
         ],
         "title": "DaySessionOut",
         "type": "object"
@@ -3028,6 +3074,10 @@
             "title": "Bars",
             "type": "array"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
           "daily": {
             "anyOf": [
               {
@@ -3047,6 +3097,18 @@
                 "type": "null"
               }
             ]
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "forming": {
             "anyOf": [
@@ -3151,6 +3213,8 @@
         },
         "required": [
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "at_end",
           "bars",
           "forming",
@@ -4567,6 +4631,16 @@
             "title": "Matches Total",
             "type": "integer"
           },
+          "membership": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UniverseMembershipOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "no_data": {
             "title": "No Data",
             "type": "integer"
@@ -5834,6 +5908,19 @@
             "title": "Hidedates",
             "type": "string"
           },
+          "maxSymbols": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxsymbols"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -6031,6 +6118,10 @@
             "title": "Id",
             "type": "integer"
           },
+          "max_symbols": {
+            "title": "Max Symbols",
+            "type": "integer"
+          },
           "next_day": {
             "anyOf": [
               {
@@ -6099,6 +6190,7 @@
           "thread_id",
           "spec",
           "sessions",
+          "max_symbols",
           "days_opened",
           "filters",
           "current",
@@ -6842,10 +6934,26 @@
             "title": "Attempt",
             "type": "integer"
           },
+          "behind_clock": {
+            "title": "Behind Clock",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "day_clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Clock"
           },
           "day_list_id": {
             "anyOf": [
@@ -6986,6 +7094,8 @@
           "window_start",
           "window_end",
           "revealed_through",
+          "day_clock",
+          "behind_clock",
           "tape_feed",
           "armed",
           "marks",
@@ -7277,6 +7387,10 @@
             "title": "Name",
             "type": "string"
           },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
           "source": {
             "enum": [
               "alert_strategy",
@@ -7294,9 +7408,175 @@
           "bar_time",
           "bar_close",
           "close",
-          "evidence"
+          "evidence",
+          "seen"
         ],
         "title": "ReplaySignalOut",
+        "type": "object"
+      },
+      "RescanCandidateOut": {
+        "description": "A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised).",
+        "properties": {
+          "filters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "list_price": {
+            "title": "List Price",
+            "type": "number"
+          },
+          "matched_since": {
+            "format": "date-time",
+            "title": "Matched Since",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "new_since_list": {
+            "title": "New Since List",
+            "type": "boolean"
+          },
+          "operands": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Operands",
+            "type": "object"
+          },
+          "price_at": {
+            "format": "date-time",
+            "title": "Price At",
+            "type": "string"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rank_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Value"
+          },
+          "reported_before_open": {
+            "title": "Reported Before Open",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "symbol",
+          "filters",
+          "rank_value",
+          "matched_since",
+          "operands",
+          "list_price",
+          "price_at",
+          "prior_close",
+          "reported_before_open",
+          "metrics",
+          "new_since_list"
+        ],
+        "title": "RescanCandidateOut",
+        "type": "object"
+      },
+      "RescanOut": {
+        "description": "The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.\nIt is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RescanCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ListColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
+          "new_count": {
+            "title": "New Count",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/ListUniverseOut"
+          }
+        },
+        "required": [
+          "seq",
+          "as_of",
+          "data_through",
+          "universe",
+          "columns",
+          "candidates",
+          "new_count",
+          "created_at"
+        ],
+        "title": "RescanOut",
         "type": "object"
       },
       "ReviewOut": {
@@ -10521,6 +10801,132 @@
         "title": "UniverseCountsOut",
         "type": "object"
       },
+      "UniverseCoverageOut": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "first_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Day"
+          },
+          "last_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Day"
+          }
+        },
+        "required": [
+          "first_day",
+          "last_day",
+          "days"
+        ],
+        "title": "UniverseCoverageOut",
+        "type": "object"
+      },
+      "UniverseDayOut": {
+        "description": "One morning's recorded membership. `recorded` false: no pass wrote it, so that day's list scans today's set.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "day",
+          "recorded",
+          "size",
+          "symbols",
+          "note"
+        ],
+        "title": "UniverseDayOut",
+        "type": "object"
+      },
+      "UniverseDaysOut": {
+        "description": "The `universe_days` read path: its coverage, the first day a new plan should default to (null until 20 finished\ndays have been recorded), and with `?day=` that morning's membership.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/UniverseCoverageOut"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UniverseDayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_day_default": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Day Default"
+          },
+          "first_day_note": {
+            "title": "First Day Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "coverage",
+          "first_day_default",
+          "first_day_note",
+          "day"
+        ],
+        "title": "UniverseDaysOut",
+        "type": "object"
+      },
       "UniverseExcludedOut": {
         "description": "One neutral reason that names no date, so the list reveals nothing about what happened later.",
         "properties": {
@@ -10538,6 +10944,46 @@
           "reason"
         ],
         "title": "UniverseExcludedOut",
+        "type": "object"
+      },
+      "UniverseMembershipOut": {
+        "description": "Where the scanned names came from (02o-b2): the symbols the Desk recorded for that morning (`universe_days`), or\ntoday's Desk set for a day before the recording began. `note` says so in plain words.",
+        "properties": {
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "recorded_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Size"
+          },
+          "scanned_size": {
+            "title": "Scanned Size",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "universe_days",
+              "today"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "recorded_size",
+          "scanned_size",
+          "note"
+        ],
+        "title": "UniverseMembershipOut",
         "type": "object"
       },
       "UniversePrepOut": {
@@ -13717,6 +14163,49 @@
         ]
       }
     },
+    "/api/desk/replay/day-lists/{day_list_id}/rescan": {
+      "post": {
+        "description": "Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,\nlabelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is\npractised (no clock yet) and after the day ends. A second scan at the same clock returns the first.",
+        "operationId": "rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "day_list_id",
+            "required": true,
+            "schema": {
+              "title": "Day List Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rescan Day",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
       "post": {
         "description": "Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in\nv1: another name is a 409 until the day ends. A swing day allows several names on its shared clock.",
@@ -14813,6 +15302,57 @@
           }
         },
         "summary": "Patch Thread Week",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/universe-days": {
+      "get": {
+        "description": "The recorded universe (02o-b2): which mornings the Desk recorded the names it scanned, the first day a new plan\ndefaults to once 20 finished days are recorded, and with `day` that morning's membership. A day without a recording\nscans today's Desk set, and says so.",
+        "operationId": "get_universe_days_api_desk_replay_universe_days_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UniverseDaysOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Universe Days",
         "tags": [
           "replay"
         ]

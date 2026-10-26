@@ -544,8 +544,8 @@ def test_a_thread_session_belongs_to_the_thread_row(db_session, user_id, svc) ->
 
 
 def _second_name(db_session, user_id, svc, row, thread, symbol="SPLITTER"):
-    """A second session on the same day list (the switch protocol is 02o-b2: v1 refuses a second name at the route,
-    so the day rules are exercised through the service)."""
+    """A second session on the same day list, through the service (the route's cap and open-trade checks are in
+    test_replay_switch.py)."""
     plan = db_session.get(PracticePlan, row.plan_id)
     spec = plan_mod._session_spec(plan, row.day, symbol, thread)
     return session_mod.create(db_session, user_id, spec, svc, day_list=row, thread_id=thread.id)
@@ -626,6 +626,7 @@ def test_the_watch_check_lists_starred_traded_and_off_watch_names(db_session, us
     on = plan_mod.day_list_out(db_session, user_id, row.id, svc)["watch_check"]
     assert (on["starred"], on["traded"], on["off_watch"], on["verdict"]) == (["GAPPER"], ["GAPPER"], [], "on_watch")
     assert on["label"] == "Traded only names on your watch"
+    _mark(db_session, user_id, svc, a.id, "long_exit")  # one open trade a day: GAPPER closes before the next name
     b = _second_name(db_session, user_id, svc, row, thread)
     _mark(db_session, user_id, svc, b.id, "long_entry", shares=1)
     off = plan_mod.day_list_out(db_session, user_id, row.id, svc)["watch_check"]

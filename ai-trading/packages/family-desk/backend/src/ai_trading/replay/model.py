@@ -53,3 +53,28 @@ class Plan:
     @property
     def any(self) -> bool:
         return self.stop_required or self.signal_only or self.max_loss_usd is not None or self.max_trades is not None
+
+
+# -- the spans she was not on a name (02o-b2) ---------------------------------------------------------------------
+
+Span = tuple[pd.Timestamp, pd.Timestamp]
+
+
+def spans_of(rows: list[list[str]]) -> list[Span]:
+    """`row.away` (ISO pairs) as timestamps."""
+    return [(pd.Timestamp(start), pd.Timestamp(end)) for start, end in rows]
+
+
+def add_span(rows: list[list[str]], start: pd.Timestamp, end: pd.Timestamp) -> list[list[str]]:
+    """`rows` plus the span `[start, end]`, joined to the last span when it begins where that one ends."""
+    if end <= start:
+        return rows
+    if rows and pd.Timestamp(rows[-1][1]) == start:
+        return [*rows[:-1], [rows[-1][0], end.isoformat()]]
+    return [*rows, [start.isoformat(), end.isoformat()]]
+
+
+def unseen(spans: list[Span], moment: pd.Timestamp) -> bool:
+    """True when `moment` lies strictly inside a span she was away for. A bar that closed at a span's end is on the
+    chart she lands on, and one that closed at its start was already in front of her: both are seen."""
+    return any(start < moment < end for start, end in spans)

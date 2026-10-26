@@ -660,6 +660,11 @@
           ],
           "type": "string"
         },
+        "maxSymbols": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
         "schemaVersion": {
           "const": 1,
           "type": "number"

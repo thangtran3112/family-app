@@ -1,8 +1,9 @@
-"""`/api/desk/replay/*` (02o §b): the Practice lane. Ten routes (02o), six for daily-list practice (02o-b v1:
-the hub plan read, open or advance the next day list, read, star, start the day's session, end the day), six for
-practice threads (02r: create, list, read with stats and curve, edit the plan, close, the ledger) and five for swing
-practice (02p: the universe preview, the holds, the weeks and one week's review and notes), all behind
-the gateway identity, all scoped to the signed-in user (a non-owner gets 404), all `Cache-Control: no-store`.
+"""`/api/desk/replay/*` (02o §b): the Practice lane. Ten routes (02o), the recorded universe (02o-b2), seven for
+daily-list practice (02o-b v1: the hub plan read, open or advance the next day list, read, star, start the day's
+session, end the day; 02o-b2: the re-scan at the day clock; plus the D-012 relist route), six for practice threads
+(02r: create, list, read with stats and curve, edit the plan, close, the ledger) and five for swing practice (02p:
+the universe preview, the holds, the weeks and one week's review and notes), all behind the gateway identity, all
+scoped to the signed-in user (a non-owner gets 404), all `Cache-Control: no-store`.
 
 The day-list, open-next, thread and session routes serve a swing thread too: they dispatch on the plan's mode, so a day
 thread's responses are exactly what they were and a swing thread's carry the extra (additive) shapes of
@@ -21,7 +22,7 @@ the trimmed R0 fixture (`replay/fixture.py`); the services themselves run unchan
 
 import logging
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 from ai_trading_common.errors import ProviderError
@@ -50,6 +51,7 @@ from ai_trading.api.schemas.replay import (
     ReplaySessionPatch,
     ReplaySessionSummaryOut,
     SessionStatus,
+    UniverseDaysOut,
 )
 from ai_trading.api.schemas.swing import (
     HoldsOut,
@@ -72,6 +74,7 @@ from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as svc_mod
 from ai_trading.replay import swing as swing_mod
 from ai_trading.replay import threads as threads_mod
+from ai_trading.replay import universe_days as universe_mod
 from ai_trading.replay.data import History, ReplayDayError
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound
 from ai_trading.replay.tape import Tape
@@ -164,6 +167,18 @@ def list_days(
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     return days_mod.list_days(db, user.id, symbol=symbol, limit=limit, now=datetime.now(UTC))
+
+
+@router.get("/universe-days", response_model=UniverseDaysOut)
+def get_universe_days(
+    day: date | None = None,
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """The recorded universe (02o-b2): which mornings the Desk recorded the names it scanned, the first day a new plan
+    defaults to once 20 finished days are recorded, and with `day` that morning's membership. A day without a recording
+    scans today's Desk set, and says so."""
+    return universe_mod.read(db, day, services.now())
 
 
 @router.get("/sessions", response_model=list[ReplaySessionSummaryOut])
@@ -524,6 +539,20 @@ def start_day_session(
     return _with_thread(
         db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
     )
+
+
+@router.post("/day-lists/{day_list_id}/rescan", response_model=DayListOut)
+def rescan_day(
+    day_list_id: int,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,
+    labelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is
+    practised (no clock yet) and after the day ends. A second scan at the same clock returns the first."""
+    _call(plan_mod.rescan, db, user.id, day_list_id, services)
+    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 
 @router.post("/day-lists/{day_list_id}/end", response_model=DayListOut | SwingDayListOut)
