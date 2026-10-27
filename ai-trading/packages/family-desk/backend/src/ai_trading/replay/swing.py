@@ -383,7 +383,7 @@ def _check_arms(db: Session, user_id: int, swing: dict[str, Any]) -> None:
 def create_thread(
     db: Session, user_id: int, spec: PracticeThreadCreateV1, svc: Services
 ) -> tuple[PracticeThread, PracticePlan]:
-    """Validate and write a swing thread: the days, one active swing thread per owner, the plan against the balance,
+    """Validate and write a swing thread: the days, the plan against the balance,
     the arms, and every universe symbol's data for the whole range (fetched now when it is not cached). Then the
     thread row and its ONE plan row, with the universe frozen in order and prep marked running (the caller starts
     `run_prep`)."""
@@ -394,7 +394,7 @@ def create_thread(
     now = svc.now()
     first = date.fromisoformat(swing["firstDay"])
     days = plan_mod.check_range(first, swing["sessions"], now, path="swing.firstDay")
-    threads_mod.check_new_thread(db, user_id, dumped)
+    threads_mod.check_new_thread(dumped)
     _check_arms(db, user_id, swing)
     store = svc.store_factory(db)
     for index, entry in enumerate(swing["universe"]):

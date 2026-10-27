@@ -5,7 +5,7 @@ The shapes are generated (strategy_spec_v1.py). `PracticeThreadPatchV1` and `Pra
 of them. `SwingSetupV1` (unique universe symbols), `PracticeThreadCreateV1` and `PracticeThreadV1` (the `swing` block
 exactly when the mode is swing, and for the thread `closedAt` exactly when closed) carry cross-field rules that live
 in Zod `superRefine`, which JSON Schema cannot, so they are hand-written here; the two thread models re-declare
-`swing` so it is the rule-carrying `SwingSetupV1`. The rules that need a database (one active thread per mode, no
+`swing` so it is the rule-carrying `SwingSetupV1`. The rules that need a database (no
 plan edit once closed, the daily plan binding to an active thread, the swing days and universe) are server rules in
 `replay/threads.py`.
 """

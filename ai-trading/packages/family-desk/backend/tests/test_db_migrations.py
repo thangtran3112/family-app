@@ -75,11 +75,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0010() -> None:
+def test_migration_chain_has_a_single_head_at_0011() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0010"]
+    assert script.get_heads() == ["0011"]
+    assert script.get_revision("0011").down_revision == "0010"
     assert script.get_revision("0010").down_revision == "0009"
     assert script.get_revision("0009").down_revision == "0008"
     assert script.get_revision("0008").down_revision == "0007"
@@ -127,19 +128,19 @@ def test_tables_exist(db_engine: Engine) -> None:
     assert "hold_id" in {c["name"] for c in inspect(db_engine).get_columns("practice_ledger")}
 
 
-def test_downgrade_minus_one_reverts_only_0010_and_drops_exactly_what_it_made(db_engine: Engine) -> None:
+def test_downgrade_to_0009_reverts_0011_and_0010_and_drops_exactly_what_0010_made(db_engine: Engine) -> None:
     url = db_engine.url.render_as_string(hide_password=False)
     with db_engine.connect() as conn:
         before = set(inspect(conn).get_table_names())
     try:
-        command.downgrade(_alembic_config(url), "-1")
+        command.downgrade(_alembic_config(url), "0009")  # 0011 holds no table; 0010 holds the three feedback ones
         inspector = inspect(db_engine)
         tables = set(inspector.get_table_names())
         assert before - tables == NEW_0010_TABLES and tables <= before  # exactly its three tables, nothing else
         with db_engine.connect() as conn:
             left = conn.execute(text("SELECT relname FROM pg_class WHERE relname LIKE 'feedback\\_%'")).all()
         assert left == []  # no table, index or sequence of 0010 survives
-        # 0009's own table and column are still there: only 0010 was reverted.
+        # 0009's own table and column are still there: only 0011 and 0010 were reverted.
         assert NEW_0009_TABLES <= tables
         assert "away" in {column["name"] for column in inspector.get_columns("replay_sessions")}
         # Re-upgrading brings the three tables back, so the downgrade is reversible.
