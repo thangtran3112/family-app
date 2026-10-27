@@ -30,7 +30,7 @@ from typing import Any
 import pandas as pd
 from ai_trading_common.errors import ProviderError
 from pydantic import ValidationError
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -184,14 +184,18 @@ def practice_universe(db: Session, user_id: int) -> tuple[list[str], bool]:
 
 
 def active_plan(db: Session, user_id: int, *, thread_id: int | None = None, lock: bool = False) -> PracticePlan | None:
-    """The active plan of thread `thread_id`, else of her DAY thread (a plan saved before 0007 has no thread and counts
-    as a day plan). A swing thread has its own plan beside it, so every daily-list caller keeps the day meaning."""
+    """The active plan of thread `thread_id`, else of her most recently started DAY thread (a plan saved before 0007
+    has no thread and counts as a day plan). A swing thread has its own plan beside it, so every daily-list caller keeps
+    the day meaning. With several day threads, name the thread."""
+    if thread_id is None:
+        thread = threads_mod.active_thread(db, user_id)
+        thread_id = None if thread is None else thread.id
     query = select(PracticePlan).where(PracticePlan.owner_user_id == user_id, PracticePlan.status == "active")
     if thread_id is not None:
         query = query.where(PracticePlan.thread_id == thread_id)
     else:
-        day_threads = select(PracticeThread.id).where(PracticeThread.mode == "day")
-        query = query.where(or_(PracticePlan.thread_id.is_(None), PracticePlan.thread_id.in_(day_threads)))
+        query = query.where(PracticePlan.thread_id.is_(None))  # no day thread: only a plan saved before 0007 is left
+    query = query.order_by(PracticePlan.id.desc()).limit(1)
     return db.execute(query.with_for_update() if lock else query).scalar_one_or_none()
 
 
@@ -577,12 +581,14 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
 def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = None) -> Opened:
     """The current day list while it is not over; else the next day's list, built now on today's Desk universe
     (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
-    Every day done: no list. A swing thread (`thread_id`) continues its own calendar (`swing.open_next`)."""
+    Every day done: no list. `thread_id` names the thread (else her most recent day thread); a swing thread continues
+    its own calendar (`swing.open_next`)."""
     if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
         return _swing().open_next(db, user_id, svc, thread_id)
-    plan = active_plan(db, user_id, lock=True)
+    plan = active_plan(db, user_id, thread_id=thread_id, lock=True)
     if plan is None:
         raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
+    plan_thread_id = plan.thread_id
     days = plan_days(plan.first_day, plan.spec["sessions"])
     latest = _latest(db, plan.id)
     if latest is not None and latest.status != "ended":
@@ -620,7 +626,7 @@ def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = 
         db.flush()
     except IntegrityError:  # a concurrent open of the same day: use that list
         db.rollback()
-        plan = active_plan(db, user_id)
+        plan = active_plan(db, user_id, thread_id=plan_thread_id)
         assert plan is not None
         return Opened(plan, _latest(db, plan.id))
     return Opened(plan, row)
@@ -637,7 +643,8 @@ def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Servi
     universe grew and its bars are not ready yet the plan is saved and the list stays as it was: relist again once
     the plan's data is prepared (the result then carries `restart_prep`)."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
-    plan = active_plan(db, user_id, lock=True)
+    owner_plan = db.get(PracticePlan, row.plan_id)
+    plan = active_plan(db, user_id, thread_id=None if owner_plan is None else owner_plan.thread_id, lock=True)
     if plan is None or plan.id != row.plan_id:
         raise ReplayProblem("This plan was replaced · relist from the current plan's day", path="listAt", status=409)
     if row.status != "listed":
@@ -1217,9 +1224,17 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
 # -- the hub ----------------------------------------------------------------------------------------------------
 
 
-def hub(db: Session, user_id: int) -> dict[str, Any]:
-    plan = active_plan(db, user_id)
-    thread = threads_mod.active_thread(db, user_id)
+def hub(db: Session, user_id: int, thread_id: int | None = None) -> dict[str, Any]:
+    """Her plan and thread card: thread `thread_id` (404 when it is not hers) with its own plan, else her most recently
+    started active day thread. The card is the daily plan's, so a swing thread has a card and no plan here."""
+    thread = threads_mod.get_thread(db, user_id, thread_id) if thread_id is not None else None
+    if thread is None:
+        thread = threads_mod.active_thread(db, user_id)
+    plan = (
+        None
+        if thread is not None and thread.mode == "swing"
+        else active_plan(db, user_id, thread_id=None if thread is None else thread.id)
+    )
     return {
         "plan": None if plan is None else plan_out(db, plan),
         "thread": None if thread is None else threads_mod.summary(db, thread),

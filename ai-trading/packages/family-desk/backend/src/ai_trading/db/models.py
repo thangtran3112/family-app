@@ -640,17 +640,11 @@ class UniverseDay(Base):
 
 class PracticeThread(Base):
     """A practice thread: the SIMULATED balance she practises in, with the risk plan that governs every day in it.
-    One active thread per owner and mode; the balance is never stored (`starting_balance` + the ledger)."""
+    Any number of threads may be active per owner and mode (Alembic 0011 dropped the one-active index); the balance is
+    never stored (`starting_balance` + the ledger)."""
 
     __tablename__ = "practice_threads"
     __table_args__ = (
-        Index(
-            "uq_practice_threads_owner_user_id_mode_active",
-            "owner_user_id",
-            "mode",
-            unique=True,
-            postgresql_where=text("status = 'active'"),
-        ),
         CheckConstraint("mode IN ('day', 'swing')", name="ck_practice_threads_mode"),
         CheckConstraint("status IN ('active', 'closed')", name="ck_practice_threads_status"),
         CheckConstraint("starting_balance BETWEEN 1000 AND 10000000", name="ck_practice_threads_starting_balance"),

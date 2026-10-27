@@ -291,19 +291,26 @@ def test_a_swing_thread_is_created_with_its_setup_echoed_and_its_state(world, db
     assert row.swing == state and row.thread.swing is not None and "daily" not in listed[0]
 
 
-def test_a_second_active_swing_thread_is_a_409_and_a_day_thread_runs_beside_it(world) -> None:
+def test_several_active_swing_threads_and_a_day_thread_run_side_by_side(world) -> None:
     client, _, _ = world
     assert _create(client).status_code == 200
-    second = _create(client)
-    assert second.status_code == 409
-    assert _problems(second) == [
-        {"path": "mode", "message": "You already have an active swing thread · close it before starting another"}
-    ]
+    assert _create(client).status_code == 200  # a second swing thread is allowed
     day = client.post(f"{BASE}/threads", json=DAY_CREATE, headers=auth_headers())
     assert day.status_code == 200 and day.json().get("swing") is None and "swing" not in day.json()["thread"]
     listed = client.get(f"{BASE}/threads", headers=auth_headers()).json()
-    assert sorted(row["thread"]["mode"] for row in listed) == ["day", "swing"]
+    assert sorted(row["thread"]["mode"] for row in listed) == ["day", "swing", "swing"]
     assert [row.get("swing") is not None for row in listed if row["thread"]["mode"] == "day"] == [False]
+
+
+def test_the_daily_card_of_a_swing_thread_has_its_thread_and_no_day_plan(world) -> None:
+    client, _, _ = world
+    swing_id = _create(client).json()["thread"]["id"]
+    day_id = client.post(f"{BASE}/threads", json=DAY_CREATE, headers=auth_headers()).json()["thread"]["id"]
+    card = client.get(f"{BASE}/daily", params={"threadId": swing_id}, headers=auth_headers())
+    assert card.status_code == 200 and card.json()["plan"] is None
+    assert card.json()["thread"]["thread"]["id"] == swing_id and card.json()["thread"]["thread"]["mode"] == "swing"
+    unnamed = client.get(f"{BASE}/daily", headers=auth_headers()).json()  # no threadId: the day thread, as before
+    assert unnamed["thread"]["thread"]["id"] == day_id
 
 
 def test_swing_create_rejections_are_plain_problems(world, db_session) -> None:
@@ -373,9 +380,9 @@ def test_a_thread_id_alone_is_checked_before_anything_else(world) -> None:
     client, _, _ = world
     swing_id = _create(client).json()["thread"]["id"]
     day_id = client.post(f"{BASE}/threads", json=DAY_CREATE, headers=auth_headers()).json()["thread"]["id"]
-    needs_plan = {"path": "threadId", "message": "Send threadId, a whole number, together with a plan"}
-    day = _next(client, day_id)
-    assert day.status_code == 422 and _problems(day) == [needs_plan]  # a day thread starts from a plan
+    needs_plan = {"path": "threadId", "message": "Send threadId, a whole number"}
+    day = _next(client, day_id)  # a day thread continues its own plan; it has none yet
+    assert day.status_code == 409 and _problems(day)[0]["message"] == "Start a daily practice plan first"
     for bad in (True, "7", 1.5, [1]):
         stray = client.post(f"{BASE}/daily/next", json={"threadId": bad}, headers=auth_headers())
         assert stray.status_code == 422 and _problems(stray) == [needs_plan]

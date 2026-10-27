@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { MouseEvent } from "react";
+import { useEffect, type MouseEvent } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import type { PracticePlan } from "@/lib/replay/daily";
+import { loadDaily } from "@/lib/desk/replay";
+import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { swingCardView } from "@/lib/replay/swing";
 import type { PracticeThread, ThreadSummary } from "@/lib/replay/threads";
 import {
@@ -18,17 +19,22 @@ import {
   todayView,
   winRateText,
 } from "@/lib/replay/threadView";
+import { DeleteThread } from "./DeleteThread";
 import { ThreadAction, lockLink } from "./ThreadAction";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
+const POLL_MS = 4000;
+
 /** The landing's table (Paper mock LEW-0): one row per thread, the active ones first and the closed ones below. Every
  *  dollar figure is SIMULATED. A click anywhere on a row opens the thread page; the last column holds the one action
- *  (Resume, or the swing thread's own, or Journal for a closed thread). While `loading` the rows are two grey skeletons.
- *  `busy` is true while any row's action is opening a day: every row waits, so a second click cannot race the first. */
+ *  (Resume, or the swing thread's own, or Journal for a closed thread) and a Delete button. Each active day thread reads
+ *  its own plan, because several can run at once. While `loading` the rows are two grey skeletons.
+ *  `busy` is true while any row's action is opening a day: every row waits, so a second click cannot race the first.
+ *  `revision` is bumped when something changed, so each row refetches its plan. */
 export function ThreadTable({
   rows,
-  plan,
+  revision,
   loading = false,
   busy,
   onBusy,
@@ -36,7 +42,7 @@ export function ThreadTable({
   onNewPlan,
 }: {
   rows: readonly ThreadSummary[];
-  plan: PracticePlan | null;
+  revision: number;
   loading?: boolean;
   busy: boolean;
   onBusy: (busy: boolean) => void;
@@ -63,7 +69,7 @@ export function ThreadTable({
           {loading
             ? [0, 1].map((n) => <SkeletonRow key={n} wide={wide} />)
             : rows.map((row) => (
-                <ThreadRow key={row.thread.id} summary={row} plan={plan} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
+                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
               ))}
         </tbody>
       </table>
@@ -88,7 +94,7 @@ function SkeletonRow({ wide }: { wide: boolean }) {
 
 function ThreadRow({
   summary,
-  plan,
+  revision,
   wide,
   busy,
   onBusy,
@@ -96,7 +102,7 @@ function ThreadRow({
   onNewPlan,
 }: {
   summary: ThreadSummary;
-  plan: PracticePlan | null;
+  revision: number;
   wide: boolean;
   busy: boolean;
   onBusy: (busy: boolean) => void;
@@ -114,6 +120,17 @@ function ThreadRow({
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
   const view = todayView(today, lastDay);
+  // An active day thread's own plan (the card says Resume or "New plan needed" from it); other threads need none.
+  const dayActive = !closed && thread.mode === "day";
+  const daily = useDeskQuery(`replay-daily:${thread.id}`, (signal) => loadDaily({ threadId: thread.id, signal }), { enabled: dayActive, revision });
+  const plan = daily.data?.plan ?? null;
+  const preparing = plan?.prep.state === "running";
+  const { refresh } = daily;
+  useEffect(() => {
+    if (!preparing) return;
+    const timer = setInterval(refresh, POLL_MS);
+    return () => clearInterval(timer);
+  }, [preparing, refresh]);
   return (
     <tr className={styles.row} data-status={thread.status} data-busy={busy || undefined} aria-label={`${threadName(thread)} · ${threadModeLabel(thread.mode)}`} onClick={openThread}>
       <th scope="row" className={styles.threadCell}>
@@ -151,9 +168,12 @@ function ThreadRow({
         <div className={styles.actions}>
           {closed ? (
             <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink} {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Link>
+          ) : dayActive && daily.loading ? (
+            <span className={`${styles.skel} ${styles.skelAction}`} aria-hidden="true" />
           ) : (
             <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={() => onNewPlan(thread)} />
           )}
+          <DeleteThread thread={thread} busy={busy} onBusy={onBusy} onDeleted={onChanged} />
         </div>
       </td>
     </tr>

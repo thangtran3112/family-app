@@ -87,7 +87,7 @@ def _user(db: Session, email: str = "owner@example.test") -> int:
 
 
 def _thread(db: Session, user_id: int, mode: str = "swing", status: str = "active") -> int:
-    """`closed` threads do not count against the one-active-thread-per-mode index, so an owner can have several."""
+    """An owner may have several active threads of a mode (Alembic 0011 dropped the one-active index)."""
     values: dict[str, Any] = {
         "owner_user_id": user_id,
         "mode": mode,
@@ -538,3 +538,33 @@ def test_downgrade_with_swing_data_leaves_a_0007_database_and_upgrade_works_agai
         assert [r for (r,) in db.execute(select(PracticeLedger.id))] == [ids["day_row"]]  # swing data is not restored
         _plan(db, ids["user"], ids["swing_thread"], status="archived")  # and the new tables accept rows again
         _hold(db, ids["user"], ids["swing_thread"])
+
+
+def test_0011_allows_several_active_threads_per_mode_and_its_downgrade_keeps_only_the_newest(at_head) -> None:
+    engine, config = at_head
+    with Session(engine) as db:
+        user_id = _user(db)
+        older, newer, swing = _thread(db, user_id, "day"), _thread(db, user_id, "day"), _thread(db, user_id, "swing")
+        older_plan, newer_plan = _plan(db, user_id, older), _plan(db, user_id, newer)
+    assert "uq_practice_threads_owner_user_id_mode_active" not in {
+        i["name"] for i in inspect(engine).get_indexes("practice_threads")
+    }
+
+    command.downgrade(config, "0010")
+
+    indexes = {i["name"]: i for i in inspect(engine).get_indexes("practice_threads")}
+    assert indexes["uq_practice_threads_owner_user_id_mode_active"]["unique"]
+    with Session(engine) as db:
+        status = dict(db.execute(select(PracticeThread.id, PracticeThread.status)).all())
+        assert status == {older: "closed", newer: "active", swing: "active"}  # the older day thread was closed
+        assert dict(db.execute(select(PracticePlan.id, PracticePlan.status)).all()) == {
+            older_plan: "archived",
+            newer_plan: "active",
+        }
+        with pytest.raises(IntegrityError):  # one active thread per owner and mode again
+            _thread(db, user_id, "day")
+        db.rollback()
+
+    command.upgrade(config, "head")
+    with Session(engine) as db:
+        _thread(db, user_id, "day")  # and the second active thread is accepted again

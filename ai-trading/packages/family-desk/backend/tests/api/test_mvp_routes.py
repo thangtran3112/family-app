@@ -93,6 +93,7 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/replay/threads"),
     ("GET", "/api/desk/replay/threads/{}"),
     ("PATCH", "/api/desk/replay/threads/{}"),
+    ("DELETE", "/api/desk/replay/threads/{}"),
     ("POST", "/api/desk/replay/threads/{}/close"),
     ("GET", "/api/desk/replay/threads/{}/ledger"),
     # Rows 77-81: swing practice, 02p.
@@ -132,7 +133,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 91
+    assert len(INVENTORY) == 92
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

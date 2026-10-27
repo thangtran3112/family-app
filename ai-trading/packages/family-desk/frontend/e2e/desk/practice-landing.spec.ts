@@ -1,5 +1,6 @@
 import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
+import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { ANY_CLOSE, DAY_URL, THREAD_URL, clickNewPlan, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
 
@@ -181,15 +182,16 @@ test.describe("Practice landing", () => {
     await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: PRACTICE_COPY.planResume, exact: true })).toBeVisible();
   });
 
-  test("with a day thread active the modal keeps Day off and the thread page replaces its plan", async ({ page, context }) => {
+  test("with a day thread active the modal still offers Day and the thread page replaces its plan", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     const id = threadIdOf(page);
     await openDesk(page, "/practice");
     const dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeDisabled();
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByText("A day thread is already active")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByText("is already active")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     // Replace plan from the thread page: only the plan, the balance and risk plan stay with the thread.
@@ -203,6 +205,47 @@ test.describe("Practice landing", () => {
     await replace.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
     await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText("Day 1 of 10", { timeout: 60_000 }); // the data is prepared in the background first
+  });
+
+  test("several day threads list as several rows, and Delete removes one after a confirm", async ({ page, context }) => {
+    const first = await createThreadByApi(context, { balance: 20_000 });
+    const second = await createThreadByApi(context, { balance: 30_000 });
+    const closed = await createThreadByApi(context, { balance: 40_000 });
+    expect((await context.request.post(`${origin}/api/desk/replay/threads/${closed}/close`)).ok()).toBeTruthy();
+    await openDesk(page, "/practice");
+    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(3); // two active and one closed, active first
+    await expect(table.getByRole("row", { name: /Day trading/ }).first()).toContainText(formatBalance(30_000)); // newest active first
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeEnabled();
+    await expect(table.getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan })).toHaveCount(2); // each active day thread reads its own plan
+    await expectCleanScreen(page);
+
+    // Delete asks first; Keep leaves the thread alone, a click on the dialog never opens the thread page.
+    const row = table.getByRole("row", { name: /Day trading/ }).filter({ hasText: formatBalance(20_000) });
+    await row.getByRole("button", { name: /^Delete/ }).click();
+    const confirm = page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle });
+    await expect(confirm).toContainText(PRACTICE_COPY.threadDeleteBody);
+    await confirm.click({ position: { x: 4, y: 4 } });
+    await expect(page).toHaveURL(/\/practice$/);
+    await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteKeep }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(3);
+
+    await row.getByRole("button", { name: /^Delete/ }).click();
+    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(2);
+    await expect(table).not.toContainText(formatBalance(20_000));
+    expect((await context.request.get(`${origin}/api/desk/replay/threads/${first}`)).status()).toBe(404);
+    expect((await context.request.get(`${origin}/api/desk/replay/threads/${second}`)).ok()).toBeTruthy();
+
+    // A closed thread deletes too, and the last row going leaves the empty sentence.
+    await table.getByRole("row", { name: /Day trading/ }).filter({ hasText: PRACTICE_COPY.threadClosedBadge }).getByRole("button", { name: /^Delete/ }).click();
+    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
+    await table.getByRole("button", { name: /^Delete/ }).click();
+    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
   });
 
   test("the thread page says so for a thread that does not exist", async ({ page }) => {

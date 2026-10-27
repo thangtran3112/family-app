@@ -11,7 +11,7 @@ import pytest
 from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
 from daily_world import DAYS, NOW, SYMBOLS, make_services
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from test_replay_daily_api import _plan_body, _start_plan
 
 from ai_trading.api.app import app
@@ -19,7 +19,14 @@ from ai_trading.api.replay import get_services
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1, PracticeThreadV1
 from ai_trading.core.calendar import et
-from ai_trading.db.models import PracticePlan, User
+from ai_trading.db.models import (
+    PracticeLedger,
+    PracticeMark,
+    PracticePlan,
+    ReplayDayList,
+    ReplaySession,
+    User,
+)
 from ai_trading.replay import plan as plan_mod
 
 BASE = "/api/desk/replay"
@@ -144,11 +151,7 @@ def test_thread_requests_are_the_contracts_and_rejections_are_plain_problems(wor
     not_json = client.post(f"{BASE}/threads", content="nope", headers=auth_headers())
     assert not_json.status_code == 422
     assert _create(client).status_code == 200
-    second = _create(client)
-    assert second.status_code == 409
-    assert _problems(second) == [
-        {"path": "mode", "message": "You already have an active day thread · close it before starting another"}
-    ]
+    assert _create(client).status_code == 200  # several active threads of a mode are allowed
     patch_wrong = client.patch(
         f"{BASE}/threads/1", json={"schemaVersion": 1, "plan": PLAN, "mode": "day"}, headers=auth_headers()
     )
@@ -192,14 +195,49 @@ def test_a_plan_without_a_thread_is_a_plain_409_and_a_closed_one_says_so(world, 
         assert refused.status_code == 409 and _problems(refused)[0]["message"] == closed
 
 
-def test_threadid_must_come_with_a_plan_and_be_a_whole_number(world, db_session) -> None:
+def test_threadid_is_a_whole_number_and_alone_it_continues_that_threads_plan(world, db_session) -> None:
     client, _, user_id = world
     tid = _create(client).json()["thread"]["id"]
     body = {"plan": _plan_body(db_session, user_id)}
-    for bad in ({"threadId": tid}, {**body, "threadId": True}, {**body, "threadId": "1"}, {**body, "threadId": 1.5}):
+    for bad in ({**body, "threadId": True}, {**body, "threadId": "1"}, {**body, "threadId": 1.5}, {"threadId": "1"}):
         assert client.post(f"{BASE}/daily/next", json=bad, headers=auth_headers()).status_code == 422
+    alone = client.post(f"{BASE}/daily/next", json={"threadId": tid}, headers=auth_headers())
+    assert alone.status_code == 409 and "Start a daily practice plan first" in _problems(alone)[0]["message"]
     named = client.post(f"{BASE}/daily/next", json={**body, "threadId": tid}, headers=auth_headers())
     assert named.status_code == 200 and named.json()["plan"]["thread_id"] == tid
+    again = client.post(f"{BASE}/daily/next", json={"threadId": tid}, headers=auth_headers())
+    assert again.status_code == 200 and again.json()["plan"]["id"] == named.json()["plan"]["id"]
+
+
+def test_two_day_threads_each_have_a_plan_and_the_daily_card_reads_the_named_one(world, db_session) -> None:
+    client, _, user_id = world
+    first = _create(client, startingBalance=20_000).json()["thread"]["id"]
+    second = _create(client, startingBalance=30_000).json()["thread"]["id"]  # no 409: several threads may run
+    body = {"plan": _plan_body(db_session, user_id)}
+    plans = {}
+    for tid in (first, second):
+        started = client.post(f"{BASE}/daily/next", json={**body, "threadId": tid}, headers=auth_headers())
+        assert started.status_code == 200 and started.json()["plan"]["thread_id"] == tid
+        plans[tid] = started.json()["plan"]["id"]
+    assert plans[first] != plans[second]
+    for tid, balance in ((first, 20_000.0), (second, 30_000.0)):
+        card = client.get(f"{BASE}/daily", params={"threadId": tid}, headers=auth_headers()).json()
+        assert card["plan"]["id"] == plans[tid] and card["thread"]["thread"]["id"] == tid
+        assert card["thread"]["thread"]["stats"]["balance"] == balance
+    newest = client.get(f"{BASE}/daily", headers=auth_headers()).json()  # no threadId: the newest thread, as before
+    assert newest["thread"]["thread"]["id"] == second and newest["plan"]["id"] == plans[second]
+    continued = client.post(f"{BASE}/daily/next", json={"threadId": first}, headers=auth_headers())
+    assert continued.status_code == 200 and continued.json()["plan"]["id"] == plans[first]
+    listed = client.get(f"{BASE}/threads", headers=auth_headers()).json()
+    assert sorted(row["thread"]["id"] for row in listed) == [first, second]
+    # A thread without a plan answers a null plan with its own card; another owner's or a missing one is a 404.
+    third = _create(client).json()["thread"]["id"]
+    bare = client.get(f"{BASE}/daily", params={"threadId": third}, headers=auth_headers()).json()
+    assert bare["plan"] is None and bare["thread"]["thread"]["id"] == third
+    assert client.get(f"{BASE}/daily", params={"threadId": 99999}, headers=auth_headers()).status_code == 404
+    other = auth_headers(OTHER_EMAIL)
+    assert client.get(f"{BASE}/daily", params={"threadId": first}, headers=other).status_code == 404
+    assert client.get(f"{BASE}/daily", params={"threadId": 0}, headers=auth_headers()).status_code == 422
 
 
 def test_the_daily_card_carries_the_threads_plan_stats_and_the_simulated_label(world, db_session) -> None:
@@ -315,3 +353,59 @@ def test_an_old_client_that_still_sends_the_plan_fields_is_ignored_not_refused(w
     assert client.post(f"{BASE}/daily/next", json={"plan": junk}, headers=auth_headers()).status_code == 200
     extra = {**block, "setup": {**block["setup"], "stray": 1}}  # any other unknown key is still refused
     assert client.post(f"{BASE}/daily/next", json={"plan": extra}, headers=auth_headers()).status_code == 422
+
+
+# -- delete -------------------------------------------------------------------------------------------------------
+
+
+def _rows(db_session, model, tid: int) -> int:
+    return db_session.execute(select(func.count()).select_from(model).where(model.thread_id == tid)).scalar_one()
+
+
+def test_a_thread_is_deleted_with_its_days_and_ledger_once_no_day_is_open(world, db_session) -> None:
+    client, _, _ = world
+    keep = _create(client).json()["thread"]["id"]
+    list_id = _day_one(world, db_session)  # a second thread with Day 1 open
+    tid = client.get(f"{BASE}/daily", headers=auth_headers()).json()["thread"]["thread"]["id"]
+    assert tid != keep
+    sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
+        "id"
+    ]
+    _advance(client, sid, "09:30")
+    _mark(client, sid, "long_entry", shares=10)
+    _advance(client, sid, "10:00")
+    assert _mark(client, sid, "long_exit").status_code == 200
+    assert _rows(db_session, PracticeLedger, tid) == 1
+
+    refused = client.delete(f"{BASE}/threads/{tid}", headers=auth_headers())
+    assert refused.status_code == 409
+    assert _problems(refused) == [
+        {
+            "path": "status",
+            "message": "End today's practice day before deleting the thread · its simulated trades are not scored yet",
+        }
+    ]
+    assert client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 200
+    assert _rows(db_session, PracticeLedger, tid) == 1 and _rows(db_session, ReplaySession, tid) == 1
+
+    assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).status_code == 200
+    stranger = client.delete(f"{BASE}/threads/{tid}", headers=auth_headers(OTHER_EMAIL))
+    assert stranger.status_code == 404
+    assert client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 200  # nothing was removed
+
+    gone = client.delete(f"{BASE}/threads/{tid}", headers=auth_headers())
+    assert gone.status_code == 204 and gone.content == b""
+    assert client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 404
+    assert client.delete(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 404
+    db_session.expire_all()
+    for model in (PracticeLedger, ReplaySession, PracticePlan):
+        assert _rows(db_session, model, tid) == 0
+    assert db_session.execute(select(func.count()).select_from(ReplayDayList)).scalar_one() == 0
+    assert db_session.execute(select(func.count()).select_from(PracticeMark)).scalar_one() == 0
+    assert [row["thread"]["id"] for row in client.get(f"{BASE}/threads", headers=auth_headers()).json()] == [keep]
+
+    closed = _create(client).json()["thread"]["id"]  # a closed thread (or one never used) is deletable at once
+    client.post(f"{BASE}/threads/{closed}/close", headers=auth_headers())
+    assert client.delete(f"{BASE}/threads/{closed}", headers=auth_headers()).status_code == 204
+    assert client.delete(f"{BASE}/threads/{keep}", headers=auth_headers()).status_code == 204
+    assert client.get(f"{BASE}/threads", headers=auth_headers()).json() == []

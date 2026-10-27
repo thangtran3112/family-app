@@ -1,4 +1,5 @@
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
+import { z } from "zod";
 import {
   MarkResultSchema,
   MarkUndoSchema,
@@ -70,16 +71,19 @@ export const loadUniverseDays = (params: { day?: string } = {}, options?: Reques
 
 // ---- daily-list practice (02o-b v1) -----------------------------------------------------------------------------
 
-/** The hub card: her plan and its cursor, or `{ plan: null }`. */
-export const loadDaily = (options?: RequestOptions) => clientOf(options)(deskPath("/replay/daily"), DailySchema, readInit(options));
+/** The daily card: a plan and its cursor, or `{ plan: null }`. With `threadId` it is that thread's own plan (several day
+ *  threads can run at once); without it, her most recently started day thread's. */
+export const loadDaily = (options?: RequestOptions & { threadId?: number }) =>
+  clientOf(options)(deskPath("/replay/daily", { threadId: options?.threadId }), DailySchema, readInit(options));
 
 /** Opens the next day's list or continues the current one. With `plan` (a `PracticeBlockV1`) it first saves that plan,
- *  bound to `threadId` or else her active day thread (02r). */
+ *  bound to `threadId` or else her most recent day thread (02r). With `threadId` alone it continues that thread's day,
+ *  so name the thread whenever more than one can be active. */
 export const openNextDay = (plan?: unknown, options?: RequestOptions & { threadId?: number }) =>
   clientOf(options)(
     deskPath("/replay/daily/next"),
     OpenNextSchema,
-    jsonInit("POST", plan === undefined ? {} : { plan, ...(options?.threadId === undefined ? {} : { threadId: options.threadId }) }, options),
+    jsonInit("POST", { ...(plan === undefined ? {} : { plan }), ...(options?.threadId === undefined ? {} : { threadId: options.threadId }) }, options),
   );
 
 /** One practice day. `peek` adds the pre-open chart data of one candidate (cut at the list's data time). */
@@ -115,7 +119,7 @@ export const loadThreads = (options?: RequestOptions) => clientOf(options)(deskP
 /** One thread: plan, stats, the daily P/L rows (one per ended day) and the balance curve, all read back from the ledger. */
 export const loadThread = (id: number, options?: RequestOptions) => clientOf(options)(deskPath(`/replay/threads/${id}`), ThreadSchema, readInit(options));
 
-/** Body is a `PracticeThreadCreateV1`. One active thread per mode: a second is a 409 in plain words. */
+/** Body is a `PracticeThreadCreateV1`. Any number of threads of a mode may be active. */
 export const createThread = (spec: unknown, options?: RequestOptions) =>
   clientOf(options)(deskPath("/replay/threads"), ThreadSchema, jsonInit("POST", spec, options));
 
@@ -126,3 +130,7 @@ export const patchThread = (id: number, body: unknown, options?: RequestOptions)
 /** Closes the thread: its journal and final balance stay, its plan and balance freeze. An open practice day is a 409. */
 export const closeThread = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/threads/${id}/close`), ThreadSchema, jsonInit("POST", {}, options));
+
+/** Deletes the thread with its days, ledger and (swing) holds and weeks; it cannot be undone. An open practice day is a 409 in plain words. */
+export const deleteThread = (id: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/threads/${id}`), z.undefined(), { method: "DELETE", signal: options?.signal });

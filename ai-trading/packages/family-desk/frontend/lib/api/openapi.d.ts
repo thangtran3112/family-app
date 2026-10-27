@@ -468,8 +468,9 @@ export interface paths {
         };
         /**
          * Get Daily
-         * @description The hub's daily-list card: her plan and where its cursor is, and her active day thread with its SIMULATED balance
-         *     and stats; either is `null` before she has one.
+         * @description The daily-list card: a plan and where its cursor is, and its thread with its SIMULATED balance and stats; either
+         *     is `null` before she has one. `threadId` names the thread whose plan to read (404 when it is not hers); without it
+         *     the answer is her most recently started active day thread.
          */
         get: operations["get_daily_api_desk_replay_daily_get"];
         put?: never;
@@ -499,8 +500,9 @@ export interface paths {
          *     in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
          *     old client are ignored.
          *
-         *     `{"threadId": n}` alone continues a SWING thread's calendar (it has no plan to send: its universe is frozen with the
-         *     thread) and answers `kind: "swing"`; with a day thread it is the same plain 422 as before.
+         *     `{"threadId": n}` alone continues that thread: a SWING thread's calendar (it has no plan to send: its universe is
+         *     frozen with the thread; the answer is `kind: "swing"`), or a day thread's current plan. `{}` continues her most
+         *     recently started day thread.
          */
         post: operations["open_next_api_desk_replay_daily_next_post"];
         delete?: never;
@@ -794,9 +796,9 @@ export interface paths {
         /**
          * Create Thread
          * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). One active thread per mode: a second is a 409.
-         *     A swing thread freezes its universe and calendar here, after the days, the data and the arms check out (every
-         *     rejection is a plain problem), and starts preparing its bars in the background.
+         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
+         *     each with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data
+         *     and the arms check out (every rejection is a plain problem), and starts preparing its bars in the background.
          */
         post: operations["create_thread_api_desk_replay_threads_post"];
         delete?: never;
@@ -842,7 +844,12 @@ export interface paths {
         get: operations["get_thread_api_desk_replay_threads__thread_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Thread
+         * @description Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An
+         *     open practice day is a 409 (end it first), like closing. It cannot be undone; a thread that is not hers is a 404.
+         */
+        delete: operations["delete_thread_api_desk_replay_threads__thread_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -6923,7 +6930,9 @@ export interface operations {
     };
     get_daily_api_desk_replay_daily_get: {
         parameters: {
-            query?: never;
+            query?: {
+                threadId?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6937,6 +6946,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DailyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7586,6 +7604,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ThreadOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_thread_api_desk_replay_threads__thread_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

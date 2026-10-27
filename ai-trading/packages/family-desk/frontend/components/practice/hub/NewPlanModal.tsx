@@ -10,7 +10,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { savePlanPatiently } from "@/lib/desk/patience";
 import { createThread, loadDaily, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { effectiveMode, HUB_SWING_COPY, hubSwingText, startBlockedBy, type OpenModes, type ThreadMode } from "@/lib/replay/hubSwing";
+import { hubSwingText, startBlockedBy, type ThreadMode } from "@/lib/replay/hubSwing";
 import { defaultPlanDraft, effectiveFirstDay, planProblems, validatePlanDraft, type PlanDraft, type PlanProblems } from "@/lib/replay/planSetup";
 import { problemMessage } from "@/lib/replay/setup";
 import { defaultSwingDraft, swingProblems, validateSwingDraft, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
@@ -32,16 +32,14 @@ type Stage = "thread" | "plan";
  * plan, which starts preparing the data and opens Day 1, then `onSaved` takes her to the thread page. Swing (02p) swaps the daily
  * fields for its universe and calendar and starts the thread from the live universe table.
  *
- * `open` says which modes have no active thread (one active thread per mode; D-009, D-016). With `thread` set the modal only
+ * Any number of threads of either mode may be active, so Day and Swing are always offered. With `thread` set the modal only
  * replaces that day thread's plan: its balance and risk plan stay with it. Nothing here reaches IBKR.
  */
 export function NewPlanModal({
-  open,
   thread = null,
   onClose,
   onSaved,
 }: {
-  open: OpenModes;
   thread?: PracticeThread | null;
   onClose: () => void;
   /** The thread and its plan are saved; the page decides where to go next. */
@@ -65,12 +63,11 @@ export function NewPlanModal({
   const firstDay = effectiveFirstDay(plan.firstDay, dayPicked, recorded.data?.first_day_default ?? null);
 
   const planOnly = thread !== null;
-  const mode: ThreadMode = planOnly ? "day" : effectiveMode(open, threadDraft.mode);
+  const mode: ThreadMode = planOnly ? "day" : threadDraft.mode;
   const swing = mode === "swing";
   const preview = useUniversePreview(swingDraft, swing, now);
   const blocker = swing ? startBlockedBy({ preview: preview.preview, fresh: preview.fresh, problems: preview.problems }) : null;
   const noFilters = !swing && plan.filterIds.length === 0;
-  const noMode = !planOnly && !open.day && !open.swing;
 
   // A native modal dialog: the browser holds focus inside it, dims and disables the page behind it, and sends Escape as `cancel`.
   useEffect(() => {
@@ -120,11 +117,11 @@ export function NewPlanModal({
       if (threadId === null) return;
       stage = "plan";
       const id = threadId;
-      const before = await loadDaily().then((daily) => daily.plan?.id ?? null, () => null);
+      const before = await loadDaily({ threadId: id }).then((daily) => daily.plan?.id ?? null, () => null);
       await savePlanPatiently(
         () => openNextDay(day.spec, { threadId: id }),
-        () => openNextDay(),
-        () => loadDaily().then((daily) => daily.plan?.id ?? null),
+        () => openNextDay(undefined, { threadId: id }),
+        () => loadDaily({ threadId: id }).then((daily) => daily.plan?.id ?? null),
         before,
         { onWaiting: () => setStill(true) },
       );
@@ -144,17 +141,14 @@ export function NewPlanModal({
   const shownBalance = threadDraft.startingBalance.trim() === "" || !Number.isFinite(typed) ? DEFAULT_STARTING_BALANCE : typed;
   const shown: Problems = swing ? { ...preview.problems, ...problems } : problems;
   const formError = failure ?? shown.form ?? null;
-  const modeReason = !open.day ? HUB_SWING_COPY.dayTaken : !open.swing ? HUB_SWING_COPY.swingTaken : null;
   const riskFields = <ThreadPlanFields draft={threadDraft} onDraft={setThreadDraft} problems={shown} idPrefix="new-plan" perWeek={swing} />;
-  const note = noMode
-    ? PRACTICE_COPY.newPlanBothActive
-    : swing
-      ? (blocker ?? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 }))
-      : noFilters
-        ? PRACTICE_COPY.planSaveFilterFirst
-        : planOnly
-          ? PRACTICE_COPY.threadPlanFrom
-          : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
+  const note = swing
+    ? (blocker ?? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 }))
+    : noFilters
+      ? PRACTICE_COPY.planSaveFilterFirst
+      : planOnly
+        ? PRACTICE_COPY.threadPlanFrom
+        : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
 
   return (
     <dialog
@@ -217,8 +211,6 @@ export function NewPlanModal({
                     type="button"
                     className={styles.segment}
                     aria-pressed={mode === "day"}
-                    aria-describedby={!open.day ? "new-plan-mode-reason" : undefined}
-                    disabled={!open.day}
                     onClick={() => setThreadDraft({ ...threadDraft, mode: "day" })}
                   >
                     {PRACTICE_COPY.threadModeDay}
@@ -227,19 +219,16 @@ export function NewPlanModal({
                     type="button"
                     className={styles.segment}
                     aria-pressed={swing}
-                    aria-describedby={!open.swing ? "new-plan-mode-reason" : undefined}
-                    disabled={!open.swing}
                     onClick={() => setThreadDraft({ ...threadDraft, mode: "swing" })}
                   >
                     {PRACTICE_COPY.swingModeLabel}
                   </button>
                 </div>
-                {modeReason && <span id="new-plan-mode-reason" className={styles.hint}>{modeReason}</span>}
               </div>
             </div>
           )}
 
-          {noMode ? null : swing ? (
+          {swing ? (
             <SwingSetupSection draft={swingDraft} onDraft={editSwing} preview={preview} problems={shown} now={now}>
               {riskFields}
             </SwingSetupSection>
@@ -279,7 +268,7 @@ export function NewPlanModal({
           <button
             type="submit"
             className={`${styles.primary} ${modal.submit}`}
-            disabled={submitting || noMode || noFilters || blocker !== null}
+            disabled={submitting || noFilters || blocker !== null}
             aria-busy={submitting || undefined}
             aria-describedby="new-plan-note"
           >

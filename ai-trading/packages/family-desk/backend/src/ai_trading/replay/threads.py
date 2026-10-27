@@ -5,13 +5,16 @@ plan binds to one thread; every realized practice trade books a ledger row (`rep
 stored**: the balance is `starting_balance` plus the ledger, the day series and the stats are read back from the
 ledger and the ended day lists, so the numbers cannot drift from the trades (the reconciliation tests pin this).
 
-- **One active thread per owner and mode.** A second `day` thread is a 409 until the first is closed. A swing thread is
-  created by `swing.create_thread` (02p), which shares the checks and the insert below.
+- **Several active threads per owner and mode.** Each has its own plan, ledger and balance; `active_thread` is the
+  most recently started one, for callers that name no thread. A swing thread is created by `swing.create_thread`
+  (02p), which shares the checks and the insert below.
 - **Plan edits apply from the next session.** A session snapshots the plan when it starts, so a day already under way
   is scored against the plan it began with. The starting balance and the mode never change.
 - **Closing** archives the daily plan and freezes the thread (no plan edits, no new days). It waits for an open
   practice day: that day holds trades that are not scored yet. A swing thread's open holds exit at the last ended
   day's close first (`swing.close_thread`).
+- **Deleting** removes the thread and everything under it (its ledger, holds, weeks, plans, day lists and sessions). It
+  waits for an open practice day, like closing; a swing thread's open holds go with it.
 - **A practised day** is an ended day list that had a session; a **skipped day** ended with none, and the balance
   simply carries. In a swing thread a ledger row belongs to the ended day it exited on (it may have no session).
 
@@ -22,12 +25,19 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1, PracticeThreadV1
-from ai_trading.db.models import PracticeLedger, PracticePlan, PracticeThread, ReplayDayList, ReplaySession
+from ai_trading.db.models import (
+    PracticeHold,
+    PracticeLedger,
+    PracticePlan,
+    PracticeThread,
+    PracticeWeek,
+    ReplayDayList,
+    ReplaySession,
+)
 from ai_trading.replay.ledger import entry_out, utc_z
 from ai_trading.replay.session import ReplayProblem, Services
 
@@ -36,6 +46,7 @@ SWING_CLOSED = "Swing threads are not open yet · start a day thread"
 NO_THREAD = "Start a practice thread first · it holds your simulated balance and risk plan"
 CLOSED_THREAD = "Your practice thread is closed · start a new thread to keep practising"
 DAY_OPEN = "End today's practice day before closing the thread · its simulated trades are not scored yet"
+DAY_OPEN_DELETE = "End today's practice day before deleting the thread · its simulated trades are not scored yet"
 LEDGER_LIMIT = 500
 
 
@@ -61,11 +72,19 @@ def get_thread(db: Session, user_id: int, thread_id: int, *, lock: bool = False)
     return row
 
 
-def active_thread(db: Session, user_id: int, mode: str = "day", *, lock: bool = False) -> PracticeThread | None:
-    query = select(PracticeThread).where(
-        PracticeThread.owner_user_id == user_id, PracticeThread.mode == mode, PracticeThread.status == "active"
+def active_threads(db: Session, user_id: int, mode: str = "day", *, lock: bool = False) -> list[PracticeThread]:
+    """Her active threads of the mode, the newest first."""
+    query = (
+        select(PracticeThread)
+        .where(PracticeThread.owner_user_id == user_id, PracticeThread.mode == mode, PracticeThread.status == "active")
+        .order_by(PracticeThread.created_at.desc(), PracticeThread.id.desc())
     )
-    return db.execute(query.with_for_update() if lock else query).scalar_one_or_none()
+    return list(db.execute(query.with_for_update() if lock else query).scalars())
+
+
+def active_thread(db: Session, user_id: int, mode: str = "day", *, lock: bool = False) -> PracticeThread | None:
+    """The most recently started active thread of the mode: what a caller that names no thread means."""
+    return next(iter(active_threads(db, user_id, mode, lock=lock)), None)
 
 
 def plan_dict(thread: PracticeThread) -> dict[str, Any]:
@@ -118,20 +137,17 @@ def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: 
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     if dumped["mode"] != "day":
         raise ReplayProblem(SWING_CLOSED, path="mode")
-    check_new_thread(db, user_id, dumped)
+    check_new_thread(dumped)
     return add_thread(db, user_id, dumped, now)
 
 
-def check_new_thread(db: Session, user_id: int, dumped: dict[str, Any]) -> None:
-    """The create rules on top of the contract: the plan fits the balance, no other thread of the mode is active."""
+def check_new_thread(dumped: dict[str, Any]) -> None:
+    """The create rule on top of the contract: the plan fits the balance. Any number of threads of a mode may run."""
     _check_plan(dumped["plan"], dumped["startingBalance"])
-    if active_thread(db, user_id, dumped["mode"], lock=True) is not None:
-        raise _already_active(dumped["mode"])
 
 
 def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime) -> PracticeThread:
-    """Write the thread row (`dumped` passed `check_new_thread`). The unique index is the backstop for a concurrent
-    create of the same mode."""
+    """Write the thread row (`dumped` passed `check_new_thread`)."""
     plan = dumped["plan"]
     row = PracticeThread(
         owner_user_id=user_id,
@@ -148,18 +164,8 @@ def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime)
         closed_at=None,
     )
     db.add(row)
-    try:
-        db.flush()
-    except IntegrityError:  # a concurrent create of the same thread
-        db.rollback()
-        raise _already_active(dumped["mode"]) from None
+    db.flush()
     return row
-
-
-def _already_active(mode: str) -> ReplayProblem:
-    return ReplayProblem(
-        f"You already have an active {mode} thread · close it before starting another", path="mode", status=409
-    )
 
 
 def patch_thread(
@@ -222,6 +228,34 @@ def close_thread(
     row.status, row.closed_at, row.updated_at = "closed", now, now
     db.flush()
     return row
+
+
+def delete_thread(db: Session, user_id: int, thread_id: int) -> None:
+    """Remove the thread and everything under it. An open practice day (or a session still running) is a 409, like
+    closing: its simulated trades are not scored yet. A swing thread's open holds are deleted with the thread, so they
+    need no exit first. Children go before parents (the FKs cascade as well, so this order is the explicit one)."""
+    row = get_thread(db, user_id, thread_id, lock=True)
+    under_way = open_day(db, row.id)
+    running = db.execute(
+        select(ReplaySession.id).where(ReplaySession.thread_id == row.id, ReplaySession.status != "ended").limit(1)
+    ).first()
+    if under_way is not None or running is not None:
+        if row.mode == "swing" and under_way is not None:
+            raise ReplayProblem(f"End Day {under_way.day_no} first", path="status", status=409)
+        raise ReplayProblem(DAY_OPEN_DELETE, path="status", status=409)
+    plans = select(PracticePlan.id).where(PracticePlan.thread_id == row.id)
+    day_lists = select(ReplayDayList.id).where(ReplayDayList.plan_id.in_(plans))
+    for stmt in (
+        delete(PracticeLedger).where(PracticeLedger.thread_id == row.id),
+        delete(PracticeHold).where(PracticeHold.thread_id == row.id),
+        delete(PracticeWeek).where(PracticeWeek.thread_id == row.id),
+        delete(ReplaySession).where(or_(ReplaySession.thread_id == row.id, ReplaySession.day_list_id.in_(day_lists))),
+        delete(ReplayDayList).where(ReplayDayList.plan_id.in_(plans)),
+        delete(PracticePlan).where(PracticePlan.thread_id == row.id),
+        delete(PracticeThread).where(PracticeThread.id == row.id),
+    ):
+        db.execute(stmt.execution_options(synchronize_session=False))
+    db.expire_all()
 
 
 def resolve_for_plan(db: Session, user_id: int, thread_id: int | None) -> PracticeThread:
@@ -519,12 +553,14 @@ def brief(db: Session, thread_id: int | None, day_list_id: int | None = None) ->
 __all__ = (
     "ThreadNotFound",
     "active_thread",
+    "active_threads",
     "add_thread",
     "brief",
     "check_new_thread",
     "close_thread",
     "create_thread",
     "day_balances",
+    "delete_thread",
     "detail",
     "get_thread",
     "ledger_page",
