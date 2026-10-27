@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -24,6 +24,8 @@ export function PracticeLanding() {
   const changed = useCallback(() => setRevision((n) => n + 1), []);
   // `thread` set: the modal replaces that day thread's plan instead of starting a thread.
   const [modal, setModal] = useState<{ thread: PracticeThread | null } | null>(null);
+  // True while any row's action is opening a day: every row's action waits, so a second click cannot race the first.
+  const [busy, setBusy] = useState(false);
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { revision });
 
@@ -45,17 +47,15 @@ export function PracticeLanding() {
           <h1 className={hub.title}>Practice</h1>
           <p className={hub.hint}>{PRACTICE_COPY.threadsHint}</p>
         </div>
-        <button type="button" className={hub.primary} onClick={() => setModal({ thread: null })}>{PRACTICE_COPY.planNew}</button>
+        <button type="button" className={hub.primary} disabled={threads.loading} onClick={() => setModal({ thread: null })}>{PRACTICE_COPY.planNew}</button>
       </header>
       <div className={hub.body}>
-        {threads.loading ? (
-          <LoadingBlock label={PRACTICE_COPY.threadsLoading} height={180} />
-        ) : threads.data === null ? (
+        {!threads.loading && threads.data === null ? (
           <ErrorBlock message={PRACTICE_COPY.threadsLoadError} onRetry={threads.refresh} />
-        ) : rows.length === 0 ? (
+        ) : !threads.loading && rows.length === 0 ? (
           <EmptyBlock title={PRACTICE_COPY.threadNone}>{PRACTICE_COPY.landingNoneHint}</EmptyBlock>
         ) : (
-          <ThreadTable rows={rows} plan={plan} onChanged={changed} onNewPlan={(thread) => setModal({ thread })} />
+          <ThreadTable rows={rows} plan={plan} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onNewPlan={(thread) => setModal({ thread })} />
         )}
       </div>
       {modal && (

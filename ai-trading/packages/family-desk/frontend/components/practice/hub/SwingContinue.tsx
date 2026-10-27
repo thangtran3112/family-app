@@ -15,9 +15,26 @@ import styles from "./hub.module.css";
  * exactly as the day card does. While the thread's data is still being prepared it says so with the counts and stays on
  * the page; asking again later opens the day. Used by the hub card and the thread journal.
  */
-export function SwingContinue({ threadId, label, onChanged }: { threadId: number; label: string; onChanged: () => void }) {
+export function SwingContinue({
+  threadId,
+  label,
+  locked = false,
+  onBusy,
+  onChanged,
+}: {
+  threadId: number;
+  label: string;
+  /** Another thread's open is running: this button waits (the landing shares one flag across its rows). */
+  locked?: boolean;
+  onBusy?: (busy: boolean) => void;
+  onChanged: () => void;
+}) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [own, setOwn] = useState(false);
+  const setBusy = (on: boolean) => {
+    setOwn(on);
+    onBusy?.(on);
+  };
   const [waiting, setWaiting] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // The gateway cut the open short and the screen is asking again; the Desk is still preparing the day (D-058, D-066).
@@ -48,8 +65,8 @@ export function SwingContinue({ threadId, label, onChanged }: { threadId: number
   return (
     <>
       <div className={styles.inline}>
-        <button type="button" className={styles.primary} disabled={busy} aria-busy={busy || undefined} onClick={() => void open()}>{busy ? PRACTICE_COPY.planOpening : label}</button>
-        {busy && still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
+        <button type="button" className={styles.primary} disabled={locked || own} aria-busy={locked || own || undefined} onClick={() => void open()}>{own ? PRACTICE_COPY.planOpening : label}</button>
+        {own && still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
         {waiting && (
           <p role="status" className={styles.hint}>
             {waiting} · {PRACTICE_COPY.swingPrepWaitHint}

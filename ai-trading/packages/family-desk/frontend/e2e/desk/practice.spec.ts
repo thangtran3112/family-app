@@ -5,7 +5,7 @@ import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/fr
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
-import { DAY, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, saveFilter, startThread } from "./hub-helpers";
+import { DAY, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread } from "./hub-helpers";
 import { replayRail } from "./swing-helpers";
 
 // The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, B, T, S/X, end, the
@@ -326,6 +326,7 @@ test.describe("Practice", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", /^\/practice\/thread\?id=\d+$/);
     // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
     await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
@@ -409,9 +410,12 @@ test.describe("Practice", () => {
     await expect(lastDay).toContainText("Last day");
     await expect(lastDay).toContainText(`${formatDayResult(afterDayOne.daily[0]!.pnl_usd)} realized · 1 practice trade`);
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(afterDayOne.thread.stats.balance));
-    // Continue: the landing's row opens Day 2, which has no stored TSLA bars, so its list is empty and says so.
+    // The thread page charts the win/loss of her days, and the journal is a link of its own.
+    await expect(page.getByRole("region", { name: "Thread balance" }).getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
+    // Resume: the landing's row opens Day 2, which has no stored TSLA bars, so its list is empty and says so.
     await openDesk(page, "/practice");
-    await dayRow(page).getByRole("button", { name: PRACTICE_COPY.planContinue, exact: true }).click();
+    await dayRow(page).getByRole("button", { name: PRACTICE_COPY.planResume, exact: true }).click();
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
     await expect(page.getByText(PRACTICE_COPY.dayNoNames).first()).toBeVisible();
@@ -438,12 +442,14 @@ test.describe("Practice", () => {
     expect(read.daily[1]!.balance, "a skipped day carries the balance").toBe(read.daily[0]!.balance);
     const balance = formatBalance(read.thread.stats.balance);
 
-    // The landing's row shows the balance; its journal opens from there.
+    // The landing's row shows the balance; a click on the row opens the thread page, and its journal opens from there.
     await openDesk(page, "/practice");
     const card = dayRow(page);
     await expect(card).toContainText(balance);
     await expect(card).toContainText(PRACTICE_COPY.threadSimulated);
-    await card.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    await expect(card.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveCount(0); // the journal is a link of the thread page, not of the row
+    await openRow(page, card);
+    await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
@@ -490,13 +496,13 @@ test.describe("Practice", () => {
     await expect((await readThread(context, threadId)).thread.status).toBe("closed");
     await expectCleanScreen(page);
 
-    // Back on the landing: the closed thread keeps its row (marked Closed, no Continue), and a new plan can start a thread again.
+    // Back on the landing: the closed thread keeps its row (marked Closed, no Resume), and a new plan can start a thread again.
     await openDesk(page, "/practice");
     const closedRow = dayRow(page);
     await expect(closedRow).toContainText(PRACTICE_COPY.threadClosedBadge);
     await expect(closedRow).toContainText(balance);
-    await expect(closedRow.getByRole("button", { name: PRACTICE_COPY.planContinue })).toHaveCount(0);
-    await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toBeVisible();
+    await expect(closedRow.getByRole("button", { name: PRACTICE_COPY.planResume })).toHaveCount(0);
+    await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.landingJournal, exact: true })).toBeVisible(); // a closed thread's one action
     const again = await clickNewPlan(page);
     await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
     await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
@@ -508,7 +514,7 @@ test.describe("Practice", () => {
     await openDesk(page, "/practice");
     const card = dayRow(page);
     await expect(card).toContainText(PRACTICE_COPY.landingNeedsPlan); // no daily plan yet: nothing to resume
-    await expect(card.getByRole("button", { name: PRACTICE_COPY.planContinue })).toHaveCount(0);
+    await expect(card.getByRole("button", { name: PRACTICE_COPY.planResume })).toHaveCount(0);
     await openDesk(page, `/practice/thread?id=${id}`);
     await expect(page.getByRole("region", { name: "Practice day" }).getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan })).toBeVisible();
     await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
@@ -555,7 +561,8 @@ test.describe("Practice", () => {
     await expect(taken.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toHaveCount(0);
     await expectCleanScreen(page);
     await page.keyboard.press("Escape");
-    await dayRow(page).getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    await openRow(page, dayRow(page));
+    await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
   });
 
@@ -610,8 +617,8 @@ test.describe("Practice", () => {
     await expect(plan).toContainText("Day 2 · plan day 1 of 5 · list ready");
     await expect(plan).not.toContainText("in progress");
 
-    // The thread page's Continue and the review's Next day open the same day.
-    await day.getByRole("link", { name: PRACTICE_COPY.planContinue, exact: true }).click();
+    // The thread page's Resume and the review's Next day open the same day.
+    await day.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true }).click();
     await page.waitForURL(fresh);
     await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
@@ -639,8 +646,8 @@ test.describe("Practice", () => {
 
     await page.getByRole("link", { name: "Practice", exact: true }).first().click();
     await page.waitForURL(/\/practice$/);
-    // Day 2 is open: the row's Continue is its link.
-    await expect(dayRow(page).getByRole("link", { name: PRACTICE_COPY.planContinue, exact: true })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
+    // Day 2 is open: the row's Resume is its link.
+    await expect(dayRow(page).getByRole("link", { name: PRACTICE_COPY.planResume, exact: true })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
   });
 
   // D-058: a slow open outlasts the gateway (524) while the server finishes it. The screen says it is still working, asks again,

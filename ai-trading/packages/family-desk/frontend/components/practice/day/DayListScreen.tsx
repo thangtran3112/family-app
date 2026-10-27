@@ -45,6 +45,7 @@ import {
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
+import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
@@ -215,6 +216,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
+      <BackLink threadId={list.thread?.id ?? list.plan.thread_id} />
       <header className={styles.header}>
         <div className={styles.titleRow}>
           <h1 className={styles.title}>{title} · Practice day list</h1>
@@ -229,7 +231,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           ) : (
             <button type="button" className={styles.button} disabled={busy} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</button>
           )}
-          <Link href="/practice" className={styles.button}>Practice</Link>
         </div>
       </header>
       {list.thread && <ThreadStrip thread={list.thread} />}
