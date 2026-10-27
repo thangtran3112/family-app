@@ -536,8 +536,8 @@ test.describe("Practice", () => {
   });
 
   // D-009, D-016: the New plan modal checks the starting balance against the contract's bounds and keeps the typed value. With a day
-  // thread active its Day segment is off with the one-thread note (Swing stays open, 02p).
-  test("the New plan modal bounds the starting balance, keeps a custom one, and turns the taken mode off while a thread is active", async ({ page, context }) => {
+  // thread active both segments stay on offer: several threads of a mode can run at once.
+  test("the New plan modal bounds the starting balance, keeps a custom one, and still offers Day while a day thread is active", async ({ page, context }) => {
     test.setTimeout(180_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
@@ -553,12 +553,14 @@ test.describe("Practice", () => {
     const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { startingBalance: number; stats: { balance: number } } }>;
     expect([listed[0]!.thread.startingBalance, listed[0]!.thread.stats.balance]).toEqual([25000, 25000]);
 
-    // 02p: the server allows one active thread per mode, so the modal keeps the Day segment off with the reason, and Swing is the open mode.
+    // The server allows several active threads per mode, so the modal keeps both segments on and Day can start another thread.
     await openDesk(page, "/practice");
-    const taken = await clickNewPlan(page);
-    await expect(taken.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeDisabled();
-    await expect(taken).toContainText("A day thread is already active · close it in its journal to start another");
-    await expect(taken.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toHaveCount(0);
+    const again = await clickNewPlan(page);
+    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
+    await expect(again.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(again).not.toContainText("is already active");
+    await expect(again.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toBeVisible();
     await expectCleanScreen(page);
     await page.keyboard.press("Escape");
     await openRow(page, dayRow(page));
@@ -765,7 +767,7 @@ test.describe("Practice", () => {
     const second = await context.request.post(`${origin}/api/desk/replay/threads`, {
       data: { schemaVersion: 1, mode: "day", startingBalance: 50000, plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" } },
     });
-    expect(second.status(), "one active day thread at a time").toBe(409);
+    expect(second.ok(), "several active day threads are allowed").toBeTruthy();
     const refused = await context.request.post(`${origin}/api/desk/replay/daily/next`, { data: plan("08:30", "09:30") });
     expect(refused.status()).toBe(422);
     const { detail } = await refused.json();

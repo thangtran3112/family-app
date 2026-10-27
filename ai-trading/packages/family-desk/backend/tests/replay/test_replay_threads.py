@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
-from daily_world import DAYS, NOW, make_thread
+from daily_world import DAYS, NOW, SYMBOLS, make_thread
 from sqlalchemy import select, update
 from test_replay_plan import _advance, _block, _first_list, _open, _plan, _ready, _thread
 
@@ -95,12 +95,14 @@ def test_a_thread_starts_with_the_default_balance_and_the_contract_reads_back(db
     assert "Simulated" in out["label"]
 
 
-def test_one_active_day_thread_per_owner_and_a_swing_create_is_not_served_by_the_day_path(db_session, user_id) -> None:
-    threads_mod.create_thread(db_session, user_id, _create(), NOW)
-    with pytest.raises(ReplayProblem) as second:
-        threads_mod.create_thread(db_session, user_id, _create(), NOW)
-    assert (second.value.status, second.value.path) == (409, "mode")
-    assert second.value.message == "You already have an active day thread · close it before starting another"
+def test_several_active_day_threads_per_owner_and_a_swing_create_is_not_served_by_the_day_path(
+    db_session, user_id
+) -> None:
+    first = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    second = threads_mod.create_thread(db_session, user_id, _create(balance=20_000), NOW)
+    assert first.id != second.id
+    assert [t.id for t in threads_mod.active_threads(db_session, user_id)] == [second.id, first.id]  # newest first
+    assert threads_mod.active_thread(db_session, user_id).id == second.id  # "the current one" is the newest
     # A valid swing create (it carries its swing block) still belongs to `swing.create_thread`, not to this path.
     with pytest.raises(ReplayProblem) as swing:
         threads_mod.create_thread(db_session, user_id, _create(mode="swing"), NOW)
@@ -753,3 +755,105 @@ def test_a_plan_saved_before_0007_is_served_without_the_old_fields_and_scores_wi
     session = plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     assert session.spec["plan"] == {"stopRequired": "no", "signalOnly": "no", "maxTrades": 7}  # not the legacy plan
     assert session.spec["shares"] == plan_mod.DAY_SESSION_SHARES and session.thread_id == thread.id
+
+
+# -- several day threads side by side, and deleting one -------------------------------------------------------------
+
+
+def _ready_plan(db_session, user_id, svc, thread) -> PracticePlan:
+    """A prepared plan bound to `thread` over the three synthetic symbols."""
+    plan = plan_mod.create_plan(db_session, user_id, _block(db_session, user_id), svc, thread)
+    plan.universe = {**plan.universe, "symbols": SYMBOLS}
+    plan.prep = {**plan.prep, "total": len(SYMBOLS)}
+    db_session.commit()
+    plan_mod.run_prep(db_session, svc, plan.id)
+    return plan
+
+
+def test_two_day_threads_keep_independent_plans_ledgers_and_balances(db_session, user_id, svc) -> None:
+    first = make_thread(db_session, user_id, starting_balance=20_000)
+    second = make_thread(db_session, user_id, starting_balance=30_000)
+    first_plan = _ready_plan(db_session, user_id, svc, first)
+    second_plan = _ready_plan(db_session, user_id, svc, second)
+    assert first_plan.id != second_plan.id and {first_plan.status, second_plan.status} == {"active"}  # one each
+
+    day_a = plan_mod.open_next(db_session, user_id, svc, first.id).day_list
+    session_a = plan_mod.start_session(db_session, user_id, day_a.id, "GAPPER", svc)
+    _trade(db_session, user_id, svc, session_a.id, "long", shares=10)  # +40 in the first thread
+    # The second thread's Day 1 cannot practise GAPPER while the first one's session on it is still running.
+    day_b = plan_mod.open_next(db_session, user_id, svc, second.id).day_list
+    db_session.commit()
+    assert day_a.id != day_b.id and (day_a.plan_id, day_b.plan_id) == (first_plan.id, second_plan.id)
+    with pytest.raises(ReplayProblem) as clash:
+        plan_mod.start_session(db_session, user_id, day_b.id, "GAPPER", svc)
+    assert clash.value.status == 409 and "end it first" in clash.value.message
+    db_session.rollback()
+    plan_mod.end_day(db_session, user_id, day_a.id, svc)
+    db_session.commit()
+
+    session_b = plan_mod.start_session(db_session, user_id, day_b.id, "GAPPER", svc)
+    _trade(db_session, user_id, svc, session_b.id, "short", shares=5)  # 110 - 106 against a short: -20 in the second
+    plan_mod.end_day(db_session, user_id, day_b.id, svc)
+    db_session.commit()
+
+    assert [(r.thread_id, float(r.pnl_usd)) for r in _ledger(db_session)] == [(first.id, 40.0), (second.id, -20.0)]
+    stats_a, stats_b = _stats(db_session, first), _stats(db_session, second)
+    assert (stats_a.balance, stats_b.balance) == (20_040.0, 29_980.0)
+    assert (stats_a.wins, stats_a.losses, stats_b.wins, stats_b.losses) == (1, 0, 0, 1)
+    for thread, expected in ((first, 20_040.0), (second, 29_980.0)):
+        detail = threads_mod.detail(db_session, thread)
+        assert detail["curve"][-1]["balance"] == detail["daily"][-1]["balance"] == expected
+        assert [d["trades"] for d in detail["daily"]] == [1]
+        assert threads_mod.brief(db_session, thread.id)["balance"] == expected
+    # The hub card reads the named thread's own plan; unnamed it is the newest thread's.
+    assert plan_mod.hub(db_session, user_id, first.id)["plan"]["id"] == first_plan.id
+    assert plan_mod.hub(db_session, user_id, second.id)["thread"]["thread"].id == second.id
+    assert plan_mod.hub(db_session, user_id)["plan"]["id"] == second_plan.id
+    # Closing one leaves the other plan live.
+    threads_mod.close_thread(db_session, user_id, first.id, NOW)
+    assert db_session.get(PracticePlan, first_plan.id).status == "archived"
+    assert db_session.get(PracticePlan, second_plan.id).status == "active"
+    assert plan_mod.hub(db_session, user_id)["plan"]["id"] == second_plan.id
+
+
+def test_deleting_a_thread_waits_for_an_open_day_then_removes_only_its_own_rows(db_session, user_id, svc) -> None:
+    keep = make_thread(db_session, user_id)
+    gone = make_thread(db_session, user_id)
+    gone_plan = _ready_plan(db_session, user_id, svc, gone)
+    day = plan_mod.open_next(db_session, user_id, svc, gone.id).day_list
+    session = plan_mod.start_session(db_session, user_id, day.id, "GAPPER", svc)
+    _trade(db_session, user_id, svc, session.id, "long", shares=10)
+    db_session.commit()
+    gone_id, keep_id, gone_plan_id = gone.id, keep.id, gone_plan.id
+    with pytest.raises(ReplayProblem) as open_day:
+        threads_mod.delete_thread(db_session, user_id, gone_id)
+    assert open_day.value.status == 409 and "before deleting the thread" in open_day.value.message
+    db_session.rollback()
+    assert db_session.get(PracticeThread, gone_id) is not None and len(_ledger(db_session, gone_id)) == 1
+
+    plan_mod.end_day(db_session, user_id, day.id, svc)
+    db_session.commit()
+    assert len(_ledger(db_session, gone_id)) == 1
+    threads_mod.delete_thread(db_session, user_id, gone_id)
+    db_session.commit()
+    assert db_session.get(PracticeThread, gone_id) is None and db_session.get(PracticePlan, gone_plan_id) is None
+    for model in (PracticeLedger, ReplayDayList, ReplaySession, PracticeMark):
+        assert db_session.execute(select(model)).scalars().all() == []
+    assert db_session.get(PracticeThread, keep_id) is not None
+    assert [t["thread"].id for t in threads_mod.list_threads(db_session, user_id)] == [keep_id]
+    with pytest.raises(threads_mod.ThreadNotFound):
+        threads_mod.delete_thread(db_session, user_id, gone_id)  # already gone
+
+
+def test_a_closed_or_untouched_thread_is_deletable_and_a_stranger_cannot_delete_one(db_session, user_id) -> None:
+    thread_id = make_thread(db_session, user_id).id
+    other = User(email="spouse@example.com", settings={})
+    db_session.add(other)
+    db_session.flush()
+    with pytest.raises(threads_mod.ThreadNotFound):  # never confirms the thread exists
+        threads_mod.delete_thread(db_session, other.id, thread_id)
+    assert db_session.get(PracticeThread, thread_id) is not None
+    threads_mod.close_thread(db_session, user_id, thread_id, NOW)
+    threads_mod.delete_thread(db_session, user_id, thread_id)
+    db_session.commit()
+    assert db_session.get(PracticeThread, thread_id) is None

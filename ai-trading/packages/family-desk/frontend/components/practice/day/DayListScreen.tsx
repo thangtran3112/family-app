@@ -200,7 +200,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     setMessage(null);
     setRetry(null);
     try {
-      const result = await whenReady(() => openNextDay(), { onWaiting: () => setStill("open") });
+      const result = await whenReady(() => openNextDay(undefined, threadId === null ? {} : { threadId }), { onWaiting: () => setStill("open") });
       router.push(result.day_list_id === null ? "/practice" : `/practice/day?id=${result.day_list_id}`);
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.planStartError));

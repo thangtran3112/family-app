@@ -7,7 +7,7 @@ import { SchemaVersionSchema, UtcTimestampSchema } from "./strategy-common.ts";
 // from the ledger); `PracticeLedgerEntryV1` is one realized practice trade. Money is SIMULATED.
 // Nothing is a boolean or null (yes/no enums; an absent key means "no value"), every object is
 // strict, and no field names an order, account or broker, as in the other 02k-family contracts.
-// State rules (one active thread per mode, no plan edit once closed, the daily plan binding to an
+// State rules (no plan edit once closed, the daily plan binding to an
 // active thread) are server rules, not contract rules.
 
 export const DEFAULT_STARTING_BALANCE = 50_000;

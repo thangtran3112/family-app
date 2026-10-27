@@ -492,18 +492,18 @@ def test_risk_per_hold_is_kept_and_an_absent_one_stays_absent(db_session, owner,
     assert "riskPerHoldUsd" not in bare.spec
 
 
-def test_one_active_swing_thread_per_owner_but_a_day_thread_can_run_beside_it(db_session, owner, svc) -> None:
+def test_several_active_swing_threads_per_owner_each_with_its_own_plan_and_a_day_thread_beside_them(
+    db_session, owner, svc
+) -> None:
     day = make_thread(db_session, owner)
-    swing_thread, _ = create_swing_thread(db_session, owner, svc)
+    first, first_plan = create_swing_thread(db_session, owner, svc)
+    second, second_plan = create_swing_thread(db_session, owner, svc)
     assert {t.mode for t in db_session.scalars(select(PracticeThread)).all()} == {"day", "swing"}
-    with pytest.raises(ReplayProblem) as second:
-        swing.create_thread(db_session, owner, swing_create(), svc)
-    assert (second.value.status, second.value.path) == (409, "mode")
-    assert second.value.message == "You already have an active swing thread · close it before starting another"
-    threads_mod.close_thread(db_session, owner, swing_thread.id, NOW)
-    db_session.commit()
-    again, _ = create_swing_thread(db_session, owner, svc)  # closing the first frees the slot
-    assert again.id != swing_thread.id and threads_mod.active_thread(db_session, owner, "day").id == day.id
+    assert first.id != second.id and first_plan.id != second_plan.id
+    assert [t.id for t in threads_mod.active_threads(db_session, owner, "swing")] == [second.id, first.id]
+    assert threads_mod.active_thread(db_session, owner, "day").id == day.id
+    threads_mod.close_thread(db_session, owner, first.id, NOW)  # closing one leaves the other running
+    assert [t.id for t in threads_mod.active_threads(db_session, owner, "swing")] == [second.id]
 
 
 def test_a_day_thread_can_be_created_while_a_swing_thread_is_active(db_session, owner, svc) -> None:

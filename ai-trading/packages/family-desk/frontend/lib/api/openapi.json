@@ -15117,8 +15117,27 @@
     },
     "/api/desk/replay/daily": {
       "get": {
-        "description": "The hub's daily-list card: her plan and where its cursor is, and her active day thread with its SIMULATED balance\nand stats; either is `null` before she has one.",
+        "description": "The daily-list card: a plan and where its cursor is, and its thread with its SIMULATED balance and stats; either\nis `null` before she has one. `threadId` names the thread whose plan to read (404 when it is not hers); without it\nthe answer is her most recently started active day thread.",
         "operationId": "get_daily_api_desk_replay_daily_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "threadId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threadid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15129,6 +15148,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Daily",
@@ -15139,7 +15168,7 @@
     },
     "/api/desk/replay/daily/next": {
       "post": {
-        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.\n\nA new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409\nin plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an\nold client are ignored.\n\n`{\"threadId\": n}` alone continues a SWING thread's calendar (it has no plan to send: its universe is frozen with the\nthread) and answers `kind: \"swing\"`; with a day thread it is the same plain 422 as before.",
+        "description": "Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves\nthat plan, replacing hers, and starts preparing its data in the background. While the data is not ready the\nanswer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.\n\nA new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409\nin plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an\nold client are ignored.\n\n`{\"threadId\": n}` alone continues that thread: a SWING thread's calendar (it has no plan to send: its universe is\nfrozen with the thread; the answer is `kind: \"swing\"`), or a day thread's current plan. `{}` continues her most\nrecently started day thread.",
         "operationId": "open_next_api_desk_replay_daily_next_post",
         "requestBody": {
           "content": {
@@ -16084,7 +16113,7 @@
         ]
       },
       "post": {
-        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). One active thread per mode: a second is a 409.\nA swing thread freezes its universe and calendar here, after the days, the data and the arms check out (every\nrejection is a plain problem), and starts preparing its bars in the background.",
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,\neach with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data\nand the arms check out (every rejection is a plain problem), and starts preparing its bars in the background.",
         "operationId": "create_thread_api_desk_replay_threads_post",
         "requestBody": {
           "content": {
@@ -16158,6 +16187,40 @@
       }
     },
     "/api/desk/replay/threads/{thread_id}": {
+      "delete": {
+        "description": "Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An\nopen practice day is a 409 (end it first), like closing. It cannot be undone; a thread that is not hers is a 404.",
+        "operationId": "delete_thread_api_desk_replay_threads__thread_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Thread",
+        "tags": [
+          "replay"
+        ]
+      },
       "get": {
         "description": "One thread: its plan, stats, today, the daily P/L series (one row per ended day) and the balance curve. Every\nfigure is read back from the ledger; nothing is stored twice.",
         "operationId": "get_thread_api_desk_replay_threads__thread_id__get",
