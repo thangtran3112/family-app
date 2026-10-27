@@ -393,10 +393,15 @@ def _pool_prep_in_background(
 
 
 @router.get("/daily", response_model=DailyOut)
-def get_daily(user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, Any]:
-    """The hub's daily-list card: her plan and where its cursor is, and her active day thread with its SIMULATED balance
-    and stats; either is `null` before she has one."""
-    return plan_mod.hub(db, user.id)
+def get_daily(
+    thread_id: int | None = Query(default=None, alias="threadId", ge=1),
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """The daily-list card: a plan and where its cursor is, and its thread with its SIMULATED balance and stats; either
+    is `null` before she has one. `threadId` names the thread whose plan to read (404 when it is not hers); without it
+    the answer is her most recently started active day thread."""
+    return _call(plan_mod.hub, db, user.id, thread_id)
 
 
 @router.post(
@@ -436,25 +441,24 @@ def open_next(
     in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
     old client are ignored.
 
-    `{"threadId": n}` alone continues a SWING thread's calendar (it has no plan to send: its universe is frozen with the
-    thread) and answers `kind: "swing"`; with a day thread it is the same plain 422 as before."""
+    `{"threadId": n}` alone continues that thread: a SWING thread's calendar (it has no plan to send: its universe is
+    frozen with the thread; the answer is `kind: "swing"`), or a day thread's current plan. `{}` continues her most
+    recently started day thread."""
     if not isinstance(raw, dict) or set(raw) - {"plan", "threadId"}:
         raise _problem('Send {} to continue, or {"plan": ..., "threadId": ...} to start a plan', "")
     started = raw.get("plan") is not None
     thread_id = raw.get("threadId")
-    needs_plan = _problem("Send threadId, a whole number, together with a plan", "threadId")
     if thread_id is not None and (isinstance(thread_id, bool) or not isinstance(thread_id, int)):
-        raise needs_plan
+        raise _problem("Send threadId, a whole number", "threadId")
     swing_thread_id = None
     if thread_id is not None and not started:
-        if _call(threads_mod.get_thread, db, user.id, thread_id).mode != "swing":
-            raise needs_plan
-        swing_thread_id = thread_id
+        swing_thread_id = thread_id if _call(threads_mod.get_thread, db, user.id, thread_id).mode == "swing" else None
     if started:
         block = _validated(PracticeBlockV1, plan_mod.without_legacy_plan_fields(raw["plan"]))
         thread = _call(threads_mod.resolve_for_plan, db, user.id, thread_id)
         _call(plan_mod.create_plan, db, user.id, block, services, thread)
-    opened = _call(plan_mod.open_next, db, user.id, services, swing_thread_id)
+        thread_id = thread.id
+    opened = _call(plan_mod.open_next, db, user.id, services, thread_id)
     if started or opened.restart_prep:
         # The task runs on its own session while this request's one is still open (FastAPI closes a yield dependency
         # after the response and its background tasks), so the plan must be committed before the task can see it.
@@ -591,9 +595,9 @@ def create_thread(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-    risk plan, and the mode (`day`, or `swing` with its `swing` block). One active thread per mode: a second is a 409.
-    A swing thread freezes its universe and calendar here, after the days, the data and the arms check out (every
-    rejection is a plain problem), and starts preparing its bars in the background."""
+    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
+    each with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data
+    and the arms check out (every rejection is a plain problem), and starts preparing its bars in the background."""
     swing = isinstance(raw, dict) and raw.get("mode") == "swing"
     spec = _validated(PracticeThreadCreateV1, raw, "swing" if swing else "plan")
     if not swing:
@@ -687,6 +691,16 @@ def close_thread(
     Idempotent."""
     row = _call(threads_mod.close_thread, db, user.id, thread_id, services.now(), services)
     return threads_mod.detail(db, row)
+
+
+@router.delete("/threads/{thread_id}", status_code=204, response_model=None)
+def delete_thread(
+    thread_id: int, user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)
+) -> Response:
+    """Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An
+    open practice day is a 409 (end it first), like closing. It cannot be undone; a thread that is not hers is a 404."""
+    _call(threads_mod.delete_thread, db, user.id, thread_id)
+    return Response(status_code=204)
 
 
 @router.get("/threads/{thread_id}/ledger", response_model=ThreadLedgerOut)

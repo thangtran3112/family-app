@@ -3,37 +3,17 @@ import type { SwingOpenNext, UniversePreview } from "./swingApi.ts";
 import type { SwingProblems } from "./swingSetup.ts";
 import { startBlocker } from "./universeView.ts";
 import { niceTicks, type Box, type Tick } from "./threadChart.ts";
-import type { SwingEquityPoint, ThreadSummary } from "./threads.ts";
+import type { SwingEquityPoint } from "./threads.ts";
 
-// What the hub and the thread journal need for swing threads beyond F1's `swing*.ts`: which modes can start a thread,
+// What the hub and the thread journal need for swing threads beyond F1's `swing*.ts`: the thread modes,
 // the universe preview's timing, what "Continue" answered, and the geometry of the balance-and-equity curve. Pure, so
 // the node tests cover it. Copy that only these screens use lives here (checked by the same banned-word test).
 
-// -- one active thread per mode -------------------------------------------------------------------------------
+// -- thread modes ----------------------------------------------------------------------------------------------
 
 export type ThreadMode = "day" | "swing";
-export type ActiveThreads = { day: ThreadSummary | null; swing: ThreadSummary | null };
-export type OpenModes = Record<ThreadMode, boolean>;
-
-/** Her active day thread and her active swing thread (the server allows one of each at the same time). */
-export function activeThreads(list: readonly ThreadSummary[]): ActiveThreads {
-  const active = list.filter((row) => row.thread.status === "active");
-  return {
-    day: active.find((row) => row.thread.mode === "day") ?? null,
-    swing: active.find((row) => row.thread.mode === "swing") ?? null,
-  };
-}
-
-/** The modes that can still start a thread. */
-export const openModes = (active: ActiveThreads): OpenModes => ({ day: active.day === null, swing: active.swing === null });
-
-/** The mode the form shows: the one asked for when it is open, else the other open one (day when none is open). */
-export const effectiveMode = (open: OpenModes, wanted: ThreadMode): ThreadMode => (open[wanted] ? wanted : open.day ? "day" : open.swing ? "swing" : wanted);
 
 export const HUB_SWING_COPY = {
-  dayTaken: "A day thread is already active · close it in its journal to start another",
-  swingTaken: "A swing thread is already active · close it in its journal to start another",
-  bothActive: "A day thread and a swing thread are both active · close one in its journal to start another",
   pickSwing: "Pick Swing to build a universe and start a swing thread",
   noWatchlists: "No watchlists yet · you can still add symbols by hand",
   noDailyFilters: "No daily filters yet · a swing board reads daily bars, so only daily filters are offered",

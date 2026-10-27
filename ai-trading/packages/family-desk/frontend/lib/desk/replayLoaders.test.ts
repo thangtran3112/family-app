@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import { createDeskApiClient, DeskApiError } from "../api/client.ts";
 import { daysResponse, delta, feed, markResult, session, sessionSummary, spec } from "../replay/fixtures.ts";
-import { advanceReplay, closeThread, createReplaySession, createThread, endReplay, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, loadThread, loadThreads, openNextDay, patchReplaySession, relistDay, patchThread, placeMark, undoMark } from "./replay.ts";
+import { advanceReplay, closeThread, createReplaySession, createThread, deleteThread, endReplay, loadDaily, loadReplayDays, loadReplayFeed, loadReplaySession, loadReplaySessions, loadThread, loadThreads, openNextDay, patchReplaySession, relistDay, patchThread, placeMark, undoMark } from "./replay.ts";
 import { activeThread, closedThread, thread } from "../replay/threadFixtures.ts";
 
 type Call = { method: string; path: string; body: unknown };
@@ -150,6 +150,25 @@ test("a new daily plan names its thread; continuing sends an empty body", async 
   d = fakeDesk(answer);
   await openNextDay(undefined, { client: d.client });
   assert.deepEqual(d.calls[0]!.body, {});
+  d = fakeDesk(answer);
+  await openNextDay(undefined, { client: d.client, threadId: 4 }); // several day threads: continue THIS thread's plan
+  assert.deepEqual(d.calls[0]!.body, { threadId: 4 });
+});
+
+test("the daily card reads the named thread's plan, else the newest day thread's", async () => {
+  const answer = { plan: null, thread: null };
+  let d = fakeDesk(answer);
+  await loadDaily({ client: d.client, threadId: 9 });
+  assert.equal(d.calls[0]!.path, "/api/desk/replay/daily?threadId=9");
+  d = fakeDesk(answer);
+  await loadDaily({ client: d.client });
+  assert.equal(d.calls[0]!.path, "/api/desk/replay/daily");
+});
+
+test("deleting a thread sends DELETE to its route and expects no body", async () => {
+  const d = fakeDesk(undefined, 204);
+  assert.equal(await deleteThread(6, { client: d.client }), undefined);
+  assert.deepEqual(d.calls[0], { method: "DELETE", path: "/api/desk/replay/threads/6", body: undefined });
 });
 
 test("re-listing a day posts the new list time to the day's relist route (D-012)", async () => {

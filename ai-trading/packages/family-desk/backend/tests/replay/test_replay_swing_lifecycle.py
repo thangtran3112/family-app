@@ -32,7 +32,16 @@ from test_replay_swing_setup import _filter
 
 from ai_trading.contracts.practice_thread import SwingSetupV1
 from ai_trading.core.calendar import et, previous_session
-from ai_trading.db.models import PracticeHold, PracticeLedger, PracticeMark, PracticeWeek
+from ai_trading.db.models import (
+    PracticeHold,
+    PracticeLedger,
+    PracticeMark,
+    PracticePlan,
+    PracticeThread,
+    PracticeWeek,
+    ReplayDayList,
+    ReplaySession,
+)
 from ai_trading.replay import hold_rows, swing
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
@@ -1182,3 +1191,42 @@ def test_an_open_day_is_marked_at_no_price_the_day_has_not_revealed(db_session, 
             )
         )
     assert snapshots[0] == snapshots[1]
+
+
+def test_deleting_a_swing_thread_waits_for_the_open_day_then_removes_holds_weeks_days_and_ledger(
+    db_session, owner, world, svc
+) -> None:
+    other, _ = ready_thread(db_session, owner, svc)  # a second swing thread that must survive the delete
+    thread, _ = ready_thread(db_session, owner, svc)
+    thread_id, other_id = thread.id, other.id
+    day1 = _open(db_session, owner, svc, thread)
+    (session,) = _practice(db_session, owner, svc, day1, "S04")
+    _enter(db_session, thread, world, "S04", "long", 100, DAYS[0], session=session)
+    _end(db_session, owner, svc, day1)
+    _open(db_session, owner, svc, thread)  # Day 2 is open now
+    with pytest.raises(ReplayProblem) as caught:
+        threads_mod.delete_thread(db_session, owner, thread_id)
+    assert (caught.value.status, caught.value.message) == (409, "End Day 2 first")
+    db_session.rollback()
+    assert db_session.get(PracticeThread, thread_id) is not None and _hold(db_session, thread, "S04").status == "open"
+
+    day2 = db_session.execute(
+        select(ReplayDayList)
+        .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
+        .where(PracticePlan.thread_id == thread.id, ReplayDayList.status != "ended")
+    ).scalar_one()
+    _end(db_session, owner, svc, day2)
+    threads_mod.delete_thread(db_session, owner, thread_id)  # the hold is still open: it goes with the thread
+    db_session.commit()
+    assert db_session.get(PracticeThread, thread_id) is None and db_session.get(PracticeThread, other_id) is not None
+    for model in (PracticeHold, PracticeWeek, PracticeLedger, PracticePlan, ReplaySession):
+        assert (
+            db_session.execute(select(func.count()).select_from(model).where(model.thread_id == thread_id)).scalar_one()
+            == 0
+        )
+    assert (
+        db_session.execute(select(func.count()).select_from(PracticeMark)).scalar_one() == 0
+    )  # cascaded with its session
+    assert (
+        db_session.execute(select(func.count()).select_from(ReplayDayList)).scalar_one() == 0
+    )  # `other` opened no day

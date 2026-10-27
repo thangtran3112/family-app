@@ -33,7 +33,7 @@ export function ThreadOverview() {
   const changed = useCallback(() => setRevision((n) => n + 1), []);
   const [replacing, setReplacing] = useState(false);
   const query = useDeskQuery(`practice-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null, revision });
-  const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { enabled: id !== null, revision });
+  const daily = useDeskQuery(`replay-daily:${id}`, (signal) => loadDaily({ threadId: id ?? 0, signal }), { enabled: id !== null, revision });
   const plan = daily.data?.plan ?? null;
   const preparing = plan?.prep.state === "running" && query.data !== null && planOpensIn(plan, query.data.thread);
   useEffect(() => {
@@ -151,7 +151,6 @@ export function ThreadOverview() {
 
       {replacing && (
         <NewPlanModal
-          open={{ day: false, swing: false }}
           thread={thread}
           onClose={() => {
             setReplacing(false);

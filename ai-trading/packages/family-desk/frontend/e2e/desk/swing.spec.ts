@@ -26,15 +26,17 @@ test.describe("Swing practice", () => {
     expect(swingCalls()).toEqual([]);
     await page.keyboard.press("Escape");
 
-    // The day thread first (made by API: this spec is about the swing thread): the modal then offers Swing only, already open in it.
+    // The day thread first (made by API: this spec is about the swing thread): both modes stay on offer (several threads of a mode can run).
     await createThreadByApi(context);
     await openDesk(page, "/practice");
     const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
     await expect(table.getByRole("row", { name: /Day trading/ })).toContainText("$50,000");
     dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByText("is already active")).toHaveCount(0);
+    await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByText("A day thread is already active")).toBeVisible();
     await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingStartThread })).toBeDisabled(); // no universe yet
     await expectCleanScreen(page);
 
