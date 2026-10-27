@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
 import {
-  activeThreads,
   continueOutcome,
-  effectiveMode,
   firstProblem,
   HUB_SWING_COPY,
   hubSwingText,
-  openModes,
   PREVIEW_POLL_MAX_MS,
   pollExpired,
   startBlockedBy,
@@ -16,31 +13,8 @@ import {
   swingCurveSummary,
   weeklyPlanRows,
 } from "./hubSwing.ts";
-import { swingOpenNext, swingOpenNextWaiting, swingState, swingThreadSummary, universePreview, universePreviewPreparing } from "./swingFixtures.ts";
-import { activeThread } from "./threadFixtures.ts";
-import type { ThreadSummary } from "./threads.ts";
+import { swingOpenNext, swingOpenNextWaiting, swingState, universePreview, universePreviewPreparing } from "./swingFixtures.ts";
 import { formatBalance, planRows } from "./threadView.ts";
-
-const day = activeThread;
-const swing = swingThreadSummary;
-const closed = (summary: ThreadSummary): ThreadSummary => ({ ...summary, thread: { ...summary.thread, status: "closed" } });
-
-test("one active thread per mode: a day and a swing thread can both be active", () => {
-  assert.deepEqual(openModes(activeThreads([])), { day: true, swing: true });
-  assert.deepEqual(openModes(activeThreads([day])), { day: false, swing: true });
-  assert.deepEqual(openModes(activeThreads([swing])), { day: true, swing: false });
-  assert.deepEqual(openModes(activeThreads([swing, day])), { day: false, swing: false });
-  assert.equal(activeThreads([swing, day]).swing, swing);
-  assert.equal(activeThreads([swing, day]).day, day);
-  assert.deepEqual(openModes(activeThreads([closed(day), closed(swing)])), { day: true, swing: true }, "a closed thread frees its mode");
-});
-
-test("the form shows the asked mode when it is open, else the other open one", () => {
-  assert.equal(effectiveMode({ day: true, swing: true }, "swing"), "swing");
-  assert.equal(effectiveMode({ day: false, swing: true }, "day"), "swing");
-  assert.equal(effectiveMode({ day: true, swing: false }, "swing"), "day");
-  assert.equal(effectiveMode({ day: false, swing: false }, "swing"), "swing");
-});
 
 test("the preview stops asking after ten minutes", () => {
   assert.equal(pollExpired(1000, 1000 + PREVIEW_POLL_MAX_MS - 1), false);

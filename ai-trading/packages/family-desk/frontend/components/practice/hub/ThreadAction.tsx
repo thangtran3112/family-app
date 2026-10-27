@@ -68,11 +68,12 @@ export function ThreadAction({
   // The plan's data is still being prepared: the first list opens when it is ready.
   const card = planCard(plan);
   if (card.action === "none") return <p role="status" className={styles.muted}>{card.headline}</p>;
-  return <OpenNextDay label={card.action === "start" ? PRACTICE_COPY.planStart : PRACTICE_COPY.planResume} locked={busy} onBusy={onBusy} onChanged={onChanged} />;
+  return <OpenNextDay threadId={thread.id} label={card.action === "start" ? PRACTICE_COPY.planStart : PRACTICE_COPY.planResume} locked={busy} onBusy={onBusy} onChanged={onChanged} />;
 }
 
-/** Opens the plan's next day and goes to it; with the data not ready yet the answer has no day and the screen refetches. */
-function OpenNextDay({ label, locked, onBusy, onChanged }: { label: string; locked: boolean; onBusy?: (busy: boolean) => void; onChanged: () => void }) {
+/** Opens the thread's next day and goes to it; with the data not ready yet the answer has no day and the screen refetches.
+ *  It names the thread: several day threads can be active, and each continues its own plan. */
+function OpenNextDay({ threadId, label, locked, onBusy, onChanged }: { threadId: number; label: string; locked: boolean; onBusy?: (busy: boolean) => void; onChanged: () => void }) {
   const router = useRouter();
   const [own, setOwn] = useState(false);
   const setBusy = (on: boolean) => {
@@ -88,7 +89,7 @@ function OpenNextDay({ label, locked, onBusy, onChanged }: { label: string; lock
     setStill(false);
     setMessage(null);
     try {
-      const result = await whenReady(() => openNextDay(), { onWaiting: () => setStill(true) });
+      const result = await whenReady(() => openNextDay(undefined, { threadId }), { onWaiting: () => setStill(true) });
       if (result.day_list_id !== null) {
         router.push(`/practice/day?id=${result.day_list_id}`);
         return;
