@@ -302,6 +302,17 @@ def test_several_active_swing_threads_and_a_day_thread_run_side_by_side(world) -
     assert [row.get("swing") is not None for row in listed if row["thread"]["mode"] == "day"] == [False]
 
 
+def test_the_daily_card_of_a_swing_thread_has_its_thread_and_no_day_plan(world) -> None:
+    client, _, _ = world
+    swing_id = _create(client).json()["thread"]["id"]
+    day_id = client.post(f"{BASE}/threads", json=DAY_CREATE, headers=auth_headers()).json()["thread"]["id"]
+    card = client.get(f"{BASE}/daily", params={"threadId": swing_id}, headers=auth_headers())
+    assert card.status_code == 200 and card.json()["plan"] is None
+    assert card.json()["thread"]["thread"]["id"] == swing_id and card.json()["thread"]["thread"]["mode"] == "swing"
+    unnamed = client.get(f"{BASE}/daily", headers=auth_headers()).json()  # no threadId: the day thread, as before
+    assert unnamed["thread"]["thread"]["id"] == day_id
+
+
 def test_swing_create_rejections_are_plain_problems(world, db_session) -> None:
     client, _, _ = world
     missing = client.post(f"{BASE}/threads", json={**_swing_body(), "swing": None}, headers=auth_headers())

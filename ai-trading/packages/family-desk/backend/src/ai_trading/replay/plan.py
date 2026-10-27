@@ -1226,11 +1226,15 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
 
 def hub(db: Session, user_id: int, thread_id: int | None = None) -> dict[str, Any]:
     """Her plan and thread card: thread `thread_id` (404 when it is not hers) with its own plan, else her most recently
-    started active day thread."""
+    started active day thread. The card is the daily plan's, so a swing thread has a card and no plan here."""
     thread = threads_mod.get_thread(db, user_id, thread_id) if thread_id is not None else None
     if thread is None:
         thread = threads_mod.active_thread(db, user_id)
-    plan = active_plan(db, user_id, thread_id=None if thread is None else thread.id)
+    plan = (
+        None
+        if thread is not None and thread.mode == "swing"
+        else active_plan(db, user_id, thread_id=None if thread is None else thread.id)
+    )
     return {
         "plan": None if plan is None else plan_out(db, plan),
         "thread": None if thread is None else threads_mod.summary(db, thread),
