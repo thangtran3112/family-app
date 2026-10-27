@@ -1,7 +1,7 @@
 import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
-import { ANY_CLOSE, DAY_URL, THREAD_URL, clickNewPlan, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, saveFilter, startThread, threadIdOf } from "./hub-helpers";
+import { ANY_CLOSE, DAY_URL, THREAD_URL, clickNewPlan, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
 
 // The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
 
@@ -40,8 +40,33 @@ test.describe("Practice landing", () => {
     await expect(page.getByRole("dialog", { name: /^New plan for/ })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await row.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
+    // One action per row: no Overview or Journal link beside it, only the thread's name, which links to its page like the row does.
+    await expect(row.getByRole("link")).toHaveCount(1);
+    await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0);
+    await expect(row.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveCount(0);
+    await openRow(page, row);
+    await expect(page).toHaveURL(new RegExp(`/practice/thread\\?id=${id}$`));
+    // The journal is one click from the thread page.
+    await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(new RegExp(`/practice/journal\\?thread=${id}`));
+  });
+
+  test("while the threads load the table shows skeleton rows and New plan waits", async ({ page }) => {
+    // Hold the threads answer back so the loading state stays on screen long enough to look at.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/api/desk/replay/threads", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto("/practice");
+    const loading = page.getByRole("table", { name: PRACTICE_COPY.threadsLoading });
+    await expect(loading).toHaveAttribute("aria-busy", "true");
+    await expect(loading.locator("tbody tr")).toHaveCount(2);
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeDisabled();
+    release();
+    await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeEnabled();
   });
 
   test("the New plan modal lists filters in one vertical column, keeps the risk plan open, and closes three ways", async ({ page, context }) => {
@@ -119,7 +144,7 @@ test.describe("Practice landing", () => {
     expect((await (await context.request.get("/api/desk/replay/threads")).json()) as unknown[]).toHaveLength(0);
   });
 
-  test("Populate data starts the thread and its plan, lands on the thread page, and Start Day 1 opens the day", async ({ page, context }) => {
+  test("Populate data starts the thread and its plan, lands on the thread page, and Start day opens the day", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context, { balance: "25000", maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks.", stop: true });
     const id = threadIdOf(page);
@@ -141,17 +166,19 @@ test.describe("Practice landing", () => {
 
     await openFirstDay(page);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5");
+    // The day screen has a way back to the thread's page.
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", `/practice/thread?id=${id}`);
 
-    // Back on the landing: the thread has a row whose Continue is today's open day.
+    // Back on the landing: the thread has a row whose Resume is today's open day.
     await openDesk(page, "/practice");
     const row = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel }).getByRole("row", { name: /Day trading/ });
     await expect(row).toContainText(formatBalance(25_000));
-    await row.getByRole("link", { name: PRACTICE_COPY.planContinue, exact: true }).click();
+    await row.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true }).click();
     await page.waitForURL(DAY_URL);
 
-    // The thread page is where she returns between days: today's day is a Continue link.
+    // The thread page is where she returns between days: today's day is a Resume link.
     await openDesk(page, `/practice/thread?id=${id}`);
-    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: PRACTICE_COPY.planContinue, exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: PRACTICE_COPY.planResume, exact: true })).toBeVisible();
   });
 
   test("with a day thread active the modal keeps Day off and the thread page replaces its plan", async ({ page, context }) => {

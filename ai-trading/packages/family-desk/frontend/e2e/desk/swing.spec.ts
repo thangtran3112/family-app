@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
-import { clickNewPlan, createThreadByApi, openNewPlan, THREAD_URL } from "./hub-helpers";
+import { clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
 import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
@@ -387,8 +387,8 @@ test.describe("Swing practice", () => {
     const row = swingRow(page);
     await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
     await expect(row.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
-    await row.getByRole("link", { name: "Overview" }).click();
-    await page.waitForURL(THREAD_URL);
+    await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0); // the row itself is the way to the thread page
+    await openRow(page, row);
     await expect(page.getByRole("status").filter({ hasText: "Week 1 review ready" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
     await shot(page, "swing-hub-review-ready");

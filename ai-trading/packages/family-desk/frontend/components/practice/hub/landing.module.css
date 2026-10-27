@@ -11,20 +11,37 @@
 .table tbody th { font-weight: inherit; }
 .num { text-align: right !important; white-space: nowrap; }
 .actionHead { width: 1%; text-align: right !important; white-space: nowrap; }
+.row { cursor: pointer; }
 .row:hover { background: var(--color-raised); }
+.row[data-busy] { cursor: default; }
 .row[data-status="closed"] { color: var(--color-muted); }
 .threadCell { display: table-cell; min-width: 220px; }
 .threadHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.threadName { color: var(--color-text); font-size: var(--text-body); font-weight: var(--weight-bold); }
+.threadName { color: var(--color-text); font-size: var(--text-body); font-weight: var(--weight-bold); text-decoration: none; }
+.threadName:hover { text-decoration: underline; }
+.threadName:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.threadName[aria-disabled="true"] { cursor: default; text-decoration: none; }
 .activeTag { display: inline-flex; align-items: center; color: var(--color-muted); font-size: var(--text-micro); }
 .sub { display: block; margin-top: 2px; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); font-weight: var(--weight-regular); }
 .balance { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .balanceValue { color: var(--color-text); font-size: var(--text-body); font-weight: var(--weight-semibold); }
 .actionCell { white-space: nowrap; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); }
-.journalLink { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-semibold); text-decoration: none; }
-.journalLink:hover { text-decoration: underline; }
-.journalLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+/* Loading skeletons (the landing's rows and the thread page): grey bars in the shape of what is coming. */
+.skel { display: block; height: 12px; border-radius: var(--radius-sm); background: var(--color-raised); animation: pulse 1.4s ease-in-out infinite; }
+.skelRow:hover { background: transparent; }
+.skelName { width: 70%; min-width: 120px; height: 14px; }
+.skelMoney { width: 96px; height: 14px; }
+.skelNum { width: 32px; margin-left: auto; }
+.skelAction { width: 84px; height: 32px; margin-left: auto; }
+.skelStack { display: flex; flex-direction: column; gap: var(--space-4); }
+.skelTitle { width: 120px; }
+.skelButton { width: 160px; height: 40px; }
+.skelLine { width: 60%; }
+.skelCurve { height: 200px; }
+.skelStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.skelStat { height: 32px; }
 
 /* The modal: a native dialog over a dimmed page. The body scrolls; the header and footer stay. */
 .dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); margin: auto; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-ground); padding: 0; color: var(--color-text); font-family: var(--font-sans); }
@@ -41,7 +58,8 @@
 .filterList { max-height: none; overflow-y: visible; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } .skel { animation: none; } }
 
 /* The thread page */
 .page { display: flex; min-width: 0; flex-direction: column; }
@@ -52,3 +70,11 @@
 .panelTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .dayLine { margin: 0; font-size: var(--text-body); line-height: var(--line-body); }
 .dayActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+/* Resume is the page's one primary control: a bigger, filled button (ThreadAction renders it; a swing thread's review link and "New plan needed" get the same size). */
+.resumeAction { display: contents; }
+.resumeAction a, .resumeAction button { min-height: 40px; padding: 0 var(--space-6); font-size: var(--text-body); }
+.resumeAction a:not([aria-disabled="true"]), .resumeAction button:not(:disabled) { background: var(--color-amber); color: var(--color-ground); }
+.resumeAction a:not([aria-disabled="true"]):hover, .resumeAction button:not(:disabled):hover { background: var(--color-amber); filter: brightness(1.12); }
+.mutedLink { display: inline-flex; min-height: 24px; align-items: center; align-self: flex-start; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); text-decoration: none; }
+.mutedLink:hover { color: var(--color-text); text-decoration: underline; }
+.mutedLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
