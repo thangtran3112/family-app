@@ -87,10 +87,16 @@ export async function startThread(page: Page, context: BrowserContext, plan: New
   return threadIdOf(page);
 }
 
-/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start Day 1`, or Continue when the modal already opened it). */
+/** A landing row is one click target: a click on its balance cell (not on the name link or the action) opens the thread page. */
+export async function openRow(page: Page, row: Locator) {
+  await row.getByRole("cell").first().click();
+  await page.waitForURL(THREAD_URL);
+}
+
+/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start day`, or Resume when the modal already opened it). */
 export async function openFirstDay(page: Page) {
   const start = page.getByRole("button", { name: PRACTICE_COPY.planStart });
-  const resume = page.getByRole("link", { name: PRACTICE_COPY.planContinue, exact: true });
+  const resume = page.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true });
   await expect(start.or(resume)).toBeVisible({ timeout: 60_000 });
   if (await start.isVisible()) await start.click();
   else await resume.click();

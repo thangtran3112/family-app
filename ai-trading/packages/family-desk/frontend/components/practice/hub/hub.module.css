@@ -37,6 +37,7 @@
 .button:hover:not(:disabled) { background: var(--color-raised); }
 .primary, .primaryLink { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-4); color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: none; white-space: nowrap; }
 .primary:hover:not(:disabled), .primaryLink:hover { background: var(--color-raised); }
+.primaryLink[aria-disabled="true"] { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
 .primary:disabled { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
 .linkButton { align-self: flex-start; min-height: 24px; border: 0; background: transparent; padding: 0; color: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
 .linkButton:hover { text-decoration: underline; }
