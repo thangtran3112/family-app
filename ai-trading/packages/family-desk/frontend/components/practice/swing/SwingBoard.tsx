@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
+import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -201,6 +202,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
   return (
     <div className={dayStyles.screen}>
+      <BackLink threadId={threadId} />
       <header className={dayStyles.header}>
         <h1 className={dayStyles.title}>{swingHeaderLine(list, hidden)}</h1>
         <div className={dayStyles.actions}>
@@ -221,7 +223,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
           {after?.next?.kind === "continue" && (
             <button type="button" className={`${dayStyles.button} ${dayStyles.primary}`} disabled={busy || prep !== null} onClick={() => void proceed()}>{after.next.label}</button>
           )}
-          <Link href="/practice" className={dayStyles.button}>Practice</Link>
         </div>
       </header>
       <div className={styles.strip} role="group" aria-label="Practice thread">

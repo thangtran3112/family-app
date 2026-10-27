@@ -8,6 +8,7 @@ import { DayStrip } from "@/components/practice/swing/DayStrip";
 import { StopPausedToast } from "@/components/practice/swing/StopPausedToast";
 import { SwingPlanChecklist } from "@/components/practice/swing/SwingPlanChecklist";
 import { useSwingContext } from "@/components/practice/swing/useSwingContext";
+import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
@@ -355,6 +356,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
+      <BackLink threadId={session.thread_id ?? session.thread?.id ?? null} />
       <ReplayHeader
         symbol={spec.symbol}
         dayLabel={swingDay ?? dayLabel}
