@@ -144,7 +144,7 @@ Technical D11).
 | Import failed | "Couldn't import holdings · showing Thu 2026-10-22 · Try again" |
 | Not connected | "Holdings aren't connected yet · set up the IBKR import in Settings" |
 | No holdings for this user | "No holdings imported for you" |
-| Option quotes not connected | "Option quotes connect after the IBKR setup" |
+| Option quotes not connected | "Option quotes connect after the Alpaca setup" |
 | IV rank short history | "IV rank needs more history · opportunity alerts start later" |
 | Ex-dividend unknown | "Ex-dividend date unknown · check before selling a call" |
 | Desk AI not started | "Desk AI starts after its first daily run (5:05 PM ET)" |
@@ -474,7 +474,7 @@ and expiry dates. The run log records counts only, never values. Nothing in it i
 - Masked: every dollar amount, share count, and contract count shows `•••••` (the default state). The "values shown" strip on FD1
   uses round SIMULATED numbers.
 - SIMULATED until Run F7: candidate rows and the payoff sketch on FD4, Δ and the roll pane on FD5, futures prices on FD6, the implied
-  move on FD9. Each board also shows the real pre-probe state ("Option quotes connect after the IBKR setup").
+  move on FD9. Each board also shows the real pre-probe state ("Option quotes connect after the Alpaca setup").
 - SIMULATED until step 5: every Desk AI verdict, brief row, and AI timeline item (FD7, FD8, FD10, right rail). FD8 also shows the
   "Desk AI starts after its first daily run" state.
 

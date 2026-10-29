@@ -105,9 +105,9 @@ test("the first row with something to sell opens first, and the roll price line 
   assert.equal(defaultCoverageRow([{ coverable: 0, symbol: "X" }])?.symbol, "X");
   assert.equal(defaultCoverageRow([]), null);
   assert.equal(costToCloseText(1.2), "$1.20 a share");
-  assert.equal(costToCloseText(null), "Option quotes connect after the IBKR setup");
+  assert.equal(costToCloseText(null), "Option quotes connect after the Alpaca setup");
   const roll = RollSchema.parse(loadFundamentalFixture("covered_calls_roll_jnj"));
-  assert.equal(costToCloseText(roll.cost_to_close), "Option quotes connect after the IBKR setup");
+  assert.equal(costToCloseText(roll.cost_to_close), "Option quotes connect after the Alpaca setup");
 });
 
 test("the assignment note says it is not tax advice once", () => {

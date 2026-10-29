@@ -100,7 +100,7 @@ test("the calls card hides contract counts and says when option quotes are not c
   assert.equal(card.note, null);
   assert.equal(callsCard("AAPL", coverage.rows, shortCalls, candidates, false).coverable, "3");
   const offline = { ...candidates, candidates: [], chain_stamp: { as_of: null, source: null, quality: "unavailable", freshness: "unavailable" } } as typeof candidates;
-  assert.equal(callsCard("AAPL", coverage.rows, shortCalls, offline, true).note, "Option quotes connect after the IBKR setup");
+  assert.equal(callsCard("AAPL", coverage.rows, shortCalls, offline, true).note, "Option quotes connect after the Alpaca setup");
   assert.equal(callsCard("AAPL", coverage.rows, shortCalls, null, true).note, null);
 });
 

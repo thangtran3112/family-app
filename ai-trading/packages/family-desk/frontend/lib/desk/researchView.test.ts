@@ -148,7 +148,7 @@ test("the earnings reaction: summary, axis and one bar per report oldest first",
 
 test("the implied move is a number when quotes exist and the copy-table row when they do not", () => {
   assert.equal(impliedMoveText(4.6), "Options imply a move of ±4.6%");
-  assert.equal(impliedMoveText(null), "Option quotes connect after the IBKR setup");
+  assert.equal(impliedMoveText(null), "Option quotes connect after the Alpaca setup");
 });
 
 test("timeline rows, filters, links and pagination", () => {

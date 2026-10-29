@@ -15,7 +15,7 @@ test("market strip: SPY QQQ IWM real, /ES and /NQ unavailable and read-only", ()
   assert.equal(spy.readOnly, false);
   for (const tile of tiles.slice(3)) {
     assert.deepEqual([tile.unavailable, tile.readOnly, tile.last, tile.change], [true, true, "—", "—"]);
-    assert.equal(tile.note, "Waiting for IBKR · not connected yet");
+    assert.equal(tile.note, "Futures deferred · not connected yet");
   }
 });
 

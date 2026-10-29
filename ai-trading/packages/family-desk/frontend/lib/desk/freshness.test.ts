@@ -142,7 +142,7 @@ test("the Fundamental copy rows match 02n §b4", () => {
   assert.equal(holdingsImportFailedText(null), "Couldn't import holdings · Try again");
   assert.equal(COPY.holdingsNotConnected, "Holdings aren't connected yet · set up the IBKR import in Settings");
   assert.equal(COPY.holdingsNone, "No holdings imported for you");
-  assert.equal(COPY.optionQuotesNotConnected, "Option quotes connect after the IBKR setup");
+  assert.equal(COPY.optionQuotesNotConnected, "Option quotes connect after the Alpaca setup");
   assert.equal(COPY.ivRankShortHistory, "IV rank needs more history · opportunity alerts start later");
   assert.equal(COPY.exDividendUnknown, "Ex-dividend date unknown · check before selling a call");
   assert.equal(COPY.deskAiNotStarted, "Desk AI starts after its first daily run (5:05 PM ET)");
