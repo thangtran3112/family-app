@@ -1,0 +1,10 @@
+{
+ "import": {
+  "account_scope": "data",
+  "imported_at": null,
+  "lots": 0,
+  "source": "ibkr_flex",
+  "state": "running",
+  "statement_date": null
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "assignment_note": {
+  "account_type": "ira",
+  "text": "Held in an IRA: assignment sells the shares inside the account with no immediate tax. Not tax advice."
+ },
+ "candidates": [
+  {
+   "delta": 0.45,
+   "dte": 28,
+   "expiry": "2026-11-20",
+   "flags": [],
+   "net_credit": 0.6,
+   "strike": 72.5
+  },
+  {
+   "delta": 0.29,
+   "dte": 56,
+   "expiry": "2026-12-18",
+   "flags": [],
+   "net_credit": 0.35,
+   "strike": 75.0
+  }
+ ],
+ "chain_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "cost_to_close": 0.95
+}

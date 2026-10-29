@@ -1,0 +1,13 @@
+{
+ "items": [
+  {
+   "at": "2026-10-22T14:00:00Z",
+   "detail": "Headline from the last 7 days.",
+   "href": "https://example.com/news/ko",
+   "kind": "news",
+   "source": "Finnhub",
+   "title": "Beverage volumes hold up as pricing eases"
+  }
+ ],
+ "total": 1
+}

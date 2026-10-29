@@ -111,6 +111,25 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/feedback/attachments/{}"),
     ("DELETE", "/api/desk/feedback/attachments/{}"),
     ("POST", "/api/desk/feedback/{}/attachments"),
+    # The Fundamental lane, 02n §c2 rows 1-17 (rows 18-20 extend routes above): Today, holdings, covered calls, futures
+    # readings, research and the alert templates.
+    ("GET", "/api/desk/dashboard/fundamental"),
+    ("GET", "/api/desk/holdings"),
+    ("GET", "/api/desk/holdings/{}/lots"),
+    ("POST", "/api/desk/holdings/import"),
+    ("PATCH", "/api/desk/accounts/{}"),
+    ("GET", "/api/desk/covered-calls/coverage"),
+    ("GET", "/api/desk/covered-calls/candidates"),
+    ("GET", "/api/desk/covered-calls/short-calls"),
+    ("GET", "/api/desk/covered-calls/short-calls/{}/roll"),
+    ("GET", "/api/desk/covered-calls/income"),
+    ("GET", "/api/desk/futures/readings"),
+    ("GET", "/api/desk/research/brief"),
+    ("GET", "/api/desk/research/symbols/{}"),
+    ("GET", "/api/desk/research/symbols/{}/valuation"),
+    ("GET", "/api/desk/research/symbols/{}/timeline"),
+    ("GET", "/api/desk/fundamental-alerts"),
+    ("PUT", "/api/desk/fundamental-alerts/{}"),
 ]
 
 #: `PUT /watchlists/{id}/order` reorders symbols (02m §a2 row 25). It is the one route whose path may
@@ -133,7 +152,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 92
+    assert len(INVENTORY) == 109
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

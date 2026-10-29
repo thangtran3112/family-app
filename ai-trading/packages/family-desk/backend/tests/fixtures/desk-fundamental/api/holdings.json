@@ -1,0 +1,282 @@
+{
+ "accounts": [
+  {
+   "id": 1,
+   "label": "Taxable",
+   "type": "taxable"
+  },
+  {
+   "id": 2,
+   "label": "IRA",
+   "type": "ira"
+  }
+ ],
+ "import": {
+  "account_scope": "data",
+  "imported_at": "2026-10-24T09:15:00Z",
+  "lots": 10,
+  "source": "ibkr_flex",
+  "state": "ok",
+  "statement_date": "2026-10-23"
+ },
+ "option_lots": [
+  {
+   "account_id": 1,
+   "contracts": -1,
+   "expiry": "2026-11-20",
+   "id": 8,
+   "right": "C",
+   "strike": 245.0,
+   "symbol": "AAPL"
+  },
+  {
+   "account_id": 2,
+   "contracts": -3,
+   "expiry": "2026-10-30",
+   "id": 9,
+   "right": "C",
+   "strike": 72.5,
+   "symbol": "KO"
+  },
+  {
+   "account_id": 2,
+   "contracts": -2,
+   "expiry": "2026-12-18",
+   "id": 10,
+   "right": "C",
+   "strike": 175.0,
+   "symbol": "JNJ"
+  }
+ ],
+ "rows": [
+  {
+   "account_ids": [
+    1,
+    2
+   ],
+   "ai_rating": "buy",
+   "avg_cost": 166.49,
+   "change_pct": 0.8,
+   "coverable_contracts": 3,
+   "fundamentals": {
+    "ai_rating": "buy",
+    "ai_target_base": 265.0,
+    "ai_upside_pct": 14.5,
+    "cc_coverable": 3,
+    "debt_to_equity": 1.5,
+    "dist_to_252d_high_pct": -3.1,
+    "dividend_yield_pct": 0.4,
+    "eps_rev_30d_pct": 1.4,
+    "eps_rev_7d_pct": 0.4,
+    "eps_rev_90d_pct": 2.9,
+    "ex_dividend": null,
+    "fcf_yield_pct": 3.1,
+    "fwd_pe": 28.4,
+    "gain_vs_cost_pct": 39.0,
+    "next_earnings": "2027-01-28",
+    "pe_vs_5y_median_pct": 6.2,
+    "revenue_growth_yoy_pct": 6.8,
+    "weight_pct": 43.1
+   },
+   "last": 231.4,
+   "market_value": 208260.0,
+   "name": "Apple Inc.",
+   "next_earnings": "2027-01-28",
+   "open_calls": 1,
+   "shares": 900.0,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "AAPL",
+   "unrealized_pct": 39.0,
+   "weight_pct": 43.1
+  },
+  {
+   "account_ids": [
+    1
+   ],
+   "ai_rating": "hold",
+   "avg_cost": 310.0,
+   "change_pct": -0.4,
+   "coverable_contracts": 0,
+   "fundamentals": {
+    "ai_rating": "hold",
+    "ai_target_base": 445.0,
+    "ai_upside_pct": 3.8,
+    "cc_coverable": 0,
+    "debt_to_equity": 0.3,
+    "dist_to_252d_high_pct": -6.7,
+    "dividend_yield_pct": 0.8,
+    "eps_rev_30d_pct": -0.6,
+    "eps_rev_7d_pct": -0.2,
+    "eps_rev_90d_pct": 0.8,
+    "ex_dividend": null,
+    "fcf_yield_pct": 2.4,
+    "fwd_pe": 31.2,
+    "gain_vs_cost_pct": 38.3,
+    "next_earnings": "2026-10-28",
+    "pe_vs_5y_median_pct": -4.5,
+    "revenue_growth_yoy_pct": 13.1,
+    "weight_pct": 13.3
+   },
+   "last": 428.6,
+   "market_value": 64290.0,
+   "name": "Microsoft Corporation",
+   "next_earnings": "2026-10-28",
+   "open_calls": 0,
+   "shares": 150.0,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "MSFT",
+   "unrealized_pct": 38.3,
+   "weight_pct": 13.3
+  },
+  {
+   "account_ids": [
+    1
+   ],
+   "ai_rating": "buy",
+   "avg_cost": 128.0,
+   "change_pct": 1.9,
+   "coverable_contracts": 2,
+   "fundamentals": {
+    "ai_rating": "buy",
+    "ai_target_base": 165.0,
+    "ai_upside_pct": 15.5,
+    "cc_coverable": 2,
+    "debt_to_equity": 0.2,
+    "dist_to_252d_high_pct": -8.9,
+    "dividend_yield_pct": 0.0,
+    "eps_rev_30d_pct": 3.1,
+    "eps_rev_7d_pct": 1.1,
+    "eps_rev_90d_pct": 7.4,
+    "ex_dividend": null,
+    "fcf_yield_pct": 2.9,
+    "fwd_pe": 24.9,
+    "gain_vs_cost_pct": 11.6,
+    "next_earnings": "2026-11-18",
+    "pe_vs_5y_median_pct": -31.0,
+    "revenue_growth_yoy_pct": 58.0,
+    "weight_pct": 11.8
+   },
+   "last": 142.8,
+   "market_value": 57120.0,
+   "name": "NVIDIA Corporation",
+   "next_earnings": "2026-11-18",
+   "open_calls": 0,
+   "shares": 400.0,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "NVDA",
+   "unrealized_pct": 11.6,
+   "weight_pct": 11.8
+  },
+  {
+   "account_ids": [
+    2
+   ],
+   "ai_rating": "hold",
+   "avg_cost": 58.4,
+   "change_pct": 0.2,
+   "coverable_contracts": 2,
+   "fundamentals": {
+    "ai_rating": "hold",
+    "ai_target_base": 72.0,
+    "ai_upside_pct": 0.1,
+    "cc_coverable": 2,
+    "debt_to_equity": 1.6,
+    "dist_to_252d_high_pct": -1.2,
+    "dividend_yield_pct": 3.0,
+    "eps_rev_30d_pct": 0.3,
+    "eps_rev_7d_pct": 0.1,
+    "eps_rev_90d_pct": null,
+    "ex_dividend": "2026-11-13",
+    "fcf_yield_pct": 4.0,
+    "fwd_pe": 22.3,
+    "gain_vs_cost_pct": 23.1,
+    "next_earnings": "2026-10-27",
+    "pe_vs_5y_median_pct": 2.1,
+    "revenue_growth_yoy_pct": 3.2,
+    "weight_pct": 14.9
+   },
+   "last": 71.9,
+   "market_value": 71900.0,
+   "name": "The Coca-Cola Company",
+   "next_earnings": "2026-10-27",
+   "open_calls": 3,
+   "shares": 1000.0,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "KO",
+   "unrealized_pct": 23.1,
+   "weight_pct": 14.9
+  },
+  {
+   "account_ids": [
+    2
+   ],
+   "ai_rating": null,
+   "avg_cost": 147.0,
+   "change_pct": -0.1,
+   "coverable_contracts": 0,
+   "fundamentals": {
+    "ai_rating": null,
+    "ai_target_base": null,
+    "ai_upside_pct": null,
+    "cc_coverable": 0,
+    "debt_to_equity": 0.5,
+    "dist_to_252d_high_pct": -5.8,
+    "dividend_yield_pct": 3.1,
+    "eps_rev_30d_pct": null,
+    "eps_rev_7d_pct": null,
+    "eps_rev_90d_pct": null,
+    "ex_dividend": null,
+    "fcf_yield_pct": 5.1,
+    "fwd_pe": 14.6,
+    "gain_vs_cost_pct": 11.8,
+    "next_earnings": "2027-01-20",
+    "pe_vs_5y_median_pct": -9.3,
+    "revenue_growth_yoy_pct": 4.4,
+    "weight_pct": 17.0
+   },
+   "last": 164.3,
+   "market_value": 82150.0,
+   "name": "Johnson & Johnson",
+   "next_earnings": "2027-01-20",
+   "open_calls": 2,
+   "shares": 500.0,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "JNJ",
+   "unrealized_pct": 11.8,
+   "weight_pct": 17.0
+  }
+ ],
+ "totals": {
+  "cost": 379440.0,
+  "day_change": 2520.99,
+  "day_change_pct": 0.52,
+  "market_value": 483720.0,
+  "unrealized": 104280.0,
+  "unrealized_pct": 27.5
+ }
+}

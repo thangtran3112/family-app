@@ -1,6 +1,6 @@
 """`DataSources.from_env` (02j §5, §9 "Registry" and "Swap").
 
-Uses a small, synthetic registry/defaults covering all twelve kinds with fake adapters -- not the
+Uses a small, synthetic registry/defaults covering all thirteen kinds with fake adapters -- not the
 real six vendors -- so these tests pin the registry *machinery* (defaults, env override, startup
 failures, whitespace, build-once, swapping a provider) independently of any real provider's
 shape. `test_conformance.py` and `test_chains.py` cover the real `REGISTRY`.
@@ -19,7 +19,7 @@ NOW = pd.Timestamp("2026-10-11T00:00:00Z")
 
 
 class FakeAdapter:
-    """Implements every Protocol method across all twelve kinds with trivial canned values, so one
+    """Implements every Protocol method across all thirteen kinds with trivial canned values, so one
     fake can serve as the provider for any kind in a test's custom `registry=`/`defaults=`."""
 
     def __init__(self, label: str, *, raises: Exception | None = None) -> None:
@@ -77,6 +77,9 @@ class FakeAdapter:
     def trades(self, symbol, start, end, *, feed, now=None):
         return self._value()
 
+    def option_chain(self, symbol, *, now, right="C", min_dte=0, max_dte, min_strike=None, max_strike=None):
+        return [self._value()]
+
 
 _ALL_KINDS = (
     "bars",
@@ -91,6 +94,7 @@ _ALL_KINDS = (
     "universe",
     "quotes",
     "trades",
+    "option_chain",
 )
 
 
@@ -103,7 +107,7 @@ def _provider(name: str, adapter: FakeAdapter, kinds: tuple[str, ...] = _ALL_KIN
 
 
 def _full_setup(*, extra: dict[str, Provider] | None = None) -> tuple[dict[str, Provider], dict[str, tuple[str, ...]]]:
-    """A complete registry/defaults pair covering all twelve kinds with one shared fake provider
+    """A complete registry/defaults pair covering all thirteen kinds with one shared fake provider
     named "fake", so a test only has to override the one kind (or provider) it cares about."""
     fake = FakeAdapter("fake")
     registry = {"fake": _provider("fake", fake)}
@@ -127,8 +131,8 @@ class TestDefaults:
 
 
 class TestTradesKind:
-    def test_data_sources_has_a_trades_field_last(self):
-        assert [f.name for f in fields(DataSources)][-2:] == ["quotes", "trades"]
+    def test_data_sources_has_a_trades_field_after_quotes(self):
+        assert [f.name for f in fields(DataSources)][-3:-1] == ["quotes", "trades"]
 
     def test_a_trades_provider_is_served_through_the_chain(self):
         fake = FakeAdapter("trades-fake")
@@ -146,6 +150,59 @@ class TestTradesKind:
         registry, defaults = _full_setup(extra={"only_bars": _provider("only_bars", only_bars, kinds=("bars",))})
         with pytest.raises(ValueError, match="does not serve 'trades'"):
             DataSources.from_env(env={"DATA_PROVIDERS_TRADES": "only_bars"}, registry=registry, defaults=defaults)
+
+
+class TestOptionChainKind:
+    def test_option_chain_defaults_to_alpaca_options(self):
+        assert DEFAULT_CHAINS["option_chain"] == ("alpaca_options",)
+
+    def test_data_sources_has_an_option_chain_field_last_and_defaulted(self):
+        last = fields(DataSources)[-1]
+        assert last.name == "option_chain"
+        assert last.default is None  # a DataSources written before this kind existed still builds
+
+    def test_a_pre_option_chain_data_sources_still_builds(self):
+        unused = object()
+        old_fields = {f.name: unused for f in fields(DataSources) if f.name != "option_chain"}
+        assert DataSources(**old_fields).option_chain is None
+
+    def test_an_option_chain_provider_is_served_through_the_chain(self):
+        fake = FakeAdapter("chain-fake")
+        registry, defaults = _full_setup(extra={"custom": _provider("custom", fake, kinds=("option_chain",))})
+        env = {"DATA_PROVIDERS_OPTION_CHAIN": "custom"}
+        sources = DataSources.from_env(env=env, registry=registry, defaults=defaults)
+        assert sources.option_chain.option_chain("AAPL", now=NOW, max_dte=45) == ["chain-fake"]
+
+    def test_the_chain_forwards_every_argument(self):
+        seen = {}
+
+        class Recorder:
+            def option_chain(self, symbol, **kwargs):
+                seen.update(symbol=symbol, **kwargs)
+                return []
+
+        registry, defaults = _full_setup(
+            extra={"rec": Provider(name="rec", kinds=("option_chain",), build=lambda env, http: Recorder())}
+        )
+        sources = DataSources.from_env(env={"DATA_PROVIDERS_OPTION_CHAIN": "rec"}, registry=registry, defaults=defaults)
+        sources.option_chain.option_chain(
+            "AAPL", now=NOW, right="P", min_dte=7, max_dte=45, min_strike=100.0, max_strike=150.0
+        )
+        assert seen == {
+            "symbol": "AAPL",
+            "now": NOW,
+            "right": "P",
+            "min_dte": 7,
+            "max_dte": 45,
+            "min_strike": 100.0,
+            "max_strike": 150.0,
+        }
+
+    def test_a_provider_that_does_not_serve_option_chain_raises_value_error(self):
+        only_bars = FakeAdapter("only_bars")
+        registry, defaults = _full_setup(extra={"only_bars": _provider("only_bars", only_bars, kinds=("bars",))})
+        with pytest.raises(ValueError, match="does not serve 'option_chain'"):
+            DataSources.from_env(env={"DATA_PROVIDERS_OPTION_CHAIN": "only_bars"}, registry=registry, defaults=defaults)
 
 
 class TestEnvOverride:

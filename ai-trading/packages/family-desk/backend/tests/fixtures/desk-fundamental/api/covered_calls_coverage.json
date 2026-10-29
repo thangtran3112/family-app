@@ -1,0 +1,59 @@
+{
+ "cap_pct": 50.0,
+ "rows": [
+  {
+   "account_id": 1,
+   "coverable": 2,
+   "open_contracts": 1,
+   "reason": "ok",
+   "reason_text": "2 contracts can be sold at a 50% cap",
+   "shares": 600.0,
+   "symbol": "AAPL"
+  },
+  {
+   "account_id": 2,
+   "coverable": 1,
+   "open_contracts": 0,
+   "reason": "ok",
+   "reason_text": "1 contract can be sold at a 50% cap",
+   "shares": 300.0,
+   "symbol": "AAPL"
+  },
+  {
+   "account_id": 1,
+   "coverable": 0,
+   "open_contracts": 0,
+   "reason": "under_one_contract",
+   "reason_text": "150 shares: under one contract at a 50% cap",
+   "shares": 150.0,
+   "symbol": "MSFT"
+  },
+  {
+   "account_id": 1,
+   "coverable": 2,
+   "open_contracts": 0,
+   "reason": "no_chain",
+   "reason_text": "no option chain for this symbol yet",
+   "shares": 400.0,
+   "symbol": "NVDA"
+  },
+  {
+   "account_id": 2,
+   "coverable": 2,
+   "open_contracts": 3,
+   "reason": "earnings_wait",
+   "reason_text": "earnings Oct 27: waits",
+   "shares": 1000.0,
+   "symbol": "KO"
+  },
+  {
+   "account_id": 2,
+   "coverable": 0,
+   "open_contracts": 2,
+   "reason": "fully_covered",
+   "reason_text": "fully covered at its cap",
+   "shares": 500.0,
+   "symbol": "JNJ"
+  }
+ ]
+}

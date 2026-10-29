@@ -1,4 +1,8 @@
 {
+ "ai_daily": {
+  "last_run_at": null,
+  "state": "not_started"
+ },
  "alerts": {
   "state": "running",
   "unread": 2
@@ -6,10 +10,25 @@
  "backups": null,
  "data_sources": "alpaca",
  "gateway": "not_configured",
+ "holdings": {
+  "account_scope": "data",
+  "imported_at": null,
+  "lots": 0,
+  "source": "ibkr_flex",
+  "state": "not_configured",
+  "statement_date": null
+ },
  "market": {
   "last_close": "2026-10-23T20:00:00Z",
   "next_open": "2026-10-26T13:30:00Z",
   "session": "closed"
+ },
+ "options": {
+  "as_of": null,
+  "freshness": "unavailable",
+  "quality": "unavailable",
+  "source": null,
+  "state": "not_connected"
  },
  "quotes": {
   "as_of": "2026-10-23T20:00:00Z",

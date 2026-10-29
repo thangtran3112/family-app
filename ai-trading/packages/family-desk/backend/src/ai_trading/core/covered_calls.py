@@ -176,20 +176,28 @@ def short_call_risks(
     *,
     spot: float,
     today: date,
-    delta: float,
-    extrinsic: float,
     next_trading_day: date,
+    delta: float | None = None,
+    extrinsic: float | None = None,
     ex_dividend: date | None = None,
     dividend: float | None = None,
     earnings: date | None = None,
 ) -> list[str]:
-    """Risk-alert reasons for one open short call; empty when there is nothing to report."""
+    """Risk-alert reasons for one open short call; empty when there is nothing to report.
+
+    `delta` and `extrinsic` come from option quotes. While there are none (Δ unknown, 02n §e) the rules that need them
+    do not fire and the date and strike rules still run: unknown data never raises a risk."""
     risks = []
-    if delta > 0.50:
+    if delta is not None and delta > 0.50:
         risks.append("delta_above_0_50")
     if (call.expiry - today).days <= 7 and _r(abs(spot - call.strike)) <= _r(0.02 * call.strike):
         risks.append("near_strike_near_expiry")
-    if ex_dividend == next_trading_day and dividend is not None and _r(extrinsic) < _r(dividend):
+    if (
+        ex_dividend == next_trading_day
+        and dividend is not None
+        and extrinsic is not None
+        and _r(extrinsic) < _r(dividend)
+    ):
         risks.append("early_assignment_before_dividend")
     if earnings is not None and today <= earnings <= call.expiry:
         risks.append("earnings_before_expiry")

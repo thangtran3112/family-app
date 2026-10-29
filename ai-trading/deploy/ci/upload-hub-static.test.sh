@@ -109,8 +109,8 @@ DESK="$WORKDIR/desk"; mkdir -p "$DESK/_next/static/chunks" "$DESK/strategies/new
 for route in index 404 strategies strategies/new; do
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
-# The MVP route set: every desktop page must pass the desk allowlist.
-for route in today screener screener/filters strategies/library alerts alerts/new watchlists technicals futures futures/specs settings more paper holdings ask covered-calls stocks backtests; do
+# The MVP route set (plus 02n's /futures/read): every desktop page must pass the desk allowlist.
+for route in today screener screener/filters strategies/library alerts alerts/new watchlists technicals futures futures/specs futures/read settings more paper holdings ask covered-calls stocks backtests; do
   mkdir -p "$DESK/$(dirname "$route")"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done

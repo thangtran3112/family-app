@@ -40,6 +40,7 @@ const routes = [
   "ask",
   "futures",
   "futures/specs",
+  "futures/read",
   "feedback",
   "feedback/new",
 ];

@@ -1,0 +1,10 @@
+{
+ "detail": {
+  "problems": [
+   {
+    "message": "send a label or a type",
+    "path": ""
+   }
+  ]
+ }
+}

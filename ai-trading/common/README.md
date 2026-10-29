@@ -13,7 +13,7 @@ src/ai_trading_common/
   trades.py    the tape: `Trades` (one row per print: t, p, s, x, c) and `empty_trades_frame()`
   sources.py   one runtime-checkable Protocol per data kind
   registry.py  Kind, Provider, REGISTRY, DEFAULT_CHAINS, DataSources.from_env()
-  providers/   alpaca.py sec_edgar.py fred.py finnhub.py alphavantage.py eulerpool.py ibkr.py
+  providers/   alpaca.py alpaca_options.py sec_edgar.py fred.py finnhub.py alphavantage.py eulerpool.py ibkr.py
 ```
 
 Each `providers/<name>.py` holds that vendor's raw client, one `<Name>Source` adapter mapping
@@ -56,6 +56,25 @@ python3 common/config/family_config.py set ai-trading/desk DESK_IBKR_GATEWAY_ENA
 and install the wire client (`uv sync --extra ibkr` / `ai-trading-common[ibkr]`). The session is read-only: no order,
 position, or balance call exists in this module (`tests/providers/test_ibkr.py` pins that). `DataSources.gateway_status()`
 reports `not_configured | down | reconnecting | connected` for the Desk's `/status`.
+
+## Option chains (Alpaca, delayed)
+
+`DataSources.option_chain` is the `option_chain` kind: `option_chain(symbol, *, now, right="C", min_dte=0, max_dte,
+min_strike=None, max_strike=None)` returns a snapshot list of `OptionContract` (strike, expiry, `dte`, bid, ask, model
+delta and IV, open interest, the quote's `as_of`), by expiry then strike. `now` pins the expiry window; the quotes are
+the provider's latest, never a replay. `max_dte` is required so nobody fetches a whole chain by accident.
+
+`DEFAULT_CHAINS["option_chain"]` is `alpaca_options` (`providers/alpaca_options.py`), read-only, on the same
+`ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` as `quotes` (Firestore `ai-trading/market-data`). Two GETs per chain:
+market-data snapshots (bid, ask, delta, IV) and the trading `/v2/options/contracts` list (open interest). It serves
+the free `indicative` feed and stamps every contract `delayed-15m`; `ALPACA_OPTIONS_FEED=opra` switches the feed after
+the $99 tier is bought, and the stamp stays until that is a deliberate decision. Requests share the throttled client
+(200 a minute spacing, bounded 5xx backoff, a 429 latches the host and raises `SoftBanned`); a chain over 10 pages is
+an error, so narrow it with `max_dte` and the strike bounds. A contract that cannot be priced, or sits on an adjusted
+root, is left out; an empty window is `[]`.
+
+Tests use `ai_trading_common.testing.FakeOptionChain`, which applies the same window as the provider
+(`tests/test_option_chain_contract.py` keeps the two in step).
 
 ## Re-recording fixtures
 

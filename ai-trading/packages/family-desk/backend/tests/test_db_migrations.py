@@ -66,6 +66,19 @@ NEW_0009_TABLES = {"replay_day_scans"}
 # Alembic 0010 (feedback log, 02s): three new tables and nothing else.
 NEW_0010_TABLES = {"feedback_reports", "feedback_events", "feedback_attachments"}
 
+# Alembic 0012 (fundamental lane, 02n §d): nine new tables and nothing else.
+NEW_0012_TABLES = {
+    "accounts",
+    "holding_imports",
+    "holding_lots",
+    "holding_trades",
+    "covered_call_scans",
+    "iv_history",
+    "symbol_fundamentals",
+    "ai_verdicts",
+    "ai_calls",
+}
+
 _ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 
@@ -75,11 +88,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0011() -> None:
+def test_migration_chain_has_a_single_head_at_0012() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0011"]
+    assert script.get_heads() == ["0012"]
+    assert script.get_revision("0012").down_revision == "0011"
     assert script.get_revision("0011").down_revision == "0010"
     assert script.get_revision("0010").down_revision == "0009"
     assert script.get_revision("0009").down_revision == "0008"
@@ -100,6 +114,7 @@ def test_head_matches_models(db_engine: Engine) -> None:
         | NEW_0008_TABLES
         | NEW_0009_TABLES
         | NEW_0010_TABLES
+        | NEW_0012_TABLES
     ) <= set(Base.metadata.tables)
     with db_engine.connect() as conn:
         context = MigrationContext.configure(conn)
@@ -120,6 +135,7 @@ def test_tables_exist(db_engine: Engine) -> None:
         | NEW_0008_TABLES
         | NEW_0009_TABLES
         | NEW_0010_TABLES
+        | NEW_0012_TABLES
     ) <= tables
     assert "day_list_id" in {c["name"] for c in inspect(db_engine).get_columns("replay_sessions")}
     for table in ("replay_sessions", "practice_plans"):
@@ -128,15 +144,17 @@ def test_tables_exist(db_engine: Engine) -> None:
     assert "hold_id" in {c["name"] for c in inspect(db_engine).get_columns("practice_ledger")}
 
 
-def test_downgrade_to_0009_reverts_0011_and_0010_and_drops_exactly_what_0010_made(db_engine: Engine) -> None:
+def test_downgrade_to_0009_reverts_0012_to_0010_and_drops_exactly_what_0010_and_0012_made(db_engine: Engine) -> None:
     url = db_engine.url.render_as_string(hide_password=False)
     with db_engine.connect() as conn:
         before = set(inspect(conn).get_table_names())
     try:
-        command.downgrade(_alembic_config(url), "0009")  # 0011 holds no table; 0010 holds the three feedback ones
+        # 0011 holds no table; 0010 holds the three feedback ones and 0012 the nine of the Fundamental lane
+        command.downgrade(_alembic_config(url), "0009")
         inspector = inspect(db_engine)
         tables = set(inspector.get_table_names())
-        assert before - tables == NEW_0010_TABLES and tables <= before  # exactly its three tables, nothing else
+        # exactly those twelve tables, nothing else
+        assert before - tables == NEW_0010_TABLES | NEW_0012_TABLES and tables <= before
         with db_engine.connect() as conn:
             left = conn.execute(text("SELECT relname FROM pg_class WHERE relname LIKE 'feedback\\_%'")).all()
         assert left == []  # no table, index or sequence of 0010 survives

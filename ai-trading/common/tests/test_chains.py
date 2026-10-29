@@ -15,16 +15,18 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from ai_trading_common.errors import NotConfigured, Unavailable
 from ai_trading_common.registry import REGISTRY, DataSources, Provider
-from ai_trading_common.testing import FakeResponse, FakeTrades, make_client
+from ai_trading_common.testing import FakeOptionChain, FakeResponse, FakeTrades, make_client
 from ai_trading_common.types import (
     ActiveSymbol,
     AnalystTargets,
     ConsensusSnapshot,
     EarningsResult,
     Mover,
+    OptionContract,
     Quote,
     UniverseAsset,
 )
@@ -134,6 +136,7 @@ def _sources_with(**overrides) -> DataSources:
         "universe": ("alpaca",),
         "quotes": ("alpaca",),
         "trades": ("alpaca",),
+        "option_chain": ("alpaca_options",),
     }
     for kind, (names, adapter) in overrides.items():
         names_tuple = tuple(names) if isinstance(names, list) else names
@@ -328,3 +331,42 @@ class TestRealAdapterFallback:
         assert len(session.calls) == 5  # 4 failed Eulerpool attempts + 1 successful Alpha Vantage call
         assert got
         assert all(row.provider == "alphavantage" and row.quality == "fallback" for row in got)
+
+
+class TestOptionChainChain:
+    def _contract(self, provider: str, quality="delayed-15m") -> OptionContract:
+        return OptionContract(
+            underlying="AAPL",
+            symbol="AAPL261120C00290000",
+            right="C",
+            expiry=date(2026, 11, 20),
+            strike=290.0,
+            dte=40,
+            bid=4.1,
+            ask=4.3,
+            delta=0.34,
+            iv=0.25,
+            open_interest=2500,
+            as_of=NOW,
+            provider=provider,
+            quality=quality,
+        )
+
+    def test_a_later_provider_chain_is_relabeled_fallback(self):
+        primary = FakeOptionChain(raises=Unavailable("a", "down"))
+        secondary = FakeOptionChain({"AAPL": [self._contract("b")]})
+        sources = _sources_with(option_chain=(["a", "b"], [primary, secondary]))
+        got = sources.option_chain.option_chain("AAPL", now=NOW, min_dte=30, max_dte=45)
+        assert [c.quality for c in got] == ["fallback"]
+
+    def test_the_primary_keeps_its_own_quality(self):
+        primary = FakeOptionChain({"AAPL": [self._contract("a")]})
+        sources = _sources_with(option_chain=(["a"], [primary]))
+        got = sources.option_chain.option_chain("AAPL", now=NOW, min_dte=30, max_dte=45)
+        assert [c.quality for c in got] == ["delayed-15m"]
+
+    def test_with_every_provider_down_the_outage_is_raised_not_an_empty_chain(self):
+        down = FakeOptionChain(raises=NotConfigured("a", "no key"))
+        sources = _sources_with(option_chain=(["a"], [down]))
+        with pytest.raises(NotConfigured):
+            sources.option_chain.option_chain("AAPL", now=NOW, max_dte=45)

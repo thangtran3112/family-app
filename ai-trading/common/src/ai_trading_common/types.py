@@ -200,6 +200,32 @@ class Quote:
     quality: Quality
 
 
+OptionRight = Literal["C", "P"]
+
+
+@dataclass(frozen=True)
+class OptionContract:
+    """One contract on an option-chain snapshot. `symbol` is the OCC contract symbol, `dte` the calendar days from
+    the request's `now` (its New York date) to `expiry`. `delta` and `iv` are the provider's model values, None when it
+    could not compute them (no valid quote). `open_interest` is as of the previous close, None when unknown. `as_of`
+    is the latest quote's time (UTC), so a stale quote shows its age; the contract is a snapshot, never a live tick."""
+
+    underlying: str
+    symbol: str
+    right: OptionRight
+    expiry: date
+    strike: float
+    dte: int
+    bid: float
+    ask: float
+    delta: float | None
+    iv: float | None
+    open_interest: int | None
+    as_of: pd.Timestamp  # UTC
+    provider: str
+    quality: Quality
+
+
 GatewayState = Literal["not_configured", "connected", "reconnecting", "down"]
 
 

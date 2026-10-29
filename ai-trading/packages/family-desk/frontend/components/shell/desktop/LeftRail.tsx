@@ -1,28 +1,38 @@
 "use client";
 
 import { Suspense, useId, useState } from "react";
+import { HoldingsRailPanel } from "@/components/fundamental/rail/HoldingsRailPanel";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { useDeskUi } from "./DeskContext";
 import { FiltersPanel } from "./FiltersPanel";
 import { WatchlistsPanel } from "./WatchlistsPanel";
 import styles from "./leftrail.module.css";
 
-type Tab = "watchlists" | "filters";
+type Tab = "holdings" | "watchlists" | "filters";
 
-const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
+const TECHNICAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "watchlists", label: "Watchlists" },
   { id: "filters", label: "Filters" },
 ];
+// The Fundamental lane swaps Filters for her holdings (02n §b1); the Watchlists tab is the same panel.
+const FUNDAMENTAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "holdings", label: "Holdings" },
+  { id: "watchlists", label: "Watchlists" },
+];
 
-/** Left rail (02l §b2): her watchlists or saved filters, collapsible to a 48 px icon strip. */
+/** Left rail (02l §b2, 02n §b1): her watchlists and saved filters, or in the Fundamental lane her holdings and watchlists; collapsible to a 48 px icon strip. */
 export function LeftRail({ band }: { band: ShellBand }) {
-  const { leftCollapsed, setLeftCollapsed } = useDeskUi();
-  const [tab, setTab] = useState<Tab>("watchlists");
+  const { lane, leftCollapsed, setLeftCollapsed } = useDeskUi();
+  const TABS = lane === "fundamental" ? FUNDAMENTAL_TABS : TECHNICAL_TABS;
+  const [chosen, setTab] = useState<Tab | null>(null);
+  // No tab picked yet, or one the other lane owned (Filters, Holdings): the lane's first tab.
+  const tab = TABS.find((item) => item.id === chosen)?.id ?? TABS[0]!.id;
+  const label = lane === "fundamental" ? "Holdings and watchlists" : "Watchlists and filters";
   const id = useId();
 
   if (leftCollapsed) {
     return (
-      <aside aria-label="Watchlists and filters" className={styles.root}>
+      <aside aria-label={label} className={styles.root}>
         <div className={styles.strip}>
           <button type="button" className={styles.iconButton} aria-label="Expand left panel" onClick={() => setLeftCollapsed(false)}>
             <ChevronIcon direction="right" />
@@ -39,7 +49,7 @@ export function LeftRail({ band }: { band: ShellBand }) {
                 setLeftCollapsed(false);
               }}
             >
-              {item.id === "watchlists" ? <ListIcon /> : <FilterIcon />}
+              {item.id === "filters" ? <FilterIcon /> : <ListIcon />}
             </button>
           ))}
         </div>
@@ -49,7 +59,7 @@ export function LeftRail({ band }: { band: ShellBand }) {
 
   const panelId = `${id}-panel`;
   return (
-    <aside aria-label="Watchlists and filters" className={styles.root}>
+    <aside aria-label={label} className={styles.root}>
       <div className={styles.header}>
         <div role="tablist" aria-label="Left panel" className={styles.tabs}>
           {TABS.map((item) => (
@@ -72,7 +82,9 @@ export function LeftRail({ band }: { band: ShellBand }) {
         </button>
       </div>
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-${tab}`} className={styles.panel}>
-        {tab === "watchlists" ? (
+        {tab === "holdings" ? (
+          <HoldingsRailPanel band={band} />
+        ) : tab === "watchlists" ? (
           <WatchlistsPanel band={band} />
         ) : (
           // useSearchParams needs a Suspense boundary for static prerendering (Next.js docs).

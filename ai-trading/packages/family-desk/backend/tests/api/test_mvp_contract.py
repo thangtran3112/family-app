@@ -87,6 +87,11 @@ def seeded(client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPa
     """A fresh database seeded for the owner: identities restart, so the seeded ids are the stub world's
     (watchlists 1-2, filters 1-10, alert strategies 1-5)."""
     monkeypatch.setenv("DESK_MVP_STUB", "1")
+    monkeypatch.delenv(
+        "DESK_FUNDAMENTAL_STUB", raising=False
+    )  # the Fundamental fields of `status` read as not connected
+    monkeypatch.delenv("IBKR_FLEX_TOKEN", raising=False)
+    monkeypatch.delenv("IBKR_FLEX_QUERY_ID", raising=False)
     db_session.execute(text("TRUNCATE users, watchlists, filter_strategies, strategies RESTART IDENTITY CASCADE"))
     db_session.commit()
     seed_email(db_session, OWNER_EMAIL)
