@@ -1,0 +1,81 @@
+{
+ "account_id": 1,
+ "ai_context": {
+  "note": "Desk AI rates AAPL a Buy: a call strike below $265 caps part of that view.",
+  "rating": "buy",
+  "target_base": 265.0
+ },
+ "candidates": [
+  {
+   "annualized_yield": 0.160548,
+   "ask": 3.0,
+   "bid": 2.85,
+   "delta": 0.28,
+   "dte": 28,
+   "expiry": "2026-11-20",
+   "flags": [
+    "cover_tax_advantaged_first"
+   ],
+   "open_interest": 3100,
+   "premium_yield": 0.012316,
+   "return_if_called": 0.071089,
+   "score": 2.2548,
+   "spread_pct": 5.128205,
+   "strike": 245.0,
+   "upside_cap": 0.058773
+  },
+  {
+   "annualized_yield": 0.108909,
+   "ask": 1.6,
+   "bid": 1.45,
+   "delta": 0.19,
+   "dte": 21,
+   "expiry": "2026-11-13",
+   "flags": [
+    "cover_tax_advantaged_first"
+   ],
+   "open_interest": 2500,
+   "premium_yield": 0.006266,
+   "return_if_called": 0.065039,
+   "score": 2.0909,
+   "spread_pct": 9.836066,
+   "strike": 245.0,
+   "upside_cap": 0.058773
+  },
+  {
+   "annualized_yield": 0.092015,
+   "ask": 2.6,
+   "bid": 2.45,
+   "delta": 0.21,
+   "dte": 42,
+   "expiry": "2026-12-04",
+   "flags": [
+    "cover_tax_advantaged_first"
+   ],
+   "open_interest": 1400,
+   "premium_yield": 0.010588,
+   "return_if_called": 0.090968,
+   "score": 0.4015,
+   "spread_pct": 5.940594,
+   "strike": 250.0,
+   "upside_cap": 0.08038
+  }
+ ],
+ "chain_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "iv_history_sessions": 252,
+ "iv_rank": 62.0,
+ "opportunity": false,
+ "spot": 231.4,
+ "spot_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "symbol": "AAPL"
+}

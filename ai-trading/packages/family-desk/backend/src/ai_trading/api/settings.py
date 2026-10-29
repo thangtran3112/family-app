@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ai_trading.api.auth import AuthedUser, get_current_user, get_session
 from ai_trading.api.schemas.settings import SettingsChannelStateOut, SettingsChannelTestOut, SettingsTelegramLinkBody
 from ai_trading.db.models import User
+from ai_trading.fundamental import settings as fundamental_settings
 from ai_trading.mvp_stub import settings as stub_settings
 from ai_trading.mvp_stub import stub_enabled
 from ai_trading.notify.channel import Channel, ChannelError, ChannelNotConnected
@@ -57,6 +58,9 @@ def _validate_owned_settings(settings: dict[str, Any]) -> None:
 
     if "pause_all" in settings and not isinstance(settings["pause_all"], bool):
         raise HTTPException(status_code=422, detail="pause_all must be true or false")
+
+    if problems := fundamental_settings.validate(settings):
+        raise HTTPException(status_code=422, detail={"problems": problems})
 
 
 def _current_row(session: Session, user: AuthedUser) -> User:

@@ -1,0 +1,61 @@
+{
+ "items": [
+  {
+   "at": "2026-10-29T12:30:00Z",
+   "detail": "Third quarter; moves rate-sensitive stocks.",
+   "href": null,
+   "kind": "macro",
+   "source": "FRED",
+   "title": "GDP, advance estimate"
+  },
+  {
+   "at": "2026-10-27T20:00:00Z",
+   "detail": "After the close.",
+   "href": null,
+   "kind": "earnings",
+   "source": "Earnings calendar",
+   "title": "KO reports earnings"
+  },
+  {
+   "at": "2026-10-23T21:05:00Z",
+   "detail": "Unchanged: still a Hold",
+   "href": null,
+   "kind": "desk_ai",
+   "source": "Desk AI",
+   "title": "Desk AI: Hold"
+  },
+  {
+   "at": "2026-10-23T20:30:00Z",
+   "detail": "Fiscal-year estimate unchanged on the day.",
+   "href": null,
+   "kind": "consensus",
+   "source": "Desk snapshot",
+   "title": "Consensus EPS snapshot taken"
+  },
+  {
+   "at": "2026-10-22T14:00:00Z",
+   "detail": "Headline from the last 7 days.",
+   "href": "https://example.com/news/ko",
+   "kind": "news",
+   "source": "Finnhub",
+   "title": "Beverage volumes hold up as pricing eases"
+  },
+  {
+   "at": "2026-10-20T13:00:00Z",
+   "detail": "Fires on a rating change or a cross of the base target.",
+   "href": null,
+   "kind": "strategy",
+   "source": "Desk",
+   "title": "Alert 'AI daily view' turned on"
+  },
+  {
+   "at": "2026-10-16T21:00:00Z",
+   "detail": "Quarterly report for the period ended September.",
+   "href": "https://example.com/filings/ko",
+   "kind": "filing",
+   "source": "SEC EDGAR",
+   "title": "10-Q filed"
+  }
+ ],
+ "total": 7
+}

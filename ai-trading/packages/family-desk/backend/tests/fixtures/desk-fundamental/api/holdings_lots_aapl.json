@@ -1,0 +1,50 @@
+{
+ "lots": [
+  {
+   "account_id": 1,
+   "acquired": "2023-03-14",
+   "cost_per_share": 152.3,
+   "gain_pct": 51.9,
+   "shares": 400.0,
+   "term": "long"
+  },
+  {
+   "account_id": 1,
+   "acquired": "2024-06-03",
+   "cost_per_share": 188.1,
+   "gain_pct": 23.0,
+   "shares": 200.0,
+   "term": "long"
+  },
+  {
+   "account_id": 2,
+   "acquired": "2024-01-10",
+   "cost_per_share": 171.0,
+   "gain_pct": 35.3,
+   "shares": 300.0,
+   "term": "long"
+  }
+ ],
+ "short_calls": [
+  {
+   "account_id": 1,
+   "contracts": 1,
+   "delta": 0.24,
+   "dte": 28,
+   "expiry": "2026-11-20",
+   "id": 8,
+   "moneyness_pct": -5.55,
+   "risks": [],
+   "spot": 231.4,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "strike": 245.0,
+   "symbol": "AAPL"
+  }
+ ],
+ "symbol": "AAPL"
+}

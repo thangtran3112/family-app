@@ -1,6 +1,6 @@
 # Release 2 Addendum B: Family Desk Market Data Options
 
-Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day. Prices come from vendor and broker pages read on 2026-10-10 and change often. The owner subscribed the IBKR data user on 2026-10-10 ([02e](02e-ibkr-data-user-setup.md)); [02d](02d-desk-spike-results.md) records what the spike confirms.
+Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day; **the 2026-10-10 decision is revised 2026-10-29 (section 4b): live data moves from the IBKR data username to Alpaca Algo Trader Plus, not yet purchased.** Prices come from vendor and broker pages read on 2026-10-10 and change often. The owner subscribed the IBKR data user on 2026-10-10 ([02e](02e-ibkr-data-user-setup.md)); [02d](02d-desk-spike-results.md) records what the spike confirms.
 
 Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (the Desk v1 design that uses this data), [02-release-2-desk-design.md](02-release-2-desk-design.md) (the kept base sections), [STATUS.md](../STATUS.md).
 
@@ -64,6 +64,16 @@ IBKR non-professional pricing, per username ([IBKR market data pricing](https://
 - **History and reference data:** free sources (section 5).
 - **Paid cost:** $14.50 a month as subscribed: the $10 Snapshot and Futures Value Bundle plus the $4.50 Equity and Options Add-On Streaming Bundle. IBKR's documentation says the add-on includes OPRA L1, so option greeks need no separate OPRA line ([02g](02g-desk-covered-calls-and-futures-swing-design.md) §3). Task 0.5 and the first bill confirm it.
 - **Consensus EPS (owner, 2026-10-10):** Eulerpool's free tier after a 10-symbol pilot, with Finnhub free plus Alpha Vantage free as the fallback ([02f](02f-desk-indicators-and-ai-daily-design.md) §4). It adds no cost.
+
+## 4b. Decision revision (Owner, 2026-10-29)
+
+The 2026-10-10 decision (section 4) chose the IBKR data username for live data at $14.50/month. That is **reversed** for live data, for one reason: the IB Gateway/TWS live feed needs a human 2FA re-login roughly weekly that cannot be automated, so it cannot drive a real-time alert. Programmatic API-key access is now a hard requirement for any live alert or live-signal screen.
+
+- **Live data (when purchased):** Alpaca Algo Trader Plus, **$99/month** — real-time all-US-exchanges equities (SIP) plus OPRA options (chains, IV, greeks), one account, one API key, no login. **Not purchased yet (2026-10-29):** subscribe only after the products are tested working, all bugs fixed, and feature requests are done. Until then the free/delayed Alpaca key serves development; the code is built so the upgrade is a key/tier swap, not new work.
+- **IBKR is reduced to the one-time Flex holdings import** (yearly token, reports only) — the read-only positions path already verified 2026-10-29 (20 lots). No more IBKR gateway streaming.
+- **US futures are deferred** out of live-data scope; revisit only if real-time futures alerts become a requirement (then Massive futures ~$199/month is the add-on).
+- **Option chains for covered calls** come from Alpaca's options feed (OPRA; delayed until the $99 tier is purchased), replacing the "IBKR snapshots" line in §5.
+- **Budget note:** this exceeds the §1 $30/month cap; that cap is superseded by the owner's 2026-10-29 direction to pay for a programmatic feed once the product is proven.
 
 ## 5. Hybrid Store: What We Keep and What We Fetch
 

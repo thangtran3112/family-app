@@ -3,11 +3,12 @@ table. The create, items, and delete models stay in `api/watchlists.py` (existin
 
 import unicodedata
 from datetime import datetime
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
-from ai_trading.api.schemas.common import Freshness, Stamp
+from ai_trading.api.schemas.common import Freshness, Stamp, SwingOptional
+from ai_trading.api.schemas.fundamental import Fundamentals
 
 
 class WatchlistNameBase(BaseModel):
@@ -46,7 +47,12 @@ class WatchlistTableTag(BaseModel):
     at: datetime | None  # the pattern's bar time; null for an armed strategy
 
 
-class WatchlistTableRow(BaseModel):
+class WatchlistTableRow(SwingOptional):
+    """`fundamentals` is a `long_term` list's (02n §c3 #20): a row of an intraday or swing list leaves it out, so those
+    responses are byte for byte what they were (`SwingOptional`'s rule, whatever the lane)."""
+
+    swing_only: ClassVar[tuple[str, ...]] = ("fundamentals",)
+
     symbol: str
     name: str
     asset_type: Literal["stock", "etf", "future"]
@@ -57,6 +63,7 @@ class WatchlistTableRow(BaseModel):
     bias_label: str
     freshness: Freshness
     tags: list[WatchlistTableTag]
+    fundamentals: Fundamentals | None = None
 
 
 class WatchlistTable(BaseModel):

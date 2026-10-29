@@ -21,6 +21,13 @@ const bar = {
 
 const stamp = { as_of: "2026-10-20T14:35:00Z", source: "alpaca", quality: "delayed-15m", freshness: "delayed" };
 
+// The three Fundamental fields of `/status` (02n §c3 #18) before anything is connected.
+const fundamentalStatus = {
+  holdings: { source: "ibkr_flex", account_scope: "data", statement_date: null, imported_at: null, lots: 0, state: "not_configured" },
+  options: { as_of: null, source: null, quality: "unavailable", freshness: "unavailable", state: "not_connected" },
+  ai_daily: { state: "not_started", last_run_at: null },
+};
+
 const warmingTechnicals = {
   symbol: "AAPL",
   quality: "eod",
@@ -141,6 +148,7 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     quotes: stamp,
     scans: { ...stamp, next_run_at: null },
     alerts: { state: "running", unread: 0 },
+    ...fundamentalStatus,
   }), {
     gateway: "not_configured",
     data_sources: "unknown",
@@ -151,6 +159,7 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     quotes: stamp,
     scans: { ...stamp, next_run_at: null },
     alerts: { state: "running", unread: 0 },
+    ...fundamentalStatus,
   });
   assert.deepEqual(MeSchema.parse({ email: "desk-user" }), { email: "desk-user" });
   assert.deepEqual(WatchlistItemsSchema.parse([
@@ -243,5 +252,6 @@ test("numeric API response schemas reject non-finite values", () => {
     quotes: stamp,
     scans: { ...stamp, next_run_at: null },
     alerts: { state: "running", unread: 0 },
+    ...fundamentalStatus,
   }).success, false);
 });

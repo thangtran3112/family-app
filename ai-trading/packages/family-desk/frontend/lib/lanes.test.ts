@@ -18,22 +18,40 @@ import {
   writeLanePreference,
 } from "./lanes.ts";
 
-test("every desktop route maps to a lane; the MVP routes are technical", () => {
-  for (const path of ["/", "/today", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/practice", "/practice/replay", "/practice/journal", "/technicals", "/futures", "/futures/specs", "/settings", "/more", "/feedback", "/feedback/new"]) {
+test("every desktop route maps to a lane; the shared routes render the active lane's variant", () => {
+  for (const path of ["/screener", "/screener/filters", "/alerts", "/alerts/new", "/strategies", "/strategies/library", "/strategies/new", "/practice", "/practice/replay", "/practice/journal", "/technicals", "/futures", "/feedback", "/feedback/new"]) {
     assert.equal(laneForPath(path), "technical", path);
   }
-  for (const path of ["/holdings", "/covered-calls", "/stocks", "/paper", "/backtests", "/ask", "/holdings/"]) {
+  for (const path of ["/", "/today", "/watchlists", "/settings", "/more", "/futures/specs", "/today/", "/futures/specs/"]) {
+    assert.equal(laneForPath(path), "shared", path);
+  }
+  for (const path of ["/holdings", "/covered-calls", "/stocks", "/futures/read", "/paper", "/backtests", "/ask", "/holdings/", "/futures/read/"]) {
     assert.equal(laneForPath(path), "fundamental", path);
   }
   assert.equal(laneForPath("/unknown-page"), "technical");
 });
 
-test("wrong-lane routes show the interstitial in the other lane only", () => {
+test("wrong-lane routes show the interstitial in the other lane only; shared routes never do", () => {
   assert.equal(isWrongLane("technical", "/holdings"), true);
   assert.equal(isWrongLane("technical", "/screener"), false);
   assert.equal(isWrongLane("fundamental", "/holdings"), false);
   assert.equal(isWrongLane("fundamental", "/screener"), true);
+  assert.equal(isWrongLane("technical", "/futures/read"), true);
+  assert.equal(isWrongLane("fundamental", "/futures"), true);
+  for (const lane of ["technical", "fundamental"] as const) {
+    for (const path of ["/", "/today", "/watchlists", "/settings", "/more", "/futures/specs"]) assert.equal(isWrongLane(lane, path), false, `${lane} ${path}`);
+  }
   assert.equal(otherLane("technical"), "fundamental");
+});
+
+test("the Fundamental primary nav is Today, Holdings, Covered calls, Stocks, Futures (02n §b1)", () => {
+  assert.deepEqual(PRIMARY_NAV.fundamental.map((item) => item.label), ["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
+  assert.deepEqual(PRIMARY_NAV.fundamental.map((item) => item.href), ["/", "/holdings", "/covered-calls", "/stocks", "/futures/read"]);
+  // Every Fundamental tab opens a route its own lane may show.
+  for (const item of PRIMARY_NAV.fundamental) assert.notEqual(laneForPath(item.href), "technical", item.href);
+  assert.equal(isNavActive("/", "/today"), true);
+  assert.equal(isNavActive("/covered-calls", "/covered-calls"), true);
+  assert.equal(isNavActive("/futures/read", "/futures/read"), true);
 });
 
 test("technical primary nav and the avatar menu match 02l §b2", () => {

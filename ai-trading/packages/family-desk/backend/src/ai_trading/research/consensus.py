@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from ai_trading.core.calendar import ET
 from ai_trading.data.refresher import PassReport, _detail, _fetch_each, record_health, watchlist_symbols
 from ai_trading.db.models import AnalystTarget, Base, ConsensusSnapshot, EarningsResult, FeedHealth
+from ai_trading.holdings.service import held_symbols
 
 CONSENSUS_FEED = "consensus"
 EARNINGS_FEED = "earnings"
@@ -37,8 +38,8 @@ FEEDS = (CONSENSUS_FEED, EARNINGS_FEED, TARGETS_FEED)
 
 
 def snapshot_symbols(session: Session) -> list[str]:
-    """The symbols to snapshot: every stock on a watchlist. Holdings join once their tables exist (02n `0004`)."""
-    return watchlist_symbols(session)
+    """The symbols to snapshot: every stock on a watchlist and every stock a holdings import has put in an account."""
+    return sorted({*watchlist_symbols(session), *held_symbols(session)})
 
 
 def done_today(session: Session, feed: str, day: date) -> bool:
