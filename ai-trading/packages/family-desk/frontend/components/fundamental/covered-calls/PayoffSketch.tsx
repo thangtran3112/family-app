@@ -30,7 +30,7 @@ export function PayoffSketch({ spot, strike, bid }: { spot: number | null; strik
           <text key={`x${tick}`} x={x(tick)} y={H - M.bottom + 14} textAnchor="middle">{formatUsd(tick)}</text>
         ))}
         <line className={styles.spot} x1={x(payoff.spot)} x2={x(payoff.spot)} y1={M.top} y2={H - M.bottom} />
-        <text x={x(payoff.spot)} y={M.top + 8} textAnchor="middle">Now {formatUsd(payoff.spot, { cents: true })}</text>
+        <text x={x(payoff.spot) + 4} y={H - M.bottom - 6} textAnchor="start">Now {formatUsd(payoff.spot, { cents: true })}</text>
         <path className={styles.line} d={path} />
         <circle className={styles.mark} cx={x(payoff.breakeven)} cy={y(0)} r={3.5} />
         <text className={styles.markText} x={x(payoff.breakeven)} y={y(0) + 14} textAnchor="middle">Breakeven {formatUsd(payoff.breakeven, { cents: true })}</text>

@@ -20,7 +20,7 @@ test("metric cells format by kind and never print a missing value", () => {
   assert.deepEqual(metricCell("fcf_yield_pct", aapl, true), { text: "3.1%", tone: null, rating: null });
   assert.deepEqual(metricCell("eps_rev_30d_pct", aapl, true), { text: "+1.4%", tone: "up", rating: null });
   assert.deepEqual(metricCell("dist_to_252d_high_pct", aapl, true), { text: "−3.1%", tone: "down", rating: null });
-  assert.equal(metricCell("next_earnings", aapl, true).text, "Thu 2027-01-28");
+  assert.equal(metricCell("next_earnings", aapl, true).text, "2027-01-28");
   assert.equal(metricCell("ai_target_base", aapl, true).text, "$265.00");
   assert.equal(metricCell("ai_rating", aapl, true).rating, "buy");
   // Nothing known: a dash, whatever the kind.

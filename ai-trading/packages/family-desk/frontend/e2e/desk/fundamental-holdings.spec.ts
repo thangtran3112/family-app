@@ -85,7 +85,7 @@ test("the positions table drops its low-priority columns at 1180 and nothing scr
   await openDesk(page, "/holdings");
   const table = page.getByRole("table", { name: "Holdings" });
   await expect(table).toBeVisible();
-  const dropped = ["Earnings", "AI", "Open calls", "Unrl %"];
+  const dropped = ["Earnings", "AI", "Open", "Unrl %"];
   for (const name of dropped) {
     const header = table.getByRole("columnheader", { name, exact: true });
     if (compact()) await expect(header).toHaveCount(0);

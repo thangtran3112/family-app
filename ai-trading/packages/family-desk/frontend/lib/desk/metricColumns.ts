@@ -1,6 +1,6 @@
 import type { HoldingRow, Rating } from "../api/fundamentalSchemas.ts";
 import { METRIC_KEYS, type MetricKey } from "../settings/fundamental.ts";
-import { changeTone, EMPTY_VALUE, formatEtDay, formatNumber, formatPct, formatSignedPct, type Tone } from "./format.ts";
+import { changeTone, EMPTY_VALUE, formatNumber, formatPct, formatSignedPct, type Tone } from "./format.ts";
 import { formatUsdPrice, maskedQuantity } from "./mask.ts";
 
 // The Columns menu and the Fundamentals table (02n §c4): one label and one display kind per metric key, numbers or null.
@@ -41,7 +41,8 @@ export function metricCell(key: MetricKey, fundamentals: Fundamentals, masked: b
     case "rating":
       return { text: String(value), tone: null, rating: value as Rating };
     case "date":
-      return plain(typeof value === "string" ? formatEtDay(value) : EMPTY_VALUE);
+      // The plain date, no weekday: a table of eight chosen columns has to fit the 1440 centre without scrolling.
+      return plain(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : EMPTY_VALUE);
     case "number":
       return plain(typeof value === "number" ? formatNumber(value, 1) : EMPTY_VALUE);
     case "pct":

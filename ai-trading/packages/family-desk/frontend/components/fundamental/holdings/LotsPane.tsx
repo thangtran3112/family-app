@@ -33,7 +33,9 @@ export function LotsPane({ symbol, masked, accounts }: { symbol: string; masked:
         ) : query.data === null ? (
           <LoadingBlock label="Loading lots…" height={80} />
         ) : (
-          <DenseTable caption={`${symbol} tax lots`} columns={columns} rows={lots} rowKey={(lot) => lot.key} density="compact" empty={<p className={fund.muted}>No tax lots for {symbol}</p>} />
+          <div className={fund.tight}>
+            <DenseTable caption={`${symbol} tax lots`} columns={columns} rows={lots} rowKey={(lot) => lot.key} density="compact" empty={<p className={fund.muted}>No tax lots for {symbol}</p>} />
+          </div>
         )}
       </section>
       <section className={`${fund.panel} ${styles.pane}`} aria-label={`${symbol} short calls`}>

@@ -16,8 +16,7 @@ const tone = (value: { text: string; tone: "up" | "down" | "flat" }) => <span cl
 function SymbolCell({ view }: { view: HoldingView }) {
   return (
     <span className={styles.symbolCell}>
-      <a className={styles.symbolLink} href={`/stocks?symbol=${encodeURIComponent(view.symbol)}#overview`} onClick={(event) => event.stopPropagation()}>{view.symbol}</a>
-      <span className={styles.symbolName}>{view.name}</span>
+      <a className={styles.symbolLink} title={view.name} href={`/stocks?symbol=${encodeURIComponent(view.symbol)}#overview`} onClick={(event) => event.stopPropagation()}>{view.symbol}</a>
     </span>
   );
 }
@@ -33,7 +32,7 @@ const POSITION_COLUMNS: DenseColumn<HoldingView>[] = withPriorities<DenseColumn<
     { key: "weight_pct", label: "Weight", align: "right", render: (view) => view.weight, sortValue: (view) => view.row.weight_pct },
     { key: "unrealized_pct", label: "Unrl %", align: "right", render: (view) => tone(view.unrealized), sortValue: (view) => view.row.unrealized_pct },
     { key: "coverable", label: "Coverable", align: "right", render: (view) => view.coverable },
-    { key: "open_calls", label: "Open calls", align: "right", render: (view) => view.openCalls },
+    { key: "open_calls", label: "Open", align: "right", render: (view) => view.openCalls },
     { key: "next_earnings", label: "Earnings", align: "right", render: (view) => view.nextEarnings, sortValue: (view) => view.row.next_earnings, firstSort: "asc" },
     { key: "ai_rating", label: "AI", render: (view) => <AiRatingChip rating={view.row.ai_rating} compact /> },
   ],
@@ -43,15 +42,18 @@ const POSITION_COLUMNS: DenseColumn<HoldingView>[] = withPriorities<DenseColumn<
 /** The positions: one row per held symbol (02n §b3 FD3). */
 export function PositionsTable({ rows, masked, selected, onSelect }: { rows: readonly HoldingRow[]; masked: boolean; selected: string | null; onSelect: (symbol: string) => void }) {
   return (
-    <DenseTable
-      caption="Holdings"
-      columns={POSITION_COLUMNS}
-      rows={holdingViews(rows, masked)}
-      rowKey={(view) => view.symbol}
-      selectedKey={selected}
-      onSelect={(view) => onSelect(view.symbol)}
-      initialSort={{ key: "weight_pct", direction: "desc" }}
-    />
+    <div className={fund.tight}>
+      <DenseTable
+        caption="Holdings"
+        columns={POSITION_COLUMNS}
+        rows={holdingViews(rows, masked)}
+        rowKey={(view) => view.symbol}
+        density="compact"
+        selectedKey={selected}
+        onSelect={(view) => onSelect(view.symbol)}
+        initialSort={{ key: "weight_pct", direction: "desc" }}
+      />
+    </div>
   );
 }
 
@@ -76,5 +78,9 @@ export function FundamentalsTable({ rows, chosen, masked, selected, onSelect }: 
       },
     })),
   ];
-  return <DenseTable caption="Fundamentals" columns={columns} rows={rows} rowKey={(row) => row.symbol} selectedKey={selected} onSelect={(row) => onSelect(row.symbol)} density="compact" />;
+  return (
+    <div className={fund.tight}>
+      <DenseTable caption="Fundamentals" columns={columns} rows={rows} rowKey={(row) => row.symbol} selectedKey={selected} onSelect={(row) => onSelect(row.symbol)} density="compact" />
+    </div>
+  );
 }
