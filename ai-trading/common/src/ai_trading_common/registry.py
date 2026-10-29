@@ -24,6 +24,7 @@ from ai_trading_common.fallback import first_success
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.providers import (
     alpaca,
+    alpaca_options,
     alphavantage,
     eulerpool,
     finnhub,
@@ -41,6 +42,7 @@ from ai_trading_common.sources import (
     GatewayStatusSource,
     MacroSource,
     NewsSource,
+    OptionChainSource,
     QuoteSource,
     TargetsSource,
     TradesSource,
@@ -63,10 +65,11 @@ Kind = Literal[
     "universe",
     "quotes",
     "trades",
+    "option_chain",
 ]
 
 #: Every kind, in `DataSources`' own field order. Fixed, not derived from `DEFAULT_CHAINS`, so
-#: `DataSources` is always built with all twelve fields regardless of how small a custom
+#: `DataSources` is always built with all thirteen fields regardless of how small a custom
 #: `registry=`/`defaults=` override is (a test overriding one kind still needs the rest).
 _KINDS: tuple[Kind, ...] = (
     "bars",
@@ -81,6 +84,7 @@ _KINDS: tuple[Kind, ...] = (
     "universe",
     "quotes",
     "trades",
+    "option_chain",
 )
 
 
@@ -222,6 +226,24 @@ class _TradesChain:
         return _chain_call(self.providers, "trades", symbol, start, end, feed=feed, now=now)
 
 
+@dataclass(frozen=True)
+class _OptionChainChain:
+    providers: tuple[OptionChainSource, ...]
+
+    def option_chain(self, symbol, *, now, right="C", min_dte=0, max_dte, min_strike=None, max_strike=None):
+        return _chain_call(
+            self.providers,
+            "option_chain",
+            symbol,
+            now=now,
+            right=right,
+            min_dte=min_dte,
+            max_dte=max_dte,
+            min_strike=min_strike,
+            max_strike=max_strike,
+        )
+
+
 #: Kind -> its chain class and its Protocol (the latter used by the conformance test to check
 #: each registered provider's adapter against every kind it claims to serve).
 _CHAIN_CLASSES: dict[Kind, type] = {
@@ -237,6 +259,7 @@ _CHAIN_CLASSES: dict[Kind, type] = {
     "universe": _UniverseChain,
     "quotes": _QuotesChain,
     "trades": _TradesChain,
+    "option_chain": _OptionChainChain,
 }
 
 KIND_PROTOCOLS: dict[Kind, type] = {
@@ -252,6 +275,7 @@ KIND_PROTOCOLS: dict[Kind, type] = {
     "universe": UniverseSource,
     "quotes": QuoteSource,
     "trades": TradesSource,
+    "option_chain": OptionChainSource,
 }
 
 
@@ -259,6 +283,7 @@ KIND_PROTOCOLS: dict[Kind, type] = {
 #: one line here.
 REGISTRY: dict[str, Provider] = {
     "alpaca": alpaca.PROVIDER,
+    "alpaca_options": alpaca_options.PROVIDER,
     "alphavantage": alphavantage.PROVIDER,
     "eulerpool": eulerpool.PROVIDER,
     "finnhub": finnhub.PROVIDER,
@@ -278,6 +303,7 @@ DEFAULT_CHAINS: dict[Kind, tuple[str, ...]] = {
     "fundamentals": ("sec_edgar",),
     "macro": ("fred",),
     "news": ("finnhub",),
+    "option_chain": ("alpaca_options",),  # Alpaca's options feed: `indicative` on the free key, stamped delayed-15m
     "quotes": ("ibkr", "alpaca"),  # ibkr only joins while its switch is on (Provider.enabled)
     "targets": ("eulerpool", "finnhub"),
     "trades": ("alpaca",),
@@ -302,6 +328,9 @@ class DataSources:
     universe: UniverseSource
     quotes: QuoteSource
     trades: TradesSource
+    #: Defaulted only so a `DataSources(...)` written before this kind existed still builds (such a double has no
+    #: chain); `from_env` always fills it.
+    option_chain: OptionChainSource | None = None
 
     def gateway_status(self) -> GatewayStatus:
         """How the live-quote gateway stands: the first quotes provider that holds one reports it, and
