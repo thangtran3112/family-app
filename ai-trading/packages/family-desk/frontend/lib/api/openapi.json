@@ -1,6 +1,71 @@
 {
   "components": {
     "schemas": {
+      "AccountOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "taxable",
+              "ira",
+              "roth"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "type"
+        ],
+        "title": "AccountOut",
+        "type": "object"
+      },
+      "AccountPatch": {
+        "additionalProperties": false,
+        "description": "`PATCH /accounts/{id}`: the owner names an account and says what kind it is (the assignment note and the tax\nflags follow the type).",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "taxable",
+                  "ira",
+                  "roth"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "title": "AccountPatch",
+        "type": "object"
+      },
       "AdherenceCheckOut": {
         "properties": {
           "applicable": {
@@ -295,6 +360,41 @@
           "stamp"
         ],
         "title": "AdvanceOut",
+        "type": "object"
+      },
+      "AiContextOut": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "rating": {
+            "enum": [
+              "buy",
+              "hold",
+              "sell"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "target_base": {
+            "title": "Target Base",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rating",
+          "target_base",
+          "note"
+        ],
+        "title": "AiContextOut",
         "type": "object"
       },
       "AlertLogOut": {
@@ -1196,6 +1296,54 @@
         "title": "AlertStrategyVersionOut",
         "type": "object"
       },
+      "AnalystTargetsOut": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/RatingCountsOut"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          }
+        },
+        "required": [
+          "low",
+          "mean",
+          "high",
+          "counts"
+        ],
+        "title": "AnalystTargetsOut",
+        "type": "object"
+      },
       "ArmedItem": {
         "additionalProperties": false,
         "properties": {
@@ -1273,6 +1421,58 @@
           "fires_so_far"
         ],
         "title": "ArmedOut",
+        "type": "object"
+      },
+      "AssignmentNoteOut": {
+        "properties": {
+          "account_type": {
+            "enum": [
+              "taxable",
+              "ira",
+              "roth"
+            ],
+            "title": "Account Type",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_type",
+          "text"
+        ],
+        "title": "AssignmentNoteOut",
+        "type": "object"
+      },
+      "AssignmentOut": {
+        "properties": {
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "symbol",
+          "contracts",
+          "strike"
+        ],
+        "title": "AssignmentOut",
         "type": "object"
       },
       "BarOut": {
@@ -1713,6 +1913,162 @@
         "title": "BoardRowOut",
         "type": "object"
       },
+      "BriefOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BriefRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "track_record": {
+            "$ref": "#/components/schemas/TrackRecordOut"
+          }
+        },
+        "required": [
+          "date",
+          "run",
+          "rows",
+          "track_record"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
+      "BriefRowOut": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "earnings_in_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earnings In Days"
+          },
+          "eps_rev_30d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eps Rev 30D Pct"
+          },
+          "prev_rating": {
+            "anyOf": [
+              {
+                "enum": [
+                  "buy",
+                  "hold",
+                  "sell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Rating"
+          },
+          "rating": {
+            "enum": [
+              "buy",
+              "hold",
+              "sell"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "stale_days": {
+            "title": "Stale Days",
+            "type": "integer"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/TargetRangeOut"
+          },
+          "upside_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upside Pct"
+          }
+        },
+        "required": [
+          "symbol",
+          "rating",
+          "prev_rating",
+          "target",
+          "upside_pct",
+          "confidence",
+          "eps_rev_30d_pct",
+          "earnings_in_days",
+          "stale_days"
+        ],
+        "title": "BriefRowOut",
+        "type": "object"
+      },
+      "BriefRunOut": {
+        "properties": {
+          "analyzed": {
+            "title": "Analyzed",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "ran_at": {
+            "format": "date-time",
+            "title": "Ran At",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ran_at",
+          "analyzed",
+          "skipped",
+          "cost_usd"
+        ],
+        "title": "BriefRunOut",
+        "type": "object"
+      },
       "CandidateOut": {
         "description": "One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.",
         "properties": {
@@ -1816,6 +2172,85 @@
         "title": "CandidateOut",
         "type": "object"
       },
+      "CandidatesOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "ai_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiContextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CoveredCallCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "chain_stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "iv_history_sessions": {
+            "title": "Iv History Sessions",
+            "type": "integer"
+          },
+          "iv_rank": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Rank"
+          },
+          "opportunity": {
+            "title": "Opportunity",
+            "type": "boolean"
+          },
+          "spot": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spot"
+          },
+          "spot_stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "account_id",
+          "spot",
+          "spot_stamp",
+          "chain_stamp",
+          "iv_rank",
+          "iv_history_sessions",
+          "opportunity",
+          "candidates",
+          "ai_context"
+        ],
+        "title": "CandidatesOut",
+        "type": "object"
+      },
       "CardBackOut": {
         "properties": {
           "atr_pct_label": {
@@ -1906,6 +2341,244 @@
           "pivots"
         ],
         "title": "CardBackOut",
+        "type": "object"
+      },
+      "ConsensusOut": {
+        "properties": {
+          "fiscal_years": {
+            "items": {
+              "$ref": "#/components/schemas/ConsensusPeriodOut"
+            },
+            "title": "Fiscal Years",
+            "type": "array"
+          },
+          "next_earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextEarningsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quarters": {
+            "items": {
+              "$ref": "#/components/schemas/ConsensusPeriodOut"
+            },
+            "title": "Quarters",
+            "type": "array"
+          },
+          "revisions": {
+            "$ref": "#/components/schemas/RevisionsOut"
+          },
+          "surprises": {
+            "items": {
+              "$ref": "#/components/schemas/SurpriseOut"
+            },
+            "title": "Surprises",
+            "type": "array"
+          }
+        },
+        "required": [
+          "quarters",
+          "fiscal_years",
+          "surprises",
+          "next_earnings",
+          "revisions"
+        ],
+        "title": "ConsensusOut",
+        "type": "object"
+      },
+      "ConsensusPeriodOut": {
+        "properties": {
+          "analysts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysts"
+          },
+          "eps_estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eps Estimate"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "eps_estimate",
+          "analysts"
+        ],
+        "title": "ConsensusPeriodOut",
+        "type": "object"
+      },
+      "CoverageOut": {
+        "properties": {
+          "cap_pct": {
+            "title": "Cap Pct",
+            "type": "number"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cap_pct",
+          "rows"
+        ],
+        "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoverageRowOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "coverable": {
+            "title": "Coverable",
+            "type": "integer"
+          },
+          "open_contracts": {
+            "title": "Open Contracts",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "ok",
+              "under_one_contract",
+              "earnings_wait",
+              "fully_covered",
+              "no_chain"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "reason_text": {
+            "title": "Reason Text",
+            "type": "string"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "account_id",
+          "shares",
+          "open_contracts",
+          "coverable",
+          "reason",
+          "reason_text"
+        ],
+        "title": "CoverageRowOut",
+        "type": "object"
+      },
+      "CoveredCallCandidateOut": {
+        "description": "The engine's `core.covered_calls.Candidate`, flattened. Yields are fractions (0.16 = 16%); `spread_pct` is a\npercentage of the mid.",
+        "properties": {
+          "annualized_yield": {
+            "title": "Annualized Yield",
+            "type": "number"
+          },
+          "ask": {
+            "title": "Ask",
+            "type": "number"
+          },
+          "bid": {
+            "title": "Bid",
+            "type": "number"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "number"
+          },
+          "dte": {
+            "title": "Dte",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "open_interest": {
+            "title": "Open Interest",
+            "type": "integer"
+          },
+          "premium_yield": {
+            "title": "Premium Yield",
+            "type": "number"
+          },
+          "return_if_called": {
+            "title": "Return If Called",
+            "type": "number"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "spread_pct": {
+            "title": "Spread Pct",
+            "type": "number"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "upside_cap": {
+            "title": "Upside Cap",
+            "type": "number"
+          }
+        },
+        "required": [
+          "expiry",
+          "strike",
+          "dte",
+          "bid",
+          "ask",
+          "delta",
+          "premium_yield",
+          "annualized_yield",
+          "upside_cap",
+          "return_if_called",
+          "spread_pct",
+          "open_interest",
+          "flags",
+          "score"
+        ],
+        "title": "CoveredCallCandidateOut",
         "type": "object"
       },
       "CurvePointOut": {
@@ -2116,6 +2789,133 @@
         "title": "DashboardEventOut",
         "type": "object"
       },
+      "DashboardFundamentalEventOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "earnings",
+              "ex_dividend",
+              "macro"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "symbol",
+          "kind",
+          "date",
+          "label"
+        ],
+        "title": "DashboardFundamentalEventOut",
+        "type": "object"
+      },
+      "DashboardFundamentalOut": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardFundamentalEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "feed": {
+            "items": {
+              "$ref": "#/components/schemas/FeedItemOut"
+            },
+            "title": "Feed",
+            "type": "array"
+          },
+          "income": {
+            "$ref": "#/components/schemas/DashboardIncomeOut"
+          },
+          "market": {
+            "$ref": "#/components/schemas/DashboardMarketOut"
+          },
+          "market_strip": {
+            "items": {
+              "$ref": "#/components/schemas/MarketStripTileOut"
+            },
+            "title": "Market Strip",
+            "type": "array"
+          },
+          "portfolio": {
+            "$ref": "#/components/schemas/DashboardPortfolioOut"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          }
+        },
+        "required": [
+          "stamp",
+          "market",
+          "market_strip",
+          "portfolio",
+          "feed",
+          "income",
+          "events"
+        ],
+        "title": "DashboardFundamentalOut",
+        "type": "object"
+      },
+      "DashboardIncomeOut": {
+        "properties": {
+          "month_to_date": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month To Date"
+          },
+          "next_expiry": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Expiry"
+          },
+          "open_calls": {
+            "title": "Open Calls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month_to_date",
+          "open_calls",
+          "next_expiry"
+        ],
+        "title": "DashboardIncomeOut",
+        "type": "object"
+      },
       "DashboardMarketOut": {
         "properties": {
           "next_open": {
@@ -2214,6 +3014,66 @@
           "alerts_state"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DashboardPortfolioOut": {
+        "properties": {
+          "day_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Change"
+          },
+          "day_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Change Pct"
+          },
+          "import": {
+            "$ref": "#/components/schemas/ImportStateOut"
+          },
+          "unrealized_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pct"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "day_change",
+          "day_change_pct",
+          "unrealized_pct",
+          "import"
+        ],
+        "title": "DashboardPortfolioOut",
         "type": "object"
       },
       "DashboardScreenerMatchOut": {
@@ -3058,6 +3918,111 @@
           "timing"
         ],
         "title": "EarningsChipOut",
+        "type": "object"
+      },
+      "EarningsReactionOut": {
+        "properties": {
+          "avg_abs_move_pct": {
+            "title": "Avg Abs Move Pct",
+            "type": "number"
+          },
+          "avg_excess_pct": {
+            "title": "Avg Excess Pct",
+            "type": "number"
+          },
+          "beats": {
+            "$ref": "#/components/schemas/ReactionBucketOut"
+          },
+          "implied_move_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implied Move Pct"
+          },
+          "misses": {
+            "$ref": "#/components/schemas/ReactionBucketOut"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ReactionPointOut"
+            },
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reports",
+          "avg_abs_move_pct",
+          "avg_excess_pct",
+          "beats",
+          "misses",
+          "series",
+          "implied_move_pct"
+        ],
+        "title": "EarningsReactionOut",
+        "type": "object"
+      },
+      "FeedItemOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "short_call_risk",
+              "earnings_soon",
+              "ex_dividend",
+              "cc_opportunity",
+              "ai_change",
+              "import"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "symbol",
+          "title",
+          "detail",
+          "at",
+          "href"
+        ],
+        "title": "FeedItemOut",
         "type": "object"
       },
       "FeedOut": {
@@ -4119,6 +5084,448 @@
         "title": "FormingBarOut",
         "type": "object"
       },
+      "FundamentalAlertOut": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "rules": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Rules",
+            "type": "object"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "const": "holdings",
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/WatchlistScopeOut"
+              }
+            ],
+            "title": "Scope"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "template": {
+            "enum": [
+              "covered_call_income",
+              "short_call_risk",
+              "ai_daily_view"
+            ],
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template",
+          "enabled",
+          "scope",
+          "rules",
+          "strategy_id"
+        ],
+        "title": "FundamentalAlertOut",
+        "type": "object"
+      },
+      "FundamentalAlertPut": {
+        "additionalProperties": false,
+        "description": "`PUT /fundamental-alerts/{template}`: whatever is sent changes, the rest stays; a change saves a new strategy\nversion.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "const": "holdings",
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/WatchlistScopeOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "title": "FundamentalAlertPut",
+        "type": "object"
+      },
+      "Fundamentals": {
+        "description": "02n \u00a7c4: the metric keys a holdings row, a `long_term` watchlist row and the `Columns` menu share. Numbers or\nnull, never NaN; a date or a rating where the key says so.",
+        "properties": {
+          "ai_rating": {
+            "anyOf": [
+              {
+                "enum": [
+                  "buy",
+                  "hold",
+                  "sell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Rating"
+          },
+          "ai_target_base": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Target Base"
+          },
+          "ai_upside_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Upside Pct"
+          },
+          "cc_coverable": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cc Coverable"
+          },
+          "debt_to_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt To Equity"
+          },
+          "dist_to_252d_high_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dist To 252D High Pct"
+          },
+          "dividend_yield_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dividend Yield Pct"
+          },
+          "eps_rev_30d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eps Rev 30D Pct"
+          },
+          "eps_rev_7d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eps Rev 7D Pct"
+          },
+          "eps_rev_90d_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eps Rev 90D Pct"
+          },
+          "ex_dividend": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ex Dividend"
+          },
+          "fcf_yield_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fcf Yield Pct"
+          },
+          "fwd_pe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwd Pe"
+          },
+          "gain_vs_cost_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gain Vs Cost Pct"
+          },
+          "next_earnings": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Earnings"
+          },
+          "pe_vs_5y_median_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pe Vs 5Y Median Pct"
+          },
+          "revenue_growth_yoy_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Growth Yoy Pct"
+          },
+          "weight_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Pct"
+          }
+        },
+        "title": "Fundamentals",
+        "type": "object"
+      },
+      "FuturesReadingOut": {
+        "properties": {
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "front": {
+            "title": "Front",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "next_roll": {
+            "format": "date",
+            "title": "Next Roll",
+            "type": "string"
+          },
+          "root": {
+            "enum": [
+              "/ES",
+              "/NQ",
+              "/CL",
+              "/GC"
+            ],
+            "title": "Root",
+            "type": "string"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "week_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Week High"
+          },
+          "week_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Week Low"
+          }
+        },
+        "required": [
+          "root",
+          "front",
+          "last",
+          "change_pct",
+          "week_high",
+          "week_low",
+          "next_roll",
+          "expiry",
+          "stamp"
+        ],
+        "title": "FuturesReadingOut",
+        "type": "object"
+      },
+      "FuturesReadingsOut": {
+        "properties": {
+          "macro_week": {
+            "items": {
+              "$ref": "#/components/schemas/MacroReleaseOut"
+            },
+            "title": "Macro Week",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/FuturesReadingOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "macro_week"
+        ],
+        "title": "FuturesReadingsOut",
+        "type": "object"
+      },
       "FuturesSpecOut": {
         "properties": {
           "approx_margin": {
@@ -4519,6 +5926,270 @@
         "title": "HoldOut",
         "type": "object"
       },
+      "HoldingRowOut": {
+        "properties": {
+          "account_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Account Ids",
+            "type": "array"
+          },
+          "ai_rating": {
+            "anyOf": [
+              {
+                "enum": [
+                  "buy",
+                  "hold",
+                  "sell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Rating"
+          },
+          "avg_cost": {
+            "title": "Avg Cost",
+            "type": "number"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "coverable_contracts": {
+            "title": "Coverable Contracts",
+            "type": "integer"
+          },
+          "fundamentals": {
+            "$ref": "#/components/schemas/Fundamentals"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "market_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Value"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_earnings": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Earnings"
+          },
+          "open_calls": {
+            "title": "Open Calls",
+            "type": "integer"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "number"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "unrealized_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pct"
+          },
+          "weight_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Pct"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "account_ids",
+          "shares",
+          "avg_cost",
+          "last",
+          "change_pct",
+          "market_value",
+          "weight_pct",
+          "unrealized_pct",
+          "coverable_contracts",
+          "open_calls",
+          "next_earnings",
+          "ai_rating",
+          "fundamentals",
+          "stamp"
+        ],
+        "title": "HoldingRowOut",
+        "type": "object"
+      },
+      "HoldingsOut": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountOut"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "import": {
+            "$ref": "#/components/schemas/ImportStateOut"
+          },
+          "option_lots": {
+            "items": {
+              "$ref": "#/components/schemas/OptionLotOut"
+            },
+            "title": "Option Lots",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/HoldingsTotalsOut"
+          }
+        },
+        "required": [
+          "import",
+          "accounts",
+          "totals",
+          "rows",
+          "option_lots"
+        ],
+        "title": "HoldingsOut",
+        "type": "object"
+      },
+      "HoldingsTotalsOut": {
+        "properties": {
+          "cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "day_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Change"
+          },
+          "day_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Change Pct"
+          },
+          "market_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Value"
+          },
+          "unrealized": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized"
+          },
+          "unrealized_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pct"
+          }
+        },
+        "required": [
+          "market_value",
+          "cost",
+          "unrealized",
+          "unrealized_pct",
+          "day_change",
+          "day_change_pct"
+        ],
+        "title": "HoldingsTotalsOut",
+        "type": "object"
+      },
       "HoldsOut": {
         "description": "The thread's holds. Open ones are marked at the LAST ENDED day's close, never later (`as_of_day_no`).",
         "properties": {
@@ -4556,6 +6227,158 @@
           "label"
         ],
         "title": "HoldsOut",
+        "type": "object"
+      },
+      "ImportOut": {
+        "description": "`POST /holdings/import` answers 202 with the running state.",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/ImportStateOut"
+          }
+        },
+        "required": [
+          "import"
+        ],
+        "title": "ImportOut",
+        "type": "object"
+      },
+      "ImportStateOut": {
+        "properties": {
+          "account_scope": {
+            "enum": [
+              "data",
+              "main_interim"
+            ],
+            "title": "Account Scope",
+            "type": "string"
+          },
+          "imported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported At"
+          },
+          "lots": {
+            "title": "Lots",
+            "type": "integer"
+          },
+          "source": {
+            "const": "ibkr_flex",
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "running",
+              "failed",
+              "not_configured",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "statement_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Date"
+          }
+        },
+        "required": [
+          "source",
+          "account_scope",
+          "statement_date",
+          "imported_at",
+          "lots",
+          "state"
+        ],
+        "title": "ImportStateOut",
+        "type": "object"
+      },
+      "IncomeMonthOut": {
+        "properties": {
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "month": {
+            "pattern": "^\\d{4}-\\d{2}$",
+            "title": "Month",
+            "type": "string"
+          },
+          "premium": {
+            "title": "Premium",
+            "type": "number"
+          }
+        },
+        "required": [
+          "month",
+          "premium",
+          "contracts"
+        ],
+        "title": "IncomeMonthOut",
+        "type": "object"
+      },
+      "IncomeOut": {
+        "properties": {
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentOut"
+            },
+            "title": "Assignments",
+            "type": "array"
+          },
+          "by_month": {
+            "items": {
+              "$ref": "#/components/schemas/IncomeMonthOut"
+            },
+            "title": "By Month",
+            "type": "array"
+          },
+          "source_stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "needs_trades"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "ytd_premium": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ytd Premium"
+          }
+        },
+        "required": [
+          "state",
+          "by_month",
+          "assignments",
+          "ytd_premium",
+          "source_stamp"
+        ],
+        "title": "IncomeOut",
         "type": "object"
       },
       "JournalOut": {
@@ -5434,6 +7257,85 @@
         "title": "ListUniverseOut",
         "type": "object"
       },
+      "LotOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "acquired": {
+            "format": "date",
+            "title": "Acquired",
+            "type": "string"
+          },
+          "cost_per_share": {
+            "title": "Cost Per Share",
+            "type": "number"
+          },
+          "gain_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gain Pct"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "number"
+          },
+          "term": {
+            "enum": [
+              "short",
+              "long"
+            ],
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "shares",
+          "cost_per_share",
+          "acquired",
+          "term",
+          "gain_pct"
+        ],
+        "title": "LotOut",
+        "type": "object"
+      },
+      "LotsOut": {
+        "properties": {
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/LotOut"
+            },
+            "title": "Lots",
+            "type": "array"
+          },
+          "short_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ShortCallRowOut"
+            },
+            "title": "Short Calls",
+            "type": "array"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "lots",
+          "short_calls"
+        ],
+        "title": "LotsOut",
+        "type": "object"
+      },
       "MacdOut": {
         "properties": {
           "histogram": {
@@ -5476,6 +7378,30 @@
           "histogram"
         ],
         "title": "MacdOut",
+        "type": "object"
+      },
+      "MacroReleaseOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "series_id": {
+            "title": "Series Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "release",
+          "series_id"
+        ],
+        "title": "MacroReleaseOut",
         "type": "object"
       },
       "MarkOut": {
@@ -5930,6 +7856,25 @@
         "title": "Metrics",
         "type": "object"
       },
+      "NextEarningsOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "timing": {
+            "title": "Timing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "timing"
+        ],
+        "title": "NextEarningsOut",
+        "type": "object"
+      },
       "OpenNextOut": {
         "description": "`day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every\nday is done.",
         "properties": {
@@ -6068,6 +8013,54 @@
           "r"
         ],
         "title": "OpenTradeOut",
+        "type": "object"
+      },
+      "OptionLotOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "right": {
+            "enum": [
+              "C",
+              "P"
+            ],
+            "title": "Right",
+            "type": "string"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "account_id",
+          "right",
+          "strike",
+          "expiry",
+          "contracts"
+        ],
+        "title": "OptionLotOut",
         "type": "object"
       },
       "PaceOut": {
@@ -7435,6 +9428,78 @@
         "title": "Problem",
         "type": "object"
       },
+      "RatingCountsOut": {
+        "properties": {
+          "buy": {
+            "title": "Buy",
+            "type": "integer"
+          },
+          "hold": {
+            "title": "Hold",
+            "type": "integer"
+          },
+          "sell": {
+            "title": "Sell",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "buy",
+          "hold",
+          "sell"
+        ],
+        "title": "RatingCountsOut",
+        "type": "object"
+      },
+      "ReactionBucketOut": {
+        "properties": {
+          "avg_excess_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Excess Pct"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "avg_excess_pct"
+        ],
+        "title": "ReactionBucketOut",
+        "type": "object"
+      },
+      "ReactionPointOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "excess_pct": {
+            "title": "Excess Pct",
+            "type": "number"
+          },
+          "move_pct": {
+            "title": "Move Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "move_pct",
+          "excess_pct"
+        ],
+        "title": "ReactionPointOut",
+        "type": "object"
+      },
       "RelistOfferOut": {
         "description": "The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which\nmoves the plan's list time, and the practice window's start with it when `window_from` is set.",
         "properties": {
@@ -8335,6 +10400,56 @@
         "title": "RescanOut",
         "type": "object"
       },
+      "ResearchOut": {
+        "properties": {
+          "consensus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsensusOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "targets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalystTargetsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerdictOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "symbol",
+          "verdict",
+          "consensus",
+          "targets",
+          "stamp"
+        ],
+        "title": "ResearchOut",
+        "type": "object"
+      },
       "ReviewOut": {
         "description": "Every candidate's move from its list price to the window end and the close, ranked by the signed move to the\nwindow end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen\nhid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029).",
         "properties": {
@@ -8506,6 +10621,135 @@
           "picked"
         ],
         "title": "ReviewRowOut",
+        "type": "object"
+      },
+      "RevisionsOut": {
+        "properties": {
+          "d30": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "D30"
+          },
+          "d7": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "D7"
+          },
+          "d90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "D90"
+          }
+        },
+        "required": [
+          "d7",
+          "d30",
+          "d90"
+        ],
+        "title": "RevisionsOut",
+        "type": "object"
+      },
+      "RollCandidateOut": {
+        "properties": {
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "dte": {
+            "title": "Dte",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "net_credit": {
+            "title": "Net Credit",
+            "type": "number"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          }
+        },
+        "required": [
+          "expiry",
+          "strike",
+          "dte",
+          "delta",
+          "net_credit",
+          "flags"
+        ],
+        "title": "RollCandidateOut",
+        "type": "object"
+      },
+      "RollOut": {
+        "properties": {
+          "assignment_note": {
+            "$ref": "#/components/schemas/AssignmentNoteOut"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RollCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "chain_stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "cost_to_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost To Close"
+          }
+        },
+        "required": [
+          "cost_to_close",
+          "candidates",
+          "assignment_note",
+          "chain_stamp"
+        ],
+        "title": "RollOut",
         "type": "object"
       },
       "ScreenerFilterCreate": {
@@ -9273,6 +11517,122 @@
         "title": "SettingsTelegramLinkBody",
         "type": "object"
       },
+      "ShortCallRiskOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "delta_above_0_50",
+              "near_strike_near_expiry",
+              "early_assignment_before_dividend",
+              "earnings_before_expiry"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "ShortCallRiskOut",
+        "type": "object"
+      },
+      "ShortCallRowOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "dte": {
+            "title": "Dte",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "moneyness_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moneyness Pct"
+          },
+          "risks": {
+            "items": {
+              "$ref": "#/components/schemas/ShortCallRiskOut"
+            },
+            "title": "Risks",
+            "type": "array"
+          },
+          "spot": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spot"
+          },
+          "stamp": {
+            "$ref": "#/components/schemas/Stamp"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "account_id",
+          "strike",
+          "expiry",
+          "contracts",
+          "dte",
+          "spot",
+          "moneyness_pct",
+          "delta",
+          "risks",
+          "stamp"
+        ],
+        "title": "ShortCallRowOut",
+        "type": "object"
+      },
       "SignalOut": {
         "properties": {
           "bar_time": {
@@ -9513,6 +11873,38 @@
         "title": "StarOut",
         "type": "object"
       },
+      "StatusAiDailyOut": {
+        "properties": {
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "state": {
+            "enum": [
+              "not_started",
+              "ok",
+              "partial",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "last_run_at"
+        ],
+        "title": "StatusAiDailyOut",
+        "type": "object"
+      },
       "StatusAlertsOut": {
         "properties": {
           "state": {
@@ -9568,8 +11960,78 @@
         "title": "StatusMarketOut",
         "type": "object"
       },
+      "StatusOptionsOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "freshness": {
+            "enum": [
+              "live",
+              "delayed",
+              "closed",
+              "paused",
+              "unavailable",
+              "replay"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "realtime",
+              "delayed-15m",
+              "eod",
+              "fallback",
+              "unavailable"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "not_connected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "source",
+          "quality",
+          "freshness",
+          "state"
+        ],
+        "title": "StatusOptionsOut",
+        "type": "object"
+      },
       "StatusOut": {
         "properties": {
+          "ai_daily": {
+            "$ref": "#/components/schemas/StatusAiDailyOut"
+          },
           "alerts": {
             "$ref": "#/components/schemas/StatusAlertsOut"
           },
@@ -9597,8 +12059,14 @@
             "title": "Gateway",
             "type": "string"
           },
+          "holdings": {
+            "$ref": "#/components/schemas/ImportStateOut"
+          },
           "market": {
             "$ref": "#/components/schemas/StatusMarketOut"
+          },
+          "options": {
+            "$ref": "#/components/schemas/StatusOptionsOut"
           },
           "quotes": {
             "$ref": "#/components/schemas/Stamp"
@@ -9623,7 +12091,10 @@
           "data_sources",
           "streaming_slots",
           "backups",
-          "reconciliation"
+          "reconciliation",
+          "holdings",
+          "options",
+          "ai_daily"
         ],
         "title": "StatusOut",
         "type": "object"
@@ -10088,6 +12559,55 @@
           "hold"
         ],
         "title": "StripRowOut",
+        "type": "object"
+      },
+      "SurpriseOut": {
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "surprise_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surprise Pct"
+          }
+        },
+        "required": [
+          "period",
+          "actual",
+          "estimate",
+          "surprise_pct"
+        ],
+        "title": "SurpriseOut",
         "type": "object"
       },
       "SwingDayListOut": {
@@ -10984,6 +13504,29 @@
         "title": "SymbolSearchOut",
         "type": "object"
       },
+      "TargetRangeOut": {
+        "properties": {
+          "base": {
+            "title": "Base",
+            "type": "number"
+          },
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          }
+        },
+        "required": [
+          "low",
+          "base",
+          "high"
+        ],
+        "title": "TargetRangeOut",
+        "type": "object"
+      },
       "TechnicalsOut": {
         "properties": {
           "as_of": {
@@ -11546,6 +14089,105 @@
         "title": "ThreadTodayOut",
         "type": "object"
       },
+      "TimelineItemOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
+          },
+          "kind": {
+            "enum": [
+              "earnings",
+              "desk_ai",
+              "news",
+              "strategy",
+              "filing",
+              "macro",
+              "consensus"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "title",
+          "detail",
+          "source",
+          "href"
+        ],
+        "title": "TimelineItemOut",
+        "type": "object"
+      },
+      "TimelineOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "TimelineOut",
+        "type": "object"
+      },
+      "TrackRecordOut": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "settled": {
+            "title": "Settled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "settled",
+          "pending"
+        ],
+        "title": "TrackRecordOut",
+        "type": "object"
+      },
       "UniverseCountsOut": {
         "properties": {
           "filter": {
@@ -11897,6 +14539,264 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValuationMethodOut": {
+        "properties": {
+          "fallbacks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
+          "id": {
+            "enum": [
+              "dcf",
+              "owner_earnings",
+              "ev_ebitda",
+              "residual_income"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "inputs",
+          "fallbacks"
+        ],
+        "title": "ValuationMethodOut",
+        "type": "object"
+      },
+      "ValuationOut": {
+        "properties": {
+          "blend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend"
+          },
+          "earnings_reaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EarningsReactionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filing_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing As Of"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/ValuationMethodOut"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          }
+        },
+        "required": [
+          "price",
+          "methods",
+          "blend",
+          "filing_as_of",
+          "earnings_reaction"
+        ],
+        "title": "ValuationOut",
+        "type": "object"
+      },
+      "VerdictInputOut": {
+        "properties": {
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "as_of"
+        ],
+        "title": "VerdictInputOut",
+        "type": "object"
+      },
+      "VerdictOut": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "bear": {
+            "title": "Bear",
+            "type": "string"
+          },
+          "bull": {
+            "title": "Bull",
+            "type": "string"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/VerdictInputOut"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "rating": {
+            "enum": [
+              "buy",
+              "hold",
+              "sell"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risks",
+            "type": "array"
+          },
+          "stale_days": {
+            "title": "Stale Days",
+            "type": "integer"
+          },
+          "target": {
+            "$ref": "#/components/schemas/TargetRangeOut"
+          },
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/VerdictVoteOut"
+            },
+            "title": "Votes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rating",
+          "target",
+          "confidence",
+          "reasons",
+          "risks",
+          "changed",
+          "votes",
+          "bull",
+          "bear",
+          "inputs",
+          "as_of",
+          "stale_days"
+        ],
+        "title": "VerdictOut",
+        "type": "object"
+      },
+      "VerdictVoteOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "signal": {
+            "enum": [
+              "buy",
+              "hold",
+              "sell"
+            ],
+            "title": "Signal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "signal",
+          "score",
+          "reasons"
+        ],
+        "title": "VerdictVoteOut",
+        "type": "object"
+      },
       "VolatilityOut": {
         "properties": {
           "atr14": {
@@ -12212,6 +15112,19 @@
         "title": "WatchlistRename",
         "type": "object"
       },
+      "WatchlistScopeOut": {
+        "properties": {
+          "watchlist_id": {
+            "title": "Watchlist Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "watchlist_id"
+        ],
+        "title": "WatchlistScopeOut",
+        "type": "object"
+      },
       "WatchlistTable": {
         "description": "`GET /api/desk/watchlists/{id}/table`: rows in stored `position` order.",
         "properties": {
@@ -12261,6 +15174,7 @@
         "type": "object"
       },
       "WatchlistTableRow": {
+        "description": "`fundamentals` is a `long_term` list's (02n \u00a7c3 #20): a row of an intraday or swing list leaves it out, so those\nresponses are byte for byte what they were (`SwingOptional`'s rule, whatever the lane).",
         "properties": {
           "asset_type": {
             "enum": [
@@ -12297,6 +15211,16 @@
             ],
             "title": "Freshness",
             "type": "string"
+          },
+          "fundamentals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fundamentals"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "last": {
             "anyOf": [
@@ -13366,6 +16290,59 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/desk/accounts/{account_id}": {
+      "patch": {
+        "description": "Name an account and say what kind it is. The stub stores nothing.",
+        "operationId": "patch_account_api_desk_accounts__account_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Account",
+        "tags": [
+          "holdings"
+        ]
+      }
+    },
     "/api/desk/alert-strategies": {
       "get": {
         "operationId": "list_alert_strategies_api_desk_alert_strategies_get",
@@ -14316,6 +17293,202 @@
         ]
       }
     },
+    "/api/desk/covered-calls/candidates": {
+      "get": {
+        "description": "The top three calls from the latest scan; an empty list with an unavailable chain stamp before option quotes.",
+        "operationId": "candidates_api_desk_covered_calls_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Candidates",
+        "tags": [
+          "covered-calls"
+        ]
+      }
+    },
+    "/api/desk/covered-calls/coverage": {
+      "get": {
+        "description": "Coverable contracts per holding and account, with the reason in words.",
+        "operationId": "coverage_api_desk_covered_calls_coverage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Coverage",
+        "tags": [
+          "covered-calls"
+        ]
+      }
+    },
+    "/api/desk/covered-calls/income": {
+      "get": {
+        "operationId": "income_api_desk_covered_calls_income_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Income",
+        "tags": [
+          "covered-calls"
+        ]
+      }
+    },
+    "/api/desk/covered-calls/short-calls": {
+      "get": {
+        "operationId": "short_calls_api_desk_covered_calls_short_calls_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ShortCallRowOut"
+                  },
+                  "title": "Response Short Calls Api Desk Covered Calls Short Calls Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Short Calls",
+        "tags": [
+          "covered-calls"
+        ]
+      }
+    },
+    "/api/desk/covered-calls/short-calls/{call_id}/roll": {
+      "get": {
+        "description": "Cost to close, roll candidates and the assignment note for one open short call.",
+        "operationId": "roll_api_desk_covered_calls_short_calls__call_id__roll_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Roll",
+        "tags": [
+          "covered-calls"
+        ]
+      }
+    },
     "/api/desk/dashboard": {
       "get": {
         "operationId": "dashboard_api_desk_dashboard_get",
@@ -14354,6 +17527,28 @@
           }
         },
         "summary": "Dashboard",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/desk/dashboard/fundamental": {
+      "get": {
+        "description": "The Fundamental Today screen's one aggregate read (02n \u00a7c3 #1). Contract-first: `DESK_FUNDAMENTAL_STUB=1` answers\nfrom the invented world, otherwise 503 until the real service lands.",
+        "operationId": "dashboard_fundamental_api_desk_dashboard_fundamental_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardFundamentalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard Fundamental",
         "tags": [
           "dashboard"
         ]
@@ -14837,6 +18032,110 @@
         ]
       }
     },
+    "/api/desk/fundamental-alerts": {
+      "get": {
+        "operationId": "list_alerts_api_desk_fundamental_alerts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FundamentalAlertOut"
+                  },
+                  "title": "Response List Alerts Api Desk Fundamental Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "fundamental-alerts"
+        ]
+      }
+    },
+    "/api/desk/fundamental-alerts/{template}": {
+      "put": {
+        "operationId": "put_alert_api_desk_fundamental_alerts__template__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "enum": [
+                "covered_call_income",
+                "short_call_risk",
+                "ai_daily_view"
+              ],
+              "title": "Template",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FundamentalAlertPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundamentalAlertOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Alert",
+        "tags": [
+          "fundamental-alerts"
+        ]
+      }
+    },
+    "/api/desk/futures/readings": {
+      "get": {
+        "description": "ES, NQ, CL and GC rows (front contract, last, week range, roll, expiry) and the week's macro releases (02n\n\u00a7c3 #11). Contract-first: `DESK_FUNDAMENTAL_STUB=1` answers from the invented world, otherwise 503 until the real\nservice lands.",
+        "operationId": "futures_readings_api_desk_futures_readings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FuturesReadingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Futures Readings",
+        "tags": [
+          "futures"
+        ]
+      }
+    },
     "/api/desk/futures/specs": {
       "get": {
         "operationId": "futures_specs_api_desk_futures_specs_get",
@@ -14859,6 +18158,124 @@
         "summary": "Futures Specs",
         "tags": [
           "futures"
+        ]
+      }
+    },
+    "/api/desk/holdings": {
+      "get": {
+        "description": "Import state, accounts, totals, one row per held symbol and the option lots.",
+        "operationId": "list_holdings_api_desk_holdings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Holdings",
+        "tags": [
+          "holdings"
+        ]
+      }
+    },
+    "/api/desk/holdings/import": {
+      "post": {
+        "description": "Run the Flex import now. Idempotent per statement date. The stub starts nothing and says it is running.",
+        "operationId": "run_import_api_desk_holdings_import_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "An import ran in the last 60 seconds (Flex allows 10 requests a minute)"
+          }
+        },
+        "summary": "Run Import",
+        "tags": [
+          "holdings"
+        ]
+      }
+    },
+    "/api/desk/holdings/{symbol}/lots": {
+      "get": {
+        "description": "The tax lots and the open short calls of one symbol.",
+        "operationId": "list_lots_api_desk_holdings__symbol__lots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lots",
+        "tags": [
+          "holdings"
         ]
       }
     },
@@ -16674,6 +20091,231 @@
         "summary": "Get Universe Days",
         "tags": [
           "replay"
+        ]
+      }
+    },
+    "/api/desk/research/brief": {
+      "get": {
+        "description": "Every analyzed stock after the close, the run summary and the track-record counts.",
+        "operationId": "brief_api_desk_research_brief_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Brief",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/api/desk/research/symbols/{symbol}": {
+      "get": {
+        "operationId": "research_api_desk_research_symbols__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/api/desk/research/symbols/{symbol}/timeline": {
+      "get": {
+        "operationId": "timeline_api_desk_research_symbols__symbol__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "earnings",
+                    "desk_ai",
+                    "news",
+                    "strategy",
+                    "filing",
+                    "macro",
+                    "consensus"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/api/desk/research/symbols/{symbol}/valuation": {
+      "get": {
+        "operationId": "valuation_api_desk_research_symbols__symbol__valuation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValuationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Valuation",
+        "tags": [
+          "research"
         ]
       }
     },

@@ -1,0 +1,69 @@
+{
+ "consensus": {
+  "fiscal_years": [
+   {
+    "analysts": 36,
+    "eps_estimate": 10.8,
+    "period": "FY2026"
+   },
+   {
+    "analysts": 34,
+    "eps_estimate": 11.25,
+    "period": "FY2027"
+   }
+  ],
+  "next_earnings": {
+   "date": "2027-01-20",
+   "timing": "after close"
+  },
+  "quarters": [
+   {
+    "analysts": 31,
+    "eps_estimate": 2.81,
+    "period": "Q4 2026"
+   },
+   {
+    "analysts": 29,
+    "eps_estimate": 2.9,
+    "period": "Q1 2027"
+   }
+  ],
+  "revisions": {
+   "d30": null,
+   "d7": null,
+   "d90": null
+  },
+  "surprises": [
+   {
+    "actual": 2.87,
+    "estimate": 2.81,
+    "period": "Q3 2026",
+    "surprise_pct": 2.0
+   },
+   {
+    "actual": 2.78,
+    "estimate": 2.81,
+    "period": "Q2 2026",
+    "surprise_pct": -1.0
+   }
+  ]
+ },
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "symbol": "JNJ",
+ "targets": {
+  "counts": {
+   "buy": 24,
+   "hold": 9,
+   "sell": 2
+  },
+  "high": 221.81,
+  "low": 134.73,
+  "mean": 184.02
+ },
+ "verdict": null
+}

@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/desk/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Account
+         * @description Name an account and say what kind it is. The stub stores nothing.
+         */
+        patch: operations["patch_account_api_desk_accounts__account_id__patch"];
+        trace?: never;
+    };
     "/api/desk/alert-strategies": {
         parameters: {
             query?: never;
@@ -219,6 +239,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/covered-calls/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Candidates
+         * @description The top three calls from the latest scan; an empty list with an unavailable chain stamp before option quotes.
+         */
+        get: operations["candidates_api_desk_covered_calls_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/covered-calls/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description Coverable contracts per holding and account, with the reason in words.
+         */
+        get: operations["coverage_api_desk_covered_calls_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/covered-calls/income": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Income */
+        get: operations["income_api_desk_covered_calls_income_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/covered-calls/short-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Short Calls */
+        get: operations["short_calls_api_desk_covered_calls_short_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/covered-calls/short-calls/{call_id}/roll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Roll
+         * @description Cost to close, roll candidates and the assignment note for one open short call.
+         */
+        get: operations["roll_api_desk_covered_calls_short_calls__call_id__roll_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/dashboard": {
         parameters: {
             query?: never;
@@ -228,6 +342,27 @@ export interface paths {
         };
         /** Dashboard */
         get: operations["dashboard_api_desk_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/dashboard/fundamental": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard Fundamental
+         * @description The Fundamental Today screen's one aggregate read (02n §c3 #1). Contract-first: `DESK_FUNDAMENTAL_STUB=1` answers
+         *     from the invented world, otherwise 503 until the real service lands.
+         */
+        get: operations["dashboard_fundamental_api_desk_dashboard_fundamental_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -348,6 +483,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/fundamental-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts */
+        get: operations["list_alerts_api_desk_fundamental_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/fundamental-alerts/{template}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Alert */
+        put: operations["put_alert_api_desk_fundamental_alerts__template__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/futures/readings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Futures Readings
+         * @description ES, NQ, CL and GC rows (front contract, last, week range, roll, expiry) and the week's macro releases (02n
+         *     §c3 #11). Contract-first: `DESK_FUNDAMENTAL_STUB=1` answers from the invented world, otherwise 503 until the real
+         *     service lands.
+         */
+        get: operations["futures_readings_api_desk_futures_readings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/futures/specs": {
         parameters: {
             query?: never;
@@ -357,6 +548,66 @@ export interface paths {
         };
         /** Futures Specs */
         get: operations["futures_specs_api_desk_futures_specs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Holdings
+         * @description Import state, accounts, totals, one row per held symbol and the option lots.
+         */
+        get: operations["list_holdings_api_desk_holdings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/holdings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Import
+         * @description Run the Flex import now. Idempotent per statement date. The stub starts nothing and says it is running.
+         */
+        post: operations["run_import_api_desk_holdings_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/holdings/{symbol}/lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Lots
+         * @description The tax lots and the open short calls of one symbol.
+         */
+        get: operations["list_lots_api_desk_holdings__symbol__lots_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -990,6 +1241,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/research/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brief
+         * @description Every analyzed stock after the close, the run summary and the track-record counts.
+         */
+        get: operations["brief_api_desk_research_brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/research/symbols/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Research */
+        get: operations["research_api_desk_research_symbols__symbol__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/research/symbols/{symbol}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Timeline */
+        get: operations["timeline_api_desk_research_symbols__symbol__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/research/symbols/{symbol}/valuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Valuation */
+        get: operations["valuation_api_desk_research_symbols__symbol__valuation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/screener/filters": {
         parameters: {
             query?: never;
@@ -1408,6 +1730,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountOut */
+        AccountOut: {
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "taxable" | "ira" | "roth";
+        };
+        /**
+         * AccountPatch
+         * @description `PATCH /accounts/{id}`: the owner names an account and says what kind it is (the assignment note and the tax
+         *     flags follow the type).
+         */
+        AccountPatch: {
+            /** Label */
+            label?: string | null;
+            /** Type */
+            type?: ("taxable" | "ira" | "roth") | null;
+        };
         /** AdherenceCheckOut */
         AdherenceCheckOut: {
             /** Applicable */
@@ -1496,6 +1841,18 @@ export interface components {
             stamp: components["schemas"]["Stamp"];
             /** Strip */
             strip?: components["schemas"]["StripRowOut"][] | null;
+        };
+        /** AiContextOut */
+        AiContextOut: {
+            /** Note */
+            note: string | null;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "buy" | "hold" | "sell";
+            /** Target Base */
+            target_base: number;
         };
         /** AlertLogOut */
         AlertLogOut: {
@@ -1809,6 +2166,16 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** AnalystTargetsOut */
+        AnalystTargetsOut: {
+            counts: components["schemas"]["RatingCountsOut"];
+            /** High */
+            high: number | null;
+            /** Low */
+            low: number | null;
+            /** Mean */
+            mean: number | null;
+        };
         /** ArmedItem */
         ArmedItem: {
             /** Id */
@@ -1836,6 +2203,30 @@ export interface components {
             source: "alert_strategy" | "filter";
             /** Version Id */
             version_id: number;
+        };
+        /** AssignmentNoteOut */
+        AssignmentNoteOut: {
+            /**
+             * Account Type
+             * @enum {string}
+             */
+            account_type: "taxable" | "ira" | "roth";
+            /** Text */
+            text: string;
+        };
+        /** AssignmentOut */
+        AssignmentOut: {
+            /** Contracts */
+            contracts: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Strike */
+            strike: number;
+            /** Symbol */
+            symbol: string;
         };
         /** BarOut */
         BarOut: {
@@ -1960,6 +2351,55 @@ export interface components {
             /** Vs 50D Avg Pct */
             vs_50d_avg_pct: number | null;
         };
+        /** BriefOut */
+        BriefOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Rows */
+            rows: components["schemas"]["BriefRowOut"][];
+            run: components["schemas"]["BriefRunOut"] | null;
+            track_record: components["schemas"]["TrackRecordOut"];
+        };
+        /** BriefRowOut */
+        BriefRowOut: {
+            /** Confidence */
+            confidence: number;
+            /** Earnings In Days */
+            earnings_in_days: number | null;
+            /** Eps Rev 30D Pct */
+            eps_rev_30d_pct: number | null;
+            /** Prev Rating */
+            prev_rating: ("buy" | "hold" | "sell") | null;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "buy" | "hold" | "sell";
+            /** Stale Days */
+            stale_days: number;
+            /** Symbol */
+            symbol: string;
+            target: components["schemas"]["TargetRangeOut"];
+            /** Upside Pct */
+            upside_pct: number | null;
+        };
+        /** BriefRunOut */
+        BriefRunOut: {
+            /** Analyzed */
+            analyzed: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /**
+             * Ran At
+             * Format: date-time
+             */
+            ran_at: string;
+            /** Skipped */
+            skipped: number;
+        };
         /**
          * CandidateOut
          * @description One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.
@@ -1998,6 +2438,26 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /** CandidatesOut */
+        CandidatesOut: {
+            /** Account Id */
+            account_id: number;
+            ai_context: components["schemas"]["AiContextOut"] | null;
+            /** Candidates */
+            candidates: components["schemas"]["CoveredCallCandidateOut"][];
+            chain_stamp: components["schemas"]["Stamp"];
+            /** Iv History Sessions */
+            iv_history_sessions: number;
+            /** Iv Rank */
+            iv_rank: number | null;
+            /** Opportunity */
+            opportunity: boolean;
+            /** Spot */
+            spot: number | null;
+            spot_stamp: components["schemas"]["Stamp"];
+            /** Symbol */
+            symbol: string;
+        };
         /** CardBackOut */
         CardBackOut: {
             /** Atr Pct Label */
@@ -2022,6 +2482,91 @@ export interface components {
             symbol: string;
             /** Timeframe */
             timeframe: string;
+        };
+        /** ConsensusOut */
+        ConsensusOut: {
+            /** Fiscal Years */
+            fiscal_years: components["schemas"]["ConsensusPeriodOut"][];
+            next_earnings: components["schemas"]["NextEarningsOut"] | null;
+            /** Quarters */
+            quarters: components["schemas"]["ConsensusPeriodOut"][];
+            revisions: components["schemas"]["RevisionsOut"];
+            /** Surprises */
+            surprises: components["schemas"]["SurpriseOut"][];
+        };
+        /** ConsensusPeriodOut */
+        ConsensusPeriodOut: {
+            /** Analysts */
+            analysts: number | null;
+            /** Eps Estimate */
+            eps_estimate: number | null;
+            /** Period */
+            period: string;
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /** Cap Pct */
+            cap_pct: number;
+            /** Rows */
+            rows: components["schemas"]["CoverageRowOut"][];
+        };
+        /** CoverageRowOut */
+        CoverageRowOut: {
+            /** Account Id */
+            account_id: number;
+            /** Coverable */
+            coverable: number;
+            /** Open Contracts */
+            open_contracts: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "ok" | "under_one_contract" | "earnings_wait" | "fully_covered" | "no_chain";
+            /** Reason Text */
+            reason_text: string;
+            /** Shares */
+            shares: number;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * CoveredCallCandidateOut
+         * @description The engine's `core.covered_calls.Candidate`, flattened. Yields are fractions (0.16 = 16%); `spread_pct` is a
+         *     percentage of the mid.
+         */
+        CoveredCallCandidateOut: {
+            /** Annualized Yield */
+            annualized_yield: number;
+            /** Ask */
+            ask: number;
+            /** Bid */
+            bid: number;
+            /** Delta */
+            delta: number;
+            /** Dte */
+            dte: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Flags */
+            flags: string[];
+            /** Open Interest */
+            open_interest: number;
+            /** Premium Yield */
+            premium_yield: number;
+            /** Return If Called */
+            return_if_called: number;
+            /** Score */
+            score: number;
+            /** Spread Pct */
+            spread_pct: number;
+            /** Strike */
+            strike: number;
+            /** Upside Cap */
+            upside_cap: number;
         };
         /**
          * CurvePointOut
@@ -2107,6 +2652,45 @@ export interface components {
             /** Timing */
             timing: string;
         };
+        /** DashboardFundamentalEventOut */
+        DashboardFundamentalEventOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "earnings" | "ex_dividend" | "macro";
+            /** Label */
+            label: string;
+            /** Symbol */
+            symbol: string | null;
+        };
+        /** DashboardFundamentalOut */
+        DashboardFundamentalOut: {
+            /** Events */
+            events: components["schemas"]["DashboardFundamentalEventOut"][];
+            /** Feed */
+            feed: components["schemas"]["FeedItemOut"][];
+            income: components["schemas"]["DashboardIncomeOut"];
+            market: components["schemas"]["DashboardMarketOut"];
+            /** Market Strip */
+            market_strip: components["schemas"]["MarketStripTileOut"][];
+            portfolio: components["schemas"]["DashboardPortfolioOut"];
+            stamp: components["schemas"]["Stamp"];
+        };
+        /** DashboardIncomeOut */
+        DashboardIncomeOut: {
+            /** Month To Date */
+            month_to_date: number | null;
+            /** Next Expiry */
+            next_expiry: string | null;
+            /** Open Calls */
+            open_calls: number;
+        };
         /** DashboardMarketOut */
         DashboardMarketOut: {
             /**
@@ -2140,6 +2724,18 @@ export interface components {
             signals: components["schemas"]["DashboardSignalOut"][];
             stamp: components["schemas"]["Stamp"];
             watchlist: components["schemas"]["DashboardWatchlistOut"];
+        };
+        /** DashboardPortfolioOut */
+        DashboardPortfolioOut: {
+            /** Day Change */
+            day_change: number | null;
+            /** Day Change Pct */
+            day_change_pct: number | null;
+            import: components["schemas"]["ImportStateOut"];
+            /** Unrealized Pct */
+            unrealized_pct: number | null;
+            /** Value */
+            value: number | null;
         };
         /** DashboardScreenerMatchOut */
         DashboardScreenerMatchOut: {
@@ -2442,6 +3038,42 @@ export interface components {
              * @enum {string}
              */
             timing: "before open" | "after close";
+        };
+        /** EarningsReactionOut */
+        EarningsReactionOut: {
+            /** Avg Abs Move Pct */
+            avg_abs_move_pct: number;
+            /** Avg Excess Pct */
+            avg_excess_pct: number;
+            beats: components["schemas"]["ReactionBucketOut"];
+            /** Implied Move Pct */
+            implied_move_pct: number | null;
+            misses: components["schemas"]["ReactionBucketOut"];
+            /** Reports */
+            reports: number;
+            /** Series */
+            series: components["schemas"]["ReactionPointOut"][];
+        };
+        /** FeedItemOut */
+        FeedItemOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Detail */
+            detail: string;
+            /** Href */
+            href: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "short_call_risk" | "earnings_soon" | "ex_dividend" | "cc_opportunity" | "ai_change" | "import";
+            /** Symbol */
+            symbol: string | null;
+            /** Title */
+            title: string;
         };
         /**
          * FeedOut
@@ -2794,6 +3426,118 @@ export interface components {
             /** V */
             v: number;
         };
+        /** FundamentalAlertOut */
+        FundamentalAlertOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Rules */
+            rules: {
+                [key: string]: number | boolean;
+            };
+            /** Scope */
+            scope: "holdings" | components["schemas"]["WatchlistScopeOut"];
+            /** Strategy Id */
+            strategy_id: number | null;
+            /**
+             * Template
+             * @enum {string}
+             */
+            template: "covered_call_income" | "short_call_risk" | "ai_daily_view";
+        };
+        /**
+         * FundamentalAlertPut
+         * @description `PUT /fundamental-alerts/{template}`: whatever is sent changes, the rest stays; a change saves a new strategy
+         *     version.
+         */
+        FundamentalAlertPut: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Rules */
+            rules?: {
+                [key: string]: number | boolean;
+            } | null;
+            /** Scope */
+            scope?: "holdings" | components["schemas"]["WatchlistScopeOut"] | null;
+        };
+        /**
+         * Fundamentals
+         * @description 02n §c4: the metric keys a holdings row, a `long_term` watchlist row and the `Columns` menu share. Numbers or
+         *     null, never NaN; a date or a rating where the key says so.
+         */
+        Fundamentals: {
+            /** Ai Rating */
+            ai_rating?: ("buy" | "hold" | "sell") | null;
+            /** Ai Target Base */
+            ai_target_base?: number | null;
+            /** Ai Upside Pct */
+            ai_upside_pct?: number | null;
+            /** Cc Coverable */
+            cc_coverable?: number | null;
+            /** Debt To Equity */
+            debt_to_equity?: number | null;
+            /** Dist To 252D High Pct */
+            dist_to_252d_high_pct?: number | null;
+            /** Dividend Yield Pct */
+            dividend_yield_pct?: number | null;
+            /** Eps Rev 30D Pct */
+            eps_rev_30d_pct?: number | null;
+            /** Eps Rev 7D Pct */
+            eps_rev_7d_pct?: number | null;
+            /** Eps Rev 90D Pct */
+            eps_rev_90d_pct?: number | null;
+            /** Ex Dividend */
+            ex_dividend?: string | null;
+            /** Fcf Yield Pct */
+            fcf_yield_pct?: number | null;
+            /** Fwd Pe */
+            fwd_pe?: number | null;
+            /** Gain Vs Cost Pct */
+            gain_vs_cost_pct?: number | null;
+            /** Next Earnings */
+            next_earnings?: string | null;
+            /** Pe Vs 5Y Median Pct */
+            pe_vs_5y_median_pct?: number | null;
+            /** Revenue Growth Yoy Pct */
+            revenue_growth_yoy_pct?: number | null;
+            /** Weight Pct */
+            weight_pct?: number | null;
+        };
+        /** FuturesReadingOut */
+        FuturesReadingOut: {
+            /** Change Pct */
+            change_pct: number | null;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Front */
+            front: string;
+            /** Last */
+            last: number | null;
+            /**
+             * Next Roll
+             * Format: date
+             */
+            next_roll: string;
+            /**
+             * Root
+             * @enum {string}
+             */
+            root: "/ES" | "/NQ" | "/CL" | "/GC";
+            stamp: components["schemas"]["Stamp"];
+            /** Week High */
+            week_high: number | null;
+            /** Week Low */
+            week_low: number | null;
+        };
+        /** FuturesReadingsOut */
+        FuturesReadingsOut: {
+            /** Macro Week */
+            macro_week: components["schemas"]["MacroReleaseOut"][];
+            /** Rows */
+            rows: components["schemas"]["FuturesReadingOut"][];
+        };
         /** FuturesSpecOut */
         FuturesSpecOut: {
             /** Approx Margin */
@@ -2901,6 +3645,65 @@ export interface components {
             /** Unrealized Usd */
             unrealized_usd: number | null;
         };
+        /** HoldingRowOut */
+        HoldingRowOut: {
+            /** Account Ids */
+            account_ids: number[];
+            /** Ai Rating */
+            ai_rating: ("buy" | "hold" | "sell") | null;
+            /** Avg Cost */
+            avg_cost: number;
+            /** Change Pct */
+            change_pct: number | null;
+            /** Coverable Contracts */
+            coverable_contracts: number;
+            fundamentals: components["schemas"]["Fundamentals"];
+            /** Last */
+            last: number | null;
+            /** Market Value */
+            market_value: number | null;
+            /** Name */
+            name: string;
+            /** Next Earnings */
+            next_earnings: string | null;
+            /** Open Calls */
+            open_calls: number;
+            /** Shares */
+            shares: number;
+            stamp: components["schemas"]["Stamp"];
+            /** Symbol */
+            symbol: string;
+            /** Unrealized Pct */
+            unrealized_pct: number | null;
+            /** Weight Pct */
+            weight_pct: number | null;
+        };
+        /** HoldingsOut */
+        HoldingsOut: {
+            /** Accounts */
+            accounts: components["schemas"]["AccountOut"][];
+            import: components["schemas"]["ImportStateOut"];
+            /** Option Lots */
+            option_lots: components["schemas"]["OptionLotOut"][];
+            /** Rows */
+            rows: components["schemas"]["HoldingRowOut"][];
+            totals: components["schemas"]["HoldingsTotalsOut"];
+        };
+        /** HoldingsTotalsOut */
+        HoldingsTotalsOut: {
+            /** Cost */
+            cost: number | null;
+            /** Day Change */
+            day_change: number | null;
+            /** Day Change Pct */
+            day_change_pct: number | null;
+            /** Market Value */
+            market_value: number | null;
+            /** Unrealized */
+            unrealized: number | null;
+            /** Unrealized Pct */
+            unrealized_pct: number | null;
+        };
         /**
          * HoldsOut
          * @description The thread's holds. Open ones are marked at the LAST ENDED day's close, never later (`as_of_day_no`).
@@ -2914,6 +3717,61 @@ export interface components {
             label: string;
             /** Thread Id */
             thread_id: number;
+        };
+        /**
+         * ImportOut
+         * @description `POST /holdings/import` answers 202 with the running state.
+         */
+        ImportOut: {
+            import: components["schemas"]["ImportStateOut"];
+        };
+        /** ImportStateOut */
+        ImportStateOut: {
+            /**
+             * Account Scope
+             * @enum {string}
+             */
+            account_scope: "data" | "main_interim";
+            /** Imported At */
+            imported_at: string | null;
+            /** Lots */
+            lots: number;
+            /**
+             * Source
+             * @constant
+             */
+            source: "ibkr_flex";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ok" | "running" | "failed" | "not_configured" | "none";
+            /** Statement Date */
+            statement_date: string | null;
+        };
+        /** IncomeMonthOut */
+        IncomeMonthOut: {
+            /** Contracts */
+            contracts: number;
+            /** Month */
+            month: string;
+            /** Premium */
+            premium: number;
+        };
+        /** IncomeOut */
+        IncomeOut: {
+            /** Assignments */
+            assignments: components["schemas"]["AssignmentOut"][];
+            /** By Month */
+            by_month: components["schemas"]["IncomeMonthOut"][];
+            source_stamp: components["schemas"]["Stamp"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ok" | "needs_trades";
+            /** Ytd Premium */
+            ytd_premium: number | null;
         };
         /**
          * JournalOut
@@ -3256,6 +4114,36 @@ export interface components {
              */
             source: "desk";
         };
+        /** LotOut */
+        LotOut: {
+            /** Account Id */
+            account_id: number;
+            /**
+             * Acquired
+             * Format: date
+             */
+            acquired: string;
+            /** Cost Per Share */
+            cost_per_share: number;
+            /** Gain Pct */
+            gain_pct: number | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Term
+             * @enum {string}
+             */
+            term: "short" | "long";
+        };
+        /** LotsOut */
+        LotsOut: {
+            /** Lots */
+            lots: components["schemas"]["LotOut"][];
+            /** Short Calls */
+            short_calls: components["schemas"]["ShortCallRowOut"][];
+            /** Symbol */
+            symbol: string;
+        };
         /** MacdOut */
         MacdOut: {
             /** Histogram */
@@ -3264,6 +4152,18 @@ export interface components {
             line: number | null;
             /** Signal */
             signal: number | null;
+        };
+        /** MacroReleaseOut */
+        MacroReleaseOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Release */
+            release: string;
+            /** Series Id */
+            series_id: string;
         };
         /** MarkOut */
         MarkOut: {
@@ -3372,6 +4272,16 @@ export interface components {
             /** Vwap Close */
             vwap_close?: number | null;
         };
+        /** NextEarningsOut */
+        NextEarningsOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Timing */
+            timing: string;
+        };
         /**
          * OpenNextOut
          * @description `day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every
@@ -3415,6 +4325,29 @@ export interface components {
             trade_no: number;
             /** Unrealized Usd */
             unrealized_usd: number;
+        };
+        /** OptionLotOut */
+        OptionLotOut: {
+            /** Account Id */
+            account_id: number;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Id */
+            id: number;
+            /**
+             * Right
+             * @enum {string}
+             */
+            right: "C" | "P";
+            /** Strike */
+            strike: number;
+            /** Symbol */
+            symbol: string;
         };
         /**
          * PaceOut
@@ -3863,6 +4796,34 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** RatingCountsOut */
+        RatingCountsOut: {
+            /** Buy */
+            buy: number;
+            /** Hold */
+            hold: number;
+            /** Sell */
+            sell: number;
+        };
+        /** ReactionBucketOut */
+        ReactionBucketOut: {
+            /** Avg Excess Pct */
+            avg_excess_pct: number | null;
+            /** N */
+            n: number;
+        };
+        /** ReactionPointOut */
+        ReactionPointOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Excess Pct */
+            excess_pct: number;
+            /** Move Pct */
+            move_pct: number;
+        };
         /**
          * RelistOfferOut
          * @description The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which
@@ -4206,6 +5167,15 @@ export interface components {
             seq: number;
             universe: components["schemas"]["ListUniverseOut"];
         };
+        /** ResearchOut */
+        ResearchOut: {
+            consensus: components["schemas"]["ConsensusOut"] | null;
+            stamp: components["schemas"]["Stamp"];
+            /** Symbol */
+            symbol: string;
+            targets: components["schemas"]["AnalystTargetsOut"] | null;
+            verdict: components["schemas"]["VerdictOut"] | null;
+        };
         /**
          * ReviewOut
          * @description Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
@@ -4255,6 +5225,42 @@ export interface components {
             symbol: string;
             /** Window End Price */
             window_end_price: number | null;
+        };
+        /** RevisionsOut */
+        RevisionsOut: {
+            /** D30 */
+            d30: number | null;
+            /** D7 */
+            d7: number | null;
+            /** D90 */
+            d90: number | null;
+        };
+        /** RollCandidateOut */
+        RollCandidateOut: {
+            /** Delta */
+            delta: number | null;
+            /** Dte */
+            dte: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Flags */
+            flags: string[];
+            /** Net Credit */
+            net_credit: number;
+            /** Strike */
+            strike: number;
+        };
+        /** RollOut */
+        RollOut: {
+            assignment_note: components["schemas"]["AssignmentNoteOut"];
+            /** Candidates */
+            candidates: components["schemas"]["RollCandidateOut"][];
+            chain_stamp: components["schemas"]["Stamp"];
+            /** Cost To Close */
+            cost_to_close: number | null;
         };
         /** ScreenerFilterCreate */
         ScreenerFilterCreate: {
@@ -4544,6 +5550,45 @@ export interface components {
             /** Chat Id */
             chat_id: string;
         };
+        /** ShortCallRiskOut */
+        ShortCallRiskOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "delta_above_0_50" | "near_strike_near_expiry" | "early_assignment_before_dividend" | "earnings_before_expiry";
+            /** Text */
+            text: string;
+        };
+        /** ShortCallRowOut */
+        ShortCallRowOut: {
+            /** Account Id */
+            account_id: number;
+            /** Contracts */
+            contracts: number;
+            /** Delta */
+            delta: number | null;
+            /** Dte */
+            dte: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Id */
+            id: number;
+            /** Moneyness Pct */
+            moneyness_pct: number | null;
+            /** Risks */
+            risks: components["schemas"]["ShortCallRiskOut"][];
+            /** Spot */
+            spot: number | null;
+            stamp: components["schemas"]["Stamp"];
+            /** Strike */
+            strike: number;
+            /** Symbol */
+            symbol: string;
+        };
         /** SignalOut */
         SignalOut: {
             /**
@@ -4645,6 +5690,16 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /** StatusAiDailyOut */
+        StatusAiDailyOut: {
+            /** Last Run At */
+            last_run_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "not_started" | "ok" | "partial" | "failed";
+        };
         /** StatusAlertsOut */
         StatusAlertsOut: {
             /**
@@ -4673,8 +5728,31 @@ export interface components {
              */
             session: "pre" | "regular" | "after" | "closed";
         };
+        /** StatusOptionsOut */
+        StatusOptionsOut: {
+            /** As Of */
+            as_of: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "live" | "delayed" | "closed" | "paused" | "unavailable" | "replay";
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable";
+            /** Source */
+            source: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "not_connected";
+        };
         /** StatusOut */
         StatusOut: {
+            ai_daily: components["schemas"]["StatusAiDailyOut"];
             alerts: components["schemas"]["StatusAlertsOut"];
             /** Backups */
             backups: null;
@@ -4688,7 +5766,9 @@ export interface components {
              * @enum {string}
              */
             gateway: "not_configured" | "connected" | "reconnecting" | "down";
+            holdings: components["schemas"]["ImportStateOut"];
             market: components["schemas"]["StatusMarketOut"];
+            options: components["schemas"]["StatusOptionsOut"];
             quotes: components["schemas"]["Stamp"];
             /** Reconciliation */
             reconciliation: null;
@@ -4853,6 +5933,17 @@ export interface components {
             source: "hold" | "focus";
             /** Symbol */
             symbol: string;
+        };
+        /** SurpriseOut */
+        SurpriseOut: {
+            /** Actual */
+            actual: number | null;
+            /** Estimate */
+            estimate: number | null;
+            /** Period */
+            period: string;
+            /** Surprise Pct */
+            surprise_pct: number | null;
         };
         /**
          * SwingDayListOut
@@ -5200,6 +6291,15 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /** TargetRangeOut */
+        TargetRangeOut: {
+            /** Base */
+            base: number;
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
         /** TechnicalsOut */
         TechnicalsOut: {
             /** As Of */
@@ -5382,6 +6482,43 @@ export interface components {
              */
             weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
         };
+        /** TimelineItemOut */
+        TimelineItemOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Detail */
+            detail: string;
+            /** Href */
+            href: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "earnings" | "desk_ai" | "news" | "strategy" | "filing" | "macro" | "consensus";
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
+        };
+        /** TimelineOut */
+        TimelineOut: {
+            /** Items */
+            items: components["schemas"]["TimelineItemOut"][];
+            /** Total */
+            total: number;
+        };
+        /** TrackRecordOut */
+        TrackRecordOut: {
+            /** Calls */
+            calls: number;
+            /** Pending */
+            pending: number;
+            /** Settled */
+            settled: number;
+        };
         /** UniverseCountsOut */
         UniverseCountsOut: {
             /** Filter */
@@ -5509,6 +6646,90 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** ValuationMethodOut */
+        ValuationMethodOut: {
+            /** Fallbacks */
+            fallbacks: string[];
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "dcf" | "owner_earnings" | "ev_ebitda" | "residual_income";
+            /** Inputs */
+            inputs: {
+                [key: string]: number | null;
+            };
+            /** Value */
+            value: number | null;
+        };
+        /** ValuationOut */
+        ValuationOut: {
+            /** Blend */
+            blend: number | null;
+            earnings_reaction: components["schemas"]["EarningsReactionOut"] | null;
+            /** Filing As Of */
+            filing_as_of: string | null;
+            /** Methods */
+            methods: components["schemas"]["ValuationMethodOut"][];
+            /** Price */
+            price: number | null;
+        };
+        /** VerdictInputOut */
+        VerdictInputOut: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Name */
+            name: string;
+        };
+        /** VerdictOut */
+        VerdictOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Bear */
+            bear: string;
+            /** Bull */
+            bull: string;
+            /** Changed */
+            changed: string;
+            /** Confidence */
+            confidence: number;
+            /** Inputs */
+            inputs: components["schemas"]["VerdictInputOut"][];
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "buy" | "hold" | "sell";
+            /** Reasons */
+            reasons: string[];
+            /** Risks */
+            risks: string[];
+            /** Stale Days */
+            stale_days: number;
+            target: components["schemas"]["TargetRangeOut"];
+            /** Votes */
+            votes: components["schemas"]["VerdictVoteOut"][];
+        };
+        /** VerdictVoteOut */
+        VerdictVoteOut: {
+            /** Name */
+            name: string;
+            /** Reasons */
+            reasons: string[];
+            /** Score */
+            score: number;
+            /**
+             * Signal
+             * @enum {string}
+             */
+            signal: "buy" | "hold" | "sell";
+        };
         /** VolatilityOut */
         VolatilityOut: {
             /** Atr14 */
@@ -5622,6 +6843,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** WatchlistScopeOut */
+        WatchlistScopeOut: {
+            /** Watchlist Id */
+            watchlist_id: number;
+        };
         /**
          * WatchlistTable
          * @description `GET /api/desk/watchlists/{id}/table`: rows in stored `position` order.
@@ -5641,7 +6867,11 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** WatchlistTableRow */
+        /**
+         * WatchlistTableRow
+         * @description `fundamentals` is a `long_term` list's (02n §c3 #20): a row of an intraday or swing list leaves it out, so those
+         *     responses are byte for byte what they were (`SwingOptional`'s rule, whatever the lane).
+         */
         WatchlistTableRow: {
             /**
              * Asset Type
@@ -5657,6 +6887,7 @@ export interface components {
              * @enum {string}
              */
             freshness: "live" | "delayed" | "closed" | "paused" | "unavailable" | "replay";
+            fundamentals?: components["schemas"]["Fundamentals"] | null;
             /** Last */
             last: number | null;
             /** Name */
@@ -5977,6 +7208,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    patch_account_api_desk_accounts__account_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_alert_strategies_api_desk_alert_strategies_get: {
         parameters: {
             query?: {
@@ -6463,6 +7729,140 @@ export interface operations {
             };
         };
     };
+    candidates_api_desk_covered_calls_candidates_get: {
+        parameters: {
+            query: {
+                symbol: string;
+                account_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidatesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_api_desk_covered_calls_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageOut"];
+                };
+            };
+        };
+    };
+    income_api_desk_covered_calls_income_get: {
+        parameters: {
+            query?: {
+                months?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncomeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    short_calls_api_desk_covered_calls_short_calls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortCallRowOut"][];
+                };
+            };
+        };
+    };
+    roll_api_desk_covered_calls_short_calls__call_id__roll_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RollOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dashboard_api_desk_dashboard_get: {
         parameters: {
             query?: {
@@ -6490,6 +7890,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_fundamental_api_desk_dashboard_fundamental_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardFundamentalOut"];
                 };
             };
         };
@@ -6757,6 +8177,81 @@ export interface operations {
             };
         };
     };
+    list_alerts_api_desk_fundamental_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundamentalAlertOut"][];
+                };
+            };
+        };
+    };
+    put_alert_api_desk_fundamental_alerts__template__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template: "covered_call_income" | "short_call_risk" | "ai_daily_view";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FundamentalAlertPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundamentalAlertOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    futures_readings_api_desk_futures_readings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FuturesReadingsOut"];
+                };
+            };
+        };
+    };
     futures_specs_api_desk_futures_specs_get: {
         parameters: {
             query?: never;
@@ -6773,6 +8268,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FuturesSpecOut"][];
+                };
+            };
+        };
+    };
+    list_holdings_api_desk_holdings_get: {
+        parameters: {
+            query?: {
+                account_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_import_api_desk_holdings_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportOut"];
+                };
+            };
+            /** @description An import ran in the last 60 seconds (Flex allows 10 requests a minute) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_lots_api_desk_holdings__symbol__lots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7894,6 +9478,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UniverseDaysOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    brief_api_desk_research_brief_get: {
+        parameters: {
+            query?: {
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_api_desk_research_symbols__symbol__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_api_desk_research_symbols__symbol__timeline_get: {
+        parameters: {
+            query?: {
+                kind?: ("earnings" | "desk_ai" | "news" | "strategy" | "filing" | "macro" | "consensus") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    valuation_api_desk_research_symbols__symbol__valuation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuationOut"];
                 };
             };
             /** @description Validation Error */
