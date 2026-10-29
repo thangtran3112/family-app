@@ -11,8 +11,8 @@
 
 .opportunity { margin: 0; border: 1px solid var(--color-up); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 
-.flagsCell { display: inline-block; max-width: 120px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
-.riskCell { display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+.flagsCell { display: inline-block; max-width: 44px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+.riskCell { display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
 .strong { font-weight: var(--weight-bold); }
 
 .notes { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
@@ -40,3 +40,10 @@
 .assignments { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--text-label); }
 .assignments li { display: flex; gap: var(--space-3); min-height: 24px; align-items: center; }
 .total { margin: 0; font-size: var(--text-label); }
+
+/* The 13-column candidates table runs edge to edge inside its panel so it fits the 1440 centre without scrolling; the flags are spelled out under it. */
+.tableBleed { margin-inline: calc(-1 * var(--space-4)); }
+/* !important beats DenseTable's own compact padding, which has higher specificity. */
+.tableBleed :is(th, td) { padding-inline: 4px !important; }
+.tableBleed :is(th, td):first-child { padding-left: var(--space-4) !important; }
+.tableBleed :is(th, td):last-child { padding-right: var(--space-4) !important; }

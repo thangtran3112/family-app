@@ -67,9 +67,12 @@ export async function mockFundamental(
   );
 }
 
-/** Put the browser's lane on Fundamental before the page loads (the lane lives in localStorage, `lib/lanes.ts`). */
+/** Put the browser's lane on Fundamental before the first page loads (the lane lives in localStorage, `lib/lanes.ts`); a lane the
+ * person chose later stays, because the script only fills an empty slot on every later load. */
 export async function startInFundamental(page: Page) {
-  await page.addInitScript(() => window.localStorage.setItem("desk.lane", "fundamental"));
+  await page.addInitScript(() => {
+    if (window.localStorage.getItem("desk.lane") === null) window.localStorage.setItem("desk.lane", "fundamental");
+  });
 }
 
 /** The text of the page's main content region. */

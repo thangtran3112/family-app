@@ -68,7 +68,9 @@ export function CandidatesPanel({ row, accountName }: { row: Pick<CoverageRow, "
             <p className={styles.notice} role="status" data-testid="fund-cc-nomatch">{NO_MATCH_TEXT}</p>
           ) : (
             <>
-              <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" />
+              <div className={local.tableBleed}>
+                <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" />
+              </div>
               {flags.length > 0 && (
                 <ul className={local.notes} aria-label="What the flags mean">
                   {flags.map((flag) => <li key={flag}>{flagText(flag)}</li>)}
