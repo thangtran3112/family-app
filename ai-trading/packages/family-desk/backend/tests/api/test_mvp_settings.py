@@ -116,6 +116,43 @@ def test_unknown_keys_are_still_kept_next_to_the_new_ones(client):
     assert client.get("/api/desk/settings", headers=auth_headers(OWNER_EMAIL)).json() == {"settings": body}
 
 
+# --- Fundamental keys (02n §c3 #19) ---------------------------------------------------------------
+
+
+def test_the_fundamental_keys_round_trip(client):
+    body = {
+        "mask_values": False,
+        "fundamental_columns": ["fwd_pe", "cc_coverable"],
+        "covered_calls": {"min_dte": 14, "max_dte": 60, "cap_pct": 25},
+    }
+
+    assert _put_settings(client, body).status_code == 200
+    assert client.get("/api/desk/settings", headers=auth_headers(OWNER_EMAIL)).json() == {"settings": body}
+
+
+@pytest.mark.parametrize(
+    ("settings", "problems"),
+    [
+        ({"mask_values": "yes"}, [{"path": "mask_values", "message": "must be true or false"}]),
+        ({"fundamental_columns": ["rsi"]}, [{"path": "fundamental_columns", "message": "unknown metric: rsi"}]),
+        (
+            {"covered_calls": {"min_dte": 50, "max_dte": 30}},
+            [{"path": "covered_calls.max_dte", "message": "must not be below min_dte"}],
+        ),
+        (
+            {"covered_calls": {"cap_pct": 0}},
+            [{"path": "covered_calls.cap_pct", "message": "must be between 1 and 100"}],
+        ),
+    ],
+)
+def test_a_bad_fundamental_key_is_a_422_with_problems_and_nothing_is_stored(client, settings, problems):
+    response = _put_settings(client, settings)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": {"problems": problems}}
+    assert client.get("/api/desk/settings", headers=auth_headers(OWNER_EMAIL)).json() == {"settings": {}}
+
+
 # --- channels (a3.8): GET shape ---------------------------------------------------------------
 
 

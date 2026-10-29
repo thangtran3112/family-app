@@ -139,6 +139,24 @@ def test_short_call_risk_rules():
     assert extrinsic_value(5.30, 104.0, 100.0) == 1.3
 
 
+def test_short_call_risks_without_option_quotes_fire_only_the_date_and_strike_rules():
+    # 02n §e: before any option quote exists delta and extrinsic are unknown; unknown data never fires a rule.
+    short = ShortCall(expiry=TODAY + timedelta(days=7), strike=100.0, contracts=2)
+    common = {"today": TODAY, "next_trading_day": TODAY + timedelta(days=1)}
+    assert short_call_risks(short, spot=98.0, **common) == ["near_strike_near_expiry"]
+    assert short_call_risks(short, spot=130.0, **common) == []  # deep in the money: the delta rule would fire, unknown
+    dividend = {"ex_dividend": TODAY + timedelta(days=1), "dividend": 0.26}
+    assert short_call_risks(short, spot=130.0, **common, **dividend) == []  # extrinsic unknown: no early-assignment
+    assert short_call_risks(short, spot=130.0, earnings=TODAY + timedelta(days=3), **common) == [
+        "earnings_before_expiry"
+    ]
+    # With the quotes the same call fires the quote rules again.
+    assert short_call_risks(short, spot=130.0, delta=0.9, extrinsic=0.1, **common, **dividend) == [
+        "delta_above_0_50",
+        "early_assignment_before_dividend",
+    ]
+
+
 def test_roll_candidates():
     short = ShortCall(expiry=TODAY + timedelta(days=5), strike=100.0, contracts=1)
     quotes = [
