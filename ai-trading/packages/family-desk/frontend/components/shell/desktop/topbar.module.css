@@ -478,3 +478,32 @@
 /* The top-bar badge during a replay (02o §a1): amber, never Live or Delayed. */
 .replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bar[data-band] .replayBadge { max-width: none; }
+
+/* Fundamental lane: the masking switch (02n §b1). */
+.maskToggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0 var(--space-3);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.maskToggle:hover {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
+.maskToggle[aria-pressed="true"] {
+  border-color: var(--color-amber);
+  color: var(--color-text);
+}

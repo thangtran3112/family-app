@@ -9,6 +9,7 @@ import styles from "./interstitial.module.css";
 export function WrongLaneInterstitial({ pathname }: { pathname: string }) {
   const { setLane } = useDeskUi();
   const target = laneForPath(pathname);
+  if (target === "shared") return null;
   return (
     <section className={styles.panel} aria-labelledby="wrong-lane-title">
       <h1 id="wrong-lane-title" className={styles.title}>{wrongLaneText(LANE_LABEL[target])}</h1>
