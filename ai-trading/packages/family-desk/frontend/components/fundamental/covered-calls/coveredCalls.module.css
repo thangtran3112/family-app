@@ -1,0 +1,42 @@
+/* Covered calls (FD4 Scan, FD5 Open calls & income): only layout that these two views use; the shared look is ../fundamental.module.css. */
+
+.tabLink { display: inline-flex; min-height: 32px; align-items: center; border-bottom: 2px solid transparent; color: var(--color-muted); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+.tabLink:hover { color: var(--color-text); }
+.tabLink[aria-current="page"] { border-bottom-color: var(--color-amber); color: var(--color-text); }
+.tabLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+
+.cap { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
+.stamps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; }
+.stamps > * { margin: 0; }
+
+.opportunity { margin: 0; border: 1px solid var(--color-up); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+
+.flagsCell { display: inline-block; max-width: 120px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+.riskCell { display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+.strong { font-weight: var(--weight-bold); }
+
+.notes { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
+
+.aiNote { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-label); }
+
+.sketch { display: grid; gap: var(--space-1); }
+.chart { width: 100%; max-width: 460px; height: auto; color: var(--color-muted); }
+.chart text { fill: var(--color-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart .axis { stroke: var(--color-hairline); stroke-width: 1; }
+.chart .grid { stroke: var(--color-hairline); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .spot { stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.chart .line { fill: none; stroke: var(--color-amber); stroke-width: 2; stroke-linejoin: round; }
+.chart .mark { fill: var(--color-amber); }
+.chart .markText { fill: var(--color-text); }
+.chart .bar { fill: var(--color-amber); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+
+.detail { display: grid; gap: var(--space-3); }
+.detailGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.detailList { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 0 var(--space-4); font-size: var(--text-label); }
+.subTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+
+.assignments { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--text-label); }
+.assignments li { display: flex; gap: var(--space-3); min-height: 24px; align-items: center; }
+.total { margin: 0; font-size: var(--text-label); }
