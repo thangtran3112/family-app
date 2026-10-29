@@ -14,8 +14,18 @@ the `DesktopShell`, the 1440 and 1180 bands, the lane switch, the wrong-lane int
 options feed (OPRA; delayed until the $99 Algo Trader Plus tier is bought, which waits until the products are tested and the
 bugs are fixed); IBKR is only the Flex holdings import (`IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` in Firestore `ai-trading/desk`);
 US futures prices are deferred, so FD6 keeps roll and expiry dates and the macro week and its prices say "futures deferred".
-The registry still has no `option_chain` kind: adding it is an `ai-trading/common` change (step 6), and until then
-`fundamental/sources.py` reports the chain as unavailable.
+The registry's `option_chain` kind (built in step 3c-a) resolves through the delayed `alpaca_options` provider, so
+`fundamental/sources.py` reports the chain `delayed-15m`; it is `not_configured` only while the Alpaca keys are unset.
+
+**Step 3c-b built (2026-10-29): the real services.** With `DESK_FUNDAMENTAL_STUB` off, these 13 of the 20 endpoints answer
+from services: holdings (`GET /holdings`, `/holdings/{symbol}/lots`, `POST /holdings/import`, `PATCH /accounts/{id}`),
+covered calls (coverage, candidates, short calls, roll, income) and research (brief, symbol, valuation, timeline). Four stay
+503 behind the flag: `/dashboard/fundamental`, `/futures/readings` (futures deferred, 02b §4b) and the two fundamental-alert
+routes (step 5 scoring). `/status` reports the real import state and the chain's last read. Covered calls resolve each request
+from the `quotes` kind (spot), the `option_chain` kind (calls, DTE from the user's filters) and the newest Flex statement,
+through `core/covered_calls.py` unchanged; the scan job and its stored scans (`covered_call_scans`, `iv_history`) are step 6,
+so IV rank stays null until 60 sessions of IV history exist. The Desk AI verdict is null and the brief has no rows until step 5.
+The Alpaca key currently answers 401, so live chain calls read `unavailable` until a valid key is set; tests use fixtures.
 
 Inputs read: 02l §b–§d, 02m §a, §c and §e, the R3 persona-split plan (`paper-persona-split-plan.md`, local Hermes run
 `desk-activation-20261020`; its F1–F12 mobile boards are content reference, not layouts), [02g](02g-desk-covered-calls-and-futures-swing-design.md),
@@ -296,17 +306,17 @@ Most math exists (`core/covered_calls.py`, `options_math.py`, `futures.py`, `val
 
 | Module | New or extended | Responsibility | Gate |
 |---|---|---|---|
-| `holdings/flex.py` | new | Flex v3 client: `SendRequest`, then poll `GetStatement` (1 request a second, 10 a minute); XML parse that rejects DTDs and entities (trust boundary); maps `OpenPositions` LOT rows (stocks and options) and, when present, `Trades` rows | now (fixture); live per §e |
-| `holdings/importer.py` | new | idempotent import per (account, statement date): upsert `accounts` by external id, write `holding_imports` and `holding_lots` (and `holding_trades`); assigns the import to the `DESK_FLEX_USER`; hooks into `jobs/premarket.py` and `POST /holdings/import` | now |
-| `holdings/service.py` | new | holdings rows: lots grouped per symbol and account, market value from the latest close (`data/bars.py`), weights, gains, short or long term, coverable contracts | now |
-| `covered_calls/service.py` | new | coverage and reasons (`coverable_contracts`, earnings wait); candidates from the latest stored scan; short-call rows with `short_call_risks`; roll via `roll_candidates`; income and assignments from `holding_trades` | coverage, short calls now; the rest per §e |
+| `holdings/flex.py` | new | Flex v3 client: `SendRequest`, then poll `GetStatement` (1 request a second, 10 a minute); XML parse that rejects DTDs and entities (trust boundary); maps `OpenPositions` LOT rows (stocks and options) and, when present, `Trades` rows | **built 3c-b** (fixture); live per §e |
+| `holdings/importer.py` | new | idempotent import per (account, statement date): upsert `accounts` by external id, write `holding_imports` and `holding_lots` (and `holding_trades`); assigns the import to the `DESK_FLEX_USER`; hooks into `jobs/premarket.py` and `POST /holdings/import` | **built 3c-b** for `POST /holdings/import` (a background task, state in process memory); the `premarket` hook waits for the owner's go on live Flex |
+| `holdings/service.py` | new | holdings rows: lots grouped per symbol and account, market value from the latest close (`data/bars.py`), weights, gains, short or long term, coverable contracts | **built 3c-b** |
+| `covered_calls/service.py` | new | coverage and reasons (`coverable_contracts`, earnings wait); candidates from the latest stored scan; short-call rows with `short_call_risks`; roll via `roll_candidates`; income and assignments from `holding_trades` | **built 3c-b** (candidates, roll and income resolve per request; no stored scan yet) |
 | `covered_calls/scan.py` | new | the 15:30 ET scan job (02c Phase 5): per holding with coverable > 0, fetch the chain through the registry, run `candidates`, store `covered_call_scans`; record IV30 in `iv_history`; evaluate the covered-call income and short-call risk templates into `signals` and the existing outbox | IBKR slot |
 | `core/covered_calls.py` | extended (one change) | `short_call_risks` accepts `delta: float | None` and `extrinsic: float | None` and skips the rules that need them (unknown data never fires a rule, Phase 1 ruling), so the date and strike rules run before option quotes exist | now |
 | `futures/readings.py` | new | ES, NQ, CL, GC rows: front month and roll and expiry dates from `core/futures.py`; last, change, weekly range from the registry `quotes` kind (IBKR slot, 02m §b4); the week's releases from FRED `release_dates` for a fixed series list (CPI, PPI, payrolls, PCE, GDP, retail sales) | dates now; prices IBKR slot |
 | `research/consensus.py` | new | daily snapshot job after 16:30 ET: `consensus_snapshots`, `earnings_results`, `analyst_targets` (02f §4); revisions from the Desk's own snapshots. **Start this first:** 7/30/90-day revisions need that much history | now |
 | `research/fundamentals.py` | new | the §c4 metric row per symbol (SEC facts, consensus, bars) into `symbol_fundamentals`, in `daily_close` for holdings and `long_term` watchlist symbols | now |
-| `research/valuation.py` | new (thin) | `core/valuation.py` and `core/earnings_reaction.py` on stored filings and bars, cached per filing date; implied move from the chain when present | now; implied move IBKR slot |
-| `research/timeline.py` | new | read model over earnings, verdicts, consensus, news, filings, signals (02h §5); no new source | now |
+| `research/valuation.py` | new (thin) | `core/valuation.py` and `core/earnings_reaction.py` on stored filings and bars, cached per filing date; implied move from the chain when present | **built 3c-b**; implied move not built (null) |
+| `research/timeline.py` | new | read model over earnings, verdicts, consensus, news, filings, signals (02h §5); no new source | **built 3c-b** (no `desk_ai` or `macro` items) |
 | `ai/verdict.py`, `ai/votes.py`, `jobs/ai_daily.py` | new | the 17:05 ET Desk AI verdict (02f §5): four votes, one structured call, the code checks, content-hash cache, the stale path, `llm_usage` cost; writes `ai_verdicts` and, on a rating change, `ai_calls` (settlement job later, §f) | step 5 (new dependency, §g) |
 | `alerts/fundamental.py` | new | the three templates' toggles as `strategies` rows with `lane = 'fundamental'` and versions; the scan job and the AI job evaluate them | now (rules fire when their data exists) |
 | `api/holdings.py`, `api/covered_calls.py`, `api/research.py`, `api/fundamental_alerts.py` | new | thin routers per §c | |
@@ -321,9 +331,8 @@ statement date), `holding_lots` (`import_id`, `account_id`, `symbol`, `asset_cla
 `iv30`), `consensus_snapshots`, `earnings_results`, `analyst_targets`, `symbol_fundamentals` (`symbol` PK, `as_of`, `metrics jsonb`),
 `ai_verdicts`, `ai_calls`. `ai_call_outcomes` and backtest tables are not added.
 
-**`ai-trading/common` (02j addendum):** an `option_chain` registry kind (IBKR provider through the Phase 2b client; chain plus
-bid, ask, OI, model delta, IV), and futures roots in the IBKR `quotes` provider (02m §b4 slot). Both are written against recorded
-fixtures now and switched on after the probe.
+**`ai-trading/common` (02j addendum):** an `option_chain` registry kind, **built in step 3c-a** as the delayed Alpaca options
+provider (`alpaca_options`: chain plus bid, ask, OI, model delta, IV); futures roots in a `quotes` provider stay deferred (02b §4b).
 
 ## e. What is available now vs gated on the Monday 2026-10-26 IBKR probe
 
@@ -339,6 +348,11 @@ then move Flex to the data user. "IBKR slot" below means the probe passed and Ph
 | Consensus EPS, targets, earnings dates, revisions (snapshots start now) | **Premium income by month and assignments:** the data user's Flex query with a `Trades` section (§g decision 2) |
 | Fundamental metric columns, valuation, earnings reaction, timeline | **Options-implied earnings move:** IBKR option quotes |
 | Today feed (risks, earnings, ex-dividend when known, import state), Settings, alert toggles | **Desk AI verdict, brief, AI changes, AI alert rules:** not probe-gated; gated on the step 5 build and the new dependency |
+
+**Update 2026-10-29 (3c-b).** Wherever this table says IBKR option chains or quotes, read Alpaca's delayed chain: candidates,
+annualized yield, the opportunity flag, Δ, the roll panel and the cost to close are built and answer `unavailable` until a valid
+key is set. IV rank still needs 60 sessions of IV history (the step-6 scan job writes it). Premium income needs the Flex
+`Trades` section (`needs_trades` until then). Futures prices stay deferred.
 
 ## f. Non-goals
 
@@ -388,7 +402,7 @@ the mechanical sub-tasks as subagents of the stream that owns them. Streams foll
 | 3c | S: Sonnet | real services available now: Flex client and importer (fixture, then live per §e), holdings service, coverage and short calls, futures readings (dates, macro), fundamentals metrics, valuation and earnings reaction, timeline, fundamental alert toggles, `/dashboard/fundamental`, status and settings | 3b |
 | 4 | F: Sonnet; Haiku subagents for FD6, FD10, FD11, the 1180 column priorities, and the copy-table rows | `lib/lanes.ts` shared routes and Fundamental nav; left and right rails; `MaskToggle` and `lib/desk/mask.ts`; FD2, FD3, FD4, FD5 (the owner-gated templates first), then FD6–FD11; FD12 is the §b3 media rules, no new components | 3b |
 | 5 | S: Sonnet | Desk AI verdict job (§g decision 6), `ai_verdicts`, `ai_calls`; the brief and verdict sections go live | owner approves the dependency |
-| 6 | S: Sonnet; Haiku for fixtures | **after the probe:** `option_chain` kind and IBKR futures quotes in `common`; `covered_calls/scan.py` and IV history; roll and candidates real; Flex switched to the data user with `Trades`; income real | Monday 2026-10-26 probe and Reporting grant |
+| 6 | S: Sonnet; Haiku for fixtures | **after the probe:** ~~`option_chain` kind~~ (done, 3c-a) and IBKR futures quotes in `common` (deferred); `covered_calls/scan.py` and IV history; roll and candidates real; Flex switched to the data user with `Trades`; income real | Monday 2026-10-26 probe and Reporting grant |
 | 7 | Sonnet (Paper) | **Run F7:** re-stamp FD4, FD5, FD6 with real chain and futures values; drop their SIMULATED labels | step 6 data |
 | 8 | Both | integration: stubs off; Playwright projects at 1440 and 1180 for the Fundamental specs; acceptance (§j) | 3c, 4, 6 |
 
