@@ -16292,7 +16292,7 @@
   "paths": {
     "/api/desk/accounts/{account_id}": {
       "patch": {
-        "description": "Name an account and say what kind it is. The stub stores nothing.",
+        "description": "Name an account and say what kind it is.",
         "operationId": "patch_account_api_desk_accounts__account_id__patch",
         "parameters": [
           {
@@ -17295,7 +17295,7 @@
     },
     "/api/desk/covered-calls/candidates": {
       "get": {
-        "description": "The top three calls from the latest scan; an empty list with an unavailable chain stamp before option quotes.",
+        "description": "The engine's top three calls for one holding, from the delayed spot and chain read now; an empty list with an\nunavailable chain stamp when the chain cannot be read.",
         "operationId": "candidates_api_desk_covered_calls_candidates_get",
         "parameters": [
           {
@@ -18213,7 +18213,7 @@
     },
     "/api/desk/holdings/import": {
       "post": {
-        "description": "Run the Flex import now. Idempotent per statement date. The stub starts nothing and says it is running.",
+        "description": "Start the Flex import and answer 202 with the running state; the statement is fetched and stored in the\nbackground (idempotent per account and statement date). Only the Desk user named by `DESK_FLEX_USER` may start\nit.",
         "operationId": "run_import_api_desk_holdings_import_post",
         "responses": {
           "202": {
@@ -18226,8 +18226,14 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "description": "The import belongs to another Desk user"
+          },
           "409": {
             "description": "An import ran in the last 60 seconds (Flex allows 10 requests a minute)"
+          },
+          "503": {
+            "description": "The Flex import is not set up"
           }
         },
         "summary": "Run Import",
@@ -20096,7 +20102,7 @@
     },
     "/api/desk/research/brief": {
       "get": {
-        "description": "Every analyzed stock after the close, the run summary and the track-record counts.",
+        "description": "Every analyzed stock after the close, the run summary and the track-record counts. No Desk AI run exists before\nstep 5: no rows, no run, and the track record counts the stored calls.",
         "operationId": "brief_api_desk_research_brief_get",
         "parameters": [
           {
@@ -20147,6 +20153,7 @@
     },
     "/api/desk/research/symbols/{symbol}": {
       "get": {
+        "description": "Consensus EPS, revisions and analyst targets from the stored snapshots; `verdict` is null until step 5.",
         "operationId": "research_api_desk_research_symbols__symbol__get",
         "parameters": [
           {
@@ -20279,6 +20286,7 @@
     },
     "/api/desk/research/symbols/{symbol}/valuation": {
       "get": {
+        "description": "The four valuation methods per share, the 60/40 blend against the price, and the earnings reaction.",
         "operationId": "valuation_api_desk_research_symbols__symbol__valuation_get",
         "parameters": [
           {

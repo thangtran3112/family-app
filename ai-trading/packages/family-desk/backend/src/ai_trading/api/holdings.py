@@ -23,10 +23,10 @@ from ai_trading.holdings import service as holdings_service
 router = APIRouter(prefix="/api/desk", tags=["holdings"], dependencies=[Depends(get_current_user)])
 
 
-def get_session_factory(request: Request) -> sessionmaker[Session]:
+def get_session_factory(request: Request) -> sessionmaker[Session] | None:
     """The factory the import's background task opens its own session from (the request's session closes first);
-    tests override it like `get_session`."""
-    return request.app.state.session_factory
+    None when the app has no database configured. Tests override it like `get_session`."""
+    return getattr(request.app.state, "session_factory", None)
 
 
 @router.get("/holdings", response_model=HoldingsOut)
@@ -73,7 +73,7 @@ def run_import(
     background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     session: Session = Depends(get_session),
-    factory: sessionmaker[Session] = Depends(get_session_factory),
+    factory: sessionmaker[Session] | None = Depends(get_session_factory),
 ) -> dict[str, Any]:
     """Start the Flex import and answer 202 with the running state; the statement is fetched and stored in the
     background (idempotent per account and statement date). Only the Desk user named by `DESK_FLEX_USER` may start
@@ -82,7 +82,7 @@ def run_import(
         return {"import": stub_holdings.import_state("running")}
     env = dict(os.environ)
     flex_user = importer.flex_user_email(env)
-    if fundamental_sources(env)["holdings"].state != "configured" or flex_user is None:
+    if factory is None or fundamental_sources(env)["holdings"].state != "configured" or flex_user is None:
         raise HTTPException(status_code=503, detail="holdings import is not set up")
     if user.email.lower() != flex_user:
         raise HTTPException(status_code=404, detail="no holdings import for you")

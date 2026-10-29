@@ -74,8 +74,29 @@ def test_only_exactly_one_turns_the_fundamental_stub_on(
     assert stub_enabled() is expected
 
 
-@pytest.mark.parametrize(("method", "url", "body"), NEW_ROUTES, ids=IDS)
-def test_with_the_flag_off_a_new_route_serves_nothing(
+#: The routes still without a real service with the flag off (02n §h step 3c): the Today aggregate, the futures
+#: readings (deferred, 02b §4b) and the alert templates (the step-5 scoring). Holdings, covered calls and research are
+#: real now: `test_holdings_real.py`, `test_covered_calls_real.py` and `test_research_real.py` cover them.
+GATED_ROUTES = [
+    route
+    for route in NEW_ROUTES
+    if route[1].split(PREFIX)[1].split("?")[0]
+    in (
+        "/dashboard/fundamental",
+        "/futures/readings",
+        "/fundamental-alerts",
+        "/fundamental-alerts/ai_daily_view",
+    )
+]
+GATED_IDS = [f"{method} {url.removeprefix(PREFIX)}" for method, url, _ in GATED_ROUTES]
+
+
+def test_the_gated_routes_are_the_four_with_no_real_service_yet() -> None:
+    assert len(GATED_ROUTES) == 4 and len(NEW_ROUTES) - len(GATED_ROUTES) == 13
+
+
+@pytest.mark.parametrize(("method", "url", "body"), GATED_ROUTES, ids=GATED_IDS)
+def test_with_the_flag_off_a_gated_route_serves_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, method: str, url: str, body: Any
 ) -> None:
     monkeypatch.delenv(STUB_FLAG, raising=False)

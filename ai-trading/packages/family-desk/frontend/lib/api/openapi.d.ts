@@ -19,7 +19,7 @@ export interface paths {
         head?: never;
         /**
          * Patch Account
-         * @description Name an account and say what kind it is. The stub stores nothing.
+         * @description Name an account and say what kind it is.
          */
         patch: operations["patch_account_api_desk_accounts__account_id__patch"];
         trace?: never;
@@ -248,7 +248,8 @@ export interface paths {
         };
         /**
          * Candidates
-         * @description The top three calls from the latest scan; an empty list with an unavailable chain stamp before option quotes.
+         * @description The engine's top three calls for one holding, from the delayed spot and chain read now; an empty list with an
+         *     unavailable chain stamp when the chain cannot be read.
          */
         get: operations["candidates_api_desk_covered_calls_candidates_get"];
         put?: never;
@@ -587,7 +588,9 @@ export interface paths {
         put?: never;
         /**
          * Run Import
-         * @description Run the Flex import now. Idempotent per statement date. The stub starts nothing and says it is running.
+         * @description Start the Flex import and answer 202 with the running state; the statement is fetched and stored in the
+         *     background (idempotent per account and statement date). Only the Desk user named by `DESK_FLEX_USER` may start
+         *     it.
          */
         post: operations["run_import_api_desk_holdings_import_post"];
         delete?: never;
@@ -1250,7 +1253,8 @@ export interface paths {
         };
         /**
          * Brief
-         * @description Every analyzed stock after the close, the run summary and the track-record counts.
+         * @description Every analyzed stock after the close, the run summary and the track-record counts. No Desk AI run exists before
+         *     step 5: no rows, no run, and the track record counts the stored calls.
          */
         get: operations["brief_api_desk_research_brief_get"];
         put?: never;
@@ -1268,7 +1272,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Research */
+        /**
+         * Research
+         * @description Consensus EPS, revisions and analyst targets from the stored snapshots; `verdict` is null until step 5.
+         */
         get: operations["research_api_desk_research_symbols__symbol__get"];
         put?: never;
         post?: never;
@@ -1302,7 +1309,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Valuation */
+        /**
+         * Valuation
+         * @description The four valuation methods per share, the 60/40 blend against the price, and the earnings reaction.
+         */
         get: operations["valuation_api_desk_research_symbols__symbol__valuation_get"];
         put?: never;
         post?: never;
@@ -8321,8 +8331,22 @@ export interface operations {
                     "application/json": components["schemas"]["ImportOut"];
                 };
             };
+            /** @description The import belongs to another Desk user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description An import ran in the last 60 seconds (Flex allows 10 requests a minute) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Flex import is not set up */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
