@@ -75,16 +75,22 @@ def owned_account(db: Session, user_id: int, account_id: int) -> Account:
     return account
 
 
-def latest_lots(db: Session, user_id: int, account_id: int | None = None) -> list[HoldingLot]:
-    """The lots of each of the user's accounts as of that account's newest statement."""
-    newest = (
+def _newest_statements(user_id: int | None):
+    """Each account's newest imported statement date, for one user's accounts or (None) every account."""
+    query = (
         select(HoldingImport.account_id, func.max(HoldingImport.statement_date).label("statement_date"))
         .join(Account, Account.id == HoldingImport.account_id)
-        .where(Account.owner_user_id == user_id, HoldingImport.state == "ok")
+        .where(HoldingImport.state == "ok")
         .group_by(HoldingImport.account_id)
-        .subquery()
     )
-    query = (
+    if user_id is not None:
+        query = query.where(Account.owner_user_id == user_id)
+    return query.subquery()
+
+
+def _newest_lots(user_id: int | None):
+    newest = _newest_statements(user_id)
+    return (
         select(HoldingLot)
         .join(HoldingImport, HoldingImport.id == HoldingLot.import_id)
         .join(
@@ -94,9 +100,20 @@ def latest_lots(db: Session, user_id: int, account_id: int | None = None) -> lis
         )
         .order_by(HoldingLot.account_id, HoldingLot.symbol, HoldingLot.acquired, HoldingLot.id)
     )
+
+
+def latest_lots(db: Session, user_id: int, account_id: int | None = None) -> list[HoldingLot]:
+    """The lots of each of the user's accounts as of that account's newest statement."""
+    query = _newest_lots(user_id)
     if account_id is not None:
         query = query.where(HoldingLot.account_id == account_id)
     return list(db.execute(query).scalars())
+
+
+def held_symbols(db: Session) -> list[str]:
+    """Every stock any account holds as of its newest statement (the snapshot job covers them beside the watchlists)."""
+    lots = _newest_lots(None).where(HoldingLot.asset_class == "STK").subquery()
+    return list(db.execute(select(lots.c.symbol).distinct().order_by(lots.c.symbol)).scalars())
 
 
 def open_short_calls(lots: list[HoldingLot], today: date) -> list[HoldingLot]:

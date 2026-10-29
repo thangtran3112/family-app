@@ -147,6 +147,25 @@ def test_each_feed_is_stored_for_every_watchlist_stock_and_never_a_future(db_ses
     assert all(health(db_session, feed).state == "ok" for feed in consensus.FEEDS)
 
 
+def test_held_stocks_join_the_pass_from_the_newest_statement_only(db_session, watchlist_with_items):
+    """02n `0012`: a holding is snapshotted beside the watchlists, so its consensus history starts when it is imported.
+    A stock only an older statement held, an option's underlying and a cash line are not."""
+    from fundamental_world import import_xml, option_lot, response, statement, stock_lot, user
+
+    owner = user(db_session)
+    old = response(statement("U0000001", "20261001", [stock_lot("SOLD", 10, 5.0, "20250101")]))
+    new = response(
+        statement(
+            "U0000001",
+            "20261023",
+            [stock_lot("KO", 100, 60.0, "20250101"), option_lot("MSFT", -1, 330, "20261120")],
+        )
+    )
+    import_xml(db_session, owner.id, old)
+    import_xml(db_session, owner.id, new)
+    assert consensus.snapshot_symbols(db_session) == ["AAPL", "KO"]  # AAPL is on the fixture's watchlist
+
+
 def test_the_snapshot_day_is_the_eastern_trading_day_not_the_utc_date(db_session, watchlist_with_items):
     late = datetime(2026, 10, 7, 0, 30, tzinfo=UTC)  # 20:30 ET on the 6th, already the 7th in UTC
 
