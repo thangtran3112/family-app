@@ -1,22 +1,25 @@
-// Route-to-lane map for the desktop shell (02m §c1). The Technical lane is the MVP; a route that
-// belongs to the other lane shows the wrong-lane interstitial instead of its screen.
+// Route-to-lane map for the desktop shell (02m §c1, 02n §b1). A route that belongs to the other lane shows the
+// wrong-lane interstitial instead of its screen; a "shared" route renders the active lane's variant.
 export type Lane = "technical" | "fundamental";
+export type RouteLane = Lane | "shared";
 export const LANES: readonly Lane[] = ["technical", "fundamental"];
 export const LANE_LABEL: Record<Lane, string> = { technical: "Technical", fundamental: "Fundamental" };
 
 // Longest matching prefix wins, so "/strategies/library" can differ from "/strategies" if it ever must.
-const ROUTE_LANES: ReadonlyArray<readonly [string, Lane]> = [
-  ["/", "technical"],
-  ["/today", "technical"],
+const ROUTE_LANES: ReadonlyArray<readonly [string, RouteLane]> = [
+  ["/", "shared"],
+  ["/today", "shared"],
   ["/screener", "technical"],
-  ["/watchlists", "technical"],
+  ["/watchlists", "shared"],
   ["/alerts", "technical"],
   ["/strategies", "technical"],
   ["/practice", "technical"],
   ["/technicals", "technical"],
   ["/futures", "technical"],
-  ["/settings", "technical"],
-  ["/more", "technical"],
+  ["/futures/specs", "shared"],
+  ["/futures/read", "fundamental"],
+  ["/settings", "shared"],
+  ["/more", "shared"],
   ["/feedback", "technical"],
   ["/holdings", "fundamental"],
   ["/covered-calls", "fundamental"],
@@ -29,9 +32,9 @@ const ROUTE_LANES: ReadonlyArray<readonly [string, Lane]> = [
 
 const normalize = (pathname: string) => (pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname) || "/";
 
-export function laneForPath(pathname: string): Lane {
+export function laneForPath(pathname: string): RouteLane {
   const path = normalize(pathname);
-  let best: Lane = "technical";
+  let best: RouteLane = "technical";
   let bestLength = -1;
   for (const [prefix, lane] of ROUTE_LANES) {
     const matches = prefix === "/" ? path === "/" : path === prefix || path.startsWith(`${prefix}/`);
@@ -43,9 +46,10 @@ export function laneForPath(pathname: string): Lane {
   return best;
 }
 
-/** True when the route belongs to the other lane (so the shell shows the interstitial). */
+/** True when the route belongs to the other lane (so the shell shows the interstitial); a shared route never does. */
 export function isWrongLane(activeLane: Lane, pathname: string): boolean {
-  return laneForPath(pathname) !== activeLane;
+  const owner = laneForPath(pathname);
+  return owner !== "shared" && owner !== activeLane;
 }
 
 export const otherLane = (lane: Lane): Lane => (lane === "technical" ? "fundamental" : "technical");
@@ -63,9 +67,11 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Practice", href: "/practice" },
   ],
   fundamental: [
+    { label: "Today", href: "/" },
     { label: "Holdings", href: "/holdings" },
     { label: "Covered calls", href: "/covered-calls" },
     { label: "Stocks", href: "/stocks" },
+    { label: "Futures", href: "/futures/read", match: "/futures/read" },
   ],
 };
 

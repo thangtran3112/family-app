@@ -46,6 +46,26 @@ export const COPY = {
   stripFirstUpdate: "First market update {time}",
   stripNoData: "No market data yet",
   stripLastClose: "Last close · {time}",
+  // The Fundamental lane (02n §b4). "Not started" and "unavailable" are honest states, never a stand-in value.
+  holdingsFresh: "Holdings as of {day} close · IBKR Flex",
+  holdingsImporting: "Importing holdings…",
+  holdingsImportFailed: "Couldn't import holdings · showing {day} · Try again",
+  holdingsImportFailedNoData: "Couldn't import holdings · Try again",
+  holdingsNotConnected: "Holdings aren't connected yet · set up the IBKR import in Settings",
+  holdingsNone: "No holdings imported for you",
+  optionQuotesNotConnected: "Option quotes connect after the IBKR setup",
+  ivRankShortHistory: "IV rank needs more history · opportunity alerts start later",
+  exDividendUnknown: "Ex-dividend date unknown · check before selling a call",
+  deskAiNotStarted: "Desk AI starts after its first daily run (5:05 PM ET)",
+  deskAiStale: "Desk AI view from {day} · today's update didn't finish",
+  valuesHidden: "Values hidden · Show values",
+  futuresReadingOnly: "Reading only · switch to the Technical view to trade futures or swing",
+  tax: "Not tax advice",
+  // Surfaces whose source is not built yet (02n §e): shown as plain states, not errors.
+  futuresDeferred: "Futures readings start once futures prices are connected",
+  alertTemplatesNotStarted: "Fundamental alerts start once their data sources are connected",
+  maskShow: "Show values",
+  maskHide: "Hide values",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -213,6 +233,21 @@ export function emptyScanText(nextRunAt: string | null): string {
 
 export function loadErrorText(subject: string): string {
   return fill(COPY.loadError, { subject });
+}
+
+/** "Holdings as of Fri 2026-10-23 close · IBKR Flex" */
+export function holdingsFreshText(statementDate: string): string {
+  return fill(COPY.holdingsFresh, { day: formatEtDay(statementDate) });
+}
+
+/** "Couldn't import holdings · showing Thu 2026-10-22 · Try again"; without an older statement, no "showing". */
+export function holdingsImportFailedText(statementDate: string | null): string {
+  return statementDate ? fill(COPY.holdingsImportFailed, { day: formatEtDay(statementDate) }) : COPY.holdingsImportFailedNoData;
+}
+
+/** "Desk AI view from Thu · today's update didn't finish" */
+export function deskAiStaleText(day: string): string {
+  return fill(COPY.deskAiStale, { day });
 }
 
 export function wrongLaneText(lane: string): string {

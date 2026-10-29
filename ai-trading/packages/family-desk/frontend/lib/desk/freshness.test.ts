@@ -6,7 +6,10 @@ import {
   BANNED_TERMS,
   containsBannedTerm,
   COPY,
+  deskAiStaleText,
   emptyScanText,
+  holdingsFreshText,
+  holdingsImportFailedText,
   loadErrorText,
   marketDataLine,
   marketPillShort,
@@ -129,4 +132,22 @@ test("the copy table and every rendered label avoid the banned words", () => {
   }
   assert.equal(containsBannedTerm("Reconnecting… · last update 10:41:12 AM ET"), false);
   for (const fine of ["9 of 131", "NVDA 210.99 +0.50%", "Scanned 131 US stocks and ETFs", "Volume 12,883,312"]) assert.equal(containsBannedTerm(fine), false, fine);
+});
+
+// 02n §b4: the Fundamental copy rows, word for word.
+test("the Fundamental copy rows match 02n §b4", () => {
+  assert.equal(holdingsFreshText("2026-10-23"), "Holdings as of Fri 2026-10-23 close · IBKR Flex");
+  assert.equal(COPY.holdingsImporting, "Importing holdings…");
+  assert.equal(holdingsImportFailedText("2026-10-22"), "Couldn't import holdings · showing Thu 2026-10-22 · Try again");
+  assert.equal(holdingsImportFailedText(null), "Couldn't import holdings · Try again");
+  assert.equal(COPY.holdingsNotConnected, "Holdings aren't connected yet · set up the IBKR import in Settings");
+  assert.equal(COPY.holdingsNone, "No holdings imported for you");
+  assert.equal(COPY.optionQuotesNotConnected, "Option quotes connect after the IBKR setup");
+  assert.equal(COPY.ivRankShortHistory, "IV rank needs more history · opportunity alerts start later");
+  assert.equal(COPY.exDividendUnknown, "Ex-dividend date unknown · check before selling a call");
+  assert.equal(COPY.deskAiNotStarted, "Desk AI starts after its first daily run (5:05 PM ET)");
+  assert.equal(deskAiStaleText("Thu"), "Desk AI view from Thu · today's update didn't finish");
+  assert.equal(COPY.valuesHidden, "Values hidden · Show values");
+  assert.equal(COPY.futuresReadingOnly, "Reading only · switch to the Technical view to trade futures or swing");
+  assert.equal(COPY.tax, "Not tax advice");
 });
