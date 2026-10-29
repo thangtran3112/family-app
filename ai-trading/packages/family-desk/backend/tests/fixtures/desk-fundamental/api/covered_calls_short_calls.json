@@ -1,0 +1,72 @@
+[
+ {
+  "account_id": 1,
+  "contracts": 1,
+  "delta": 0.24,
+  "dte": 28,
+  "expiry": "2026-11-20",
+  "id": 8,
+  "moneyness_pct": -5.55,
+  "risks": [],
+  "spot": 231.4,
+  "stamp": {
+   "as_of": "2026-10-23T20:00:00Z",
+   "freshness": "closed",
+   "quality": "delayed-15m",
+   "source": "simulated"
+  },
+  "strike": 245.0,
+  "symbol": "AAPL"
+ },
+ {
+  "account_id": 2,
+  "contracts": 3,
+  "delta": 0.52,
+  "dte": 7,
+  "expiry": "2026-10-30",
+  "id": 9,
+  "moneyness_pct": -0.83,
+  "risks": [
+   {
+    "kind": "delta_above_0_50",
+    "text": "Delta is above 0.50: assignment is now more likely than not"
+   },
+   {
+    "kind": "near_strike_near_expiry",
+    "text": "Within 2% of the strike with 7 days or fewer left"
+   },
+   {
+    "kind": "earnings_before_expiry",
+    "text": "Earnings fall before this call expires"
+   }
+  ],
+  "spot": 71.9,
+  "stamp": {
+   "as_of": "2026-10-23T20:00:00Z",
+   "freshness": "closed",
+   "quality": "delayed-15m",
+   "source": "simulated"
+  },
+  "strike": 72.5,
+  "symbol": "KO"
+ },
+ {
+  "account_id": 2,
+  "contracts": 2,
+  "delta": null,
+  "dte": 56,
+  "expiry": "2026-12-18",
+  "id": 10,
+  "moneyness_pct": -6.11,
+  "risks": [],
+  "spot": 164.3,
+  "stamp": {
+   "as_of": "2026-10-23T20:00:00Z",
+   "freshness": "closed",
+   "quality": "delayed-15m",
+   "source": "simulated"
+  },
+  "strike": 175.0,
+  "symbol": "JNJ"
+ }
+]

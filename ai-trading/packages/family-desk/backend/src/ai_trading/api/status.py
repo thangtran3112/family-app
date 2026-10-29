@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -10,12 +11,16 @@ from sqlalchemy.orm import Session
 from ai_trading.alerts.runtime import alert_state
 from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
 from ai_trading.api.schemas.common import Stamp
+from ai_trading.api.schemas.fundamental import ImportStateOut, StatusAiDailyOut, StatusOptionsOut
 from ai_trading.api.schemas.platform import StatusAlertsOut, StatusMarketOut, StatusScansOut
 from ai_trading.api.stamp import feed_last_ok, make_stamp
 from ai_trading.core.freshness import market_state
 from ai_trading.data.refresher import STRIP_FEED
 from ai_trading.data.universe import MARKET_STRIP
 from ai_trading.db.models import Alert, SymbolMetrics
+from ai_trading.fundamental.sources import fundamental_sources
+from ai_trading.fundamental_stub import platform as fundamental_platform
+from ai_trading.fundamental_stub import stub_enabled as fundamental_stub_enabled
 from ai_trading.jobs.refresh_15m import next_due
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
@@ -41,6 +46,9 @@ class StatusOut(BaseModel):
     streaming_slots: StreamingSlotsOut
     backups: None
     reconciliation: None
+    holdings: ImportStateOut
+    options: StatusOptionsOut
+    ai_daily: StatusAiDailyOut
 
 
 def _delayed_feed_stamp(session: Session, feed: str, now: datetime) -> Stamp:
@@ -71,6 +79,32 @@ def _seeded_quotes_stamp(session: Session, now: datetime) -> Stamp | None:
     )
 
 
+def _fundamental_status() -> dict[str, Any]:
+    """The three Fundamental fields (02n §c3 #18). Stub flag off: what is true before any service exists (nothing
+    imported, no option quotes, no Desk AI run), never a stand-in; the real services replace it (§h step 3c)."""
+    if fundamental_stub_enabled():
+        return fundamental_platform.status()
+    configured = fundamental_sources(os.environ)["holdings"].state == "configured"
+    return {
+        "holdings": {
+            "source": "ibkr_flex",
+            "account_scope": "data",
+            "statement_date": None,
+            "imported_at": None,
+            "lots": 0,
+            "state": "none" if configured else "not_configured",
+        },
+        "options": {
+            "as_of": None,
+            "source": None,
+            "quality": "unavailable",
+            "freshness": "unavailable",
+            "state": "not_connected",
+        },
+        "ai_daily": {"state": "not_started", "last_run_at": None},
+    }
+
+
 @router.get("/status", response_model=StatusOut)
 def status(
     user: AuthedUser = Depends(get_current_user),
@@ -78,7 +112,7 @@ def status(
     data_sources: DataSources = Depends(get_data_sources),
 ) -> StatusOut | dict[str, Any]:
     if stub_enabled():
-        return stub_platform.status()
+        return {**stub_platform.status(), **_fundamental_status()}
     now = datetime.now(UTC)
     market = market_state(now)
     gateway = data_sources.gateway_status()
@@ -113,4 +147,5 @@ def status(
         streaming_slots=StreamingSlotsOut(used=gateway.lines_used, max=70),
         backups=None,
         reconciliation=None,
+        **_fundamental_status(),
     )

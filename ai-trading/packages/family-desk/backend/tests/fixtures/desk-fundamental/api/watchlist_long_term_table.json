@@ -1,0 +1,79 @@
+{
+ "rows": [
+  {
+   "asset_type": "stock",
+   "bias_label": "warming up",
+   "change_pct": null,
+   "freshness": "unavailable",
+   "fundamentals": {
+    "ai_rating": "buy",
+    "ai_target_base": 265.0,
+    "ai_upside_pct": 14.5,
+    "cc_coverable": 3,
+    "debt_to_equity": 1.5,
+    "dist_to_252d_high_pct": -3.1,
+    "dividend_yield_pct": 0.4,
+    "eps_rev_30d_pct": 1.4,
+    "eps_rev_7d_pct": 0.4,
+    "eps_rev_90d_pct": 2.9,
+    "ex_dividend": null,
+    "fcf_yield_pct": 3.1,
+    "fwd_pe": 28.4,
+    "gain_vs_cost_pct": 39.0,
+    "next_earnings": "2027-01-28",
+    "pe_vs_5y_median_pct": 6.2,
+    "revenue_growth_yoy_pct": 6.8,
+    "weight_pct": 43.1
+   },
+   "last": null,
+   "name": "AAPL",
+   "rvol_10d": null,
+   "symbol": "AAPL",
+   "tags": [],
+   "vs_vwap_pct": null
+  },
+  {
+   "asset_type": "stock",
+   "bias_label": "warming up",
+   "change_pct": null,
+   "freshness": "unavailable",
+   "fundamentals": {
+    "ai_rating": null,
+    "ai_target_base": null,
+    "ai_upside_pct": null,
+    "cc_coverable": null,
+    "debt_to_equity": null,
+    "dist_to_252d_high_pct": null,
+    "dividend_yield_pct": null,
+    "eps_rev_30d_pct": null,
+    "eps_rev_7d_pct": null,
+    "eps_rev_90d_pct": null,
+    "ex_dividend": null,
+    "fcf_yield_pct": null,
+    "fwd_pe": null,
+    "gain_vs_cost_pct": null,
+    "next_earnings": null,
+    "pe_vs_5y_median_pct": null,
+    "revenue_growth_yoy_pct": null,
+    "weight_pct": null
+   },
+   "last": null,
+   "name": "ZZZZ",
+   "rvol_10d": null,
+   "symbol": "ZZZZ",
+   "tags": [],
+   "vs_vwap_pct": null
+  }
+ ],
+ "stamp": {
+  "as_of": null,
+  "freshness": "unavailable",
+  "quality": "delayed-15m",
+  "source": "alpaca"
+ },
+ "watchlist": {
+  "horizon": "long_term",
+  "id": 1,
+  "name": "Long"
+ }
+}

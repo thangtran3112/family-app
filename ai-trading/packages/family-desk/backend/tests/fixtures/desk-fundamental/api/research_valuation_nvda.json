@@ -1,0 +1,49 @@
+{
+ "blend": 156.7,
+ "earnings_reaction": null,
+ "filing_as_of": "2026-10-16",
+ "methods": [
+  {
+   "fallbacks": [],
+   "id": "dcf",
+   "inputs": {
+    "fcf_yield_pct": 2.9,
+    "growth_pct": 58.0,
+    "wacc_pct": 8.6
+   },
+   "value": 159.94
+  },
+  {
+   "fallbacks": [],
+   "id": "owner_earnings",
+   "inputs": {
+    "fcf_yield_pct": 2.9,
+    "required_return_pct": 15.0
+   },
+   "value": 149.94
+  },
+  {
+   "fallbacks": [
+    "EBITDA multiple: the sector median, no five-year history"
+   ],
+   "id": "ev_ebitda",
+   "inputs": {
+    "debt_to_equity": 0.2,
+    "fwd_pe": 24.9
+   },
+   "value": 137.09
+  },
+  {
+   "fallbacks": [
+    "Book value growth: 4% default"
+   ],
+   "id": "residual_income",
+   "inputs": {
+    "book_value_growth_pct": 4.0,
+    "cost_of_equity_pct": 9.1
+   },
+   "value": 168.5
+  }
+ ],
+ "price": 142.8
+}

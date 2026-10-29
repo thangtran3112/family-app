@@ -32,6 +32,10 @@ def _universe(symbol: str, name: str, asset_type: str = "stock", active: bool = 
 
 def test_status_stub_returns_the_a31_example(client, monkeypatch):
     monkeypatch.setenv("DESK_MVP_STUB", "1")
+    # The Fundamental fields (02n §c3 #18) are the honest "nothing connected yet" ones while their own stub flag is off.
+    monkeypatch.delenv("DESK_FUNDAMENTAL_STUB", raising=False)
+    monkeypatch.delenv("IBKR_FLEX_TOKEN", raising=False)
+    monkeypatch.delenv("IBKR_FLEX_QUERY_ID", raising=False)
     response = client.get("/api/desk/status", headers=auth_headers())
     assert response.status_code == 200
     assert response.json() == {
@@ -44,6 +48,16 @@ def test_status_stub_returns_the_a31_example(client, monkeypatch):
         "streaming_slots": {"used": 0, "max": 70},
         "backups": None,
         "reconciliation": None,
+        "holdings": {
+            "source": "ibkr_flex",
+            "account_scope": "data",
+            "statement_date": None,
+            "imported_at": None,
+            "lots": 0,
+            "state": "not_configured",
+        },
+        "options": {**UNAVAILABLE_STAMP, "state": "not_connected"},
+        "ai_daily": {"state": "not_started", "last_run_at": None},
     }
 
 
