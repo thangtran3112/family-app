@@ -1,9 +1,11 @@
 """Where each Fundamental-lane field comes from, and what it honestly is today (02b §4b, 02n §e).
 
-The 2026-10-29 revision: quotes come from Alpaca through the registry's `quotes` kind (the free key is 15 minutes
-delayed until the Algo Trader Plus tier is bought, and the provider stamps `delayed-15m` whatever the key); holdings
-come from the IBKR Flex report only (a yearly token, read-only; no gateway, so the `DESK_IBKR_GATEWAY_ENABLED` switch
-stays off); a field with no source behind it says so, so a screen shows "unavailable" and never a stand-in.
+The 2026-10-29 revision: quotes and option chains come from Alpaca through the registry's `quotes` and `option_chain`
+kinds (the free key is 15 minutes delayed until the Algo Trader Plus tier is bought, and both providers stamp
+`delayed-15m` whatever the key); holdings come from the IBKR Flex report only (a yearly token, read-only; no gateway,
+so the `DESK_IBKR_GATEWAY_ENABLED` switch stays off); a field with no source behind it says so, so a screen shows
+"unavailable" and never a stand-in. "Configured" means a key is set, not that Alpaca accepts it: a rejected key still
+surfaces on each read as an unavailable stamp.
 
 Pure: it reads the environment it is given (Firestore `ai-trading/desk` rendered by `family_config.py`) and reports
 only whether a value is set, never the value."""
@@ -58,11 +60,12 @@ def fundamental_sources(env: Mapping[str, str]) -> dict[str, SourceState]:
             else f"set {' and '.join(ALPACA_KEY_VARS)} in the ai-trading/desk profile",
         ),
         "option_chain": SourceState(
-            None,
-            "unavailable",
-            "unavailable",
-            "option chain unavailable: Alpaca's options feed (OPRA, delayed until the $99 tier) needs an "
-            "`option_chain` registry kind in ai-trading/common, and none is registered yet",
+            "alpaca_options" if quotes else None,
+            "delayed" if quotes else "not_configured",
+            "delayed-15m" if quotes else "unavailable",
+            "Alpaca options, 15 minutes delayed (the free `indicative` feed until the Algo Trader Plus tier is bought)"
+            if quotes
+            else f"set {' and '.join(ALPACA_KEY_VARS)} in the ai-trading/desk profile",
         ),
         "futures_prices": SourceState(
             None,
