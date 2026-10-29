@@ -4,15 +4,10 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from ai_trading.covered_calls.service import ASSIGNMENT_NOTE
 from ai_trading.fundamental_stub import holdings, stamp, unavailable_stamp
 from ai_trading.fundamental_stub import world as w
 
-ASSIGNMENT_NOTE = {
-    "taxable": "If assigned, the shares are sold at the strike and the gain is taxable, short or long term by lot. "
-    "Not tax advice.",
-    "ira": "Held in an IRA: assignment sells the shares inside the account with no immediate tax. Not tax advice.",
-    "roth": "Held in a Roth IRA: assignment sells the shares inside the account with no immediate tax. Not tax advice.",
-}
 #: (month, premium, contracts) from the invented Trades history, oldest first.
 _INCOME = (
     ("2025-11", 180.0, 2),

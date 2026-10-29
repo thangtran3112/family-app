@@ -7,16 +7,9 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from ai_trading.covered_calls.service import RISK_TEXT
 from ai_trading.fundamental_stub import stamp
 from ai_trading.fundamental_stub import world as w
-
-RISK_TEXT = {
-    "delta_above_0_50": "Delta is above 0.50: assignment is now more likely than not",
-    "near_strike_near_expiry": "Within 2% of the strike with 7 days or fewer left",
-    "early_assignment_before_dividend": "Ex-dividend tomorrow with less time value than the dividend: "
-    "early assignment is possible",
-    "earnings_before_expiry": "Earnings fall before this call expires",
-}
 
 
 def import_state(state: str = "ok") -> dict[str, Any]:
