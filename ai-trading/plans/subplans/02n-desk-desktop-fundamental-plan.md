@@ -3,10 +3,19 @@
 Status: planned 2026-10-24 (docs only; nothing activated). This is roadmap step 3 of [02l](02l-desk-desktop-first-mvp.md) §f: the
 desktop Fundamental views, built after the desktop Technical MVP ([02l](02l-desk-desktop-first-mvp.md), [02m](02m-desk-mvp-implementation-spec.md),
 STATUS rows 5D–5F). **Mocks (2026-10-24):** FD1–FD8 are complete and the owner gate has passed. **Code:** the consensus snapshot job
-(step 3a, `0004_consensus_history`) is built; Practice took `0005_replay_practice`, so the rest of the migration below becomes
-`0006_fundamental_lane`. It delivers 02c Phase 5 (long-term, covered calls, Desk AI) desktop-first and reuses everything 02l/02m built:
+(step 3a, `0004_consensus_history`) is built; Practice then took `0005` to `0011`, so the rest of the migration below is
+`0012_fundamental_lane` (built 2026-10-29 with the models, the settings keys and `short_call_risks` with an optional delta;
+see the revision note below). It delivers 02c Phase 5 (long-term, covered calls, Desk AI) desktop-first and reuses everything 02l/02m built:
 the `DesktopShell`, the 1440 and 1180 bands, the lane switch, the wrong-lane interstitial, `DenseTable`, `useDeskQuery`, the
 `lib/desk/freshness.ts` copy table, the `stamp` convention, and the stub-first stream order. Nothing here redesigns them.
+
+**Data-source revision (owner, 2026-10-29; [02b](02b-desk-market-data-options.md) §4b).** Wherever this plan says "IBKR slot",
+"IBKR option chains", "IBKR quotes" or the "Monday probe", read it as: option chains, option quotes and Δ come from Alpaca's
+options feed (OPRA; delayed until the $99 Algo Trader Plus tier is bought, which waits until the products are tested and the
+bugs are fixed); IBKR is only the Flex holdings import (`IBKR_FLEX_TOKEN` and `IBKR_FLEX_QUERY_ID` in Firestore `ai-trading/desk`);
+US futures prices are deferred, so FD6 keeps roll and expiry dates and the macro week and its prices say "futures deferred".
+The registry still has no `option_chain` kind: adding it is an `ai-trading/common` change (step 6), and until then
+`fundamental/sources.py` reports the chain as unavailable.
 
 Inputs read: 02l §b–§d, 02m §a, §c and §e, the R3 persona-split plan (`paper-persona-split-plan.md`, local Hermes run
 `desk-activation-20261020`; its F1–F12 mobile boards are content reference, not layouts), [02g](02g-desk-covered-calls-and-futures-swing-design.md),
