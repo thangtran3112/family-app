@@ -30,6 +30,7 @@ from ai_trading.alerts.runtime import alert_state
 from ai_trading.alerts.universe import watchlist_symbols
 from ai_trading.api.auth import AuthedUser, get_current_user, get_data_sources, get_session
 from ai_trading.api.schemas.common import Stamp
+from ai_trading.api.schemas.fundamental import DashboardFundamentalOut
 from ai_trading.api.schemas.platform import (
     DashboardEventOut,
     DashboardMarketOut,
@@ -47,6 +48,9 @@ from ai_trading.core.freshness import market_state
 from ai_trading.data.refresher import STRIP_FEED
 from ai_trading.data.universe import MARKET_STRIP
 from ai_trading.db.models import Signal, Strategy, StrategyVersion, SymbolMetrics, Watchlist, WatchlistItem
+from ai_trading.fundamental_stub import platform as fundamental_platform
+from ai_trading.fundamental_stub import stub_enabled as fundamental_stub_enabled
+from ai_trading.fundamental_stub import unavailable as fundamental_unavailable
 from ai_trading.jobs.refresh_15m import next_due
 from ai_trading.mvp_stub import platform as stub_platform
 from ai_trading.mvp_stub import stub_enabled
@@ -259,3 +263,12 @@ def dashboard(
         events=_events(data_sources, _watchlist_symbols(session, user.id), now.astimezone(ET).date()),
         alerts_state=alert_state(session, user.id, now),
     )
+
+
+@router.get("/fundamental", response_model=DashboardFundamentalOut)
+def dashboard_fundamental() -> dict[str, Any]:
+    """The Fundamental Today screen's one aggregate read (02n §c3 #1). Contract-first: `DESK_FUNDAMENTAL_STUB=1` answers
+    from the invented world, otherwise 503 until the real service lands."""
+    if not fundamental_stub_enabled():
+        fundamental_unavailable()
+    return fundamental_platform.dashboard()

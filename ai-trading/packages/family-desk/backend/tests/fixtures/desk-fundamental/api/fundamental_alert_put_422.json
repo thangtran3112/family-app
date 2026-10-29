@@ -1,0 +1,14 @@
+{
+ "detail": {
+  "problems": [
+   {
+    "message": "must be a number",
+    "path": "rules.delta_above"
+   },
+   {
+    "message": "is not a rule of this template",
+    "path": "rules.colour"
+   }
+  ]
+ }
+}

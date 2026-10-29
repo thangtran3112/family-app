@@ -1,0 +1,26 @@
+{
+ "account_id": 2,
+ "ai_context": {
+  "note": "Desk AI rates KO a Hold: a call strike below $72 caps part of that view.",
+  "rating": "hold",
+  "target_base": 72.0
+ },
+ "candidates": [],
+ "chain_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "iv_history_sessions": 6,
+ "iv_rank": null,
+ "opportunity": false,
+ "spot": 71.9,
+ "spot_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "symbol": "KO"
+}

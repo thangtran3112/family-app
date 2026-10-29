@@ -13,6 +13,12 @@ export const BOARD_PRIORITIES = {
   // Daily-list practice (02o-b v1): the candidate table drops the time the match began, then the filter names, then volume, gap and vs VWAP (P7 keeps prev close, RVOL, change, ATR, RSI and earnings).
   practiceList: { matched_since: 1, filters: 2, volume: 3, gap_pct_open: 4, vs_vwap_pct: 5 },
   practiceReview: { range_pct: 1, close_move_pct: 2 },
+  // Fundamental lane (02n §b3, "1180 column drop orders"): Holdings drops next earnings, the AI rating, open calls, then unrealized %;
+  // the candidates drop spread, open interest, return if called, then upside cap; open calls drop moneyness, then contracts; the brief drops the 30-day EPS revision, then confidence.
+  fundHoldings: { next_earnings: 1, ai_rating: 2, open_calls: 3, unrealized_pct: 4 },
+  fundCandidates: { spread_pct: 1, open_interest: 2, return_if_called: 3, upside_cap: 4 },
+  fundShortCalls: { moneyness_pct: 1, contracts: 2 },
+  fundBrief: { eps_rev_30d_pct: 1, confidence: 2 },
 } as const satisfies Record<string, Record<string, number>>;
 
 export type Board = keyof typeof BOARD_PRIORITIES;

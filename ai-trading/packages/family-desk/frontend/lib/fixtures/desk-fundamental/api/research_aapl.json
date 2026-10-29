@@ -1,0 +1,143 @@
+{
+ "consensus": {
+  "fiscal_years": [
+   {
+    "analysts": 36,
+    "eps_estimate": 7.82,
+    "period": "FY2026"
+   },
+   {
+    "analysts": 34,
+    "eps_estimate": 8.15,
+    "period": "FY2027"
+   }
+  ],
+  "next_earnings": {
+   "date": "2027-01-28",
+   "timing": "after close"
+  },
+  "quarters": [
+   {
+    "analysts": 31,
+    "eps_estimate": 2.04,
+    "period": "Q4 2026"
+   },
+   {
+    "analysts": 29,
+    "eps_estimate": 2.1,
+    "period": "Q1 2027"
+   }
+  ],
+  "revisions": {
+   "d30": 1.4,
+   "d7": 0.4,
+   "d90": 2.9
+  },
+  "surprises": [
+   {
+    "actual": 2.08,
+    "estimate": 2.04,
+    "period": "Q3 2026",
+    "surprise_pct": 2.0
+   },
+   {
+    "actual": 2.02,
+    "estimate": 2.04,
+    "period": "Q2 2026",
+    "surprise_pct": -1.0
+   }
+  ]
+ },
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ },
+ "symbol": "AAPL",
+ "targets": {
+  "counts": {
+   "buy": 24,
+   "hold": 9,
+   "sell": 2
+  },
+  "high": 312.39,
+  "low": 189.75,
+  "mean": 259.17
+ },
+ "verdict": {
+  "as_of": "2026-10-23T21:05:00Z",
+  "bear": "A weak report would cut estimates and the multiple together.",
+  "bull": "Estimates keep rising and the price still trails the base target.",
+  "changed": "Unchanged: still a Buy",
+  "confidence": 72.0,
+  "inputs": [
+   {
+    "as_of": "2026-10-16",
+    "name": "SEC filings"
+   },
+   {
+    "as_of": "2026-10-23",
+    "name": "Consensus EPS"
+   },
+   {
+    "as_of": "2026-10-23",
+    "name": "Daily bars"
+   },
+   {
+    "as_of": "2026-10-22",
+    "name": "News"
+   }
+  ],
+  "rating": "buy",
+  "reasons": [
+   "Forward P/E of 28.4 sits 6.2% above its five-year median",
+   "Free-cash-flow yield of 3.1%",
+   "The base target of $265 is 14.5% from the last price"
+  ],
+  "risks": [
+   "Earnings can reset the estimates",
+   "A market-wide drawdown would pull the target range down"
+  ],
+  "stale_days": 0,
+  "target": {
+   "base": 265.0,
+   "high": 290.0,
+   "low": 235.0
+  },
+  "votes": [
+   {
+    "name": "Fundamentals",
+    "reasons": [
+     "Estimates are steady"
+    ],
+    "score": 0.4,
+    "signal": "buy"
+   },
+   {
+    "name": "Valuation",
+    "reasons": [
+     "Close to its own history"
+    ],
+    "score": 0.1,
+    "signal": "hold"
+   },
+   {
+    "name": "Technicals",
+    "reasons": [
+     "Daily bias is mild"
+    ],
+    "score": 0.2,
+    "signal": "buy"
+   },
+   {
+    "name": "News and sentiment",
+    "reasons": [
+     "No headline moves the view"
+    ],
+    "score": 0.0,
+    "signal": "hold"
+   }
+  ]
+ }
+}

@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages -- Full document navigation lets the strategy builder's beforeunload guard run. */
 
-import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
 import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
@@ -10,6 +10,7 @@ import { AvatarMenu } from "./AvatarMenu";
 import { useReplayBadge } from "./PracticeChrome";
 import { LaneSwitch } from "./LaneSwitch";
 import { MarketStatusPill } from "./MarketStatusPill";
+import { MaskToggle } from "./MaskToggle";
 import { PrimaryNav } from "./PrimaryNav";
 import { SymbolSearch } from "./SymbolSearch";
 import styles from "./topbar.module.css";
@@ -17,6 +18,7 @@ import styles from "./topbar.module.css";
 export function TopBar({ band }: { band: ShellBand }) {
   const { status, connection, failed } = useDeskStatus();
   const replayBadge = useReplayBadge();
+  const { lane } = useDeskUi();
   return (
     <header className={styles.bar} role="banner" data-band={band}>
       <a className={styles.wordmark} href="/">
@@ -33,6 +35,7 @@ export function TopBar({ band }: { band: ShellBand }) {
       <PrimaryNav />
       <span className={styles.spacer} />
       <SymbolSearch compact={band === "1180"} />
+      {lane === "fundamental" && <MaskToggle />}
       {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs. */}
       {!replayBadge && <MarketStatusPill band={band} />}
       {replayBadge ? (

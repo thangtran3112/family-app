@@ -1,0 +1,13 @@
+{
+ "enabled": true,
+ "rules": {
+  "confidence_below": 40.0,
+  "cross_target": true,
+  "earnings_within_days": 3.0,
+  "eps_revision_pct": 3.0,
+  "rating_change": true
+ },
+ "scope": "holdings",
+ "strategy_id": null,
+ "template": "ai_daily_view"
+}

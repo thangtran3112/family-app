@@ -1,0 +1,14 @@
+{
+ "assignment_note": {
+  "account_type": "ira",
+  "text": "Held in an IRA: assignment sells the shares inside the account with no immediate tax. Not tax advice."
+ },
+ "candidates": [],
+ "chain_stamp": {
+  "as_of": null,
+  "freshness": "unavailable",
+  "quality": "unavailable",
+  "source": null
+ },
+ "cost_to_close": null
+}

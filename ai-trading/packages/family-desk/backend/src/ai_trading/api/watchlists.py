@@ -32,6 +32,8 @@ from ai_trading.db.models import (
     Watchlist,
     WatchlistItem,
 )
+from ai_trading.fundamental_stub import platform as fundamental_platform
+from ai_trading.fundamental_stub import stub_enabled as fundamental_stub_enabled
 from ai_trading.jobs.backfill_watchlist import backfill_on_join
 from ai_trading.mvp_stub import stamp as stub_stamp
 from ai_trading.mvp_stub import stub_enabled, world
@@ -173,6 +175,11 @@ def watchlist_table(
                     interval=TABLE_INTERVAL,
                     last_ok_at=last_ok_at,
                 ).freshness
+            )
+        if watchlist.horizon == "long_term":
+            # All null until the metric job fills `symbol_fundamentals` (02n §h step 3c): unknown is never invented.
+            fields["fundamentals"] = (
+                fundamental_platform.watchlist_fundamentals(item.symbol) if fundamental_stub_enabled() else {}
             )
         rows.append(
             WatchlistTableRow(

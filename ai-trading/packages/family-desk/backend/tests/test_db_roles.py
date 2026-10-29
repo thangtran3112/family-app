@@ -139,7 +139,101 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "feedback_reports",
         "feedback_events",
         "feedback_attachments",
+        "accounts",
+        "holding_imports",
+        "holding_lots",
+        "holding_trades",
+        "covered_call_scans",
+        "iv_history",
+        "symbol_fundamentals",
+        "ai_verdicts",
+        "ai_calls",
     }
+
+
+def test_desk_runtime_can_use_the_fundamental_lane_tables(role_split_urls: RoleSplitUrls) -> None:
+    # 0012's tables (and their id sequences) are reachable through the zz-20 script's default privileges, with no grant
+    # change: an import, its lots and trades, a scan, an IV point, a fundamentals row and a verdict with its call, all
+    # as the runtime role, then the account's delete cascading through the lot.
+    runtime_engine = create_engine(role_split_urls.runtime_url)
+    try:
+        with runtime_engine.begin() as conn:
+            user_id = conn.execute(
+                text("INSERT INTO users (email) VALUES (:email) RETURNING id"),
+                {"email": "fundamental-roles@example.test"},
+            ).scalar_one()
+            account_id = conn.execute(
+                text(
+                    "INSERT INTO accounts (owner_user_id, external_id, label, created_at) "
+                    "VALUES (:u, 'ROLES-ACCOUNT', 'Account 1', now()) RETURNING id"
+                ),
+                {"u": user_id},
+            ).scalar_one()
+            import_id = conn.execute(
+                text(
+                    "INSERT INTO holding_imports (account_id, statement_date, imported_at) "
+                    "VALUES (:a, '2026-10-28', now()) RETURNING id"
+                ),
+                {"a": account_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO holding_lots (import_id, account_id, symbol, asset_class, quantity) "
+                    "VALUES (:i, :a, 'ROLES', 'STK', 100)"
+                ),
+                {"i": import_id, "a": account_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO holding_trades (account_id, external_ref, symbol, option_right, strike, expiry, kind, "
+                    "trade_date, quantity, price) VALUES (:a, 'T-1', 'ROLES', 'C', 10, '2026-11-20', 'sell_to_open', "
+                    "'2026-10-28', -1, 0.5)"
+                ),
+                {"a": account_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO covered_call_scans (account_id, symbol, run_at, stamp) "
+                    "VALUES (:a, 'ROLES', now(), '{}'::jsonb)"
+                ),
+                {"a": account_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO iv_history (symbol, day, iv30, source, quality) "
+                    "VALUES ('ROLES', '2026-10-28', 0.3, 'fake', 'eod')"
+                )
+            )
+            conn.execute(text("INSERT INTO symbol_fundamentals (symbol, as_of) VALUES ('ROLES', now())"))
+            conn.execute(
+                text(
+                    "INSERT INTO ai_verdicts (symbol, trading_day, rating, target_low, target_base, target_high, "
+                    "confidence, model, content_hash, created_at) "
+                    "VALUES ('ROLES', '2026-10-28', 'buy', 1, 2, 3, 50, 'fake', '0', now())"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO ai_calls (symbol, trading_day, rating, created_at) "
+                    "VALUES ('ROLES', '2026-10-28', 'buy', now())"
+                )
+            )
+            conn.execute(text("UPDATE holding_imports SET lots = 1 WHERE id = :i"), {"i": import_id})
+            conn.execute(text("DELETE FROM accounts WHERE id = :a"), {"a": account_id})
+            conn.execute(text("DELETE FROM ai_verdicts WHERE symbol = 'ROLES'"))
+            conn.execute(text("DELETE FROM iv_history WHERE symbol = 'ROLES'"))
+            conn.execute(text("DELETE FROM symbol_fundamentals WHERE symbol = 'ROLES'"))
+            remaining = conn.execute(
+                text(
+                    "SELECT (SELECT COUNT(*) FROM holding_lots) + (SELECT COUNT(*) FROM holding_trades) "
+                    "+ (SELECT COUNT(*) FROM covered_call_scans) + (SELECT COUNT(*) FROM ai_calls) "
+                    "+ (SELECT COUNT(*) FROM iv_history WHERE symbol = 'ROLES')"
+                )
+            ).scalar_one()
+            assert remaining == 0
+            conn.execute(text("DELETE FROM users WHERE id = :u"), {"u": user_id})
+    finally:
+        runtime_engine.dispose()
 
 
 def test_desk_runtime_can_use_the_feedback_tables(role_split_urls: RoleSplitUrls) -> None:

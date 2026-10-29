@@ -4,7 +4,8 @@
 `signals`, `alerts`, `deliveries` -- Alembic `0002`), and the technical desktop MVP's screener, universe,
 metrics, and feed-health tables (02m §b2 -- Alembic `0003`), the consensus-history tables
 (`consensus_snapshots`, `earnings_results`, `analyst_targets` -- 02n §d, Alembic `0004`), and the replay
-practice tables (02o c3 -- Alembic `0005`), and the feedback log (02s -- Alembic `0010`). Still out of scope:
+practice tables (02o c3 -- Alembic `0005`), the feedback log (02s -- Alembic `0010`), and the Fundamental lane's
+holdings, covered-call, IV, fundamentals and Desk AI tables (02n §d -- Alembic `0012`). Still out of scope:
 `iv_daily`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase 2a's own D3 ruling -- "a
 table arrives with the phase that first needs it").
 
@@ -31,6 +32,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -871,4 +873,223 @@ class FeedbackAttachment(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)  # never loaded with the row
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# -- Fundamental lane (Alembic 0012, 02n §d) ------------------------------------------------------------------------
+# Created in FK-dependency order: accounts -> holding_imports -> holding_lots, holding_trades; the scan, IV and
+# fundamentals tables stand alone; ai_verdicts -> ai_calls. Quantities and prices are floats like the engine's own
+# `covered_calls.Lot` and `OptionQuote` (a report is read, never settled against). Option rows say which side of the
+# chain they sit on with `option_right`: `right` is a reserved word in SQL.
+
+
+class Account(Base):
+    """One broker account of one Desk user. `external_id` is the broker's account number: it only matches an import to
+    its account and no endpoint ever returns it (02n §c1); the owner sees `label` and `type`."""
+
+    __tablename__ = "accounts"
+    __table_args__ = (
+        UniqueConstraint("broker", "external_id", name="uq_accounts_broker_external_id"),
+        CheckConstraint("type IN ('taxable', 'ira', 'roth')", name="ck_accounts_type"),
+        Index("ix_accounts_owner_user_id", "owner_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    broker: Mapped[str] = mapped_column(String, nullable=False, default="ibkr", server_default=text("'ibkr'"))
+    external_id: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str] = mapped_column(String, nullable=False)  # owner-set; "Account 1" until then
+    type: Mapped[str] = mapped_column(String, nullable=False, default="taxable", server_default=text("'taxable'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HoldingImport(Base):
+    """One account's import of one statement date, idempotent per (account, statement date): a re-run replaces the
+    row's lots. `state` is stored for statements that were read; "not configured" and "none" are read-time answers.
+    `detail` carries counts and states, never values (02d §7)."""
+
+    __tablename__ = "holding_imports"
+    __table_args__ = (
+        UniqueConstraint("account_id", "statement_date", name="uq_holding_imports_account_id_statement_date"),
+        CheckConstraint("source IN ('ibkr_flex')", name="ck_holding_imports_source"),
+        CheckConstraint("state IN ('running', 'ok', 'failed')", name="ck_holding_imports_state"),
+        CheckConstraint("lots >= 0", name="ck_holding_imports_lots"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="ibkr_flex", server_default=text("'ibkr_flex'"))
+    statement_date: Mapped[date] = mapped_column(Date, nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    state: Mapped[str] = mapped_column(String, nullable=False, default="ok", server_default=text("'ok'"))
+    detail: Mapped[str | None] = mapped_column(Text)
+
+
+class HoldingLot(Base):
+    """One LOT row of a statement: a stock lot (`STK`, with `acquired`) or an option lot (`OPT`, with right, strike and
+    expiry; a negative `quantity` is a short position, in contracts). `account_id` repeats the import's for the
+    per-symbol reads."""
+
+    __tablename__ = "holding_lots"
+    __table_args__ = (
+        CheckConstraint("quantity <> 0", name="ck_holding_lots_quantity"),
+        CheckConstraint("multiplier >= 1", name="ck_holding_lots_multiplier"),
+        CheckConstraint(
+            "(asset_class = 'STK' AND option_right IS NULL AND strike IS NULL AND expiry IS NULL) OR "
+            "(asset_class = 'OPT' AND option_right IN ('C', 'P') AND strike > 0 AND expiry IS NOT NULL)",
+            name="ck_holding_lots_asset_class",
+        ),
+        Index("ix_holding_lots_import_id", "import_id"),
+        Index("ix_holding_lots_account_id_symbol", "account_id", "symbol"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    import_id: Mapped[int] = mapped_column(ForeignKey("holding_imports.id", ondelete="CASCADE"), nullable=False)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)  # the underlying, for an option lot too
+    asset_class: Mapped[str] = mapped_column(String, nullable=False)  # "STK" | "OPT"
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    cost_per_share: Mapped[float | None] = mapped_column(Float)
+    acquired: Mapped[date | None] = mapped_column(Date)
+    option_right: Mapped[str | None] = mapped_column(String)  # "C" | "P"
+    strike: Mapped[float | None] = mapped_column(Float)
+    expiry: Mapped[date | None] = mapped_column(Date)
+    multiplier: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+
+
+class HoldingTrade(Base):
+    """An option trade from the data user's Flex `Trades` section: the sells, buys, assignments and expirations that the
+    premium-income history is summed from. Unique per (account, broker trade reference), so overlapping 365-day
+    statements never count a trade twice. `quantity` is in contracts and signed like the broker's."""
+
+    __tablename__ = "holding_trades"
+    __table_args__ = (
+        UniqueConstraint("account_id", "external_ref", name="uq_holding_trades_account_id_external_ref"),
+        CheckConstraint("option_right IN ('C', 'P')", name="ck_holding_trades_option_right"),
+        CheckConstraint("strike > 0", name="ck_holding_trades_strike"),
+        CheckConstraint(
+            "kind IN ('sell_to_open', 'buy_to_close', 'buy_to_open', 'sell_to_close', 'assignment', 'expiration')",
+            name="ck_holding_trades_kind",
+        ),
+        Index("ix_holding_trades_account_id_trade_date", "account_id", "trade_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    external_ref: Mapped[str] = mapped_column(String, nullable=False)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)  # the underlying
+    option_right: Mapped[str] = mapped_column(String, nullable=False)
+    strike: Mapped[float] = mapped_column(Float, nullable=False)
+    expiry: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)  # premium per share
+    multiplier: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default=text("100"))
+    commission: Mapped[float | None] = mapped_column(Float)
+
+
+class CoveredCallScan(Base):
+    """One scan of one holding in one account (02n §d `covered_calls/scan.py`): the engine's top candidates as it
+    returned them, with the chain's own `stamp` (`{as_of, source, quality, freshness}`), so a delayed or missing chain
+    is stored as such. A stored scan is never rewritten; the latest `run_at` is the one the screens read."""
+
+    __tablename__ = "covered_call_scans"
+    __table_args__ = (
+        CheckConstraint("iv_rank IS NULL OR iv_rank BETWEEN 0 AND 100", name="ck_covered_call_scans_iv_rank"),
+    )
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    spot: Mapped[float | None] = mapped_column(Float)
+    stamp: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    iv_rank: Mapped[float | None] = mapped_column(Float)  # null until 60 sessions of `iv_history` exist
+    opportunity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    candidates: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+
+
+class IvHistory(Base):
+    """One day's 30-day implied volatility of a symbol, the series `core.covered_calls.iv_rank` reads (latest day last).
+    `source` and `quality` name where the point came from, so a delayed chain's IV is never filed as real-time."""
+
+    __tablename__ = "iv_history"
+    __table_args__ = (CheckConstraint("iv30 > 0", name="ck_iv_history_iv30"),)
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    iv30: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    quality: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class SymbolFundamental(Base):
+    """The 02n §c4 metric row of one symbol, as of one time; a metric that cannot be computed is null in `metrics`."""
+
+    __tablename__ = "symbol_fundamentals"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    metrics: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+
+
+class AiVerdict(Base):
+    """The Desk AI's verdict of one symbol on one trading day (02f §5): the rating, the 12-month target, the votes, the
+    inputs with their as-of times, the model, tokens and cost. The checks 02f §5 makes in code are repeated here:
+    0 < low <= base <= high and confidence within 0-100. The rating's value set is the step-5 spec's, so it is free
+    text here."""
+
+    __tablename__ = "ai_verdicts"
+    __table_args__ = (
+        CheckConstraint(
+            "target_low > 0 AND target_low <= target_base AND target_base <= target_high", name="ck_ai_verdicts_target"
+        ),
+        CheckConstraint("confidence BETWEEN 0 AND 100", name="ck_ai_verdicts_confidence"),
+    )
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    trading_day: Mapped[date] = mapped_column(Date, primary_key=True)
+    rating: Mapped[str] = mapped_column(String, nullable=False)
+    target_low: Mapped[float] = mapped_column(Float, nullable=False)
+    target_base: Mapped[float] = mapped_column(Float, nullable=False)
+    target_high: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[int] = mapped_column(Integer, nullable=False)
+    reasons: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    risks: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    changed: Mapped[str | None] = mapped_column(Text)  # what changed since the previous day's verdict
+    votes: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    bull: Mapped[str | None] = mapped_column(Text)
+    bear: Mapped[str | None] = mapped_column(Text)
+    inputs: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    content_hash: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # the cache key: the same inputs, the same verdict
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AiCall(Base):
+    """A Desk AI rating change (02h §3): the calls the track record counts, one per verdict whose rating differs from
+    the one before. Its outcome after 90 trading days is the settlement job's own table, not added yet."""
+
+    __tablename__ = "ai_calls"
+    __table_args__ = (
+        UniqueConstraint("symbol", "trading_day", name="uq_ai_calls_symbol_trading_day"),
+        ForeignKeyConstraint(
+            ["symbol", "trading_day"],
+            ["ai_verdicts.symbol", "ai_verdicts.trading_day"],
+            name="fk_ai_calls_symbol_trading_day_ai_verdicts",
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    trading_day: Mapped[date] = mapped_column(Date, nullable=False)
+    rating: Mapped[str] = mapped_column(String, nullable=False)
+    prev_rating: Mapped[str | None] = mapped_column(String)  # null for a symbol's first verdict
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

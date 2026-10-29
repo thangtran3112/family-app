@@ -145,8 +145,8 @@ test("a Fundamental route shows the wrong-lane screen; Switch view and the lane 
 
   await main.getByRole("button", { name: "Switch view" }).click();
   await expect(top.getByRole("radio", { name: "Fundamental" })).toBeChecked();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Holdings", "Covered calls", "Stocks"]);
-  await expect(main.getByRole("heading", { name: "Portfolio snapshot" })).toBeVisible();
+  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
+  await expect(main.getByTestId("fund-holdings")).toBeVisible();
   await expectCleanScreen(page);
 
   await top.getByRole("radio", { name: "Technical" }).click();

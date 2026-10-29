@@ -1,0 +1,21 @@
+{
+ "ai_daily": {
+  "last_run_at": "2026-10-23T21:05:00Z",
+  "state": "ok"
+ },
+ "holdings": {
+  "account_scope": "data",
+  "imported_at": "2026-10-24T09:15:00Z",
+  "lots": 10,
+  "source": "ibkr_flex",
+  "state": "ok",
+  "statement_date": "2026-10-23"
+ },
+ "options": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated",
+  "state": "connected"
+ }
+}

@@ -1,0 +1,24 @@
+/* Left rail Holdings tab and the Fundamental right rail (02n §b1). 24 px rows, nothing scrolls sideways. */
+
+.list { display: flex; margin: 0; flex-direction: column; padding: var(--space-2); list-style: none; font-variant-numeric: tabular-nums; }
+.row { display: grid; width: 100%; min-height: 24px; align-items: center; grid-template-columns: minmax(0, 1fr) auto auto 12px; gap: var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); text-align: left; cursor: pointer; }
+.row[data-band="1180"] { grid-template-columns: minmax(0, 1fr) auto auto; }
+.row:hover { background: var(--color-raised); }
+.row[aria-pressed="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.row:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.symbol { font-weight: var(--weight-bold); }
+.weight { color: var(--color-muted); text-align: right; }
+.change { text-align: right; }
+.dot { display: flex; justify-content: center; }
+.note { margin: 0; padding: var(--space-3); color: var(--color-muted); font-size: var(--text-label); }
+
+/* Right rail sections */
+.block { display: grid; gap: var(--space-2); font-variant-numeric: tabular-nums; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-3); margin: 0; font-size: var(--text-label); }
+.kv dt { color: var(--color-muted); }
+.kv dd { margin: 0; text-align: right; }
+.line { margin: 0; font-size: var(--text-label); }
+.big { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
+.prompt { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
+.verdict { display: grid; gap: var(--space-2); border: 1px solid color-mix(in srgb, var(--color-ai) 45%, var(--color-hairline)); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3); }
+.reasons { margin: 0; padding-left: var(--space-4); color: var(--color-muted); font-size: var(--text-label); }

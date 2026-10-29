@@ -25,6 +25,15 @@ _REQUIRE_VAR = "DESK_REQUIRE_DB"
 _ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 _TABLES = (
+    "ai_calls",
+    "ai_verdicts",
+    "symbol_fundamentals",
+    "iv_history",
+    "covered_call_scans",
+    "holding_trades",
+    "holding_lots",
+    "holding_imports",
+    "accounts",
     "filter_matches",
     "filter_runs",
     "filter_strategy_versions",

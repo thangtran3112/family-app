@@ -1,0 +1,37 @@
+[
+ {
+  "enabled": true,
+  "rules": {
+   "min_annualized_yield_pct": 15.0,
+   "min_iv_rank": 50.0,
+   "skip_earnings": true
+  },
+  "scope": "holdings",
+  "strategy_id": 11,
+  "template": "covered_call_income"
+ },
+ {
+  "enabled": true,
+  "rules": {
+   "days_to_expiry": 7.0,
+   "delta_above": 0.5,
+   "near_strike_pct": 2.0
+  },
+  "scope": "holdings",
+  "strategy_id": 12,
+  "template": "short_call_risk"
+ },
+ {
+  "enabled": false,
+  "rules": {
+   "confidence_below": 50.0,
+   "cross_target": true,
+   "earnings_within_days": 3.0,
+   "eps_revision_pct": 3.0,
+   "rating_change": true
+  },
+  "scope": "holdings",
+  "strategy_id": null,
+  "template": "ai_daily_view"
+ }
+]

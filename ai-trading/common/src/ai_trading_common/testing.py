@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.trades import Trades, empty_trades_frame
+from ai_trading_common.types import OptionContract
 
 
 class FakeClock:
@@ -74,6 +77,35 @@ class FakeTrades:
             return Trades(frame=empty_trades_frame(), source="fake", feed=feed)
         kept = frame[(frame["t"] >= start) & (frame["t"] < end)].reset_index(drop=True)
         return Trades(frame=kept, source="fake", feed=feed)
+
+
+class FakeOptionChain:
+    """An option-chain source over canned contracts keyed by underlying. It applies the `OptionChainSource` window
+    (`right`, `min_dte`..`max_dte` from `now`'s New York date, the strike bounds) to the stored contracts and sets
+    each `dte` from `now`, so a test gets the same narrowing a real provider does; an underlying with none is an
+    empty chain. `raises` makes every
+    call raise it, as a provider outage or a rejected key does. Every call is recorded in `calls` as
+    `(symbol, now, right, min_dte, max_dte, min_strike, max_strike)`."""
+
+    def __init__(self, contracts: dict[str, list[OptionContract]] | None = None, *, raises: Exception | None = None):
+        self.contracts = contracts or {}
+        self.raises = raises
+        self.calls: list[tuple] = []
+
+    def option_chain(self, symbol, *, now, right="C", min_dte=0, max_dte, min_strike=None, max_strike=None):
+        self.calls.append((symbol, now, right, min_dte, max_dte, min_strike, max_strike))
+        if self.raises is not None:
+            raise self.raises
+        today = now.tz_convert("America/New_York").date()
+        found = [
+            replace(c, dte=(c.expiry - today).days)
+            for c in self.contracts.get(symbol, [])
+            if c.right == right
+            and min_dte <= (c.expiry - today).days <= max_dte
+            and (min_strike is None or c.strike >= min_strike)
+            and (max_strike is None or c.strike <= max_strike)
+        ]
+        return sorted(found, key=lambda c: (c.expiry, c.strike))
 
 
 class FakeGateway:

@@ -187,6 +187,26 @@ export const StatusSchema = z.object({
     state: z.enum(["running", "paused_no_quotes", "paused_by_user", "not_started"]),
     unread: finiteNumber.int(),
   }),
+  // The Fundamental lane's three fields (02n §c3 #18).
+  holdings: z.object({
+    source: z.literal("ibkr_flex"),
+    account_scope: z.enum(["data", "main_interim"]),
+    statement_date: z.iso.date().nullable(),
+    imported_at: utcTimestamp.nullable(),
+    lots: finiteNumber.int(),
+    state: z.enum(["ok", "running", "failed", "not_configured", "none"]),
+  }),
+  options: z.object({
+    as_of: dateOrTimestamp.nullable(),
+    source: z.string().nullable(),
+    quality,
+    freshness,
+    state: z.enum(["connected", "not_connected"]),
+  }),
+  ai_daily: z.object({
+    state: z.enum(["not_started", "ok", "partial", "failed"]),
+    last_run_at: utcTimestamp.nullable(),
+  }),
 }) satisfies z.ZodType<components["schemas"]["StatusOut"]>;
 
 export const MeSchema = z.object({ email: z.string() }) satisfies z.ZodType<components["schemas"]["MeOut"]>;

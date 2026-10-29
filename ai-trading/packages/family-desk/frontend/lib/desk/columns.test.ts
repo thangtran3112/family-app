@@ -11,6 +11,11 @@ test("each board drops its declared columns at 1180 and keeps all at 1440", () =
     ["dashboard", dashboard, ["vs_vwap_pct", "rvol_10d"]],
     ["screener", screener, ["matched_since", "atr_pct_14", "volume"]],
     ["watchlist", watchlist, ["rvol_10d", "bias_label"]],
+    // 02n §b3 "1180 column drop orders (lowest first)": no Fundamental table scrolls sideways.
+    ["fundHoldings", ["symbol", "shares", "last", "change_pct", "next_earnings", "ai_rating", "open_calls", "unrealized_pct", "weight_pct"].map((key) => ({ key })), ["next_earnings", "ai_rating", "open_calls", "unrealized_pct"]],
+    ["fundCandidates", ["expiry", "strike", "annualized_yield", "spread_pct", "open_interest", "return_if_called", "upside_cap", "score"].map((key) => ({ key })), ["spread_pct", "open_interest", "return_if_called", "upside_cap"]],
+    ["fundShortCalls", ["symbol", "strike", "moneyness_pct", "contracts", "risks"].map((key) => ({ key })), ["moneyness_pct", "contracts"]],
+    ["fundBrief", ["symbol", "rating", "eps_rev_30d_pct", "confidence", "upside_pct"].map((key) => ({ key })), ["eps_rev_30d_pct", "confidence"]],
   ];
   for (const [board, columns, dropped] of cases) {
     const prioritized = withPriorities(columns, board);

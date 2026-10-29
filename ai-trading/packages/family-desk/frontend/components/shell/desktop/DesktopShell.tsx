@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { hasMoreLeftRail, hasPracticeLeftRail, isPracticePath, isWrongLane } from "@/lib/lanes";
 import type { ShellBand } from "@/lib/desk/viewport";
-import { DeskStatusProvider, DeskUiProvider, LeftSlotContext, RailSlotContext, useDeskUi } from "./DeskContext";
+import { DeskHoldingsProvider, DeskStatusProvider, DeskUiProvider, LeftSlotContext, RailSlotContext, useDeskUi } from "./DeskContext";
 import { LeftRail } from "./LeftRail";
 import { MoreRail } from "./MoreRail";
 import { PracticeBand, PracticeChromeProvider } from "./PracticeChrome";
@@ -18,9 +18,11 @@ export function DesktopShell({ band, children }: { band: ShellBand; children: Re
   return (
     <DeskStatusProvider>
       <DeskUiProvider>
-        <PracticeChromeProvider>
-          <ShellFrame band={band}>{children}</ShellFrame>
-        </PracticeChromeProvider>
+        <DeskHoldingsProvider>
+          <PracticeChromeProvider>
+            <ShellFrame band={band}>{children}</ShellFrame>
+          </PracticeChromeProvider>
+        </DeskHoldingsProvider>
       </DeskUiProvider>
     </DeskStatusProvider>
   );

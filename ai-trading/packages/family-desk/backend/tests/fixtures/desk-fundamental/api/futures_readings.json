@@ -1,0 +1,80 @@
+{
+ "macro_week": [
+  {
+   "date": "2026-10-29",
+   "release": "GDP, advance estimate",
+   "series_id": "GDP"
+  },
+  {
+   "date": "2026-10-30",
+   "release": "PCE price index",
+   "series_id": "PCEPI"
+  }
+ ],
+ "rows": [
+  {
+   "change_pct": 0.3,
+   "expiry": "2026-12-18",
+   "front": "ESZ6",
+   "last": 6120.25,
+   "next_roll": "2026-12-14",
+   "root": "/ES",
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "week_high": 6155.0,
+   "week_low": 6040.5
+  },
+  {
+   "change_pct": 0.5,
+   "expiry": "2026-12-18",
+   "front": "NQZ6",
+   "last": 21480.5,
+   "next_roll": "2026-12-14",
+   "root": "/NQ",
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "week_high": 21610.0,
+   "week_low": 21090.0
+  },
+  {
+   "change_pct": null,
+   "expiry": "2026-11-20",
+   "front": "CLZ6",
+   "last": null,
+   "next_roll": "2026-11-13",
+   "root": "/CL",
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "week_high": null,
+   "week_low": null
+  },
+  {
+   "change_pct": null,
+   "expiry": "2026-12-29",
+   "front": "GCZ6",
+   "last": null,
+   "next_roll": "2026-11-23",
+   "root": "/GC",
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "week_high": null,
+   "week_low": null
+  }
+ ]
+}

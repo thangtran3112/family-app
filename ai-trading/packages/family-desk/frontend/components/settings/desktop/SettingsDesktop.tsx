@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { DeskApiError, type DeskApiProblem } from "@/lib/api/client";
+import { withMaskValues } from "@/lib/desk/mask";
 import { loadChannels, loadSettings, saveSettings } from "@/lib/desk/settings";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { Lane } from "@/lib/lanes";
 import { createSingleFlightSettingsSave, settingsControlsDisabled } from "@/lib/settings/persistence";
+import { readCoveredCallSettings } from "@/lib/settings/fundamental";
 import {
   mergeOwnedSettings,
   QuietHoursSchema,
@@ -19,12 +22,17 @@ import {
   type QuietHours as QuietRange,
   type SettingsRecord,
 } from "@/lib/settings/schema";
+import { AccountsCard } from "./AccountsCard";
+import { AlertTemplatesCard } from "./AlertTemplatesCard";
 import { BrokerRowsDisabled } from "./BrokerRowsDisabled";
 import { ChannelRows } from "./ChannelRows";
 import { DefaultView } from "./DefaultView";
+import { HoldingsImportCard } from "./HoldingsImportCard";
 import { MarketDataStatus } from "./MarketDataStatus";
+import { MaskingCard } from "./MaskingCard";
 import { PauseAll } from "./PauseAll";
 import { QuietHours } from "./QuietHours";
+import { ScanFiltersCard } from "./ScanFiltersCard";
 import styles from "./settingsDesktop.module.css";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -32,7 +40,7 @@ type Runner = ReturnType<typeof createSingleFlightSettingsSave>;
 
 /** D11 Settings and More (02m §a3.8, §a3.9). Every write goes through `save`, one request at a time. */
 export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
-  const { rememberLane } = useDeskUi();
+  const { rememberLane, lane } = useDeskUi();
   const settingsQuery = useDeskQuery("settings", (signal) => loadSettings({ signal }));
   const channelsQuery = useDeskQuery("settings-channels", (signal) => loadChannels({ signal }));
   // The record the last successful save returned; until the first save, the loaded settings.
@@ -42,6 +50,8 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   // The record a failed save tried to write, so Retry sends the same change again.
   const [unsaved, setUnsaved] = useState<SettingsRecord | null>(null);
+  // The 422 problems of the last failed save, in the server's words (the Fundamental scan filters show them beside their fields).
+  const [serverProblems, setServerProblems] = useState<readonly DeskApiProblem[]>([]);
   const runner = useRef<Runner | null>(null);
 
   useEffect(() => {
@@ -68,7 +78,13 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
     if (!single) return;
     setSaveStatus("saving");
     setUnsaved(null);
-    const result = await single.run(() => saveSettings(next));
+    setServerProblems([]);
+    const result = await single.run(() =>
+      saveSettings(next).catch((error: unknown) => {
+        if (error instanceof DeskApiError && error.problems.length > 0) setServerProblems(error.problems);
+        throw error;
+      }),
+    );
     if (result.status === "saved") {
       setSaved(result.value.settings);
       setSaveStatus("saved");
@@ -91,6 +107,8 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
     rememberLane(view);
     edit((base) => withDefaultView(base, view));
   }
+
+  const fundamental = lane === "fundamental";
 
   function changeQuiet(boundary: keyof QuietRange, value: string) {
     const draft = { ...quiet, [boundary]: value };
@@ -147,6 +165,22 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
           <h2 id="settings-default-view" className={styles.eyebrow}>Default view</h2>
           <DefaultView value={readDefaultView(settings)} disabled={disabled} onChange={changeView} />
         </section>
+
+        {fundamental && (
+          <>
+            <MaskingCard settings={settings} disabled={disabled} onChange={(masked) => edit((base) => withMaskValues(base, masked))} />
+            <AccountsCard disabled={disabled} />
+            <HoldingsImportCard disabled={disabled} />
+            <ScanFiltersCard
+              key={JSON.stringify(readCoveredCallSettings(settings))}
+              settings={settings}
+              disabled={disabled}
+              serverProblems={serverProblems}
+              onSave={edit}
+            />
+            <AlertTemplatesCard />
+          </>
+        )}
 
         <section className={styles.card} aria-labelledby="settings-alerts">
           <h2 id="settings-alerts" className={styles.eyebrow}>Alerts</h2>

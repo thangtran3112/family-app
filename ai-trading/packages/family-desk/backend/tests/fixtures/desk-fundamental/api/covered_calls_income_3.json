@@ -1,0 +1,41 @@
+{
+ "assignments": [
+  {
+   "contracts": 2,
+   "date": "2026-08-21",
+   "strike": 70.0,
+   "symbol": "KO"
+  },
+  {
+   "contracts": 1,
+   "date": "2026-03-20",
+   "strike": 170.0,
+   "symbol": "JNJ"
+  }
+ ],
+ "by_month": [
+  {
+   "contracts": 6,
+   "month": "2026-08",
+   "premium": 790.0
+  },
+  {
+   "contracts": 5,
+   "month": "2026-09",
+   "premium": 610.0
+  },
+  {
+   "contracts": 3,
+   "month": "2026-10",
+   "premium": 345.0
+  }
+ ],
+ "source_stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "eod",
+  "source": "simulated"
+ },
+ "state": "ok",
+ "ytd_premium": 4910.0
+}

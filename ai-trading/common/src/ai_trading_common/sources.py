@@ -28,6 +28,8 @@ from ai_trading_common.types import (
     Mover,
     NewsItem,
     Observation,
+    OptionContract,
+    OptionRight,
     Quote,
     UniverseAsset,
 )
@@ -114,6 +116,26 @@ class UniverseSource(Protocol):
 @runtime_checkable
 class QuoteSource(Protocol):
     def latest(self, symbols: Sequence[str], *, now: pd.Timestamp) -> list[Quote]: ...
+
+
+@runtime_checkable
+class OptionChainSource(Protocol):
+    """A snapshot of one underlying's option chain, never a stream. `now` pins the expiry window
+    (`min_dte`..`max_dte` calendar days from its New York date) and each contract's `dte`; the quotes are the
+    provider's latest, stamped by `quality`. An empty window is an empty list, not `NoData`. `max_dte` is required
+    so no caller can ask for a whole chain by accident (a free plan allows 200 requests a minute)."""
+
+    def option_chain(
+        self,
+        symbol: str,
+        *,
+        now: pd.Timestamp,
+        right: OptionRight = "C",
+        min_dte: int = 0,
+        max_dte: int,
+        min_strike: float | None = None,
+        max_strike: float | None = None,
+    ) -> list[OptionContract]: ...
 
 
 @runtime_checkable

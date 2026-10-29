@@ -1,0 +1,165 @@
+{
+ "events": [
+  {
+   "date": "2026-10-27",
+   "kind": "earnings",
+   "label": "KO earnings",
+   "symbol": "KO"
+  },
+  {
+   "date": "2026-10-28",
+   "kind": "earnings",
+   "label": "MSFT earnings",
+   "symbol": "MSFT"
+  },
+  {
+   "date": "2026-10-29",
+   "kind": "macro",
+   "label": "GDP, advance estimate",
+   "symbol": null
+  },
+  {
+   "date": "2026-11-13",
+   "kind": "ex_dividend",
+   "label": "KO ex-dividend",
+   "symbol": "KO"
+  }
+ ],
+ "feed": [
+  {
+   "at": "2026-10-24T09:15:00Z",
+   "detail": "IBKR Flex statement for Fri 2026-10-23.",
+   "href": "/holdings",
+   "kind": "import",
+   "symbol": null,
+   "title": "Holdings imported: 10 lots"
+  },
+  {
+   "at": "2026-10-23T21:05:00Z",
+   "detail": "Base target 445.",
+   "href": "/stocks?symbol=MSFT#overview",
+   "kind": "ai_change",
+   "symbol": "MSFT",
+   "title": "Desk AI moved MSFT from Buy to Hold"
+  },
+  {
+   "at": "2026-10-23T20:05:00Z",
+   "detail": "Strike 72.50 expires Oct 30; the price is 71.90 and earnings fall before expiry.",
+   "href": "/covered-calls#income",
+   "kind": "short_call_risk",
+   "symbol": "KO",
+   "title": "KO short call is at its strike"
+  },
+  {
+   "at": "2026-10-23T20:00:00Z",
+   "detail": "Before its call expires on Oct 30.",
+   "href": "/stocks?symbol=KO#overview",
+   "kind": "earnings_soon",
+   "symbol": "KO",
+   "title": "KO reports Oct 27"
+  },
+  {
+   "at": "2026-10-23T20:00:00Z",
+   "detail": "After the close.",
+   "href": "/stocks?symbol=MSFT#overview",
+   "kind": "earnings_soon",
+   "symbol": "MSFT",
+   "title": "MSFT reports Oct 28"
+  },
+  {
+   "at": "2026-10-23T19:30:00Z",
+   "detail": "IRA: the Nov 20 245 call, delta 0.28, bid 2.85.",
+   "href": "/covered-calls#scan",
+   "kind": "cc_opportunity",
+   "symbol": "AAPL",
+   "title": "AAPL covered call: 16.1% a year"
+  }
+ ],
+ "income": {
+  "month_to_date": 345.0,
+  "next_expiry": "2026-10-30",
+  "open_calls": 6
+ },
+ "market": {
+  "next_open": "2026-10-26T13:30:00Z",
+  "next_update_at": null,
+  "session": "closed"
+ },
+ "market_strip": [
+  {
+   "change_pct": 0.3,
+   "last": 612.4,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "SPY"
+  },
+  {
+   "change_pct": 0.5,
+   "last": 538.2,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "QQQ"
+  },
+  {
+   "change_pct": -0.2,
+   "last": 231.1,
+   "stamp": {
+    "as_of": "2026-10-23T20:00:00Z",
+    "freshness": "closed",
+    "quality": "delayed-15m",
+    "source": "simulated"
+   },
+   "symbol": "IWM"
+  },
+  {
+   "change_pct": null,
+   "last": null,
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "symbol": "/ES"
+  },
+  {
+   "change_pct": null,
+   "last": null,
+   "stamp": {
+    "as_of": null,
+    "freshness": "unavailable",
+    "quality": "unavailable",
+    "source": null
+   },
+   "symbol": "/NQ"
+  }
+ ],
+ "portfolio": {
+  "day_change": 2520.99,
+  "day_change_pct": 0.52,
+  "import": {
+   "account_scope": "data",
+   "imported_at": "2026-10-24T09:15:00Z",
+   "lots": 10,
+   "source": "ibkr_flex",
+   "state": "ok",
+   "statement_date": "2026-10-23"
+  },
+  "unrealized_pct": 27.5,
+  "value": 483720.0
+ },
+ "stamp": {
+  "as_of": "2026-10-23T20:00:00Z",
+  "freshness": "closed",
+  "quality": "delayed-15m",
+  "source": "simulated"
+ }
+}

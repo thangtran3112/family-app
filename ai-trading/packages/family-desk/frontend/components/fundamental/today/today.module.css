@@ -1,0 +1,17 @@
+/* FD2 Today (02n §b3): the Needs-you feed beside the income and events column. Shared look lives in ../fundamental.module.css. */
+
+.columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: var(--space-4); }
+.column { display: grid; min-width: 0; align-content: start; gap: var(--space-4); }
+
+.item { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: baseline; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-2) 0; color: inherit; font-size: var(--text-label); }
+.item:hover { background: var(--color-raised); }
+.item:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.kind { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.kind[data-kind="short_call_risk"], .kind[data-kind="import"] { color: var(--color-amber); }
+.itemBody { display: grid; min-width: 0; gap: 2px; }
+.itemTitle { font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.itemDetail { color: var(--color-muted); overflow-wrap: anywhere; }
+
+.event { display: grid; grid-template-columns: 56px 128px minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 28px; border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
+
+.hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

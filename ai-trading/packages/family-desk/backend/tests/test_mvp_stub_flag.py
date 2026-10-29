@@ -10,6 +10,7 @@ import pytest
 from ai_trading_common.errors import NoData
 from ai_trading_common.registry import DataSources
 
+from ai_trading import fundamental_stub
 from ai_trading.api.replay import get_services
 from ai_trading.mvp_stub import STUB_FLAG, stub_enabled
 from ai_trading.replay import fixture
@@ -59,7 +60,8 @@ def test_no_deploy_file_sets_the_stub_flag() -> None:
     for root in existing:
         for path in [root] if root.is_file() else (p for p in root.rglob("*") if p.is_file()):
             try:
-                if any(flag in path.read_text(errors="ignore") for flag in (STUB_FLAG, fixture.STUB_FLAG)):
+                flags = (STUB_FLAG, fixture.STUB_FLAG, fundamental_stub.STUB_FLAG)
+                if any(flag in path.read_text(errors="ignore") for flag in flags):
                     offenders.append(str(path.relative_to(_REPO)))
             except OSError:
                 continue
