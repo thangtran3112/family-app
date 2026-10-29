@@ -27,6 +27,16 @@ through `core/covered_calls.py` unchanged; the scan job and its stored scans (`c
 so IV rank stays null until 60 sessions of IV history exist. The Desk AI verdict is null and the brief has no rows until step 5.
 The Alpaca key currently answers 401, so live chain calls read `unavailable` until a valid key is set; tests use fixtures.
 
+**Step 3d built (2026-10-29): the desktop screens.** The Fundamental view renders real screens from the 13 real endpoints:
+FD2 Today (composed client-side, because `/dashboard/fundamental` stays gated), FD3 Holdings with the lots pane and the
+`Columns` menu, FD4 and FD5 Covered calls, FD7 to FD10 Research, FD11 Settings, and the Fundamental left and right rails.
+`lib/lanes.ts` has the third value `shared` (Today, Watchlists, Settings, More, `/futures/specs` render the active lane's
+variant); `default_view` and `mask_values` load once from the saved settings; the top-bar switch (`Alt+M`) masks dollars,
+share counts and contract counts. Deferred and shown as plain "not started" or "not connected" states, never a stand-in:
+FD6 futures prices (the `/futures/read` page shows the real roll calendar), every Desk AI verdict, brief row and AI change
+(step 5), and the fundamental alert templates (disabled switches, `/fundamental-alerts` never called). The `/watchlists`
+Fundamental variant (a `long_term` table with fundamentals) is not built; the left rail's Watchlists tab is the existing panel.
+
 Inputs read: 02l §b–§d, 02m §a, §c and §e, the R3 persona-split plan (`paper-persona-split-plan.md`, local Hermes run
 `desk-activation-20261020`; its F1–F12 mobile boards are content reference, not layouts), [02g](02g-desk-covered-calls-and-futures-swing-design.md),
 [02f](02f-desk-indicators-and-ai-daily-design.md), [02h](02h-desk-research-tools-design.md), [02d](02d-desk-spike-results.md) §7 (Flex),
