@@ -141,7 +141,7 @@ From repository root, with local token file mode `0600`:
 
 ```bash
 ./infrastructure/vps/bootstrap-cloudflared.sh \
-  --host 158.69.202.250 \
+  --host $VPS_IPV4_ADDRESS \
   --user ubuntu \
   --key ~/.ssh/id_ed25519_personal \
   --ssh-port 2222 \
