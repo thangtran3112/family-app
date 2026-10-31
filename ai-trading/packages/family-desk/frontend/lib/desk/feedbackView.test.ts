@@ -4,7 +4,6 @@ import { DeskApiError } from "../api/client.ts";
 import type { FeedbackDetail, FeedbackEvent } from "../feedback/schemas.ts";
 import {
   agentLine,
-  agoText,
   areaLabel,
   areaOptions,
   checkScreenshot,
@@ -98,14 +97,6 @@ test("dates print in Eastern time the way the board does", () => {
   assert.equal(formatShortDay("not a date"), "—");
 });
 
-test("how long ago reads in minutes, hours and days", () => {
-  const now = new Date("2026-10-26T12:00:00Z");
-  assert.equal(agoText("2026-10-26T11:59:40Z", now), "just now");
-  assert.equal(agoText("2026-10-26T11:48:00Z", now), "12 min ago");
-  assert.equal(agoText("2026-10-26T10:00:00Z", now), "2 h ago");
-  assert.equal(agoText("2026-10-23T12:00:00Z", now), "3 d ago");
-});
-
 test("the timeline reads Open, In progress, Fixed, with the agent chip only where an agent acted", () => {
   const entries = timeline([opened, started, fixed]);
   assert.deepEqual(
@@ -140,8 +131,8 @@ test("a fix reference reads as a commit or stays a pull request", () => {
 
 test("the agent line is purple only for Claude Code or Hermes, and says who is working on it or what fixed it", () => {
   const now = new Date("2026-10-26T14:02:00Z");
-  assert.deepEqual(agentLine(detail("in_progress", [opened, started]), now), { tone: "ai", text: "Claude Code is working on this · updated 2 h ago" });
-  assert.deepEqual(agentLine(detail("in_progress", [opened, { ...started, actor: "hermes" }]), now), { tone: "ai", text: "Hermes is working on this · updated 2 h ago" });
+  assert.deepEqual(agentLine(detail("in_progress", [opened, started]), now), { tone: "ai", text: "Claude Code is working on this · updated 2 hr ago" });
+  assert.deepEqual(agentLine(detail("in_progress", [opened, { ...started, actor: "hermes" }]), now), { tone: "ai", text: "Hermes is working on this · updated 2 hr ago" });
   assert.equal(agentLine(detail("in_progress", [opened, { ...started, actor: "owner" }]), now), null);
   assert.deepEqual(agentLine(detail("fixed", [opened, started, fixed], { fix_ref: "1a2b3c4" }), now), { tone: "ai", text: "Fixed in 1a2b3c4 · shipped Thu 2026-10-29" });
   assert.deepEqual(agentLine(detail("fixed", [opened, { ...fixed, actor: "owner" }], { fix_ref: "PR #12" }), now), { tone: "plain", text: "Fixed in PR #12 · shipped Thu 2026-10-29" });
