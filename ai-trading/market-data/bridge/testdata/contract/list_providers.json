@@ -1,0 +1,37 @@
+{
+  "http_status": 200,
+  "request": {},
+  "response": {
+    "providers": [
+      {
+        "classes": [
+          "EQUITY_QUOTES",
+          "EQUITY_BARS"
+        ],
+        "configured": true,
+        "counters": {
+          "requests": "1"
+        },
+        "lastOk": "2024-05-02T20:30:00Z",
+        "provider": "alpaca",
+        "quality": "DELAYED_15M",
+        "state": "HEALTH_STATE_OK"
+      },
+      {
+        "classes": [
+          "EQUITY_QUOTES"
+        ],
+        "configured": true,
+        "counters": {
+          "requests": "1"
+        },
+        "lastOk": "2024-05-02T20:30:00Z",
+        "newestTick": "2024-05-02T20:30:00Z",
+        "provider": "ibkr",
+        "quality": "REALTIME",
+        "state": "HEALTH_STATE_OK"
+      }
+    ]
+  },
+  "rpc": "ListProviders"
+}

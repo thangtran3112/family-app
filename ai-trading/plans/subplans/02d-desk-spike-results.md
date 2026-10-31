@@ -4,6 +4,7 @@ Status: In progress, started 2026-10-10.
 - The desk-side checks and the documentation research are done.
 - The owner set up the data user ([phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4, guide [02e](02e-ibkr-data-user-setup.md)).
 - The Flex check (7) passed on 2026-10-24. The Gateway checks (1, 3, 4, 9) run in the streaming probe on Mon 2026-10-26 at 09:30 ET (Task 0.5, owner phone approval), then Task 0.6 closes the spike.
+- **Note 2026-10-31:** no Gateway probe result was recorded and the 2026-10-26 schedule is stale. The probe moves to [02t](02t-market-data-bridge-plan.md) B1 step 1 (on the spare Ubuntu laptop).
 
 Related:
 - [02a §12](02a-desk-v1-strategies-design.md): the checks and their decided fallbacks

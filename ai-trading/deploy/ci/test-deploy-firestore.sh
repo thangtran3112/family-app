@@ -423,7 +423,7 @@ if [[ "$status" != 0 ]]; then
   fail "case1: expected exit 0, got $status"
 else
   # GNU stat -f prints filesystem data before failing; try -c first, then BSD -f.
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env cloudflared.env; do
     f="$s1/secrets/$name"
     [[ -f "$f" ]] || { fail "case1: missing $f"; continue; }
     [[ "$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f" 2>/dev/null)" == 600 ]] || fail "case1: $f not mode 600"
@@ -431,6 +431,7 @@ else
   grep -q 'fake-not-real-gateway' "$s1/secrets/auth.env" 2>/dev/null || fail "case1: auth.env missing renamed gateway content"
   [[ -f "$s1/secrets/gateway.env" ]] && fail "case1: gateway.env should have been renamed to auth.env, not left behind"
   grep -q 'fake-tunnel-token' "$s1/secrets/cloudflared.env" 2>/dev/null || fail "case1: cloudflared.env content mismatch"
+  grep -q 'fake-not-real-market-data-bridge' "$s1/secrets/market-data-bridge.env" 2>/dev/null || fail "case1: market-data-bridge.env missing its rendered profile"
   # The gateway (Caddy) gets only Vibe's API key, never Vibe's provider keys.
   [[ "$(cat "$s1/secrets/vibe-gateway.env" 2>/dev/null)" == 'VIBE_API_AUTH_KEY=fake-vibe-key-not-real' ]] || fail "case1: vibe-gateway.env must hold exactly VIBE_API_AUTH_KEY"
   ! grep -q '^FINNHUB_API_KEY=' "$s1/secrets/vibe-consensus.env" || fail "case1: optional Finnhub key should be absent"
@@ -470,6 +471,22 @@ export DEPLOY_SH_FAIL_AFTER=vibe-consensus.env
 status="$(FAKE_FC_FINNHUB_KEY=1 run_scenario "$s_consensus_first")"
 unset DEPLOY_SH_FAIL_AFTER
 [[ "$status" != 0 && ! -e "$s_consensus_first/secrets/vibe-consensus.env" ]] || fail "new consensus secret survived rollback"
+
+echo "=== Case 1d (GREEN): missing optional market-data-bridge profile never fails the deploy ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_bridge="$(new_scratch case_bridge_missing)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_bridge/ci-staging/cloudflared.env"
+status="$(FAKE_FC_MISSING_PROFILE=ai-trading/market-data-bridge run_scenario "$s_bridge" 2>"$s_bridge/stderr.out")"
+[[ "$status" == 0 ]] || fail "case1d: missing bridge profile must not fail the deploy, got $status"
+[[ -f "$s_bridge/secrets/market-data-bridge.env" ]] || fail "case1d: placeholder market-data-bridge.env not installed"
+! grep -Eq 'TOKEN|FAKE_VALUE|ALPACA' "$s_bridge/secrets/market-data-bridge.env" || fail "case1d: placeholder must hold no key or value"
+grep -q 'market-data-bridge profile not available' "$s_bridge/stderr.out" || fail "case1d: the missing profile must be logged"
+for name in tradingagents.env ai-hedge-fund.env vibe-trading.env auth.env market-data.env cloudflared.env; do
+  [[ -f "$s_bridge/secrets/$name" ]] || fail "case1d: other app secret $name must still be installed"
+done
+[[ "$(stat -c '%a' "$s_bridge/secrets/market-data-bridge.env" 2>/dev/null || stat -f '%Lp' "$s_bridge/secrets/market-data-bridge.env" 2>/dev/null)" == 600 ]] || fail "case1d: bridge env mode is not 0600"
+# The bridge's names never reach another app's env file.
+! grep -rEq 'MARKET_DATA_BRIDGE' "$s_bridge/secrets" || fail "case1d: bridge token names leaked into another env file"
 
 echo "=== Case 2 (GREEN): redeploy over existing secrets -- new content wins, old content backed up to .previous/ ==="
 CASE_COUNT=$((CASE_COUNT + 1))

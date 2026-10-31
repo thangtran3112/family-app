@@ -104,6 +104,30 @@ services:
     read_only: true
     security_opt: ["no-new-privileges:true"]
 
+  market-data-bridge:
+    # 02t B0: the Go gRPC market-data bridge, deployed dark (no consumer yet). No host port
+    # and no Caddy route: reachable only on `marketdata` (joined by api and scheduler).
+    # Serves with auth required even when its Firestore profile is missing; see deploy.sh.
+    # `marketdata` is a plain internal bridge network, not `internal: true`, because the
+    # bridge itself must reach its providers (Alpaca today) outbound.
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-market-data-bridge:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-bridge.env
+    networks: [marketdata]
+    mem_limit: 128m
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # Process health only (`bridge healthcheck` asks /healthz): a provider outage never restarts it.
+      test: ["CMD", "/bridge", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
   vibe-trading:
     image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-vibe-trading:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
     restart: unless-stopped
@@ -255,7 +279,7 @@ services:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
     # Caddy reaches the API only on gateway; database access stays on the
     # shared Postgres network. No host port is published.
-    networks: [database, gateway]
+    networks: [database, gateway, marketdata]
     mem_limit: 512m
     pids_limit: 256
     security_opt: ["no-new-privileges:true"]
@@ -281,9 +305,9 @@ services:
     command: python -m ai_trading.jobs.scheduler
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
-    # Database only -- never gateway (it's a background job loop, not an
-    # HTTP service Caddy ever reaches).
-    networks: [database]
+    # Database and marketdata (the bridge) only -- never gateway (it's a
+    # background job loop, not an HTTP service Caddy ever reaches).
+    networks: [database, marketdata]
     mem_limit: 512m
     pids_limit: 256
     security_opt: ["no-new-privileges:true"]
@@ -307,6 +331,8 @@ networks:
   ahf: {}
   vibe: {}
   gateway: {}
+  # The market-data bridge's private network (02t §7.1), shared with api and scheduler.
+  marketdata: {}
   # Dedicated to gateway + ta-research only (review round 1, Critical): a
   # fixed, small subnet so ta-research's own FORWARDED_ALLOW_IPS above can
   # trust exactly this network's peers, not "*". /29 (6 usable addresses) is

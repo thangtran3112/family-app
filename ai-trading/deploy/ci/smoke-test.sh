@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke-tests locally loaded ai-trading images.
-# Usage: ai-trading/deploy/ci/smoke-test.sh [web|ta-terminal|ahf-terminal|vibe-trading|mirofish-backend|mirofish|gateway|all]
+# Usage: ai-trading/deploy/ci/smoke-test.sh [web|ta-terminal|ahf-terminal|market-data|market-data-bridge|vibe-trading|mirofish-backend|mirofish|gateway|all]
 # REGISTRY and TAG select the images (same defaults as docker-bake.hcl).
 set -Eeuo pipefail
 
@@ -17,7 +17,7 @@ cleanup() {
   if ((${#containers[@]})); then
     docker rm -fv "${containers[@]}" >/dev/null 2>&1 || true
   fi
-  docker network rm smoke-gateway-net smoke-research-net smoke-desk-db-net >/dev/null 2>&1 || true
+  docker network rm smoke-gateway-net smoke-research-net smoke-desk-db-net smoke-marketdata-net >/dev/null 2>&1 || true
   docker volume rm smoke-control-sock >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -891,6 +891,55 @@ assert fd.get_company_facts("AAPL").sector == "Manufacturing"
   docker network rm "$net" >/dev/null 2>&1 || true
 }
 
+# 02t B0: the Go market-data bridge, deployed dark. It must boot healthy both with its
+# profile's tokens and without any (a missing Firestore profile), reject unauthenticated
+# calls either way, and answer ListProviders to a sibling container on the same network
+# (the shape api and scheduler use from B2).
+smoke_market_data_bridge() {
+  local rpc="http://127.0.0.1:18090/familyapp.marketdata.v1.MarketData" health="" deadline body
+  docker network rm smoke-marketdata-net >/dev/null 2>&1 || true
+  docker network create smoke-marketdata-net >/dev/null
+  start smoke-market-data-bridge "$(image market-data-bridge)" 18090 8080 \
+    --network smoke-marketdata-net --network-alias market-data-bridge \
+    --read-only --cap-drop ALL --security-opt no-new-privileges:true --memory 128m \
+    -e MARKET_DATA_BRIDGE_TOKEN=smoke-bridge-token -e MARKET_DATA_BRIDGE_ADMIN_TOKEN=smoke-bridge-admin
+  expect_status 200 http://127.0.0.1:18090/healthz
+  expect_status 200 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer smoke-bridge-token' -d '{}'
+  expect_status 401 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -d '{}'
+  expect_status 403 "$rpc/SetRouting" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer smoke-bridge-token' -d '{"version":1}'
+  # No Alpaca key in this run: the provider must say so, never pretend to serve.
+  body="$(curl -fsS -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer smoke-bridge-token' -d '{}' "$rpc/ListProviders")"
+  grep -q 'HEALTH_STATE_NOT_CONFIGURED' <<<"$body" || fail "bridge ListProviders without keys: $body"
+  # A sibling container reaches it by service name on the shared network (Connect unary JSON).
+  docker run --rm --network smoke-marketdata-net --entrypoint python "$(image desk)" -c '
+import json, urllib.request
+req = urllib.request.Request("http://market-data-bridge:8080/familyapp.marketdata.v1.MarketData/GetStatus", data=b"{}",
+    headers={"Content-Type": "application/json", "Authorization": "Bearer smoke-bridge-token"})
+status = json.load(urllib.request.urlopen(req, timeout=5))
+assert status["role"] == "bridge" and status["routing"]["source"] == "ENV_DEFAULT", status
+' || fail "market-data-bridge GetStatus from a sibling container"
+  # The image HEALTHCHECK (`bridge healthcheck`) reports process health.
+  deadline=$((SECONDS + 60))
+  while ((SECONDS < deadline)); do
+    health="$(docker inspect -f '{{.State.Health.Status}}' smoke-market-data-bridge)"
+    [[ "$health" == healthy ]] && break
+    sleep 2
+  done
+  [[ "$health" == healthy ]] || fail "market-data-bridge container health is ${health:-unknown}, want healthy"
+  echo "ok   market-data-bridge answers on the internal network and its healthcheck is healthy"
+  docker rm -fv smoke-market-data-bridge >/dev/null
+
+  # A missing ai-trading/market-data-bridge profile means no env at all: still a healthy
+  # process, auth required, nothing served.
+  start smoke-market-data-bridge-bare "$(image market-data-bridge)" 18090 8080 --read-only
+  expect_status 200 http://127.0.0.1:18090/healthz
+  expect_status 401 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer anything' -d '{}'
+  expect_status 401 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ' -d '{}'
+  echo "ok   market-data-bridge with no profile boots healthy and rejects every call"
+  docker rm -fv smoke-market-data-bridge-bare >/dev/null
+  docker network rm smoke-marketdata-net >/dev/null 2>&1 || true
+}
+
 case "${1:-all}" in
   web) smoke_web ;;
   ta-terminal) smoke_terminal ta-terminal tradingagents /u/tradingagents 17681 ;;
@@ -900,18 +949,20 @@ case "${1:-all}" in
   mirofish) smoke_mirofish_backend; smoke_mirofish_frontend ;;
   gateway) smoke_gateway ;;
   market-data) smoke_market_data ;;
+  market-data-bridge) smoke_market_data_bridge ;;
   all)
     smoke_web
     smoke_terminal ta-terminal tradingagents /u/tradingagents 17681
     smoke_gateway
     smoke_terminal ahf-terminal aihf /u/ai-hedge-fund 17682
     smoke_market_data
+    smoke_market_data_bridge
     smoke_vibe
     smoke_mirofish_backend
     smoke_mirofish_frontend
     ;;
   *)
-    echo "usage: $0 [web|ta-terminal|ahf-terminal|market-data|vibe-trading|mirofish-backend|mirofish|gateway|all]" >&2
+    echo "usage: $0 [web|ta-terminal|ahf-terminal|market-data|market-data-bridge|vibe-trading|mirofish-backend|mirofish|gateway|all]" >&2
     exit 2
     ;;
 esac

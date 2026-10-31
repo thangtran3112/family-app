@@ -1,0 +1,9 @@
+# Keep tests, goldens, and the proto sources out of the build context: the
+# generated Go in gen/ is committed, so the image build never runs buf.
+Dockerfile
+.dockerignore
+testdata
+proto
+buf.yaml
+buf.gen.yaml
+**/*_test.go
