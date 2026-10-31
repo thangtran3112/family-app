@@ -20,6 +20,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 | `ai-trading/` | Trading Hub (open-source apps) and the Family Desk | `ai-trading/AGENTS.md` |
 | `expense-tax-management/` | Expense and tax apps | `expense-tax-management/AGENTS.md` |
 | `infrastructure/` | Terraform, VPS bootstrap, shared compose, backups | `infrastructure/README.md` |
+| `infrastructure/tailscale/` | Tailnet policy for admin and CI SSH | `infrastructure/tailscale/README.md` |
 | `common/config/` | Firestore `family-config` CLI | `common/config/README.md` |
 | `docs/superpowers/` | Cross-app specs and plans | n/a |
 
@@ -28,6 +29,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 - Public repo: never commit or print secrets, email addresses, account numbers, or VPS addresses.
 - All secrets and env values live in Firestore `family-config`, read and written only through `common/config/family_config.py`. No `.env` or key files in the repo.
 - Infrastructure is code under `infrastructure/`; no console edits. GCP commands use `CLOUDSDK_ACTIVE_CONFIG_NAME=personal`. One shared Cloudflare token (`shared/cloudflare`): never create another.
+- The family-app tailnet is separate from any other tailnet the owner belongs to. Nothing in this repo may name, reference, or read another tailnet. Tailnet ID, MagicDNS names, device names, and IPs live in Firestore `shared/tailscale`, never in the repo.
 - One shared VPS: touch only your own app's containers, images, and volumes; never run a global `docker system prune`.
 - Never commit to or force-push `dev` or `main`; work reaches `dev` by pull request; `main` releases carry only the owning package's paths. Delivery authorization is per package.
 - **Conserve GitHub Actions minutes (owner rule, 2026-10-10; every package):** open a pull request only when a phase is finished or a batch of work is meaningful on its own, never for a single small task or a docs fix. Stack commits on `feature/toby` and let small changes ride along with the next phase's pull request. Push to an open pull request only when its CI fails, because every push re-runs CI.

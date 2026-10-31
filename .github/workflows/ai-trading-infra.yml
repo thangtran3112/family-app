@@ -7,6 +7,7 @@ on:
       - "infrastructure/gcp/ai-trading/**"
       - "infrastructure/cloudflare/zero-trust/**"
       - "infrastructure/cloudflare/ai-trading/**"
+      - "infrastructure/tailscale/**"
       - "common/config/**"
       - "infrastructure/gcp/bootstrap-state.sh"
       - ".github/workflows/ai-trading-infra.yml"
@@ -55,6 +56,7 @@ jobs:
           - infrastructure/gcp/ai-trading
           - infrastructure/cloudflare/zero-trust
           - infrastructure/cloudflare/ai-trading
+          - infrastructure/tailscale
     defaults:
       run:
         working-directory: ${{ matrix.root }}
