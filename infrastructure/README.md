@@ -6,7 +6,7 @@
 
 - `cloudflare/expense-tax/`: live Cloudflare Tunnel, product DNS/ingress, Clerk DNS, and GCS-backed Terraform state.
 - `tailscale/`: default-deny tailnet policy as code, operator-applied. Tailscale carries admin and CI SSH to the family host only; public traffic stays on the Cloudflare tunnels and never touches the tailnet.
-- `vps/bootstrap-cloudflared.sh`: installs the outbound Tunnel connector on an existing VPS.
+- `host/bootstrap-cloudflared.sh`: installs the outbound Tunnel connector on an existing VPS (the old `vps/` path keeps a symlink shim until the expense lane is repointed, 0001b-2).
 - `vps/`: reusable SSH hardening, UFW, Docker, and shared-PostgreSQL bootstrap.
 - `temporal/docker-compose.yml`: independently owned shared Temporal server and loopback-only UI.
 - `temporal/dynamicconfig.yaml`: shared Temporal dynamic configuration.
@@ -39,7 +39,7 @@ One VPS PostgreSQL cluster reduces memory and operations overhead. Each family a
 
 ## Shared Temporal Activation (operator-only)
 
-Source changes alone do not migrate the live Temporal server. Production activation needs a separately approved, coordinated cutover:
+Source changes alone do not migrate the live Temporal server. Production activation needs a separately approved, coordinated cutover. On a host bootstrapped with `host/bootstrap.sh --only temporal`, `host/steps/35-temporal.sh` performs the staging, env file, start and namespace steps (2 and 3 below, minus the downtime handling); the runbook remains the VPS procedure:
 
 1. Keep the existing `temporal` and `temporal_visibility` PostgreSQL databases and the `expense_temporal` role. `expense-tax-management/deploy/production/bootstrap-temporal-db.sh` remains an operator-only database creation step; do not run it during normal deployment. Record the last known-good image tag and preserve the existing Expense Compose file, deploy scripts, and root-only production environment file in a root-only recovery directory before replacing anything.
 2. Create `family_shared` once. Transfer `infrastructure/temporal/docker-compose.yml`, `dynamicconfig.yaml`, and `bootstrap-namespaces.sh` together into `/opt/family-app/temporal/` on the VPS. Provision `/etc/family-app/temporal.env` as root-owned mode `0600` with **only** `TEMPORAL_DB_PASSWORD` set to the existing `expense_temporal` role password. Keep that password in a separate shared-infrastructure secret bundle; do not generate a new password or take it from a new Expense bundle. The shared server also joins `postgres_default`.
@@ -62,7 +62,7 @@ Future Stock Analysis onboarding may create `stock-analysis` with `temporal oper
 
 - Automated PostgreSQL backup/restore to GCS.
 - Proven fresh-host restore and provider migration drill.
-- Live proof of shared-cluster `vps/steps/30-postgres.sh` on a fresh VPS.
+- Live proof of shared-cluster `host/steps/30-postgres.sh` on a fresh VPS.
 - Search/graph production infrastructure.
 
 See `expense-tax-management/plans/ROADMAP.md` for current status and migration order.

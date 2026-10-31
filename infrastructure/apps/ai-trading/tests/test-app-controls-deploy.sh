@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Focused offline tests for Task 5 (app-controls): the Linux bootstrap
-# (infrastructure/vps/app-controls/install.sh) and the deploy.sh/
+# (infrastructure/host/app-controls/install.sh) and the deploy.sh/
 # health-check.sh behaviors test-deploy-firestore.sh's own existing suite
 # does not already cover -- explicit selected-service Compose calls, the
 # lifecycle lock's contention/inherited-FD behavior, preference
@@ -21,16 +21,19 @@
 # Python" guidance, applied here to the installer rather than the
 # control/*.py suite). SKIPPED entirely when Docker is unavailable.
 #
-# Usage: ai-trading/deploy/ci/test-app-controls-deploy.sh
+# Usage: infrastructure/apps/ai-trading/tests/test-app-controls-deploy.sh
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AI_TRADING_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DEPLOY_SH="$SCRIPT_DIR/../production/deploy.sh"
-HEALTH_SH="$SCRIPT_DIR/../production/health-check.sh"
-MIROFISH_LIB_SH="$SCRIPT_DIR/../production/mirofish-runtime.sh"
-INSTALL_SH="$AI_TRADING_DIR/../infrastructure/vps/app-controls/install.sh"
-UNIT_FILE="$AI_TRADING_DIR/../infrastructure/vps/app-controls/ai-trading-control.service"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+AI_TRADING_DIR="$REPO_ROOT/ai-trading"
+PROD_DIR="$SCRIPT_DIR/.."
+DEPLOY_SH="$PROD_DIR/deploy.sh"
+HEALTH_SH="$PROD_DIR/health-check.sh"
+MIROFISH_LIB_SH="$PROD_DIR/mirofish-runtime.sh"
+PREPARE_MIROFISH_SH="$PROD_DIR/prepare-mirofish.sh"
+INSTALL_SH="$REPO_ROOT/infrastructure/host/app-controls/install.sh"
+UNIT_FILE="$REPO_ROOT/infrastructure/host/app-controls/ai-trading-control.service"
 CONTROL_DIR_REAL="$AI_TRADING_DIR/control"
 
 [[ -f "$DEPLOY_SH" ]] || { echo "test-app-controls-deploy: missing $DEPLOY_SH" >&2; exit 1; }
@@ -38,7 +41,7 @@ CONTROL_DIR_REAL="$AI_TRADING_DIR/control"
 
 # A real $HOME-rooted scratch directory, never /tmp or the opencode temp
 # dir: on this host, Docker runs in a VM that only reliably bind-mounts
-# $HOME (ai-trading/deploy/ci/test-app-controls-gateway.sh documents the
+# $HOME (infrastructure/apps/ai-trading/tests/test-app-controls-gateway.sh documents the
 # same finding). Removed on every exit.
 TEST_ROOT="$HOME/.cache/ai-trading-app-controls-deploy-test-$$"
 rm -rf "$TEST_ROOT"
@@ -1271,7 +1274,7 @@ if ! docker info >/dev/null 2>&1; then
 else
   IROOT="$HOME/.cache/ai-trading-app-controls-install-test-$$"
   rm -rf "$IROOT"
-  mkdir -p "$IROOT/bin" "$IROOT/src/ai-trading/control" "$IROOT/src/ai-trading/deploy/production" "$IROOT/src/infrastructure/vps/app-controls" "$IROOT/fake-state"
+  mkdir -p "$IROOT/bin" "$IROOT/src/ai-trading/control" "$IROOT/src/ai-trading/deploy/production" "$IROOT/src/infrastructure/host/app-controls" "$IROOT/fake-state"
   chmod 0700 "$IROOT"
   install_cleanup() { rm -rf "$IROOT"; }
   trap 'install_cleanup; cleanup' EXIT
@@ -1280,9 +1283,9 @@ else
   cp "$CONTROL_DIR_REAL/state.py" "$IROOT/src/ai-trading/control/state.py"
   cp "$CONTROL_DIR_REAL/runtime.py" "$IROOT/src/ai-trading/control/runtime.py"
   cp "$CONTROL_DIR_REAL/server.py" "$IROOT/src/ai-trading/control/server.py"
-  cp "$AI_TRADING_DIR/deploy/production/mirofish-runtime.sh" "$IROOT/src/ai-trading/deploy/production/mirofish-runtime.sh"
-  cp "$AI_TRADING_DIR/deploy/production/prepare-mirofish.sh" "$IROOT/src/ai-trading/deploy/production/prepare-mirofish.sh"
-  cp "$UNIT_FILE" "$IROOT/src/infrastructure/vps/app-controls/ai-trading-control.service"
+  cp "$MIROFISH_LIB_SH" "$IROOT/src/ai-trading/deploy/production/mirofish-runtime.sh"
+  cp "$PREPARE_MIROFISH_SH" "$IROOT/src/ai-trading/deploy/production/prepare-mirofish.sh"
+  cp "$UNIT_FILE" "$IROOT/src/infrastructure/host/app-controls/ai-trading-control.service"
   cp "$INSTALL_SH" "$IROOT/src/install.sh"
 
   cat >"$IROOT/bin/id" <<'EOF'

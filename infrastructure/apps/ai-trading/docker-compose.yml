@@ -342,7 +342,7 @@ networks:
       config:
         - subnet: 172.30.90.0/29
   # The shared VPS Postgres cluster's own Compose project default network
-  # (infrastructure/vps/steps/30-postgres.sh's project directory is
+  # (infrastructure/host/steps/30-postgres.sh's project directory is
   # ${SHARED_PG_DIR}, so Compose's default "<project>_default" naming makes
   # it postgres_default) -- external because that cluster is a different
   # Compose project with its own lifecycle, already running before this

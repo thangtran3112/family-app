@@ -3,9 +3,12 @@
 # health checks passing, the app-control helper active and privately
 # reachable as the gateway identity, and the Cloudflare Tunnel connected
 # (always-on, regardless of any app preference). Runs on the VPS as root.
+# DEPLOY_DARK=1 (a dark deploy, exported by deploy.sh): cloudflared and scheduler are not
+# part of the selected services and the tunnel probe is skipped; everything else is checked.
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/family-app/ai-trading}"
+DEPLOY_DARK="${DEPLOY_DARK:-0}"
 ATTEMPTS="${HEALTH_CHECK_ATTEMPTS:-30}"
 DELAY="${HEALTH_CHECK_DELAY_SECONDS:-2}"
 # Task 5 (app-controls): the SAME control/state.py CLI and persisted state
@@ -68,6 +71,8 @@ service_ok() {
 # Always-on and unconditional, regardless of any app preference (task-5-brief:
 # "Health still tunnel-ready always-on").
 tunnel_ready() {
+  # Dark deploy: cloudflared is deliberately not running, so there is no tunnel to probe.
+  [[ "$DEPLOY_DARK" == 1 ]] && return 0
   compose exec -T web node -e "fetch('http://cloudflared:2000/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 }
 
@@ -79,9 +84,10 @@ tunnel_ready() {
 # <(selected_services_text)` (task-5-brief: that form hides a failing
 # Python exit status).
 selected_services_text() {
-  local ready=false
+  local ready=false dark_args=()
   mirofish_enabled && ready=true
-  python3 "$CONTROL_DIR/state.py" services --mirofish-ready "$ready" \
+  [[ "$DEPLOY_DARK" == 1 ]] && dark_args=(--dark)
+  python3 "$CONTROL_DIR/state.py" services --mirofish-ready "$ready" "${dark_args[@]+"${dark_args[@]}"}" \
     --state "$CONTROL_STATE_PATH" --owner-uid "$CONTROL_OWNER_UID"
 }
 

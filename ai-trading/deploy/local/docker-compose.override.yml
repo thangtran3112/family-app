@@ -1,5 +1,6 @@
 # Local-only overlay for the production compose file. Paths are relative to
-# the first compose file (ai-trading/deploy/production/).
+# the first compose file (infrastructure/apps/ai-trading/), so the router's Caddyfile
+# mount below climbs back up to the repository root.
 services:
   cloudflared:
     profiles: ["production-only"]
@@ -14,7 +15,7 @@ services:
   router:
     image: caddy:2-alpine
     volumes:
-      - ../local/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../../../ai-trading/deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8899:8899"

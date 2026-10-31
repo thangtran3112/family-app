@@ -211,7 +211,7 @@ Vibe-Trading has **no** `ai-trading/deploy/upstream/vibe-trading/` wrapper
 — unlike TradingAgents/ai-hedge-fund, `docker-bake.hcl`'s `vibe-trading`
 target builds the submodule's own `Dockerfile` directly. The only override
 points are that Dockerfile's `ENV`s, or
-`ai-trading/deploy/production/docker-compose.yml`'s `vibe-trading`
+`infrastructure/apps/ai-trading/docker-compose.yml`'s `vibe-trading`
 `environment:`/`env_file:` entries. If neither absorbs the change, **do
 not edit the submodule in place** — explain why (no wrapper to patch) and
 ask whether to fork; see below first.

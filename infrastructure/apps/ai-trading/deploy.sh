@@ -60,6 +60,13 @@
 #                             query (its `docker ps --filter label=com.docker.compose.
 #                             project=...`) uses this same name, so the override scopes
 #                             both. Never set this in production.
+#   DEPLOY_DARK              0 (default) or 1. 1 = a "dark" deploy (staging, or a warm-up on a
+#                             host that must not serve traffic yet): the selected service list
+#                             omits cloudflared and scheduler (so the stack never starts the
+#                             Cloudflare tunnel or the Desk scheduler) and health-check.sh
+#                             skips the tunnel probe. Every other protected service is still
+#                             started and checked; a normal deploy requires all of them. Any
+#                             other value fails the deploy before it touches anything.
 #   AI_TRADING_MIN_FREE_GB    free GiB required (after old images are pruned) before this
 #                             release is pulled; a whole number 0-999999, default 30. One
 #                             release unpacks to ~17 GB and needs ~5 GB more of compressed
@@ -90,8 +97,16 @@ ENV_STAGING_DIR="${ENV_STAGING_DIR:-}"
 APP_CONFIG_STAGING_DIR="${APP_CONFIG_STAGING_DIR:-}"
 RUNTIME_ENV_DIR="${AI_TRADING_RUNTIME_ENV_DIR:-/run/family-app/ai-trading}"
 export APP_DIR SECRETS_DIR RUNTIME_ENV_DIR
+# Dark deploy (see DEPLOY_DARK above). Validated before anything is touched; exported so the
+# scratch health-check.sh this script runs sees the same mode. DARK_ARGS is spliced into every
+# `state.py services` call and stays empty on a normal deploy, so that path is unchanged.
+DEPLOY_DARK="${DEPLOY_DARK:-0}"
+[[ "$DEPLOY_DARK" == 0 || "$DEPLOY_DARK" == 1 ]] || die "DEPLOY_DARK must be 0 or 1"
+export DEPLOY_DARK
+DARK_ARGS=()
+if [[ "$DEPLOY_DARK" == 1 ]]; then DARK_ARGS=(--dark); fi
 # Task 5 (app-controls): the shared lifecycle lock/state file a cooperating
-# control helper (control/server.py, installed by infrastructure/vps/
+# control helper (control/server.py, installed by infrastructure/host/
 # app-controls/install.sh) and every PUT/reconcile operation also use --
 # never a deploy-only copy. AI_TRADING_CONTROL_OWNER_UID is test-only (a
 # non-root test process cannot create a uid-0-owned lock/state file; never
@@ -511,7 +526,7 @@ print("\n".join(service for services in data["apps"].values() for service in ser
 # is not in this run's selected list.
 migrate_desk_db() {
   local selected_text
-  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$(mirofish_ready_flag)")" \
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$(mirofish_ready_flag)" "${DARK_ARGS[@]+"${DARK_ARGS[@]}"}")" \
     || die "control: failed to compute the selected service list"
   [[ $'\n'"$selected_text"$'\n' == *$'\napi\n'* ]] || return 0
   compose run --rm --no-deps api python -c "import os; from alembic import command; from alembic.config import Config; c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', os.environ.get('DESK_MIGRATOR_DATABASE_URL') or os.environ['DESK_RUNTIME_DATABASE_URL']); command.upgrade(c, 'head')" \
@@ -526,7 +541,7 @@ migrate_desk_db() {
 apply_selected_services() {
   local mirofish_ready selected_text
   mirofish_ready="$(mirofish_ready_flag)"
-  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready")" \
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready" "${DARK_ARGS[@]+"${DARK_ARGS[@]}"}")" \
     || die "control: failed to compute the selected service list"
   [[ -n "$selected_text" ]] || die "control: selected service list is empty"
   local selected=()
@@ -542,7 +557,7 @@ apply_selected_services() {
 stop_disabled_groups() {
   local mirofish_ready selected_text all_text disabled=()
   mirofish_ready="$(mirofish_ready_flag)"
-  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready")" \
+  selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready" "${DARK_ARGS[@]+"${DARK_ARGS[@]}"}")" \
     || die "control: failed to compute the selected service list"
   all_text="$(all_catalog_services)" || die "control: failed to read the service catalog"
   local selected_set=$'\n'"$selected_text"$'\n'

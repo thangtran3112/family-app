@@ -109,7 +109,7 @@ Every push to `main` touching `ai-trading/**` (excluding `ai-trading/plans/**` a
 1. `build`: builds and smoke-tests the images with a fake Clerk key, then builds and pushes the real images to GHCR tagged with the commit SHA, using the publishable key from the repo-scoped GitHub Actions variable `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (see `ai-trading/AGENTS.md`). Before any image in this job is built or pushed (including the fake-keyed smoke build), `ai-trading/deploy/ci/check-clerk-publishable-key.sh` fails the job closed unless that variable is a `pk_live_` key decoding to this app's own Clerk Frontend API domain — the same guard `hub-static-upload` runs before its `pnpm build`.
 
    Production smoke/export builds read CI layer caches but clear `cache-to` (`set: '*.cache-to='`), so optional GitHub cache uploads cannot hold up the deployment. PR CI still seeds caches. The immutable GHCR push build does not use the CI cache-export overlay. Verify the override locally with `docker buildx bake -f ai-trading/deploy/docker-bake.hcl -f ai-trading/deploy/docker-bake.ci.hcl --set '*.cache-to=' --print`: targets retain `cache-from` and have no `cache-to`.
-2. `deploy` (environment `ai-trading-production`): authenticates to GCP over Workload Identity Federation (no stored key), fetches only the live Cloudflare tunnel token (`ai-trading/deploy/ci/render-env.sh`, `ai-trading/cloudflare` profile) and the VPS deploy SSH key (`shared/vps` `VPS_DEPLOY_SSH_PRIVATE_KEY`), then copies the compose files, `deploy.sh`, `health-check.sh`, `common/config/family_config.py`, and the one CI-rendered file (`cloudflared.env`) to the host and runs `deploy.sh`.
+2. `deploy` (environment `ai-trading-production`): authenticates to GCP over Workload Identity Federation (no stored key), fetches only the live Cloudflare tunnel token (`infrastructure/apps/ai-trading/render-env.sh`, `ai-trading/cloudflare` profile) and the VPS deploy SSH key (`shared/vps` `VPS_DEPLOY_SSH_PRIVATE_KEY`), then copies the compose files, `deploy.sh`, `health-check.sh`, `common/config/family_config.py`, and the one CI-rendered file (`cloudflared.env`) to the host and runs `deploy.sh`.
 
 On the host, `deploy.sh` renders `ai-trading/tradingagents`, `ai-trading/ai-hedge-fund`, `ai-trading/vibe-trading`, and `ai-trading/gateway` (renamed `auth.env`) straight from Firestore with the `family-config-reader` key, validates every file (well-formed `KEY=value` lines, no empty value, no NUL or CR byte), backs up the current files to `.previous/`, derives `vibe-gateway.env` (only `VIBE_API_AUTH_KEY`, copied from `vibe-trading.env`'s `API_AUTH_KEY`, for the Caddy gateway), installs all six files (the five above, plus `cloudflared.env`, the one file CI itself staged) as `root:root 0600`, then pulls and restarts the stack. If the new tag fails to come up healthy, it restores `.previous/` and rolls back to `last-good-tag`.
 
@@ -181,7 +181,7 @@ itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
   reconciles the same desired choice; it never queues a duplicate or flips
   the opposite toggle. Stopping never deletes a volume, image, or calls
   `compose down` — it only stops that group's containers to free RAM.
-- **Target bootstrap:** `infrastructure/vps/app-controls/install.sh` creates
+- **Target bootstrap:** `infrastructure/host/app-controls/install.sh` creates
   the dedicated `ai-trading-gateway` identity (UID/GID 22001, no Docker group
   membership), the state directory (`/var/lib/family-app/ai-trading`), and
   the socket/run directory, refusing a symlinked path, an incompatible
@@ -261,7 +261,7 @@ itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
 
 ## Moving to a new host
 
-1. Run `infrastructure/vps/bootstrap.sh --only firewall,ssh,docker` against the new host, then `infrastructure/gcp/family-config/install-reader-key.sh` to install `/etc/family-app/config-reader.json` there.
+1. Run `infrastructure/host/bootstrap.sh --only firewall,ssh,docker` against the new host, then `infrastructure/gcp/family-config/install-reader-key.sh` to install `/etc/family-app/config-reader.json` there.
 2. Update `shared/vps`'s `VPS_HOST`, `VPS_PORT`, `VPS_USER`, and `VPS_SSH_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <new-host>`) — `ai-trading/deploy` references these by name, so it needs no separate update (see "Editing values").
 3. Rerun the deploy workflow.
 4. Stop the stack on the old host: `sudo docker compose -p ai-trading ... down`.

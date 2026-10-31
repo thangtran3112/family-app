@@ -41,7 +41,7 @@ machine with real GCP credentials.
   (`BACKUP_WRITER_KEY_JSON`), next to the age identity (`BACKUP_AGE_IDENTITY`)
   and recipient (`BACKUP_AGE_RECIPIENT`). Key creation needs the project
   override below. VPS bootstrap streams the key to a root-only, mode-0400 file
-  (`infrastructure/vps/bootstrap.sh --only backup`); it is never re-derived
+  (`infrastructure/host/bootstrap.sh --only backup`); it is never re-derived
   from Terraform.
 
   ```bash

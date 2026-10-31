@@ -16,6 +16,8 @@ Each package's rules live in its own `AGENTS.md` (see "Package rules"). This fil
 
 Start a session inside the package you are changing. Each package's `AGENTS.md` governs that package only; where rules conflict, the package being edited wins. Never apply one app's branch, release, or deploy policy to another.
 
+`infrastructure/apps/<app>/` belongs to `<app>` for release scoping and delivery. An ai-trading release may carry `infrastructure/apps/ai-trading/**`, and the expense rules govern `infrastructure/apps/expense-tax/**`. The shared roots under `infrastructure/` (`host/`, `gcp/`, `cloudflare/`, `backup/`, `temporal/`) belong to the infrastructure plans in `infrastructure/plans/`.
+
 | Path | What | Rules |
 |---|---|---|
 | `ai-trading/` | Trading Hub (open-source apps) and the Family Desk | `ai-trading/AGENTS.md` |

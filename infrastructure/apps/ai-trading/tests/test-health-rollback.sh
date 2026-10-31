@@ -9,8 +9,9 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HEALTH_SH="${HEALTH_SH_OVERRIDE:-$SCRIPT_DIR/../production/health-check.sh}"
-CONTROL_DIR="$SCRIPT_DIR/../../control"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+HEALTH_SH="${HEALTH_SH_OVERRIDE:-$SCRIPT_DIR/../health-check.sh}"
+CONTROL_DIR="$REPO_ROOT/ai-trading/control"
 ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 PASS=0
@@ -57,7 +58,10 @@ if [[ "${1:-}" == compose ]]; then
         fi
       done
       ;;
-    exec) ;;
+    exec)
+      # tunnel probe: FAKE_TUNNEL_DOWN makes it fail
+      if [[ -n "${FAKE_TUNNEL_DOWN:-}" ]]; then exit 1; fi
+      ;;
     *)
       echo "fake docker: unsupported compose subcommand: $sub" >&2
       exit 1
@@ -99,6 +103,9 @@ run_health() {
   if [[ -n "$rollback" ]]; then
     extra=(HEALTH_CHECK_ROLLBACK=1)
   fi
+  # RUN_DARK / RUN_TUNNEL_DOWN: set by the dark-mode cases below, empty otherwise.
+  if [[ -n "${RUN_DARK:-}" ]]; then extra+=(DEPLOY_DARK=1); fi
+  if [[ -n "${RUN_TUNNEL_DOWN:-}" ]]; then extra+=(FAKE_TUNNEL_DOWN=1); fi
   OUT="$ROOT/out.txt"
   ERR="$ROOT/err.txt"
   set +e
@@ -154,5 +161,34 @@ if grep -q "does not run" "$ERR"; then
   fail "a rollback to a release that runs everything must skip nothing: $(cat "$ERR")"
 fi
 ok "a rollback to a release that runs every protected service still checks all of them"
+
+# --- Dark mode (DEPLOY_DARK=1): cloudflared and scheduler are not required and the tunnel probe is
+# skipped; a normal deploy still requires both and the tunnel.
+DARK_SELECTED="$(python3 "$CONTROL_DIR/state.py" services --mirofish-ready false --dark \
+  --state "$ROOT/state/control.json" --owner-uid "$(id -u)")" || fail "could not compute the dark selected services"
+DARK_LIST="$(tr '\n' ' ' <<<"$DARK_SELECTED")"
+if grep -qxE 'cloudflared|scheduler' <<<"$DARK_SELECTED"; then fail "the dark selection must omit cloudflared and scheduler"; fi
+
+RUN_DARK=1 RUN_TUNNEL_DOWN=1 run_health "" "$DARK_LIST" "$DARK_LIST" ""
+[[ $RC -eq 0 ]] || fail "a dark deploy without cloudflared, scheduler or a tunnel must pass (rc=$RC): $(cat "$ERR")"
+grep -q "all services healthy" "$OUT" || fail "dark success message missing: $(cat "$OUT")"
+ok "a dark deploy passes with no cloudflared, no scheduler and no tunnel"
+
+RUN_TUNNEL_DOWN=1 run_health "" "$FULL" "$FULL" ""
+[[ $RC -eq 1 ]] || fail "a normal deploy must still fail when the tunnel is down (rc=$RC)"
+grep -q "tunnel connected: no" "$ERR" || fail "a normal deploy must report the tunnel as down: $(cat "$ERR")"
+ok "a normal deploy still requires the tunnel"
+
+run_health "" "$DARK_LIST" "$DARK_LIST" ""
+[[ $RC -eq 1 ]] || fail "a normal deploy missing cloudflared and scheduler must fail (rc=$RC)"
+grep -q "failing services:.*cloudflared" "$ERR" || fail "a normal deploy must name cloudflared: $(cat "$ERR")"
+grep -q "failing services:.*scheduler" "$ERR" || fail "a normal deploy must name scheduler: $(cat "$ERR")"
+ok "a normal deploy still requires cloudflared and scheduler"
+
+STOPPED_DARK_GATEWAY="$(tr ' ' '\n' <<<"$DARK_LIST" | grep -vx gateway | tr '\n' ' ')"
+RUN_DARK=1 run_health "" "$DARK_LIST" "$STOPPED_DARK_GATEWAY" ""
+[[ $RC -eq 1 ]] || fail "a dark deploy must still fail when another protected service is down (rc=$RC)"
+grep -q "failing services:.*gateway" "$ERR" || fail "a dark deploy must name the stopped gateway: $(cat "$ERR")"
+ok "a dark deploy still requires every other protected service"
 
 printf '\n%d checks passed (health-check rollback mode)\n' "$PASS"

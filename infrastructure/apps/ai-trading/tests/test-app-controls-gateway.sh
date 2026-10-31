@@ -19,8 +19,8 @@
 # deploy/ci/smoke-test.sh's own gateway fixture) cannot collide.
 set -Eeuo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)" # repository root
-CADDYFILE="$ROOT/ai-trading/deploy/production/Caddyfile"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)" # repository root
+CADDYFILE="$ROOT/infrastructure/apps/ai-trading/Caddyfile"
 ID="actrlgw-$(date +%s)-$$"
 NET="${ID}-net"
 RESEARCH_NET="${ID}-rnet"

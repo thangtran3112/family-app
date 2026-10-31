@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates the family-app config store: Firestore database family-config with
-# deny-all client rules, plus the read-only VPS service account. Safe to re-run.
+# deny-all client rules, plus the read-only host service account. Safe to re-run.
 # Usage: infrastructure/gcp/family-config/bootstrap.sh
 set -Eeuo pipefail
 umask 077
@@ -69,10 +69,10 @@ fi
 if g iam service-accounts describe "$READER_EMAIL" >/dev/null 2>&1; then
   echo "service account $READER_EMAIL exists"
 else
-  g iam service-accounts create "$READER" --display-name="Family config reader (VPS)"
+  g iam service-accounts create "$READER" --display-name="Family config reader (host)"
 fi
 
-# The VPS identity is deliberately broad (owner decision): project-wide roles for
+# The host identity is deliberately broad (owner decision): project-wide roles for
 # the GCP services family-app uses, with no per-resource conditions.
 grant() {
   local project="$1" role="$2" attempts="$3" attempt
@@ -93,4 +93,4 @@ done
 for role in roles/secretmanager.secretAccessor roles/storage.objectAdmin; do
   grant expense-tax-tobytran-2026 "$role" 1 || echo "warning: could not grant $role on expense-tax-tobytran-2026" >&2
 done
-echo "family-config ready: database $DATABASE ($LOCATION), VPS identity $READER_EMAIL"
+echo "family-config ready: database $DATABASE ($LOCATION), host identity $READER_EMAIL"

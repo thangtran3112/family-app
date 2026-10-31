@@ -311,11 +311,19 @@ def initial_state(running):
     }
 
 
-def selected_services(state, mirofish_ready):
+# A "dark" deploy (DEPLOY_DARK=1: staging or a pre-cutover warm-up on a host that must not serve
+# traffic or place orders) brings the stack up without the Cloudflare tunnel and without the Desk
+# scheduler. Every other protected service stays required, and a normal deploy requires all of them.
+DARK_EXCLUDED_SERVICES = ("cloudflared", "scheduler")
+
+
+def selected_services(state, mirofish_ready, dark=False):
     validate_state(state)
     if type(mirofish_ready) is not bool:
         raise ValueError("MiroFish readiness must be a boolean")
-    selected = list(PROTECTED_SERVICES)
+    if type(dark) is not bool:
+        raise ValueError("dark must be a boolean")
+    selected = [service for service in PROTECTED_SERVICES if not (dark and service in DARK_EXCLUDED_SERVICES)]
     for app_id, services in APP_SERVICES.items():
         if state["desired"][app_id] and (app_id != "mirofish" or mirofish_ready):
             selected.extend(services)
@@ -478,6 +486,7 @@ def _parser():
     services = commands.add_parser("services")
     options(services)
     services.add_argument("--mirofish-ready", choices=("true", "false"), required=True)
+    services.add_argument("--dark", action="store_true")
 
     snapshot = commands.add_parser("snapshot")
     options(snapshot)
@@ -532,7 +541,7 @@ def main(argv=None):
         if args.command == "services":
             state = read_state(args.state, owner_uid=args.owner_uid)
             ready = args.mirofish_ready == "true"
-            print("\n".join(selected_services(state, ready)))
+            print("\n".join(selected_services(state, ready, dark=args.dark)))
             return 0
         with _cli_lock(args.lock, args.owner_uid, args.lock_fd):
             if args.command == "snapshot":

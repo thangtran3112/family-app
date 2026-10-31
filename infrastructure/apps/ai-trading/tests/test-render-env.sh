@@ -18,7 +18,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-RENDER_ENV_SH="$SCRIPT_DIR/render-env.sh"
+RENDER_ENV_SH="$SCRIPT_DIR/../render-env.sh"
 
 PASS=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -34,9 +34,9 @@ fake_repo=$(mktemp -d)
 fake_bin=$(mktemp -d)
 trap 'rm -rf "$fake_repo" "$fake_bin"' EXIT
 
-mkdir -p "$fake_repo/ai-trading/deploy/ci" "$fake_repo/common/config"
-cp "$RENDER_ENV_SH" "$fake_repo/ai-trading/deploy/ci/render-env.sh"
-chmod 0755 "$fake_repo/ai-trading/deploy/ci/render-env.sh"
+mkdir -p "$fake_repo/infrastructure/apps/ai-trading" "$fake_repo/common/config"
+cp "$RENDER_ENV_SH" "$fake_repo/infrastructure/apps/ai-trading/render-env.sh"
+chmod 0755 "$fake_repo/infrastructure/apps/ai-trading/render-env.sh"
 
 # --- Static check: this script must never shell out to the retired tool
 # (comments are free to name it when explaining what changed; only an actual
@@ -111,7 +111,7 @@ run_render_env() {
   local out_dir="$1"
   FAKE_FAMILY_CONFIG_LOG="$invocation_log" \
   PATH="$fake_bin:$PATH" \
-    bash "$fake_repo/ai-trading/deploy/ci/render-env.sh" "$out_dir"
+    bash "$fake_repo/infrastructure/apps/ai-trading/render-env.sh" "$out_dir"
 }
 
 # --- Happy path ---

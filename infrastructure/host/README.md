@@ -59,18 +59,30 @@ provider's panel next before doubting the script.
 ## Layout
 
 ```
-vps/
+host/                       # was vps/ (renamed in 0001b-1; infrastructure/vps keeps two shims until 0001b-2)
 ├── README.md              # this file
 ├── bootstrap.sh            # orchestrator -- run this
+├── test-bootstrap.sh       # offline: secret transport through ssh/scp
+├── test-steps.sh           # offline: every step against stub commands
 ├── steps/
-│   ├── 00-firewall.sh      # UFW: default deny incoming, allow SSH port + 80/443
+│   ├── 00-firewall.sh      # UFW: default deny incoming, SSH port; ALLOW_HTTP=0 and SSH_INTERFACE options
+│   ├── 05-power.sh         # always-on laptop: no sleep, lid ignored, swap, Saturday reboot window, journald cap (opt-in)
 │   ├── 10-harden-ssh.sh    # SSH: target port, key-only auth, no root password login
-│   ├── 20-docker.sh        # Docker Engine + Compose plugin
-│   ├── 30-postgres.sh      # shared Postgres cluster + per-app DB/roles
+│   ├── 15-tailscale.sh     # tailscaled enabled, joined with the family-host tag (opt-in)
+│   ├── 20-docker.sh        # Docker Engine + Compose plugin; optional data-root check
+│   ├── 30-postgres.sh      # shared Postgres cluster (project "postgres", digest-pinnable image, --data-from-copy) + per-app DB/roles
+│   ├── 35-temporal.sh      # shared Temporal server and UI, expense-tax namespace (opt-in)
 │   └── 40-backup.sh        # backup state dirs, root-only secrets, systemd units (opt-in, see below)
+├── app-controls/           # ai-trading app-controls installer and unit
 └── apps/
     └── expense-tax-management.conf   # per-app config consumed by bootstrap.sh
 ```
+
+The default `--only` set stays `firewall,ssh,docker,postgres`. `power`, `tailscale`, `temporal`
+and `backup` are opt-in and always run in the order firewall, power, ssh, tailscale, docker,
+postgres, temporal, backup. Secrets for the opt-in steps (the Tailscale auth key, the Temporal
+role password, the Postgres superuser password for backups) are read from Firestore on the
+operator machine and streamed over SSH stdin; none reaches an argv.
 
 Each `steps/*.sh` file is self-contained and idempotent: it checks the
 current state first and prints "already ... no changes" when nothing
@@ -81,7 +93,7 @@ need to without the orchestrator.
 ## Usage
 
 ```bash
-cd infrastructure/vps
+cd infrastructure/host
 
 # Brand-new VPS, first-ever connection (see "manual bridge gap" above):
 ./bootstrap.sh --host 1.2.3.4 --ssh-user ubuntu --ssh-key ~/.ssh/id_ed25519 \
