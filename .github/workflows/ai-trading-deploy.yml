@@ -69,6 +69,32 @@ on:
           cutover. Run from main after the owner-reviewed bucket/IAM apply.
         type: boolean
         default: false
+      target:
+        description: >-
+          Host the deploy job targets: the Firestore group (shared/<target>)
+          its SSH host, port, user, deploy key and known hosts are read from.
+          A push to main always deploys to vps. Only takes effect when
+          deploy_app is also true. laptop stays unusable until the Tailscale
+          join step below exists (0001a/0001c).
+        type: choice
+        options: [vps, laptop]
+        default: vps
+      dark:
+        description: >-
+          Dark deploy (DEPLOY_DARK=1 to deploy.sh): start the stack without
+          cloudflared (the Cloudflare tunnel) and the Desk scheduler, and skip
+          the tunnel health probe. For staging or a warm-up on a host that must
+          not serve traffic yet. Only takes effect when deploy_app is also true.
+        type: boolean
+        default: false
+      image_tag:
+        description: >-
+          Deploy this already-pushed GHCR tag (a full 40-character commit SHA)
+          and skip the build job, so a dark deploy or a cutover spends no build
+          time. Leave empty to build and deploy the dispatched commit. Only
+          takes effect when deploy_app is also true.
+        type: string
+        default: ''
 
 concurrency:
   group: ai-trading-production-deploy
@@ -98,7 +124,7 @@ jobs:
   # dispatch (upload_hub_static / upload_mirofish_static below).
   build:
     name: Build and push images
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_app == true)
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_app == true && inputs.image_tag == '')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -183,7 +209,9 @@ jobs:
 
   deploy:
     name: Deploy to the VPS
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_app == true)
+    # `build` is skipped (not failed) when an image_tag is dispatched, so the
+    # default `needs` gate would skip this job too: accept skipped, never failed.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_app == true)) }}
     needs: build
     runs-on: ubuntu-latest
     environment: ai-trading-production
@@ -191,7 +219,21 @@ jobs:
       contents: read
       packages: read
       id-token: write
+    env:
+      # Firestore group holding the host's SSH details (VPS_HOST, VPS_PORT, VPS_USER,
+      # VPS_DEPLOY_SSH_PRIVATE_KEY, VPS_SSH_KNOWN_HOSTS). Push to main is always vps.
+      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'vps' }}
+      # Already-pushed tag to deploy; empty means the commit this run built.
+      IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
     steps:
+      - name: Validate dispatch inputs
+        run: |
+          set -euo pipefail
+          case "$TARGET" in vps | laptop) ;; *) echo "target must be vps or laptop" >&2; exit 1 ;; esac
+          if [[ -n "$IMAGE_TAG_INPUT" && ! "$IMAGE_TAG_INPUT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be a full 40-character lowercase commit SHA" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           sparse-checkout: |
@@ -222,16 +264,20 @@ jobs:
           # Older family_config.py prints ::add-mask:: lines on stdout; move them to
           # stderr (still processed by the runner) so the files hold only the value.
           get_file() { common/config/family_config.py get "$1" "$2" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }' >"$3"; }
-          get_file shared/vps VPS_DEPLOY_SSH_PRIVATE_KEY "$RUNNER_TEMP/ssh-key"
+          # TODO(0001c, Tailscale org): when TARGET=laptop, a pinned
+          # tailscale/github-action step must join the tailnet as tag:ci (OAuth
+          # credentials from shared/tailscale, masked) BEFORE this step; until
+          # then target=laptop cannot reach the host and the deploy fails at ssh.
+          get_file "shared/$TARGET" VPS_DEPLOY_SSH_PRIVATE_KEY "$RUNNER_TEMP/ssh-key"
           chmod 600 "$RUNNER_TEMP/ssh-key"
           # Multi-line, so read from the shared group (profile values must be single-line).
-          get_file shared/vps VPS_SSH_KNOWN_HOSTS "$RUNNER_TEMP/ai-trading-known-hosts"
+          get_file "shared/$TARGET" VPS_SSH_KNOWN_HOSTS "$RUNNER_TEMP/ai-trading-known-hosts"
 
       - name: Deploy over SSH
         env:
           GHCR_USER: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || github.sha }}
           SSH_KEY_FILE: ${{ runner.temp }}/ssh-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/ai-trading-known-hosts
           ENV_DIR: ${{ runner.temp }}/ai-trading-env
@@ -241,6 +287,9 @@ jobs:
           # running now and its profile still renders valid. A failed
           # activation never fails the other three apps' deploy.
           MIROFISH_ACTIVATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.stop_mirofish == true) && '0' || ((github.event_name == 'workflow_dispatch' && inputs.activate_mirofish == true) && '1' || 'keep') }}
+          # '1' only on a dispatch with dark=true: deploy.sh then leaves cloudflared and the
+          # Desk scheduler out and health-check.sh skips the tunnel probe. Every push is '0'.
+          DEPLOY_DARK: ${{ (github.event_name == 'workflow_dispatch' && inputs.dark == true) && '1' || '0' }}
         run: |
           set -euo pipefail
           echo "::add-mask::$GITHUB_TOKEN"
@@ -304,9 +353,17 @@ jobs:
           scp "${scp_opts[@]}" "$ENV_DIR"/*.env "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/env/"
           # shellcheck disable=SC2029 # GHCR_USER and IMAGE_TAG expand on the runner on purpose
           printf '%s\n' "$GITHUB_TOKEN" | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo bash /tmp/ai-trading-deploy/bootstrap/install.sh --src-dir /tmp/ai-trading-deploy/bootstrap; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh"
+            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo bash /tmp/ai-trading-deploy/bootstrap/install.sh --src-dir /tmp/ai-trading-deploy/bootstrap; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' DEPLOY_DARK='$DEPLOY_DARK' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh"
           SCRIPT_EOF
-          common/config/family_config.py run ai-trading/deploy -- bash "$DEPLOY_SCRIPT"
+          # Host details come straight from the target's Firestore group (the old
+          # ai-trading/deploy profile only linked these three names to shared/vps).
+          get_val() { common/config/family_config.py get "shared/$TARGET" "$1" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }'; }
+          VPS_HOST="$(get_val VPS_HOST)"
+          VPS_PORT="$(get_val VPS_PORT)"
+          VPS_USER="$(get_val VPS_USER)"
+          for value in "$VPS_HOST" "$VPS_PORT" "$VPS_USER"; do echo "::add-mask::$value"; done
+          export VPS_HOST VPS_PORT VPS_USER
+          bash "$DEPLOY_SCRIPT"
 
       - name: Remove runner deploy material
         if: always()

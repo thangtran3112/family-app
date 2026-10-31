@@ -3331,6 +3331,96 @@ run_runtime_marker_scenario "$s73" 2 || status73=$?
 [[ "$(cat "$s73/app/up-count")" == 1 ]] || fail "case73: post-commit marker cleanup must not restart Vibe"
 grep -q 'release applied but Vibe admission marker could not be cleared' "$s73/stderr.log" || fail "case73: operator did not get an applied-but-gated diagnosis"
 
+# run_fake_deploy_dark SCRATCH DARK: Case 9's process-level deploy (real deploy.sh, fake Docker,
+# fake root ownership) with DEPLOY_DARK=DARK exported. Leaves the compose calls in
+# SCRATCH/app/docker.log and returns deploy.sh's exit status.
+run_fake_deploy_dark() {
+  local scratch="$1" dark="$2" status=0
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$scratch/ci-staging/cloudflared.env"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$scratch/config-staging/health-check.sh"
+  chmod +x "$scratch/config-staging/health-check.sh"
+  (
+    APP_DIR="$scratch/app"
+    AI_TRADING_SECRETS_DIR="$scratch/secrets"
+    ENV_STAGING_DIR="$scratch/ci-staging"
+    APP_CONFIG_STAGING_DIR="$scratch/config-staging"
+    AI_TRADING_STATE_DIR="$scratch/control-state"
+    AI_TRADING_UNIT_DIR="$scratch/unit-dir"
+    FAMILY_CONFIG_CREDENTIALS="$scratch/fake-reader-key.json"
+    DEPLOY_SH_SKIP_CHOWN=1
+    IMAGE_TAG=1111111111111111111111111111111111111111
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG
+    if [[ -n "$dark" ]]; then
+      DEPLOY_DARK="$dark"
+      export DEPLOY_DARK
+    fi
+    # shellcheck disable=SC2329 # exported shim, called by the deploy.sh child process
+    docker() {
+      if [[ "${1:-}" == compose ]]; then
+        echo "fake docker $*" >>"$APP_DIR/docker.log"
+        return 0
+      fi
+      if [[ "${1:-}" == ps || "${1:-}" == images || "${1:-}" == rmi ]]; then
+        return 0
+      fi
+      command docker "$@"
+    }
+    export -f docker
+    install_fake_systemctl "$scratch"
+    # shellcheck disable=SC2329 # exported shim, called by the deploy.sh child process
+    stat() {
+      if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+        local mode
+        mode="$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+        printf '0:%s\n' "$mode"
+      else
+        command stat "$@"
+      fi
+    }
+    export -f stat
+    bash "$DEPLOY_SH" >"$scratch/stdout.log" 2>"$scratch/stderr.log"
+  ) || status=$?
+  return "$status"
+}
+
+echo "=== Case 74 (GREEN, process-level, dark mode): DEPLOY_DARK=1 never starts cloudflared or scheduler, still starts every other protected service ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s74="$(new_scratch case74)"
+status74=0
+run_fake_deploy_dark "$s74" 1 || status74=$?
+[[ "$status74" == 0 ]] || fail "case74: a dark deploy must succeed, got $status74: $(cat "$s74/stderr.log" 2>/dev/null)"
+up74="$(grep 'up -d' "$s74/app/docker.log" 2>/dev/null)" || fail "case74: no compose up call"
+for svc in web gateway auth market-data api market-data-bridge; do
+  [[ " $up74 " == *" $svc "* ]] || fail "case74: a dark deploy must still start $svc: $up74"
+done
+for svc in cloudflared scheduler; do
+  [[ " $up74 " != *" $svc "* ]] || fail "case74: a dark deploy must never start $svc: $up74"
+done
+[[ "$(cat "$s74/app/last-good-tag" 2>/dev/null)" == 1111111111111111111111111111111111111111 ]] || fail "case74: a dark deploy must still commit last-good-tag"
+
+echo "=== Case 75 (GREEN, process-level, dark mode): a normal deploy (DEPLOY_DARK unset or 0) still starts both cloudflared and scheduler ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+for variant in unset 0; do
+  s75="$(new_scratch "case75-$variant")"
+  status75=0
+  run_fake_deploy_dark "$s75" "$([[ "$variant" == unset ]] && echo '' || echo 0)" || status75=$?
+  [[ "$status75" == 0 ]] || fail "case75($variant): a normal deploy must succeed, got $status75: $(cat "$s75/stderr.log" 2>/dev/null)"
+  up75="$(grep 'up -d' "$s75/app/docker.log" 2>/dev/null)" || fail "case75($variant): no compose up call"
+  for svc in cloudflared scheduler; do
+    [[ " $up75 " == *" $svc "* ]] || fail "case75($variant): a normal deploy must start $svc: $up75"
+  done
+done
+
+echo "=== Case 76 (RED, process-level, dark mode): a malformed DEPLOY_DARK fails before any secret, config or container is touched ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s76="$(new_scratch case76)"
+status76=0
+run_fake_deploy_dark "$s76" yes || status76=$?
+[[ "$status76" != 0 ]] || fail "case76: DEPLOY_DARK=yes must fail the deploy"
+grep -q 'DEPLOY_DARK must be 0 or 1' "$s76/stderr.log" || fail "case76: missing the DEPLOY_DARK diagnosis: $(cat "$s76/stderr.log")"
+[[ ! -e "$s76/app/docker.log" ]] || fail "case76: docker was reached despite a malformed DEPLOY_DARK"
+[[ ! -e "$s76/secrets/cloudflared.env" ]] || fail "case76: a secret was installed despite a malformed DEPLOY_DARK"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
