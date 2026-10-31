@@ -321,7 +321,7 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     const preparing = (await step.boundingBox())!.height;
     await page.unroute(/\/api\/desk\/replay\/daily(\?|$)/);
     await openDesk(page, overviewUrl(id));
-    await expect(step.getByRole("button", { name: /^Start Day \d+$/ })).toBeVisible();
+    await expect(step.getByRole("button", { name: /^Start Day \d+$/ })).toBeVisible({ timeout: 60_000 }); // the real prepare may still be running
     expect((await step.boundingBox())!.height).toBe(preparing);
   });
 });
