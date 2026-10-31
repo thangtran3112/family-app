@@ -106,6 +106,12 @@ To move consensus, earnings, and targets from Eulerpool to provider X:
 
 To make X the default for every app instead, change `DEFAULT_CHAINS` in the same pull request rather than Firestore.
 
+Providers registered for config selection only (02b §4c, 2026-10-30), in no default chain, because an unconfigured provider raises `NotConfigured` and, at the end of a chain, that replaces an earlier provider's `Unavailable`:
+
+- `tradier`: `quotes` and `option_chain`; reads `TRADIER_ACCESS_TOKEN` and optional `TRADIER_ENVIRONMENT`; greeks refresh hourly.
+- `marketdata_app`: `quotes` and `option_chain`; reads `MARKETDATA_APP_TOKEN` and optional `MARKETDATA_APP_QUALITY`; the delay depends on the plan.
+- Longbridge has no entry: its quote API is a socket protocol with no REST schema (02b §4c).
+
 ## 9. Tests
 
 - **Registry:**
