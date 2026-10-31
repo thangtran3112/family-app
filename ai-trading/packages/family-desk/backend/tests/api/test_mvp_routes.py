@@ -130,6 +130,8 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/research/symbols/{}/timeline"),
     ("GET", "/api/desk/fundamental-alerts"),
     ("PUT", "/api/desk/fundamental-alerts/{}"),
+    ("GET", "/api/desk/settings/market-data"),
+    ("PUT", "/api/desk/settings/market-data"),
 ]
 
 #: `PUT /watchlists/{id}/order` reorders symbols (02m §a2 row 25). It is the one route whose path may
@@ -152,7 +154,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 109
+    assert len(INVENTORY) == 111
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:
