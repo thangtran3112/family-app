@@ -92,7 +92,7 @@ Typical day, after B4: before the ritual, quotes come from Longbridge (realtime,
 - **Auth:** a bearer token checked in an interceptor with a constant-time compare, like 01m's `X-API-Key`. `MARKET_DATA_BRIDGE_TOKEN` grants reads. `MARKET_DATA_BRIDGE_ADMIN_TOKEN` is also required for `SetRouting`. `IBKR_EDGE_TOKEN` guards the edge. Tokens and query strings are never logged.
 - **Health:** a plain `GET /healthz` reports the process only, never provider health, so a gateway that is off never restarts the container.
 
-### 3.2 Proto sketch (lives here until B0 creates the real file)
+### 3.2 Proto sketch (the real file is `market-data/bridge/proto/marketdata/v1/marketdata.proto`, built at B0)
 
 ```proto
 syntax = "proto3";
@@ -216,6 +216,8 @@ message GetStatusRequest {}
 message WatchStatusRequest {}
 message BridgeStatus { google.protobuf.Timestamp at = 1; string role = 2; repeated ProviderHealth providers = 3; Routing routing = 4; string build = 5; }
 ```
+
+**B0 build notes (2026-10-31).** The real file differs from this sketch in one way: `HealthState` values are prefixed (`HEALTH_STATE_OK`, `HEALTH_STATE_NOT_CONFIGURED`, ...), because proto3 enum values are package-scoped and the sketch's `NOT_CONFIGURED` collided with `ErrorKind.NOT_CONFIGURED`. On the Connect JSON wire the enum names are the strings in the proto (`EQUITY_QUOTES`, `DELAYED_15M`, `HEALTH_STATE_OK`). `SetRouting` carries the admin token in an `X-Admin-Token` header beside the bearer read token. `GetOptionChain` returns `UNIMPLEMENTED` until B6.
 
 The edge implements the same service, answering `GetQuotes`, `GetStatus`, and `WatchStatus` only. It returns `UNIMPLEMENTED` for the rest.
 

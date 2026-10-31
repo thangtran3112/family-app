@@ -10,6 +10,7 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | `ta-research` | internal only (own `research` network, port 8182) | Private, owner-scoped TradingAgents research API + static shell (06); `/research`, `/research/*`, `/api/research`, `/api/research/*` at the dedicated host, `/u/tradingagents/research...` on the hub. Own `ta-research-data` volume, never shares `ta-terminal`'s `ta-data`. Never on `ta` with `ta-terminal` -- see "Research (06)" below |
 | `ahf-terminal` | `https://ai-hedge-fund.tobytran.dev/` | ai-hedge-fund in ttyd + tmux; also `/u/ai-hedge-fund/` on the hub |
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
+| `market-data-bridge` | internal only (`marketdata` network, port 8080; no host port) | The Go gRPC market-data bridge (02t B0), deployed dark: no consumer until B2. Serves gRPC, gRPC-Web, and Connect on one port; `GET /healthz` reports the process only. Optional Firestore profile `ai-trading/market-data-bridge` (`MARKET_DATA_BRIDGE_TOKEN`, `MARKET_DATA_BRIDGE_ADMIN_TOKEN`, plus `ALPACA_API_KEY_ID`/`ALPACA_API_SECRET_KEY` linked from `shared/alpaca`; optional `BRIDGE_LADDER_*`). A missing profile never fails the deploy: the bridge boots healthy, rejects every call (no token), and serves no data (no keys) |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
 | `vibe-consensus` | internal only (`vibe` network, port 8000) | Authenticated free Finnhub recommendation counts; missing optional key yields analysis-only without stopping Vibe |
 | Desk `api` | authenticated `/api/desk` and `/api/desk/*` | Caddy/Clerk only; internal `gateway` + `database` networks, no host port |
@@ -156,8 +157,8 @@ Both static-upload jobs are fully independent of `build`/`deploy` and of each ot
 
 Either approved family user can open `/settings` on the hub and turn one of
 four groups on/off to save VPS RAM. A switch affects both users; the Hub
-itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`) and the Family Desk's
-`api` and `scheduler` are never controllable and stay always-on.
+itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
+`api` and `scheduler`, and the `market-data-bridge` are never controllable and stay always-on.
 
 | App ID | Controlled services |
 |---|---|
