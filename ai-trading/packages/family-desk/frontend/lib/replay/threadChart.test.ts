@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { barsLayout, curveLayout, niceTicks, type Box } from "./threadChart.ts";
+import { balanceTicks, barsLayout, curveLayout, type Box } from "./threadChart.ts";
 import { thread, threadCurve, threadDays } from "./threadFixtures.ts";
 import { weeksOf } from "./threadView.ts";
 
 const box: Box = { width: 700, height: 200, left: 60, right: 20, top: 10, bottom: 30 };
 
 test("nice ticks are round, ascending and cover the data", () => {
-  assert.deepEqual(niceTicks(49753, 50123), [49700, 49800, 49900, 50000, 50100, 50200]);
-  assert.deepEqual(niceTicks(-182, 240), [-200, 0, 200, 400]);
-  assert.deepEqual(niceTicks(50000, 50000).length > 1, true);
-  const ticks = niceTicks(0, 0);
+  assert.deepEqual(balanceTicks(49753, 50123), [49700, 49800, 49900, 50000, 50100, 50200]);
+  assert.deepEqual(balanceTicks(-182, 240), [-200, 0, 200, 400]);
+  assert.deepEqual(balanceTicks(50000, 50000).length > 1, true);
+  const ticks = balanceTicks(0, 0);
   assert.ok(ticks[0]! < ticks[ticks.length - 1]!);
 });
 
@@ -70,5 +70,5 @@ test("days that all ended flat still get a readable axis with no repeated figure
   assert.equal(new Set(values.map((value) => Math.round(value))).size, values.length);
   assert.ok(layout.slots.every((slot) => slot.barHeight === 0));
   // A few dollars of spread never makes the step finer than a whole dollar.
-  assert.ok(niceTicks(0, 2).every((value) => Number.isInteger(value)));
+  assert.ok(balanceTicks(0, 2).every((value) => Number.isInteger(value)));
 });
