@@ -45,3 +45,13 @@ test("Technical components never name fundamentals or covered calls", () => {
     }
   }
 });
+
+// Backtest mode (ADR-0014): the practice surfaces never name fundamentals or covered calls either.
+test("Backtest components never name fundamentals or covered calls", () => {
+  const files = sources("practice");
+  assert.ok(files.length > 5, "the scan found the Practice components");
+  for (const file of files) {
+    const text = withoutComments(readFileSync(file, "utf8"));
+    for (const pattern of TECHNICAL_BANNED) assert.equal(pattern.test(text), false, `${file} matches ${pattern}`);
+  }
+});

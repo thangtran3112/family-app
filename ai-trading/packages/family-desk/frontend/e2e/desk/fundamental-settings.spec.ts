@@ -24,7 +24,7 @@ test("the Fundamental Settings show masking, accounts, the import, the scan filt
   await openDesk(page, "/settings");
   const main = page.locator("#main-content");
 
-  for (const name of ["Default view", "Masking", "Accounts", "Holdings import", "Covered-call scan filters", "Fundamental alert templates", "Alerts", "Market data", "Trading"]) {
+  for (const name of ["Default mode", "Masking", "Accounts", "Holdings import", "Covered-call scan filters", "Fundamental alert templates", "Alerts", "Market data", "Trading"]) {
     await expect(main.getByRole("heading", { name, exact: true })).toBeVisible();
   }
 
@@ -174,7 +174,7 @@ test("the masking default saves, comes back after a reload and moves the top-bar
 test("the Technical Settings stay as they were, with none of the Fundamental cards", async ({ page }) => {
   const gated = watchGated(page);
   await openDesk(page, "/settings");
-  await expect(page.getByRole("group", { name: "Default view" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Default mode" })).toBeVisible();
   for (const name of ["Masking", "Accounts", "Holdings import", "Covered-call scan filters", "Fundamental alert templates"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
   }

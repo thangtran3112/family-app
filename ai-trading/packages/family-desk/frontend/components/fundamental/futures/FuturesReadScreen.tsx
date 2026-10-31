@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { deskFetch } from "@/lib/api/client";
@@ -19,7 +18,6 @@ const UNAVAILABLE = "—";
 
 /** FD6 Futures reading (02n §b3): reading only. Prices wait for futures quotes, so each price cell is a dash and the state is said once, in words. */
 export function FuturesReadScreen() {
-  const { setLane } = useDeskUi();
   // The shared reference route, not the gated readings route: the roll calendar is real, the prices are not connected.
   const specs = useDeskQuery("futures-read-specs", (signal) => deskFetch("/api/desk/futures/specs", FuturesSpecsSchema, { signal }));
 
@@ -44,8 +42,8 @@ export function FuturesReadScreen() {
       </header>
       <p className={`${styles.banner} ${local.reading}`} role="note" data-testid="futures-reading-only">
         <span>{COPY.futuresReadingOnly}</span>
-        {/* A full navigation, like the rest of the shell: the Technical view owns /futures. */}
-        <a className={styles.button} href="/futures" onClick={() => setLane("technical")}>Switch to Technical</a>
+        {/* A full navigation, like the rest of the shell: /futures opens in Technical mode, its only mode (ADR-0014). */}
+        <a className={styles.button} href="/futures">Switch to Technical</a>
       </p>
       <section className={styles.panel} aria-label="Futures reading">
         {specs.error !== null && specs.data === null ? (

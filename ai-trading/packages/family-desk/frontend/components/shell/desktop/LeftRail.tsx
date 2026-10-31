@@ -3,31 +3,25 @@
 import { Suspense, useId, useState } from "react";
 import { HoldingsRailPanel } from "@/components/fundamental/rail/HoldingsRailPanel";
 import type { ShellBand } from "@/lib/desk/viewport";
+import { LEFT_RAIL_TABS, type LeftRailTab } from "@/lib/lanes";
 import { useDeskUi } from "./DeskContext";
 import { FiltersPanel } from "./FiltersPanel";
 import { WatchlistsPanel } from "./WatchlistsPanel";
 import styles from "./leftrail.module.css";
 
-type Tab = "holdings" | "watchlists" | "filters";
+type Tab = LeftRailTab;
 
-const TECHNICAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
-  { id: "watchlists", label: "Watchlists" },
-  { id: "filters", label: "Filters" },
-];
-// The Fundamental lane swaps Filters for her holdings (02n §b1); the Watchlists tab is the same panel.
-const FUNDAMENTAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
-  { id: "holdings", label: "Holdings" },
-  { id: "watchlists", label: "Watchlists" },
-];
+const TAB_LABEL: Record<Tab, string> = { holdings: "Holdings", watchlists: "Watchlists", filters: "Filters" };
 
-/** Left rail (02l §b2, 02n §b1): her watchlists and saved filters, or in the Fundamental lane her holdings and watchlists; collapsible to a 48 px icon strip. */
+/** Left rail (02l §b2, 02n §b1): the mode's tabs from `LEFT_RAIL_TABS` (ADR-0014), collapsible to a 48 px icon strip. */
 export function LeftRail({ band }: { band: ShellBand }) {
   const { lane, leftCollapsed, setLeftCollapsed } = useDeskUi();
-  const TABS = lane === "fundamental" ? FUNDAMENTAL_TABS : TECHNICAL_TABS;
+  const TABS = LEFT_RAIL_TABS[lane].map((id) => ({ id, label: TAB_LABEL[id] }));
   const [chosen, setTab] = useState<Tab | null>(null);
-  // No tab picked yet, or one the other lane owned (Filters, Holdings): the lane's first tab.
+  // No tab picked yet, or one another mode owned (Filters, Holdings): the mode's first tab.
   const tab = TABS.find((item) => item.id === chosen)?.id ?? TABS[0]!.id;
-  const label = lane === "fundamental" ? "Holdings and watchlists" : "Watchlists and filters";
+  // "Watchlists and filters", "Holdings and watchlists", "Watchlists".
+  const label = TABS.map((item, index) => (index === 0 ? item.label : item.label.toLowerCase())).join(" and ");
   const id = useId();
 
   if (leftCollapsed) {

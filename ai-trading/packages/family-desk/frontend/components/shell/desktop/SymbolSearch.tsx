@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
-import { isSearchShortcut, moveActive, symbolHref } from "@/lib/desk/listNav";
+import { isSearchShortcut, moveActive } from "@/lib/desk/listNav";
+import { SYMBOL_HREF } from "@/lib/lanes";
 import { searchSymbols } from "@/lib/desk/status";
 import styles from "./topbar.module.css";
 
@@ -13,7 +14,7 @@ type Answer = { q: string; hits: Hit[] | null };
 
 export function SymbolSearch({ compact }: { compact: boolean }) {
   const router = useRouter();
-  const { confirmLeave } = useDeskUi();
+  const { lane, confirmLeave } = useDeskUi();
   const baseId = useId();
   const listId = `${baseId}-list`;
   const optionId = (index: number) => `${baseId}-option-${index}`;
@@ -73,7 +74,9 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
     setActive(-1);
     setOpen(false);
     setExpanded(false);
-    router.push(symbolHref(symbol));
+    // The mode's own symbol page: Technical opens the chart, Fundamental the stock overview (ADR-0014).
+    const href = SYMBOL_HREF[lane]?.(symbol);
+    if (href) router.push(href);
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
