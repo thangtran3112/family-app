@@ -23,6 +23,15 @@ const productionRoot = path.join(repoRoot, "..", "infrastructure", "apps", "expe
 const composePath = path.join(productionRoot, "docker-compose.yml");
 const sharedTemporalPath = path.join(repoRoot, "../infrastructure/temporal/docker-compose.yml");
 
+// Drop ambient dark-mode/worker overrides so a caller's shell cannot change what the scripts under test see.
+function cleanProcessEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && key !== "DEPLOY_DARK" && key !== "HEALTH_CHECK_REQUIRED_WORKERS") env[key] = value;
+  }
+  return env;
+}
+
 function readProductionFile(name: string): string {
   return readFileSync(path.join(productionRoot, name), "utf8");
 }
@@ -908,7 +917,7 @@ ${rollbackFn}
 rollback 1
 `;
     const env: Record<string, string> = {
-      ...process.env,
+      ...cleanProcessEnv(),
       PATH: `${fakeBin}:${process.env.PATH}`,
       FAKE_DOCKER_STATE_DIR: stateDir,
       WORKFLOW_WORKER_IMAGE_EXISTS: options.workflowWorkerImageExists ? "1" : "0",
@@ -1214,7 +1223,7 @@ printf '%s\\n' "\${APPLICATION_SERVICES[@]}"
       }
       const result = spawnSync("bash", [path.join(productionRoot, "health-check.sh")], {
         env: {
-          ...process.env,
+          ...cleanProcessEnv(),
           PATH: `${fakeBin}:${process.env.PATH}`,
           PRODUCTION_ENV_FILE: "/dev/null",
           HEALTH_CHECK_ATTEMPTS: "1",
