@@ -99,6 +99,17 @@ This adds to section 4b and reverses nothing. The owner keeps the adapter patter
 
 **Still open** (the comparison doc, section 6): Tradier's data fee, its equity feed and whether Lite gets real-time options; Longbridge's US-resident OpenAPI eligibility, OPRA price, option quote fields and Level 1 source.
 
+## 4d. Decision revision (Owner, 2026-10-31)
+
+This supersedes parts of section 4b and section 4c; §4b and §4c stay as history. The full design is [02t](02t-market-data-bridge-plan.md), a Go gRPC bridge that hides the provider (planned only: nothing is built, bought, or activated).
+
+- **Tradier is declined.** The owner will not create the account. The Python `tradier` adapter (row 5Q) stays in the tree, **dormant**: in no default chain, never ported to the bridge, never given a key.
+- **The IBKR gateway is back in.** The owner accepts a **daily on/off ritual** (sign in each trading morning, approve on the phone, close in the evening) with IB Gateway on the spare Ubuntu laptop. This **supersedes the 2026-10-29 gateway rejection** in §4b ("needs a human 2FA re-login"). When the gateway is off, the design falls back down a ladder and the UI says so. The API stays read-only: quotes only, never orders. The §4b reduction to "Flex import only" no longer holds for live quotes; the Flex holdings import itself is unchanged.
+- **marketdata.app ($30/month non-professional plan) is an options fallback only**, bought only if Longbridge's real-time options prove poor. Its stock quotes are 15 minutes delayed on every plan (owner-verified on its pricing page), so it is never a stocks source. This corrects the §6 bench row.
+- **Provider mix:** IBKR + Alpaca + Longbridge (+ marketdata.app as the options fallback). Alpaca Basic stays the free baseline and last rung; the $99 Algo Trader Plus tier is bought only when the wife reaches a professional level and the app is comprehensive (Telegram alerting plus AI stock Q&A). Longbridge has no account yet, and its US-resident eligibility is unverified.
+- **Order:** stocks first, covered-call options later. Futures stay out of scope.
+- **Where the work is planned:** [02t](02t-market-data-bridge-plan.md) (STATUS row 5R). The Desk keeps its adapter pattern; the bridge enters the registry as one more provider.
+
 ## 5. Hybrid Store: What We Keep and What We Fetch
 
 | Data | Live source | History and backfill | Stored |
