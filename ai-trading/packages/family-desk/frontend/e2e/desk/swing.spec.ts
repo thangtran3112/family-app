@@ -466,7 +466,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByText("Through the last finished day's close · not final yet")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Start Week/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveCount(0); // Day 7 has no board yet
-    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
+    await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`); // D-088, D-089: back to the thread's page, not the journal
     await expectNoDates(page);
 
     // Once Day 7 is open, the same review goes back to its board.

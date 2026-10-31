@@ -318,3 +318,48 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();
   });
 });
+
+// Fix wave 5S, stream 1: the week review.
+test.describe("Practice week review · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, `/practice/week?thread=${threadId}&week=1`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Week 1");
+    // D-088: Start Week 2 is in the first screen beside the "Final" chip, and ← Thread goes to the thread's page.
+    await expect(page.getByRole("button", { name: "Start Week 2" })).toBeInViewport();
+    await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
+    // D-086: every tile value is one line inside its tile, also in a narrow tile (the grid is squeezed to about 154 px a tile, as the audit saw it).
+    await page.locator("#main-content ul[role=list]").filter({ has: page.locator("[data-tone]") }).first().evaluate((list) => ((list as HTMLElement).style.width = "470px"));
+    const broken = await page.locator("#main-content [data-tone]").evaluateAll((nodes) =>
+      nodes.flatMap((node) => {
+        const box = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
+        const wraps = box.height > line * 1.5;
+        const spills = node.scrollWidth > node.clientWidth + 1;
+        return wraps || spills ? [`${node.textContent} (${Math.round(box.width)}x${Math.round(box.height)})`] : [];
+      }),
+    );
+    expect(broken, "a tile value wraps or spills").toEqual([]);
+    expect(await page.locator("#main-content [data-tone]").count(), "the tiles are there").toBeGreaterThan(5);
+    // D-087: the key lists the day-close ticks too, and "this week is shaded" is a filled block, not a box that looks ticked.
+    const key = page.getByRole("list", { name: "Chart key" });
+    await expect(key).toContainText("Close of each day");
+    const shade = key.getByRole("listitem").filter({ hasText: "This week is shaded" }).locator("span").first();
+    await expect(shade).toHaveCSS("border-top-width", "0px");
+  });
+
+  test("a day thread's week page has a heading, a full sentence and a link to the thread's page (D-089)", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    await openDesk(page, `/practice/week?thread=${id}&week=1`);
+    await expect(page.getByRole("heading", { level: 1, name: "Weekly review" })).toBeVisible();
+    await expect(page.getByText("Weekly reviews are for swing threads. This is a day thread, so it has no weeks.")).toBeVisible();
+    await expect(page.getByText("swing threads only", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/thread?id=${id}`);
+  });
+});

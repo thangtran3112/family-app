@@ -84,10 +84,11 @@
 .valueLabel { font-size: var(--text-micro); font-weight: var(--weight-semibold); }
 
 /* Summary tiles: a grid that wraps to fewer columns as the centre narrows. */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.tile { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.tile { container-type: inline-size; position: relative; display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
 .tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.tileValue { font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+/* The value takes the size its tile allows (up to the title size) and never wraps: "$25,000.00" stays one number on one line (D-086). */
+.tileValue { font-size: clamp(var(--text-body), 11cqi, var(--text-title)); line-height: var(--line-title); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tileValue[data-tone="up"] { color: var(--color-up); }
 .tileValue[data-tone="down"] { color: var(--color-down); }
 .tileSub { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
