@@ -4,20 +4,19 @@ import { MarketChart } from "@/components/charts/MarketChart";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { AsOfLine } from "@/components/ui/AsOfLine";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { AlertsOnStock } from "@/components/workspace/AlertsOnStock";
 import { KeyLevels } from "@/components/workspace/KeyLevels";
 import { StrategyMatches } from "@/components/workspace/StrategyMatches";
 import { SymbolHeader } from "@/components/workspace/SymbolHeader";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { loadBars, loadTechnicals } from "@/lib/desk/charts";
-import type { Connection } from "@/lib/desk/freshness";
 import { historyBanner } from "@/lib/desk/summary";
-import { chartDays, SUMMARY_TIMEFRAMES, timeframeLabel } from "@/lib/desk/timeframes";
-import { COPY } from "@/lib/desk/freshness";
+import { chartDays, HEADER_DAYS, SUMMARY_TIMEFRAMES, timeframeLabel } from "@/lib/desk/timeframes";
+import { COPY, fillCopy, type Connection } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useLiveQuote } from "@/lib/desk/useLiveQuote";
-import { priceSummary } from "@/lib/desk/workspace";
+import { headerSummary, noMarketData } from "@/lib/desk/workspace";
 import { BiasGauge } from "./Gauges";
 import { IndicatorTables } from "./IndicatorTables";
 import { PivotsTable } from "./PivotsTable";
@@ -37,11 +36,15 @@ export function TechnicalSummary({ symbol, timeframe, onTimeframe }: { symbol: s
   const technicals = useDeskQuery(`summary:${symbol}:${timeframe}`, (signal) => loadTechnicals(symbol, timeframe, 3650, { signal }), { intervalMs: refresh });
   const bars = useDeskQuery(`summary-bars:${symbol}:${timeframe}`, (signal) => loadBars(symbol, timeframe, { days: chartDays(timeframe) }, { signal }), { intervalMs: refresh });
   const strategies = useDeskQuery(`alert-strategies:${symbol}`, (signal) => loadAlertStrategies({ symbol }, { signal }));
+  // The header's day change reads daily bars on every timeframe (V-Technicals-01).
+  const daily = useDeskQuery(`daily:${symbol}`, (signal) => loadBars(symbol, "1d", { days: HEADER_DAYS }, { signal }), { intervalMs: refresh });
   const live = useLiveQuote(symbol);
 
   const barRows = bars.data?.bars ?? [];
   const connection: Connection = technicals.connection === "reconnecting" || live.connection === "reconnecting" ? "reconnecting" : technicals.updating ? "updating" : "ok";
-  const summary = priceSummary(live.quote?.close ?? null, barRows, technicals.data?.levels?.prior_close);
+  const dailyRows = daily.data?.bars ?? [];
+  const summary = headerSummary(live.quote, dailyRows, barRows);
+  const noData = bars.data !== null && daily.data !== null && noMarketData(live.quote, dailyRows, barRows);
   const label = timeframeLabel(timeframe);
   const banner = technicals.data ? historyBanner(technicals.data, label) : null;
 
@@ -72,7 +75,13 @@ export function TechnicalSummary({ symbol, timeframe, onTimeframe }: { symbol: s
   let body;
   if (technicals.loading) body = <LoadingBlock label="Loading technical summary…" height={320} />;
   else if (technicals.data === null) body = <ErrorBlock subject="summary" onRetry={technicals.refresh} />;
-  else {
+  else if (noData) {
+    body = (
+      <div role="status">
+        <EmptyBlock title={fillCopy(COPY.noMarketData, { symbol })}>{COPY.noMarketDataHint}</EmptyBlock>
+      </div>
+    );
+  } else {
     const data = technicals.data;
     const unavailable = data.quality === "unavailable";
     body = (
@@ -104,6 +113,7 @@ export function TechnicalSummary({ symbol, timeframe, onTimeframe }: { symbol: s
         session={live.quote?.session ?? status?.market.session}
         connection={connection}
         view="summary"
+        notice={noData ? COPY.noMarketDataBadge : undefined}
       />
       <div className={styles.tabs}><TimeframeTabs options={SUMMARY_TIMEFRAMES} value={timeframe} onChange={onTimeframe} /></div>
       <div className={styles.content} data-dim={connection === "reconnecting" ? "true" : undefined}>{body}</div>

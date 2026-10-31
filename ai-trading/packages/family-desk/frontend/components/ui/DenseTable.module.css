@@ -6,6 +6,8 @@
 .table th { position: sticky; top: 0; z-index: 1; background: var(--color-ground); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .right { text-align: right !important; }
 .center { text-align: center !important; }
+/* The slack column: takes the width the others leave and clips its own text with an ellipsis (a 1180 rail has 215 px for four columns). */
+.table .fill { width: 100%; min-width: 0; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .row { box-shadow: inset 2px 0 0 transparent; }
 .row:hover { background: var(--color-raised); }
 .clickable { cursor: pointer; }

@@ -39,3 +39,6 @@ export const isIntraday = (api: string): boolean => api !== "1d" && api !== "1w"
 // How many calendar days of bars the chart asks for at each timeframe.
 const CHART_DAYS: Record<string, number> = { "1m": 2, "5m": 5, "15m": 20, "30m": 30, "1h": 60, "4h": 180, "1d": 365, "1w": 1825 };
 export const chartDays = (api: string): number => CHART_DAYS[api] ?? 30;
+
+/** Calendar days of daily bars behind the symbol header's day change: two sessions across a long weekend. */
+export const HEADER_DAYS = 10;

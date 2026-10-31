@@ -41,6 +41,11 @@ export function useDeskStatus(): DeskStatusValue {
   return value;
 }
 
+/** The Desk feed's own stamp (the one the top bar shows), or null before /status answers or outside the desktop shell. Page badges read it so a paused feed states one age. */
+export function useDeskFeedStamp(): DeskStatus["quotes"] | null {
+  return useContext(StatusContext)?.status?.quotes ?? null;
+}
+
 export type DeskUiValue = {
   lane: Lane;
   setLane: (lane: Lane) => void;
@@ -117,6 +122,11 @@ export function useDeskUi(): DeskUiValue {
   const value = useContext(UiContext);
   if (!value) throw new Error("useDeskUi must be used inside the desktop shell");
   return value;
+}
+
+/** The active lane, or Technical where there is no desktop shell (the mobile shell has no lanes). For shared pages that render in both. */
+export function useActiveLane(): Lane {
+  return useContext(UiContext)?.lane ?? "technical";
 }
 
 /** The element a page portals its right-rail content into (see RightRail). Null before mount. */
