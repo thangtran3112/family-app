@@ -14,7 +14,9 @@ Every provider call goes through `DataSources` (never a provider module). One sy
 pass goes on; five failures in a row stop the pass, because the provider is down or has banned us and more
 requests only make it worse. Bars are stored closed-only (`upsert_bars`), and every pass is safe to repeat.
 A pass reports `down` when nothing could be fetched; the once-a-day jobs then fail without marking their clock, so
-the scheduler retries them on its next tick (catch-up) instead of evaluating a whole day on stale data.
+the scheduler retries them on its next tick (catch-up) instead of evaluating a whole day on stale data. A pass that
+asked for symbols and got nothing back (no failure, only `NoData`) reports `empty`: it does not block a job, but it
+is never `ok` and never moves `last_ok_at`.
 
 All stored bars are delayed SIP minutes (`delayed-15m`): nothing here is real time, and the freshness a reader shows
 comes from `core.freshness` over the `last_ok_at` this module writes, never from a value computed here.
@@ -74,25 +76,30 @@ def scan_enabled(data_sources: DataSources) -> bool:
 
 @dataclass
 class PassReport:
-    """What one pass did. `failed` maps a symbol (or a list name) to the error class that stopped it."""
+    """What one pass did. `failed` maps a symbol (or a list name) to the error class that stopped it. `expected` is
+    how many symbols the pass asked for: an `empty` pass fetched none of them and nothing failed."""
 
     fetched: int = 0
     failed: dict[str, str] = field(default_factory=dict)
     stopped_early: bool = False
+    expected: int = 0
 
     @property
     def state(self) -> str:
-        """`down` when nothing worked, `degraded` when some did, else `ok`."""
+        """`down` when nothing worked, `degraded` when some did, `empty` when symbols were asked for and none came
+        back, else `ok`."""
         if self.fetched == 0 and (self.failed or self.stopped_early):
             return "down"
-        return "degraded" if self.failed or self.stopped_early else "ok"
+        if self.failed or self.stopped_early:
+            return "degraded"
+        return "empty" if self.expected and not self.fetched else "ok"
 
 
 def record_health(session: Session, feed: str, state: str, *, now: datetime, detail: str | None = None) -> None:
-    """Upsert one feed's row. `last_ok_at` moves only for `ok` and `degraded`: a feed that is down keeps the
-    time it last worked, which is what `core.freshness` and the staleness guard read. Caller commits."""
+    """Upsert one feed's row. `last_ok_at` moves only for `ok` and `degraded`: a feed that is down or empty keeps
+    the time it last worked, which is what `core.freshness` and the staleness guard read. Caller commits."""
     values = {"feed": feed, "state": state, "detail": detail, "updated_at": now}
-    if state != "down":
+    if state not in ("down", "empty"):
         values["last_ok_at"] = now
     stmt = pg_insert(FeedHealth).values(**values)
     changed = {key: value for key, value in values.items() if key != "feed"}
@@ -131,16 +138,21 @@ def candidate_symbols(session: Session) -> list[str]:
 
 
 def _fetch_each(symbols: Iterable[str], fetch) -> PassReport:
-    """Call `fetch(symbol)` for each symbol, isolating `ProviderError`s and stopping after a run of them."""
+    """Call `fetch(symbol)` for each symbol, isolating failures and stopping after a run of them. Any exception
+    counts as the symbol's failure (a store error must not kill the pass or vanish); the report keeps the error
+    class, and the log keeps a short message."""
     report = PassReport()
     streak = 0
     for symbol in symbols:
+        report.expected += 1
         try:
             fetch(symbol)
         except NoData:
             streak = 0  # the provider answered: it has nothing for this symbol
             continue
-        except ProviderError as exc:
+        except Exception as exc:  # noqa: BLE001 -- ProviderError or not, one symbol never ends the pass
+            if not isinstance(exc, ProviderError):
+                log.warning("%s fetch failed: %s: %.200s", symbol, type(exc).__name__, exc)
             report.failed[symbol] = type(exc).__name__
             streak += 1
             if streak >= STOP_AFTER_FAILURES:
@@ -285,7 +297,12 @@ def _refresh_universe(session: Session, sources: DataSources, *, now: datetime) 
     record_universe_day(session, now=now)
     # `build.failed` values carry provider messages: keep the error class only, like every other failure here.
     failed = {name: message.split(":", 1)[0] for name, message in build.failed.items()}
-    return PassReport(fetched=daily.fetched, failed={**failed, **daily.failed}, stopped_early=daily.stopped_early)
+    return PassReport(
+        fetched=daily.fetched,
+        failed={**failed, **daily.failed},
+        stopped_early=daily.stopped_early,
+        expected=daily.expected,
+    )
 
 
 def intraday_pass(session: Session, sources: DataSources, *, now: datetime) -> PassReport:
@@ -316,6 +333,7 @@ def premarket_pass(session: Session, sources: DataSources, *, now: datetime) -> 
     _recompute(session, symbols, now=now)
     run_filters(session, now=now, run_on=PREMARKET_FILTERS)
     report.fetched += minutes.fetched
+    report.expected += minutes.expected
     report.failed.update(minutes.failed)
     report.stopped_early = report.stopped_early or minutes.stopped_early
     record_health(session, SCAN_FEED, report.state, now=now, detail=_detail(report))
@@ -365,7 +383,7 @@ def ensure_market_strip(session: Session, sources: DataSources, *, now: datetime
 def _detail(report: PassReport) -> str | None:
     """A short, secret-free note for `feed_health.detail`: how many symbols failed and the error classes."""
     if not report.failed and not report.stopped_early:
-        return None
+        return f"nothing fetched for {report.expected} symbols" if report.state == "empty" else None
     kinds = ", ".join(sorted(set(report.failed.values())))
     note = f"{len(report.failed)} failed ({kinds})" if report.failed else "stopped early"
     return note + ("; stopped early" if report.stopped_early and report.failed else "")
