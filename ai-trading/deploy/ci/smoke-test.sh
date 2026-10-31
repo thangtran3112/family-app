@@ -866,7 +866,7 @@ assert status(lambda: FDClient(api_key="wrong").get_prices("AAPL", "2024-01-01",
   echo "ok   ai-hedge-fund FDClient reaches market-data: 501/502/401 contract"
   # Shape contract: our responses parse into upstream's own pydantic models
   # (server code run in-process with fake providers, inside the real ahf image).
-  docker run --rm --network none -v "$PWD/ai-trading/market-data:/md:ro" -e PYTHONPATH=/md -e PYTHONDONTWRITEBYTECODE=1 \
+  docker run --rm --network none -v "$PWD/ai-trading/packages/market-data:/md:ro" -e PYTHONPATH=/md -e PYTHONDONTWRITEBYTECODE=1 \
     --entrypoint python "$(image ahf-terminal)" -c '
 import threading
 import server, test_metrics
