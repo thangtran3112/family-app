@@ -454,6 +454,20 @@ def _today(db: Session, thread: PracticeThread) -> dict[str, Any] | None:
     }
 
 
+def _last_activity(db: Session, thread_id: int) -> datetime | None:
+    """The wall-clock moment something last changed in the thread: a day list opened, a day ended (a pass is a day that
+    ended with no session) or a week closed with its review. Booking times only, never a replayed date (those are
+    spoilers). None for a thread with no day yet."""
+    days = (
+        select(func.max(func.greatest(ReplayDayList.created_at, ReplayDayList.ended_at)))
+        .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
+        .where(PracticePlan.thread_id == thread_id)
+    )
+    weeks = select(func.max(PracticeWeek.closed_at)).where(PracticeWeek.thread_id == thread_id)
+    times = [t for t in (db.execute(days).scalar_one(), db.execute(weeks).scalar_one()) if t is not None]
+    return max(times, default=None)
+
+
 def summary(db: Session, thread: PracticeThread) -> dict[str, Any]:
     ledger = _ledger(db, thread.id)
     series = _series(db, thread, ledger)
@@ -461,6 +475,7 @@ def summary(db: Session, thread: PracticeThread) -> dict[str, Any]:
         "thread": _contract(db, thread, _stats(thread, ledger, series)),
         "today": _today(db, thread),
         "last_day": series[-1] if series else None,  # the card's row when no day is open (D-048)
+        "last_activity_at": _last_activity(db, thread.id),
         "label": SIMULATED_LABEL,
     }
     if thread.mode == "swing":
@@ -479,6 +494,7 @@ def detail(db: Session, thread: PracticeThread) -> dict[str, Any]:
         "thread": _contract(db, thread, _stats(thread, ledger, series)),
         "today": _today(db, thread),
         "last_day": series[-1] if series else None,
+        "last_activity_at": _last_activity(db, thread.id),
         "label": SIMULATED_LABEL,
         "daily": series,
         "curve": curve,

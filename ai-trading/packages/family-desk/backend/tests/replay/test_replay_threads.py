@@ -7,6 +7,7 @@ The world: GAPPER sits at 106 in the premarket and 110 from the open, so a long 
 10:00 wins 4 a share and the same short loses 4 a share. SPLITTER sits at 100 all day."""
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from ai_trading.db.models import (
     PracticeMark,
     PracticePlan,
     PracticeThread,
+    PracticeWeek,
     ReplayDayList,
     ReplaySession,
     User,
@@ -280,6 +282,41 @@ def test_the_card_row_reads_the_last_ended_day_from_the_balances_own_series(db_s
     assert summary["last_day"]["pnl_usd"] == 40.0 and summary["last_day"]["trades"] == 1
     assert summary["last_day"] == threads_mod.detail(db_session, thread)["daily"][-1]
     assert summary["last_day"]["balance"] == summary["thread"].stats.balance == 50_040.0
+
+
+def test_last_activity_is_the_wall_clock_of_the_last_day_event_and_never_a_replayed_date(
+    db_session, user_id, svc
+) -> None:
+    """Null for a fresh thread; a day list opening, a day ending (a pass is a day that ended with no session) and a
+    week closing each move it; a replayed date (September 2026 here) never appears."""
+    thread = _thread(db_session, user_id)
+    assert threads_mod.summary(db_session, thread)["last_activity_at"] is None
+    row = _first_list(db_session, user_id, svc)
+    assert threads_mod.summary(db_session, thread)["last_activity_at"] == NOW  # the list opened at the wall clock
+    plan_mod.end_day(db_session, user_id, row.id, svc)  # a pass: no session
+    row.ended_at = NOW + timedelta(hours=3)
+    db_session.commit()
+    summary = threads_mod.summary(db_session, thread)
+    assert summary["last_activity_at"] == row.ended_at == threads_mod.detail(db_session, thread)["last_activity_at"]
+    assert summary["last_activity_at"].date() not in DAYS
+    row.revealed_through = datetime(2020, 1, 2, tzinfo=UTC)  # a replayed date is not activity
+    db_session.commit()
+    assert threads_mod.summary(db_session, thread)["last_activity_at"] == row.ended_at
+    closed = NOW + timedelta(days=1)
+    db_session.add(
+        PracticeWeek(
+            thread_id=thread.id,
+            owner_user_id=user_id,
+            week_no=1,
+            first_day=DAYS[0],
+            last_day=DAYS[-1],
+            status="closed",
+            created_at=NOW,
+            closed_at=closed,
+        )
+    )
+    db_session.commit()
+    assert threads_mod.summary(db_session, thread)["last_activity_at"] == closed
 
 
 def test_replacing_a_plan_exits_an_open_trade_at_the_last_price_and_books_it(db_session, user_id, svc) -> None:
