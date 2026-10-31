@@ -26,7 +26,7 @@ Architecture context: [`ARCHITECTURE.md`](../../expense-tax-management/plans/ARC
 | `recovery-drill.sh` | Task 8 orchestrator: restore.sh → compare restored-vs-supported schema migration versions → pluggable deploy/health-check/smoke-test commands → timestamped JSON report, failing if the whole thing exceeds the 2h RTO. Deploy/health-check/smoke-test are commands YOU supply; this script never talks to Cloudflare or deploys real images itself. |
 | `test-recovery-drill.sh` | **Slow, Docker.** Proves the orchestration (pass / failing health-check / RTO breach / migration-version mismatch) with fake deploy/health/smoke commands against a real backup+restore. Not wired into CI. Run manually (below). |
 
-See also [`../vps/README.md`](../vps/README.md) "Backup (opt-in)" for how
+See also [`../host/README.md`](../host/README.md) "Backup (opt-in)" for how
 `40-backup.sh` installs these units onto a real VPS, and
 [`../../.github/workflows/family-backup-freshness.yml`](../../.github/workflows/family-backup-freshness.yml)
 for the daily off-host staleness check (18h warn / 22h page / 24h RPO

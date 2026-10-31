@@ -5,7 +5,7 @@
 ## Production Sources
 
 - `cloudflare/expense-tax/`: live Cloudflare Tunnel, product DNS/ingress, Clerk DNS, and GCS-backed Terraform state.
-- `vps/bootstrap-cloudflared.sh`: installs the outbound Tunnel connector on an existing VPS.
+- `host/bootstrap-cloudflared.sh`: installs the outbound Tunnel connector on an existing VPS (the old `vps/` path keeps a symlink shim until the expense lane is repointed, 0001b-2).
 - `vps/`: reusable SSH hardening, UFW, Docker, and shared-PostgreSQL bootstrap.
 - `temporal/docker-compose.yml`: independently owned shared Temporal server and loopback-only UI.
 - `temporal/dynamicconfig.yaml`: shared Temporal dynamic configuration.
@@ -61,7 +61,7 @@ Future Stock Analysis onboarding may create `stock-analysis` with `temporal oper
 
 - Automated PostgreSQL backup/restore to GCS.
 - Proven fresh-host restore and provider migration drill.
-- Live proof of shared-cluster `vps/steps/30-postgres.sh` on a fresh VPS.
+- Live proof of shared-cluster `host/steps/30-postgres.sh` on a fresh VPS.
 - Search/graph production infrastructure.
 
 See `expense-tax-management/plans/ROADMAP.md` for current status and migration order.
