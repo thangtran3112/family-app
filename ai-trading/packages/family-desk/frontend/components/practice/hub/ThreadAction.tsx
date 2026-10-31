@@ -26,7 +26,7 @@ export const lockLink = (locked: boolean) =>
 /**
  * What a thread can do next, for the landing's rows and the thread page (02r2): a day thread resumes today's open day,
  * or opens the next day of its plan ("Start day" for the first), or says a new plan is needed; a swing thread continues
- * its day or opens its finished week's review. A closed thread has no action. The same logic as the old thread card
+ * or starts its day (while its week review is owed it has no action here: the overview carries the review). A closed thread has none. The same logic as the old thread card
  * (D-046, D-048). `busy` is true while any thread's open runs, so no second open can race the first; `onBusy` reports
  * this action's own open.
  */
@@ -49,11 +49,9 @@ export function ThreadAction({
   if (thread.status === "closed") return null;
 
   if (thread.mode === "swing") {
+    // The owed week review is not an action of the row or of the Resume card: the overview's next-step card and week list carry it.
     const action = swingCardView(summary)?.action;
     if (!action || action.label === null) return null;
-    if (action.kind === "review" && action.weekNo !== null) {
-      return <Link href={`/practice/week?thread=${thread.id}&week=${action.weekNo}`} className={styles.primaryLink} {...lockLink(busy)}>{action.label}</Link>;
-    }
     return action.kind === "start" || action.kind === "continue" ? <SwingContinue threadId={thread.id} label={action.label} locked={busy} onBusy={onBusy} onChanged={onChanged} /> : null;
   }
 

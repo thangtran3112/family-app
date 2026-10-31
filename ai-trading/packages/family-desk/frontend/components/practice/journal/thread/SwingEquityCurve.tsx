@@ -1,7 +1,7 @@
 "use client";
 
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { HUB_SWING_COPY, swingCurveLayout, swingCurveSummary } from "@/lib/replay/hubSwing";
+import { HUB_SWING_COPY, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
 import type { Box } from "@/lib/replay/threadChart";
 import type { SwingState } from "@/lib/replay/threads";
 import { formatBalance } from "@/lib/replay/threadView";
@@ -22,6 +22,15 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
   const summary = swingCurveSummary(state.equity_series, startingBalance, formatBalance);
   // The higher figure's label sits above its point and the other below, so two close lines do not print on each other.
   const equityAbove = now !== null && now.equity >= now.balance;
+  const endLabels: CurveLabel[] =
+    now === null
+      ? []
+      : [
+          { x: now.x - 8, y: now.equityY + (equityAbove ? -8 : 16), text: `${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`, anchor: "end" },
+          { x: now.x - 8, y: now.balanceY + (equityAbove ? 16 : -8), text: `${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`, anchor: "end" },
+        ];
+  // The start note moves off the end labels when the balance sits near its start ("Starting balance" printed over "Balance $25,000.00" on a live thread).
+  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, endLabels);
 
   return (
     <div className={styles.stack}>
@@ -33,7 +42,7 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
           </g>
         ))}
         <line x1={plot.x} x2={plot.x + plot.width} y1={layout.startY} y2={layout.startY} className={styles.startLine} />
-        <text x={plot.x + 6} y={layout.startY - 6} className={styles.note}>{PRACTICE_COPY.curveStart}</text>
+        <text x={note.x} y={note.y} textAnchor={note.anchor} className={styles.note}>{note.text}</text>
         {layout.days.length > 1 && (
           <>
             <path d={layout.equityLine} className={styles.equityLine} />
@@ -49,15 +58,11 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
         {layout.days.map((point) =>
           point.label ? <text key={point.dayNo} x={point.x} y={bottom + 16} textAnchor="middle" className={styles.axis}>{point.label}</text> : null,
         )}
-        {now && (
-          <>
-            <text x={now.x - 8} y={now.equityY + (equityAbove ? -8 : 16)} textAnchor="end" className={styles.equityLabel}>
-              {`${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`}
-            </text>
-            <text x={now.x - 8} y={now.balanceY + (equityAbove ? 16 : -8)} textAnchor="end" className={styles.nowLabel}>
-              {`${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`}
-            </text>
-          </>
+        {endLabels[0] && (
+          <text x={endLabels[0].x} y={endLabels[0].y} textAnchor="end" className={styles.equityLabel}>{endLabels[0].text}</text>
+        )}
+        {endLabels[1] && (
+          <text x={endLabels[1].x} y={endLabels[1].y} textAnchor="end" className={styles.nowLabel}>{endLabels[1].text}</text>
         )}
       </svg>
       <ul role="list" className={styles.keyList}>

@@ -1,0 +1,73 @@
+"use client";
+
+import Link from "next/link";
+import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import type { PracticePlan } from "@/lib/replay/daily";
+import { swingGate } from "@/lib/replay/overviewView";
+import { swingCardView } from "@/lib/replay/swing";
+import type { ThreadSummary } from "@/lib/replay/threads";
+import { todayView } from "@/lib/replay/threadView";
+import { ThreadAction, planOpensIn } from "./ThreadAction";
+import { ResultLine } from "./ThreadTable";
+import hub from "./hub.module.css";
+import styles from "./landing.module.css";
+
+/**
+ * The overview's one primary step (a region named "Practice day"). A day thread: Resume, Start day or New plan needed, with
+ * Replace plan beside it. A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
+ * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
+ */
+export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
+  const { thread, today, last_day: lastDay } = summary;
+  const closed = thread.status === "closed";
+  const swing = swingCardView(summary);
+  const gate = swingGate(summary);
+  const view = todayView(today, lastDay);
+  const canReplace = !closed && thread.mode === "day" && planOpensIn(plan, thread);
+  // A thread with a plan and no day yet: nothing to resume, so it says what comes next instead of "no day open".
+  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread);
+  const finished = swing?.action.kind === "none";
+  const title = closed ? PRACTICE_COPY.threadClosedTitle : swing ? PRACTICE_COPY.overviewNext : view.label;
+  const result = <ResultLine pnl={view.pnl} line={view.line} />;
+
+  return (
+    <section className={styles.panel} aria-label="Practice day">
+      <h2 className={styles.panelTitle}>{title}</h2>
+      {closed ? (
+        <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+      ) : (
+        <>
+          <div className={styles.dayActions}>
+            {gate ? (
+              <div className={styles.resumeAction}>
+                <Link href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} className={hub.primaryLink}>{gate.step}</Link>
+              </div>
+            ) : (
+              !finished && (
+                <div className={styles.resumeAction}>
+                  <ThreadAction summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
+                </div>
+              )
+            )}
+            {canReplace && <button type="button" className={hub.button} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
+          </div>
+          {gate && <p className={hub.muted}>{gate.locked}</p>}
+          {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
+          <p className={styles.dayLine}>
+            {fresh ? (
+              PRACTICE_COPY.threadPageFresh
+            ) : swing ? (
+              <>
+                <span className={hub.muted}>{`${view.label}: `}</span>
+                {result}
+              </>
+            ) : (
+              result
+            )}
+          </p>
+          {swing?.notice && <p className={hub.swingNotice} role="status">{swing.notice}</p>}
+        </>
+      )}
+    </section>
+  );
+}

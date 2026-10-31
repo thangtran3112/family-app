@@ -6445,6 +6445,8 @@ export interface components {
             daily: components["schemas"]["ThreadDayOut"][];
             /** Label */
             label: string;
+            /** Last Activity At */
+            last_activity_at: string | null;
             last_day: components["schemas"]["ThreadDayOut"] | null;
             swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];
@@ -6458,6 +6460,8 @@ export interface components {
         ThreadSummaryOut: {
             /** Label */
             label: string;
+            /** Last Activity At */
+            last_activity_at: string | null;
             last_day: components["schemas"]["ThreadDayOut"] | null;
             swing?: components["schemas"]["SwingStateOut"] | null;
             thread: components["schemas"]["PracticeThreadV1"];

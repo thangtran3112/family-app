@@ -9,6 +9,7 @@ import {
   PREVIEW_POLL_MAX_MS,
   pollExpired,
   startBlockedBy,
+  startNoteSpot,
   swingCurveLayout,
   swingCurveSummary,
   weeklyPlanRows,
@@ -92,4 +93,27 @@ test("a swing thread's plan rows say a week where the day rule says a day", () =
   const rows = weeklyPlanRows(planRows({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no", maxLossUsd: 600, maxTrades: 6 }));
   assert.deepEqual(rows.map((row) => row.label), ["Shares per trade", "Stop on every entry", "Trade only on a signal", "Max loss, pretend dollars a week", "Max trades a week"]);
   assert.deepEqual(rows.map((row) => row.value), ["You set it on each entry", "Yes", "No", "$600", "6"]);
+});
+
+test("the Starting balance note moves off the end labels when the balance is still at its start", () => {
+  const plot = { x: 64, y: 16, width: 672, height: 192 };
+  const layout = { plot, startY: 112 };
+  // Nothing near the start line: the note keeps its place, above the line at the left.
+  assert.deepEqual(startNoteSpot(layout, "Starting balance", []), { x: 70, y: 106, text: "Starting balance", anchor: "start" });
+  // The live thread: balance flat at the start, the equity a hair below. Both end labels sit on the note's spot.
+  const labels = [
+    { x: 224, y: 128, text: "Equity $24,964.00", anchor: "end" as const },
+    { x: 224, y: 104, text: "Balance $25,000.00", anchor: "end" as const },
+  ];
+  const moved = startNoteSpot(layout, "Starting balance", labels);
+  assert.notDeepEqual([moved.x, moved.y], [70, 106], "the default spot collides");
+  for (const label of labels) {
+    const noteRight = moved.anchor === "end" ? moved.x : moved.x + moved.text.length * 7;
+    const noteLeft = moved.anchor === "end" ? moved.x - moved.text.length * 7 : moved.x;
+    const clear = noteRight <= label.x - label.text.length * 7 || noteLeft >= label.x || moved.y + 3 <= label.y - 11 || moved.y - 11 >= label.y + 3;
+    assert.equal(clear, true, `the note clears "${label.text}"`);
+  }
+  // No free spot at all: the first one stays rather than dropping the note.
+  const wall = [0, 1, 2, 3].map((n) => ({ x: n % 2 === 0 ? 400 : 736, y: n < 2 ? 106 : 126, text: "x".repeat(120), anchor: "end" as const }));
+  assert.equal(startNoteSpot(layout, "Starting balance", wall).y, 106);
 });
