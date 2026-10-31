@@ -151,7 +151,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const atEnd = api.player.status === "at_end" || ended;
   const behind = view.behindClock && !ended;
 
-  const masked = hidden && !dateShown;
+  // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
+  const masked = hidden && !dateShown && !(ended && !swing);
   useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: view.revealedThrough, status: replayStatusLine(session.tape_feed, view.revealedThrough), onShowDate: masked ? () => setDateShown(true) : null });
 
   // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series.
@@ -447,7 +448,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       />
       {dayListId !== null && !full && (
         <p className={styles.endLine}>
-          <Link href={`/practice/day?id=${dayListId}`} className={styles.link}>{PRACTICE_COPY.backToList}</Link>
+          <Link href={`/practice/day?id=${dayListId}`} className={`${styles.button} ${styles.buttonLink}`}>{PRACTICE_COPY.backToList}</Link>
         </p>
       )}
       {ended && swing ? (
