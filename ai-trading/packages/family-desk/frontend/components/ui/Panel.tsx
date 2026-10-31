@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { panelHeadingTag } from "@/lib/desk/primitivesView";
 import styles from "./Panel.module.css";
 
@@ -14,10 +14,9 @@ export function Panel({ children, className, ...label }: Layout & { children: Re
  * heads a rail section or a group (no box). `level` picks h2 to h4; the page owns the h1.
  */
 export function PanelHeader({ title, level, variant = "title", actions, id, className }: Layout & { title: ReactNode; level?: number; variant?: "title" | "label"; actions?: ReactNode; id?: string }) {
-  const Heading = panelHeadingTag(level);
   return (
     <header className={`${styles.header} ${className ?? ""}`} data-variant={variant}>
-      <Heading id={id} className={styles.title}>{title}</Heading>
+      {createElement(panelHeadingTag(level), { id, className: styles.title }, title)}
       {actions && <div className={styles.actions}>{actions}</div>}
     </header>
   );

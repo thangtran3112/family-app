@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY, practiceBandText, replayBadgeText } from "@/lib/desk/freshness";
 import type { PracticeStatusLine } from "@/lib/replay/statusLine";
 import styles from "./practiceChrome.module.css";
@@ -105,7 +106,7 @@ export function PracticeBand() {
       <span className={styles.bandNote}>
         <span>{hiddenSession ? PRACTICE_COPY.bandHiddenWhy : PRACTICE_COPY.bandMarks}</span>
         {hiddenSession && state.onShowDate && (
-          <button type="button" className={styles.bandButton} onClick={state.onShowDate}>{PRACTICE_COPY.showDate}</button>
+          <Button variant="primary" size="sm" onClick={state.onShowDate}>{PRACTICE_COPY.showDate}</Button>
         )}
       </span>
     </div>
