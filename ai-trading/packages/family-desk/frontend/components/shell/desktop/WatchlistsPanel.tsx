@@ -44,6 +44,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
     {
       key: "symbol",
       label: "Symbol",
+      fill: true,
       render: (row) => (
         <a
           href={`/technicals?symbol=${encodeURIComponent(row.symbol)}#chart`}
