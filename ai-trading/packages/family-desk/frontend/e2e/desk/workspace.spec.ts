@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { COPY, notEnoughHistoryText } from "../../lib/desk/freshness.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 
@@ -176,6 +176,60 @@ test("a symbol with no stored bars shows empty states, not errors", async ({ pag
   await expect(page.getByRole("img", { name: "Summary: Unavailable, score —. Vote counts unavailable" })).toBeVisible();
   await expect(page.getByText("Couldn't load this summary")).toHaveCount(0);
   await expectCleanScreen(page);
+});
+
+/** lightweight-charts lays a chart out as table rows: price pane, each indicator pane, then the time axis. */
+function chartRows(chart: Locator) {
+  return chart.locator("table").first().locator("tr").evaluateAll((items) =>
+    items.map((item) => item.getBoundingClientRect()).filter((box) => box.height > 4).map((box) => ({ top: Math.round(box.top), height: Math.round(box.height) })));
+}
+
+async function settledRows(chart: Locator) {
+  let last = "";
+  await expect.poll(async () => {
+    const now = JSON.stringify(await chartRows(chart));
+    const settled = now === last && JSON.parse(now).length === 4;
+    last = now;
+    return settled;
+  }).toBe(true);
+  return JSON.parse(last) as Array<{ top: number; height: number }>;
+}
+
+test("the price pane keeps most of the chart and each pane legend sits on its pane (V-Technicals-04)", async ({ page }) => {
+  test.skip(test.info().project.name === "desktop-1180", "the 1440 layout is the one measured in the audit");
+  await openDesk(page, "/technicals?symbol=NVDA#chart");
+  const chart = page.getByRole("region", { name: "NVDA 15m market chart" });
+  await expect(chart.locator("canvas").first()).toBeVisible();
+  // Price, RSI and MACD: the price pane had 151 of about 380 px.
+  await expect.poll(async () => {
+    const panes = (await chartRows(chart)).slice(0, -1);
+    const total = panes.reduce((sum, pane) => sum + pane.height, 0);
+    return panes.length === 3 && total > 0 ? panes[0]!.height / total : 0;
+  }).toBeGreaterThanOrEqual(0.58);
+  const rows = await settledRows(chart);
+  for (const [index, name] of [[1, "Close RSI (14)"], [2, "Close MACD (12, 26, 9)"]] as const) {
+    const box = (await page.getByRole("button", { name }).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(rows[index]!.top);
+    expect(box.y + box.height).toBeLessThanOrEqual(rows[index]!.top + rows[index]!.height);
+  }
+});
+
+test("the open data table leaves the chart as it was and reads in ET with one precision (V-Technicals-05)", async ({ page }) => {
+  test.skip(test.info().project.name === "desktop-1180", "the 1440 layout is the one measured in the audit");
+  await openDesk(page, "/technicals?symbol=NVDA#chart");
+  const chart = page.getByRole("region", { name: "NVDA 15m market chart" });
+  await expect(chart.locator("canvas").first()).toBeVisible();
+  const before = await settledRows(chart);
+  const legend = (await page.getByRole("button", { name: "Close RSI (14)" }).boundingBox())!;
+
+  await chart.getByText(/^Chart data table/).click();
+  await expect(chart.getByRole("columnheader", { name: "Time (ET)" })).toBeVisible();
+  await expect(chart.getByRole("rowheader").first()).toHaveText(/^[A-Z][a-z]{2} \d{4}-\d{2}-\d{2} \d{1,2}:\d{2} [AP]M$/);
+  await expect(chart.getByRole("cell").first()).toHaveText(/^\d[\d,]*\.\d{2}$/);
+  // The chart had fallen to 23 px with the RSI and MACD legends floating over the table rows.
+  expect(await chartRows(chart)).toEqual(before);
+  const tableOnTop = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("details") !== null, { x: legend.x + 4, y: legend.y + legend.height / 2 });
+  expect(tableOnTop).toBe(true);
 });
 
 test("the right rail is open inline at 1440 and a drawer behind a 40 px strip at 1180", async ({ page }) => {

@@ -10,7 +10,7 @@ import type { ChartMarkerInput, CrosshairPoint } from "@/lib/chart-data";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { loadBars, loadMarkers, loadTechnicals, type ChartSession } from "@/lib/desk/charts";
 import type { Connection } from "@/lib/desk/freshness";
-import { chartDays, timeframeLabel } from "@/lib/desk/timeframes";
+import { chartDays, isIntraday, timeframeLabel } from "@/lib/desk/timeframes";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useLiveQuote } from "@/lib/desk/useLiveQuote";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -35,7 +35,6 @@ import { SymbolHeader } from "./SymbolHeader";
 import styles from "./workspace.module.css";
 
 const humanize = (pattern: string) => pattern.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
-const PANE_HEIGHT = 120;
 
 /** D3: symbol header, toolbar, chart with legend/markers/levels, bottom panel; summary, alerts and levels in the right rail. */
 export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: string; timeframe: string; onTimeframe: (api: string) => void }) {
@@ -76,12 +75,6 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
   const stamp = live.quote ? { as_of: live.quote.as_of, source: live.quote.source ?? bars.data?.stamp.source ?? null, quality: live.quote.quality, freshness: live.quote.freshness ?? bars.data?.stamp.freshness ?? "delayed" } : (bars.data?.stamp ?? null);
   const label = timeframeLabel(timeframe);
   const legend = legendModel(symbol, label, barRows, series.overlays, crosshair);
-
-  // Pane legends sit over their own pane: counted from the bottom of the chart.
-  const paneLegends = series.panes.map((pane, index) => {
-    const below = series.panes.slice(index).reduce((sum, item) => sum + (item.height ?? PANE_HEIGHT), 0);
-    return { pane, bottomOffset: below };
-  });
 
   const railSections: RailSection[] = [
     {
@@ -128,18 +121,18 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
           onCrosshair={setCrosshair}
           chrome="bare"
           height="fill"
+          clockTicks={isIntraday(timeframe)}
           dimmed={connection === "reconnecting"}
-        />
-        <div className={styles.legend}><ChartLegend model={legend} /></div>
-        {paneLegends.map(({ pane, bottomOffset }) => (
-          <div key={pane.id} className={styles.paneLegend} style={{ bottom: bottomOffset - 4 }}>
+          paneLegends={series.panes.map((pane) => (
             <PaneLegend
+              key={pane.id}
               label={pane.label}
               items={pane.series.map((item) => ({ label: item.label, color: item.color, value: legendValue(item.id, pane.id, item.values, crosshair) }))}
               onClose={() => setIndicators((current) => toggleIndicator(current, pane.id as IndicatorId))}
             />
-          </div>
-        ))}
+          ))}
+        />
+        <div className={styles.legend}><ChartLegend model={legend} /></div>
       </div>
     );
   }

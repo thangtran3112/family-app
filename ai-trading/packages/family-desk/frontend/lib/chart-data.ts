@@ -9,6 +9,7 @@ import type {
   UTCTimestamp,
   WhitespaceData,
 } from "lightweight-charts";
+import { formatEtDay, formatEtTime } from "./desk/format.ts";
 
 export type ChartBar = {
   t: string;
@@ -177,6 +178,22 @@ export function replayTickLabel(time: Time, tickType: number, hideDates: boolean
  * "Day 6"; a stand-in timeline's own clock time says nothing), else the time of day.
  */
 export function sourceTimeLabel(t: string, index: number, hideDates: boolean, rowLabels?: readonly string[]): string {
-  if (!hideDates) return t;
+  // Dates shown: the New York day and time ("Fri 2026-10-23 10:07 AM"), never the raw UTC string (V-Technicals-05).
+  if (!hideDates) return /^\d{4}-\d{2}-\d{2}$/.test(t) ? formatEtDay(t) : `${formatEtDay(t)} ${formatEtTime(t)}`;
   return rowLabels?.[index] ?? formatChartClock(Math.floor(Date.parse(t) / 1000) as UTCTimestamp);
+}
+
+/** The least share of the chart the price pane keeps when the indicator panes ask for more than the rest. */
+export const PRICE_PANE_SHARE = 0.6;
+
+/**
+ * Pixel heights `[price, ...panes]` for a chart `total` px tall (V-Technicals-04). Indicator panes keep their own height
+ * while there is room; when there is not, they shrink in proportion so the price pane keeps PRICE_PANE_SHARE of the
+ * chart. Two 120 px panes in a 406 px chart had left the candles about 90 px.
+ */
+export function paneHeights(total: number, wanted: readonly number[]): number[] {
+  const asked = wanted.reduce((sum, height) => sum + height, 0);
+  const price = Math.max(total - asked, total * PRICE_PANE_SHARE);
+  const room = total - price;
+  return [price, ...wanted.map((height) => (asked > 0 ? (height * room) / asked : 0))];
 }
