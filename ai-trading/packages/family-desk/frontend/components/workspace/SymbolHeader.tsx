@@ -1,4 +1,4 @@
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import type { Stamp } from "@/lib/api/schemas";
 import { resolveFreshness, type Connection, type MarketSession } from "@/lib/desk/freshness";
 import { changeTone, formatPrice } from "@/lib/desk/format";
@@ -29,7 +29,7 @@ export function SymbolHeader({ symbol, name, summary, stamp, session, connection
           <span className={styles.price}>{formatPrice(summary.last)}</span>
           <span className={styles.change} data-tone={changeTone(summary.change)}>{changeText(summary)}</span>
         </div>
-        {notice ? <span className={styles.notice} role="status">{notice}</span> : <FreshnessBadge stamp={stamp} session={session} connection={connection} />}
+        {notice ? <span className={styles.notice} role="status">{notice}</span> : <Freshness stamp={stamp} session={session} connection={connection} />}
       </div>
       <nav aria-label="Chart or summary" className={styles.tabs}>
         <a href="#chart" className={styles.tab} aria-current={view === "chart" ? "page" : undefined}>Chart</a>

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
-import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
+import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY, emptyScanText } from "@/lib/desk/freshness";
 import { loadFilterDetail, loadFilterResults, loadFilters } from "@/lib/desk/screener";
@@ -108,7 +108,7 @@ export function ScreenerScreen() {
         <div className={styles.meta}>
           <UniverseLine run={data && !waiting ? data : null} />
           {/* A delayed scan shows its pill by the title instead; the badge still shows if the connection is in trouble. */}
-          {data && !waiting && (!delayed || results.connection !== "ok" || fresh.stale) && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
+          {data && !waiting && (!delayed || results.connection !== "ok" || fresh.stale) && <Freshness stamp={data.stamp} connection={results.connection} />}
         </div>
         {data && data.matches.length > 0 && <QuickFilters picks={picks} onChange={setPicks} />}
         {table}

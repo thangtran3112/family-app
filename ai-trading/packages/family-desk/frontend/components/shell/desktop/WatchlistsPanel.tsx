@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { useFreshness } from "@/components/ui/FreshnessBadge";
+import { useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { WatchlistTableRow } from "@/lib/api/schemas";
 import { changeTone, formatPrice, formatSignedPct } from "@/lib/desk/format";

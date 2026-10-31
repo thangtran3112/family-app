@@ -1,7 +1,7 @@
 "use client";
 
 import { useHoldings } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import { AsOfLine } from "@/components/ui/AsOfLine";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadResearch, loadValuation } from "@/lib/desk/research";
@@ -30,7 +30,7 @@ export function StockPage({ symbol, view }: { symbol: string; view: StockView })
         <h1 className={styles.pageTitle} style={{ margin: 0 }}>{symbol}</h1>
         {name && <span className={local.stockName}>{name}</span>}
         <span style={{ marginLeft: "auto" }} />
-        {data && <FreshnessBadge stamp={data.stamp} />}
+        {data && <Freshness stamp={data.stamp} />}
       </header>
       {data && <AsOfLine stamp={data.stamp} />}
       <nav className={styles.tabs} aria-label="Stock views">

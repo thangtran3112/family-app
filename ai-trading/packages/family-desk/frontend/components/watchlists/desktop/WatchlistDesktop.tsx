@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
-import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
+import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -104,7 +104,7 @@ export function WatchlistDesktop() {
       <header className={styles.header}>
         <div className={styles.titleGroup}>
           <h1 className={styles.title}>{active?.name ?? "Watchlists"}</h1>
-          {active && <FreshnessBadge stamp={table.data?.stamp ?? null} connection={table.connection} />}
+          {active && <Freshness stamp={table.data?.stamp ?? null} connection={table.connection} />}
         </div>
         <div className={styles.actions}>
           <button type="button" className={styles.button} aria-pressed={manage} onClick={() => setManage(!manage)}>Manage</button>

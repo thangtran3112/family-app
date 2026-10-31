@@ -2,14 +2,13 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Full document navigation lets the strategy builder's beforeunload guard run. */
 
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { AlertsBell } from "./AlertsBell";
 import { AvatarMenu } from "./AvatarMenu";
 import { useReplayBadge } from "./PracticeChrome";
 import { LaneSwitch } from "./LaneSwitch";
-import { MarketStatusPill } from "./MarketStatusPill";
 import { MaskToggle } from "./MaskToggle";
 import { PrimaryNav } from "./PrimaryNav";
 import { SymbolSearch } from "./SymbolSearch";
@@ -37,13 +36,13 @@ export function TopBar({ band }: { band: ShellBand }) {
       <SymbolSearch compact={band === "1180"} />
       {lane === "fundamental" && <MaskToggle />}
       {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs. */}
-      {!replayBadge && <MarketStatusPill band={band} />}
+      {!replayBadge && <Freshness variant="pill" band={band} />}
       {replayBadge ? (
-        <span className={`${styles.pill} ${styles.topBadge} ${styles.replayBadge}`} role="status" title={replayBadge}>{replayBadge}</span>
+        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="amber" />
       ) : failed ? (
-        <span className={`${styles.pill} ${styles.topBadge}`} role="status">{COPY.statusUnavailable}</span>
+        <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} />
       ) : (
-        <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
+        <Freshness className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
       )}
       <AlertsBell />
       <AvatarMenu />

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { AsOfLine } from "@/components/ui/AsOfLine";
 import type { ImportState } from "@/lib/api/fundamentalSchemas";
@@ -104,7 +104,7 @@ export function HoldingsScreen() {
     <div className={fund.screen} data-testid="fund-holdings">
       <header className={fund.head}>
         <h1 className={fund.pageTitle}>Holdings</h1>
-        {stamp && !emptyText && <FreshnessBadge stamp={stamp} />}
+        {stamp && !emptyText && <Freshness stamp={stamp} />}
         <select
           className={styles.select}
           aria-label="Account"

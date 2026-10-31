@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MarketStrip } from "@/components/dashboard/MarketStrip";
 import { FundamentalRightRail } from "@/components/fundamental/rail/FundamentalRightRail";
 import { useDeskStatus, useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadShortCalls, loadIncome } from "@/lib/desk/coveredCalls";
 import { loadDashboard } from "@/lib/desk/dashboard";
@@ -53,7 +53,7 @@ export function FundamentalToday() {
     <div className={styles.screen} data-testid="fund-today">
       <header className={styles.head}>
         <h1 className={styles.pageTitle}>Today</h1>
-        {market.data && <FreshnessBadge stamp={market.data.stamp} session={market.data.market.session} connection={market.connection === "reconnecting" ? "reconnecting" : "ok"} feed />}
+        {market.data && <Freshness stamp={market.data.stamp} session={market.data.market.session} connection={market.connection === "reconnecting" ? "reconnecting" : "ok"} feed />}
         {updating && <span className={styles.caption}>{COPY.updating}</span>}
         <button type="button" className={styles.button} onClick={refresh}>Refresh</button>
       </header>

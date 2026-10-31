@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { reportUrl } from "@/lib/desk/feedbackContext";
-import { alertsBanner, COPY, statusBarText } from "@/lib/desk/freshness";
-import { formatEtTimeZone } from "@/lib/desk/format";
+import { Freshness } from "@/components/ui/Freshness";
+import { alertsBanner, COPY } from "@/lib/desk/freshness";
 import { useDeskStatus } from "./DeskContext";
 import { usePracticeChrome, useReplayBadge } from "./PracticeChrome";
 import styles from "./statusbar.module.css";
@@ -26,10 +26,8 @@ function ReportProblem({ pathname }: { pathname: string }) {
 
 /** 24 px bar: quote source and state, last update in ET, alert delivery state (02l §b2). A Practice route may bring its own line (D-043). */
 export function StatusBar() {
-  const { status, failed, connection } = useDeskStatus();
+  const { status } = useDeskStatus();
   const pathname = usePathname() ?? "/";
-  const quotes = status?.quotes ?? null;
-  const quoteText = failed ? COPY.statusUnavailable : statusBarText({ stamp: quotes, session: status?.market.session, connection, feed: true });
   const replaying = useReplayBadge() !== null;
   const own = usePracticeChrome()?.status ?? null;
   const alertsText = status ? (alertsBanner(status.alerts.state) ?? COPY.alertsRunning) : null;
@@ -52,10 +50,7 @@ export function StatusBar() {
       {replaying ? (
         <span>Replay · past market data · no live quotes on this screen</span>
       ) : (
-        <>
-          <span>{quoteText}</span>
-          {quotes?.as_of && <span>Last update {formatEtTimeZone(quotes.as_of)}</span>}
-        </>
+        <Freshness variant="statusBar" />
       )}
       {onFeedback && <span>Feedback stays on this Desk · nothing is sent to a third-party tracker</span>}
       <span className={styles.right}>

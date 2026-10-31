@@ -310,41 +310,6 @@
   background: var(--color-amber);
 }
 
-.pill {
-  display: inline-flex;
-  flex-shrink: 0;
-  min-height: 24px;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-full);
-  padding: 0 10px;
-  color: var(--color-muted);
-  font-size: 12px;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-.pill[data-open="true"] {
-  color: var(--color-text);
-}
-
-.pillDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-muted);
-}
-
-.pill[data-open="true"] .pillDot {
-  background: var(--color-up);
-}
-
-/* The market is open but the quotes are not current: an amber dot, not the green that reads as live. */
-.pill[data-stale="true"] .pillDot {
-  background: var(--color-amber);
-}
-
 .badge {
   position: absolute;
   top: -4px;
@@ -510,13 +475,11 @@
   background: var(--color-raised);
 }
 
-.pillText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pill { max-width: none; flex-shrink: 0; }
 .topBadge { min-width: 0; max-width: 260px; flex-shrink: 1; }
 .bar[data-band="1180"] .topBadge { max-width: 260px; }
 
-/* The top-bar badge during a replay (02o §a1): amber, never Live or Delayed. */
-.replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The replay note keeps its whole text (layout only; ui/Freshness owns the look): never Live or Delayed, never shrunk (02o §a1). */
+.replayBadge { flex-shrink: 0; max-width: none; }
 .bar[data-band] .replayBadge { max-width: none; }
 
 /* Fundamental lane: the masking switch (02n §b1). */
