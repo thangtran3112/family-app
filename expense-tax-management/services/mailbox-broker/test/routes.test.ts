@@ -178,7 +178,7 @@ describe("mailbox-broker routes", () => {
   }
 
   // ------------------------------------------------------------------ //
-  // Health — Phase 3D-A Task 5: deploy/production/health-check.sh polls
+  // Health — Phase 3D-A Task 5: infrastructure/apps/expense-tax/health-check.sh polls
   // this loopback endpoint once the broker joins the production Compose.
   // ------------------------------------------------------------------ //
 

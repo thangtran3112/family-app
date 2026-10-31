@@ -11,14 +11,14 @@ const main = read("main.tf");
 const readme = read("README.md");
 const state = read("bootstrap-state.sh");
 const cloudflareBootstrap = readFileSync(
-  join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
+  join(repoRoot, "infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
   "utf8",
 );
 const appBootstrap = readFileSync(
-  join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"),
+  join(repoRoot, "infrastructure/gcp/expense-tax/bootstrap.sh"),
   "utf8",
 );
-const vps = readFileSync(join(repoRoot, "infrastructure/vps/bootstrap-cloudflared.sh"), "utf8");
+const vps = readFileSync(join(repoRoot, "infrastructure/host/bootstrap-cloudflared.sh"), "utf8");
 const workflowRaw = readFileSync(join(repoRoot, ".github/workflows/expense-tax-cloudflare.yml"), "utf8");
 const workflow = YAML.parse(workflowRaw);
 const failures = [];
@@ -149,7 +149,7 @@ includes(cloudflareBootstrap, "assertion.environment=='production'", "Cloudflare
 excludes(cloudflareBootstrap, "secretmanager.secretAccessor", "application Secret Manager access");
 excludes(cloudflareBootstrap, "roles/run.", "application deploy permissions");
 excludes(appBootstrap, "expense-tax-cloudflare.yml", "Cloudflare workflow in application WIF admission");
-excludes(workflowRaw, "expense-tax-management/deploy/production", "application deployment in Cloudflare workflow");
+excludes(workflowRaw, "infrastructure/apps/expense-tax", "application deployment in Cloudflare workflow");
 excludes(workflowRaw, "docker push", "container deployment in Cloudflare workflow");
 
 if (failures.length > 0) {

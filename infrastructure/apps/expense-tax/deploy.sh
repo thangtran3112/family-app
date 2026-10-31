@@ -273,6 +273,19 @@ export IMAGE_TAG
 if [[ "${MAILBOX_FEATURE_ENABLED:-false}" == "true" ]]; then
   APPLICATION_SERVICES+=(mailbox-broker)
 fi
+# Dark deploy (DEPLOY_DARK=1, the workflow's dark=true dispatch): bring the
+# stack up on a host that must not process work yet. workflow-worker is left
+# out, so no Temporal workflow runs there; every other service starts as in a
+# normal deploy. health-check.sh skips its worker check when DEPLOY_DARK=1.
+case "${DEPLOY_DARK:-0}" in 0 | 1) ;; *) die "DEPLOY_DARK must be 0 or 1" ;; esac
+export DEPLOY_DARK="${DEPLOY_DARK:-0}"
+if [[ "$DEPLOY_DARK" == "1" ]]; then
+  dark_services=()
+  for service in "${APPLICATION_SERVICES[@]}"; do
+    [[ "$service" == "workflow-worker" ]] || dark_services+=("$service")
+  done
+  APPLICATION_SERVICES=("${dark_services[@]}")
+fi
 compose config --quiet
 require_shared_temporal
 
@@ -295,6 +308,8 @@ rollback() {
     export IMAGE_TAG
 
     local rollback_services=("${APPLICATION_SERVICES[@]}") required_workers="workflow-worker"
+    # A dark deploy never started the worker, so its rollback does not require one.
+    [[ "${DEPLOY_DARK:-0}" == "1" ]] && required_workers=""
     if ! workflow_worker_image_exists "$previous_tag"; then
       printf 'workflow-worker has no image for tag %s; rolling back without it\n' "$previous_tag" >&2
       rollback_services=()

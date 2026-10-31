@@ -1,6 +1,6 @@
 # Standalone Compose contract for the one-shot encrypted backup (Task 6 of
 # vps-backup-and-restore.md). Deliberately NOT part of
-# expense-tax-management/deploy/production/docker-compose.yml: backup is
+# infrastructure/apps/expense-tax/docker-compose.yml: backup is
 # shared host infrastructure (ARCHITECTURE.md "Backup and Recovery"), not
 # an Expense application service, and Compose interpolates every ${VAR:?}
 # in a file before any --profile filtering -- a required backup var inside
@@ -49,7 +49,7 @@ networks:
 
 volumes:
   # The Expense production receipt volume, created by
-  # expense-tax-management/deploy/production/docker-compose.yml under its
+  # infrastructure/apps/expense-tax/docker-compose.yml under its
   # own Compose project. Referenced here by its real (project-prefixed)
   # name since Docker resolves a named volume regardless of which Compose
   # project created it.

@@ -42,7 +42,7 @@ variable "github_repository" {
 
 variable "wif_pool_id" {
   type        = string
-  description = "ID of the EXISTING GitHub OIDC/WIF workload identity pool (provisioned by expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh) to attach the freshness-monitor provider to. No default -- this names a real, project-specific resource."
+  description = "ID of the EXISTING GitHub OIDC/WIF workload identity pool (provisioned by infrastructure/gcp/expense-tax/bootstrap.sh) to attach the freshness-monitor provider to. No default -- this names a real, project-specific resource."
 
   validation {
     condition     = length(var.wif_pool_id) > 0

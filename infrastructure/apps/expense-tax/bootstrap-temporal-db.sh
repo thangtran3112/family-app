@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # normal production env bundle or pass it through deploy.sh.
 : "${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}"
 : "${TEMPORAL_DB_PASSWORD:?TEMPORAL_DB_PASSWORD is required}"
-POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-expense-tax-postgres}"
+POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-family-app-postgres}"
 POSTGRES_SUPERUSER="${POSTGRES_SUPERUSER_USER:-postgres}"
 
 if [[ -z "$POSTGRES_CONTAINER" || -z "$POSTGRES_SUPERUSER" ]]; then

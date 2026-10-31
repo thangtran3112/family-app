@@ -33,7 +33,7 @@
 #   RECOVERY_DEPLOY_CMD              Optional. e.g. a disposable
 #                                    `docker compose up -d --wait`.
 #   RECOVERY_HEALTH_CHECK_CMD        Optional. e.g.
-#                                    deploy/production/health-check.sh against
+#                                    apps/expense-tax/health-check.sh against
 #                                    the disposable host.
 #   RECOVERY_SMOKE_TEST_CMD          Optional authenticated product smoke test.
 #   RECOVERY_DEADLINE_SECONDS        Default 7200 (2 hours, the plan's RTO).
@@ -41,7 +41,7 @@
 #                                    infrastructure/host/steps/30-postgres.sh
 #                                    actually uses). Configurable here on
 #                                    purpose -- fix round 2: this used to be
-#                                    hardcoded into deploy/production/health-check.sh,
+#                                    hardcoded into apps/expense-tax/health-check.sh,
 #                                    which runs on every ordinary deploy AND
 #                                    its automatic rollback; a wrong guess
 #                                    there (bootstrap-temporal-db.sh's own
@@ -81,7 +81,7 @@ run_named_step() {
 report_bool() { [[ "$1" == 0 ]] && echo true || echo false; }
 
 # Task 8's "verify PostgreSQL ... and receipt retrieval" bullet, moved
-# here (fix round 2) from deploy/production/health-check.sh: that script
+# here (fix round 2) from apps/expense-tax/health-check.sh: that script
 # runs on every ordinary production deploy and its automatic rollback, so
 # an unverified/wrong container name there fails live deploys, not just a
 # drill. See the RECOVERY_POSTGRES_CONTAINER doc comment above.

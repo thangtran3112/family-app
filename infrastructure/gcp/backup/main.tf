@@ -133,7 +133,7 @@ resource "google_storage_bucket_iam_member" "backup_writer_getter" {
 # storage.objects.get) custom role, and authenticated via GitHub Actions
 # OIDC/WIF rather than any downloadable key. Reuses the EXISTING
 # expense-tax-github workload identity POOL that
-# expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh
+# infrastructure/gcp/expense-tax/bootstrap.sh
 # already provisions for the deploy service account, but defines its OWN
 # provider: that pool's existing "github" provider has an attributeCondition
 # hard-scoped to expense-tax-deploy.yml on refs/heads/main, which would

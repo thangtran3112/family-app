@@ -262,7 +262,7 @@ services:
   # container. `database` below is this repo's OWN top-level network name,
   # pointed at the shared cluster's real external network (`postgres_default`,
   # the project-default name 30-postgres.sh's own Compose project creates) --
-  # the exact shape expense-tax-management/deploy/production/docker-compose.yml
+  # the exact shape infrastructure/apps/expense-tax/docker-compose.yml
   # already uses for the same shared cluster. No desk-postgres service, no
   # Desk-private network, and no Desk-private data volume: nothing here is
   # Desk-private anymore. Neither service gets a `depends_on` on the cluster

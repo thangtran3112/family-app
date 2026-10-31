@@ -24,7 +24,7 @@ machine with real GCP credentials.
 - A **freshness-monitor** identity (`backup_freshness_monitor`), entirely
   separate from the writer, authenticated via its own GitHub Actions
   OIDC/WIF provider (reusing the existing `expense-tax-github` pool from
-  `expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh`,
+  `infrastructure/gcp/expense-tax/bootstrap.sh`,
   but with its own attribute-condition-scoped provider -- that pool's
   existing `github` provider is hard-scoped to the deploy workflow and
   would reject this one's tokens). It holds a custom, list-only IAM role

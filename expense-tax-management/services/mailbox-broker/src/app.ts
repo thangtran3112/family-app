@@ -149,7 +149,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // Phase 3D-A Task 5: liveness only (no token-vault-database probe),
   // matching app-api's/foundry-service's own `/health/live` (their
   // DB-backed `/health/ready` has no broker equivalent yet) -- needed so
-  // deploy/production/health-check.sh has a loopback endpoint to poll
+  // infrastructure/apps/expense-tax/health-check.sh has a loopback endpoint to poll
   // once this service joins the production Compose.
   app.get("/health/live", async () => ({
     status: "ok" as const,

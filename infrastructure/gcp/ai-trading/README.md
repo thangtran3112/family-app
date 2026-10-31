@@ -27,7 +27,7 @@ Each provider's `attribute_condition` requires the exact repository
 (`thangtran3112/family-app`), `refs/heads/main`, the exact `workflow_ref`
 (`<repo>/.github/workflows/<file>@refs/heads/main`), and environment
 `ai-trading-production` -- the same shape as
-`expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`.
+`infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`.
 
 ## Apply order
 

@@ -59,7 +59,7 @@ provider's panel next before doubting the script.
 ## Layout
 
 ```
-host/                       # was vps/ (renamed in 0001b-1; infrastructure/vps keeps two shims until 0001b-2)
+host/                       # was vps/ (renamed in 0001b-1; the two transitional shims were removed in 0001b-2)
 ├── README.md              # this file
 ├── bootstrap.sh            # orchestrator -- run this
 ├── test-bootstrap.sh       # offline: secret transport through ssh/scp
@@ -193,7 +193,7 @@ host-path lookup is needed.
 - **Application deployment**: this base bootstrap does not install application
   containers. Production deployment is live through
   `.github/workflows/expense-tax-deploy.yml` and
-  `expense-tax-management/deploy/production/`; Cloudflare Tunnel reaches only
+  `infrastructure/apps/expense-tax/`; Cloudflare Tunnel reaches only
   loopback application origins. Traefik is not the current production edge.
 - **Provider VM creation itself** (no Terraform): OVH/Database
   Mart-tier VPS purchases are typically manual control-panel actions,

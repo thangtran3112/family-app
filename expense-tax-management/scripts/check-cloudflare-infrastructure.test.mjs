@@ -12,10 +12,10 @@ import {
 const repoRoot = join(process.cwd(), "..");
 const main = readFileSync(join(repoRoot, "infrastructure/cloudflare/expense-tax/main.tf"), "utf8");
 const workflow = readFileSync(join(repoRoot, ".github/workflows/expense-tax-cloudflare.yml"), "utf8");
-const vps = readFileSync(join(repoRoot, "infrastructure/vps/bootstrap-cloudflared.sh"), "utf8");
+const vps = readFileSync(join(repoRoot, "infrastructure/host/bootstrap-cloudflared.sh"), "utf8");
 const state = readFileSync(join(repoRoot, "infrastructure/cloudflare/expense-tax/bootstrap-state.sh"), "utf8");
 const cloudflareBootstrap = readFileSync(
-  join(repoRoot, "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
+  join(repoRoot, "infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"),
   "utf8",
 );
 const legacyServiceAccountId = ["expense-tax-cloudflare", "terraform"].join("-");

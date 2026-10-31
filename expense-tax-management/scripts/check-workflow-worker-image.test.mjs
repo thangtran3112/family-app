@@ -25,7 +25,8 @@ test("worker joins immutable main-only image builds", () => {
   const deploy = YAML.parse(readRepo(".github/workflows/expense-tax-deploy.yml"));
   assert.deepEqual(deploy.on.push.branches, ["main"]);
   for (const job of [deploy.jobs.build, deploy.jobs.deploy]) {
-    assert.equal(job.if, "github.ref == 'refs/heads/main'");
+    // Both jobs stay main-only; build/deploy gain extra dispatch conditions (image_tag).
+    assert.ok(job.if.includes("github.ref == 'refs/heads/main'"), "job must be main-only");
   }
   const images = deploy.jobs.build.strategy.matrix.include;
   assert.deepEqual(images.find(({ image }) => image === "expense-tax-workflow-worker"), {
@@ -44,7 +45,7 @@ test("Phase 3D-A Task 5: mailbox broker joins the immutable main-only image matr
 });
 
 test("production Compose runs workflow-worker on expense-tax/expense-tax-processing", () => {
-  const compose = YAML.parse(readPackage("deploy/production/docker-compose.yml"));
+  const compose = YAML.parse(readPackage("../infrastructure/apps/expense-tax/docker-compose.yml"));
   const worker = compose.services["workflow-worker"];
   assert.ok(worker, "production Compose must define a workflow-worker service");
   assert.equal(

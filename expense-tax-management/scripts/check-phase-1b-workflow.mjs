@@ -25,11 +25,16 @@ const trigger = workflow.on ?? workflow["on"];
 assertEqual(trigger?.push?.branches?.join(","), "main", "push trigger branches");
 assertIncludes(trigger?.push?.paths?.join("|") ?? "", "expense-tax-management/**", "push path filter");
 assertIncludes(trigger?.push?.paths?.join("|") ?? "", "common/config/**", "push path filter");
+assertIncludes(trigger?.push?.paths?.join("|") ?? "", "infrastructure/apps/expense-tax/**", "push path filter");
 assertEqual(trigger?.workflow_dispatch !== undefined, true, "workflow_dispatch trigger present");
 assertEqual(trigger?.workflow_run, undefined, "no workflow_run trigger (deployment-only pipeline)");
-for (const job of ["build", "deploy"]) {
-  assertEqual(workflow.jobs?.[job]?.if, "github.ref == 'refs/heads/main'", `${job} main-only condition`);
-}
+assertIncludes(workflow.jobs?.build?.if ?? "", "github.ref == 'refs/heads/main'", "build main-only condition");
+assertIncludes(workflow.jobs?.deploy?.if ?? "", "github.ref == 'refs/heads/main'", "deploy main-only condition");
+assertIncludes(workflow.jobs?.build?.if ?? "", "inputs.image_tag == ''", "build skipped when an image_tag is dispatched");
+const dispatchInputs = trigger?.workflow_dispatch?.inputs ?? {};
+assertEqual(Object.keys(dispatchInputs).sort().join(","), "dark,image_tag,target", "workflow_dispatch inputs");
+assertEqual((dispatchInputs.target?.options ?? []).join(","), "vps,laptop", "target options");
+assertEqual(dispatchInputs.target?.default, "vps", "target defaults to vps");
 assertExcludes(raw, "pull_request", "pull-request deployment path");
 
 assertIncludes(raw, "actions/checkout@v7");
@@ -95,8 +100,8 @@ assertIncludes(
 );
 assertIncludes(raw, 'scp "${SCP_OPTIONS[@]}"');
 assertExcludes(raw, 'scp "${SSH_OPTIONS[@]}"', "scp reusing ssh options");
-assertIncludes(raw, "deploy/production/docker-compose.yml");
-assertIncludes(raw, "deploy/production/deploy.sh");
+assertIncludes(raw, "infrastructure/apps/expense-tax/docker-compose.yml");
+assertIncludes(raw, "infrastructure/apps/expense-tax/deploy.sh");
 assertIncludes(raw, "sudo env DOCKER_CONFIG=", "root-scoped Docker config");
 assertIncludes(raw, "docker login ghcr.io");
 assertIncludes(raw, "docker logout ghcr.io");

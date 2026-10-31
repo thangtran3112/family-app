@@ -8,9 +8,34 @@ on:
     paths:
       - "expense-tax-management/**"
       - "common/config/**"
+      - "infrastructure/apps/expense-tax/**"
       - "infrastructure/docker-compose.common.yml"
       - ".github/workflows/expense-tax-deploy.yml"
   workflow_dispatch:
+    inputs:
+      target:
+        description: >-
+          Host the deploy job targets. A push to main always deploys to vps.
+          laptop joins the tailnet as tag:ci first and uses the LAPTOP_* host
+          variables and secrets (copies of Firestore shared/laptop).
+        type: choice
+        options: [vps, laptop]
+        default: vps
+      dark:
+        description: >-
+          Dark deploy (DEPLOY_DARK=1 to deploy.sh): start the stack without
+          workflow-worker, so no Temporal workflow runs on that host, and skip
+          the worker health check. For staging or a warm-up on a host that must
+          not process work yet.
+        type: boolean
+        default: false
+      image_tag:
+        description: >-
+          Deploy this already-pushed GHCR tag (a full 40-character commit SHA)
+          and skip the build job. Leave empty to build and deploy the
+          dispatched commit.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,7 +51,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.image_tag == '')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
@@ -83,26 +108,82 @@ jobs:
   deploy:
     name: Deploy production
     needs: build
-    if: github.ref == 'refs/heads/main'
+    # `build` is skipped (not failed) when an image_tag is dispatched, so the
+    # default `needs` gate would skip this job too: accept skipped, never failed.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.build.result == 'skipped') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
     permissions:
       contents: read
       packages: read
+    env:
+      # Push to main is always the vps. The step env below keeps its VPS_* names
+      # for both targets: they hold whichever host this run targets.
+      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'vps' }}
+      # Already-pushed tag to deploy; empty means the commit this run built.
+      IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
+      # '1' only on a dispatch with dark=true; every push is '0'.
+      DEPLOY_DARK: ${{ (github.event_name == 'workflow_dispatch' && inputs.dark == true) && '1' || '0' }}
+      VPS_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_HOST || vars.VPS_HOST }}
+      VPS_PORT: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_PORT || vars.VPS_PORT }}
+      VPS_USER: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_USER || vars.VPS_USER }}
     steps:
+      - name: Validate dispatch inputs
+        env:
+          LAPTOP_HOST: ${{ vars.LAPTOP_HOST }}
+          LAPTOP_PORT: ${{ vars.LAPTOP_PORT }}
+          LAPTOP_USER: ${{ vars.LAPTOP_USER }}
+          LAPTOP_DEPLOY_SSH_KEY: ${{ secrets.LAPTOP_DEPLOY_SSH_KEY }}
+          LAPTOP_DEPLOY_KNOWN_HOSTS: ${{ secrets.LAPTOP_DEPLOY_KNOWN_HOSTS }}
+          TS_CI_OAUTH_CLIENT_ID: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
+          TS_CI_OAUTH_SECRET: ${{ secrets.TS_CI_OAUTH_SECRET }}
+        run: |
+          set -euo pipefail
+          case "$TARGET" in vps | laptop) ;; *) echo "target must be vps or laptop" >&2; exit 1 ;; esac
+          # An unset laptop value would otherwise fall back to the VPS value in the
+          # selection expressions: fail closed instead of deploying to the wrong host.
+          if [[ "$TARGET" == "laptop" ]]; then
+            for name in LAPTOP_HOST LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS TS_CI_OAUTH_CLIENT_ID TS_CI_OAUTH_SECRET; do
+              if [[ -z "${!name}" ]]; then
+                echo "target=laptop needs $name (GitHub copy of Firestore shared/laptop or shared/tailscale)" >&2
+                exit 1
+              fi
+            done
+          fi
+          if [[ -n "$IMAGE_TAG_INPUT" && ! "$IMAGE_TAG_INPUT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be a full 40-character lowercase commit SHA" >&2
+            exit 1
+          fi
+
       - name: Checkout pushed commit
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      # target=laptop only: the laptop is reachable over the tailnet, not the
+      # public internet. The OAuth client (scope auth_keys, tag:ci) is a GitHub
+      # environment secret copy of the CI OAuth client kept in Firestore
+      # shared/tailscale (infrastructure/tailscale/README.md). The runner joins
+      # as an ephemeral tag:ci node. No id-token: the join uses the OAuth
+      # client, not GitHub OIDC.
+      - name: Join the tailnet
+        if: ${{ env.TARGET == 'laptop' }}
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_CI_OAUTH_SECRET }}
+          tags: tag:ci
+
       # Production env is not read here: the VPS loads it from Firestore
       # family-config at deploy time (common/config/family_config.py).
       - name: Install pinned SSH identity
         env:
-          VPS_DEPLOY_SSH_KEY: ${{ secrets.VPS_DEPLOY_SSH_KEY }}
-          VPS_DEPLOY_KNOWN_HOSTS: ${{ secrets.VPS_DEPLOY_KNOWN_HOSTS }}
+          # LAPTOP_* secrets are GitHub copies of Firestore shared/laptop; the VPS_*
+          # copies stay until the VPS is retired (0001f).
+          VPS_DEPLOY_SSH_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && secrets.LAPTOP_DEPLOY_SSH_KEY || secrets.VPS_DEPLOY_SSH_KEY }}
+          VPS_DEPLOY_KNOWN_HOSTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && secrets.LAPTOP_DEPLOY_KNOWN_HOSTS || secrets.VPS_DEPLOY_KNOWN_HOSTS }}
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |
@@ -114,9 +195,6 @@ jobs:
 
       - name: Transfer production runtime
         env:
-          VPS_HOST: ${{ vars.VPS_HOST }}
-          VPS_PORT: ${{ vars.VPS_PORT }}
-          VPS_USER: ${{ vars.VPS_USER }}
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |
@@ -125,35 +203,29 @@ jobs:
           SCP_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT")
           ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" "install -d -m 0700 /tmp/expense-tax-deploy"
           scp "${SCP_OPTIONS[@]}" \
-            expense-tax-management/deploy/production/docker-compose.yml \
-            expense-tax-management/deploy/production/docker-compose.mailbox.yml \
-            expense-tax-management/deploy/production/deploy.sh \
-            expense-tax-management/deploy/production/health-check.sh \
+            infrastructure/apps/expense-tax/docker-compose.yml \
+            infrastructure/apps/expense-tax/docker-compose.mailbox.yml \
+            infrastructure/apps/expense-tax/deploy.sh \
+            infrastructure/apps/expense-tax/health-check.sh \
             common/config/family_config.py \
             "$VPS_USER@$VPS_HOST:/tmp/expense-tax-deploy/"
 
       - name: Deploy over dedicated SSH identity
         env:
-          VPS_HOST: ${{ vars.VPS_HOST }}
-          VPS_PORT: ${{ vars.VPS_PORT }}
-          VPS_USER: ${{ vars.VPS_USER }}
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
           GITHUB_TOKEN: ${{ github.token }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || github.sha }}
         run: |
           set -euo pipefail
           echo "::add-mask::$GITHUB_TOKEN"
           SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
           printf '%s\n' "$GITHUB_TOKEN" | ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
-            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/expense-tax-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/expense-tax-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '${{ github.actor }}' --password-stdin; sudo install -d -m 0755 /opt/expense-tax-management/app; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.yml /opt/expense-tax-management/app/docker-compose.yml; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.mailbox.yml /opt/expense-tax-management/app/docker-compose.mailbox.yml; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/deploy.sh /opt/expense-tax-management/app/deploy.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/health-check.sh /opt/expense-tax-management/app/health-check.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/family_config.py /opt/expense-tax-management/app/family_config.py; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' FAMILY_CONFIG_CREDENTIALS=/etc/family-app/config-reader.json /opt/expense-tax-management/app/family_config.py run expense-tax-management/production --env-file-var DEPLOY_ENV_FILE -- /opt/expense-tax-management/app/deploy.sh"
+            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/expense-tax-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/expense-tax-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '${{ github.actor }}' --password-stdin; sudo install -d -m 0755 /opt/expense-tax-management/app; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.yml /opt/expense-tax-management/app/docker-compose.yml; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.mailbox.yml /opt/expense-tax-management/app/docker-compose.mailbox.yml; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/deploy.sh /opt/expense-tax-management/app/deploy.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/health-check.sh /opt/expense-tax-management/app/health-check.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/family_config.py /opt/expense-tax-management/app/family_config.py; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' DEPLOY_DARK='$DEPLOY_DARK' FAMILY_CONFIG_CREDENTIALS=/etc/family-app/config-reader.json /opt/expense-tax-management/app/family_config.py run expense-tax-management/production --env-file-var DEPLOY_ENV_FILE -- /opt/expense-tax-management/app/deploy.sh"
 
       - name: Clean remote staging
         if: always()
         env:
-          VPS_HOST: ${{ vars.VPS_HOST }}
-          VPS_PORT: ${{ vars.VPS_PORT }}
-          VPS_USER: ${{ vars.VPS_USER }}
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |

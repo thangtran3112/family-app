@@ -54,7 +54,14 @@ done
 # accumulates the healthcheck's interval before it dies again, so it never
 # reaches `healthy`, same idiom `verify_running_images` in deploy.sh uses
 # to resolve a service's container id via `compose ps -q`.
-read -r -a required_workers <<<"${HEALTH_CHECK_REQUIRED_WORKERS-workflow-worker}"
+#
+# Dark deploy (DEPLOY_DARK=1): deploy.sh leaves workflow-worker out on
+# purpose, so the default requires no worker. Only the default changes: an
+# explicit HEALTH_CHECK_REQUIRED_WORKERS still wins, and a normal deploy
+# (DEPLOY_DARK unset or 0) still requires workflow-worker.
+default_workers="workflow-worker"
+[[ "${DEPLOY_DARK:-0}" == "1" ]] && default_workers=""
+read -r -a required_workers <<<"${HEALTH_CHECK_REQUIRED_WORKERS-$default_workers}"
 for worker in "${required_workers[@]}"; do
   worker_ready=0
   for ((attempt = 1; attempt <= attempts; attempt += 1)); do
