@@ -504,7 +504,7 @@ class PracticePlanOut(BaseModel):
     thread_id: int | None  # the practice thread this plan's days book into
     spec: PracticeBlockV1
     sessions: int
-    max_symbols: int  # the most names she can star and practise in a day (the plan's `maxSymbols`, else 5)
+    max_symbols: int  # the most names she can star and practise in a day (the plan's `maxSymbols`, else 20)
     days_opened: int
     day_offset: int  # ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset`
     filters: list[PlanFilterOut]
@@ -806,10 +806,10 @@ class DayListOut(BaseModel):
 
 
 class DayListPatch(BaseModel):
-    """PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left
+    """PATCH body: the stars (at most 20 names from the list), notes, and the self-rating. A key left out is left
     alone; `null` clears notes and rating."""
 
-    watch: list[str] | None = Field(default=None, max_length=5)
+    watch: list[str] | None = Field(default=None, max_length=20)
     notes: str | None = Field(default=None, max_length=2000)
     rating: int | None = Field(default=None, ge=1, le=5)
 

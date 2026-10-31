@@ -134,10 +134,12 @@ test("cells use the column's format and never print null; the since column is a 
   assert.equal(filtersText(smci), "Gap up · Abnormal volume");
 });
 
-test("stars toggle, keep order, and refuse a sixth name", () => {
+test("stars toggle, keep order, and refuse a 21st name", () => {
   assert.deepEqual(toggledStars([{ symbol: "A" }], "B"), ["A", "B"]);
   assert.deepEqual(toggledStars([{ symbol: "A" }, { symbol: "B" }], "A"), ["B"]);
-  assert.equal(toggledStars(["A", "B", "C", "D", "E"].map((symbol) => ({ symbol })), "F"), null);
+  const twenty = Array.from({ length: 20 }, (_, i) => ({ symbol: `S${i}` }));
+  assert.equal(toggledStars(twenty, "NEW"), null);
+  assert.equal(toggledStars(twenty.slice(0, 19), "NEW")?.length, 20);
 });
 
 test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
@@ -346,14 +348,14 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
   ...changes,
 });
 
-test("the cap on stars is the plan's, never above five, and the refusal says which cap it was", () => {
+test("the cap on stars is the plan's, never above 20, and the refusal says which cap it was", () => {
   const stars = ["SMCI", "ANET"].map((symbol) => ({ symbol, starred_clock: "2026-03-10T12:30:00Z" }));
   assert.equal(nameCap({ max_symbols: 2 }), 2);
   assert.equal(toggledStars(stars, "NVDA", 2), null);
   assert.deepEqual(toggledStars(stars, "NVDA", 3), ["SMCI", "ANET", "NVDA"]);
   assert.deepEqual(toggledStars(stars, "SMCI", 2), ["ANET"]);
-  assert.deepEqual(toggledStars(stars, "NVDA", 9), toggledStars(stars, "NVDA")); // past five is five
-  assert.equal(starsFullText(5), "You can star at most 5 names");
+  assert.deepEqual(toggledStars(stars, "NVDA", 99), toggledStars(stars, "NVDA")); // past 20 is 20
+  assert.equal(starsFullText(20), "You can star at most 20 names · 20/20 watched");
   assert.equal(starsFullText(2), "Your plan limits a day to 2 names · unstar one first");
   assert.equal(starsFullText(1), "Your plan limits a day to 1 name · unstar one first");
 });

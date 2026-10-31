@@ -391,7 +391,7 @@ export const PRACTICE_COPY = {
   dayStar: "Star {symbol}",
   dayUnstar: "Unstar {symbol}",
   dayRemove: "Remove {symbol} from your names",
-  dayStarsFull: "You can star at most 5 names",
+  dayStarsFull: "You can star at most 20 names · 20/20 watched",
   dayStarsFullAt: "Your plan limits a day to {max} {names} · unstar one first",
   dayWatch: "Your names",
   dayWatchEmpty: "Star up to {max} {names} to keep them in view",
