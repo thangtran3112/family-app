@@ -1,0 +1,16 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen
+clean: true
+plugins:
+  # Plugin versions are pinned by go.mod `tool` directives, so `buf generate`
+  # is reproducible with only Go and buf installed.
+  - local: [go, tool, protoc-gen-go]
+    out: gen
+    opt: paths=source_relative
+  - local: [go, tool, protoc-gen-connect-go]
+    out: gen
+    opt: paths=source_relative
