@@ -318,15 +318,20 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
         f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )
     assert entered.status_code == 200
-    blocked = start("FLAT")
-    assert blocked.status_code == 409
-    assert blocked.json()["detail"]["problems"][0]["message"].startswith("Close your open GAPPER practice trade")
-    strip = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["sessions"]
+    switched = start("FLAT")  # a trade open on GAPPER no longer blocks the switch (one open trade per name)
+    assert switched.status_code == 200, switched.text
+    detail = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
+    strip = detail["sessions"]
     assert [(s["symbol"], s["behind_clock"], s["has_open_trade"]) for s in strip] == [
         ("GAPPER", False, True),
         ("FLAT", False, False),
         ("SPLITTER", True, False),  # opened at 10:00, behind the 10:30 clock
     ]
+    assert {k: detail["day_pnl"][k] for k in ("realized_usd", "open_count", "as_of")} == {
+        "realized_usd": 0.0,
+        "open_count": 1,
+        "as_of": at("10:30"),
+    }
     stars = client.patch(
         f"{BASE}/day-lists/{list_id}", json={"watch": ["GAPPER", "FLAT", "SPLITTER"]}, headers=auth_headers()
     )

@@ -74,7 +74,7 @@ class OpenTradeOut(SwingOptional):
     """The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
     four last fields say how long it has been held and which price it is valued at; a day session leaves them out."""
 
-    swing_only: ClassVar[tuple[str, ...]] = ("opened_day_no", "days_held", "gap_usd", "price_basis")
+    swing_only: ClassVar[tuple[str, ...]] = ("opened_day_no", "days_held", "gap_usd", "price_basis", "stop_hit_at")
 
     trade_no: int
     side: Side
@@ -88,6 +88,9 @@ class OpenTradeOut(SwingOptional):
     days_held: int | None = None  # counts the day itself
     gap_usd: FiniteFloat | None = None  # a carried hold's overnight gap so far, signed for its side
     price_basis: Literal["prior_close", "last"] | None = None
+    # a day's `DaySessionOut.position` only: when play paused because this trade's stop was crossed (an exit, a new
+    # entry or a new stop note clears it). Left out while there is no pause.
+    stop_hit_at: datetime | None = None
 
 
 # -- swing session shapes (02p): holds, the stop pause, the day strip and the daily block ------------------------------
@@ -429,8 +432,10 @@ class AdvanceOut(SwingOptional):
     quiet_s: int | None  # seconds with no eligible print, once that passes a minute: a halt looks like this
     open_trade: OpenTradeOut | None
     stamp: Stamp
-    # swing sessions only (02p); left out of a day session's JSON
+    # a stop was crossed on any open name of the day: play stopped at the close of its bar (a swing or a day session).
+    # Left out of the JSON while there is no pause.
     paused: PausedOut | None = None
+    # swing sessions only (02p); left out of a day session's JSON
     strip: list[StripRowOut] | None = None
     daily_forming: DailyBarOut | None = None
 
@@ -637,10 +642,20 @@ class DaySessionOut(BaseModel):
     status: SessionStatus
     revealed_through: datetime
     behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
-    has_open_trade: bool  # the day holds one open trade at a time: close it before moving to another name
+    has_open_trade: bool  # the name holds an open trade (one per name, at most five across the day)
     trades: int  # closed trades on this name today
     realized_usd: FiniteFloat  # the closed trades' P/L (swing sessions report none here: their holds are scored weekly)
-    position: OpenTradeOut | None  # the open trade marked at the name's own playhead; null when flat
+    position: OpenTradeOut | None  # the open trade marked at the DAY CLOCK, not the name's playhead; null when flat
+
+
+class DayPnlOut(BaseModel):
+    """The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock."""
+
+    realized_usd: FiniteFloat
+    open_usd: FiniteFloat
+    total_usd: FiniteFloat  # realized + open
+    open_count: int  # open trades right now, at most five
+    as_of: datetime  # the day clock (the list time before the day starts)
 
 
 class PeekDailyBarOut(BaseModel):
@@ -792,6 +807,7 @@ class DayListOut(BaseModel):
     watch: list[StarOut]
     clock: datetime | None
     sessions: list[DaySessionOut]
+    day_pnl: DayPnlOut
     watch_check: WatchCheckOut
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]

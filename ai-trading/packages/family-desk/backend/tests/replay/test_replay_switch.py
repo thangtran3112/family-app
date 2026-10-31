@@ -208,26 +208,28 @@ def test_a_catch_up_past_the_ask_still_moves_the_clock_only_forward(db_session, 
     assert row.revealed_through == et(DAYS[0], "11:00")  # the clock never goes back
 
 
-# -- one open trade a day ------------------------------------------------------------------------------------
+# -- one open trade a name ---------------------------------------------------------------------------------
 
 
-def test_a_switch_with_a_trade_open_is_refused_until_the_trade_is_closed(db_session, user_id, svc) -> None:
+def test_a_switch_with_a_trade_open_keeps_it_open_and_opens_the_next_name(db_session, user_id, svc) -> None:
+    """Flipped from the one-open-trade-a-day rule: a day holds one open trade per NAME (up to five), so switching with a
+    trade open is no longer a 409 and the second name can be entered too. The one-per-name rule stays."""
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT")
     _advance(db_session, user_id, svc, gapper.id, "09:35")
     _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)
     assert plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"][0]["has_open_trade"] is True
-    with pytest.raises(ReplayProblem) as caught:
-        plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    assert caught.value.status == 409 and caught.value.path == "symbol"
-    assert caught.value.message.startswith("Close your open GAPPER practice trade before you switch to FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)  # was a 409: "Close your open GAPPER ..."
     assert plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc).id == gapper.id  # resuming it is fine
-    _mark(db_session, user_id, svc, gapper.id, "long_exit")
-    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)
+    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)  # was a 422: "... one open trade a day"
+    held = {
+        s["symbol"]: s["has_open_trade"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]
+    }
+    assert held == {"GAPPER": True, "FLAT": True}
     with pytest.raises(ReplayProblem) as entry:
-        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # not through the route either
-    assert entry.value.message == "Close your open FLAT practice trade first · one open trade a day"
+        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # a second trade on the same name
+    assert entry.value.message == "Close the open practice trade first"
+    _mark(db_session, user_id, svc, gapper.id, "long_exit")
     _mark(db_session, user_id, svc, gapper.id, "note", note="watching")  # a note is not an entry
 
 

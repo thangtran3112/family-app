@@ -2921,6 +2921,7 @@ export interface components {
             day: string;
             /** Day No */
             day_no: number;
+            day_pnl: components["schemas"]["DayPnlOut"];
             /** Ended At */
             ended_at: string | null;
             /** Id */
@@ -2976,6 +2977,25 @@ export interface components {
             rating?: number | null;
             /** Watch */
             watch?: string[] | null;
+        };
+        /**
+         * DayPnlOut
+         * @description The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock.
+         */
+        DayPnlOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Open Count */
+            open_count: number;
+            /** Open Usd */
+            open_usd: number;
+            /** Realized Usd */
+            realized_usd: number;
+            /** Total Usd */
+            total_usd: number;
         };
         /**
          * DayRelistIn
@@ -4423,6 +4443,8 @@ export interface components {
              * @enum {string}
              */
             side: "long" | "short";
+            /** Stop Hit At */
+            stop_hit_at?: string | null;
             /** Stop Price */
             stop_price: number | null;
             /** Trade No */
