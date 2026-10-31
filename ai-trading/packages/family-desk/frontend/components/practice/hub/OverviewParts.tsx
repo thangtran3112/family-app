@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { adherenceStat, overviewDayRows, threadProgress, type OverviewDayRow } from "@/lib/replay/overviewView";
+import { adherenceStat, overviewDayRows, threadProgress, type EquityDays, type OverviewDayRow } from "@/lib/replay/overviewView";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
 import { formatBalance, startedWithText, threadModeLabel, winRateText } from "@/lib/replay/threadView";
 import hub from "./hub.module.css";
@@ -13,13 +13,13 @@ import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
 /** The page frame of the thread overview: the shared header (back link, name, mode and status chips) over the content. */
-export function OverviewShell({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+export function OverviewShell({ title, titleRef, aside, children }: { title: string; titleRef?: Ref<HTMLHeadingElement>; aside?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.page}>
       <header className={`${hub.header} ${styles.headerSplit}`}>
         <div className={styles.titleBlock}>
           <Link href="/practice" className={styles.back}>{`← ${PRACTICE_COPY.threadPageBack}`}</Link>
-          <h1 className={hub.title}>{title}</h1>
+          <h1 ref={titleRef} tabIndex={-1} className={hub.title}>{title}</h1>
         </div>
         {aside && <div className={hub.inline}>{aside}</div>}
       </header>
@@ -40,17 +40,17 @@ export function OverviewChips({ thread }: { thread: ThreadSummary["thread"] }) {
 }
 
 /** Where the thread is: the balance with SIMULATED, what it started with, the place line and the days so far. `children` adds the swing facts. */
-export function PlaceStrip({ summary, children }: { summary: ThreadSummary; children?: ReactNode }) {
+export function PlaceStrip({ summary, planFinished = false, children }: { summary: ThreadSummary; planFinished?: boolean; children?: ReactNode }) {
   const { thread } = summary;
-  const progress = threadProgress(summary);
+  const progress = threadProgress(summary, planFinished);
   return (
     <section className={`${styles.panel} ${o.place}`} aria-label="Thread balance">
-      <span className={hub.cap}>{PRACTICE_COPY.threadBalance}</span>
+      <h2 className={styles.panelTitle}>{PRACTICE_COPY.threadBalance}</h2>
       <p className={hub.balanceRow}>
         <span className={hub.balanceValue}>{formatBalance(thread.stats.balance)}</span>
         <SimulatedBadge />
       </p>
-      <p className={hub.muted}>{startedWithText(thread)}</p>
+      <p className={hub.muted}>{startedWithText(thread, summary.swing)}</p>
       {children}
       <p className={o.placeLine}>{progress.sub === PRACTICE_COPY.landingProgressNoDays ? progress.main : `${progress.main} · ${progress.sub}`}</p>
     </section>
@@ -86,7 +86,7 @@ export function StatsPanel({ thread }: { thread: ThreadSummary["thread"] & { id:
         </div>
       </dl>
       <p className={hub.hint}>{PRACTICE_COPY.threadAdherenceMeaning}</p>
-      <Link href={`/practice/journal?thread=${thread.id}`} className={styles.mutedLink}>{PRACTICE_COPY.threadJournal}</Link>
+      <Link href={`/practice/journal?thread=${thread.id}`} className={styles.textLink}>{PRACTICE_COPY.threadJournal}</Link>
     </section>
   );
 }
@@ -94,7 +94,7 @@ export function StatsPanel({ thread }: { thread: ThreadSummary["thread"] & { id:
 const tone = (value: OverviewDayRow["resultTone"]) => o[value];
 
 const DAY_COLUMNS: DenseColumn<OverviewDayRow>[] = [
-  { key: "day", label: "Day", render: (row) => <Link href={row.href} className={o.link}>{row.title}</Link> },
+  { key: "day", label: "Day", render: (row) => <Link href={row.href} className={o.rowLink}>{row.title}</Link> },
   { key: "status", label: "Status", render: (row) => row.status },
   { key: "trades", label: "Trades", align: "right", render: (row) => row.trades },
   { key: "result", label: "Result", align: "right", render: (row) => <span className={tone(row.resultTone)}>{row.result}</span> },
@@ -103,14 +103,14 @@ const DAY_COLUMNS: DenseColumn<OverviewDayRow>[] = [
 ];
 
 /** One row per ended day, the newest first: day number and weekday (never a date), practiced or skipped, trades, result, adherence and the balance. Each day opens its board. */
-export function DaysSection({ daily }: { daily: Thread["daily"] }) {
+export function DaysSection({ daily, equity }: { daily: Thread["daily"]; equity?: EquityDays }) {
   return (
     <section className={`${styles.panel} ${o.tablePanel}`} aria-label={PRACTICE_COPY.overviewDaysTitle}>
       <div className={o.sectionHead}>
         <h2 className={styles.panelTitle}>{PRACTICE_COPY.overviewDaysTitle}</h2>
         <SimulatedBadge />
       </div>
-      <DenseTable caption={PRACTICE_COPY.overviewDaysCaption} columns={DAY_COLUMNS} rows={overviewDayRows(daily)} rowKey={(row) => row.key} empty={PRACTICE_COPY.overviewDaysNone} />
+      <DenseTable caption={PRACTICE_COPY.overviewDaysCaption} columns={DAY_COLUMNS} rows={overviewDayRows(daily, equity)} rowKey={(row) => row.key} empty={PRACTICE_COPY.overviewDaysNone} />
     </section>
   );
 }

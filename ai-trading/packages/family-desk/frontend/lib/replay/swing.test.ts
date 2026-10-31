@@ -30,7 +30,7 @@ import {
   swingCardView,
   swingDatesHidden,
   swingDayTitle,
-  swingHeaderLine,
+  swingBoardTitle,
 } from "./swing.ts";
 import {
   amdHold,
@@ -60,11 +60,11 @@ test("a hold row reads like the board: entry day and price, days held, stop, the
   const row = holdRowView(nvdaHold);
   assert.deepEqual(
     [row.side, row.shares, row.entry, row.held, row.stop, row.value, row.result, row.resultTone, row.r, row.gap, row.earnings, row.splitNote, row.exit],
-    ["Long", "100", "Day 5 · 184.20", "2 days held", "Stop 178.50", "Prior close 190.10", "+$590.00", "up", "+1.04R", null, "Earnings in 3 sessions · after close", null, null],
+    ["Long", "100", "Day 5 · 184.20", "Day 2 of hold", "Stop 178.50", "Prior close 190.10", "+$590.00", "up", "+1.04R", null, "Earnings in 3 sessions · after close", null, null],
   );
   assert.equal(holdEntryLabel({ entry_day_no: 3, entry_price: 184.2 }), "Day 3 · 184.20");
-  assert.equal(daysHeldText(1), "1 day held");
-  assert.equal(daysHeldText(2), "2 days held");
+  assert.equal(daysHeldText(1), "Day 1 of hold", "D-140: a count of the hold's days, not a length of time");
+  assert.equal(daysHeldText(2), "Day 2 of hold");
   assert.equal(sideLabel("short"), "Short");
 });
 
@@ -189,17 +189,15 @@ test("dates stay hidden unless the setup says otherwise", () => {
 test("the board header: day, week, weekday, as of the prior close, balance, equity and SIMULATED", () => {
   assert.equal(swingDayTitle(swingDayList, true), "Day 7 of 20 · Week 2 · Tue");
   assert.equal(swingDayTitle(swingDayList, false), "Day 7 of 20 · Week 2 · Tue 2026-07-14");
-  assert.equal(swingHeaderLine(swingDayList, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close · Balance $51,240.00 · Equity $52,010.00 · SIMULATED");
-  assert.equal(swingHeaderLine(swingDayListEnded, true), "Day 7 of 20 · Week 2 · Tue · Day over · Balance $51,240.00 · Equity $52,010.00 · SIMULATED");
-  assert.equal(swingHeaderLine({ ...swingDayList, thread: null }, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close", "no money, no label to carry");
-  assert.equal(swingHeaderLine({ ...swingDayList, thread: { ...swingBrief, equity_usd: undefined } }, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close · Balance $51,240.00 · SIMULATED");
+  assert.equal(swingBoardTitle(swingDayList, true), "Day 7 of 20 · Tue", "D-139: day and weekday; the week and the state are chips, the money is in the strip");
+  assert.equal(swingBoardTitle(swingDayList, false), "Day 7 of 20 · Tue 2026-07-14");
   assert.equal(swingBriefLine(swingBrief), "Balance $51,240.00 · Equity $52,010.00 · Free cash $24,720.00 · SIMULATED");
 });
 
 test("the hub card line, the review-ready notice and the action", () => {
   const card = swingCardView(swingThreadSummary)!;
   assert.equal(card.title, "Swing · 50 names");
-  assert.equal(card.line, "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · Balance $51,240.00 · Equity $52,010.00 · 2 holds open");
+  assert.equal(card.line, "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · 2 holds open", "D-112: week, day, names and holds; the money sits in its own cells");
   assert.deepEqual([card.notice, card.action], [null, { kind: "continue", label: "Continue Day 7", weekNo: null }]);
 
   const ready = swingCardView(swingThreadReviewReady)!;
@@ -208,7 +206,7 @@ test("the hub card line, the review-ready notice and the action", () => {
   assert.match(ready.line, /1 hold open$/);
 
   const finished = swingCardView(swingThreadFinished)!;
-  assert.equal(finished.line, "Swing · 50 names · Finished · Day 20 of 20 · Balance $51,240.00 · Equity $52,010.00");
+  assert.equal(finished.line, "Swing · 50 names · Finished · Day 20 of 20");
   assert.equal(finished.action.kind, "none");
 
   const fresh = swingCardView({ ...swingThreadSummary, today: null, swing: { ...swingThreadSummary.swing!, days_ended: 0, day_no: 1, week_no: 1, holds_open: 0, equity_series: [] } })!;
@@ -290,8 +288,8 @@ test("every string the helpers build avoids the Practice banned words", () => {
       const view = stripRowView(row);
       return [view.sub, view.label];
     }),
-    swingHeaderLine(swingDayList, true),
-    swingHeaderLine(swingDayListEnded, false),
+    swingBoardTitle(swingDayList, true),
+    swingBoardTitle(swingDayListEnded, false),
     swingBriefLine(swingBrief),
     ...[swingThreadSummary, swingThreadReviewReady, swingThreadFinished].flatMap((summary) => {
       const card = swingCardView(summary)!;

@@ -13,7 +13,7 @@ import { overviewWeekRows, type OverviewWeekRow } from "@/lib/replay/overviewVie
 import { freeCashText, holdRowView, swingCardView, swingDatesHidden, type HoldRowView } from "@/lib/replay/swing";
 import { loadHolds, loadWeeks } from "@/lib/replay/swingApi";
 import type { Thread } from "@/lib/replay/threads";
-import { planRows } from "@/lib/replay/threadView";
+import { formatBalance, planRows } from "@/lib/replay/threadView";
 import { DaysSection, PlaceStrip, StatsPanel } from "./OverviewParts";
 import { NextStep } from "./NextStep";
 import hub from "./hub.module.css";
@@ -23,10 +23,11 @@ import o from "./overview.module.css";
 const tone = (value: HoldRowView["resultTone"] | OverviewWeekRow["realizedTone"]) => o[value];
 
 const WEEK_COLUMNS = (): DenseColumn<OverviewWeekRow>[] => [
-  { key: "week", label: "Week", render: (row) => (row.href === null ? row.label : <Link href={row.href} className={o.link}>{row.label}</Link>) },
+  { key: "week", label: "Week", render: (row) => (row.href === null ? row.label : <Link href={row.href} className={o.rowLink}>{row.label}</Link>) },
   { key: "status", label: "Status", render: (row) => <span className={row.status === "upcoming" ? o.pending : undefined}>{row.statusText}</span> },
   { key: "days", label: "Days", align: "right", render: (row) => row.days },
   { key: "realized", label: "Realized", align: "right", render: (row) => <span className={tone(row.realizedTone)}>{row.realized}</span> },
+  { key: "equityChange", label: PRACTICE_COPY.landingColEquityChange, align: "right", render: (row) => <span className={tone(row.equityChangeTone)}>{row.equityChange}</span> },
 ];
 
 type HoldRow = { id: string; view: HoldRowView };
@@ -61,7 +62,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
       <div className={o.main}>
         <PlaceStrip summary={summary}>
           <p className={o.placeLine}>{card.line}</p>
-          <p className={hub.muted}>{freeCashText(state.free_cash_usd)}</p>
+          <p className={hub.muted}>{`${practiceText("swingEquity", { amount: formatBalance(state.equity_usd) })} · ${freeCashText(state.free_cash_usd)}`}</p>
         </PlaceStrip>
         <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={() => undefined} />
 
@@ -80,7 +81,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           )}
         </section>
 
-        <DaysSection daily={summary.daily} />
+        <DaysSection daily={summary.daily} equity={{ startingBalance: thread.startingBalance, series: state.equity_series }} />
 
         <section className={`${styles.panel} ${o.tablePanel}`} aria-label={HUB_SWING_COPY.holdsTitle}>
           <div className={o.sectionHead}>
@@ -95,7 +96,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           ) : (
             <DenseTable caption={PRACTICE_COPY.overviewHoldsCaption} columns={HOLD_COLUMNS} rows={holdRows} rowKey={(row) => row.id} empty={PRACTICE_COPY.swingNoHoldsOpen} />
           )}
-          <Link href={`/practice/journal?thread=${thread.id}`} className={styles.mutedLink}>{PRACTICE_COPY.overviewHoldsLink}</Link>
+          <Link href={`/practice/journal?thread=${thread.id}`} className={styles.textLink}>{PRACTICE_COPY.overviewHoldsLink}</Link>
         </section>
 
         <section className={styles.panel} aria-label={PRACTICE_COPY.overviewCurveTitle}>
@@ -120,7 +121,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           <p className={styles.dayLine}>{card.title}</p>
           {setup && swingDatesHidden(setup) && <p className={hub.muted}>{HUB_SWING_COPY.dateHidden}</p>}
           <dl className={o.planList}>
-            {planRows(thread.plan).map((row) => (
+            {planRows(thread.plan, "swing").map((row) => (
               <div key={row.id} className={o.planItem}>
                 <dt>{row.label}</dt>
                 <dd>{row.value}</dd>

@@ -3,6 +3,7 @@ import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { HUB_SWING_COPY } from "../../lib/replay/hubSwing.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { origin } from "../helpers";
 import { THREAD_URL, createThreadByApi, startThread, threadIdOf } from "./hub-helpers";
 import { DAY_ISO, createSwingThread, enterByApi, expectNoDates, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
 
@@ -49,7 +50,7 @@ test.describe("Practice thread overview", () => {
     await openDesk(page, "/practice");
     const row = swingRow(page);
     await expect(row).toContainText("Day 6 of 15");
-    await expect(row).toContainText(/\d+ practiced · \d+ skipped/);
+    await expect(row).toContainText(/\d+ practiced · \d+ passed/);
     await expect(row).toContainText("Week 1 review due");
     await expect(row.getByRole("link", { name: /review/i })).toHaveCount(0);
     await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
@@ -66,8 +67,8 @@ test.describe("Practice thread overview", () => {
     const next = practiceDay(page);
     await expect(next.getByRole("heading", { name: PRACTICE_COPY.overviewNext })).toBeVisible();
     await expect(next.getByRole("link", { name: "Week 1 review", exact: true })).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
-    await expect(next).toContainText("Day 6 unlocks after the Week 1 review");
-    await expect(next.getByRole("status")).toContainText("Week 1 review ready");
+    await expect(next).toContainText("Week 1 is done. Review it to unlock Day 6.");
+    await expect(next.getByRole("status")).toHaveCount(0); // D-085: the notice is not printed a second time under the button
     await expect(page.getByRole("button", { name: /^Continue Day|^Start Day/ })).toHaveCount(0);
 
     // Weeks: Week 1 owes its review (a link to it), Weeks 2 and 3 are still to come.
@@ -240,7 +241,7 @@ test.describe("Practice thread overview", () => {
       });
       if (here) order.push(`${here.tag} ${here.text}`.trim());
     }
-    expect(order).toEqual([expect.stringMatching(/^A .*thread$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
+    expect(order).toEqual([expect.stringMatching(/^A .*thread #\d+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
     await link.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");
@@ -259,5 +260,153 @@ test.describe("Practice thread overview", () => {
       await tab.close();
       await expect(page).toHaveURL(/\/practice$/);
     }
+  });
+});
+
+// Fix wave 5S, stream 1: the thread overview.
+test.describe("Practice thread overview · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("a swing thread with open holds: the week gate is said once, the weeks table has Equity change, the balance line counts the holds, and the plan reads per week (D-080..D-085)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, overviewUrl(threadId));
+    // D-085: one sentence says why Day 6 waits, and "review ready" is not printed a second time.
+    const gateLine = "Week 1 is done. Review it to unlock Day 6.";
+    await expect(page.getByText(gateLine)).toHaveCount(1);
+    await expect(page.getByText(/Week 1 review ready/)).toHaveCount(0);
+    // D-080: two holds are open, so the balance line says what is realized and what the holds add, not "no change yet".
+    const place = page.getByRole("region", { name: "Thread balance" });
+    await expect(place).toContainText(/Started with \$[\d,]+ · realized .* · open holds /);
+    await expect(place).not.toContainText("no change yet");
+    // D-081: the weeks table carries the equity change beside the realized figure.
+    const weeks = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption });
+    await expect(weeks.getByRole("columnheader", { name: PRACTICE_COPY.landingColEquityChange })).toBeVisible();
+    // D-083: a swing plan's limits count per week.
+    const plan = page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption });
+    await expect(plan).toContainText("Max loss, pretend dollars a week");
+    await expect(plan).toContainText("Max trades a week");
+    await expect(plan).not.toContainText("a day");
+    // D-082: a day she passed says "Passed" (the day page's word), never "Skipped".
+    const days = page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption });
+    await expect(rows(days).first()).toContainText("Passed");
+    await expect(days).not.toContainText("Skipped");
+
+    // D-085: the ended Day 5 says the same sentence, once, beside its review link.
+    await rows(days).first().getByRole("link").click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    await expect(page.getByText(gateLine)).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
+  });
+
+  test("while the plan's data prepares the step card says so once: one state, a unit on the count, Replace plan waits (D-084)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await startThread(page, context);
+    const id = threadIdOf(page);
+    await page.route(/\/api\/desk\/replay\/daily(\?|$)/, async (route) => {
+      const answer = await route.fetch();
+      const body = await answer.json();
+      if (body.plan) Object.assign(body.plan, { current: null, days_opened: 0, prep: { state: "running", done: 2, total: 18, failed: 0 } });
+      await route.fulfill({ response: answer, json: body });
+    });
+    await openDesk(page, overviewUrl(id));
+    const step = practiceDay(page);
+    await expect(step).toContainText("Preparing data · 2 of 18 names");
+    await expect(step).not.toContainText("Your thread is ready");
+    await expect(step).not.toContainText("Day 1 is next");
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();
+    // The card keeps its height when the preparation ends (it used to be 40 px shorter then).
+    const preparing = (await step.boundingBox())!.height;
+    await page.unroute(/\/api\/desk\/replay\/daily(\?|$)/);
+    await openDesk(page, overviewUrl(id));
+    await expect(step.getByRole("button", { name: /^Start Day \d+$/ })).toBeVisible({ timeout: 60_000 }); // the real prepare may still be running
+    expect((await step.boundingBox())!.height).toBe(preparing);
+  });
+});
+
+// Fix wave 5S, stream 1: the thread page's panels and links.
+test.describe("Practice thread page · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the plan panel is titled Plan and names the filters once; Balance is a heading; the journal link is one amber 32 px link (D-118, D-119, D-120)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await startThread(page, context);
+    const plan = page.getByRole("region", { name: "Daily list plan" });
+    await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 });
+    await expect(plan.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+    await expect(plan).not.toContainText("Armed on practice days");
+    await expect(plan.getByText("Any close"), "the filters line is said once").toHaveCount(1);
+    await expect(page.getByRole("heading", { level: 2, name: PRACTICE_COPY.threadBalance, exact: true })).toBeVisible();
+    const journal = page.getByRole("link", { name: PRACTICE_COPY.threadJournal });
+    const box = (await journal.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(32);
+    await expect(journal).toHaveCSS("color", "rgb(255, 176, 32)");
+  });
+
+  test("a closed thread's card finishes its sentence and offers the journal and a new thread (D-121)", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    expect((await context.request.post(`${origin}/api/desk/replay/threads/${id}/close`)).ok()).toBeTruthy();
+    await openDesk(page, overviewUrl(id));
+    const card = practiceDay(page);
+    await expect(card).toContainText("This thread is closed. Its journal and final balance stay here.");
+    await expect(card.getByRole("link", { name: PRACTICE_COPY.threadOpenJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
+    await expect(card.getByRole("link", { name: PRACTICE_COPY.threadStartNew })).toHaveAttribute("href", "/practice");
+  });
+
+  test("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, overviewUrl(threadId));
+    const link = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption }).getByRole("link", { name: "Week 1", exact: true });
+    expect(await link.evaluate((node) => getComputedStyle(node, "::after").position)).toBe("absolute");
+  });
+});
+
+// Fix wave 5S, stream 1: the week review.
+test.describe("Practice week review · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, `/practice/week?thread=${threadId}&week=1`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Week 1");
+    // D-088: Start Week 2 is in the first screen beside the "Final" chip, and ← Thread goes to the thread's page.
+    await expect(page.getByRole("button", { name: "Start Week 2" })).toBeInViewport();
+    await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
+    // D-086: every tile value is one line inside its tile, also in a narrow tile (the grid is squeezed to about 154 px a tile, as the audit saw it).
+    await page.locator("#main-content ul[role=list]").filter({ has: page.locator("[data-tone]") }).first().evaluate((list) => ((list as HTMLElement).style.width = "470px"));
+    const broken = await page.locator("#main-content [data-tone]").evaluateAll((nodes) =>
+      nodes.flatMap((node) => {
+        const box = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
+        const wraps = box.height > line * 1.5;
+        const spills = node.scrollWidth > node.clientWidth + 1;
+        return wraps || spills ? [`${node.textContent} (${Math.round(box.width)}x${Math.round(box.height)})`] : [];
+      }),
+    );
+    expect(broken, "a tile value wraps or spills").toEqual([]);
+    expect(await page.locator("#main-content [data-tone]").count(), "the tiles are there").toBeGreaterThan(5);
+    // D-087: the key lists the day-close ticks too, and "this week is shaded" is a filled block, not a box that looks ticked.
+    const key = page.getByRole("list", { name: "Chart key" });
+    await expect(key).toContainText("Close of each day");
+    const shade = key.getByRole("listitem").filter({ hasText: "This week is shaded" }).locator("span").first();
+    await expect(shade).toHaveCSS("border-top-width", "0px");
+  });
+
+  test("a day thread's week page has a heading, a full sentence and a link to the thread's page (D-089)", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    await openDesk(page, `/practice/week?thread=${id}&week=1`);
+    await expect(page.getByRole("heading", { level: 1, name: "Weekly review" })).toBeVisible();
+    await expect(page.getByText("Weekly reviews are for swing threads. This is a day thread, so it has no weeks.")).toBeVisible();
+    await expect(page.getByText("swing threads only", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/thread?id=${id}`);
   });
 });

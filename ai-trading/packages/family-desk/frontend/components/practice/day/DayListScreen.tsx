@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { DeskApiError } from "@/lib/api/client";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -24,6 +25,7 @@ import {
   dayCellText,
   dayCellTone,
   dayColumns,
+  dayRouteProblem,
   dayTitle,
   filtersNote,
   filtersText,
@@ -32,8 +34,8 @@ import {
   listCountsText,
   listWarning,
   nameCap,
+  practiceWindow,
   namesTodayText,
-  noMatchText,
   rescanCounts,
   rescanLabel,
   rescanStaleText,
@@ -46,6 +48,7 @@ import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { BackLink } from "@/components/practice/hub/BackLink";
+import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
@@ -70,30 +73,54 @@ export function DayListScreen() {
     if (id === null && openDayId !== null) router.replace(`/practice/day?id=${openDayId}`);
   }, [id, openDayId, router]);
 
+  // No id is "not chosen"; an id that is no number, or that the server does not know, is "not found" (D-117).
+  const problem = dayRouteProblem(raw);
+  const notFound = problem === "missing" || (list.error instanceof DeskApiError && list.error.status === 404);
+  if (id === null && problem === "missing") return <DayNotice title={PRACTICE_COPY.dayNotFound} />;
   if (id === null) {
-    if (daily.loading || openDayId !== null) {
-      return (
-        <div className={styles.body}>
-          <LoadingBlock label={PRACTICE_COPY.dayLoading} height={320} />
-        </div>
-      );
-    }
-    return (
-      <div className={styles.body}>
-        <EmptyBlock title={PRACTICE_COPY.dayNoPlan}><Link href="/practice" className={styles.link}>Open Practice</Link></EmptyBlock>
-      </div>
-    );
+    if (daily.loading || openDayId !== null) return <DaySkeleton />;
+    return <DayNotice title={PRACTICE_COPY.dayNoPlan} />;
   }
   if (list.data === null) {
-    return (
+    if (notFound) return <DayNotice title={PRACTICE_COPY.dayNotFound} />;
+    return list.error === null ? (
+      <DaySkeleton />
+    ) : (
       <div className={styles.body}>
-        {list.error === null ? <LoadingBlock label={PRACTICE_COPY.dayLoading} height={320} /> : <ErrorBlock message={PRACTICE_COPY.dayLoadError} onRetry={list.refresh} />}
+        <ErrorBlock message={PRACTICE_COPY.dayLoadError} onRetry={list.refresh} />
       </div>
     );
   }
   // A swing thread's day answers the swing board (02p d1); a day thread's list is the screen below.
   if (isSwingDayList(list.data)) return <SwingBoard key={list.data.id} initial={list.data} />;
   return <DayList key={list.data.id} list={list.data} onChanged={list.refresh} />;
+}
+
+/** One empty layout for a day that is not chosen or not found, with the way back (D-117). */
+function DayNotice({ title }: { title: string }) {
+  return (
+    <div className={styles.body}>
+      <EmptyBlock title={title}>
+        <Link href="/practice" className={styles.link}>Open Practice</Link>
+      </EmptyBlock>
+    </div>
+  );
+}
+
+/** The day page while it loads: grey blocks where the header, the counts and the candidate rows will be (D-116). */
+function DaySkeleton() {
+  return (
+    <div className={styles.screen} role="status" aria-busy="true" aria-label={PRACTICE_COPY.dayLoading}>
+      <header className={styles.header}>
+        <span className={`${styles.skel} ${styles.skelTitle}`} />
+      </header>
+      <div className={styles.body}>
+        <span className={`${styles.skel} ${styles.skelLine}`} />
+        <span className={`${styles.skel} ${styles.skelLine}`} />
+        <span className={`${styles.skel} ${styles.skelTable}`} />
+      </div>
+    </div>
+  );
 }
 
 function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) {
@@ -108,6 +135,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const [scanning, setScanning] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  // The plan replaced from a day with no names (D-094).
+  const [changing, setChanging] = useState(false);
+  // Keyboard focus follows the flow (D-092, D-093): the page heading on arrival, the confirm when it opens, the trigger when it
+  // closes, and the control that replaces End day once the day has ended.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const endRef = useRef<HTMLButtonElement>(null);
+  const yesRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const endedHere = useRef(false);
   // At the 1180 band the right rail is a tab strip: a row click opens the Peek drawer and the others stay as they are (D-020).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
@@ -116,7 +152,25 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const threadId = list.thread?.id ?? null;
   const thread = useDeskQuery(`day-thread:${threadId}`, (signal) => loadThread(threadId ?? 0, { signal }), { enabled: threadId !== null });
 
-  const peek = useDeskQuery(`day-peek:${list.id}:${selected}`, (signal) => loadDayList(list.id, { peek: selected ?? undefined }, { signal }), { enabled: selected !== null });
+  // A finished day has no chart to peek at: no request either (D-098).
+  const peek = useDeskQuery(`day-peek:${list.id}:${selected}`, (signal) => loadDayList(list.id, { peek: selected ?? undefined }, { signal }), { enabled: selected !== null && !ended });
+
+  useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (confirmEnd) yesRef.current?.focus();
+  }, [confirmEnd]);
+  useEffect(() => {
+    if (ended && endedHere.current) {
+      endedHere.current = false;
+      nextRef.current?.focus({ preventScroll: true });
+    }
+  }, [ended]);
+  const cancelEnd = () => {
+    setConfirmEnd(false);
+    endRef.current?.focus();
+  };
 
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
@@ -167,6 +221,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const finish = () =>
     run(async () => {
       await endDay(list.id);
+      endedHere.current = true;
       setConfirmEnd(false);
       onChanged();
     }, PRACTICE_COPY.dayLoadError);
@@ -213,23 +268,52 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const warning = listWarning(list);
   const title = dayTitle(list, hidden);
   const setup = list.plan.spec.setup;
+  const practiceTime = practiceWindow(list);
+  // Day 5 of 5: there is no next day to open, so the button says what it does and goes to the plan's summary (D-096).
+  // A re-scan with nothing to scan from (no list and no name, so no day clock) is a dead end: it is not offered (D-094).
+  const showRescan = ended ? list.rescan !== null : list.candidates.length > 0 || list.rescan !== null;
+  const finishHref = list.plan.finished ? (threadId === null ? "/practice" : `/practice/thread?id=${threadId}`) : null;
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
       <BackLink threadId={list.thread?.id ?? list.plan.thread_id} />
       <header className={styles.header}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>{title} · Practice day list</h1>
+          <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>
+          <span className={styles.chip}>Practice day list</span>
           {hidden && <span className={styles.chip}>{PRACTICE_COPY.dayDateHidden}</span>}
         </div>
-        <div className={styles.actions}>
+        <div className={`${styles.actions} ${styles.endWrap}`}>
           {practicing && !ended && (
             <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practicing.symbol}</Link>
           )}
           {ended ? (
-            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</button>
+            finishHref !== null ? (
+              <Link href={finishHref} className={`${styles.button} ${styles.primary}`}>{PRACTICE_COPY.dayFinishPlan}</Link>
+            ) : (
+              <button ref={nextRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</button>
+            )
           ) : (
-            <button type="button" className={styles.button} disabled={busy} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</button>
+            <>
+              <button ref={endRef} type="button" className={styles.button} disabled={busy} aria-expanded={confirmEnd} aria-controls="day-end-confirm" onClick={() => (confirmEnd ? cancelEnd() : setConfirmEnd(true))}>{PRACTICE_COPY.dayEnd}</button>
+              {confirmEnd && (
+                <div
+                  id="day-end-confirm"
+                  role="group"
+                  aria-label="Confirm ending the day"
+                  className={styles.endConfirm}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") cancelEnd();
+                  }}
+                >
+                  <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
+                  <div className={styles.actions}>
+                    <button ref={yesRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.dayEndYes}</button>
+                    <button type="button" className={styles.button} onClick={cancelEnd}>{PRACTICE_COPY.dayKeepPracticing}</button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </header>
@@ -260,56 +344,57 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         )}
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
-        {confirmEnd && !ended && (
-          <div role="group" aria-label="Confirm ending the day" className={styles.confirm}>
-            <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
-            <div className={styles.actions}>
-              <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.dayEnd}</button>
-              <button type="button" className={styles.button} onClick={() => setConfirmEnd(false)}>Keep practicing</button>
+
+        {!ended && (
+          <section className={styles.section} aria-label="Candidates">
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Candidates</h2>
+              <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: cap })}</span>
             </div>
-          </div>
+            <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>
+            <DenseTable
+              caption="Candidates"
+              columns={withPriorities(columns, "practiceList")}
+              rows={list.candidates}
+              rowKey={(row) => row.symbol}
+              selectedKey={selected}
+              onSelect={(row) => {
+                setSelected(row.symbol);
+                if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
+              }}
+              scrollX
+              empty={
+                <EmptyBlock title={PRACTICE_COPY.dayNoMatchTitle}>
+                  <p className={styles.muted}>{PRACTICE_COPY.dayNoMatchHint}</p>
+                  <div className={styles.actions}>
+                    {list.sessions.length === 0 && (
+                      <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.daySkip}</button>
+                    )}
+                    {thread.data !== null && <button type="button" className={styles.button} onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</button>}
+                  </div>
+                </EmptyBlock>
+              }
+              alwaysShowActions
+              rowActions={(row) => (
+                <button
+                  type="button"
+                  className={styles.small}
+                  disabled={busy}
+                  aria-label={practiceText("dayPractice", { symbol: row.symbol })}
+                  onClick={() => void practice(row.symbol)}
+                >
+                  {opened.has(row.symbol) ? "Resume" : "Practice"}
+                </button>
+              )}
+            />
+            <UniverseFootnote text={universeNote(list.universe)} />
+            <UniverseFootnote text={sourceNote(list)} />
+          </section>
         )}
 
-        <section className={styles.section} aria-label="Candidates">
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>Candidates</h2>
-            <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: cap })}</span>
-          </div>
-          {!ended && <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>}
-          <DenseTable
-            caption="Candidates"
-            columns={withPriorities(columns, "practiceList")}
-            rows={list.candidates}
-            rowKey={(row) => row.symbol}
-            selectedKey={selected}
-            onSelect={(row) => {
-              setSelected(row.symbol);
-              if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
-            }}
-            scrollX
-            empty={
-              <EmptyBlock title={noMatchText(list)}>
-                {PRACTICE_COPY.dayNoNames}
-                {!ended && <> · <Link href="/screener" className={styles.link}>{PRACTICE_COPY.dayNoNamesScreener}</Link></>}
-              </EmptyBlock>
-            }
-            rowActions={ended ? undefined : (row) => (
-              <button
-                type="button"
-                className={styles.small}
-                disabled={busy}
-                aria-label={practiceText("dayPractice", { symbol: row.symbol })}
-                onClick={() => void practice(row.symbol)}
-              >
-                {opened.has(row.symbol) ? "Resume" : "Practice"}
-              </button>
-            )}
-          />
-          <UniverseFootnote text={universeNote(list.universe)} />
-          <UniverseFootnote text={sourceNote(list)} />
-        </section>
+        {ended && list.review && <ReviewPanel review={list.review} journal={list.journal} footnote={list.universe.footnote} />}
 
-        {(!ended || list.rescan !== null) && (
+        {showRescan && (
           <section className={styles.section} aria-label="Re-scan">
             <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
             {!ended && (
@@ -338,7 +423,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           </section>
         )}
 
-        {ended && list.review && <ReviewPanel review={list.review} journal={list.journal} footnote={list.universe.footnote} />}
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
       <DayLeftPanel
@@ -355,6 +439,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         opened={opened}
         ended={ended}
       />
+      {changing && thread.data !== null && (
+        <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
+      )}
       <RightRail
         label="Day context"
         multi
@@ -393,7 +480,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                     )}
                   </>
                 )}
-                <div><dt>Window</dt><dd>{setup.window.from}–{setup.window.to} ET</dd></div>
+                <div><dt>Practice window</dt><dd>{practiceTime.from}–{practiceTime.to} ET</dd></div>
                 <div><dt>Chart</dt><dd>{setup.interval}</dd></div>
                 {thread.data?.thread.plan && planRows(thread.data.thread.plan).map((row) => <div key={row.id}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}
                 {ended && <div><dt>Day</dt><dd>{formatEtDay(list.day)}</dd></div>}
@@ -442,6 +529,7 @@ function columnsOf(
     {
       key: "star",
       label: "Star",
+      align: "center",
       render: (row) => {
         const on = star.starred(row.symbol);
         return (

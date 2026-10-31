@@ -64,13 +64,13 @@ test.describe("Swing practice", () => {
     await page.waitForURL(THREAD_URL);
     const balance = page.getByRole("region", { name: "Thread balance" });
     await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
-    await expect(balance).toContainText("Balance $50,000");
+    await expect(balance).toContainText("$50,000.00");
     await expect(balance).toContainText("Equity $50,000");
     await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
     await openDesk(page, "/practice");
     const row = swingRow(page);
     await expect(row).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
-    await expect(row).toContainText("Balance $50,000");
+    await expect(row).toContainText("$50,000.00"); // D-112: the balance sits in its own cell, not in the sub-line
     await expect(row).toContainText("Equity $50,000");
     await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(table.getByRole("row", { name: /Day trading/ })).toBeVisible(); // both threads at once
@@ -90,7 +90,7 @@ test.describe("Swing practice", () => {
         { timeout: 60_000 },
       )
       .toBe(true);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 15 · Week 1 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 15 · Mon");
     await expect(page.getByRole("table", { name: "Universe" }).getByRole("row")).toHaveCount(13);
     await expectNoDates(page);
   });
@@ -103,9 +103,13 @@ test.describe("Swing practice", () => {
     await page.waitForURL(BOARD_URL);
 
     // The board: 12 names with their source tags, the survivorship label, no review, no list chips, no dates.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Day 1 of 15 · Week 1 · Mon · as of the prior close · Balance $50,000.00 · Equity $50,000.00 · SIMULATED",
-    );
+    // D-139: the title is the day and weekday; the week and the state are chips and the money is in the strip below.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Day 1 of 15 · Mon");
+    await expect(page.getByText("Week 1", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("as of the prior close", { exact: true })).toBeVisible();
+    const moneyStrip = page.getByRole("group", { name: "Practice thread" });
+    await expect(moneyStrip).toContainText("Balance $50,000.00");
+    await expect(moneyStrip).toContainText("Equity $50,000.00");
     const universe = page.getByRole("table", { name: "Universe" });
     await expect(universe.getByRole("row")).toHaveCount(13);
     await expect(universe.getByRole("row", { name: /S05/ })).toContainText("Manual");
@@ -200,7 +204,7 @@ test.describe("Swing practice", () => {
     await shot(page, "swing-end-prompt", false);
     await confirm.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day over");
+    await expect(page.getByText("Day over", { exact: true }).first()).toBeVisible(); // D-139: the state is a chip beside the title
     await expectNoDates(page);
     await shot(page, "swing-day-ended");
     const summary = page.getByRole("region", { name: "Day summary" });
@@ -225,7 +229,7 @@ test.describe("Swing practice", () => {
     await expect(row).toContainText("2 holds open");
     await row.getByRole("button", { name: "Continue Day 2" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 15 · Week 1 · Tue");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 15 · Tue");
     const holds = page.getByRole("table", { name: "Practice holds" });
     await expect(holds.getByRole("row")).toHaveCount(3);
 
@@ -234,7 +238,7 @@ test.describe("Swing practice", () => {
     const confirm = page.getByRole("group", { name: "Confirm passing the day" });
     await expect(confirm).toContainText("Your 2 holds ride through Day 2 unwatched.");
     await confirm.getByRole("button", { name: "Pass this day" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day over");
+    await expect(page.getByText("Day over", { exact: true }).first()).toBeVisible(); // D-139: the state is a chip beside the title
     const summary = page.getByRole("region", { name: "Day summary" });
     await expect(summary).toContainText("Passed");
     await expect(summary).toContainText("$50,000"); // nothing was exited: the balance did not move
@@ -245,7 +249,7 @@ test.describe("Swing practice", () => {
     // Day 3: a watched day. No star is needed: Start Day 3 opens the first practice hold.
     await page.getByRole("button", { name: "Continue Day 3" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 3 of 15 · Week 1 · Wed");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 3 of 15 · Wed");
     await page.getByRole("button", { name: "Start Day 3" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
@@ -271,7 +275,7 @@ test.describe("Swing practice", () => {
     await expect(confirmEnd).toContainText("Your 1 hold stays open through the close, unwatched.");
     await confirmEnd.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day over");
+    await expect(page.getByText("Day over", { exact: true }).first()).toBeVisible(); // D-139: the state is a chip beside the title
 
     // After the exit day ends the balance holds the realized P/L and the equity adds the carried S04.
     const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];
@@ -282,7 +286,8 @@ test.describe("Swing practice", () => {
     const equity = balance + open[0].unrealized_usd;
     expect(closed[0].pnl_usd).toBeGreaterThan(0);
     expect((await get(context, `/threads/${threadId}`)).thread.stats.balance).toBeCloseTo(balance, 2);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(`Balance ${formatBalance(balance)} · Equity ${formatBalance(equity)}`);
+    await expect(page.getByRole("group", { name: "Practice thread" })).toContainText(`Balance ${formatBalance(balance)}`);
+    await expect(page.getByRole("group", { name: "Practice thread" })).toContainText(`Equity ${formatBalance(equity)}`);
     const ended = page.getByRole("region", { name: "Day summary" });
     await expect(ended).toContainText("0 · 1");
     await expect(page.getByRole("table", { name: "Practice holds" }).getByRole("row", { name: /^S01/ })).toContainText("Exit Day 3");
@@ -311,7 +316,7 @@ test.describe("Swing practice", () => {
     // Day 6, Mon: S03 splits 2 for 1 before the open. The board says so and the carried hold's P/L did not change.
     const dayList = await openNextDay(context, threadId);
     await openDesk(page, `/practice/day?id=${dayList}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Week 2 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon");
     const holds = page.getByRole("table", { name: "Practice holds" });
     const row = holds.getByRole("row", { name: /^S03/ });
     await expect(row).toContainText("200");
@@ -327,7 +332,7 @@ test.describe("Swing practice", () => {
     await page.getByRole("group", { name: "Confirm passing the day" }).getByRole("button", { name: "Pass this day" }).click();
     await page.getByRole("button", { name: "Continue Day 7" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Week 2 · Tue");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue");
     await expectNoDates(page);
     await page.getByRole("button", { name: "Start Day 7" }).click();
     await page.waitForURL(SESSION_URL);
@@ -394,14 +399,13 @@ test.describe("Swing practice", () => {
     await expect(row.getByRole("link")).toHaveCount(1);
     await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0); // the row itself is the way to the thread page
     await openRow(page, row);
-    await expect(page.getByRole("status").filter({ hasText: "Week 1 review ready" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
-    await expect(page.getByText("Day 6 unlocks after the Week 1 review")).toBeVisible();
+    await expect(page.getByText("Week 1 is done. Review it to unlock Day 6.")).toHaveCount(1); // D-085: said once
     await shot(page, "swing-hub-review-ready");
     await page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: "Week 1 review", exact: true }).click();
     await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 1 · 5 days");
-    await expect(page.getByText("Final", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Final/)).toBeVisible(); // "Final · N holds open" while holds ride on (D-130)
     await expect(page.getByText("Days 1 to 5", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Fixed universe · 12 symbols chosen today/)).toBeVisible();
     await shot(page, "swing-week");
@@ -455,7 +459,7 @@ test.describe("Swing practice", () => {
     // Start Week 2 opens Day 6's board.
     await page.getByRole("button", { name: "Start Week 2" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Week 2 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon");
     await expectNoDates(page);
 
     // The open week reads "to date": after Day 6 the board links to it.
@@ -467,7 +471,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByText("Through the last finished day's close · not final yet")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Start Week/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveCount(0); // Day 7 has no board yet
-    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
+    await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`); // D-088, D-089: back to the thread's page, not the journal
     await expectNoDates(page);
 
     // Once Day 7 is open, the same review goes back to its board.
@@ -476,7 +480,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveAttribute("href", `/practice/day?id=${dayList7}`);
     await page.getByRole("link", { name: "Back to Day 7" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Week 2 · Tue");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue");
   });
   test("acceptance: nothing past the day clock reaches the browser, a carried hold hand-checks, and the thread closes at the last close", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -620,7 +624,7 @@ test.describe("Swing practice", () => {
     await expect(playhead(page)).toContainText("4:00");
     await page.getByRole("button", { name: "End day" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day over");
+    await expect(page.getByText("Day over", { exact: true }).first()).toBeVisible(); // D-139: the state is a chip beside the title
     await openDesk(page, `/practice/journal?thread=${threadId}`);
     const closePlan = await railSection(page, "Thread details", PRACTICE_COPY.threadClose);
     await closePlan.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();

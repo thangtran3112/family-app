@@ -2,12 +2,14 @@
 
 import { useId } from "react";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
 import { curveLayout, type Box } from "@/lib/replay/threadChart";
 import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
-const BOX: Box = { width: 760, height: 240, left: 64, right: 24, top: 16, bottom: 32 };
+// `left` leaves the y labels their own room inside the card (they used to reach 7 px into its padding).
+const BOX: Box = { width: 760, height: 240, left: 76, right: 24, top: 16, bottom: 36 };
 
 /** The balance at the end of each day (02r board P8). Practiced days are solid dots, skipped days open circles, the newest
  *  point amber; the red shading is the part of the line below the starting balance. Colours come from the CSS classes. */
@@ -25,6 +27,12 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   // When the newest point is also the lowest, "Now" already says it: a second label on the same spot would print over it.
   const lowIsNow = lowest !== null && now !== null && lowest.x === now.x && lowest.y === now.y;
   const lowText = lowest ? `lowest ${formatBalance(lowest.balance)}` : "never below the start";
+  // The start note moves off the "Now" and "Lowest" labels, as on the swing curve (it printed over them on a live thread).
+  const others: CurveLabel[] = [
+    ...(now ? [{ x: now.x - 8, y: now.y - 8, text: `Now ${formatBalance(now.balance)}`, anchor: "end" as const }] : []),
+    ...(lowest && !lowIsNow ? [{ x: lowest.x, y: lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8, text: `Lowest ${formatBalance(lowest.balance)}`, anchor: lowRight ? ("end" as const) : ("start" as const) }] : []),
+  ];
+  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, others);
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, now ${formatBalance(stats.balance)}, ${lowText}.`;
 
   return (
@@ -41,7 +49,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
         </g>
       ))}
       <line x1={plot.x} x2={plot.x + plot.width} y1={startY} y2={startY} className={styles.startLine} />
-      <text x={plot.x + 6} y={startY - 6} className={styles.note}>{PRACTICE_COPY.curveStart}</text>
+      <text x={note.x} y={note.y} textAnchor={note.anchor} className={styles.note}>{note.text}</text>
       {drawn && (
         <>
           <path d={layout.area} clipPath={`url(#${clipId})`} className={styles.below} />
@@ -58,7 +66,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
         )}
       {points.map((point, index) =>
         index % every === 0 || index === last ? (
-          <text key={point.n} x={point.x} y={bottom + 16} textAnchor="middle" className={styles.axis}>{point.label}</text>
+          <text key={point.n} x={point.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{point.label}</text>
         ) : null,
       )}
       {now && (

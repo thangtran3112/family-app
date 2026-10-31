@@ -4,7 +4,7 @@ import { BalanceCurve } from "@/components/practice/journal/thread/BalanceCurve"
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { PracticePlan } from "@/lib/replay/daily";
-import { planArmedText, planCard } from "@/lib/replay/dayView";
+import { planCard } from "@/lib/replay/dayView";
 import type { Thread } from "@/lib/replay/threads";
 import { hasNoDays } from "@/lib/replay/threadView";
 import { NextStep } from "./NextStep";
@@ -27,7 +27,7 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: 
   return (
     <div className={o.grid}>
       <div className={o.main}>
-        <PlaceStrip summary={summary} />
+        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} />
         <div className={o.topRow}>
           <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (
@@ -36,7 +36,6 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: 
               <p className={styles.dayLine}>{card.headline}</p>
               {card.detail && <p className={hub.muted}>{card.detail}</p>}
               <p className={hub.muted}>{planHere.filters.map((filter) => filter.name).join(" · ")}</p>
-              <p className={hub.muted}>{planArmedText(planHere)}</p>
             </section>
           )}
         </div>
