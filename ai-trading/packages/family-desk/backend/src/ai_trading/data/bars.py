@@ -23,6 +23,9 @@ Timeframe = str  # "1d" | "1h" | "1m"
 _MODEL = {"1d": Bar1d, "1h": Bar1h, "1m": Bar1m}
 _COLUMNS = ("open", "high", "low", "close", "volume")
 _RETENTION_1M = timedelta(days=90)
+#: Rows per INSERT. A row binds 8 parameters and psycopg caps a statement at 65,535, so one statement tops out
+#: near 8,191 rows; a first-time 16-day minute backfill is ~9k rows. 5,000 stays far under the cap.
+_UPSERT_CHUNK = 5_000
 
 
 def _bar_day(asset: Asset, start: pd.Timestamp) -> date:
@@ -86,10 +89,11 @@ def upsert_bars(
         {"symbol": symbol, time_column: point, "source": source, **{c: float(row[c]) for c in _COLUMNS}}
         for point, row in frame.iterrows()
     ]
-    stmt = pg_insert(model).values(rows)
-    update_columns = {c: stmt.excluded[c] for c in (*_COLUMNS, "source")}
-    stmt = stmt.on_conflict_do_update(index_elements=["symbol", time_column], set_=update_columns)
-    session_.execute(stmt)
+    for offset in range(0, len(rows), _UPSERT_CHUNK):
+        stmt = pg_insert(model).values(rows[offset : offset + _UPSERT_CHUNK])
+        update_columns = {c: stmt.excluded[c] for c in (*_COLUMNS, "source")}
+        stmt = stmt.on_conflict_do_update(index_elements=["symbol", time_column], set_=update_columns)
+        session_.execute(stmt)
 
 
 def read_bars(

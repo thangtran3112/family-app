@@ -322,3 +322,13 @@ def test_seed_strip_never_stops_a_tick(monkeypatch):
 
     monkeypatch.setattr(scheduler.refresher, "ensure_market_strip", lambda session, sources, *, now: True)
     assert scheduler.seed_strip(_Session(), _FakeSources(), now=datetime(2026, 10, 24, 15, 0, tzinfo=UTC)) is True
+
+
+def test_log_result_warns_on_a_failure_and_stays_quiet_otherwise(caplog, monkeypatch):
+    monkeypatch.setattr(scheduler.logger, "disabled", False)  # alembic's fileConfig in the DB fixtures disables it
+    with caplog.at_level("DEBUG", logger=scheduler.logger.name):
+        scheduler._log_result(JobResult("premarket_0830", ok=False, error="boom"))
+        scheduler._log_result(JobResult("daily_close", ok=True, ran=False))
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert [r.getMessage() for r in warnings] == ["job premarket_0830 failed (ok=False ran=True): boom"]
+    assert [r.levelname for r in caplog.records] == ["WARNING", "DEBUG"]
