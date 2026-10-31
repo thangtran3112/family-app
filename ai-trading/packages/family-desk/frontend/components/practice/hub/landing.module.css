@@ -49,23 +49,11 @@
 .skelStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .skelStat { height: 32px; }
 
-/* The modal: a native dialog over a dimmed page. The body scrolls; the header and footer stay. */
-.dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); margin: auto; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-ground); padding: 0; color: var(--color-text); font-family: var(--font-sans); }
-.dialog[open] { display: flex; }
-.dialog::backdrop { background: rgb(0 0 0 / 0.68); }
-.dialogForm { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.dialogHead { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
-.dialogTitle { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
-.dialogBody { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-3); overflow-y: auto; padding: var(--space-4); }
-.dialogFoot { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
-.footNotes { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.submit { min-width: 160px; gap: var(--space-2); }
 /* Delete: muted until the pointer is on it, then the down colour; the confirm dialog is a small one. */
 button.deleteButton { color: var(--color-muted); }
 button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); color: var(--color-down); }
 .confirmDialog { width: min(420px, calc(100vw - 32px)); }
 .spinner { width: 12px; height: 12px; flex-shrink: 0; border: 2px solid var(--color-hairline); border-top-color: var(--color-amber); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.filterList { max-height: none; overflow-y: visible; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 50% { opacity: 0.45; } }

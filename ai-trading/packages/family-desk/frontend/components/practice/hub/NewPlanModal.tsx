@@ -20,7 +20,8 @@ import { formatWhole, threadName } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import { DayPlanFields } from "./DayPlanFields";
 import styles from "./hub.module.css";
-import modal from "./landing.module.css";
+import landing from "./landing.module.css";
+import modal from "./newplan.module.css";
 
 type Problems = SwingProblems & PlanProblems;
 /** Where a failed submit stopped: starting the thread or saving its plan. */
@@ -272,7 +273,7 @@ export function NewPlanModal({
             aria-busy={submitting || undefined}
             aria-describedby="new-plan-note"
           >
-            {submitting && <span className={modal.spinner} aria-hidden="true" />}
+            {submitting && <span className={landing.spinner} aria-hidden="true" />}
             {swing ? (submitting ? PRACTICE_COPY.planSubmitting : PRACTICE_COPY.swingStartThread) : submitting ? PRACTICE_COPY.newPlanSubmitting : PRACTICE_COPY.newPlanSubmit}
           </button>
         </footer>
