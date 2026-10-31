@@ -118,7 +118,7 @@ export const endedDayList: DayList = {
   ...dayList,
   status: "ended",
   clock: "2026-03-10T15:30:00Z",
-  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false }],
+  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false, trades: 1, realized_usd: 63, position: null }],
   journal: {
     sessions: [{ id: 12, symbol: "SMCI", trades: 1, pnl_usd: 63, adherence_pct: 100 }],
     trades: 1,

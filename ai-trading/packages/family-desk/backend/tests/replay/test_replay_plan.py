@@ -97,7 +97,7 @@ def _ready(db_session, user_id, svc) -> PracticePlan:
             "firstDay",
             "5 sessions from Tue 2026-10-20 run past the last finished day · pick an earlier start",
         ),
-        ({"screen": {"filters": [{"id": 999}]}}, "screen.filters.0.id", "Filter not found"),
+        ({"screen": {"filters": [{"id": 999_999}]}}, "screen.filters.0.id", "Filter not found"),
     ],
 )
 def test_create_plan_rejections_are_plain_problems(db_session, user_id, svc, changes, path, message) -> None:

@@ -869,8 +869,8 @@ export interface paths {
         put?: never;
         /**
          * Start Day Session
-         * @description Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in
-         *     v1: another name is a 409 until the day ends. A swing day allows several names on its shared clock.
+         * @description Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list
+         *     name opens, one open trade at a time: a switch with a trade open is a 409 until it is closed.
          */
         post: operations["start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post"];
         delete?: never;
@@ -3001,7 +3001,7 @@ export interface components {
         };
         /**
          * DaySessionOut
-         * @description A name she has practised today: the day strip's row.
+         * @description A name she has opened today: a row of the day's portfolio. Flat unless `position` is set.
          */
         DaySessionOut: {
             /** Behind Clock */
@@ -3010,6 +3010,9 @@ export interface components {
             has_open_trade: boolean;
             /** Id */
             id: number;
+            position: components["schemas"]["OpenTradeOut"] | null;
+            /** Realized Usd */
+            realized_usd: number;
             /**
              * Revealed Through
              * Format: date-time
@@ -3022,6 +3025,8 @@ export interface components {
             status: "active" | "ended";
             /** Symbol */
             symbol: string;
+            /** Trades */
+            trades: number;
         };
         /**
          * DayTradeLineOut

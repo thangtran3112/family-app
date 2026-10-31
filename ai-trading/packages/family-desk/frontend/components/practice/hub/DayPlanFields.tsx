@@ -122,7 +122,7 @@ export function DayPlanFields({
               onChange={(sessions) => onDraft({ ...draft, sessions })}
             />
           </Cell>
-          <Cell id="plan-hide" label={PRACTICE_COPY.planHideDates} group note={PRACTICE_COPY.planHideDatesHint}>
+          <Cell id="plan-hide" label={PRACTICE_COPY.planHideDates} group span note={PRACTICE_COPY.planHideDatesHint}>
             <Segments
               id="plan-hide"
               value={draft.hideDates ? "yes" : "no"}

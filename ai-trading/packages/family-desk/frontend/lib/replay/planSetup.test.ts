@@ -52,7 +52,8 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.equal(JSON.stringify(spec).includes("null"), false);
 });
 
-test("the plan has no names-a-day setting: the block carries no maxSymbols and the draft has no picker", () => {
+test("a plan has no names-a-day: the draft and the block carry no cap (a day opens any list name)", () => {
+  assert.equal("maxSymbols" in defaultPlanDraft(NOW), false);
   assert.equal("maxSymbols" in (planDraftToSpec(ready()) as Record<string, unknown>), false);
   assert.equal("maxSymbols" in ready(), false);
   assert.equal(validatePlanDraft(ready()).ok, true);
