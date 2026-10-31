@@ -463,3 +463,18 @@ Every stage ends with its gates green plus the **dual-agent post-phase walkthrou
 10. **`trades` and `universe`** (Alpaca-only, used by Practice): stay direct Python (recommended) or move into the bridge for full provider independence.
 11. **Does decision 7 ("never orders") retire Desk v1's IBKR paper orders** (02a §6; STATUS constraint)? The Practice lane already replaced paper trading in the desktop MVP.
 12. **The family-scoped routing row:** a new small table (recommended), or an owner-only key in the per-user settings JSON.
+
+### Rulings (Hermes, 2026-10-31; do-not-reopen)
+
+1. **IBKR edge = Python** (`providers/ibkr.py` + `ib_async`), speaking the same Connect protocol as every other client — IBKR has no official Go API and the built, probe-pinned client wins; the "grpcio on the laptop" caveat is dropped with ruling 2. The bridge itself stays Go.
+2. **Connect unary JSON for the Python seam, APPROVED** — connect-go serves native gRPC, gRPC-Web, and Connect on the one port (§3.1), so the bridge is a real Go gRPC service while Python adds no dependency and no codegen; any future strict-gRPC consumer uses the same service unchanged.
+3. **$30 delayed marketdata.app is the options fallback** — the owner named the $30 plan, and 15-minute-delayed chains are acceptable for covered-call scanning. Escalating to the $75 Trader plan plus an OPRA entitlement needs an explicit owner decision at B6, only if Longbridge's real-time options disappoint.
+4. **Tailscale sidecar plus Terraform ACL under `infrastructure/`, APPROVED** — infrastructure as code, and the shared VPS host stays untouched.
+5. **IBKR is an options rung while the gateway is on** (OPRA L1 rides the ~$4.50 add-on); the options ladder is `ibkr → longbridge → marketdata_app → alpaca` (indicative floor). Stocks-first phasing is unchanged (B6 remains the options stage).
+6. **Owner-only toggle** (the `PUT /api/desk/settings/market-data` route is owner-only via `DESK_OWNER_EMAILS`); the wife sees the card read-only.
+7. **Not a ruling — a B1 verification:** the Gateway probe (B1 step 1) confirms whether the $14.50 bundles are still active; if they lapsed, re-subscribing is a one-time owner dashboard action.
+8. **Go bridge at `market-data/bridge/` with the 01m facade left at `market-data/` root, APPROVED**; revisit only at B7.
+9. **Delete `marketdata_app` (and later `alpaca_options`) after the Go adapter passes the shared goldens (B7)**; `tradier` stays dormant for good (decision 2).
+10. **`trades` and `universe` stay direct Python** — Alpaca-only kinds the Practice lane depends on; provider independence is not needed there.
+11. **Yes — 02a §6's IBKR paper orders are superseded in docs** by the standing no-orders rule and the Practice lane (docs only; no order code exists).
+12. **New family-scoped routing table, APPROVED** (one small migration; version, updated_by, updated_at) — not a per-user settings key for a family-wide value.
