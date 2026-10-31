@@ -41,9 +41,19 @@ class FakeSession:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls: list[tuple[str, dict | None, dict | None]] = []
+        #: POST calls as `(url, json_body, headers)`, kept apart from `get`'s `calls` so a test that
+        #: mixes both (the bridge seam: a GET `/healthz` then a POST RPC) asserts each on its own list.
+        self.posts: list[tuple[str, dict | None, dict | None]] = []
 
     def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append((url, params, headers))
+        item = self.responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def post(self, url, params=None, headers=None, json=None, timeout=None):
+        self.posts.append((url, json, headers))
         item = self.responses.pop(0)
         if isinstance(item, Exception):
             raise item

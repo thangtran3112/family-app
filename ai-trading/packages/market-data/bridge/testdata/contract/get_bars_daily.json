@@ -11,17 +11,21 @@
     "bars": [
       {
         "close": 184,
+        "closeAt": "2024-04-30T20:00:00Z",
         "high": 185,
         "low": 179,
         "open": 180,
+        "sessionDate": "2024-04-30",
         "start": "2024-04-30T04:00:00Z",
         "volume": "1000"
       },
       {
         "close": 187.5,
+        "closeAt": "2024-05-01T20:00:00Z",
         "high": 190,
         "low": 183,
         "open": 184,
+        "sessionDate": "2024-05-01",
         "start": "2024-05-01T04:00:00Z",
         "volume": "1200"
       }

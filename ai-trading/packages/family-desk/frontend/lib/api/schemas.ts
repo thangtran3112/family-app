@@ -168,9 +168,55 @@ const FuturesSpecSchema = z.object({
 
 export const FuturesSpecsSchema = z.array(FuturesSpecSchema) satisfies z.ZodType<components["schemas"]["FuturesSpecOut"][]>;
 
+// The Market-data card (02t §6): the bridge's own provider health per class, what the Desk serves now,
+// and whether this viewer may change it.
+export const MarketDataOptionSchema = z.object({
+  provider: z.string(),
+  configured: z.boolean(),
+  state: z.string(),
+  quality: quality.nullable(),
+  in_ladder: z.boolean(),
+  detail: z.string().nullable(),
+});
+
+export const MarketDataClassSchema = z.object({
+  data_class: z.enum(["equity_quotes", "equity_bars", "option_chain"]),
+  preferred: z.string(),
+  serving: z.string(),
+  ladder: z.array(z.string()),
+  options: z.array(MarketDataOptionSchema),
+});
+
+export const MarketDataCardSchema = z.object({
+  shadow: z.boolean(),
+  owner: z.boolean(),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+  routing_source: z.string(),
+  version: finiteNumber.int(),
+  desk_serving: z.string(),
+  desk_quality: quality.nullable(),
+  classes: z.array(MarketDataClassSchema),
+});
+
+export const MarketDataChoiceSchema = z.object({
+  routing_source: z.string(),
+  version: finiteNumber.int(),
+  classes: z.array(MarketDataClassSchema),
+  warning: z.string().nullable(),
+});
+
 export const StatusSchema = z.object({
   gateway: z.enum(["not_configured", "connected", "reconnecting", "down"]),
-  data_sources: z.enum(["unknown", "alpaca", "ibkr", "mixed"]),
+  gateway_reason: z.string().nullable(),
+  // The serving vendor per data class, not one "mixed" guess (02t §5.5).
+  data_sources: z.object({
+    quotes: z.string(),
+    bars: z.string(),
+    option_chain: z.string(),
+    trades: z.string(),
+    universe: z.string(),
+  }),
   streaming_slots: z.object({ used: finiteNumber.int(), max: finiteNumber.int() }),
   backups: z.null(),
   reconciliation: z.null(),
@@ -559,6 +605,10 @@ export type Problem = z.infer<typeof ProblemSchema>;
 export type Bars = z.infer<typeof BarsSchema>;
 export type Technicals = z.infer<typeof TechnicalsSchema>;
 export type DeskStatus = z.infer<typeof StatusSchema>;
+export type MarketDataCard = z.infer<typeof MarketDataCardSchema>;
+export type MarketDataClass = z.infer<typeof MarketDataClassSchema>;
+export type MarketDataOption = z.infer<typeof MarketDataOptionSchema>;
+export type MarketDataChoice = z.infer<typeof MarketDataChoiceSchema>;
 export type Dashboard = z.infer<typeof DashboardSchema>;
 export type Markers = z.infer<typeof MarkersSchema>;
 export type ScreenerFilter = z.infer<typeof ScreenerFiltersSchema>[number];

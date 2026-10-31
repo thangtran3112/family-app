@@ -59,7 +59,8 @@ def test_without_a_gateway_the_row_is_not_configured_and_nothing_changes(client,
     db_session.commit()
     body = _status(client)
     assert body["gateway"] == "not_configured"
-    assert body["data_sources"] == "alpaca"
+    assert body["gateway_reason"] is None
+    assert body["data_sources"]["quotes"] == "alpaca"
     assert body["quotes"]["source"] == "alpaca" and body["quotes"]["quality"] == "delayed-15m"
     assert body["streaming_slots"] == {"used": 0, "max": 70}
 
@@ -72,14 +73,15 @@ def test_a_gateway_that_is_not_connected_keeps_the_delayed_quotes_stamp(client, 
     body = _status(client)
     assert body["gateway"] == state
     assert body["quotes"]["source"] == "alpaca" and body["quotes"]["quality"] == "delayed-15m"
-    assert body["data_sources"] == "alpaca"
+    assert body["data_sources"]["quotes"] == "alpaca"
 
 
 def test_a_live_tick_stamps_quotes_with_ibkrs_own_quality_and_time(client, clock):
     with_gateway(GatewayStatus("connected", "realtime", TICK_AT, 12))
     body = _status(client)
     assert body["gateway"] == "connected"
-    assert body["data_sources"] == "mixed"  # quotes from IBKR, scans and backfill still Alpaca
+    # Per class, not one "mixed" guess (02t §5.5): quotes come from IBKR, everything else stays Alpaca.
+    assert body["data_sources"]["quotes"] == "ibkr"
     assert body["streaming_slots"] == {"used": 12, "max": 70}
     quotes = body["quotes"]
     assert (quotes["source"], quotes["quality"], quotes["freshness"]) == ("ibkr", "realtime", "live")
@@ -113,7 +115,7 @@ def test_a_seeded_strip_gives_quotes_an_end_of_day_stamp_until_a_pass_has_run(cl
         "quality": "eod",
         "freshness": "delayed",
     }
-    assert body["data_sources"] == "alpaca"
+    assert body["data_sources"]["quotes"] == "alpaca"
     assert body["scans"]["quality"] == "unavailable"  # no screener run stands behind a seed
 
     db_session.merge(FeedHealth(feed="bars_delayed", state="ok", last_ok_at=IN_SESSION, updated_at=IN_SESSION))

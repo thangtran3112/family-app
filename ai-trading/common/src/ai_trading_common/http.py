@@ -147,6 +147,75 @@ class ThrottledClient:
         connection error, or 5xx. Any other status is returned to the caller to
         interpret (an unknown symbol, a bad key, and so on are provider-specific).
         """
+        return self._send(
+            "get",
+            url,
+            provider=provider,
+            host_key=host_key,
+            user_agent=user_agent,
+            min_interval=min_interval,
+            params=params,
+            headers=headers,
+            timeout=timeout,
+            ban_prone=ban_prone,
+            default_cooldown=default_cooldown,
+            retries=retries,
+        )
+
+    def post(
+        self,
+        url: str,
+        *,
+        provider: str,
+        host_key: str,
+        user_agent: str,
+        json_body: Any = None,
+        min_interval: float = 0.0,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float = 15.0,
+        ban_prone: bool = False,
+        default_cooldown: float = DEFAULT_COOLDOWN_S,
+        retries: int = len(DEFAULT_RETRY_BACKOFFS),
+    ) -> requests.Response:
+        """POST `json_body`, with the same throttle, retries, and soft-ban latch as `get`.
+
+        Connect unary JSON is a POST with the whole request message as the body (02t §3.1), so the
+        bridge seam needs exactly this: one small `post` beside `get`, no new dependency.
+        """
+        return self._send(
+            "post",
+            url,
+            provider=provider,
+            host_key=host_key,
+            user_agent=user_agent,
+            min_interval=min_interval,
+            params=params,
+            headers=headers,
+            json_body=json_body,
+            timeout=timeout,
+            ban_prone=ban_prone,
+            default_cooldown=default_cooldown,
+            retries=retries,
+        )
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        provider: str,
+        host_key: str,
+        user_agent: str,
+        min_interval: float = 0.0,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        json_body: Any = None,
+        timeout: float = 15.0,
+        ban_prone: bool = False,
+        default_cooldown: float = DEFAULT_COOLDOWN_S,
+        retries: int = len(DEFAULT_RETRY_BACKOFFS),
+    ) -> requests.Response:
         banned_for = self.throttle.banned_for(host_key)
         if banned_for > 0:
             raise SoftBanned(provider, f"{host_key} is soft-banned for {banned_for:.0f}s more")
@@ -159,7 +228,12 @@ class ThrottledClient:
         while True:
             self.throttle.wait(host_key, min_interval)
             try:
-                response = self._session.get(url, params=params, headers=merged_headers, timeout=timeout)
+                if method == "post":
+                    response = self._session.post(
+                        url, params=params, headers=merged_headers, json=json_body, timeout=timeout
+                    )
+                else:
+                    response = self._session.get(url, params=params, headers=merged_headers, timeout=timeout)
             except (requests.ConnectionError, requests.Timeout) as exc:
                 if attempt >= retries:
                     # requests' message carries the full URL, and some providers put the key in the query

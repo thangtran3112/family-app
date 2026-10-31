@@ -54,14 +54,21 @@ test("Settings shows the Technical default, channels, quiet hours, data sources 
   await expect(quietStart(page)).toHaveValue("22:00");
   await expect(quietEnd(page)).toHaveValue("07:00");
 
-  // Market data rows, in plain words (the freshness copy, read from /status).
-  await expect(page.getByRole("region", { name: "Market data" }).getByRole("listitem")).toHaveText([
-    "Quotes: Alpaca · Delayed 15 min",
-    "Scans: Alpaca · Delayed 15 min",
-    "Live IBKR quotes: not turned on · using delayed quotes",
-    "Quote slots: 0 of 70",
-    COPY.alertsNotStarted,
-  ]);
+  // The Market-data card (02t §6) in its honest no-bridge state: it says what the Desk serves, offers the
+  // four providers read-only, and never claims the bridge is serving anything.
+  const marketData = page.getByRole("region", { name: "Market data" });
+  await expect(marketData.getByText("PREVIEW")).toBeVisible();
+  await expect(marketData.getByText("The Desk still shows Alpaca. This is what the bridge would serve.")).toBeVisible();
+  await expect(marketData.getByText("The bridge is not connected yet, so nothing can be switched.")).toBeVisible();
+  for (const row of ["Stock quotes", "Option chains", "Bars"]) {
+    await expect(marketData.getByRole("heading", { name: row })).toBeVisible();
+  }
+  await expect(marketData.getByText("Serving now: Alpaca · 15-min delayed · nothing on the bridge can serve yet")).toBeVisible();
+  await expect(marketData.getByText("Alpaca (delayed) · provider choice arrives with covered-call options")).toBeVisible();
+  await expect(marketData.getByText("Serving now: Alpaca · closed bars only")).toBeVisible();
+  await expect(marketData.getByText("Options only: its stock quotes are 15 minutes delayed on every plan")).toBeVisible();
+  await expect(marketData.getByText("Only the owner changes data providers")).toBeVisible();
+  await expect(marketData.getByRole("radio")).toHaveCount(0);  // not the owner: nothing to switch
 
   // Broker rows are switches that cannot change, with the orders-off reason; no order control.
   const trading = page.getByRole("region", { name: "Trading" });
@@ -191,7 +198,7 @@ test("More shows the same settings content under its own title", async ({ page }
   await expect(page.getByRole("group", { name: "Default view" }).getByRole("radio", { name: "Technical" })).toBeChecked();
   await expect(pauseSwitch(page)).toBeVisible();
   await expect(quietStart(page)).toHaveValue("22:00");
-  await expect(page.getByRole("region", { name: "Market data" })).toContainText("Quotes: Alpaca · Delayed 15 min");
+  await expect(page.getByRole("region", { name: "Market data" })).toContainText("Serving now: Alpaca");
   await expect(page.getByRole("region", { name: "Trading" }).getByRole("switch", { name: "Place orders", exact: true })).toBeDisabled();
   await expectCleanScreen(page);
 });

@@ -132,7 +132,8 @@ class TestDefaults:
 
 class TestTradesKind:
     def test_data_sources_has_a_trades_field_after_quotes(self):
-        assert [f.name for f in fields(DataSources)][-3:-1] == ["quotes", "trades"]
+        names = [f.name for f in fields(DataSources)]
+        assert names.index("trades") == names.index("quotes") + 1
 
     def test_a_trades_provider_is_served_through_the_chain(self):
         fake = FakeAdapter("trades-fake")
@@ -157,9 +158,13 @@ class TestOptionChainKind:
         assert DEFAULT_CHAINS["option_chain"] == ("alpaca_options",)
 
     def test_data_sources_has_an_option_chain_field_last_and_defaulted(self):
-        last = fields(DataSources)[-1]
-        assert last.name == "option_chain"
-        assert last.default is None  # a DataSources written before this kind existed still builds
+        # It is the last *kind* field; the two seams follow it (02t B2): `bridge`, the routing surface the
+        # Settings card and the sync job read, and `serving`, the per-class vendor `/status` reports.
+        names = [f.name for f in fields(DataSources)]
+        kinds = [name for name in names if name in set(get_args(Kind))]
+        assert names.index("option_chain") == len(kinds) - 1
+        assert fields(DataSources)[names.index("option_chain")].default is None  # a pre-existing DataSources builds
+        assert [name for name in names if name not in set(get_args(Kind))] == ["bridge", "serving"]
 
     def test_a_pre_option_chain_data_sources_still_builds(self):
         unused = object()

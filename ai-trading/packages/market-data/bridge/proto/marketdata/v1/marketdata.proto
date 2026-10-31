@@ -97,6 +97,9 @@ message GetBarsRequest {
   google.protobuf.Timestamp end = 4;
   Adjustment adjustment = 5;  // unspecified = ALL, as in the Python BarsSource
   string pin_provider = 6;
+  // C0. Only bars that had closed by this instant are returned (no look-ahead, the rule
+  // ai_trading.data.bars.read_bars applies); unset means now, so an old client is never surprised.
+  google.protobuf.Timestamp as_of = 7;
 }
 
 message Bar {
@@ -106,6 +109,14 @@ message Bar {
   double low = 4;
   double close = 5;
   int64 volume = 6;
+  // C0. YYYY-MM-DD of the XNYS session this bar belongs to, from the exchange calendar: the New
+  // York trading date, never the UTC date of the stamp (5U: a 19:59 ET bar in EST is 00:59Z the
+  // next day but belongs to the ET date).
+  string session_date = 7;
+  // C0. The instant this bar closed, from the exchange calendar (16:00 ET, 13:00 ET on an early
+  // close; a minute bar one minute after its start). Named close_at because field 5 already is
+  // `close`: protocol buffers forbid two fields with one name in a message.
+  google.protobuf.Timestamp close_at = 8;
 }
 
 message GetBarsResponse {
