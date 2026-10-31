@@ -388,13 +388,17 @@ test.describe("Swing practice", () => {
     await openDesk(page, "/practice");
     const row = swingRow(page);
     await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
-    await expect(row.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
+    // 5R: the owed review is not a row action. The row says it is due, its one link is the thread's own, and the overview carries the review.
+    await expect(row.getByRole("link", { name: "Open Week 1 review" })).toHaveCount(0);
+    await expect(row).toContainText("Week 1 review due");
+    await expect(row.getByRole("link")).toHaveCount(1);
     await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0); // the row itself is the way to the thread page
     await openRow(page, row);
     await expect(page.getByRole("status").filter({ hasText: "Week 1 review ready" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
+    await expect(page.getByText("Day 6 unlocks after the Week 1 review")).toBeVisible();
     await shot(page, "swing-hub-review-ready");
-    await page.getByRole("link", { name: "Open Week 1 review" }).click();
+    await page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: "Week 1 review", exact: true }).click();
     await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 1 · 5 days");
     await expect(page.getByText("Final", { exact: true })).toBeVisible();

@@ -86,6 +86,8 @@ export const ThreadSummarySchema = z.object({
   today: ThreadTodaySchema.nullable(),
   /** The last ended day, from the balance's own series: the card's row while no day is open (D-048). */
   last_day: ThreadDaySchema.nullable(),
+  /** UTC wall-clock moment a day list opened, a day ended or a week closed; never a replayed date. Null while the thread is fresh. */
+  last_activity_at: z.iso.datetime({ offset: true }).nullable(),
   label: z.string(),
   swing: SwingStateSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["ThreadSummaryOut"]>;

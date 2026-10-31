@@ -6,6 +6,25 @@ const PRE_MARKET = "2026-10-15T12:00:00Z";
 
 test.beforeEach(async ({ context }) => prepareDesk(context, "technical"));
 
+// 5R: the View chips read as a switch, not two more nav tabs: Technical first, a visible caption, a tooltip that says what the chip switches to.
+test("the View chips list Technical first, carry a caption and say where each one leads", async ({ page }) => {
+  await openDesk(page, "/");
+  const top = page.locator(".dk-top");
+  const chips = top.getByRole("radiogroup", { name: "View" }).getByRole("radio");
+  await expect(chips).toHaveText(["Technical", "Fundamental"]);
+  await expect(top.getByText("View", { exact: true })).toBeVisible();
+  await expect(chips.nth(0)).toHaveAttribute("title", "Day and swing practice, screener, alerts");
+  await expect(chips.nth(1)).toHaveAttribute("title", "Holdings, covered calls, research");
+
+  // On a Technical-only screen the other chip stays clickable and says what the switch leaves.
+  await openDesk(page, "/practice");
+  await expect(chips.nth(1)).toBeEnabled();
+  await expect(chips.nth(1)).toHaveAttribute("title", "Leaves Practice · Technical-only screen");
+  await expect(chips.nth(0)).toHaveAttribute("title", "Day and swing practice, screener, alerts");
+  await chips.nth(1).focus();
+  await expect(chips.nth(1)).toBeFocused();
+});
+
 test("the top bar, left rail and status bar show the Technical chrome at the seed clock", async ({ page }) => {
   const compact = test.info().project.name === "desktop-1180";
   await openDesk(page, "/");

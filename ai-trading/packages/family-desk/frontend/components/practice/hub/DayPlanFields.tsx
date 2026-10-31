@@ -25,7 +25,7 @@ import { INTERVALS } from "@/lib/replay/setup";
 import { runLabels } from "@/lib/spec/describe";
 import { ArmStrategiesField } from "./ArmStrategiesField";
 import styles from "./hub.module.css";
-import modal from "./landing.module.css";
+import modal from "./newplan.module.css";
 
 /**
  * The daily-list half of the New plan modal (02r2, from the old daily-plan form): her filters as one vertical column of

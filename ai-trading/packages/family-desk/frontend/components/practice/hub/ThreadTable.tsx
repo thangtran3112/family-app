@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, type MouseEvent } from "react";
+import { useEffect } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadDaily } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { threadProgress } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
 import type { PracticeThread, ThreadSummary } from "@/lib/replay/threads";
 import {
@@ -16,6 +16,7 @@ import {
   formatDayResult,
   threadModeLabel,
   threadName,
+  threadStartedText,
   todayView,
   winRateText,
 } from "@/lib/replay/threadView";
@@ -27,8 +28,9 @@ import styles from "./landing.module.css";
 const POLL_MS = 4000;
 
 /** The landing's table (Paper mock LEW-0): one row per thread, the active ones first and the closed ones below. Every
- *  dollar figure is SIMULATED. A click anywhere on a row opens the thread page; the last column holds the one action
- *  (Resume, or the swing thread's own, or Journal for a closed thread) and a Delete button. Each active day thread reads
+ *  dollar figure is SIMULATED. The thread's name is a link stretched over the whole row, so a click, Enter, a middle click
+ *  and a cmd-click all open the thread's overview; the last column holds the one action (Resume, or the swing thread's own
+ *  Continue or Start, or Journal for a closed thread) and a Delete button, both clear of that link. Each active day thread reads
  *  its own plan, because several can run at once. While `loading` the rows are two grey skeletons.
  *  `busy` is true while any row's action is opening a day: every row waits, so a second click cannot race the first.
  *  `revision` is bumped when something changed, so each row refetches its plan. */
@@ -58,8 +60,7 @@ export function ThreadTable({
           <tr>
             <th scope="col">{PRACTICE_COPY.landingColThread}</th>
             <th scope="col">{PRACTICE_COPY.threadBalance}</th>
-            <th scope="col" className={styles.num}>{PRACTICE_COPY.landingColDays}</th>
-            <th scope="col" className={styles.num}>{PRACTICE_COPY.threadSkipped}</th>
+            <th scope="col">{PRACTICE_COPY.landingColProgress}</th>
             <th scope="col" className={styles.num}>{PRACTICE_COPY.threadWinRate}</th>
             {wide && <th scope="col">{PRACTICE_COPY.landingColLastDay}</th>}
             <th scope="col" className={styles.actionHead}>{PRACTICE_COPY.landingColAction}</th>
@@ -83,8 +84,7 @@ function SkeletonRow({ wide }: { wide: boolean }) {
     <tr className={styles.skelRow} aria-hidden="true">
       <td><span className={`${styles.skel} ${styles.skelName}`} /></td>
       <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
-      <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
-      <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
+      <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
       <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
       {wide && <td><span className={`${styles.skel} ${styles.skelName}`} /></td>}
       <td className={styles.actionCell}><span className={`${styles.skel} ${styles.skelAction}`} /></td>
@@ -109,17 +109,13 @@ function ThreadRow({
   onChanged: () => void;
   onNewPlan: (thread: PracticeThread) => void;
 }) {
-  const router = useRouter();
   const { thread, last_day: lastDay, today } = summary;
   const href = `/practice/thread?id=${thread.id}`;
-  // The whole row opens the thread page. The name link does the same for the keyboard; a click on the action does its own thing.
-  const openThread = (event: MouseEvent<HTMLTableRowElement>) => {
-    if (!busy && !(event.target as HTMLElement).closest("a, button")) router.push(href);
-  };
   const { stats } = thread;
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
   const view = todayView(today, lastDay);
+  const progress = threadProgress(summary);
   // An active day thread's own plan (the card says Resume or "New plan needed" from it); other threads need none.
   const dayActive = !closed && thread.mode === "day";
   const daily = useDeskQuery(`replay-daily:${thread.id}`, (signal) => loadDaily({ threadId: thread.id, signal }), { enabled: dayActive, revision });
@@ -132,7 +128,7 @@ function ThreadRow({
     return () => clearInterval(timer);
   }, [preparing, refresh]);
   return (
-    <tr className={styles.row} data-status={thread.status} data-busy={busy || undefined} aria-label={`${threadName(thread)} · ${threadModeLabel(thread.mode)}`} onClick={openThread}>
+    <tr className={styles.row} data-status={thread.status} data-busy={busy || undefined} aria-label={`${threadName(thread)} · ${threadModeLabel(thread.mode)}`}>
       <th scope="row" className={styles.threadCell}>
         <span className={styles.threadHead}>
           <Link href={href} className={styles.threadName} {...lockLink(busy)}>{threadName(thread)}</Link>
@@ -146,6 +142,7 @@ function ThreadRow({
             </span>
           )}
         </span>
+        <span className={styles.sub}>{threadStartedText(thread)}</span>
         {swing && <span className={styles.sub}>{swing.line}</span>}
       </th>
       <td>
@@ -155,8 +152,11 @@ function ThreadRow({
         </span>
         {summary.swing && <span className={styles.sub}>{practiceText("landingEquity", { amount: formatBalance(summary.swing.equity_usd) })}</span>}
       </td>
-      <td className={styles.num}>{stats.daysPracticed}</td>
-      <td className={styles.num}>{stats.daysSkipped}</td>
+      <td>
+        <span className={styles.progress}>{progress.main}</span>
+        <span className={styles.sub}>{progress.sub}</span>
+        {progress.gate && <span className={`${hub.chip} ${styles.gateChip}`}>{progress.gate}</span>}
+      </td>
       <td className={styles.num}>{winRateText(stats.winRate)}</td>
       {wide && (
         <td>

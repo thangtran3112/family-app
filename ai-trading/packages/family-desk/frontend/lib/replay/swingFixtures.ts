@@ -82,6 +82,7 @@ export const swingThreadSummary: ThreadSummary = {
   },
   today: { day_list_id: 71, day: "2026-07-14", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 },
   last_day: null,
+  last_activity_at: null,
   label: SIMULATED,
   swing: swingState,
 };
