@@ -127,7 +127,11 @@ class MarketDataApp:
             contract = _to_contract(
                 name, {key: column[i] for key, column in columns.items()}, symbol, root, right, today, quality
             )
-            if contract is not None and _in_band(contract.strike, min_strike, max_strike):
+            if (
+                contract is not None
+                and min_dte <= contract.dte <= max_dte
+                and _in_band(contract.strike, min_strike, max_strike)
+            ):
                 out.append(contract)
         return sorted(out, key=lambda c: (c.expiry, c.strike))
 
