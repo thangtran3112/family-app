@@ -367,6 +367,10 @@ func (brokenStore) Read(context.Context, string, string, string, string) ([]Sess
 func (brokenStore) Write(context.Context, string, string, []Session) error {
 	return errors.New("database down")
 }
+func (brokenStore) Bounds(context.Context, string) (string, string, error) {
+	return "", "", errors.New("database down")
+}
+func (brokenStore) Backend() string { return "postgres" }
 
 // Archive down: bars pass through from the provider, marked as such; the request does not fail.
 func TestStoreFailureNeverFailsTheRequest(t *testing.T) {

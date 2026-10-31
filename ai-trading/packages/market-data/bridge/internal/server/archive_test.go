@@ -13,6 +13,11 @@ import (
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
 )
 
+// memArchive turns the H1 archive on, over the in-memory store, at the harness's fixed clock.
+func memArchive(o *Options) {
+	o.Archive = archive.New(archive.NewMemStore(), slog.New(slog.DiscardHandler), func() time.Time { return fixedNow })
+}
+
 func rawDaily(h *harness) (int, []byte) {
 	return h.post("GetBars", &pb.GetBarsRequest{
 		Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1, Adjustment: pb.Adjustment_RAW,
