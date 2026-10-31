@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 
 import type { AlertStrategy } from "@/lib/api/schemas";
@@ -13,6 +15,7 @@ import {
   lastFiredText,
   sourceText,
   statusText,
+  statusTone,
   triggerText,
   type RowAction,
 } from "@/lib/desk/alertsView";
@@ -21,9 +24,6 @@ import styles from "./alerts.module.css";
 /** Pause, or resume. A draft's "Turn on" is a resume too (02m §a3.7). */
 export const runRowAction = (action: Exclude<RowAction, null>, id: number) =>
   action === "pause" ? pauseAlertStrategy(id) : resumeAlertStrategy(id);
-
-/** Active is up, paused is amber, draft and expired stay muted (a word plus colour). */
-export const statusTone = (status: AlertStrategy["status"]) => (status === "active" ? "up" : status === "paused" ? "amber" : "muted");
 
 const FREQUENCY_SHORT = { once: "Once", once_per_bar: "Per bar", every_time: "Every time" } as const;
 
@@ -40,7 +40,7 @@ const columns: DenseColumn<AlertStrategy>[] = [
   },
   { key: "frequency", label: "Frequency", priority: 2, render: (row) => FREQUENCY_SHORT[row.frequency] },
   { key: "channels", label: "Channels", priority: 1, render: (row) => channelsText(row.channels) },
-  { key: "status", label: "Status", render: (row) => <span className={styles.chip} data-tone={statusTone(row.status)}>{statusText(row)}</span> },
+  { key: "status", label: "Status", render: (row) => <Badge tone={statusTone(row.status)}>{statusText(row)}</Badge> },
   {
     key: "last_fired",
     label: "Last fired",
@@ -91,9 +91,9 @@ export function AlertTable({
           const action = actionFor(row);
           if (!action) return null;
           return (
-            <button type="button" className={`${styles.button} ${styles.small}`} disabled={busy === row.id} onClick={() => act(row, action)}>
+            <Button size="sm" loading={busy === row.id} onClick={() => act(row, action)}>
               {busy === row.id ? "Working…" : actionLabel(action)}
-            </button>
+            </Button>
           );
         }}
       />
