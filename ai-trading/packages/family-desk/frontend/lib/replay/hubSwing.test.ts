@@ -81,11 +81,9 @@ test("the curve reads out in words for a screen reader, and every new copy row i
   );
   assert.equal(swingCurveSummary([], 50000, formatBalance), "Balance and equity at the close of each day. Starts at $50,000.00, balance now $50,000.00, equity now $50,000.00.");
   assert.equal(hubSwingText("startsWith", { balance: "$50,000", n: 50 }), "Starts with a pretend $50,000 and 50 names. The list is frozen once the thread starts.");
-  for (const [key, text] of Object.entries(HUB_SWING_COPY)) {
-    for (const line of typeof text === "string" ? [text] : Object.values(text)) {
-      assert.equal(containsPracticeBannedTerm(line), false, `${key}: ${line}`);
-      assert.equal(line, line.trim(), key);
-    }
+  for (const [key, line] of Object.entries(HUB_SWING_COPY)) {
+    assert.equal(containsPracticeBannedTerm(line), false, `${key}: ${line}`);
+    assert.equal(line, line.trim(), key);
   }
 });
 

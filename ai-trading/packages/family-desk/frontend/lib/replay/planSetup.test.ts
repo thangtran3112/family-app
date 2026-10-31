@@ -11,9 +11,11 @@ import {
   listTimeFrom,
   listTimeHeld,
   listTimeNeed,
+  livePlanProblems,
   planDraftToSpec,
   planFieldOfPath,
   planProblems,
+  startLabel,
   toggleFilter,
   validatePlanDraft,
   windowForList,
@@ -146,34 +148,21 @@ test("the list time follows the latest filter: the first offered time that works
   assert.equal(listTimeFrom("10:46"), "10:45"); // nothing later is offered
 });
 
-test("picking a filter arms it and moves an early list time up; dropping it disarms it", () => {
+// D-076: a new plan starts with nothing armed; ticking a filter only picks it for the list (the old silent auto-arm is gone).
+test("picking a filter moves an early list time up and arms nothing; dropping it leaves the rest", () => {
   const start = defaultPlanDraft(NOW);
   assert.equal(start.listAt, "08:30");
+  assert.deepEqual(start.setup.armed, []);
   const gap = withFilterToggled(start, 1, timings);
-  assert.deepEqual([gap.filterIds, gap.listAt, gap.setup.armed], [[1], "08:30", [{ source: "filter", id: 1 }]]); // premarket stays at 8:30
+  assert.deepEqual([gap.filterIds, gap.listAt, gap.setup.armed], [[1], "08:30", []]); // premarket stays at 8:30, nothing armed
   const volume = withFilterToggled(gap, 2, timings);
-  assert.deepEqual([volume.filterIds, volume.listAt], [[1, 2], "10:00"]);
-  assert.deepEqual(volume.setup.armed, [{ source: "filter", id: 1 }, { source: "filter", id: 2 }]);
+  assert.deepEqual([volume.filterIds, volume.listAt, volume.setup.armed], [[1, 2], "10:00", []]);
   assert.deepEqual([volume.setup.from, volume.setup.to], ["10:00", "11:30"]); // the window follows the list time
   assert.equal(validatePlanDraft({ ...volume, filterIds: [1, 2] }).ok, true);
   const dropped = withFilterToggled(volume, 2, timings);
-  assert.deepEqual([dropped.filterIds, dropped.setup.armed], [[1], [{ source: "filter", id: 1 }]]);
+  assert.deepEqual([dropped.filterIds, dropped.setup.armed], [[1], []]);
   assert.equal(dropped.listAt, "10:00"); // a time she can still use is left alone
-});
-
-test("arming keeps what she armed by hand, never doubles a filter, and stops at five", () => {
-  const alerts = [1, 2, 3, 4].map((id) => ({ source: "alert_strategy" as const, id }));
-  const draft = defaultPlanDraft(NOW);
-  const withAlerts = { ...draft, setup: { ...draft.setup, armed: alerts } };
-  const one = withFilterToggled(withAlerts, 1, timings);
-  assert.equal(one.setup.armed.length, 5);
-  const two = withFilterToggled(one, 3, timings); // the sixth is refused in the arm list, the filter is still picked
-  assert.deepEqual([two.filterIds, two.setup.armed.length], [[1, 3], 5]);
-  const back = withFilterToggled(two, 1, timings);
-  assert.deepEqual(back.setup.armed, alerts); // only the dropped filter leaves
-  const armedFirst = { ...draft, setup: { ...draft.setup, armed: [{ source: "filter" as const, id: 3 }] } };
-  assert.equal(withFilterToggled(armedFirst, 3, timings).setup.armed.length, 1); // already armed: one entry
-  const full = { ...draft, filterIds: [1, 2, 3] };
+  const full = { ...start, filterIds: [1, 2, 3] };
   assert.equal(withFilterToggled(full, 4, timings), full); // the fourth filter is refused: nothing changes
 });
 
@@ -190,4 +179,30 @@ test("a list time is held only when it is earlier than the picked filters need",
   assert.equal(listTimeHeld(gap.listAt, gapNeed), false, "Gap up needs 8:30: 10:00 holds");
   assert.equal(listTimeHeld("10:00", listTimeNeed([], timings)), false, "no cadence filter, nothing to say");
   assert.equal(validatePlanDraft({ ...volume, filterIds: [2] }).ok, true, "and the draft submits");
+});
+
+// M-03: the form validates as she edits. The range check runs locally: a block of sessions cannot run past the last finished day.
+test("a first day too late for the number of days is a problem as soon as the form is read, and a shorter run clears it", () => {
+  const late = ready({ firstDay: "2026-10-12", sessions: "20" });
+  const result = validatePlanDraft(late, NOW);
+  assert.equal(result.ok, false);
+  assert.match(!result.ok ? (result.problems.firstDay ?? "") : "", /^20 sessions from .* run past the last finished day/);
+  assert.equal(validatePlanDraft({ ...late, sessions: "5" }, NOW).ok, true); // 5 days from Oct 12 end Oct 16
+  assert.equal(validatePlanDraft(late).ok, true, "without a clock the local range read is skipped");
+});
+
+test("the live problems leave out the missing filter (the footer already says it) and show the rest", () => {
+  assert.deepEqual(livePlanProblems(defaultPlanDraft(NOW), NOW), {});
+  assert.deepEqual(Object.keys(livePlanProblems(ready({ sessions: "3" }), NOW)), ["sessions"]);
+  assert.deepEqual(Object.keys(livePlanProblems(ready({ maxList: "99" }), NOW)), ["maxList"]);
+  assert.deepEqual(Object.keys(livePlanProblems(ready({ firstDay: "2026-10-12" }), NOW)), ["firstDay"]);
+});
+
+// M-07 (D-076): the one button says what it does.
+test("the start button names the days; a bad or empty number reads plainly", () => {
+  assert.equal(startLabel("20", false), "Start 20-day practice");
+  assert.equal(startLabel("5", false), "Start 5-day practice");
+  assert.equal(startLabel("20", true), "Start 20-day swing practice");
+  assert.equal(startLabel("", false), "Start practice");
+  assert.equal(startLabel("abc", true), "Start swing practice");
 });
