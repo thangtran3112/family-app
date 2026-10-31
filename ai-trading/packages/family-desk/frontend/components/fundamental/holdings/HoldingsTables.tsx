@@ -42,18 +42,17 @@ const POSITION_COLUMNS: DenseColumn<HoldingView>[] = withPriorities<DenseColumn<
 /** The positions: one row per held symbol (02n §b3 FD3). */
 export function PositionsTable({ rows, masked, selected, onSelect }: { rows: readonly HoldingRow[]; masked: boolean; selected: string | null; onSelect: (symbol: string) => void }) {
   return (
-    <div className={fund.tight}>
-      <DenseTable
-        caption="Holdings"
-        columns={POSITION_COLUMNS}
-        rows={holdingViews(rows, masked)}
-        rowKey={(view) => view.symbol}
-        density="compact"
-        selectedKey={selected}
-        onSelect={(view) => onSelect(view.symbol)}
-        initialSort={{ key: "weight_pct", direction: "desc" }}
-      />
-    </div>
+    <DenseTable
+      caption="Holdings"
+      columns={POSITION_COLUMNS}
+      rows={holdingViews(rows, masked)}
+      rowKey={(view) => view.symbol}
+      density="compact"
+      tight
+      selectedKey={selected}
+      onSelect={(view) => onSelect(view.symbol)}
+      initialSort={{ key: "weight_pct", direction: "desc" }}
+    />
   );
 }
 
@@ -79,8 +78,6 @@ export function FundamentalsTable({ rows, chosen, masked, selected, onSelect }: 
     })),
   ];
   return (
-    <div className={fund.tight}>
-      <DenseTable caption="Fundamentals" columns={columns} rows={rows} rowKey={(row) => row.symbol} selectedKey={selected} onSelect={(row) => onSelect(row.symbol)} density="compact" />
-    </div>
+    <DenseTable caption="Fundamentals" columns={columns} rows={rows} rowKey={(row) => row.symbol} selectedKey={selected} onSelect={(row) => onSelect(row.symbol)} density="compact" tight />
   );
 }

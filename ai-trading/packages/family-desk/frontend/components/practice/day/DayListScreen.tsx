@@ -370,7 +370,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   </div>
                 </EmptyBlock>
               }
-              alwaysShowActions
               rowActions={(row) => (
                 <button
                   type="button"

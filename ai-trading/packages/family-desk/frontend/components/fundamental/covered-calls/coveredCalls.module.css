@@ -44,8 +44,4 @@
 .total { margin: 0; font-size: var(--text-label); }
 
 /* The 13-column candidates table runs edge to edge inside its panel so it fits the 1440 centre without scrolling; the flags are spelled out under it. */
-.tableBleed { margin-inline: calc(-1 * var(--space-4)); }
-/* !important beats DenseTable's own compact padding, which has higher specificity. */
-.tableBleed :is(th, td) { padding-inline: 4px !important; }
-.tableBleed :is(th, td):first-child { padding-left: var(--space-4) !important; }
-.tableBleed :is(th, td):last-child { padding-right: var(--space-4) !important; }
+.tableBleed { --dense-edge: var(--space-4); margin-inline: calc(-1 * var(--space-4)); }

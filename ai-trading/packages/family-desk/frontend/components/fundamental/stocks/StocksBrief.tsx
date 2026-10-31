@@ -64,16 +64,15 @@ export function StocksBrief() {
           ) : (
             <section className={styles.panel} aria-label="AI daily brief">
               {runLine && <p className={styles.muted} data-testid="fund-brief-run">{runLine}</p>}
-              <div className={styles.tight}>
-                <DenseTable
-                  caption="AI daily brief"
-                  columns={COLUMNS}
-                  rows={rows}
-                  rowKey={(row) => row.symbol}
-                  density="compact"
-                  empty={<EmptyBlock title="No stocks were analyzed in this run" />}
-                />
-              </div>
+              <DenseTable
+                caption="AI daily brief"
+                columns={COLUMNS}
+                rows={rows}
+                rowKey={(row) => row.symbol}
+                density="compact"
+                tight
+                empty={<EmptyBlock title="No stocks were analyzed in this run" />}
+              />
               {staleRows.length > 0 && (
                 <ul className={local.rangeLegend} aria-label="Stale views">
                   {staleRows.map((row) => <li key={row.symbol}>{row.symbol}: {row.stale}</li>)}

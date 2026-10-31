@@ -69,7 +69,7 @@ export function CandidatesPanel({ row, accountName }: { row: Pick<CoverageRow, "
           ) : (
             <>
               <div className={local.tableBleed}>
-                <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" />
+                <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" tight />
               </div>
               {flags.length > 0 && (
                 <ul className={local.notes} aria-label="What the flags mean">

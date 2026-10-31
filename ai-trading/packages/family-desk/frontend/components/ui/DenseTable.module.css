@@ -1,20 +1,24 @@
 .wrap { width: 100%; overflow-x: hidden; }
 .scrollX { overflow-x: auto; }
-.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-label); line-height: var(--line-label); font-variant-numeric: tabular-nums; }
 .table th, .table td { height: 28px; padding: 0 var(--space-3); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--color-hairline); }
 .wrap[data-density="compact"] .table th, .wrap[data-density="compact"] .table td { height: 24px; padding-inline: 6px; }
+/* tight: cells 4 px apart, the outer edges keep a gutter (--dense-edge, set by a wrapper that bleeds the table to its panel edge). Replaces the !important padding overrides callers had to write. */
+.wrap[data-tight="true"] .table :is(th, td) { padding-inline: 4px; }
+.wrap[data-tight="true"] .table :is(th, td):first-child { padding-left: var(--dense-edge, var(--space-3)); }
+.wrap[data-tight="true"] .table :is(th, td):last-child { padding-right: var(--dense-edge, var(--space-3)); }
 .table th { position: sticky; top: 0; z-index: 1; background: var(--color-ground); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.right { text-align: right !important; }
-.center { text-align: center !important; }
+.table .right { text-align: right; }
+.table .center { text-align: center; }
 /* The slack column: takes the width the others leave and clips its own text with an ellipsis (a 1180 rail has 215 px for four columns). */
 .table .fill { width: 100%; min-width: 0; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .row { box-shadow: inset 2px 0 0 transparent; }
 .row:hover { background: var(--color-raised); }
 .clickable { cursor: pointer; }
-.row:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .selected { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
 .sortButton { display: inline-flex; min-height: 24px; align-items: center; gap: 4px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
-.sortButton:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.sortButton:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .caret { width: 8px; color: var(--color-amber); font-size: 8px; }
 .sticky { position: sticky; left: 0; z-index: 1; background: var(--color-ground); }
 .row:hover .sticky { background: var(--color-raised); }
@@ -22,18 +26,21 @@
 th.sticky { z-index: 2; }
 .actionsHead { width: 1%; }
 .actions { width: 1%; text-align: right; }
-.actions > * { opacity: 0; }
-.row:hover .actions > *, .row:focus-within .actions > *, .actions > *:focus-visible { opacity: 1; }
-/* alwaysShowActions (the practice day list): visible without a hover, pinned to the scroller's right edge so a 1590 px table keeps its action in view. */
-.actionsPinned .actions > * { opacity: 1; }
-.actionsPinned .actions, .actionsPinned .actionsHead { position: sticky; right: 0; background: var(--color-ground); box-shadow: -1px 0 0 var(--color-hairline); }
-/* The pinned action column also says "more to the left": a soft edge, and room under the last row for the overlay scrollbar (D-136). */
+/* actions="hover" (the densest tables only): hidden until the row is hovered or holds focus. The default is visible, so touch and sight can reach them. */
+.wrap[data-actions="hover"] .actions > * { opacity: 0; }
+.wrap[data-actions="hover"] .row:hover .actions > *, .wrap[data-actions="hover"] .row:focus-within .actions > *, .wrap[data-actions="hover"] .actions > *:focus-visible { opacity: 1; }
+/* In a scrollX table the action cell is pinned to the scroller's right edge, so a 1590 px table keeps its action in view (D-090), with room under the last row for the overlay scrollbar (D-136). */
 .actionsPinned { padding-bottom: 12px; }
-.actionsPinned .actions, .actionsPinned .actionsHead { box-shadow: -8px 0 8px -6px rgba(0, 0, 0, 0.55), -1px 0 0 var(--color-hairline); }
+.actionsPinned .actions, .actionsPinned .actionsHead { position: sticky; right: 0; background: var(--color-ground); box-shadow: -1px 0 0 var(--color-hairline); }
 .actionsPinned .actions { z-index: 1; }
 .actionsPinned .actionsHead { z-index: 2; }
 .actionsPinned .row:hover .actions { background: var(--color-raised); }
 .actionsPinned .selected .actions { background: var(--color-panel); }
+/* Scroll edge shadows (the wrapper's data-scrolled / data-more come from DenseTable): the pinned first column shades once content has scrolled under it, and the right edge shades while more is hidden. */
+.scrollX[data-scrolled="true"] .sticky { box-shadow: 8px 0 8px -6px rgb(0 0 0 / 0.55); }
+.scrollX[data-more="true"].actionsPinned .actions, .scrollX[data-more="true"].actionsPinned .actionsHead { box-shadow: -8px 0 8px -6px rgb(0 0 0 / 0.55), -1px 0 0 var(--color-hairline); }
+.scrollX[data-more="true"]:not(.actionsPinned) { mask-image: linear-gradient(to right, black calc(100% - 24px), transparent); }
 .wrap[data-dim="true"] td { opacity: 0.55; }
 .empty { padding: var(--space-6) var(--space-4); color: var(--color-muted); }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The inner span of a truncate cell: the ellipsis and the tooltip live here, the column width comes from fill or minWidth. */
+.clip { display: block; overflow: hidden; text-overflow: ellipsis; }
