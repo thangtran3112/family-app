@@ -1,5 +1,9 @@
 # Expense Tax Management Agent Rules
 
+## Decisions & changelog
+
+- Structural decisions and changelogs live in `expense-tax-management/decisions/`: ADRs under `decisions/adr/ADR-XXXX-*.md`, the changelog at `decisions/changelog/CHANGELOG.md`, with the index in `decisions/README.md`. Every durable decision lands here as an ADR; `plans/` keeps future-phase planning only (completed implementation detail stays in git history, not in live plan files). A rule or decision that changes how this package works must be recorded as an ADR, not left only in chat or a plan file.
+
 ## Architecture
 
 - App API + Foundry: Fastify/Zod/Kysely; separate PostgreSQL ownership.
@@ -101,7 +105,7 @@ Phase 0 baseline, Phase 1A CI (retired 2026-10-31: the pipeline is deployment-on
 - VPS hosts APIs, Temporal, workers, and stateful orchestration; no always-on GCP compute.
 - Production GCP owns the Cloudflare Terraform WIF and state; family config lives in Firestore `family-config` (`tobytran-portfolio`); Phase 3D mailbox broker runs as a VPS container; no new GCP compute.
 - Temporal database bootstrap remains an explicit operator-only Task 8; normal deploy never runs `bootstrap-temporal-db.sh`.
-- Current infrastructure sources: `infrastructure/vps/`, `infrastructure/cloudflare/expense-tax/`, `.github/workflows/expense-tax-deploy.yml`.
+- Current infrastructure sources: `infrastructure/host/`, `infrastructure/apps/expense-tax/`, `infrastructure/cloudflare/expense-tax/`, `.github/workflows/expense-tax-deploy.yml`.
 
 ## Tailscale
 
