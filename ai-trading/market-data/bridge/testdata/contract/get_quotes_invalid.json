@@ -1,0 +1,13 @@
+{
+  "http_status": 400,
+  "request": {
+    "symbols": [
+      "not a ticker"
+    ]
+  },
+  "response": {
+    "code": "invalid_argument",
+    "message": "symbols: not a ticker: NOT A TICKER"
+  },
+  "rpc": "GetQuotes"
+}

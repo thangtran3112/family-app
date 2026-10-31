@@ -1,0 +1,33 @@
+{
+  "http_status": 200,
+  "request": {
+    "symbols": [
+      "AAPL"
+    ]
+  },
+  "response": {
+    "quotes": [
+      {
+        "asOf": "2024-05-02T20:14:00Z",
+        "last": 187.5,
+        "provider": "alpaca",
+        "quality": "DELAYED_15M",
+        "symbol": "AAPL"
+      }
+    ],
+    "served": {
+      "attempts": [
+        {
+          "error": "UNAVAILABLE",
+          "message": "gateway_down",
+          "provider": "ibkr"
+        }
+      ],
+      "fallback": true,
+      "fallbackReason": "ibkr: gateway_down",
+      "provider": "alpaca",
+      "quality": "DELAYED_15M"
+    }
+  },
+  "rpc": "GetQuotes"
+}

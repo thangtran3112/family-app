@@ -1,0 +1,17 @@
+{
+  "http_status": 403,
+  "request": {
+    "preferences": [
+      {
+        "dataClass": "EQUITY_QUOTES",
+        "provider": "alpaca"
+      }
+    ],
+    "version": "2"
+  },
+  "response": {
+    "code": "permission_denied",
+    "message": "SetRouting needs the admin token"
+  },
+  "rpc": "SetRouting"
+}
