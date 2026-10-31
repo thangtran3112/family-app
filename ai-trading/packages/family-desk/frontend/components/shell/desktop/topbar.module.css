@@ -94,47 +94,6 @@
   stroke-width: 1.6;
 }
 
-.modeMenu {
-  left: 0;
-  right: auto;
-  width: 300px;
-  padding: 4px;
-}
-
-.modeItem {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px var(--space-3);
-  border-radius: var(--radius-sm);
-  padding: 6px var(--space-2);
-  color: var(--color-text);
-}
-
-.modeItem:hover,
-.modeItem:focus-visible {
-  background: var(--color-raised);
-}
-
-.modeItem[aria-checked="true"] {
-  box-shadow: inset 2px 0 0 var(--color-amber);
-}
-
-.modeName {
-  font-size: 13px;
-  font-weight: var(--weight-semibold);
-}
-
-.modeKey {
-  color: var(--color-muted);
-  font-size: 11px;
-}
-
-.modeSummary {
-  grid-column: 1 / -1;
-  color: var(--color-muted);
-  font-size: 12px;
-}
-
 .nav {
   display: flex;
   flex-shrink: 0;
@@ -388,11 +347,6 @@
   text-transform: uppercase;
 }
 
-.alertsPanel {
-  overflow: hidden;
-  padding: 0;
-}
-
 .alertList {
   max-height: 360px;
   overflow-y: auto;
@@ -507,25 +461,6 @@
   border-color: var(--color-muted);
 }
 
-.menu {
-  width: 180px;
-  padding: 4px;
-}
-
-.menuItem {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-2);
-  color: var(--color-text);
-  font-size: 13px;
-}
-
-.menuItem:hover {
-  background: var(--color-raised);
-}
-
 .pillText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pill { max-width: none; flex-shrink: 0; }
 .topBadge { min-width: 0; max-width: 260px; flex-shrink: 1; }
@@ -535,7 +470,7 @@
 .replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bar[data-band] .replayBadge { max-width: none; }
 
-/* Fundamental lane: the masking switch (02n §b1). */
+/* Fundamental mode: the masking switch (02n §b1). */
 .maskToggle {
   display: inline-flex;
   flex-shrink: 0;
