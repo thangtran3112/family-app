@@ -149,6 +149,10 @@ applied and a writer key is created by hand. Once both exist:
   --backup-image ghcr.io/thangtran3112/family-app/family-app-backup@sha256:...
 ```
 
+`--backup-image` must be the registry digest printed by the `Family App Backup Image` workflow
+(`.github/workflows/family-app-backup-image.yml`); the step refuses a bare local image ID, and the
+units pull the image when it is missing (see [`../backup/README.md`](../backup/README.md)).
+
 This installs `/opt/family-app/backup/{state,ciphertext}` (root-only),
 root-only `/etc/family-app/{backup.env,backup-pgpassword,backup-writer-key.json}`,
 and enables `family-app-backup.timer`. See

@@ -20,8 +20,9 @@ Architecture context: [`ARCHITECTURE.md`](../../expense-tax-management/plans/ARC
 | `test-backup-docker.sh` | **Slow, Docker.** Full dump→encrypt→upload→decrypt round trip against a disposable PostgreSQL 17 + fake-GCS. Not wired into CI. Run manually (below). |
 | `test-restore.sh` | **Slow, Docker.** End-to-end seeded-source → empty-destination restore proof (full backup + one ordered daily delta). Not wired into CI. Run manually (below). |
 | `family-app-backup.service` / `.timer` / `family-app-backup-retry.service` | Task 6 systemd units. Installed by `infrastructure/host/steps/40-backup.sh` (opt-in `bootstrap.sh --only backup`). |
+| `../../.github/workflows/family-app-backup-image.yml` | Builds `Dockerfile` and pushes it to `ghcr.io/<owner>/<repo>/family-app-backup` (`:<sha>` and `:latest`) on a push to `main` that touches `infrastructure/backup/**`, or on demand. Prints the digest to pin as `BACKUP_IMAGE`. |
 | `check-backup-freshness.sh` | Local health command: fails when the latest successful backup is ≥24h old. Fast, Docker-free; wired into CI via `check:vps-backup-infrastructure`. |
-| `test-systemd-units.sh` | Fast, Docker-free static checks on the three unit files above (timer cadence, runtime deadlines, retry bounds, read-only/tmpfs run contract, no literal secrets). Wired into CI. |
+| `test-systemd-units.sh` | Fast, Docker-free checks on the three unit files above (timer cadence, runtime deadlines, retry bounds, read-only/tmpfs run contract and every mount, templated image, the pull-when-missing `ExecStartPre` run against a stub `docker`, no literal secrets). Wired into CI. |
 | `test-check-backup-freshness.sh` | Fast, Docker-free checks for `check-backup-freshness.sh`. Wired into CI. |
 | `recovery-drill.sh` | Task 8 orchestrator: restore.sh → compare restored-vs-supported schema migration versions → pluggable deploy/health-check/smoke-test commands → timestamped JSON report, failing if the whole thing exceeds the 2h RTO. Deploy/health-check/smoke-test are commands YOU supply; this script never talks to Cloudflare or deploys real images itself. |
 | `test-recovery-drill.sh` | **Slow, Docker.** Proves the orchestration (pass / failing health-check / RTO breach / migration-version mismatch) with fake deploy/health/smoke commands against a real backup+restore. Not wired into CI. Run manually (below). |
@@ -38,6 +39,36 @@ workflow activates the moment this merges, before Task 1's bucket even
 exists; the job itself also skips entirely (0 Actions minutes) until the
 `GCP_BACKUP_BUCKET` repository variable is set. See the workflow file's
 own comment for the RPO detection-latency tradeoff this accepts.
+
+## Backup image (`BACKUP_IMAGE`)
+
+`BACKUP_IMAGE` must be a **registry reference, pinned by the digest that
+`family-app-backup-image.yml` prints**:
+
+```text
+ghcr.io/<owner>/<repo>/family-app-backup@sha256:<64 hex>
+```
+
+`infrastructure/host/steps/40-backup.sh` refuses a bare local image ID
+(`sha256:<hex>`), a local tag (`family-app-backup:2026-10-31`), or any other
+reference that is not `<registry>/<path>@sha256:<digest>` or `<registry>/<path>:<tag>`
+(a tag is accepted with a warning because it can move; a registry host with a
+port is not accepted).
+
+Both service units start with an `ExecStartPre` that runs `docker image inspect`
+and falls back to `docker pull` only when the image is missing, so a normal run
+makes no network call and a Docker prune costs one pull. A failed pull fails the
+unit, which starts `family-app-backup-retry.service` and, if it persists, the
+freshness watchdog. The host pulls as root with no registry login, so the GHCR
+package must be public (or `docker login ghcr.io` must be configured for root).
+
+Why: the units used to pin a bare local image ID because nothing published the
+image; a Docker prune removed it, `docker run` failed with `No such image`, and
+no backup ran from 2026-10-27 until the freshness watchdog caught it on 2026-10-31.
+
+To roll out a change to `infrastructure/backup/`: merge to `main`, read the digest
+from the workflow run summary, then re-run
+`bootstrap.sh --only backup --backup-image ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest>`.
 
 ## `restore.sh` environment contract
 

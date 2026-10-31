@@ -55,6 +55,73 @@ for f in "$SERVICE" "$RETRY"; do
 done
 ok "both service units run the backup container read-only with a tmpfs /staging and a read-only receipt mount"
 
+# --- Durable image reference (2026-10-27..31 outage: a bare local image ID was pruned and could not
+# be pulled again). The units stay templates; 40-backup.sh installs a registry reference and refuses
+# anything else, and each run pulls the image when it is missing.
+for f in "$SERVICE" "$RETRY"; do
+  # The image is the last argument of `docker run`, still templated, never hard-coded here.
+  awk '/^ExecStopPost=/{run=0} run && /^  /{last=$0} /^ExecStart=/{run=1} END{print last}' "$f" | grep -Eq '^  __BACKUP_IMAGE__$' \
+    || fail "$f: the final docker run argument must be the templated image placeholder __BACKUP_IMAGE__"
+  if grep -Eq 'sha256:|ghcr\.io|family-app-backup:' "$f"; then
+    fail "$f must not hard-code an image reference; 40-backup.sh substitutes __BACKUP_IMAGE__"
+  fi
+  pull_line=$(grep -E '^ExecStartPre=/bin/sh -c ' "$f" || true)
+  [[ -n "$pull_line" ]] || fail "$f: missing the pull-when-missing ExecStartPre"
+  [[ "$(printf '%s\n' "$pull_line" | wc -l | tr -d ' ')" == "1" ]] || fail "$f: expected exactly one pull-when-missing ExecStartPre"
+  [[ "$pull_line" == "ExecStartPre=/bin/sh -c '/usr/bin/docker image inspect __BACKUP_IMAGE__ >/dev/null 2>&1 || /usr/bin/docker pull __BACKUP_IMAGE__'" ]] \
+    || fail "$f: pull-when-missing ExecStartPre has the wrong shape: $pull_line"
+done
+ok "both service units template the image and pull it when missing (ExecStartPre), with no hard-coded reference"
+
+# Behaviour of that ExecStartPre, run for real against a stub docker: present -> no pull,
+# missing -> pull, failed pull -> non-zero (the unit fails, OnFailure starts the retry).
+stub_dir=$(mktemp -d)
+trap 'rm -rf "$stub_dir"' EXIT
+cat >"$stub_dir/docker" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$DOCKER_LOG"
+case "$1 $2" in
+  "image inspect") [[ -z "${STUB_IMAGE_MISSING:-}" ]] ;;
+  "pull "*) [[ -z "${STUB_PULL_FAILS:-}" ]] ;;
+esac
+SH
+chmod +x "$stub_dir/docker"
+image_ref="ghcr.io/example/family-app/family-app-backup@sha256:$(printf 'b%.0s' {1..64})"
+for f in "$SERVICE" "$RETRY"; do
+  cmd=$(grep -E '^ExecStartPre=/bin/sh -c ' "$f" | sed -e "s#^ExecStartPre=/bin/sh -c '##" -e "s#'\$##")
+  cmd=${cmd//__BACKUP_IMAGE__/$image_ref}
+  cmd=${cmd//\/usr\/bin\/docker/$stub_dir/docker}
+  export DOCKER_LOG="$stub_dir/log"
+  : >"$DOCKER_LOG"
+  /bin/sh -c "$cmd" || fail "$f: image present must succeed"
+  grep -q '^pull ' "$DOCKER_LOG" && fail "$f: must not pull when the image is already present"
+  : >"$DOCKER_LOG"
+  STUB_IMAGE_MISSING=1 /bin/sh -c "$cmd" || fail "$f: image missing and pull ok must succeed"
+  grep -Fxq "pull $image_ref" "$DOCKER_LOG" || fail "$f: must pull the exact templated reference when missing: $(cat "$DOCKER_LOG")"
+  if STUB_IMAGE_MISSING=1 STUB_PULL_FAILS=1 /bin/sh -c "$cmd"; then fail "$f: a failed pull must fail the unit"; fi
+done
+ok "pull-when-missing: no pull when present, pulls the exact reference when missing, fails loudly when the pull fails"
+
+for f in "$SERVICE" "$RETRY"; do
+  run_block=$(awk '/^ExecStart=/{run=1} run{print} /^ExecStopPost=/{run=0}' "$f")
+  for flag in \
+    '--rm' \
+    '--network postgres_default' \
+    '--read-only' \
+    '--tmpfs /staging:size=512m,mode=1700' \
+    '--env-file /etc/family-app/backup.env' \
+    '-v /etc/family-app/backup-pgpassword:/run/secrets/pgpassword:ro' \
+    '-v /etc/family-app/backup-writer-key.json:/run/secrets/writer-key.json:ro' \
+    '-v /opt/family-app/backup/state:/state' \
+    '-v /opt/family-app/backup/ciphertext:/ciphertext' \
+    '-v __RECEIPT_VOLUME__:/receipts:ro'; do
+    printf '%s\n' "$run_block" | grep -Fq -- "$flag" || fail "$f: docker run lost '$flag'"
+  done
+done
+grep -Fxq 'ExecStopPost=-/usr/bin/docker rm -f family-app-backup-run' "$SERVICE" || fail "main service must keep its ExecStopPost cleanup"
+grep -Fxq 'ExecStopPost=-/usr/bin/docker rm -f family-app-backup-retry-run' "$RETRY" || fail "retry service must keep its ExecStopPost cleanup"
+ok "docker run keeps --rm, --read-only, the /staging tmpfs, the env file, and every mount; ExecStopPost cleanup kept"
+
 for f in "$SERVICE" "$RETRY"; do
   grep -Eq '^\[Install\]$' "$f" && fail "$f must have no [Install] section (activated only by the timer or OnFailure, never \`systemctl enable\` directly)"
 done

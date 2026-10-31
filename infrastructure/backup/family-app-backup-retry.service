@@ -15,6 +15,9 @@ Type=oneshot
 # Spaces each retry attempt roughly an hour apart, including the first one
 # after the original run's failure.
 ExecStartPre=/bin/sleep 3600
+# Pull only when the image is missing; a failed pull fails this unit and chains the
+# next retry (see family-app-backup.service for the incident behind this line).
+ExecStartPre=/bin/sh -c '/usr/bin/docker image inspect __BACKUP_IMAGE__ >/dev/null 2>&1 || /usr/bin/docker pull __BACKUP_IMAGE__'
 RuntimeMaxSec=7200
 ExecStart=/usr/bin/docker run --rm \
   --name family-app-backup-retry-run \

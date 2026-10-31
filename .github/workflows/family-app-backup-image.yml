@@ -1,0 +1,76 @@
+name: Family App Backup Image
+
+# Publishes the backup container (infrastructure/backup/Dockerfile) to GHCR so the
+# host's family-app-backup units can `docker pull` it again after a prune.
+#
+# Why this exists: until 2026-10-31 nothing published the image, so the units pinned a
+# bare local image ID (sha256:93747d0e...). A Docker prune removed it, `docker run` failed
+# with "No such image", and no backup ran from 2026-10-27 until the freshness watchdog
+# reported the RPO breach. A local ID cannot be re-pulled; a registry digest can.
+#
+# The job prints the pushed digest. Pass that reference to the host bootstrap:
+#   bootstrap.sh --only backup --backup-image ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest>
+# infrastructure/host/steps/40-backup.sh refuses anything that is not a registry reference.
+#
+# Cost: runs only when infrastructure/backup/** (or this file) changes on main, or on demand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infrastructure/backup/**"
+      - ".github/workflows/family-app-backup-image.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build and push family-app-backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/family-app-backup
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: infrastructure/backup
+          push: true
+          # One plain manifest, so the digest printed below is the image digest itself.
+          provenance: false
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          # Links the GHCR package to this repository (inherits its access settings).
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=family-app-backup
+          cache-to: type=gha,scope=family-app-backup,mode=max
+      - name: Print the digest to pin on the host
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest output: '$DIGEST'" >&2; exit 1; }
+          # Ask the registry, not the build step: the digest an operator pins must be the one GHCR serves.
+          registry_digest=$(docker buildx imagetools inspect "${IMAGE}:${GITHUB_SHA}" --format '{{.Manifest.Digest}}')
+          [[ "$registry_digest" == "$DIGEST" ]] || { echo "registry digest $registry_digest != build digest $DIGEST" >&2; exit 1; }
+          echo "BACKUP_IMAGE=${IMAGE}@${DIGEST}"
+          {
+            echo "### family-app-backup image"
+            echo
+            echo "Pin this reference on the host (\`bootstrap.sh --only backup --backup-image ...\`):"
+            echo
+            echo "\`${IMAGE}@${DIGEST}\`"
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -379,6 +379,35 @@ fi
 grep -q 'backup-pgpassword' "$STEPS/40-backup.sh" || fail "40-backup.sh must expect the streamed backup-pgpassword file"
 ok "40-backup: BACKUP_HOST_ID is required and the Postgres password comes from the streamed file, not a .env"
 
+# BACKUP_IMAGE must be a pullable registry reference (the 2026-10-27..31 backup outage: a bare local
+# image ID was pruned and could not be re-pulled). The check runs before any file is touched.
+digest64=$(printf 'a%.0s' {1..64})
+run_backup_image() {
+  env BACKUP_DIR="$d/backup" BACKUP_GCS_URI=gs://b BACKUP_HOST_ID=h AGE_RECIPIENT=age1x RECEIPT_VOLUME=v \
+    BACKUP_IMAGE="$1" UNIT_FILES_DIR="$d/units" bash "$STEPS/40-backup.sh" >"$d/out" 2>&1
+}
+for bad in "sha256:93747d0e1f2a${digest64:0:52}" "93747d0e1f2a" "family-app-backup:2026-10-31" \
+  "ghcr.io/o/r/family-app-backup" "ghcr.io/o/r/family-app-backup@sha256:abc" "localhost:5000/o/family-app-backup@sha256:$digest64"; do
+  if run_backup_image "$bad"; then fail "40-backup must reject BACKUP_IMAGE='$bad'"; fi
+  grep -q "family-app-backup-image.yml" "$d/out" || fail "rejecting '$bad' must name the publishing workflow: $(cat "$d/out")"
+  grep -q "writer-key.json missing" "$d/out" && fail "'$bad' must be rejected before any other preflight: $(cat "$d/out")"
+done
+run_backup_image "sha256:93747d0e1f2a${digest64:0:52}" || true
+grep -q "bare local image ID" "$d/out" || fail "a bare sha256 ID needs its own message: $(cat "$d/out")"
+# A registry digest or tag passes the image check; the run then stops at the next preflight (no writer
+# key on this machine). Skipped on a host that really has the key, where the step would install units.
+if [[ ! -e /etc/family-app/backup-writer-key.json ]]; then
+  for good in "ghcr.io/thangtran3112/family-app/family-app-backup@sha256:$digest64" "ghcr.io/o/r/family-app-backup:abc123" \
+    "ghcr.io/o/r/family-app-backup:abc123@sha256:$digest64"; do
+    if run_backup_image "$good"; then fail "'$good' should stop at the missing writer key, not succeed"; fi
+    grep -q "BACKUP_IMAGE=" "$d/out" && fail "40-backup must accept '$good': $(cat "$d/out")"
+    grep -q "writer-key.json missing" "$d/out" || fail "'$good' must get past the image check: $(cat "$d/out")"
+  done
+  ok "40-backup: a bare local image ID or non-registry ref is refused (naming the workflow); a registry digest/tag is accepted"
+else
+  ok "40-backup: bare/non-registry refs refused (acceptance case skipped: this host has a real writer key)"
+fi
+
 # --- bootstrap.sh option validation ---------------------------------------------------------------
 base=(--host 198.51.100.1 --ssh-user ubuntu --ssh-key /dev/null --app "$SCRIPT_DIR/apps/expense-tax-management.conf" --only firewall)
 for bad in "--allow-http 2" "--ssh-interface a;b" "--docker-data-min-gb many" "--docker-data-root relative/path"; do

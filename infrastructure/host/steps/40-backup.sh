@@ -25,7 +25,10 @@
 #                              -- a named volume, not a host path: Docker can
 #                              mount it into the backup container by name
 #                              regardless of which Compose project created it
-#   BACKUP_IMAGE           - pinned backup image ref (digest, not a mutable tag)
+#   BACKUP_IMAGE           - pullable registry ref, ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest>
+#                              (digest, not a mutable tag), published by
+#                              .github/workflows/family-app-backup-image.yml. A bare local
+#                              image ID is refused below: the units pull it when missing.
 #   UNIT_FILES_DIR         - dir (already scp'd by bootstrap.sh) holding the
 #                              three *.service/*.timer template files
 #
@@ -46,6 +49,27 @@ set -euo pipefail
 : "${RECEIPT_VOLUME:?RECEIPT_VOLUME is required}"
 : "${BACKUP_IMAGE:?BACKUP_IMAGE is required}"
 : "${UNIT_FILES_DIR:?UNIT_FILES_DIR is required}"
+
+# The units must be able to re-pull their image after a Docker prune. A bare local image ID
+# (sha256:93747d0e...) cannot be pulled: one prune removed it and no backup ran 2026-10-27..31.
+# Accept only a registry reference: host/path with a digest or a tag. (No registry port:
+# the host part may not contain ":".) The allowed characters also keep the value safe for the
+# sed substitution and the systemd unit text below.
+image_name='[A-Za-z0-9.-]+(/[A-Za-z0-9._-]+)+'
+image_tag=':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}'
+image_digest='@sha256:[0-9a-f]{64}'
+image_hint="Publish the image with .github/workflows/family-app-backup-image.yml (workflow 'Family App Backup Image') and pass the digest it prints: ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest>"
+if [[ "$BACKUP_IMAGE" =~ ^(sha256:)?[0-9a-f]{12,64}$ ]]; then
+  echo "[backup] ERROR: BACKUP_IMAGE='${BACKUP_IMAGE}' is a bare local image ID; Docker cannot re-pull it after a prune. ${image_hint}" >&2
+  exit 1
+fi
+if ! [[ "$BACKUP_IMAGE" =~ ^${image_name}(${image_tag})?${image_digest}$ || "$BACKUP_IMAGE" =~ ^${image_name}${image_tag}$ ]]; then
+  echo "[backup] ERROR: BACKUP_IMAGE='${BACKUP_IMAGE}' is not a registry reference (need <registry>/<path>@sha256:<64 hex> or <registry>/<path>:<tag>); ${image_hint}" >&2
+  exit 1
+fi
+if [[ "$BACKUP_IMAGE" != *@sha256:* ]]; then
+  echo "[backup] WARNING: BACKUP_IMAGE is a tag, which can move; pin the @sha256 digest the image workflow prints." >&2
+fi
 
 [[ -s /etc/family-app/backup-writer-key.json ]] || {
   echo "[backup] ERROR: /etc/family-app/backup-writer-key.json missing -- bootstrap.sh must install it (via SSH stdin) before running this step" >&2
