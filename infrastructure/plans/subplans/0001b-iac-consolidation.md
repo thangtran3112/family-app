@@ -166,9 +166,9 @@ amends `ai-trading/AGENTS.md` ("Application deployment artifacts ... live in
 4. `package.json:29-30`: `../infrastructure/host/test-*.sh`.
 5. `infrastructure/temporal/test-temporal-infrastructure.sh:67`: reads the expense
    `health-check.sh` at its new path.
-6. `scripts/check-phase-1d-protected-development.mjs:27`: the CI push-paths string.
+6. (Retired 2026-10-31: `check-phase-1d-protected-development.mjs` is deleted with `expense-tax-ci.yml`, ADR-0013.)
 7. `scripts/check-phase-1b-workflow.mjs`: manual check; repoint it.
-8. `.github/workflows/expense-tax-ci.yml`: push paths add `infrastructure/apps/expense-tax/**`.
+8. `.github/workflows/expense-tax-deploy.yml`: push paths add `infrastructure/apps/expense-tax/**`.
 9. `.github/workflows/expense-tax-deploy.yml`: sparse and scp sources.
 10. `.github/workflows/expense-tax-cloudflare.yml:9-10,17-18`: the path filters.
 11. `bootstrap-temporal-db.sh` and `bootstrap-mailbox-vault-db.sh` default

@@ -12,7 +12,7 @@
 
 ## Completed Baseline
 
-Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phase 1C gateway hardening, Phase 1D protected development, and Phase 3B deduplication are complete. Canonical status: `plans/PLAN.md`. Completed implementation detail remains in git history, not live planning files.
+Phase 0 baseline, Phase 1A CI (retired 2026-10-31: the pipeline is deployment-only, see `plans/ROADMAP.md`), Phase 1B private production deployment/auth, Phase 1C gateway hardening, Phase 1D protected development, and Phase 3B deduplication are complete. Canonical status: `plans/PLAN.md`. Completed implementation detail remains in git history, not live planning files.
 
 ## Current Production
 
@@ -76,13 +76,14 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 - Never commit directly on `dev` or `main`.
 - Push the task's worktree branch (cut from the latest `origin/dev`), then open a pull request to `dev`. The owner's `feature/toby` is his own sync branch: agents never merge into it, reset it, or push it.
 - Unit/quality check must succeed before merge.
-- Integration result is advisory and must be reported when red.
-- GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge.
+- GitHub Actions runs no expense-tax test job (`expense-tax-ci.yml` removed 2026-10-31; ADR-0013 in `ai-trading/decisions/adr/`). The quality check is a local gate: `pnpm ci:lint`, `pnpm ci:typecheck`, `pnpm ci:test`, `pnpm ci:build`, `pnpm contracts:check`. Run it before you push and report the result.
+- Integration (`pnpm verify:phase-0n` with the `PHASE_*_INTEGRATION` gates, Docker PostgreSQL) is a local, advisory gate. Report it when red.
+- GitHub CLI merge is authorized after the local quality check has passed and been reported, the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge. If GitHub still blocks the PR on the removed `Contracts, services, workers, frontends` status check (a `dev` ruleset setting), do not bypass it: tell the owner.
 - After a squash merge, cut the next task's worktree branch from the new `origin/dev` tip. Never force-push `dev` or `main`, and never reset or push the owner's `feature/toby`.
 - Never bypass branch protection.
 - `main` remains outside the development flow until a later release phase.
 - Personal repository standing approval: agents may push `feature/*` branches, open pull requests to `dev`, and squash-merge them into `origin/dev` without execution-time confirmation once the merge conditions above hold.
-- Conserve GitHub Actions minutes: stack commits locally, push only after local verification, and open exactly one pull request per phase; avoid extra pushes to an open pull request unless CI fails.
+- Conserve GitHub Actions minutes: stack commits locally, push only after local verification, and open exactly one pull request per phase; avoid extra pushes to an open pull request unless the change needs it.
 - Every other remote write still needs explicit execution-time confirmation immediately before the command: anything targeting `main`, workflow dispatch, ruleset or default-branch changes, and any force-push.
 - Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
 - Never inspect, print, commit, or expose secrets.

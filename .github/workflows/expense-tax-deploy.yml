@@ -1,10 +1,16 @@
 name: Expense Tax Deploy
 
+# Deployment-only pipeline (ADR-0013): no test jobs run here or before it.
+# Tests are local gates the delivering session runs before it ships.
 on:
-  workflow_run:
-    workflows: ["Expense Tax CI"]
-    types: [completed]
+  push:
     branches: [main]
+    paths:
+      - "expense-tax-management/**"
+      - "common/config/**"
+      - "infrastructure/docker-compose.common.yml"
+      - ".github/workflows/expense-tax-deploy.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,10 +26,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
@@ -49,10 +52,10 @@ jobs:
           - image: expense-tax-foundry-web
             dockerfile: expense-tax-management/frontend/foundry-web/Dockerfile
     steps:
-      - name: Checkout completed CI commit
+      - name: Checkout pushed commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Set up Buildx
@@ -71,7 +74,7 @@ jobs:
           context: expense-tax-management
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ github.event.workflow_run.head_sha }}
+          tags: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           build-args: |
@@ -80,10 +83,7 @@ jobs:
   deploy:
     name: Deploy production
     needs: build
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -91,10 +91,10 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Checkout completed CI commit
+      - name: Checkout pushed commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       # Production env is not read here: the VPS loads it from Firestore
@@ -140,7 +140,7 @@ jobs:
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
           GITHUB_TOKEN: ${{ github.token }}
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
           echo "::add-mask::$GITHUB_TOKEN"
