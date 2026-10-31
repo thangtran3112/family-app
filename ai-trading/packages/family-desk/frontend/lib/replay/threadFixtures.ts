@@ -40,6 +40,7 @@ export const activeThread: ThreadSummary = {
   },
   today: { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 8, status: "practicing", trades: 1, pnl_usd: 112 },
   last_day: null,
+  last_activity_at: "2026-10-23T20:41:00Z",
   label: "Simulated money · practice only, never a real account",
 };
 
@@ -78,6 +79,7 @@ export const freshThread: Thread = {
   },
   today: null,
   last_day: null,
+  last_activity_at: null,
   daily: [],
   curve: [{ n: 0, day: null, balance: 50000 }],
   label: activeThread.label,

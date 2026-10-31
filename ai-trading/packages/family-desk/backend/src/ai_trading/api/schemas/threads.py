@@ -5,7 +5,7 @@ What she authors (`PracticeThreadCreateV1`, `PracticeThreadPatchV1`) and what th
 plain Pydantic. Every dollar figure is SIMULATED: `label` says so in words wherever a balance travels.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, FiniteFloat, field_serializer
@@ -100,6 +100,7 @@ class ThreadSummaryOut(SwingOptional):
     last_day: (
         ThreadDayOut | None
     )  # the last ended day, from the same series as the balance: the card's row with no day open
+    last_activity_at: datetime | None  # wall-clock UTC of the last day list, day end or week review; null while fresh
     label: str
     swing: SwingStateOut | None = None
 

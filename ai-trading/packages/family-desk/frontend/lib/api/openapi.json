@@ -13938,6 +13938,18 @@
             "title": "Label",
             "type": "string"
           },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
           "last_day": {
             "anyOf": [
               {
@@ -13976,6 +13988,7 @@
           "thread",
           "today",
           "last_day",
+          "last_activity_at",
           "label",
           "daily",
           "curve"
@@ -13990,6 +14003,18 @@
             "title": "Label",
             "type": "string"
           },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
           "last_day": {
             "anyOf": [
               {
@@ -14028,6 +14053,7 @@
           "thread",
           "today",
           "last_day",
+          "last_activity_at",
           "label"
         ],
         "title": "ThreadSummaryOut",

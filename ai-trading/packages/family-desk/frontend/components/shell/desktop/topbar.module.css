@@ -55,6 +55,22 @@
   color: var(--color-on-pill);
 }
 
+/* The "View" caption sets the chips apart from the nav links (5R). The bar is full at 1440, so no divider or extra gap. */
+.laneGroup {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.laneCaption {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .lane {
   display: inline-flex;
   flex-shrink: 0;
@@ -70,12 +86,21 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  padding: 0 var(--space-3);
+  padding: 0 10px;
   color: var(--color-muted);
   font: inherit;
   font-size: 13px;
   font-weight: var(--weight-semibold);
   cursor: pointer;
+}
+
+/* At 1180 the bar has no slack left: the chips and the caption give up a few pixels. */
+.bar[data-band="1180"] .laneSegment {
+  padding: 0 6px;
+}
+
+.bar[data-band="1180"] .laneCaption {
+  letter-spacing: 0;
 }
 
 .laneSegment:hover {
