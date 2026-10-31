@@ -1,28 +1,69 @@
 import { COPY } from "../../lib/desk/freshness.ts";
-import { test, expect, prepareDesk, setScenario, openDesk, expectCleanScreen, MIDDAY } from "./helpers";
+import { test, expect, prepareDesk, setScenario, openDesk, expectCleanScreen, expectBacktestChrome, MIDDAY } from "./helpers";
 
-// The desktop shell (02m D1, D12; 02l §b2-b3, §c3): top bar, rails, status bar, states, errors and wrong-lane screens.
+// The desktop shell (02m D1, D12; 02l §b2-b3, §c3; ADR-0014): top bar, mode menu, rails, status bar, states and errors.
 const PRE_MARKET = "2026-10-15T12:00:00Z";
 
 test.beforeEach(async ({ context }) => prepareDesk(context, "technical"));
 
-// 5R: the View chips read as a switch, not two more nav tabs: Technical first, a visible caption, a tooltip that says what the chip switches to.
-test("the View chips list Technical first, carry a caption and say where each one leads", async ({ page }) => {
+// ADR-0014: the mode button names the mode in full, right of the wordmark; its menu lists the three modes with what each holds and
+// its shortcut. It replaces the 5R View chips: no radiogroup, no "View" caption.
+test("the mode button names the mode in full and opens a three-item menu; a pick and Alt+1/2/3 switch modes", async ({ page }) => {
   await openDesk(page, "/");
   const top = page.locator(".dk-top");
-  const chips = top.getByRole("radiogroup", { name: "View" }).getByRole("radio");
-  await expect(chips).toHaveText(["Technical", "Fundamental"]);
-  await expect(top.getByText("View", { exact: true })).toBeVisible();
-  await expect(chips.nth(0)).toHaveAttribute("title", "Day and swing practice, screener, alerts");
-  await expect(chips.nth(1)).toHaveAttribute("title", "Holdings, covered calls, research");
+  const nav = top.getByRole("navigation", { name: "Primary navigation" });
+  const button = top.getByRole("button", { name: "Mode: Technical" });
+  await expect(button).toHaveText("Technical");
+  await expect(button).toHaveAttribute("aria-haspopup", "menu");
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(top.getByRole("radiogroup", { name: "View" })).toHaveCount(0);
+  await expect(top.getByText("View", { exact: true })).toHaveCount(0);
 
-  // On a Technical-only screen the other chip stays clickable and says what the switch leaves.
-  await openDesk(page, "/practice");
-  await expect(chips.nth(1)).toBeEnabled();
-  await expect(chips.nth(1)).toHaveAttribute("title", "Leaves Practice · Technical-only screen");
-  await expect(chips.nth(0)).toHaveAttribute("title", "Day and swing practice, screener, alerts");
-  await chips.nth(1).focus();
-  await expect(chips.nth(1)).toBeFocused();
+  await button.click();
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+  const menu = page.getByRole("menu", { name: "Mode" });
+  const items = menu.getByRole("menuitemradio");
+  await expect(items).toHaveCount(3);
+  const expected: Array<[string, string, string]> = [
+    ["Technical", "Screener, watchlists, alerts, strategies", "/?mode=technical"],
+    ["Fundamental", "Holdings, covered calls, research", "/?mode=fundamental"],
+    ["Backtest", "Day and swing practice on past days, journal", "/practice"],
+  ];
+  for (const [index, [label, summary, href]] of expected.entries()) {
+    await expect(items.nth(index)).toContainText(label);
+    await expect(items.nth(index)).toContainText(summary);
+    await expect(items.nth(index)).toContainText(`Alt ${index + 1}`);
+    await expect(items.nth(index)).toHaveAttribute("href", href);
+    await expect(items.nth(index)).toHaveAttribute("aria-checked", index === 0 ? "true" : "false");
+  }
+  // The checked mode takes focus; the arrows wrap; Escape closes and returns focus to the button.
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(items.nth(2)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(items.nth(2)).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(button).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(items.nth(1)).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(top.getByRole("button", { name: "Mode: Fundamental" })).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveText(["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
+  await expectCleanScreen(page);
+
+  await page.keyboard.press("Alt+3");
+  await expect(page).toHaveURL(/\/practice$/);
+  await expect(top.getByRole("button", { name: "Mode: Backtest" })).toBeVisible();
+  await page.keyboard.press("Alt+1");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(top.getByRole("button", { name: "Mode: Technical" })).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
 });
 
 // D-109 / S-06: the shell owns the page's one `main` landmark; a screen inside it is a plain div.
@@ -38,9 +79,9 @@ test("the top bar, left rail and status bar show the Technical chrome at the see
   const compact = test.info().project.name === "desktop-1180";
   await openDesk(page, "/");
   const top = page.locator(".dk-top");
-  await expect(top.getByRole("link", { name: "Family Desk" })).toHaveAttribute("href", "/");
-  await expect(top.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Technical" })).toBeChecked();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
+  await expect(top.getByRole("link", { name: "Family Desk" })).toHaveAttribute("href", "/?mode=technical");
+  await expect(top.getByRole("button", { name: "Mode: Technical" })).toBeVisible();
+  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
   // At 1180 the search collapses to an icon button that opens the field.
   if (compact) await expect(top.getByRole("button", { name: "Search symbols, ⌘K" })).toBeVisible();
   else await expect(top.getByRole("combobox", { name: "Search symbols" })).toBeVisible();
@@ -68,7 +109,6 @@ test("each primary nav link opens its route and keeps the top bar and left rail"
     ["Watchlists", "/watchlists"],
     ["Alerts", "/alerts"],
     ["Strategies", "/strategies/library"],
-    ["Practice", "/practice"],
     ["Today", "/"],
   ];
   for (const [label, path] of routes) {
@@ -163,27 +203,66 @@ test("a failed chart request shows the load error and Try again draws the chart"
   await expectCleanScreen(page);
 });
 
-test("a Fundamental route shows the wrong-lane screen; Switch view and the lane radio move between lanes", async ({ page }) => {
-  await openDesk(page, "/holdings");
+// ADR-0014: the wrong-lane screen is gone. A route opens in the first mode that lists it, and the browser remembers that mode.
+test("an owned route opens in its own mode with no wrong-lane screen, and shared routes keep the mode it set", async ({ page }) => {
   const main = page.locator("#main-content");
   const top = page.locator(".dk-top");
-  await expect(main.getByRole("heading", { name: "This screen belongs to the Fundamental view" })).toBeVisible();
-  await expect(main.getByRole("link", { name: "Back to Today" })).toHaveAttribute("href", "/");
-  await expectCleanScreen(page);
-
-  await main.getByRole("button", { name: "Switch view" }).click();
-  await expect(top.getByRole("radio", { name: "Fundamental" })).toBeChecked();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
+  const nav = top.getByRole("navigation", { name: "Primary navigation" });
+  await openDesk(page, "/holdings");
+  await expect(top.getByRole("button", { name: "Mode: Fundamental" })).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveText(["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
+  await expect(nav.getByRole("link", { name: "Holdings" })).toHaveAttribute("aria-current", "page");
   await expect(main.getByTestId("fund-holdings")).toBeVisible();
+  await expect(main.getByText("This screen belongs to", { exact: false })).toHaveCount(0);
+  await expect(main.getByRole("button", { name: "Switch view" })).toHaveCount(0);
   await expectCleanScreen(page);
 
-  await top.getByRole("radio", { name: "Technical" }).click();
-  await expect(top.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Today", "Screener", "Watchlists", "Alerts", "Strategies", "Practice"]);
-  await expect(main.getByRole("heading", { name: "This screen belongs to the Fundamental view" })).toBeVisible();
-  await main.getByRole("link", { name: "Back to Today" }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(top.getByRole("link", { name: "Today", exact: true })).toHaveAttribute("aria-current", "page");
+  await openDesk(page, "/watchlists");
+  await expect(top.getByRole("button", { name: "Mode: Fundamental" })).toBeVisible();
+  await openDesk(page, "/screener");
+  await expect(top.getByRole("button", { name: "Mode: Technical" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Screener" })).toHaveAttribute("aria-current", "page");
+  await openDesk(page, "/");
+  await expect(top.getByRole("button", { name: "Mode: Technical" })).toBeVisible();
   await expectCleanScreen(page);
+});
+
+// ADR-0014: Backtest is the time-decoupled desk. It has the Practice and Journal tabs and no live-market chrome; Settings, More
+// and Feedback stay one Account menu away.
+test("Backtest mode: Practice and Journal tabs, no market pill, search or bell, its own status line, and the account pages", async ({ page }) => {
+  const top = page.locator(".dk-top");
+  const nav = top.getByRole("navigation", { name: "Primary navigation" });
+  await openDesk(page, "/practice");
+  await expectBacktestChrome(page, "Practice");
+  await expect(top.getByRole("link", { name: "Family Desk" })).toHaveAttribute("href", "/practice");
+  await expect(top.getByRole("button", { name: "Account menu" })).toBeVisible();
+  await expect(top.getByRole("status")).toHaveCount(0);
+  const left = page.getByRole("complementary", { name: "Watchlists", exact: true });
+  await expect(left.getByRole("tab")).toHaveText(["Watchlists"]);
+  const footer = page.getByRole("contentinfo", { name: "Status" });
+  await expect(footer).toContainText("Practice · past market data");
+  await expect(footer).not.toContainText("Market closed");
+  await expect(footer).not.toContainText(COPY.alertsNotStarted);
+  await expectCleanScreen(page);
+
+  // Only the longest matching tab lights: the journal is Journal, not Practice.
+  await nav.getByRole("link", { name: "Journal" }).click();
+  await expect(page).toHaveURL(/\/practice\/journal$/);
+  await expectBacktestChrome(page, "Journal");
+
+  for (const [label, path] of [["Settings", "/settings"], ["More", "/more"], ["Feedback", "/feedback"]] as const) {
+    await top.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menu", { name: "Account" }).getByRole("menuitem", { name: label }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(top.getByRole("button", { name: "Mode: Backtest" })).toBeVisible();
+    await expect(page.locator("#main-content").getByText("This screen belongs to", { exact: false })).toHaveCount(0);
+  }
+  await expectCleanScreen(page);
+
+  // Today has no Backtest variant: it sends the mode home.
+  await openDesk(page, "/");
+  await expect(page).toHaveURL(/\/practice$/);
+  await expectBacktestChrome(page, "Practice");
 });
 
 test("Ctrl+K focuses symbol search; typing NV and choosing NVDA opens its chart", async ({ page }) => {

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { START_BUTTON, clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
@@ -62,6 +62,7 @@ test.describe("Swing practice", () => {
     // Start swing thread lands on the thread page: the swing line with SIMULATED, and the day thread still has its row.
     await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL);
+    await expectBacktestChrome(page, "Practice"); // ADR-0014: the thread page is Backtest mode
     const balance = page.getByRole("region", { name: "Thread balance" });
     await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
     await expect(balance).toContainText("$50,000.00");
@@ -405,6 +406,7 @@ test.describe("Swing practice", () => {
     await page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: "Week 1 review", exact: true }).click();
     await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 1 · 5 days");
+    await expectBacktestChrome(page, "Practice"); // the week review highlights Practice (design-modes-cutover Q9)
     await expect(page.getByText(/^Final/)).toBeVisible(); // "Final · N holds open" while holds ride on (D-130)
     await expect(page.getByText("Days 1 to 5", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Fixed universe · 12 symbols chosen today/)).toBeVisible();

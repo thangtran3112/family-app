@@ -4,7 +4,7 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { openNextDay, replayRail, send } from "./swing-helpers";
 
@@ -74,12 +74,15 @@ test.describe("Practice", () => {
     await openDesk(page, "/practice");
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(null));
     await expect(page.getByRole("heading", { name: "Practice", level: 1 })).toBeVisible();
+    // ADR-0014: Practice is Backtest mode, with no live-market chrome.
+    await expectBacktestChrome(page, "Practice");
     await expectCleanScreen(page);
 
     expect((await page.request.get(`${origin}/favicon.ico`)).ok(), "D-010: the export ships a favicon").toBeTruthy();
 
     await startStubSession(page, context);
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
+    await expectBacktestChrome(page, "Practice");
     await expectCleanScreen(page);
     expect(api.paths().filter((path) => LIVE_DATA.test(path)), "a replay screen never reads the live store").toEqual([]);
   });

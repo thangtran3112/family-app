@@ -45,6 +45,36 @@
   --radius-lg: 20px;
   --radius-full: 999px;
   --container-desk: 1440px;
+
+  /* ---- Design-system tokens (DS-0, additive: nothing reads these yet; later phases migrate modules onto them). ---- */
+  /* Type floor: --text-micro (11px) is for uppercase caps labels only; running text and values are --text-meta or larger. 10px is banned. */
+  --text-meta: 12px;
+  --line-meta: 16px;
+  --text-heading: 20px;
+  --line-heading: 24px;
+  --space-0-5: 2px;
+  --space-1-5: 6px;
+  /* Control and row heights. --size-touch is for the mobile shell only. */
+  --size-chip: 20px;
+  --size-sm: 24px;
+  --size-md: 28px;
+  --size-lg: 32px;
+  --size-touch: 44px;
+  /* Use as `outline: var(--focus-ring); outline-offset: 2px`, or add the .focus-ring class. */
+  --focus-ring: 2px solid var(--color-amber);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --z-sticky: 1;
+  --z-drawer: 6;
+  --z-popover: 30;
+  --z-modal: 40;
+  --rail-right: 320px;
+  --color-amber-tint: color-mix(in srgb, var(--color-amber) 12%, transparent);
+  --color-down-tint: color-mix(in srgb, var(--color-down) 12%, transparent);
+  --color-up-tint: color-mix(in srgb, var(--color-up) 12%, transparent);
+  /* Canvas and SVG cannot read CSS variables: lib/desk/chartPalette.ts repeats the colours, and chartPalette.test.ts keeps both in step. */
+  --color-chart-price: #64D2FF;
+  --color-chart-alt: #E5E5EA;
 }
 
 * {
@@ -75,6 +105,24 @@ a {
 a:focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 3px;
+}
+
+/* Shared utilities (the only two besides tokens): opt-in, so adding them changes no existing element. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.focus-ring:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .desk-shell {

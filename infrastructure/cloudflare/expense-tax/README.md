@@ -82,7 +82,7 @@ mutation, and grants existing
 dedicated `expense-tax-cf-terraform` service account object admin. The
 application deploy service account has no access to this bucket. For a fresh
 environment, run
-`expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`
+`infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh`
 to create the dedicated service account and exact Cloudflare workflow WIF
 provider. Existing production bootstrap is complete. Re-running these commands
 mutates GCP and requires explicit operator approval.

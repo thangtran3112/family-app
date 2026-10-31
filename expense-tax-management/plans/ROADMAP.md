@@ -32,7 +32,7 @@ GCP
 ## Completed Infrastructure
 
 - VPS SSH hardening, UFW policy, Docker, and reusable bootstrap scripts.
-- Private production Compose deployment under `expense-tax-management/deploy/production/`.
+- Private production Compose deployment under `infrastructure/apps/expense-tax/`.
 - GitHub Actions immutable-image build, migration, health check, rollback, and deployment workflow.
 - Cloudflare Tunnel with explicit product host/path routing and no public VPS application ports.
 - Clerk DNS, SPF/DKIM, DMARC monitoring, signed webhook delivery, and authenticated smoke verification.
@@ -44,7 +44,7 @@ GCP
 | Concern | Path |
 |---|---|
 | Production deployment workflow | `.github/workflows/expense-tax-deploy.yml` |
-| Production Compose and scripts | `expense-tax-management/deploy/production/` |
+| Production Compose and scripts | `infrastructure/apps/expense-tax/` |
 | Cloudflare Tunnel/DNS Terraform | `infrastructure/cloudflare/expense-tax/` |
 | VPS base provisioning | `infrastructure/vps/` |
 | Local shared services | `infrastructure/docker-compose.common.yml` |

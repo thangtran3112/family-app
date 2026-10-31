@@ -20,7 +20,7 @@ export function AccountsCard({ disabled }: Readonly<{ disabled: boolean }>) {
       {holdings === null ? (
         failed ? <ErrorBlock subject="accounts" onRetry={refresh} /> : <LoadingBlock label="Loading accounts…" height={64} />
       ) : holdings.accounts.length === 0 ? (
-        <ImportLine state={holdings.import} />
+        <ImportLine state={holdings.import} linkSetup={false} />
       ) : (
         <>
           {holdings.accounts.map((account) => (

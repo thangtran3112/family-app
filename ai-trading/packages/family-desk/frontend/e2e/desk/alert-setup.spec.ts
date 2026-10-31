@@ -103,13 +103,15 @@ test("building the alert updates the summary sentence and the live check answers
 });
 
 test("clearing the symbol shows one problem to fix, Save draft is answered with it, and fixing it clears the banner", async ({ page }) => {
-  // A problem shows a count banner; its plain message and dotted path sit under the Source step.
+  // A problem shows a count banner; its plain message (no schema text, no dotted path) sits under the Source step.
   await openDesk(page, "/alerts/new?source=symbol:NVDA");
   await page.getByRole("textbox", { name: "Symbols (comma separated)" }).fill("");
   await expect(page.getByText("1 problem to fix", { exact: true })).toBeVisible();
   const source = page.getByRole("region", { name: "Source", exact: true });
-  await expect(source.getByText("List should have at least 1 item after validation, not 0")).toBeVisible();
-  await expect(source.getByText("watch.universe.symbols", { exact: true })).toBeVisible();
+  await expect(source.getByText("Symbols: Add at least 1 symbol.")).toBeVisible();
+  await expect(page.getByText("watch.universe.symbols")).toHaveCount(0);
+  await expect(page.getByText("after validation")).toHaveCount(0);
+  await expect(page.getByRole("alert").getByRole("link", { name: "Symbols: Add at least 1 symbol." })).toHaveAttribute("href", "#alert-step-source");
   await expectCleanScreen(page);
 
   // Saving is answered by the server with the same problem, and nothing is created.

@@ -127,8 +127,8 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
         </ul>
       )}
 
-      <details open className={styles.details}>
-        <summary>JSON</summary>
+      <details className={styles.details}>
+        <summary>Developer view (JSON)</summary>
         <pre className={styles.json}>{JSON.stringify(strategy.spec, null, 2)}</pre>
       </details>
     </div>

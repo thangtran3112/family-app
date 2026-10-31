@@ -9,6 +9,8 @@ export const COPY = {
   updating: "Updating quotes…",
   reconnecting: "Reconnecting… · last update {time}",
   paused: "Quotes paused · last update {ago}",
+  // The mark beside a price that is not current (V-Today-01): the age, in the same words the badge uses.
+  staleMark: "Stale · {ago}",
   backup: "Using backup quotes · may differ slightly from IBKR",
   closed: "Market closed · showing last close",
   pre_market: "Pre-market · {time}",
@@ -19,12 +21,12 @@ export const COPY = {
   alertsNotStarted: "Alerts start when live quotes are connected",
   alertsRunning: "Alerts on",
   statusUnavailable: "Status unavailable right now",
+  /** The status bar in Backtest mode, where no route brings its own line (ADR-0014). */
+  backtestStatus: "Practice · past market data",
   emptyScan: "No matches right now · next scan {time}",
   emptyScanNoTime: "No matches right now",
   loadError: "Couldn't load this {subject} · Try again",
   ordersOff: "Trading is off in the Desk · place orders in IBKR",
-  wrongLane: "This screen belongs to the {lane} view",
-  switchView: "Switch view",
   advice: "Signals, not advice · you place every trade yourself in IBKR",
   marketClosedOpens: "Market closed · opens {time}",
   marketOpen: "Market open",
@@ -66,6 +68,10 @@ export const COPY = {
   alertTemplatesNotStarted: "Fundamental alerts start once their data sources are connected",
   maskShow: "Show values",
   maskHide: "Hide values",
+  // A symbol with no quote and no bars at all (V-Technicals-03): nothing will arrive, so no "trying again".
+  noMarketData: "No market data for {symbol}",
+  noMarketDataHint: "Check the symbol, or pick one from a watchlist",
+  noMarketDataBadge: "No market data",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -105,6 +111,8 @@ export type FreshnessInput = {
   connection?: Connection;
   /** The stamp covers the whole data feed (top bar, status bar, Today), not one symbol or one list. */
   feed?: boolean;
+  /** The Desk feed's own stamp (the top bar's). A paused feed sets the age on every page badge, so the screen states one age. */
+  feedStamp?: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null;
   now?: Date;
 };
 
@@ -116,6 +124,10 @@ export type FreshnessView = {
   dot: boolean;
   /** The last price stays visible but dimmed. */
   dim: boolean;
+  /** The price on screen is old but still shown (quotes paused or dropped): it needs a mark, not only a dim. */
+  stale: boolean;
+  /** "Stale · 45 min ago" for a stale price, else null. */
+  mark: string | null;
 };
 
 const TONE: Record<FreshnessState, FreshnessTone> = {
@@ -135,7 +147,16 @@ const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 export const fillCopy = fill;
 
-export function freshnessState({ stamp, session, connection = "ok", feed = false }: FreshnessInput): FreshnessState {
+/** The page's own stamp, except while the feed is paused: then the feed's age is the only age (V-Today-01, V-SCR-01). */
+function followFeed({ stamp, feedStamp }: Pick<FreshnessInput, "stamp" | "feedStamp">): FreshnessInput["stamp"] {
+  if (!stamp || feedStamp?.freshness !== "paused") return stamp;
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return stamp; // a symbol the Desk cannot read stays unreadable
+  return { ...stamp, freshness: "paused", as_of: feedStamp.as_of };
+}
+
+export function freshnessState(input: FreshnessInput): FreshnessState {
+  const { session, connection = "ok", feed = false } = input;
+  const stamp = followFeed(input);
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
   // A whole feed with nothing stored while the market is closed has nothing to retry: red "trying again" is for an
@@ -152,13 +173,23 @@ export function freshnessState({ stamp, session, connection = "ok", feed = false
 
 export function resolveFreshness(input: FreshnessInput): FreshnessView {
   const state = freshnessState(input);
-  const asOf = input.stamp?.as_of ?? null;
+  const asOf = followFeed(input)?.as_of ?? null;
   const now = input.now ?? new Date();
+  const ago = formatAgo(asOf, now);
   const label = fill(COPY[state], {
     time: state === "reconnecting" ? formatEtClock(asOf) : formatEtTimeZone(asOf),
-    ago: formatAgo(asOf, now),
+    ago,
   });
-  return { state, label, tone: TONE[state], dot: state === "live", dim: state === "reconnecting" || state === "unavailable" };
+  const stale = state === "paused" || state === "reconnecting";
+  return {
+    state,
+    label,
+    tone: TONE[state],
+    dot: state === "live",
+    dim: stale || state === "unavailable",
+    stale,
+    mark: stale ? fill(COPY.staleMark, { ago }) : null,
+  };
 }
 
 const SOURCE_LABELS: Record<string, string> = { alpaca: "Alpaca", ibkr: "IBKR", mixed: "Alpaca + IBKR" };
@@ -211,6 +242,11 @@ export function marketPillText(session: MarketSession, nextOpen: string | null):
   return nextOpen ? fill(COPY.marketClosedOpens, { time: formatEtWeekdayTime(nextOpen) }) : "Market closed";
 }
 
+/** The market pill's dot is green only while the session is open and the quotes are not stale: "Market open" beside "Quotes paused" must not look live. */
+export function marketPillOpen(session: MarketSession, quotes: Pick<FreshnessView, "stale">): boolean {
+  return session === "regular" && !quotes.stale;
+}
+
 /** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */
 export function marketPillShort(session: MarketSession): string {
   return session === "regular" ? "Open" : session === "pre" ? COPY.marketPre : session === "after" ? COPY.marketAfter : "Closed";
@@ -248,10 +284,6 @@ export function holdingsImportFailedText(statementDate: string | null): string {
 /** "Desk AI view from Thu · today's update didn't finish" */
 export function deskAiStaleText(day: string): string {
   return fill(COPY.deskAiStale, { day });
-}
-
-export function wrongLaneText(lane: string): string {
-  return fill(COPY.wrongLane, { lane });
 }
 
 export function notEnoughHistoryText(timeframe: string): string {
@@ -388,11 +420,10 @@ export const PRACTICE_COPY = {
   dayStar: "Star {symbol}",
   dayUnstar: "Unstar {symbol}",
   dayRemove: "Remove {symbol} from your names",
-  dayStarsFull: "You can star at most 20 names · 20/20 watched",
   dayWatch: "Your names",
-  dayWatchEmpty: "Star up to {max} {names} to keep them in view",
+  dayWatchEmpty: "Star names to keep them in view",
   dayPractice: "Practice {symbol}",
-    daySwitch: "Switch to {symbol}",
+  daySwitch: "Switch to {symbol}",
   dayOnNow: "On now",
   dayBehind: "Behind the clock",
   dayHolding: "Open trade",

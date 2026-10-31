@@ -20,13 +20,9 @@ import type { ThreadPlan, ThreadToday } from "./threads.ts";
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
 
-export const MAX_STARS = 20;
-
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
-/** "Star up to 3 names to keep them in view": the swing board's empty focus rail (D-095). */
-export const watchEmptyText = (cap: number): string => practiceText("dayWatchEmpty", { max: cap, names: nameWord(cap) });
 
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
@@ -272,11 +268,10 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a name past the cap is refused (at most 20; the swing board's focus names). */
-export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
+/** The next stars after a click: a starred name comes off, any other goes on the end. A practice day has no cap on stars. */
+export function toggledStars(watch: readonly { symbol: string }[], symbol: string): string[] {
   const symbols = watch.map((star) => star.symbol);
-  if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
-  return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
+  return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
 export type PortfolioRow = {

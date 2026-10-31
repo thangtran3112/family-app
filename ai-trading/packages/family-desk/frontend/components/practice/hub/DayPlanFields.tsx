@@ -27,7 +27,7 @@ import modal from "./newplan.module.css";
 
 /**
  * The daily-list half of the New plan modal (02r2, D-075, D-076): her filters as one vertical column of checkboxes, then the
- * settings in one two-column grid (first day, days, names a day, hide dates, list time, list size, interval, window). The
+ * settings in one two-column grid (first day, days, hide dates, list time, list size, interval, window). The
  * parent owns the draft and the first day (the recorded default only applies until she picks one). Nothing is armed (D-076),
  * and the list time moves up for a cadence filter.
  */

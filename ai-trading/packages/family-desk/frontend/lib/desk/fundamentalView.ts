@@ -29,3 +29,10 @@ export const hasHoldingsData = (state: ImportState): boolean => state.state === 
 
 const RATING_TEXT: Record<Rating, string> = { buy: "Buy", hold: "Hold", sell: "Sell" };
 export const ratingText = (rating: Rating): string => RATING_TEXT[rating];
+
+/** The not-connected sentence split so its setup step can be a link to Settings; null for every other line. */
+export function setupLinkParts(text: string): { lead: string; link: string; href: string } | null {
+  if (text !== COPY.holdingsNotConnected) return null;
+  const link = "set up the IBKR import in Settings";
+  return { lead: text.slice(0, text.length - link.length), link, href: "/settings" };
+}

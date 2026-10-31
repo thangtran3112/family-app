@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const productionCompose = path.join(repoRoot, "deploy", "production", "docker-compose.yml");
+const productionCompose = path.join(repoRoot, "..", "infrastructure", "apps", "expense-tax", "docker-compose.yml");
 
 const inertComposeEnv = {
   ...process.env,

@@ -201,6 +201,29 @@ export function priceSummary(liveClose: number | null, bars: Bars["bars"], prior
   return { last, change: last - priorClose, changePct: ((last - priorClose) / priorClose) * 100 };
 }
 
+type QuotePrice = { close: number; as_of: string };
+const etDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/**
+ * Header numbers: always the day's move, whatever timeframe the chart shows (V-Technicals-01: a 1W chart's prior bar
+ * is last week, so its "prior close" read as a week's drop). The live quote against the last daily close before the
+ * quote's New York day; without a quote, the last daily close against the one before it. The chart's own bars only
+ * stand in for the price while the daily bars load, never for the change.
+ */
+export function headerSummary(quote: QuotePrice | null, daily: Bars["bars"], chart: Bars["bars"]): PriceSummary {
+  if (quote) {
+    const day = etDate.format(new Date(quote.as_of));
+    const prior = daily.findLast((bar) => bar.c !== null && bar.t.slice(0, 10) < day)?.c;
+    return priceSummary(quote.close, [], prior);
+  }
+  if (daily.length > 0) return priceSummary(null, daily, daily.at(-2)?.c);
+  return priceSummary(null, chart, null);
+}
+
+/** Nothing to chart or quote at all: no live quote, no daily bars, no bars for this timeframe (V-Technicals-03). */
+export const noMarketData = (quote: QuotePrice | null, daily: Bars["bars"], chart: Bars["bars"]): boolean =>
+  quote === null && daily.length === 0 && chart.length === 0;
+
 export const changeText = (summary: PriceSummary): string =>
   summary.change === null ? "—" : `${summary.change > 0 ? "+" : summary.change < 0 ? "−" : ""}${formatPrice(Math.abs(summary.change))} (${formatSignedPct(summary.changePct)})`;
 

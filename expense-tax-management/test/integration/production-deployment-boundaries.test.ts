@@ -19,9 +19,18 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
-const productionRoot = path.join(repoRoot, "deploy", "production");
+const productionRoot = path.join(repoRoot, "..", "infrastructure", "apps", "expense-tax");
 const composePath = path.join(productionRoot, "docker-compose.yml");
 const sharedTemporalPath = path.join(repoRoot, "../infrastructure/temporal/docker-compose.yml");
+
+// Drop ambient dark-mode/worker overrides so a caller's shell cannot change what the scripts under test see.
+function cleanProcessEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && key !== "DEPLOY_DARK" && key !== "HEALTH_CHECK_REQUIRED_WORKERS") env[key] = value;
+  }
+  return env;
+}
 
 function readProductionFile(name: string): string {
   return readFileSync(path.join(productionRoot, name), "utf8");
@@ -483,7 +492,7 @@ esac
     );
 
     expect(workflow).toContain(
-      "expense-tax-management/deploy/production/docker-compose.mailbox.yml",
+      "infrastructure/apps/expense-tax/docker-compose.mailbox.yml",
     );
     expect(workflow).toContain(
       "sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.mailbox.yml /opt/expense-tax-management/app/docker-compose.mailbox.yml",
@@ -516,7 +525,7 @@ esac
 
   it("bootstraps only the GCP project and pool: no deploy identity or repository key files", () => {
     const bootstrap = readFileSync(
-      path.join(repoRoot, "infrastructure/gcp/expense-tax/bootstrap.sh"),
+      path.join(repoRoot, "../infrastructure/gcp/expense-tax/bootstrap.sh"),
       "utf8",
     );
     const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
@@ -592,7 +601,7 @@ esac
       expect(readProductionFile(name)).toMatch(/^set -Eeuo pipefail/m);
       expect(statSync(path.join(productionRoot, name)).mode & 0o777).toBe(0o755);
     }
-    expect(composePath).toContain("deploy/production/docker-compose.yml");
+    expect(composePath).toContain("infrastructure/apps/expense-tax/docker-compose.yml");
   });
 
   it("keeps workflow-worker liveness explicit and rollback-gated", () => {
@@ -732,7 +741,8 @@ esac
   it("requires workflow-worker Docker-healthy in health-check.sh via a configurable, defaulted list", () => {
     const health = readProductionFile("health-check.sh");
     expect(health).toContain("HEALTH_CHECK_REQUIRED_WORKERS");
-    expect(health).toMatch(/HEALTH_CHECK_REQUIRED_WORKERS-workflow-worker/);
+    expect(health).toMatch(/default_workers="workflow-worker"/);
+    expect(health).toMatch(/HEALTH_CHECK_REQUIRED_WORKERS-\$default_workers/);
     // Generic $worker-driven lookup, not a name hardcoded in the probe --
     // a real crash loop never settles into `healthy`, unlike the prior
     // single-poll "is it running right now" check.
@@ -770,12 +780,16 @@ describe("Task 7 Stage B fix round 1: rollback treats workflow-worker as the onl
     readonly workflowWorkerLocalImageExists?: boolean;
     readonly workflowWorkerManifestSucceedOnAttempt?: number;
     readonly pullShouldFailFor?: string;
+    readonly dark?: boolean;
   }): { readonly status: number; readonly stderr: string; readonly stateDir: string } {
     const composeFn = extractFunction(deployScript, "compose");
     const workflowWorkerImageExistsFn = extractFunction(deployScript, "workflow_worker_image_exists");
     const verifyRunningImagesFn = extractFunction(deployScript, "verify_running_images");
     const rollbackFn = extractFunction(deployScript, "rollback");
     const applicationServices = extractArray(deployScript, "APPLICATION_SERVICES");
+    // The real dark-mode filter from deploy.sh, so a dark rollback sees the
+    // same service set a dark deploy started (no workflow-worker).
+    const darkFilter = extractDarkFilter(deployScript);
 
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), "expense-tax-rollback-"));
     const stateDir = path.join(tempRoot, "state");
@@ -865,7 +879,7 @@ case "\$1" in
         *) inspect_args+=("\$1"); shift ;;
       esac
     done
-    container_id="\${inspect_args[-1]}"
+    container_id="\${inspect_args[@]: -1}"
     svc="\${container_id#fake-container-}"
     if [[ "\$fmt" == *"Health.Status"* ]]; then
       printf 'healthy\\n'
@@ -895,6 +909,7 @@ had_target=0
 env_backup=/dev/null
 previous_tag="0000000000000000000000000000000000000000"
 ${applicationServices}
+${options.dark ? `export DEPLOY_DARK=1\n${darkFilter}` : ""}
 ${composeFn}
 ${workflowWorkerImageExistsFn}
 ${verifyRunningImagesFn}
@@ -902,7 +917,7 @@ ${rollbackFn}
 rollback 1
 `;
     const env: Record<string, string> = {
-      ...process.env,
+      ...cleanProcessEnv(),
       PATH: `${fakeBin}:${process.env.PATH}`,
       FAKE_DOCKER_STATE_DIR: stateDir,
       WORKFLOW_WORKER_IMAGE_EXISTS: options.workflowWorkerImageExists ? "1" : "0",
@@ -924,6 +939,12 @@ rollback 1
       encoding: "utf8",
     });
     return { status: result.status ?? 1, stderr: result.stderr ?? "", stateDir };
+  }
+
+  function extractDarkFilter(source: string): string {
+    const match = source.match(/^if \[\[ "\$DEPLOY_DARK" == "1" \]\]; then\n {2}dark_services=\(\)[\s\S]*?^fi$/mu);
+    if (!match) throw new Error("could not extract the DEPLOY_DARK service filter");
+    return match[0];
   }
 
   function recorded(stateDir: string, file: string): string[] {
@@ -989,6 +1010,16 @@ rollback 1
     expect(recorded(stateDir, "pull-args")).toContain("workflow-worker");
     expect(recorded(stateDir, "rm-args")).not.toContain("workflow-worker");
     expect(readFileSync(path.join(stateDir, "manifest-attempts"), "utf8")).toBe("2");
+    expect(stderr).toContain("rollback verified at prior image tag");
+    expect(stderr).not.toContain("rollback failed");
+  });
+
+  it("rolls a dark deploy back without workflow-worker and does not require a worker", () => {
+    const { stderr, stateDir } = runRollback({ workflowWorkerImageExists: true, dark: true });
+    const pulled = recorded(stateDir, "pull-args");
+    expect(pulled).not.toContain("workflow-worker");
+    expect(pulled).toContain("app-api");
+    expect(recorded(stateDir, "up-args")).not.toContain("workflow-worker");
     expect(stderr).toContain("rollback verified at prior image tag");
     expect(stderr).not.toContain("rollback failed");
   });
@@ -1133,5 +1164,162 @@ printf 'ROLLBACK_RAN=%s\\n' "$ROLLBACK_RAN"
     expect(stdout).toContain("DEPLOY_OK");
     expect(stdout).toContain("ROLLBACK_RAN=0");
     expect(stderr).toContain("warning: could not stop workflow-worker before migrations");
+  });
+});
+
+describe("0001b-2 dark mode: DEPLOY_DARK=1 never starts workflow-worker", () => {
+  const deployScript = readProductionFile("deploy.sh");
+
+  function darkFilter(): string {
+    const match = deployScript.match(/^if \[\[ "\$DEPLOY_DARK" == "1" \]\]; then\n {2}dark_services=\(\)[\s\S]*?^fi$/mu);
+    if (!match) throw new Error("could not extract the DEPLOY_DARK service filter");
+    return match[0];
+  }
+
+  function servicesFor(dark: "0" | "1", mailbox: boolean): string[] {
+    const script = `
+set -Eeuo pipefail
+APPLICATION_SERVICES=(app-api foundry-service workflow-worker capture-web office-web foundry-web${mailbox ? " mailbox-broker" : ""})
+DEPLOY_DARK=${dark}
+${darkFilter()}
+printf '%s\\n' "\${APPLICATION_SERVICES[@]}"
+`;
+    const result = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    return result.stdout.split("\n").filter(Boolean);
+  }
+
+  it("leaves workflow-worker out of a dark deploy and keeps every other service", () => {
+    expect(servicesFor("1", false)).toEqual([
+      "app-api",
+      "foundry-service",
+      "capture-web",
+      "office-web",
+      "foundry-web",
+    ]);
+    expect(servicesFor("1", true)).toContain("mailbox-broker");
+    expect(servicesFor("1", true)).not.toContain("workflow-worker");
+  });
+
+  it("still starts workflow-worker on a normal deploy", () => {
+    expect(servicesFor("0", false)).toContain("workflow-worker");
+    expect(servicesFor("0", true)).toContain("workflow-worker");
+  });
+
+  it("rejects any DEPLOY_DARK value other than 0 or 1", () => {
+    expect(deployScript).toContain('case "${DEPLOY_DARK:-0}" in 0 | 1) ;; *) die "DEPLOY_DARK must be 0 or 1" ;; esac');
+  });
+
+  function runHealthCheck(env: Record<string, string>): { status: number; stderr: string } {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "expense-tax-health-dark-"));
+    try {
+      const fakeBin = path.join(tempRoot, "bin");
+      mkdirSync(fakeBin, { recursive: true });
+      // curl and docker succeed; `compose ps -q` prints nothing, so no
+      // worker container ever exists to be Docker-healthy.
+      for (const name of ["curl", "docker"]) {
+        writeFileSync(path.join(fakeBin, name), "#!/usr/bin/env bash\nexit 0\n");
+        chmodSync(path.join(fakeBin, name), 0o700);
+      }
+      const result = spawnSync("bash", [path.join(productionRoot, "health-check.sh")], {
+        env: {
+          ...cleanProcessEnv(),
+          PATH: `${fakeBin}:${process.env.PATH}`,
+          PRODUCTION_ENV_FILE: "/dev/null",
+          HEALTH_CHECK_ATTEMPTS: "1",
+          HEALTH_CHECK_DELAY_SECONDS: "0",
+          ...env,
+        },
+        encoding: "utf8",
+      });
+      return { status: result.status ?? 1, stderr: result.stderr ?? "" };
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }
+
+  it("health-check requires workflow-worker by default and skips it only in dark mode", () => {
+    const normal = runHealthCheck({});
+    expect(normal.status).toBe(1);
+    expect(normal.stderr).toContain("workflow-worker is not healthy");
+
+    const explicitZero = runHealthCheck({ DEPLOY_DARK: "0" });
+    expect(explicitZero.status).toBe(1);
+
+    const dark = runHealthCheck({ DEPLOY_DARK: "1" });
+    expect(dark.stderr).toBe("");
+    expect(dark.status).toBe(0);
+
+    // An explicit worker list still wins, even in dark mode.
+    const darkExplicit = runHealthCheck({ DEPLOY_DARK: "1", HEALTH_CHECK_REQUIRED_WORKERS: "workflow-worker" });
+    expect(darkExplicit.status).toBe(1);
+  });
+});
+
+describe("0001b-2 deploy workflow: target, dark, image_tag", () => {
+  const raw = readFileSync(path.join(repoRoot, "../.github/workflows/expense-tax-deploy.yml"), "utf8");
+  const workflow = YAML.parse(raw) as {
+    on: {
+      push: { paths: string[] };
+      workflow_dispatch: { inputs: Record<string, { type: string; options?: string[]; default: unknown }> };
+    };
+    jobs: Record<string, { if?: string; env?: Record<string, string>; permissions?: Record<string, string>; steps?: Array<Record<string, unknown>> }>;
+  };
+
+  it("adds target (vps default), dark and image_tag to workflow_dispatch", () => {
+    const inputs = workflow.on.workflow_dispatch.inputs;
+    expect(Object.keys(inputs).sort()).toEqual(["dark", "image_tag", "target"]);
+    expect(inputs.target).toMatchObject({ type: "choice", options: ["vps", "laptop"], default: "vps" });
+    expect(inputs.dark).toMatchObject({ type: "boolean", default: false });
+    expect(inputs.image_tag).toMatchObject({ type: "string", default: "" });
+    expect(workflow.on.push.paths).toContain("infrastructure/apps/expense-tax/**");
+  });
+
+  it("skips the build when an image_tag is dispatched and still deploys after a skipped build", () => {
+    expect(workflow.jobs.build.if).toContain("github.ref == 'refs/heads/main'");
+    expect(workflow.jobs.build.if).toContain("inputs.image_tag == ''");
+    expect(workflow.jobs.deploy.if).toContain("needs.build.result == 'skipped'");
+    expect(workflow.jobs.deploy.if).toContain("github.ref == 'refs/heads/main'");
+    expect(raw).toContain("IMAGE_TAG: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || github.sha }}");
+    expect(raw).toContain("^[0-9a-f]{40}$");
+  });
+
+  it("passes DEPLOY_DARK to deploy.sh through family-config, '1' only for a dark dispatch", () => {
+    expect(workflow.jobs.deploy.env?.DEPLOY_DARK).toContain("inputs.dark == true");
+    expect(workflow.jobs.deploy.env?.DEPLOY_DARK).toContain("'1' || '0'");
+    expect(raw).toContain("DEPLOY_DARK='$DEPLOY_DARK' FAMILY_CONFIG_CREDENTIALS=");
+  });
+
+  it("joins the tailnet as tag:ci only for target=laptop, with a pinned action and no OIDC", () => {
+    const steps = workflow.jobs.deploy.steps ?? [];
+    const join = steps.find((step) => step.name === "Join the tailnet") as
+      | { if: string; uses: string; with: Record<string, string> }
+      | undefined;
+    expect(join).toBeDefined();
+    expect(join?.if).toContain("env.TARGET == 'laptop'");
+    expect(join?.uses).toMatch(/^tailscale\/github-action@[0-9a-f]{40}( #.*)?$/);
+    expect(join?.with).toEqual({
+      "oauth-client-id": "${{ secrets.TS_CI_OAUTH_CLIENT_ID }}",
+      "oauth-secret": "${{ secrets.TS_CI_OAUTH_SECRET }}",
+      tags: "tag:ci",
+    });
+    expect(workflow.jobs.deploy.permissions?.["id-token"]).toBeUndefined();
+    expect(raw).not.toContain("id-token: write");
+  });
+
+  it("selects the laptop host variables and secrets, keeping the VPS copies, and fails closed when one is unset", () => {
+    for (const name of ["LAPTOP_HOST", "LAPTOP_PORT", "LAPTOP_USER"]) {
+      expect(raw).toContain(`vars.${name}`);
+    }
+    for (const name of ["LAPTOP_DEPLOY_SSH_KEY", "LAPTOP_DEPLOY_KNOWN_HOSTS"]) {
+      expect(raw).toContain(`secrets.${name}`);
+    }
+    for (const name of ["VPS_HOST", "VPS_PORT", "VPS_USER"]) {
+      expect(raw).toContain(`vars.${name}`);
+    }
+    expect(raw).toContain("secrets.VPS_DEPLOY_SSH_KEY");
+    expect(raw).toContain("secrets.VPS_DEPLOY_KNOWN_HOSTS");
+    expect(raw).toContain('if [[ "$TARGET" == "laptop" ]]; then');
+    expect(raw).toContain("target=laptop needs $name");
   });
 });

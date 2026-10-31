@@ -34,6 +34,7 @@ type step struct {
 	resp    func() proto.Message
 	auth    string // "none" | "read" | "admin"
 	wantErr connect.Code
+	archive bool // run on a bridge with the H1 archive on (the default bridge has it off)
 }
 
 func steps() []step {
@@ -56,6 +57,7 @@ func steps() []step {
 	// 2023-11-24 is an early close (13:00 ET): the 12:30 ET hourly bar closes at 18:00Z, not 18:30Z.
 	halfDay := &pb.GetBarsRequest{Symbol: "SPY", Timeframe: pb.Timeframe_HOUR_1,
 		Start: timestamppb.New(time.Date(2023, 11, 24, 15, 0, 0, 0, time.UTC)), End: timestamppb.New(time.Date(2023, 11, 24, 21, 0, 0, 0, time.UTC))}
+	ensure := &pb.EnsureHistoryRequest{Symbols: []string{"AAPL"}, Timeframe: pb.Timeframe_DAY_1, FirstSession: "2024-04-30", LastSession: "2024-05-01"}
 	prefAlpaca := &pb.SetRoutingRequest{Version: 2, Preferences: []*pb.ClassPreference{{DataClass: pb.DataClass_EQUITY_QUOTES, Provider: "alpaca"}}}
 	return []step{
 		{golden: "get_quotes", rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"AAPL", "MSFT", "ZZZZ"}}, resp: quotes, auth: "read"},
@@ -85,6 +87,8 @@ func steps() []step {
 		{golden: "get_bars_invalid", rpc: "GetBars", req: &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1,
 			Start: timestamppb.New(fixedNow), End: timestamppb.New(fixedNow.AddDate(0, 0, -1))}, resp: bars, auth: "read", wantErr: connect.CodeInvalidArgument},
 		{golden: "list_providers_unauthenticated", rpc: "ListProviders", req: &pb.ListProvidersRequest{}, resp: func() proto.Message { return &pb.ListProvidersResponse{} }, auth: "none", wantErr: connect.CodeUnauthenticated},
+		{golden: "ensure_history", archive: true, rpc: "EnsureHistory", req: ensure, resp: func() proto.Message { return &pb.EnsureHistoryResponse{} }, auth: "read"},
+		{golden: "ensure_history_disabled", rpc: "EnsureHistory", req: ensure, resp: func() proto.Message { return &pb.EnsureHistoryResponse{} }, auth: "read", wantErr: connect.CodeUnimplemented},
 		{golden: "get_quotes_unavailable", pre: func(h *harness) { h.setAlpacaDown(true) }, rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"AAPL"}}, resp: quotes, auth: "read", wantErr: connect.CodeUnavailable},
 	}
 }
@@ -178,6 +182,13 @@ func callConnect(t *testing.T, h *harness, s step, opts ...connect.ClientOption)
 		if resp, err = c.ListProviders(ctx, r); err == nil {
 			msg = resp.Msg
 		}
+	case "EnsureHistory":
+		r := connect.NewRequest(s.req.(*pb.EnsureHistoryRequest))
+		hdr(r)
+		var resp *connect.Response[pb.EnsureHistoryResponse]
+		if resp, err = c.EnsureHistory(ctx, r); err == nil {
+			msg = resp.Msg
+		}
 	case "GetStatus":
 		r := connect.NewRequest(s.req.(*pb.GetStatusRequest))
 		hdr(r)
@@ -230,12 +241,16 @@ func TestConformanceEveryRPCIdenticalOverEveryWire(t *testing.T) {
 	script := steps()
 	results := map[string][]outcome{}
 	for _, tr := range transports() {
-		h := newHarness(t)
+		h, withArchive := newHarness(t), newHarness(t, memArchive)
 		for _, s := range script {
-			if s.pre != nil {
-				s.pre(h)
+			use := h
+			if s.archive {
+				use = withArchive
 			}
-			results[tr.name] = append(results[tr.name], tr.call(t, h, s))
+			if s.pre != nil {
+				s.pre(use)
+			}
+			results[tr.name] = append(results[tr.name], tr.call(t, use, s))
 		}
 	}
 	for i, s := range script {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { chartPalette } from "@/lib/desk/chartPalette";
 import type {
   HistogramData,
   IChartApi,
@@ -11,6 +12,7 @@ import type {
   UTCTimestamp,
   WhitespaceData,
 } from "lightweight-charts";
+import { formatPrice } from "@/lib/desk/format";
 import { qualityLabel } from "@/lib/labels";
 import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
@@ -22,6 +24,7 @@ import {
   replayTickLabel,
   currentValue,
   lineData,
+  paneHeights,
   seriesMarkers,
   shadingData,
   volumeData,
@@ -101,33 +104,34 @@ export type MarketChartProps = {
   rowLabels?: readonly string[];
   /** Start time of a bar to bring into view with the crosshair on it (a click in the signals rail). `at` changes on every click, so the same bar can be asked for twice. */
   focus?: { time: string; at: number } | null;
+  /** One legend per indicator pane (same order as `panes`), drawn at the top of its pane wherever the layout puts it. */
+  paneLegends?: ReactNode[];
 };
 
 /** Bars shown on the first draw of a followed chart, and the room right of the newest bar: a marker label is centred on its bar and clipped at the price axis, so it needs about half a label of room. */
 const FOLLOW_VISIBLE_BARS = 90;
 const FOLLOW_RIGHT_PAD = 10;
 
-// The up and down colours of the Desk; canvas cannot read the CSS variables. PRICE is the line and area colour: not white
+// The Desk colours come from chartPalette (canvas cannot read the CSS variables). PRICE is the line and area colour: not white
 // (EMA 9), not green or red (those mean up and down).
-const UP = "#30D158";
-const DOWN = "#FF453A";
-const PRICE = "#64D2FF";
-const CLEAR = "rgba(0,0,0,0)";
+const { up: UP, down: DOWN, price: PRICE, clear: CLEAR } = chartPalette;
 
 const DEFAULT_PANE_HEIGHT = 120;
-const MIN_PRICE_PANE = 160;
 
-/** Indicator panes keep their pixel height and the price pane takes the rest. `setHeight` on one pane rescales the
- * others, so the second call shrank the first to about 30 px: set every pane's stretch factor from pixels instead,
- * and again whenever the chart is resized (stretch factors are shares, so a resize would rescale them). */
-function layoutPanes(chart: IChartApi, panes: MarketChartPane[]): void {
+/** Indicator panes keep their pixel height while there is room and the price pane takes the rest, never less than
+ * PRICE_PANE_SHARE of the chart (`paneHeights`). `setHeight` on one pane rescales the others, so the second call shrank
+ * the first to about 30 px: set every pane's stretch factor from pixels instead, and again whenever the chart is
+ * resized (stretch factors are shares, so a resize would rescale them). Returns the top of each indicator pane. */
+function layoutPanes(chart: IChartApi, panes: MarketChartPane[]): number[] {
   const apis = chart.panes();
   const total = apis.reduce((sum, pane) => sum + pane.getHeight(), 0);
-  if (panes.length === 0 || apis.length < panes.length + 1 || total <= 0) return;
-  const heights = panes.map((pane) => pane.height ?? DEFAULT_PANE_HEIGHT);
-  apis[0]?.setStretchFactor(Math.max(total - heights.reduce((sum, height) => sum + height, 0), MIN_PRICE_PANE));
-  heights.forEach((height, index) => apis[index + 1]?.setStretchFactor(height));
+  if (panes.length === 0 || apis.length < panes.length + 1 || total <= 0) return [];
+  const heights = paneHeights(total, panes.map((pane) => pane.height ?? DEFAULT_PANE_HEIGHT));
+  heights.forEach((height, index) => apis[index]?.setStretchFactor(height));
+  return panes.map((_, index) => heights.slice(0, index + 1).reduce((sum, height) => sum + height, 0));
 }
+
+const sameTops = (a: number[], b: number[]) => a.length === b.length && a.every((top, index) => Math.round(top) === Math.round(b[index]!));
 
 type PaneSeriesApi =
   | { kind: "line"; series: ISeriesApi<"Line", Time> }
@@ -142,7 +146,7 @@ function addMainSeries(library: Library, chart: IChartApi, kind: MainKind): Main
   switch (kind) {
     case "Bar": return chart.addSeries(library.BarSeries, { upColor: UP, downColor: DOWN, openVisible: true, thinBars: false });
     case "Line": return chart.addSeries(library.LineSeries, { color: PRICE, lineWidth: 2, crosshairMarkerVisible: true });
-    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: "rgba(100,210,255,0.24)", bottomColor: "rgba(100,210,255,0)", lineWidth: 2 });
+    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: chartPalette.priceFillTop, bottomColor: chartPalette.priceFillBottom, lineWidth: 2 });
     case "Candlestick": return chart.addSeries(library.CandlestickSeries, { upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false });
   }
 }
@@ -172,10 +176,9 @@ function formatAsOf(value: string | null): string {
   return `as of ${formatChartTime(Math.floor(Date.parse(value) / 1000) as UTCTimestamp)}`;
 }
 
+/** One precision per column (2 dp, 4 under $1), not whatever digits the value happens to carry (V-Technicals-05). */
 function formatValue(value: number | null | undefined): string {
-  return value === null || value === undefined || !Number.isFinite(value)
-    ? "unavailable"
-    : value.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return value === null || value === undefined || !Number.isFinite(value) ? "unavailable" : formatPrice(value);
 }
 
 function histogramData(
@@ -214,6 +217,7 @@ export function MarketChart({
   clockTicks = false,
   rowLabels,
   focus = null,
+  paneLegends,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
@@ -234,6 +238,7 @@ export function MarketChart({
   const paneSignature = useRef("");
   const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
+  const [paneTops, setPaneTops] = useState<number[]>([]);
 
   useEffect(() => {
     crosshairCallback.current = onCrosshair;
@@ -259,22 +264,22 @@ export function MarketChart({
         // hovering it painted it over the lines and candles (D-072): series stay in the order set below.
         hoveredSeriesOnTop: false,
         layout: {
-          background: { type: module.ColorType.Solid, color: "#000000" },
-          textColor: "#9B9BA1",
+          background: { type: module.ColorType.Solid, color: chartPalette.ground },
+          textColor: chartPalette.muted,
           fontFamily: "Inter, system-ui, sans-serif",
         },
         grid: {
-          vertLines: { color: "#2C2C30" },
-          horzLines: { color: "#2C2C30" },
+          vertLines: { color: chartPalette.hairline },
+          horzLines: { color: chartPalette.hairline },
         },
         crosshair: {
           mode: module.CrosshairMode.Normal,
-          vertLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
-          horzLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
+          vertLine: { color: chartPalette.muted, style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: chartPalette.amber },
+          horzLine: { color: chartPalette.muted, style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: chartPalette.amber },
         },
-        rightPriceScale: { borderColor: "#2C2C30" },
+        rightPriceScale: { borderColor: chartPalette.hairline },
         timeScale: {
-          borderColor: "#2C2C30",
+          borderColor: chartPalette.hairline,
           timeVisible: true,
           secondsVisible: false,
           tickMarkFormatter: (time: Time) => formatChartTime(time),
@@ -282,7 +287,10 @@ export function MarketChart({
         localization: { locale: "en-US", timeFormatter: formatChartTime },
       });
       chart.current = currentChart;
-      resizeWatch = new ResizeObserver(() => layoutPanes(currentChart, paneLayout.current));
+      resizeWatch = new ResizeObserver(() => {
+        const tops = layoutPanes(currentChart, paneLayout.current);
+        setPaneTops((current) => (sameTops(current, tops) ? current : tops));
+      });
       resizeWatch.observe(container.current);
       mainKind.current = "Candlestick";
       main.current = addMainSeries(module, currentChart, mainKind.current);
@@ -422,7 +430,7 @@ export function MarketChart({
         }
         if (!entry) continue;
         if (item.kind === "histogram" && entry.kind === "histogram") {
-          entry.series.setData(histogramData(bars, item.values, item.color, item.negativeColor ?? "#FF453A"));
+          entry.series.setData(histogramData(bars, item.values, item.color, item.negativeColor ?? chartPalette.down));
           entry.series.applyOptions({ title: item.label, color: item.color });
         } else if (item.kind === "line" && entry.kind === "line") {
           entry.series.setData(lineData(bars, item.values));
@@ -437,7 +445,7 @@ export function MarketChart({
           const line = first?.createPriceLine({
             price: reference.value,
             title: reference.label,
-            color: "#9B9BA166",
+            color: chartPalette.mutedFaint,
             lineStyle: chartLibrary.LineStyle.Dashed,
             lineWidth: 1,
             axisLabelVisible: false,
@@ -448,7 +456,8 @@ export function MarketChart({
         panePriceLines.current.set(firstId, lines);
       }
     });
-    layoutPanes(currentChart, panes);
+    const tops = layoutPanes(currentChart, panes);
+    setPaneTops((current) => (sameTops(current, tops) ? current : tops));
 
     for (const line of priceLines.current) mainSeries.removePriceLine(line);
     priceLines.current = levels.flatMap(({ label, price, color, style }) => {
@@ -456,7 +465,7 @@ export function MarketChart({
       return [mainSeries.createPriceLine({
         price,
         title: label,
-        color: color ?? "#9B9BA1",
+        color: color ?? chartPalette.muted,
         lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
         lineWidth: 1,
         axisLabelVisible: true,
@@ -556,6 +565,9 @@ export function MarketChart({
       </div>}
       <div className={styles.canvasWrap} style={height === "fill" ? { flex: "1 1 0", minHeight: 0 } : { height }}>
         <div ref={container} className={styles.canvas} aria-hidden="true" />
+        {paneLegends?.map((node, index) => paneTops[index] === undefined ? null : (
+          <div key={panes[index]?.id ?? index} className={styles.paneLegend} style={{ top: paneTops[index] + 4 }}>{node}</div>
+        ))}
         {bars.length === 0 && <p className={styles.empty} role="status">No closed bars available for this symbol and timeframe.</p>}
       </div>
       {!bare && <div className={styles.currentValues} aria-label="Latest chart values">
@@ -572,7 +584,7 @@ export function MarketChart({
         <summary>Chart data table · {bars.length} source bars</summary>
         <div className={styles.tableScroll}>
           <table>
-            <thead><tr><th scope="col">Source time</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
+            <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
             <tbody>{bars.map((bar, index) => (
               <tr key={`${bar.t}-${index}`}><th scope="row">{sourceTimeLabel(bar.t, index, hideDates, rowLabels)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
             ))}</tbody>

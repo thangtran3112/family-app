@@ -1,4 +1,4 @@
-import styles from "./interstitial.module.css";
+import styles from "./DesktopOnlyNotice.module.css";
 
 /** Desktop-only routes on a phone: no mobile layout is built for them (02m §e). */
 export function DesktopOnlyNotice() {

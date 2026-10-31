@@ -18,13 +18,14 @@ export type StripTile = {
 };
 
 /** The note under a strip tile: why an empty tile is empty and when it fills, or the as-of of a last close. */
-function tileNote(tile: Dashboard["market_strip"][number], unavailable: boolean, readOnly: boolean, nextUpdateAt: string | null): string | null {
+function tileNote(tile: Dashboard["market_strip"][number], unavailable: boolean, readOnly: boolean, nextUpdateAt: string | null, staleMark: string | null): string | null {
   if (readOnly) return unavailable ? COPY.futuresNotConnected : COPY.futuresReadOnly;
   if (unavailable) return nextUpdateAt ? fillCopy(COPY.stripFirstUpdate, { time: formatEtWeekdayTime(nextUpdateAt) }) : COPY.stripNoData;
-  return tile.stamp.freshness === "closed" && tile.stamp.as_of ? fillCopy(COPY.stripLastClose, { time: formatEtWeekdayTime(tile.stamp.as_of) }) : null;
+  if (tile.stamp.freshness === "closed" && tile.stamp.as_of) return fillCopy(COPY.stripLastClose, { time: formatEtWeekdayTime(tile.stamp.as_of) });
+  return staleMark; // a price that is not current says so on the tile (V-Today-01)
 }
 
-export function stripTiles(strip: Dashboard["market_strip"], nextUpdateAt: string | null = null): StripTile[] {
+export function stripTiles(strip: Dashboard["market_strip"], nextUpdateAt: string | null = null, staleMark: string | null = null): StripTile[] {
   return strip.map((tile) => {
     const readOnly = tile.symbol.startsWith("/");
     const unavailable = tile.stamp.freshness === "unavailable" || tile.last === null;
@@ -35,7 +36,7 @@ export function stripTiles(strip: Dashboard["market_strip"], nextUpdateAt: strin
       tone: unavailable ? "flat" : changeTone(tile.change_pct),
       unavailable,
       readOnly,
-      note: tileNote(tile, unavailable, readOnly, nextUpdateAt),
+      note: tileNote(tile, unavailable, readOnly, nextUpdateAt, staleMark),
     };
   });
 }

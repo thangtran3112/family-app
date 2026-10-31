@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const productionRoot = path.join(repoRoot, "deploy", "production");
+const productionRoot = path.join(repoRoot, "..", "infrastructure", "apps", "expense-tax");
 const deployScript = readFileSync(path.join(productionRoot, "deploy.sh"), "utf8");
 
 function extractFunction(source: string, name: string): string {
@@ -75,7 +75,7 @@ case "\$1" in
         *) inspect_args+=("\$1"); shift ;;
       esac
     done
-    container_id="\${inspect_args[-1]}"
+    container_id="\${inspect_args[@]: -1}"
     svc="\${container_id#fake-container-}"
     if [[ "\$fmt" == *"Health.Status"* ]]; then
       printf 'healthy\\n'
@@ -271,7 +271,7 @@ case "\$1" in
         *) inspect_args+=("\$1"); shift ;;
       esac
     done
-    container_id="\${inspect_args[-1]}"
+    container_id="\${inspect_args[@]: -1}"
     svc="\${container_id#fake-container-}"
     if [[ "\$fmt" == *"Health.Status"* ]]; then
       printf 'healthy\\n'

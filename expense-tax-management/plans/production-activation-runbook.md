@@ -39,7 +39,7 @@ explicitly granted by the owner before its mutating steps run.
 
 - Never commit directly to `dev` or `main`; `main` is production-only and is
   entered only through a merged `dev` → `main` PR (`AGENTS.md`).
-- Never run `deploy/production/bootstrap-temporal-db.sh` or
+- Never run `infrastructure/apps/expense-tax/bootstrap-temporal-db.sh` or
   `bootstrap-mailbox-vault-db.sh` as part of a normal deploy — operator-only,
   by design (`AGENTS.md`, `infrastructure/README.md`).
 - Never place a writer/reader GCS key, the `age` private recovery identity, or
@@ -85,8 +85,8 @@ STOP: owner approval required before R.2/R.3 (production traffic path).
 `temporal`/`temporal_visibility` once they exist under the shared server) and
 the receipt volume exists before Phase 1 touches Temporal.
 
-**Prerequisites:** VPS SSH access; shared Postgres running (`expense-tax-postgres`,
-confirmed container name per `infrastructure/vps/steps/30-postgres.sh:81`,
+**Prerequisites:** VPS SSH access; shared Postgres running (`family-app-postgres`,
+confirmed container name per `infrastructure/host/steps/30-postgres.sh:81`,
 network `postgres_default`).
 
 Choose one:
@@ -139,7 +139,7 @@ off-VPS `.tar.age` + key until Phase 1 completes.
 server before the dispatch-routing cutover, in the order that fails closed
 with zero production impact if anything is wrong.
 
-**Why this order:** `deploy/production/deploy.sh` (as merged on `dev`) now
+**Why this order:** `infrastructure/apps/expense-tax/deploy.sh` (as merged on `dev`) now
 calls `require_shared_temporal()` unconditionally before touching any
 container, and that check — along with `load_env_file`'s `is_known_key`
 rejection of any stray `TEMPORAL_DB_PASSWORD` line — runs **before** the
@@ -227,7 +227,7 @@ drains its own backlog, with no container restart.
 note two gaps not listed in `runtime-typescript-temporal-migration.md`'s own
 Stage C Files list, found by reading the actual scripts:
 
-- `deploy/production/health-check.sh`'s required-worker default is
+- `infrastructure/apps/expense-tax/health-check.sh`'s required-worker default is
   `${HEALTH_CHECK_REQUIRED_WORKERS:-ai-worker workflow-worker}`. Once
   `ai-worker` is removed from `APPLICATION_SERVICES` and the Compose file,
   this default will wait forever for a service that no longer exists. The
@@ -293,7 +293,7 @@ and does not depend on Phase 3 at all.
 - **Fixed** (commit `bf4489c`, `ci(deploy): transfer and install
   docker-compose.mailbox.yml on the VPS`): `.github/workflows/expense-tax-deploy.yml`'s
   "Transfer production runtime" step now also `scp`s
-  `expense-tax-management/deploy/production/docker-compose.mailbox.yml` to
+  `infrastructure/apps/expense-tax/docker-compose.mailbox.yml` to
   `/tmp/expense-tax-deploy/`, and "Deploy over dedicated SSH identity" now
   also installs it as
   `/opt/expense-tax-management/app/docker-compose.mailbox.yml` (root-owned,
@@ -317,7 +317,7 @@ and does not depend on Phase 3 at all.
 
 | # | Where | Step |
 |---|---|---|
-| 1 | VPS | First confirm the real container name — **do not assume it**: `docker ps --format '{{.Names}}'` (the repo's own `infrastructure/vps/steps/30-postgres.sh` names it `family-app-postgres`, but this is not guaranteed for every host and is not changed by this runbook). **Vault bootstrap** (operator-only, never part of normal deploy): `POSTGRES_CONTAINER=<name confirmed above> POSTGRES_SUPERUSER_PASSWORD=<value from Firestore shared/vps-postgres POSTGRES_SUPERUSER_PASSWORD, e.g. via family_config.py get shared/vps-postgres POSTGRES_SUPERUSER_PASSWORD piped/exported in the operator session, never echoed> MAILBOX_VAULT_MIGRATOR_DB_PASSWORD=<new> MAILBOX_VAULT_RUNTIME_DB_PASSWORD=<new> deploy/production/bootstrap-mailbox-vault-db.sh`. The script's own default (`expense-tax-postgres`) is almost certainly wrong for this cluster — **always pass `POSTGRES_CONTAINER` explicitly**; the default is intentionally left unchanged here since the real production container name is not determinable from this repository. Creates database `mailbox_vault`, roles `mailbox_vault_migrator` (DDL) and `mailbox_vault_runtime` (DML-only); store both new role passwords in Firestore `expense-tax-management/ops`. |
+| 1 | VPS | First confirm the real container name — **do not assume it**: `docker ps --format '{{.Names}}'` (the repo's own `infrastructure/host/steps/30-postgres.sh` names it `family-app-postgres`, which is now the `bootstrap-*-db.sh` default too; passing `POSTGRES_CONTAINER` explicitly still protects a host whose container is named differently). **Vault bootstrap** (operator-only, never part of normal deploy): `POSTGRES_CONTAINER=<name confirmed above> POSTGRES_SUPERUSER_PASSWORD=<value from Firestore shared/vps-postgres POSTGRES_SUPERUSER_PASSWORD, e.g. via family_config.py get shared/vps-postgres POSTGRES_SUPERUSER_PASSWORD piped/exported in the operator session, never echoed> MAILBOX_VAULT_MIGRATOR_DB_PASSWORD=<new> MAILBOX_VAULT_RUNTIME_DB_PASSWORD=<new> infrastructure/apps/expense-tax/bootstrap-mailbox-vault-db.sh`. The script's default is now `family-app-postgres` (it was `expense-tax-postgres`, wrong for this cluster since the shared-Postgres move); keep passing `POSTGRES_CONTAINER` explicitly anyway, so a differently named container never gets the wrong target. Creates database `mailbox_vault`, roles `mailbox_vault_migrator` (DDL) and `mailbox_vault_runtime` (DML-only); store both new role passwords in Firestore `expense-tax-management/ops`. |
 | 2 | Clerk dashboard (production instance) | **Clerk mailbox identities** — create FOUR machine identities, labeled for identification only: `app-api-mailbox`, `workflow-worker-mailbox`, `workflow-worker-mailbox-app`, `mailbox-broker-app`. Record each machine secret key and each identity's Clerk-issued machine ID (`mch_...`) — that machine ID, not the label, is the subject value. One machine per audience (fix round 5 ruling, App API's service-token verifier accepts only a single audience): `workflow-worker-mailbox` is scoped to the broker machine only (its ID is `CLERK_MAILBOX_WORKER_SUBJECT`, per `services/mailbox-broker/README.md`); `workflow-worker-mailbox-app` is scoped to the App API machine only (its ID is `CLERK_MAILBOX_WORKER_APP_SUBJECT`). Then add the five lock lines described in Prerequisites above. |
 | 3 | Google Cloud Console | **Google OAuth client** — scope exactly `https://www.googleapis.com/auth/gmail.readonly` (`plans/PLAN.md` Remaining-Phase Constraints). Redirect URI derived from Cloudflare config (Step 5 below): `https://expense-mailbox.tobytran.dev/oauth/google/callback` (`services/mailbox-broker/src/routes/oauth.ts`, `infrastructure/cloudflare/expense-tax/main.tf` line 65). Store the client ID, secret, and redirect URI in the Firestore production profile with `family_config.py set expense-tax-management/production GOOGLE_OAUTH_CLIENT_ID` (value from stdin), and likewise for `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_OAUTH_REDIRECT_URI`. |
 | 4 | operator machine | **Production profile with mailbox enabled**: set every mailbox key in `expense-tax-management/production` with `family_config.py set` — machine secrets, vault keys/active key ID, public base URL, allowed redirect origins, Clerk mailbox audience/subjects, `MAILBOX_BROKER_DATABASE_URL`/`MAILBOX_BROKER_MIGRATION_DATABASE_URL` using the container host `postgres:5432` and the roles from Step 1, and `MAILBOX_SERVICE_TOKEN_ISSUER`/`MAILBOX_SERVICE_TOKEN_AUDIENCE`/`MAILBOX_SERVICE_JWKS_URL` equal to the Clerk values — then set `MAILBOX_FEATURE_ENABLED` to `true` last. |

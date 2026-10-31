@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { useFreshness } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { WatchlistTableRow } from "@/lib/api/schemas";
 import { changeTone, formatPrice, formatSignedPct } from "@/lib/desk/format";
@@ -10,13 +11,14 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { loadWatchlists, loadWatchlistTable } from "@/lib/desk/watchlists";
 import { pickDefaultWatchlist } from "@/lib/desk/watchlistRail";
+import { SYMBOL_HREF } from "@/lib/lanes";
 import { useDeskUi } from "./DeskContext";
 import { useSymbolPicker } from "./PracticeChrome";
 import { ListSwitcher } from "./ListSwitcher";
 import styles from "./leftrail.module.css";
 
 export function WatchlistsPanel({ band }: { band: ShellBand }) {
-  const { selectedListId, setSelectedListId, revisions } = useDeskUi();
+  const { lane, selectedListId, setSelectedListId, revisions } = useDeskUi();
   // On the Practice hub a symbol click fills the session setup instead of opening the chart.
   const pickSymbol = useSymbolPicker();
   const lists = useDeskQuery("rail-watchlists", (signal) => loadWatchlists({ signal }), { revision: revisions.watchlists });
@@ -28,6 +30,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
     (signal) => loadWatchlistTable(activeId ?? 0, { signal }),
     { intervalMs: 60_000, enabled: activeId !== null, revision: revisions.watchlists },
   );
+  const stale = useFreshness({ stamp: table.data?.stamp ?? null, connection: table.connection }).stale;
 
   const empty = (
     <EmptyBlock title="Add symbols to start watching">
@@ -44,16 +47,27 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
     {
       key: "symbol",
       label: "Symbol",
-      render: (row) => (
-        <a
-          href={`/technicals?symbol=${encodeURIComponent(row.symbol)}#chart`}
-          className={styles.symbol}
-          onClick={pickSymbol ? (event) => { event.preventDefault(); pickSymbol(row.symbol); } : undefined}
-        >
-          {row.symbol}
-          {band === "1440" && <span className={styles.name}>{row.name}</span>}
-        </a>
-      ),
+      fill: true,
+      render: (row) => {
+        // A symbol opens the mode's own symbol page (ADR-0014). Backtest has none: the row is plain text unless a picker is registered.
+        const href = SYMBOL_HREF[lane]?.(row.symbol);
+        const text = (
+          <>
+            {row.symbol}
+            {band === "1440" && <span className={styles.name}>{row.name}</span>}
+          </>
+        );
+        if (!href && !pickSymbol) return <span className={styles.symbol}>{text}</span>;
+        return (
+          <a
+            href={href ?? "#"}
+            className={styles.symbol}
+            onClick={pickSymbol ? (event) => { event.preventDefault(); pickSymbol(row.symbol); } : undefined}
+          >
+            {text}
+          </a>
+        );
+      },
     },
     { key: "last", label: "Last", align: "right", render: (row) => formatPrice(row.last) },
     {
@@ -91,7 +105,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
           rowKey={(row) => row.symbol}
           band={band}
           density="compact"
-          dim={table.connection === "reconnecting"}
+          dim={stale}
           empty={empty}
         />
       </>

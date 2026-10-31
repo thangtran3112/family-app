@@ -37,7 +37,6 @@ import {
   dayRouteProblem,
   practiceWindow,
   tradeTotalRow,
-  watchEmptyText,
   planCard,
   rescanCounts,
   rescanLabel,
@@ -133,12 +132,14 @@ test("cells use the column's format and never print null; the since column is a 
   assert.equal(filtersText(smci), "Gap up · Abnormal volume");
 });
 
-test("stars toggle, keep order, and refuse a 21st name", () => {
+test("stars toggle, keep order, and never refuse a name (a practice day has no cap)", () => {
   assert.deepEqual(toggledStars([{ symbol: "A" }], "B"), ["A", "B"]);
   assert.deepEqual(toggledStars([{ symbol: "A" }, { symbol: "B" }], "A"), ["B"]);
   const twenty = Array.from({ length: 20 }, (_, i) => ({ symbol: `S${i}` }));
-  assert.equal(toggledStars(twenty, "NEW"), null);
-  assert.equal(toggledStars(twenty.slice(0, 19), "NEW")?.length, 20);
+  assert.equal(toggledStars(twenty, "NEW").length, 21);
+  const many = Array.from({ length: 60 }, (_, i) => ({ symbol: `M${i}` }));
+  assert.deepEqual(toggledStars(many, "NEW"), [...many.map((star) => star.symbol), "NEW"]);
+  assert.equal(toggledStars(many, "M0").length, 59);
 });
 
 test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
@@ -352,6 +353,12 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
 
 const smciLong = { trade_no: 1, side: "long" as const, shares: 100, entry_price: 812.4, stop_price: null, last_price: 814.54, unrealized_usd: 214, r: null };
 
+test("no copy says a day is limited to N names or asks her to unstar one first", () => {
+  for (const [key, text] of Object.entries(PRACTICE_COPY)) {
+    assert.doesNotMatch(String(text), /limits a day|unstar one first|star at most|names a day/i, key);
+  }
+});
+
 test("the portfolio puts the held name first and adds up each name's day P/L", () => {
   const list = {
     sessions: [opened("ANET", 13, { trades: 2, realized_usd: -38 }), opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("NVDA", 14, { behind_clock: true })],
@@ -391,6 +398,15 @@ test("a position reads Long or Short with its shares and entry price, a flat nam
   assert.equal(positionText(flat!), "Flat");
   const [short] = portfolioRows({ sessions: [opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 25, entry_price: 0.5 } })] });
   assert.equal(positionText(short!), "Short 25 @ $0.50");
+});
+
+test("the portfolio counts every name opened, with no cap to count against", () => {
+  const many = { sessions: Array.from({ length: 25 }, (_, i) => opened(`N${i}`, 100 + i)) };
+  assert.equal(portfolioRows(many).length, 25);
+  assert.equal("dayNamesToday" in PRACTICE_COPY, false, "the portfolio replaces the names-practiced line");
+  for (const text of [PRACTICE_COPY.dayPortfolioEmpty, PRACTICE_COPY.dayOpenHint, practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
+    assert.equal(containsPracticeBannedTerm(text), false, text);
+  }
 });
 
 // ---- the recorded universe (02o-b2) -----------------------------------------------------------------------------
@@ -474,11 +490,11 @@ test("a day thread's one action says what it does (D-078)", () => {
   assert.equal(dayActionLabel(null, null), null);
 });
 
-// D-095: the candidates header said "Starred 0 of 3" while the rail said "Star up to 5 names": one rule, one number.
-test("the empty rail names the plan's own cap, like the header (D-095)", () => {
-  assert.equal(watchEmptyText(3), "Star up to 3 names to keep them in view");
-  assert.equal(watchEmptyText(1), "Star up to 1 name to keep them in view");
-  assert.equal(watchEmptyText(5), "Star up to 5 names to keep them in view");
+// D-095 once said "Star up to N names" next to "Starred 0 of N". There is no N now: the day page has no starred header (the
+// portfolio replaced its stars) and the swing board's empty rail asks for none.
+test("the starred header and the empty rail name no cap", () => {
+  assert.equal("dayStarred" in PRACTICE_COPY, false);
+  assert.equal(PRACTICE_COPY.dayWatchEmpty, "Star names to keep them in view");
 });
 
 // D-097: on a 20-day block the day list pushed the starred names below the fold.

@@ -248,14 +248,28 @@ def test_a_day_opens_every_list_name_without_a_cap(db_session, user_id, svc) -> 
     }
 
 
+def test_a_plan_has_no_names_cap_and_a_second_name_opens(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc, "FLAT", "SPLITTER")
+    plan = db_session.get(PracticePlan, row.plan_id)
+    assert "maxSymbols" not in plan.spec and "max_symbols" not in plan_mod.plan_out(db_session, plan)
+    for symbol in ("FLAT", "SPLITTER"):
+        assert plan_mod.start_session(db_session, user_id, row.id, symbol, svc).day_list_id == row.id
+    assert {s.symbol for s in db_session.query(ReplaySession).filter_by(day_list_id=row.id)} == {
+        "GAPPER",
+        "FLAT",
+        "SPLITTER",
+    }
+
+
 def test_the_plan_no_longer_reports_a_name_cap(db_session, user_id, svc) -> None:
     make_thread(db_session, user_id)
     row, _ = _names(db_session, user_id, svc)
     assert "max_symbols" not in plan_mod.plan_out(db_session, db_session.get(PracticePlan, row.plan_id))
 
 
-def test_the_star_cap_is_the_watch_cap_and_not_the_plans(db_session, user_id, svc) -> None:
-    """Stars still serve the swing focus names: twenty at most, whatever an old plan's `maxSymbols` says."""
+def test_stars_have_no_cap_whatever_an_old_plans_maxsymbols_says(db_session, user_id, svc) -> None:
+    """Stars still serve the swing focus names, with no cap: an old plan's `maxSymbols` of 2 limits nothing."""
     make_thread(db_session, user_id)
     extra = [f"N{i}" for i in range(20)]
     row, _ = _names(db_session, user_id, svc, *extra, maxSymbols=2)
@@ -267,6 +281,26 @@ def test_the_star_cap_is_the_watch_cap_and_not_the_plans(db_session, user_id, sv
         )
 
     assert len(star(names[:20]).watch) == 20
-    with pytest.raises(ReplayProblem) as caught:
-        star(names)
-    assert caught.value.path == "watch" and caught.value.message == "Star at most 20 names"
+    assert [w["symbol"] for w in star(names).watch] == names  # the 21st star is kept
+
+
+def test_an_old_plan_that_saved_maxsymbols_no_longer_limits_names_or_stars(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    row, _ = _names(db_session, user_id, svc, "FLAT", "SPLITTER", maxSymbols=1)
+    for symbol in ("FLAT", "SPLITTER"):
+        plan_mod.start_session(db_session, user_id, row.id, symbol, svc)
+    watch = ["GAPPER", "FLAT", "SPLITTER"]
+    starred = plan_mod.patch_day_list(
+        db_session, user_id, row.id, svc, watch=watch, notes=None, rating=None, fields={"watch"}
+    )
+    assert [w["symbol"] for w in starred.watch] == watch
+
+
+def test_a_day_stars_more_than_twenty_names(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    extra = [f"N{n:02d}" for n in range(25)]
+    row, _ = _names(db_session, user_id, svc, *extra)
+    starred = plan_mod.patch_day_list(
+        db_session, user_id, row.id, svc, watch=["GAPPER", *extra], notes=None, rating=None, fields={"watch"}
+    )
+    assert len(starred.watch) == 26

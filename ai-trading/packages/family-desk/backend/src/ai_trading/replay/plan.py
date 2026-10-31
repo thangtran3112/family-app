@@ -72,7 +72,6 @@ from ai_trading.screener.runner import source_symbols
 log = logging.getLogger(__name__)
 
 MAX_UNIVERSE = 250
-MAX_WATCH = 20  # the most names she can star (a swing thread's focus names)
 PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
@@ -143,10 +142,6 @@ def _swing() -> Any:
     from ai_trading.replay import swing
 
     return swing
-
-
-def _names(count: int) -> str:
-    return f"{count} name{'' if count == 1 else 's'}"
 
 
 # -- the universe --------------------------------------------------------------------------------------------
@@ -970,10 +965,6 @@ def patch_day_list(
         for index, symbol in enumerate(symbols):
             if symbol not in on_list:
                 raise ReplayProblem(f"{symbol} is not on today's list", path=f"watch.{index}")
-        plan = db.get(PracticePlan, row.plan_id)
-        assert plan is not None
-        if len(symbols) > MAX_WATCH:
-            raise ReplayProblem(f"Star at most {_names(MAX_WATCH)}", path="watch")
         kept = {w["symbol"]: w["starred_clock"] for w in row.watch}
         clock = (row.revealed_through or row.list_at).isoformat()
         row.watch = [{"symbol": s, "starred_clock": kept.get(s, clock)} for s in symbols]

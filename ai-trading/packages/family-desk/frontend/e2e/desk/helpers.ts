@@ -38,6 +38,27 @@ export async function openDesk(page: Page, path: string, now: string = SEED_NOW)
   await expect(page.locator("#main-content")).toBeVisible();
 }
 
+/** Pick a mode from the top bar's mode menu (ADR-0014). The button names the current mode in full; the menu lists all three. */
+export async function pickMode(page: Page, mode: "Technical" | "Fundamental" | "Backtest") {
+  const top = page.locator(".dk-top");
+  await top.getByRole("button", { name: /^Mode: / }).click();
+  await page.getByRole("menu", { name: "Mode" }).getByRole("menuitemradio", { name: new RegExp(`^${mode}`) }).click();
+  await expect(top.getByRole("button", { name: `Mode: ${mode}` })).toBeVisible();
+}
+
+/** Backtest chrome (ADR-0014): the mode button, the Practice and Journal tabs with one active, and no live-market parts in the top bar. */
+export async function expectBacktestChrome(page: Page, active: "Practice" | "Journal") {
+  const top = page.locator(".dk-top");
+  const nav = top.getByRole("navigation", { name: "Primary navigation" });
+  await expect(top.getByRole("button", { name: "Mode: Backtest" })).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveText(["Practice", "Journal"]);
+  await expect(nav.locator("[aria-current='page']")).toHaveText([active]);
+  await expect(top.getByTitle(/market|pre-market|after hours/i), "no market-status pill in Backtest").toHaveCount(0);
+  await expect(top.getByRole("button", { name: /^Alerts/ })).toHaveCount(0);
+  await expect(top.getByRole("combobox", { name: "Search symbols" })).toHaveCount(0);
+  await expect(top.getByRole("button", { name: "Search symbols, ⌘K" })).toHaveCount(0);
+}
+
 /** Every `/api/desk/` path this page requested, so a spec can assert on what the screen asked for. */
 export function watchApi(page: Page): { paths: () => string[]; clear: () => void } {
   const seen: string[] = [];

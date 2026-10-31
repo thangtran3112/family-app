@@ -282,7 +282,8 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
           dirty={dirty}
           hasVersion={hasVersion}
           valid={canSave}
-          readOnly={readOnly || formError !== ""}
+          readOnly={readOnly}
+          blocked={formError !== ""}
           saving={saving}
           onSave={() => void saveVersion()}
         />

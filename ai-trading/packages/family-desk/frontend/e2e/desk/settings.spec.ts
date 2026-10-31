@@ -35,8 +35,8 @@ test("Settings shows the Technical default, channels, quiet hours, data sources 
   await openDesk(page, "/settings");
   await expect(page.locator("#main-content").getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
 
-  // Default view is Technical; nothing is paused.
-  await expect(page.getByRole("group", { name: "Default view" }).getByRole("radio", { name: "Technical" })).toBeChecked();
+  // Default mode is Technical; nothing is paused.
+  await expect(page.getByRole("group", { name: "Default mode" }).getByRole("radio", { name: "Technical" })).toBeChecked();
   await expect(pauseSwitch(page)).not.toBeChecked();
 
   // Desk inbox is always on; Telegram and Slack are not set up in this world (no bot is configured).
@@ -157,17 +157,21 @@ test.describe("with four alert fires", () => {
   });
 });
 
-test("Default view moves between Technical and Fundamental, is saved, and keeps the Settings screen", async ({ page }) => {
+test("Default mode moves between Technical, Fundamental and Backtest, is saved, and keeps the Settings screen", async ({ page }) => {
   await openDesk(page, "/settings");
-  const view = page.getByRole("group", { name: "Default view" });
+  const view = page.getByRole("group", { name: "Default mode" });
+  await expect(view.getByRole("radio")).toHaveCount(3);
 
-  await view.getByRole("radio", { name: "Fundamental" }).click();
-  await expect(savedNote(page)).toBeVisible();
-  await expect.poll(async () => (await storedSettings(page)).default_view).toBe("fundamental");
-  // Choosing a view only remembers it: this screen stays put, with no lane switch or interstitial.
-  await expect(view.getByRole("radio", { name: "Fundamental" })).toBeChecked();
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.locator("#main-content").getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  for (const [label, value] of [["Fundamental", "fundamental"], ["Backtest", "backtest"]] as const) {
+    await view.getByRole("radio", { name: label }).click();
+    await expect(savedNote(page)).toBeVisible();
+    await expect.poll(async () => (await storedSettings(page)).default_view).toBe(value);
+    // Choosing a mode only remembers it: this screen stays put, in the mode it opened in.
+    await expect(view.getByRole("radio", { name: label })).toBeChecked();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.locator("#main-content").getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+    await expect(page.locator(".dk-top").getByRole("button", { name: "Mode: Technical" })).toBeVisible();
+  }
 
   await view.getByRole("radio", { name: "Technical" }).click();
   await expect.poll(async () => (await storedSettings(page)).default_view).toBe("technical");
@@ -195,7 +199,7 @@ test("Send test reports sent for the inbox, and not connected in plain words for
 test("More shows the same settings content under its own title", async ({ page }) => {
   await openDesk(page, "/more");
   await expect(page.locator("#main-content").getByRole("heading", { name: "More", level: 1 })).toBeVisible();
-  await expect(page.getByRole("group", { name: "Default view" }).getByRole("radio", { name: "Technical" })).toBeChecked();
+  await expect(page.getByRole("group", { name: "Default mode" }).getByRole("radio", { name: "Technical" })).toBeChecked();
   await expect(pauseSwitch(page)).toBeVisible();
   await expect(quietStart(page)).toHaveValue("22:00");
   await expect(page.getByRole("region", { name: "Market data" })).toContainText("Serving now: Alpaca");

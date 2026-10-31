@@ -1,1 +1,0 @@
-../host/bootstrap-cloudflared.sh

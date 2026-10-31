@@ -28,7 +28,7 @@ RUN chmod 0555 /usr/local/lib/family-app-backup/lib.sh \
       /usr/local/lib/family-app-backup/recovery-drill.sh
 
 # Defense in depth: root filesystem is mounted --read-only at `docker run`
-# time (see deploy/production/docker-compose.yml backup profile and
+# time (see apps/expense-tax/docker-compose.yml backup profile and
 # infrastructure/backup/README.md); /staging is a size-bounded tmpfs
 # mounted at run time, not baked in here. This image contains no plaintext
 # secret and no application data -- only pinned tools and read-only scripts.

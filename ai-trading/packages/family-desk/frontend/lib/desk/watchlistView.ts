@@ -9,6 +9,18 @@ export function tagLine(tags: WatchlistTableRow["tags"]): string[] {
   return tags.map((tag) => (tag.kind === "pattern" && tag.at ? `${tag.label} · ${formatEtTime(tag.at)}` : tag.label));
 }
 
+/** Chips a watchlist row shows before the rest fold into "+N": three long ones pushed the table to 982 px inside 808. */
+export const STRATEGY_CHIPS_SHOWN = 2;
+
+export type StrategyChip = { text: string; armed: boolean };
+
+/** The first chips for a row's Strategy cell, and the ones folded into its "+N" chip. */
+export function strategyChips(tags: WatchlistTableRow["tags"], max: number = STRATEGY_CHIPS_SHOWN): { shown: StrategyChip[]; hidden: StrategyChip[] } {
+  const lines = tagLine(tags);
+  const chips = tags.map((tag, index) => ({ text: lines[index]!, armed: tag.kind === "armed" }));
+  return { shown: chips.slice(0, max), hidden: chips.slice(max) };
+}
+
 export const NAME_MAX = 80;
 
 /** NFKC-normalised and trimmed, the same rule the API applies (1 to 80 characters). */

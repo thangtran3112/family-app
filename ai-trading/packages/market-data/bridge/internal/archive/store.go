@@ -25,6 +25,10 @@ type Store interface {
 	Read(ctx context.Context, symbol, timeframe, from, to string) ([]Session, error)
 	// Write records sessions once. A session already recorded is left untouched: first vendor wins.
 	Write(ctx context.Context, symbol, timeframe string, sessions []Session) error
+	// Bounds is the earliest and latest recorded session date of a timeframe, "" and "" when none.
+	Bounds(ctx context.Context, timeframe string) (earliest, latest string, err error)
+	// Backend names the storage for ListProviders: "postgres".
+	Backend() string
 }
 
 // MemStore is the in-memory Store for tests, with the same write-once rule as Postgres.
@@ -58,6 +62,25 @@ func (m *MemStore) Write(_ context.Context, symbol, tf string, sessions []Sessio
 		}
 	}
 	return nil
+}
+
+func (m *MemStore) Backend() string { return "memory" }
+
+func (m *MemStore) Bounds(_ context.Context, tf string) (lo, hi string, _ error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k := range m.data {
+		if k[1] != tf {
+			continue
+		}
+		if lo == "" || k[2] < lo {
+			lo = k[2]
+		}
+		if k[2] > hi {
+			hi = k[2]
+		}
+	}
+	return lo, hi, nil
 }
 
 // clone keeps callers from sharing bars with the store (the Archive stamps source on what it

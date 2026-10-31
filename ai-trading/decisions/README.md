@@ -19,5 +19,6 @@ Index:
 | [ADR-0011](adr/ADR-0011-packages-layout.md) | `consensus/` and `market-data/` live under `packages/` |
 | [ADR-0012](adr/ADR-0012-plans-for-future.md) | `plans/` keeps future phases only; completed detail lives here |
 | [ADR-0013](adr/ADR-0013-ci-deployment-only.md) | CI is deployment-only: ai-trading and expense-tax tests are local gates; `dev` ruleset check still to drop (owner) |
+| [ADR-0014](adr/ADR-0014-global-ui-modes.md) | Three global UI modes (Fundamental/Technical/Backtest) scoped by a declarative route/tab/section seam; Backtest owns Practice |
 
 Changelog: one line per shipped phase in [changelog/CHANGELOG.md](changelog/CHANGELOG.md); session handoffs moved in from `plans/handoffs/` stay there as the session-level log.

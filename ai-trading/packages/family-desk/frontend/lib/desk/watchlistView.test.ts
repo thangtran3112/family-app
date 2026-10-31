@@ -3,7 +3,7 @@ import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import { WatchlistTableSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { manageErrorMessage, moveSymbol, normalizeListName, orderChange, tagLine, validateListName } from "./watchlistView.ts";
+import { manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
 import { columnsForBand, withPriorities } from "./columns.ts";
 
 const table = WatchlistTableSchema.parse(loadDeskFixture("watchlist_1_table"));
@@ -15,6 +15,20 @@ test("tag lines show pattern times and armed strategies", () => {
   assert.ok(lines.every((line) => !/null|undefined/.test(line)));
   assert.deepEqual(tagLine([{ kind: "pattern", label: "Hammer 15m", at: "2026-10-23T14:15:00Z" }, { kind: "armed", label: "ORB armed", at: null }]), ["Hammer 15m · 10:15 AM", "ORB armed"]);
   assert.deepEqual(tagLine([]), []);
+});
+
+test("a row with many strategies shows two chips and counts the rest, so the Actions column stays in view (V-Watchlists-01)", () => {
+  const tags = [
+    { kind: "armed" as const, label: "ORB 15m armed", at: null },
+    { kind: "armed" as const, label: "VWAP reclaim armed", at: null },
+    { kind: "pattern" as const, label: "Hammer 15m", at: "2026-10-23T14:15:00Z" },
+    { kind: "armed" as const, label: "High-of-day break armed", at: null },
+  ];
+  const { shown, hidden } = strategyChips(tags);
+  assert.deepEqual(shown, [{ text: "ORB 15m armed", armed: true }, { text: "VWAP reclaim armed", armed: true }]);
+  assert.deepEqual(hidden, [{ text: "Hammer 15m · 10:15 AM", armed: false }, { text: "High-of-day break armed", armed: true }]);
+  assert.deepEqual(strategyChips(tags.slice(0, 2)).hidden, []);
+  assert.deepEqual(strategyChips([]), { shown: [], hidden: [] });
 });
 
 test("list names: empty, long, duplicate (ignoring case) and renaming to itself", () => {

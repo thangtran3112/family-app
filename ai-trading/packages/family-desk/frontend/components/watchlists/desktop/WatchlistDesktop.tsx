@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -32,6 +32,8 @@ export function WatchlistDesktop() {
     (signal) => loadWatchlistTable(activeId ?? 0, { signal }),
     { intervalMs: 60_000, enabled: activeId !== null },
   );
+  // The table's prices dim and the badge speaks for the same feed the top bar does (V-Watchlists-03).
+  const stale = useFreshness({ stamp: table.data?.stamp ?? null, connection: table.connection }).stale;
   const items = useDeskQuery(`watchlist-items:${activeId}`, (signal) => loadWatchlistItems(activeId ?? 0, { signal }), { enabled: activeId !== null });
 
   function refreshSymbols() {
@@ -92,7 +94,7 @@ export function WatchlistDesktop() {
         {backfilling > 0 && (
           <p className={styles.caption}>Backfilling history for {backfilling} {backfilling === 1 ? "symbol" : "symbols"}</p>
         )}
-        <WatchlistTableDesktop rows={table.data.rows} dim={table.connection === "reconnecting"} />
+        <WatchlistTableDesktop rows={table.data.rows} dim={stale} />
       </>
     );
   }

@@ -10,6 +10,7 @@ import { loadCoverage } from "@/lib/desk/coveredCalls";
 import { importLine } from "@/lib/desk/fundamentalView";
 import { maskedQuantity } from "@/lib/desk/mask";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { ImportText } from "../shared/ImportText";
 import styles from "../fundamental.module.css";
 import local from "./coveredCalls.module.css";
 import { CandidatesPanel } from "./CandidatesPanel";
@@ -57,7 +58,7 @@ export function ScanView({ accounts, importState }: { accounts: readonly Holding
           density="compact"
           selectedKey={row ? rowKey(row) : null}
           onSelect={(item) => setChosen(rowKey(item))}
-          empty={<EmptyBlock title={importState ? importLine(importState).text : "No holdings to cover yet"} />}
+          empty={<EmptyBlock title={importState ? <ImportText text={importLine(importState).text} /> : "No holdings to cover yet"} />}
         />
       </section>
       {row && <CandidatesPanel key={rowKey(row)} row={row} accountName={accountLabel(accounts, row.account_id)} />}

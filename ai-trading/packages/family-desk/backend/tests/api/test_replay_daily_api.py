@@ -266,7 +266,7 @@ def test_the_hub_session_rows_say_which_day_list_they_belong_to(daily, db_sessio
     assert isinstance(date.fromisoformat(rows[0]["day"]), date)
 
 
-def test_switching_names_over_the_routes_with_no_cap_on_names(daily, db_session) -> None:
+def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) -> None:
     client, services, user_id = daily
     body = _plan_body(db_session, user_id)
     started = client.post(f"{BASE}/daily/next", json={"plan": {**body, "maxSymbols": 2}}, headers=auth_headers())
@@ -327,6 +327,11 @@ def test_switching_names_over_the_routes_with_no_cap_on_names(daily, db_session)
         ("FLAT", False, False),
         ("SPLITTER", True, False),  # opened at 10:00, behind the 10:30 clock
     ]
+    stars = client.patch(
+        f"{BASE}/day-lists/{list_id}", json={"watch": ["GAPPER", "FLAT", "SPLITTER"]}, headers=auth_headers()
+    )
+    assert stars.status_code == 200, stars.text
+    assert [w["symbol"] for w in stars.json()["watch"]] == ["GAPPER", "FLAT", "SPLITTER"]
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.status_code == 200 and ended.json()["journal"]["trades"] == 1
 
