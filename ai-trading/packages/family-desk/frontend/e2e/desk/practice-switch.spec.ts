@@ -20,11 +20,20 @@ async function marks(page: Page) {
   return page.getByRole("tabpanel");
 }
 
-/** The day's names: the left rail at 1440, the right drawer's "Names" tab at 1180. */
-async function namesPanel(page: Page) {
-  if (test.info().project.name !== "desktop-1180") return page.getByRole("region", { name: PRACTICE_COPY.dayNamesTitle });
-  const drawer = page.getByRole("dialog", { name: "Names" });
-  if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: "Names" }).click();
+/** The day's portfolio in the replay: the left rail at 1440, the right drawer's "Portfolio" tab at 1180. */
+async function portfolioPanel(page: Page) {
+  if (test.info().project.name !== "desktop-1180") return page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+  const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
+  if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
+  await expect(drawer).toBeVisible();
+  return drawer;
+}
+
+/** The day's portfolio on the day page: the left rail at 1440, the right drawer's "Portfolio" tab at 1180. */
+async function dayPagePortfolio(page: Page) {
+  if (test.info().project.name !== "desktop-1180") return page.getByRole("complementary", { name: "Practice side panel" }).getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+  const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
+  if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
   await expect(drawer).toBeVisible();
   return drawer;
 }
@@ -34,8 +43,8 @@ async function recordUniverse(context: BrowserContext, days: { day: string; symb
   expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days } })).ok()).toBeTruthy();
 }
 
-/** A filter that lists every name the stub has bars for, and a thread with a two-name plan started through the New plan modal. */
-async function startTwoNamePlan(page: Page, context: BrowserContext) {
+/** A filter that lists every name the stub has bars for, and a thread with a plan started through the New plan modal. */
+async function startEveryNamePlan(page: Page, context: BrowserContext) {
   const all = {
     schemaVersion: 1,
     name: "Every name",
@@ -47,10 +56,7 @@ async function startTwoNamePlan(page: Page, context: BrowserContext) {
   await saveFilter(context, all);
   const dialog = await openNewPlan(page);
   await fillNewPlan(dialog, { filter: "Every name" });
-  // The plan's own limit on names: three is the default, this plan allows two.
-  const names = dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols });
-  await expect(names.getByRole("button", { name: "3", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await names.getByRole("button", { name: "2", exact: true }).click();
+  await expect(dialog.getByText("Names a day"), "no cap on names to pick").toHaveCount(0);
   await dialog.getByRole("button", { name: START_BUTTON }).click();
   await page.waitForURL(THREAD_URL, { timeout: 90_000 });
   await setRiskPlan(context, threadIdOf(page)); // this spec is not about stops (D-060): Stop on every entry is No
@@ -62,26 +68,20 @@ test.describe("Practice: switching names", () => {
     await prepareDesk(context);
   });
 
-  test("a name opens at the day clock, a name left behind catches up, one trade is open at a time, and the plan's limit holds", async ({ page, context }) => {
+  test("a click opens a name at the day clock, a name left behind catches up, one trade is open at a time, and every list name opens", async ({ page, context }) => {
     test.setTimeout(240_000);
-    await startTwoNamePlan(page, context);
+    await startEveryNamePlan(page, context);
     const dayUrl = page.url();
     const table = page.getByRole("table", { name: "Candidates" });
     for (const symbol of ["TSLA", "LRCX", "PANW", "XOM"]) await expect(table.getByRole("row", { name: new RegExp(symbol) })).toBeVisible();
 
-    // The plan's limit holds for stars: two names, and the third is refused in plain words.
-    await page.getByRole("button", { name: "Star TSLA" }).click();
-    await expect(page.getByRole("button", { name: "Unstar TSLA" })).toBeVisible(); // each star lands before the next click
-    await page.getByRole("button", { name: "Star LRCX" }).click();
-    await expect(page.getByRole("button", { name: "Unstar LRCX" })).toBeVisible();
-    await page.getByRole("button", { name: "Star PANW" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Your plan limits a day to 2 names · unstar one first" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Star PANW" })).toBeVisible();
-    await expect(page.getByTestId("names-today")).toHaveText("0 of 2 names practiced today");
+    // No star and no cap: a day opens any list name, and the portfolio starts empty.
+    await expect(page.getByRole("button", { name: /star/i })).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText(/names practiced today|limits a day|Starred \d+ of/);
     await expectCleanScreen(page);
 
-    // Practice TSLA three bars in, and take a trade.
-    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
+    // Click TSLA's row: its chart opens at once. Take it three bars in, and take a trade.
+    await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
@@ -90,19 +90,26 @@ test.describe("Practice: switching names", () => {
     await page.keyboard.press("b");
     await expect(await marks(page)).toContainText("Practice long");
 
-    // One open trade a day: the switch is refused in plain words while TSLA is open.
-    let names = await namesPanel(page);
-    await expect(names).toContainText("0 of 2 names".replace("0", "1"));
-    await expect(names.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayOnNow);
-    await names.getByRole("button", { name: "Switch to LRCX" }).click();
-    await expect(names.getByRole("alert")).toContainText("Close your open TSLA practice trade before you switch to LRCX");
+    // The portfolio shows it: TSLA is on now and Long.
+    let portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayOnNow);
+
+    // One open trade a day: opening LRCX from the list is refused in plain words while TSLA is open, with a way to TSLA.
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await table.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Open LRCX" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Close your open TSLA practice trade before you switch to LRCX" })).toBeVisible();
+    await page.getByRole("link", { name: "Go to TSLA" }).click();
+    await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await page.keyboard.press("x");
     await expect(await marks(page)).toContainText("Practice exit");
 
-    // The switch opens LRCX at the clock TSLA reached, not at the window start.
-    names = await namesPanel(page);
-    await names.getByRole("button", { name: "Switch to LRCX" }).click();
+    // Opening LRCX takes the clock TSLA reached, not the window start.
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await table.getByRole("row", { name: /LRCX/ }).getByText("LRCX", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
     await expect(playhead(page)).toHaveText(tslaPlayhead);
@@ -113,11 +120,22 @@ test.describe("Practice: switching names", () => {
     const clock = (await playhead(page).textContent()) ?? "";
     await expectCleanScreen(page);
 
+    // A new Long on LRCX joins the portfolio, and TSLA's row says why it cannot be switched to until LRCX is closed.
+    await page.keyboard.press("b");
+    portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
+    const tslaRow = portfolio.locator('[data-symbol="TSLA"] button');
+    await expect(tslaRow).toHaveAttribute("aria-disabled", "true");
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Close LRCX first");
+    await page.keyboard.press("x");
+    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText("Flat");
+    await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
+
     // TSLA stayed at 9:33 while the clock moved on: it is behind, says so, and cannot be marked until it catches up.
-    names = await namesPanel(page);
-    await expect(names.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayBehind);
-    await expect(names).toContainText("2 of 2 names");
-    await names.getByRole("button", { name: "Switch to TSLA" }).click();
+    portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayBehind);
+    await expect(portfolio.locator("li")).toHaveCount(2);
+    await portfolio.getByRole("button", { name: "Switch to TSLA" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(playhead(page)).toHaveText(tslaPlayhead);
@@ -136,19 +154,30 @@ test.describe("Practice: switching names", () => {
     await expect((await marks(page)).getByText("Practice long")).toHaveCount(2); // the first trade and the one after catching up
     await page.keyboard.press("x");
 
-    // The plan's limit holds for names too: a third name is a 409 in plain words, on the list screen.
+    // Past the old two-name limit: a third and a fourth name open, and a name in hand switches back.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
-    await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Practice PANW" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Your plan allows 2 names a day · you are on TSLA and LRCX" })).toBeVisible();
-    await expect(page.getByTestId("names-today")).toHaveText("2 of 2 names practiced today");
-    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Practice LRCX" })).toHaveText("Switch"); // a name in hand switches back
+    await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Open PANW" }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "PANW", level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await page.getByRole("row", { name: /XOM/ }).getByText("XOM", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "XOM", level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await expect(page.locator("body")).not.toContainText(/names practiced today|allows \d+ names/);
+    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Switch to LRCX" })).toHaveText("Switch"); // a name in hand switches back
+    const dayPortfolio = await dayPagePortfolio(page);
+    await expect(dayPortfolio.locator("li")).toHaveCount(4);
+    await expect(dayPortfolio.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
     // Resume is the day's, never a name's: no per-name button says Resume, and the header resumes the whole day on its shared clock.
     await expect(page.getByRole("button", { name: /^Resume/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Resume Day \d+$/ })).toBeVisible();
     await expectCleanScreen(page);
 
-    // The whole day ends together: both names score.
+    // The whole day ends together: every opened name scores.
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
@@ -159,7 +188,7 @@ test.describe("Practice: switching names", () => {
     test.setTimeout(240_000);
     // The Desk recorded that morning with two of the stub's four names: the list scans those, and says so.
     await recordUniverse(context, [{ day: DAY, symbols: ["TSLA", "LRCX"] }]);
-    await startTwoNamePlan(page, context);
+    await startEveryNamePlan(page, context);
     const dayUrl = page.url();
     const list = page.getByRole("table", { name: "Candidates" });
     await expect(list.getByRole("row", { name: /TSLA/ })).toBeVisible();
@@ -173,7 +202,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByText(PRACTICE_COPY.dayRescanNeedsClock)).toBeVisible();
 
     // Practice TSLA five bars in (the clock reads 9:35), come back, and scan.
-    await page.getByRole("button", { name: "Practice TSLA" }).first().click();
+    await page.getByRole("button", { name: "Open TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     for (let bar = 0; bar < 5; bar += 1) await page.keyboard.press("ArrowRight");
@@ -194,7 +223,7 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
 
     // The clock moves on: the old scan says it is older, and a new scan is its own.
-    await page.getByRole("button", { name: "Practice TSLA" }).first().click(); // the name in hand: its button reads Switch
+    await page.getByRole("button", { name: "Switch to TSLA" }).first().click(); // the name in hand: its button reads Switch
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await page.keyboard.press("ArrowRight");

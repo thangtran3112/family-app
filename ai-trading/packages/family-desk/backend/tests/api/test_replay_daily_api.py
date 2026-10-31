@@ -394,11 +394,12 @@ def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alon
 
 def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> None:
     client, services, _ = daily
-    plan_id = _start_plan(daily, db_session)["plan"]["id"]
-    minutes = services.sources.bars.minutes["GAPPER"]  # GAPPER sits at 110 from the open: lift it to 112 from 10:00
+    # GAPPER sits at 110 from the open: lift it to 112 from 10:00. Before the plan starts, so no prep sees the old bars.
+    minutes = services.sources.bars.minutes["GAPPER"]
     after = (minutes.index >= et(DAYS[0], "10:00")) & (minutes.index < et(DAYS[0], "11:30"))
     for column in ("open", "high", "low", "close"):
         minutes.loc[after, column] = 112.0
+    plan_id = _start_plan(daily, db_session)["plan"]["id"]
     plan_mod.run_prep(db_session, services, plan_id)
     list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
     sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
@@ -414,12 +415,13 @@ def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> Non
 
     flat = row()
     assert (flat["position"], flat["trades"], flat["realized_usd"]) == (None, 0, 0.0)
-    client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("09:35")}, headers=auth_headers())
+    assert client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("09:35")}, headers=auth_headers()).status_code == 200
     entered = client.post(
         f"{BASE}/sessions/{sid}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )
     assert entered.status_code == 200, entered.text
-    client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("10:30")}, headers=auth_headers())
+    moved = client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("10:30")}, headers=auth_headers())
+    assert moved.status_code == 200 and moved.json()["revealed_through"] == at("10:30"), moved.text
     held = row()
     assert (held["trades"], held["realized_usd"], held["has_open_trade"]) == (0, 0.0, True)
     assert held["position"] is not None

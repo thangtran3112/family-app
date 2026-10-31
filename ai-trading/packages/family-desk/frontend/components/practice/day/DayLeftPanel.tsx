@@ -26,7 +26,7 @@ export function DayLeftPanel({ list, thread, revision }: DayLeftPanelProps) {
   const band = useShellBand();
   return (
     <LeftRailPortal>
-      <div className={styles.side} role="region" aria-label="Day portfolio and lists" tabIndex={0}>
+      <div className={styles.side} role="region" aria-label="Day lists and thread" tabIndex={0}>
         {band === "1440" && (
           <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayPortfolio}>
             <h2 className={styles.sideTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
