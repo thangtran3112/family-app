@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 from ai_trading_common.errors import NotConfigured, Unavailable
-from ai_trading_common.registry import REGISTRY, DataSources, Provider
+from ai_trading_common.registry import DEFAULT_CHAINS, REGISTRY, DataSources, Provider
 from ai_trading_common.testing import FakeOptionChain, FakeResponse, FakeTrades, make_client
 from ai_trading_common.types import (
     ActiveSymbol,
@@ -370,3 +370,33 @@ class TestOptionChainChain:
         sources = _sources_with(option_chain=(["a"], [down]))
         with pytest.raises(NotConfigured):
             sources.option_chain.option_chain("AAPL", now=NOW, max_dte=45)
+
+
+class TestMarketDataProviderSelection:
+    """Tradier and marketdata.app (02b §4c) are chosen by `DATA_PROVIDERS_<KIND>` and sit in no default chain: an
+    unconfigured provider raises `NotConfigured`, and at the end of a chain that is not a no-op."""
+
+    NEW = {"tradier", "marketdata_app"}
+
+    def test_no_default_chain_names_them(self):
+        for kind, names in DEFAULT_CHAINS.items():
+            assert not self.NEW & set(names), f"{kind!r}: read registry.py's docstring before adding one"
+
+    def test_an_env_override_builds_them_with_no_key_and_then_reports_the_missing_key(self):
+        env = {"DATA_PROVIDERS_QUOTES": "tradier", "DATA_PROVIDERS_OPTION_CHAIN": "marketdata_app,tradier"}
+        sources = DataSources.from_env(env=env)  # a missing key is never a startup error
+        with pytest.raises(NotConfigured, match="tradier"):
+            sources.quotes.latest(["AAPL"], now=NOW)
+        with pytest.raises(NotConfigured):
+            sources.option_chain.option_chain("AAPL", now=NOW, max_dte=45)
+
+    def test_an_unconfigured_tail_would_turn_an_outage_into_a_key_error(self):
+        down = FakeQuotes(raises=Unavailable("alpaca", "HTTP 503"))
+        registry = {**REGISTRY, "_down": Provider(name="_down", kinds=("quotes",), build=lambda env, http: down)}
+        sources = DataSources.from_env(env={"DATA_PROVIDERS_QUOTES": "_down"}, registry=registry)
+        with pytest.raises(Unavailable):
+            sources.quotes.latest(["AAPL"], now=NOW)
+
+        with_tail = DataSources.from_env(env={"DATA_PROVIDERS_QUOTES": "_down,tradier"}, registry=registry)
+        with pytest.raises(NotConfigured):  # the reason these providers are not appended to a default chain
+            with_tail.quotes.latest(["AAPL"], now=NOW)

@@ -1,0 +1,17 @@
+{
+  "http_status": 400,
+  "request": {
+    "preferences": [
+      {
+        "dataClass": "EQUITY_QUOTES",
+        "provider": "marketdata_app"
+      }
+    ],
+    "version": "3"
+  },
+  "response": {
+    "code": "invalid_argument",
+    "message": "invalid request: \"marketdata_app\" is not in the equity_quotes ladder (ibkr, alpaca)"
+  },
+  "rpc": "SetRouting"
+}

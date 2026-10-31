@@ -100,15 +100,15 @@ if grep -A2 '^  database:$' "$COMPOSE_FILE" | grep -q 'external: true' \
 else
   fail "top-level 'database' network is not external postgres_default"
 fi
-if service_block api | grep -qE 'networks: \[database, gateway\]'; then
-  ok "api: joins database and gateway"
+if service_block api | grep -qE 'networks: \[database, gateway, marketdata\]'; then
+  ok "api: joins database, gateway, and marketdata (the bridge, 02t)"
 else
-  fail "api: does not join [database, gateway]"
+  fail "api: does not join [database, gateway, marketdata]"
 fi
-if service_block scheduler | grep -qE 'networks: \[database\]'; then
-  ok "scheduler: joins [database] only"
+if service_block scheduler | grep -qE 'networks: \[database, marketdata\]'; then
+  ok "scheduler: joins database and marketdata, never gateway"
 else
-  fail "scheduler: does not join [database] only"
+  fail "scheduler: does not join [database, marketdata] only"
 fi
 
 # --- Case 7: neither new service has a depends_on (D-e: cross-project, no gating via Compose) ---
@@ -180,7 +180,7 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "SKIP - docker compose not available in this environment (Case 10)"
 else
   fake_secrets="$(mktemp -d)"
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env desk.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env desk.env cloudflared.env; do
     printf 'FAKE_VALUE=fake-not-real-%s\n' "$name" >"$fake_secrets/$name"
   done
   if AI_TRADING_IMAGE_TAG=0000000000000000000000000000000000000000 \

@@ -1,0 +1,235 @@
+// Market-data bridge API (02t §3.2). One service, three data classes; every
+// data response says who answered and why it was not the preferred provider.
+syntax = "proto3";
+
+package familyapp.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service MarketData {
+  rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse);
+  rpc GetBars(GetBarsRequest) returns (GetBarsResponse);
+  rpc GetOptionChain(GetOptionChainRequest) returns (GetOptionChainResponse);  // B6; UNIMPLEMENTED before
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc GetStatus(GetStatusRequest) returns (BridgeStatus);
+  rpc WatchStatus(WatchStatusRequest) returns (stream BridgeStatus);  // on change, and a heartbeat every 5 s
+  rpc SetRouting(SetRoutingRequest) returns (Routing);                // admin token only
+}
+
+enum DataClass {
+  DATA_CLASS_UNSPECIFIED = 0;
+  EQUITY_QUOTES = 1;
+  EQUITY_BARS = 2;
+  OPTION_CHAIN = 3;
+}
+
+// A data property, never a routing outcome: "fallback" and "unavailable" are not qualities here (see Served).
+enum Quality {
+  QUALITY_UNSPECIFIED = 0;
+  REALTIME = 1;
+  DELAYED_15M = 2;
+  EOD = 3;
+}
+
+enum ErrorKind {
+  ERROR_KIND_UNSPECIFIED = 0;
+  NOT_CONFIGURED = 1;
+  UNAVAILABLE = 2;
+  SOFT_BANNED = 3;
+  NO_DATA = 4;
+  NOT_ENTITLED = 5;
+}
+
+message Attempt {
+  string provider = 1;
+  ErrorKind error = 2;
+  string message = 3;  // never a secret
+}
+
+// On every data response: who answered, and why it was not the preferred provider.
+message Served {
+  string provider = 1;  // "ibkr" | "longbridge" | "alpaca" | "marketdata_app"
+  Quality quality = 2;
+  bool fallback = 3;  // true when provider != the class's preferred provider
+  string fallback_reason = 4;  // e.g. "ibkr: gateway_down"
+  repeated Attempt attempts = 5;
+}
+
+message GetQuotesRequest {
+  repeated string symbols = 1;  // 1..100, validated like 01m's TICKER pattern
+  string pin_provider = 2;  // optional: that provider only, no fallback (shadow, diagnostics)
+}
+
+message Quote {
+  string symbol = 1;
+  double last = 2;
+  optional double bid = 3;
+  optional double ask = 4;
+  google.protobuf.Timestamp as_of = 5;
+  Quality quality = 6;
+  string provider = 7;
+}
+
+message GetQuotesResponse {
+  repeated Quote quotes = 1;
+  repeated string missing = 2;
+  Served served = 3;
+}
+
+enum Timeframe {
+  TIMEFRAME_UNSPECIFIED = 0;
+  MINUTE_1 = 1;
+  HOUR_1 = 2;
+  DAY_1 = 3;
+}
+
+enum Adjustment {
+  ADJUSTMENT_UNSPECIFIED = 0;
+  ALL = 1;
+  SPLIT = 2;
+  RAW = 3;  // 01m needs SPLIT and RAW
+}
+
+message GetBarsRequest {
+  string symbol = 1;
+  Timeframe timeframe = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+  Adjustment adjustment = 5;  // unspecified = ALL, as in the Python BarsSource
+  string pin_provider = 6;
+}
+
+message Bar {
+  google.protobuf.Timestamp start = 1;
+  double open = 2;
+  double high = 3;
+  double low = 4;
+  double close = 5;
+  int64 volume = 6;
+}
+
+message GetBarsResponse {
+  string symbol = 1;
+  repeated Bar bars = 2;  // closed bars only
+  Served served = 3;
+}
+
+enum Right {
+  RIGHT_UNSPECIFIED = 0;
+  CALL = 1;
+  PUT = 2;
+}
+
+message GetOptionChainRequest {
+  string underlying = 1;
+  Right right = 2;
+  google.protobuf.Timestamp now = 3;  // pins the DTE window, as the Python OptionChainSource does
+  int32 min_dte = 4;
+  int32 max_dte = 5;  // required, > 0: no whole-chain request by accident
+  optional double min_strike = 6;
+  optional double max_strike = 7;
+  string pin_provider = 8;
+}
+
+message OptionContract {
+  string symbol = 1;  // OCC
+  string underlying = 2;
+  Right right = 3;
+  string expiry = 4;  // YYYY-MM-DD
+  double strike = 5;
+  int32 dte = 6;
+  double bid = 7;
+  double ask = 8;
+  optional double delta = 9;
+  optional double iv = 10;
+  optional int64 open_interest = 11;  // as of the previous close
+  google.protobuf.Timestamp as_of = 12;
+  optional google.protobuf.Timestamp greeks_as_of = 13;  // set when greeks are older than the quote
+  Quality quality = 14;
+  string provider = 15;
+}
+
+message GetOptionChainResponse {
+  repeated OptionContract contracts = 1;
+  Served served = 2;
+}
+
+// Values are prefixed (unlike the 02t sketch): proto3 enum values are scoped to
+// the package, so NOT_CONFIGURED would collide with ErrorKind.NOT_CONFIGURED.
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTH_STATE_OK = 1;
+  HEALTH_STATE_DEGRADED = 2;
+  HEALTH_STATE_DOWN = 3;
+  HEALTH_STATE_OFF = 4;
+  HEALTH_STATE_NOT_CONFIGURED = 5;
+}
+
+message ProviderHealth {
+  string provider = 1;
+  repeated DataClass classes = 2;  // what it is registered for on this bridge
+  bool configured = 3;  // credentials present; never the values
+  HealthState state = 4;
+  string reason = 5;  // §5.4 vocabulary, e.g. "edge_unreachable", "competing_session"
+  google.protobuf.Timestamp last_ok = 6;
+  google.protobuf.Timestamp newest_tick = 7;
+  Quality quality = 8;  // what it serves right now
+  int32 lines_used = 9;  // IBKR only
+  int32 lines_max = 10;
+  Counters counters = 11;  // rolling 15 minutes (§8.2)
+}
+
+message Counters {
+  int64 requests = 1;
+  int64 errors = 2;
+  int64 fallbacks = 3;
+  int32 p50_ms = 4;
+  int32 p95_ms = 5;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated ProviderHealth providers = 1;
+}
+
+enum RoutingSource {
+  ROUTING_SOURCE_UNSPECIFIED = 0;
+  ENV_DEFAULT = 1;
+  DESK = 2;
+}
+
+message ClassRouting {
+  DataClass data_class = 1;
+  string preferred = 2;  // "" = the ladder's first rung
+  repeated string ladder = 3;  // the env ladder: the allowlist, in order
+  string serving = 4;  // who would answer this class right now
+}
+
+message Routing {
+  repeated ClassRouting classes = 1;
+  int64 version = 2;
+  RoutingSource source = 3;
+}
+
+message ClassPreference {
+  DataClass data_class = 1;
+  string provider = 2;  // "" clears the preference
+}
+
+message SetRoutingRequest {
+  repeated ClassPreference preferences = 1;  // per class: classes not listed keep their preference
+  int64 version = 2;  // the Desk's version
+}
+
+message GetStatusRequest {}
+
+message WatchStatusRequest {}
+
+message BridgeStatus {
+  google.protobuf.Timestamp at = 1;
+  string role = 2;
+  repeated ProviderHealth providers = 3;
+  Routing routing = 4;
+  string build = 5;
+}

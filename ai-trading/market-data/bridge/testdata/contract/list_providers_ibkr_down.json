@@ -1,0 +1,41 @@
+{
+  "http_status": 200,
+  "request": {},
+  "response": {
+    "providers": [
+      {
+        "classes": [
+          "EQUITY_QUOTES",
+          "EQUITY_BARS"
+        ],
+        "configured": true,
+        "counters": {
+          "fallbacks": "1",
+          "requests": "2"
+        },
+        "lastOk": "2024-05-02T20:30:00Z",
+        "newestTick": "2024-05-02T20:14:00Z",
+        "provider": "alpaca",
+        "quality": "DELAYED_15M",
+        "state": "HEALTH_STATE_OK"
+      },
+      {
+        "classes": [
+          "EQUITY_QUOTES"
+        ],
+        "configured": true,
+        "counters": {
+          "errors": "1",
+          "requests": "2"
+        },
+        "lastOk": "2024-05-02T20:30:00Z",
+        "newestTick": "2024-05-02T20:30:00Z",
+        "provider": "ibkr",
+        "quality": "REALTIME",
+        "reason": "unavailable",
+        "state": "HEALTH_STATE_DOWN"
+      }
+    ]
+  },
+  "rpc": "ListProviders"
+}

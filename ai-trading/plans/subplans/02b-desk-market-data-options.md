@@ -1,6 +1,6 @@
 # Release 2 Addendum B: Family Desk Market Data Options
 
-Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day; **the 2026-10-10 decision is revised 2026-10-29 (section 4b): live data moves from the IBKR data username to Alpaca Algo Trader Plus, not yet purchased.** Prices come from vendor and broker pages read on 2026-10-10 and change often. The owner subscribed the IBKR data user on 2026-10-10 ([02e](02e-ibkr-data-user-setup.md)); [02d](02d-desk-spike-results.md) records what the spike confirms.
+Status: Research done 2026-10-10. The owner approved the decision (section 4) the same day; **the 2026-10-10 decision is revised 2026-10-29 (section 4b): live data moves from the IBKR data username to Alpaca Algo Trader Plus, not yet purchased; section 4c (2026-10-30) adds Tradier and marketdata.app behind the same registry.** Prices come from vendor and broker pages read on 2026-10-10 and change often. The owner subscribed the IBKR data user on 2026-10-10 ([02e](02e-ibkr-data-user-setup.md)); [02d](02d-desk-spike-results.md) records what the spike confirms.
 
 Related: [02a-desk-v1-strategies-design.md](02a-desk-v1-strategies-design.md) (the Desk v1 design that uses this data), [02-release-2-desk-design.md](02-release-2-desk-design.md) (the kept base sections), [STATUS.md](../STATUS.md).
 
@@ -75,6 +75,41 @@ The 2026-10-10 decision (section 4) chose the IBKR data username for live data a
 - **Option chains for covered calls** come from Alpaca's options feed (OPRA; delayed until the $99 tier is purchased), replacing the "IBKR snapshots" line in §5.
 - **Budget note:** this exceeds the §1 $30/month cap; that cap is superseded by the owner's 2026-10-29 direction to pay for a programmatic feed once the product is proven.
 
+## 4c. Decision revision (Owner, 2026-10-30)
+
+This adds to section 4b and reverses nothing. The owner keeps the adapter pattern ([02j](02j-common-data-providers-design.md)) and wants the cheaper candidates from the provider comparison (`ai-trading/temp/market-data-comparison-20261030.md`, gitignored scratch) beside Alpaca, so any of them can be chosen by configuration.
+
+- **Behind the adapter registry:** Alpaca (the $99/month Algo Trader Plus baseline, already integrated), Tradier ($0 Lite or $10 Pro brokerage plan), marketdata.app ($30 Starter, delayed chains with greeks) and Longbridge (free US Level 1 quotes; about HK$22/month for the OPRA add-on). Longbridge is the exception described below.
+- **Free or delayed data until the app is proven useful.** Nothing is bought, no account is opened, and no key exists for any new provider (2026-10-30). Paid data waits for the same gate as section 4b.
+- **A paid swap is keys plus env, with no code change:** store the key in Firestore `ai-trading/market-data` and set `DATA_PROVIDERS_QUOTES` and/or `DATA_PROVIDERS_OPTION_CHAIN` (02j §5, §8), for example `tradier,alpaca` or `marketdata_app,alpaca_options`.
+
+**What shipped** (`ai-trading/common`, row 5R in STATUS; offline tests only):
+
+| Provider | Kinds | Env names read | Data stamp |
+|---|---|---|---|
+| `tradier` | `quotes`, `option_chain` | `TRADIER_ACCESS_TOKEN`; optional `TRADIER_ENVIRONMENT` (`production`, the default, or `sandbox`) | Quotes `realtime` in production and `delayed-15m` in the sandbox; chains always `delayed-15m` |
+| `marketdata_app` | `quotes`, `option_chain` | `MARKETDATA_APP_TOKEN`; optional `MARKETDATA_APP_QUALITY` (`eod`, the default, `delayed-15m` or `realtime`) | The setting, because the delay depends on the plan and the response does not say |
+
+- **Tradier greeks are hourly.** Tradier refreshes them from about 10:15 ET, so a contract's `delta` and `iv` can be an hour older than its bid and ask. The field is exposed as is, and the module docstring says so. Tradier answers an exceeded rate limit (120 requests a minute) with HTTP 400, not 429; the adapter maps it to `SoftBanned`.
+- **marketdata.app takes `Authorization: Bearer <token>`** (its authentication page), not the bare token the first brief wrote. The free plan is 24 hours delayed, Starter is 15 minutes, and real-time needs the top plan plus an OPRA entitlement of unknown cost. A chain costs a credit per option symbol, so every request is narrowed by expiry window and strike band.
+- **Longbridge ships no adapter.** Its quote documentation (read 2026-10-30) defines the Quotes call as a binary socket command (business command 11) reached through the vendor SDKs, with OAuth in the examples. It documents no REST path, headers or response envelope, and the Quotes response carries `last_done` but no bid or ask (those sit in the separate Depth call). A REST adapter would be invented, and a socket one needs the vendor SDK as a new dependency, so it waits for an owner decision. The option-chain call returns strikes and contract symbols only, so Longbridge could never serve `option_chain` anyway. No env names are fixed for it.
+- **Default chains are unchanged.** An unconfigured provider raises `NotConfigured`, and `fallback.first_success` reports the last transient failure, so a keyless provider at the end of a default chain would turn an earlier provider's `Unavailable` into a "no key" error. With no keys, `DEFAULT_CHAINS` therefore behave exactly as before, and a test pins that the new names are in none.
+
+**Future Firestore `ai-trading/market-data` additions** (names only, none exist yet): `TRADIER_ACCESS_TOKEN`, `TRADIER_ENVIRONMENT` (only to use the sandbox), `MARKETDATA_APP_TOKEN`, `MARKETDATA_APP_QUALITY` (set to `delayed-15m` after Starter). `LONGBRIDGE_APP_KEY` and `LONGBRIDGE_APP_TOKEN` are not read by any code.
+
+**Still open** (the comparison doc, section 6): Tradier's data fee, its equity feed and whether Lite gets real-time options; Longbridge's US-resident OpenAPI eligibility, OPRA price, option quote fields and Level 1 source.
+
+## 4d. Decision revision (Owner, 2026-10-31)
+
+This supersedes parts of section 4b and section 4c; §4b and §4c stay as history. The full design is [02t](02t-market-data-bridge-plan.md), a Go gRPC bridge that hides the provider (planned only: nothing is built, bought, or activated).
+
+- **Tradier is declined.** The owner will not create the account. The Python `tradier` adapter (row 5R) stays in the tree, **dormant**: in no default chain, never ported to the bridge, never given a key.
+- **The IBKR gateway is back in.** The owner accepts a **daily on/off ritual** (sign in each trading morning, approve on the phone, close in the evening) with IB Gateway on the spare Ubuntu laptop. This **supersedes the 2026-10-29 gateway rejection** in §4b ("needs a human 2FA re-login"). When the gateway is off, the design falls back down a ladder and the UI says so. The API stays read-only: quotes only, never orders. The §4b reduction to "Flex import only" no longer holds for live quotes; the Flex holdings import itself is unchanged.
+- **marketdata.app ($30/month non-professional plan) is an options fallback only**, bought only if Longbridge's real-time options prove poor. Its stock quotes are 15 minutes delayed on every plan (owner-verified on its pricing page), so it is never a stocks source. This corrects the §6 bench row.
+- **Provider mix:** IBKR + Alpaca + Longbridge (+ marketdata.app as the options fallback). Alpaca Basic stays the free baseline and last rung; the $99 Algo Trader Plus tier is bought only when the wife reaches a professional level and the app is comprehensive (Telegram alerting plus AI stock Q&A). Longbridge has no account yet, and its US-resident eligibility is unverified.
+- **Order:** stocks first, covered-call options later. Futures stay out of scope.
+- **Where the work is planned:** [02t](02t-market-data-bridge-plan.md) (STATUS row 5S). The Desk keeps its adapter pattern; the bridge enters the registry as one more provider.
+
 ## 5. Hybrid Store: What We Keep and What We Fetch
 
 | Data | Live source | History and backfill | Stored |
@@ -103,7 +138,7 @@ Size:
 | Source | Cost | When we would use it |
 |---|---|---|
 | Massive Options Starter | $29/month | IBKR option snapshots turn out too slow for scans. It gives 15-minute-delayed full option chains with greeks. |
-| marketdata.app Trader | $30 monthly or $12/month billed yearly | Same case, with real-time stock quotes for self-certified non-professionals |
+| marketdata.app (paid plans) | $30 monthly (non-professional) | Options fallback only (§4d). **Corrected 2026-10-31:** its stock quotes are 15 minutes delayed on every plan, so it is never a stocks source; real-time options need the top plan plus an OPRA entitlement (§4c) |
 | Databento | $125 free signup credit | One-time deep futures history backfill, if backtesting arrives |
 | EODHD | $19.99/month | News with sentiment scores |
 
