@@ -51,6 +51,7 @@ _TABLES = (
     "universe_symbols",
     "symbol_metrics",
     "feed_health",
+    "market_data_routing",
     "consensus_snapshots",
     "earnings_results",
     "analyst_targets",

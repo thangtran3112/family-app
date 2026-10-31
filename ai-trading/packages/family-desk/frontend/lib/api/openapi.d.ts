@@ -1487,6 +1487,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/settings/market-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Market Data */
+        get: operations["get_market_data_api_desk_settings_market_data_get"];
+        /** Put Market Data */
+        put: operations["put_market_data_api_desk_settings_market_data_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/signals": {
         parameters: {
             query?: never;
@@ -2813,6 +2831,19 @@ export interface components {
             symbol: string;
             /** Vs Vwap Pct */
             vs_vwap_pct: number | null;
+        };
+        /** DataSourcesOut */
+        DataSourcesOut: {
+            /** Bars */
+            bars: string;
+            /** Option Chain */
+            option_chain: string;
+            /** Quotes */
+            quotes: string;
+            /** Trades */
+            trades: string;
+            /** Universe */
+            universe: string;
         };
         /** DayFilterOut */
         DayFilterOut: {
@@ -4233,6 +4264,64 @@ export interface components {
             /** Patterns */
             patterns: components["schemas"]["PatternMarkerOut"][];
         };
+        /** MarketDataCardOut */
+        MarketDataCardOut: {
+            /** Available */
+            available: boolean;
+            /** Classes */
+            classes: components["schemas"]["MarketDataClassOut"][];
+            /** Desk Quality */
+            desk_quality: ("realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable") | null;
+            /** Desk Serving */
+            desk_serving: string;
+            /** Owner */
+            owner: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Routing Source */
+            routing_source: string;
+            /** Shadow */
+            shadow: boolean;
+            /** Version */
+            version: number;
+        };
+        /** MarketDataChoiceBody */
+        MarketDataChoiceBody: {
+            /**
+             * Data Class
+             * @enum {string}
+             */
+            data_class: "equity_quotes" | "equity_bars" | "option_chain";
+            /** Provider */
+            provider: string;
+        };
+        /** MarketDataChoiceOut */
+        MarketDataChoiceOut: {
+            /** Classes */
+            classes: components["schemas"]["MarketDataClassOut"][];
+            /** Routing Source */
+            routing_source: string;
+            /** Version */
+            version: number;
+            /** Warning */
+            warning: string | null;
+        };
+        /** MarketDataClassOut */
+        MarketDataClassOut: {
+            /**
+             * Data Class
+             * @enum {string}
+             */
+            data_class: "equity_quotes" | "equity_bars" | "option_chain";
+            /** Ladder */
+            ladder: string[];
+            /** Options */
+            options: components["schemas"]["ProviderOptionOut"][];
+            /** Preferred */
+            preferred: string;
+            /** Serving */
+            serving: string;
+        };
         /** MarketStripTileOut */
         MarketStripTileOut: {
             /** Change Pct */
@@ -4805,6 +4894,25 @@ export interface components {
             message: string;
             /** Path */
             path: string;
+        };
+        /**
+         * ProviderOptionOut
+         * @description One provider's standing in one class. `state` is the bridge's own health state; `detail` is its
+         *     reason code (never rendered raw -- the card maps both to words, 02t §6).
+         */
+        ProviderOptionOut: {
+            /** Configured */
+            configured: boolean;
+            /** Detail */
+            detail: string | null;
+            /** In Ladder */
+            in_ladder: boolean;
+            /** Provider */
+            provider: string;
+            /** Quality */
+            quality: ("realtime" | "delayed-15m" | "eod" | "fallback" | "unavailable") | null;
+            /** State */
+            state: string;
         };
         /** RatingCountsOut */
         RatingCountsOut: {
@@ -5766,16 +5874,14 @@ export interface components {
             alerts: components["schemas"]["StatusAlertsOut"];
             /** Backups */
             backups: null;
-            /**
-             * Data Sources
-             * @enum {string}
-             */
-            data_sources: "unknown" | "alpaca" | "ibkr" | "mixed";
+            data_sources: components["schemas"]["DataSourcesOut"];
             /**
              * Gateway
              * @enum {string}
              */
             gateway: "not_configured" | "connected" | "reconnecting" | "down";
+            /** Gateway Reason */
+            gateway_reason: string | null;
             holdings: components["schemas"]["ImportStateOut"];
             market: components["schemas"]["StatusMarketOut"];
             options: components["schemas"]["StatusOptionsOut"];
@@ -10005,6 +10111,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsChannelTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_market_data_api_desk_settings_market_data_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketDataCardOut"];
+                };
+            };
+        };
+    };
+    put_market_data_api_desk_settings_market_data_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketDataChoiceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketDataChoiceOut"];
                 };
             };
             /** @description Validation Error */

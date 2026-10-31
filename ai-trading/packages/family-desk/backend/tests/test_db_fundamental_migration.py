@@ -299,9 +299,13 @@ def test_downgrade_to_0011_drops_exactly_what_0012_made_and_upgrading_brings_it_
     with db_engine.connect() as conn:
         before = set(inspect(conn).get_table_names())
     try:
+        # Head is 0013 (the market-data routing table); step past it first so this test stays about 0012's
+        # own nine tables.
+        command.downgrade(_alembic_config(url), "0012")
         command.downgrade(_alembic_config(url), "0011")
         tables = set(inspect(db_engine).get_table_names())
-        assert before - tables == NEW_0012_TABLES and tables <= before  # exactly its nine tables, nothing else
+        # its nine tables, plus 0013's routing table which this test stepped past first
+        assert before - tables == NEW_0012_TABLES | {"market_data_routing"} and tables <= before
         with db_engine.connect() as conn:
             left = conn.execute(
                 text(

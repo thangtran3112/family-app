@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Channels } from "./Channels.tsx";
 import { Fixtures } from "./Fixtures.tsx";
+import { MarketDataRows } from "./MarketDataRows.tsx";
 import { SourcesStatus } from "./SourcesStatus.tsx";
 import styles from "./Settings.module.css";
 import { deskFetch } from "../../lib/api/client.ts";
@@ -175,6 +176,7 @@ export function SettingsMobile() {
         </div>
 
         <Fixtures />
+        <MarketDataRows />
       </div>
       <SourcesStatus />
     </div>

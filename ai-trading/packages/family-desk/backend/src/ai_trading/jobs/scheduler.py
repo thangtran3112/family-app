@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from ai_trading.data import refresher
 from ai_trading.jobs import (
     JobResult,
+    bridge_routing,
+    bridge_shadow,
     consensus_snapshot,
     daily_close,
     healthcheck,
@@ -35,6 +37,8 @@ _ORDER = (
     "weekly",
     "relogin_reminder",
     "refresh_15m",
+    "bridge_routing",
+    "bridge_shadow",
     "watchdog",
 )
 
@@ -54,6 +58,8 @@ _DUE_NOW = {
     "weekly": weekly.due_now,
     "relogin_reminder": relogin_reminder.due_now,
     "refresh_15m": refresh_15m.due_now,
+    "bridge_routing": bridge_routing.due_now,
+    "bridge_shadow": bridge_shadow.due_now,
     "watchdog": watchdog.due_now,
 }
 
@@ -96,6 +102,10 @@ def run_due(session: Session, data_sources: DataSources, clock: JobClock, *, now
                 results.append(relogin_reminder.run(session, clock, now=now))
             elif name == "refresh_15m":
                 results.append(refresh_15m.run(session, data_sources, now=now))
+            elif name == "bridge_routing":
+                results.append(bridge_routing.run(session, data_sources, now=now))
+            elif name == "bridge_shadow":
+                results.append(bridge_shadow.run(session, data_sources, now=now))
             else:  # watchdog
                 alerted = watchdog.run(session, clock, now=now)
                 results.append(JobResult("watchdog", ok=True, ran=bool(alerted)))

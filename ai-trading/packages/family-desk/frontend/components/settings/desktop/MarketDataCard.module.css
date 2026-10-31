@@ -1,0 +1,252 @@
+/* Settings · Market data (02t §6; M boards XN2-2 / XUL-2). Tokens only: the card inherits the page's
+   panel, and every state says its name in words as well as in color. */
+
+.card {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+}
+
+.title {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.heading {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: 18px;
+}
+
+.subtitle,
+.helper {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 24px;
+}
+
+.badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--color-ai);
+  border-radius: var(--radius-full);
+  color: var(--color-ai);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  line-height: var(--line-micro);
+}
+
+.previewText {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.row {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.rowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.rowTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-label);
+}
+
+.rowNote,
+.optionState,
+.serving,
+.ownerNote,
+.syncing {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.options {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.option {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+}
+
+.option[data-selected="true"] {
+  border-color: var(--color-amber);
+  background: var(--color-raised);
+}
+
+.option[data-disabled="true"] {
+  background: var(--color-panel);
+}
+
+.option[data-in-use="true"] {
+  border-color: var(--color-muted);
+  background: var(--color-raised);
+}
+
+.option[data-disabled="true"] .optionName,
+.option[data-disabled="true"] .ring {
+  color: var(--color-muted);
+}
+
+/* The real radio input stays focusable and in the accessibility tree; the ring is its visible face. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ring {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-muted);
+  border-radius: var(--radius-full);
+}
+
+.input:checked + .ring {
+  border-color: var(--color-amber);
+}
+
+.input:checked + .ring::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-amber);
+}
+
+.input:disabled + .ring {
+  border-color: var(--color-hairline);
+}
+
+.input:focus-visible + .ring {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+.optionName {
+  color: var(--color-text);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-label);
+}
+
+.serving {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  color: var(--color-text);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-amber);
+}
+
+.syncing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.syncingRing {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-muted);
+  border-radius: var(--radius-full);
+  animation: spin 1.6s linear infinite;
+}
+
+.rowError {
+  margin: 0;
+  color: var(--color-down);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.rowSaved {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.ownerNote {
+  min-height: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syncingRing {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The 1180 band (XUL-2): the same card, four tiles that wrap rather than squeeze below ~880px. */
+@media (max-width: 1180px) {
+  .options {
+    flex-wrap: wrap;
+  }
+
+  .option {
+    flex-basis: 187px;
+  }
+}

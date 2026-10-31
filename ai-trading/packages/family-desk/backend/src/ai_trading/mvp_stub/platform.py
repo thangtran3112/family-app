@@ -23,7 +23,15 @@ def status() -> dict[str, Any]:
         "scans": {**stamp(freshness="delayed"), "next_run_at": "2026-10-26T12:30:00Z"},
         "alerts": {"state": "running", "unread": 2},
         "gateway": "not_configured",
-        "data_sources": "alpaca",
+        "gateway_reason": None,
+        # One vendor per class (02t §5.5): the stub world is Alpaca everywhere.
+        "data_sources": {
+            "quotes": "alpaca",
+            "bars": "alpaca",
+            "option_chain": "alpaca_options",
+            "trades": "alpaca",
+            "universe": "alpaca",
+        },
         "streaming_slots": {"used": 0, "max": 70},
         "backups": None,
         "reconciliation": None,

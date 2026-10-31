@@ -67,6 +67,7 @@ NEW_0009_TABLES = {"replay_day_scans"}
 NEW_0010_TABLES = {"feedback_reports", "feedback_events", "feedback_attachments"}
 
 # Alembic 0012 (fundamental lane, 02n §d): nine new tables and nothing else.
+NEW_0013_TABLES = {"market_data_routing"}
 NEW_0012_TABLES = {
     "accounts",
     "holding_imports",
@@ -88,11 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0012() -> None:
+def test_migration_chain_has_a_single_head_at_0013() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0012"]
+    assert script.get_heads() == ["0013"]
+    assert script.get_revision("0013").down_revision == "0012"
     assert script.get_revision("0012").down_revision == "0011"
     assert script.get_revision("0011").down_revision == "0010"
     assert script.get_revision("0010").down_revision == "0009"
@@ -149,12 +151,13 @@ def test_downgrade_to_0009_reverts_0012_to_0010_and_drops_exactly_what_0010_and_
     with db_engine.connect() as conn:
         before = set(inspect(conn).get_table_names())
     try:
-        # 0011 holds no table; 0010 holds the three feedback ones and 0012 the nine of the Fundamental lane
+        # 0011 holds no table; 0010 holds the three feedback ones, 0012 the nine of the Fundamental lane,
+        # and 0013 the one market-data routing row's table.
         command.downgrade(_alembic_config(url), "0009")
         inspector = inspect(db_engine)
         tables = set(inspector.get_table_names())
-        # exactly those twelve tables, nothing else
-        assert before - tables == NEW_0010_TABLES | NEW_0012_TABLES and tables <= before
+        # exactly those thirteen tables, nothing else
+        assert before - tables == NEW_0010_TABLES | NEW_0012_TABLES | NEW_0013_TABLES and tables <= before
         with db_engine.connect() as conn:
             left = conn.execute(text("SELECT relname FROM pg_class WHERE relname LIKE 'feedback\\_%'")).all()
         assert left == []  # no table, index or sequence of 0010 survives

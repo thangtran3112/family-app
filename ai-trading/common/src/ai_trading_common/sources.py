@@ -8,7 +8,7 @@ vendor class. No vendor module is imported here.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Literal, Protocol, runtime_checkable
 
@@ -30,7 +30,9 @@ from ai_trading_common.types import (
     Observation,
     OptionContract,
     OptionRight,
+    ProviderHealth,
     Quote,
+    Routing,
     UniverseAsset,
 )
 
@@ -143,3 +145,28 @@ class GatewayStatusSource(Protocol):
     """A provider that holds a live gateway session and can say how it is doing."""
 
     def gateway_status(self) -> GatewayStatus: ...
+
+
+@runtime_checkable
+class RoutingSource(Protocol):
+    """The provider toggle's admin surface (02t §4.1): the providers the bridge knows, the routing it
+    is serving, and a way to set a class's preference. The Desk finds it on `DataSources.bridge`, never
+    on a chain -- routing is one family-wide value, not a data call that can fall through."""
+
+    def providers(self) -> list[ProviderHealth]: ...
+
+    def routing(self) -> Routing: ...
+
+    def set_routing(self, preferences: Mapping[str, str], version: int) -> Routing: ...
+
+
+@runtime_checkable
+class BridgeSource(RoutingSource, GatewayStatusSource, Protocol):
+    """Everything the Desk asks the bridge directly, outside any data chain: the process check that
+    gates the Settings card, the shadow job's pinned fetch, and the routing/gateway surfaces above."""
+
+    def healthz(self) -> bool: ...
+
+    def pinned_quotes(
+        self, symbols: Sequence[str], *, now: pd.Timestamp, provider: str | None = None
+    ) -> list[Quote]: ...
