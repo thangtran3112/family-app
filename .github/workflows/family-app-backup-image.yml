@@ -1,16 +1,17 @@
 name: Family App Backup Image
 
-# Publishes the backup container (infrastructure/backup/Dockerfile) to GHCR so the
-# host's family-app-backup units can `docker pull` it again after a prune.
+# Archives the backup container (infrastructure/backup/Dockerfile) in GHCR and proves in CI that
+# it builds. It is NOT the host's pull path: the package is private and the VPS holds no
+# registry login, so the host rebuilds the image itself from /opt/family-app/backup/src
+# (infrastructure/backup/ensure-backup-image.sh; see infrastructure/backup/README.md).
 #
-# Why this exists: until 2026-10-31 nothing published the image, so the units pinned a
-# bare local image ID (sha256:93747d0e...). A Docker prune removed it, `docker run` failed
-# with "No such image", and no backup ran from 2026-10-27 until the freshness watchdog
-# reported the RPO breach. A local ID cannot be re-pulled; a registry digest can.
+# Why a local rebuild exists: until 2026-10-31 the units pinned a bare local image ID
+# (sha256:93747d0e...). A Docker prune removed it, `docker run` failed with "No such image",
+# and no backup ran from 2026-10-27 until the freshness watchdog reported the RPO breach.
 #
-# The job prints the pushed digest. Pass that reference to the host bootstrap:
-#   bootstrap.sh --only backup --backup-image ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest>
-# infrastructure/host/steps/40-backup.sh refuses anything that is not a registry reference.
+# The job prints the pushed digest: the immutable archive reference. An operator would pin it as
+# BACKUP_IMAGE (`bootstrap.sh --only backup --backup-image <ref>`) only if the package is ever
+# made public, because only then can the host `docker pull` it.
 #
 # Cost: runs only when infrastructure/backup/** (or this file) changes on main, or on demand.
 on:
@@ -57,7 +58,7 @@ jobs:
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=family-app-backup
           cache-to: type=gha,scope=family-app-backup,mode=max
-      - name: Print the digest to pin on the host
+      - name: Print the archive digest (pin only if the package is made public)
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
@@ -70,7 +71,7 @@ jobs:
           {
             echo "### family-app-backup image"
             echo
-            echo "Pin this reference on the host (\`bootstrap.sh --only backup --backup-image ...\`):"
+            echo "Archive reference (the host rebuilds locally; pin this as \`--backup-image\` only if the package is made public):"
             echo
             echo "\`${IMAGE}@${DIGEST}\`"
           } >>"$GITHUB_STEP_SUMMARY"

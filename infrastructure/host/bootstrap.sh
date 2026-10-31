@@ -95,7 +95,8 @@ Backup step only (all required together when --only includes backup):
                                for how it's created -- never committed, never
                                written to this script's own disk beyond what
                                the operator already has)
-  --backup-image              Pinned backup image ref (a digest, not a mutable tag)
+  --backup-image              Local versioned tag family-app-backup:<version> (built on the host
+                               from <backup-dir>/src), or a registry digest ref
 
 Examples:
   # Brand-new VPS from any provider, first-ever connection on port 22:
@@ -320,9 +321,14 @@ if should_run backup; then
     exit 1
   fi
   BACKUP_DIR_REPO="$REPO_ROOT/infrastructure/backup"
-  scp_to "$BACKUP_DIR_REPO/family-app-backup.service" /tmp/family-app-backup.service
-  scp_to "$BACKUP_DIR_REPO/family-app-backup.timer" /tmp/family-app-backup.timer
-  scp_to "$BACKUP_DIR_REPO/family-app-backup-retry.service" /tmp/family-app-backup-retry.service
+  # Units, the image build context and the self-heal helper go into one private stage dir;
+  # 40-backup.sh installs them (the host rebuilds the image itself: the GHCR package is private).
+  stage="/tmp/family-backup-stage"
+  ssh_run "install -d -m 0700 ${stage}"
+  for f in family-app-backup.service family-app-backup.timer family-app-backup-retry.service \
+    Dockerfile lib.sh backup.sh restore.sh recovery-drill.sh ensure-backup-image.sh; do
+    scp_to "$BACKUP_DIR_REPO/$f" "${stage}/$f"
+  done
   scp_to "$BACKUP_DIR_REPO/check-backup-freshness.sh" /tmp/check-backup-freshness.sh
   scp_to "$SCRIPT_DIR/steps/40-backup.sh" /tmp/40-backup.sh
   # The writer key NEVER appears in a command line (local or remote,
@@ -338,8 +344,9 @@ if should_run backup; then
     | ssh_run "sudo install -m 0400 /dev/stdin /etc/family-app/backup-pgpassword"
   ssh_run "sudo BACKUP_DIR=${BACKUP_DIR} BACKUP_GCS_URI=${BACKUP_GCS_URI} \
     BACKUP_HOST_ID=${BACKUP_HOST_ID} AGE_RECIPIENT=${AGE_RECIPIENT} RECEIPT_VOLUME=${RECEIPT_VOLUME} \
-    BACKUP_IMAGE=${BACKUP_IMAGE} UNIT_FILES_DIR=/tmp \
+    BACKUP_IMAGE=${BACKUP_IMAGE} UNIT_FILES_DIR=${stage} \
     bash /tmp/40-backup.sh"
+  ssh_run "rm -rf ${stage}"
 fi
 
 echo "== done =="

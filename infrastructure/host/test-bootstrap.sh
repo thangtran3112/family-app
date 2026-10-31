@@ -129,4 +129,12 @@ if grep -q 'SHARED_PG_DIR' "$capture_dir/ssh-argv.log"; then
 fi
 ok "40-backup.sh is not handed SHARED_PG_DIR any more"
 
+# The host rebuilds the backup image itself, so the build context and the self-heal helper must reach
+# the private stage dir that 40-backup.sh installs from.
+for f in Dockerfile lib.sh backup.sh restore.sh recovery-drill.sh ensure-backup-image.sh; do
+  grep -qE ":/tmp/family-backup-stage/$f\$" "$capture_dir/scp-argv.log" || fail "bootstrap.sh must scp $f into /tmp/family-backup-stage"
+done
+grep -qF "UNIT_FILES_DIR=/tmp/family-backup-stage" "$capture_dir/ssh-argv.log" || fail "40-backup.sh must be pointed at the stage dir"
+ok "the image build context and ensure-backup-image.sh are staged for 40-backup.sh"
+
 printf '\n%d checks passed (bootstrap.sh writer-key transport)\n' "$PASS"

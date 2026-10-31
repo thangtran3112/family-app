@@ -146,14 +146,16 @@ applied and a writer key is created by hand. Once both exist:
   --age-recipient age1... \
   --receipt-volume expense-tax-production_expense_tax_production_storage \
   --backup-writer-key-file ~/secure/backup-writer-key.json \
-  --backup-image ghcr.io/thangtran3112/family-app/family-app-backup@sha256:...
+  --backup-image family-app-backup:2026-10-31
 ```
 
-`--backup-image` must be the registry digest printed by the `Family App Backup Image` workflow
-(`.github/workflows/family-app-backup-image.yml`); the step refuses a bare local image ID, and the
-units pull the image when it is missing (see [`../backup/README.md`](../backup/README.md)).
+`--backup-image` is a local versioned tag such as `family-app-backup:2026-10-31`: the step stages the
+build context in `/opt/family-app/backup/src` and the units rebuild the image there when it is missing
+(a registry digest is accepted too; a bare local image ID is refused). See
+[`../backup/README.md`](../backup/README.md).
 
-This installs `/opt/family-app/backup/{state,ciphertext}` (root-only),
+This installs `/opt/family-app/backup/{state,ciphertext,src}` (state and ciphertext root-only),
+`/opt/family-app/backup/ensure-backup-image.sh`,
 root-only `/etc/family-app/{backup.env,backup-pgpassword,backup-writer-key.json}`,
 and enables `family-app-backup.timer`. See
 [`../backup/README.md`](../backup/README.md) for the container/script

@@ -12,12 +12,13 @@ Type=oneshot
 # backup.sh only ever writes plaintext to a tmpfs that dies with the
 # container, no plaintext survives either way.
 RuntimeMaxSec=7200
-# Pull only when the image is missing (a prune, a rebuilt host): `image inspect`
-# succeeds -> no network call. A failed pull fails the unit (no "-" prefix), which
-# starts family-app-backup-retry.service and shows up in the freshness watchdog.
-# The image must be a registry reference (see infrastructure/backup/README.md);
-# a bare local image ID cannot be pulled, which stopped backups 2026-10-27..31.
-ExecStartPre=/bin/sh -c '/usr/bin/docker image inspect __BACKUP_IMAGE__ >/dev/null 2>&1 || /usr/bin/docker pull __BACKUP_IMAGE__'
+# Self-heal the image before `docker run` (a prune, a rebuilt host): present -> silent;
+# else pull; else build from /opt/family-app/backup/src. The GHCR package is private and the
+# host holds no registry login, so the build is the path that works. A failure fails the unit
+# (no "-" prefix), which starts family-app-backup-retry.service and shows up in the freshness
+# watchdog. A bare local image ID cannot be rebuilt, which stopped backups 2026-10-27..31.
+Environment=BACKUP_IMAGE=__BACKUP_IMAGE__
+ExecStartPre=/opt/family-app/backup/ensure-backup-image.sh
 ExecStart=/usr/bin/docker run --rm \
   --name family-app-backup-run \
   --network postgres_default \
