@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from ai_trading.core.calendar import et, session
+from ai_trading.data import bars
 from ai_trading.data.bars import bar_close, missing_sessions, prune_1m, read_bars, upsert_bars
 
 DAY = date(2026, 10, 6)  # a regular (non-half-day) XNYS session
@@ -70,6 +71,38 @@ def test_upsert_accepts_a_bar_exactly_at_its_close(db_session):
     db_session.commit()
     out = read_bars(db_session, "AAPL", "1d", DAY, DAY, "stock", as_of=et(DAY, "20:00"))
     assert list(out["close"]) == [100.0]
+
+
+def test_upsert_splits_a_large_batch_into_chunks_and_keeps_row_order(monkeypatch):
+    monkeypatch.setattr(bars, "_UPSERT_CHUNK", 5_000)
+    start = et(DAY, "04:00")
+    points = [start + pd.Timedelta(minutes=i) for i in range(12_000)]
+    frame = _frame(points, [float(i) for i in range(12_000)])
+
+    class _Session:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, stmt):
+            self.statements.append(stmt)
+
+    fake = _Session()
+    bars.upsert_bars(fake, "AAPL", "1m", frame, "alpaca", "stock", now=points[-1] + pd.Timedelta(days=1))
+
+    rows = [{c.key: v for c, v in row.items()} for stmt in fake.statements for row in stmt._multi_values[0]]
+    assert [len(stmt._multi_values[0]) for stmt in fake.statements] == [5_000, 5_000, 2_000]
+    assert [row["bar_start"] for row in rows] == points
+    assert [row["close"] for row in rows] == [float(i) for i in range(12_000)]
+
+
+def test_upsert_stores_a_batch_past_the_postgres_parameter_cap(db_session):
+    start = et(DAY, "04:00")
+    points = [start + pd.Timedelta(minutes=i) for i in range(9_000)]  # 72k binds in one statement: over the 65,535 cap
+    now = points[-1] + pd.Timedelta(days=1)
+    upsert_bars(db_session, "AAPL", "1m", _frame(points, [1.0] * 9_000), "alpaca", "stock", now=now)
+    db_session.commit()
+    out = read_bars(db_session, "AAPL", "1m", points[0], points[-1], "stock", as_of=now)
+    assert len(out) == 9_000
 
 
 def test_upsert_is_idempotent_and_the_second_write_wins(db_session):

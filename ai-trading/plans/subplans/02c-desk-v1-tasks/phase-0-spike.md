@@ -2,6 +2,8 @@
 
 Part of [02c-desk-v1-implementation-plan.md](../02c-desk-v1-implementation-plan.md). Read its Global Constraints and Shared Interfaces first. Results go in [02d-desk-spike-results.md](../02d-desk-spike-results.md).
 
+> **Note 2026-10-31:** the Gateway probe (Task 0.5 Steps 1–2) never ran on 2026-10-26 as scheduled below; it moves to [02t](../02t-market-data-bridge-plan.md) B1 step 1, on the spare Ubuntu laptop.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Tasks 0.1–0.4 are done (checked), and so is the Flex probe (Task 0.5 Step 3, 2026-10-24). The Gateway probe (Steps 1–2) runs Mon 2026-10-26 at 09:30 ET with the owner (phone approval for the data user's sign-in); the main session then runs Task 0.6. The data user's Reporting access grant is still open. Order on Monday (owner-gated cron `caae82600785`): UAR retry, the Gateway probe with the data user, the data-user Flex migration, removal of the main-account Flex setup, then Task 0.6 ([STATUS.md](../../STATUS.md) Open Questions, "Pending IBKR sequence").
 
 **Goal:** Answer every 02a §12 check with evidence, and apply each check's decided fallback where it fails, before Phases 2, 3, and 6 commit to a gateway layout.

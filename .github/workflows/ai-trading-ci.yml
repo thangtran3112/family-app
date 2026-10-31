@@ -66,6 +66,45 @@ jobs:
       - name: Upload-hub-static mock-gcloud test
         run: ../deploy/ci/upload-hub-static.test.sh
 
+  bridge:
+    name: Market-data bridge (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/market-data/bridge
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ai-trading/market-data/bridge/go.mod
+          cache-dependency-path: ai-trading/market-data/bridge/go.sum
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.75.0
+          github_token: ${{ github.token }}
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - run: go vet ./...
+      - name: Tests (offline, httptest fakes and contract goldens)
+        run: go test -race -count=1 ./...
+      - run: buf lint
+      - name: buf breaking against origin/dev
+        run: |
+          git fetch --no-tags --depth=1 origin dev:refs/remotes/origin/dev
+          if git cat-file -e origin/dev:ai-trading/market-data/bridge/buf.yaml 2>/dev/null; then
+            buf breaking --against "$(git rev-parse --show-toplevel)/.git#ref=refs/remotes/origin/dev,subdir=ai-trading/market-data/bridge"
+          else
+            echo "origin/dev has no bridge module yet (first introduction): nothing to compare against"
+          fi
+      - name: buf generate leaves no diff
+        run: |
+          buf generate
+          test -z "$(git status --porcelain -- gen)" || { git status --short -- gen; git diff -- gen | head -50; exit 1; }
+
   desk-web:
     name: Desk web app
     runs-on: ubuntu-latest
@@ -303,7 +342,7 @@ jobs:
           set -euo pipefail
           secrets="$RUNNER_TEMP/ai-trading-secrets"
           mkdir -p "$secrets"
-          for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway vibe-consensus cloudflared auth market-data desk; do : >"$secrets/$name.env"; done
+          for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway vibe-consensus cloudflared auth market-data market-data-bridge desk; do : >"$secrets/$name.env"; done
           export AI_TRADING_SECRETS_DIR="$secrets"
           export AI_TRADING_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567
           docker compose -f ai-trading/deploy/production/docker-compose.yml \

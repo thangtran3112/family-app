@@ -1,0 +1,35 @@
+{
+  "http_status": 200,
+  "request": {
+    "preferences": [
+      {
+        "dataClass": "EQUITY_QUOTES",
+        "provider": "alpaca"
+      }
+    ],
+    "version": "2"
+  },
+  "response": {
+    "classes": [
+      {
+        "dataClass": "EQUITY_QUOTES",
+        "ladder": [
+          "ibkr",
+          "alpaca"
+        ],
+        "preferred": "alpaca",
+        "serving": "alpaca"
+      },
+      {
+        "dataClass": "EQUITY_BARS",
+        "ladder": [
+          "alpaca"
+        ],
+        "serving": "alpaca"
+      }
+    ],
+    "source": "DESK",
+    "version": "2"
+  },
+  "rpc": "SetRouting"
+}

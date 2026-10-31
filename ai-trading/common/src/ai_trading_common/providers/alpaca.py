@@ -24,7 +24,7 @@ from urllib.parse import quote
 import pandas as pd
 
 from ai_trading_common._provider import Provider
-from ai_trading_common.bars import Bars, Timeframe, drop_unclosed, to_utc, validate
+from ai_trading_common.bars import ET, Bars, Timeframe, drop_unclosed, to_utc, validate
 from ai_trading_common.errors import NoData, NotConfigured, ProviderError, Unavailable
 from ai_trading_common.http import ThrottledClient
 from ai_trading_common.quality import Quality
@@ -76,6 +76,12 @@ class AlpacaBars:
         now: pd.Timestamp | datetime,
         adjustment: str = "all",
     ) -> Bars:
+        """Closed bars inside `[start, end]`, capped to the SIP embargo and `drop_unclosed`-filtered.
+
+        For "1d" the range is applied by New York trading date, since a daily bar is stamped at
+        midnight ET of its date rather than at the session's open: a window covering exactly one
+        session returns that session's bar (see `_within_trading_dates`).
+        """
         if not (self.key_id and self.secret):
             raise NotConfigured(PROVIDER_NAME, "no API key configured")
 
@@ -85,9 +91,21 @@ class AlpacaBars:
         if capped_end < start_utc:
             return Bars(frame=_empty_frame(timeframe), source=PROVIDER_NAME, quality=quality)
 
+        # A "1d" bar is stamped at midnight America/New_York of its trading date, i.e. before
+        # that session's 04:00 ET extended open, and Alpaca filters bars by that stamp. Callers
+        # pass whole sessions (`extended_open`..`extended_close`), so their `start` sits *after*
+        # the first day's own stamp: a one-session window returned nothing (NoData) and a wider
+        # one silently lost its first session. Pad the request back to the first day's midnight;
+        # the frame is re-sliced to the caller's trading dates below, so nothing outside the
+        # window leaks out. Intraday bars are stamped at their own start, inside the window, and
+        # keep the exact requested range.
+        request_start = start_utc
+        if timeframe == "1d":
+            request_start = min(start_utc, start_utc.tz_convert(ET).normalize()).tz_convert("UTC")
+
         params = {
             "timeframe": _ALPACA_TIMEFRAME[timeframe],
-            "start": start_utc.isoformat(),
+            "start": request_start.isoformat(),
             "end": capped_end.isoformat(),
             "adjustment": adjustment,
             "feed": "sip",
@@ -100,6 +118,8 @@ class AlpacaBars:
 
         frame = _to_frame(rows, timeframe)
         frame = validate(frame, timeframe)
+        if timeframe == "1d":
+            frame = _within_trading_dates(frame, start_utc, capped_end)
         frame = drop_unclosed(frame, timeframe, now_utc)
         return Bars(frame=frame, source=PROVIDER_NAME, quality=quality)
 
@@ -285,13 +305,25 @@ def _empty_frame(timeframe: Timeframe) -> pd.DataFrame:
     return pd.DataFrame({c: pd.Series(dtype="float64") for c in columns}, index=index)
 
 
+def _within_trading_dates(frame: pd.DataFrame, start_utc: pd.Timestamp, end_utc: pd.Timestamp) -> pd.DataFrame:
+    """Keep the "1d" bars whose New York trading date is inside the caller's window dates.
+
+    The requested window is one or more whole sessions, and a bar belongs to the session of its
+    New York date, so comparing dates (rather than the bar's midnight stamp) is what makes a
+    window that opens at a session's extended open include that session.
+    """
+    first, last = start_utc.tz_convert(ET).date(), end_utc.tz_convert(ET).date()
+    return frame[[first <= day <= last for day in frame.index]]
+
+
 def _to_frame(rows: list[dict], timeframe: Timeframe) -> pd.DataFrame:
     """Alpaca's `{t, o, h, l, c, v}` bars into the shared OHLCV shape.
 
-    `t` is an RFC3339 UTC timestamp of the bar's start. A "1d" bar is reindexed
-    to its America/New_York trading date (not sliced from the string): Alpaca
-    timestamps a daily bar at that session's open in UTC, whose date can differ
-    from the UTC calendar date depending on the time of year.
+    `t` is an RFC3339 UTC timestamp. For "1h"/"1m" it is the bar's start. A "1d" bar is stamped
+    at **midnight America/New_York** of its trading date (`04:00Z` in EDT, `05:00Z` in EST) --
+    earlier than that session's 04:00 ET extended open, which is what made a window starting at
+    `extended_open` miss its own day -- so a "1d" bar is reindexed to its New York trading date
+    (not sliced from the string).
     """
     try:
         raw = pd.DataFrame(

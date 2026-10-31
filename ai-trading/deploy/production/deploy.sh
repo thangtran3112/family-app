@@ -193,7 +193,7 @@ MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
 IMAGES_ENV="$APP_DIR/images.env"
-SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env desk.env cloudflared.env)
+SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env desk.env cloudflared.env)
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
@@ -600,6 +600,15 @@ render_profiles() {
       printf '# Finnhub key not configured\n'
     fi
   } >"$RENDER_SRC_DIR/vibe-consensus.env")
+  # Optional market-data bridge profile (02t B0): MARKET_DATA_BRIDGE_TOKEN,
+  # MARKET_DATA_BRIDGE_ADMIN_TOKEN, and the Alpaca links. A missing profile never
+  # fails the deploy: the bridge still boots healthy, but with no token it rejects
+  # every call and with no keys it serves no data. Nothing consumes it until B2.
+  if ! FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
+       "$family_config" render ai-trading/market-data-bridge --out-dir "$RENDER_SRC_DIR" >/dev/null 2>&1; then
+    echo "deploy: ai-trading/market-data-bridge profile not available; market-data-bridge will serve with auth required and no providers until it exists" >&2
+    (umask 077 && printf '# market-data-bridge profile not configured\n' >"$RENDER_SRC_DIR/market-data-bridge.env")
+  fi
 }
 
 # secret_source_dir NAME: the directory holding one SECRET_FILES entry before

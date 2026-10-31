@@ -30,6 +30,11 @@ target "ahf-terminal" {
   cache-to   = ["type=gha,scope=ai-trading-ahf-terminal,mode=max"]
 }
 
+target "market-data-bridge" {
+  cache-from = ["type=gha,scope=ai-trading-market-data-bridge"]
+  cache-to   = ["type=gha,scope=ai-trading-market-data-bridge,mode=max"]
+}
+
 target "vibe-trading" {
   cache-from = ["type=gha,scope=ai-trading-vibe-wrapper"]
   cache-to   = ["type=gha,scope=ai-trading-vibe-wrapper,mode=max"]

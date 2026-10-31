@@ -14,6 +14,7 @@ src/ai_trading_common/
   sources.py   one runtime-checkable Protocol per data kind
   registry.py  Kind, Provider, REGISTRY, DEFAULT_CHAINS, DataSources.from_env()
   providers/   alpaca.py alpaca_options.py sec_edgar.py fred.py finnhub.py alphavantage.py eulerpool.py ibkr.py
+               tradier.py marketdata_app.py   (quotes and option_chain; chosen by env, in no default chain, 02b §4c)
 ```
 
 Each `providers/<name>.py` holds that vendor's raw client, one `<Name>Source` adapter mapping
