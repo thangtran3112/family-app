@@ -58,6 +58,12 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
 - The only manual steps are those with no API: Anthropic and OpenAI spend limits, interactive logins, and owner-approved broadening of the shared Cloudflare token's own permission scope in the dashboard ("Cloudflare API Token" above — the token's permissions only, never DNS/Tunnel/Worker settings). Cloudflare Access onboarding requires a separate owner-approved exception and is not part of Release 1.
 - GCP commands from the operator machine must use the personal gcloud configuration: prefix them with `CLOUDSDK_ACTIVE_CONFIG_NAME=personal`. The default active configuration (`chartflow`) is a work account; never touch it.
 
+## Tailscale
+
+- The family-app tailnet carries admin and CI SSH only (port 2222 on `tag:family-host`); public traffic stays on the Cloudflare tunnel.
+- All of it is Terraform under `infrastructure/tailscale/`. Rule: `ai-trading/.claude/rules/tailscale.md`; skill: `manage-family-tailscale`.
+- Never the employer tailnet, never a console edit.
+
 ## Upstream Apps
 
 - Never edit `packages/trading-agents`, `packages/ai-hedge-fund`, `packages/vibe-trading`, or `packages/mirofish` (upstream submodules). Wrapper Dockerfiles live in `deploy/upstream/`.
