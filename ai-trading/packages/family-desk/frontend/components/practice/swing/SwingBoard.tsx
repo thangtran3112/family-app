@@ -30,7 +30,7 @@ import {
   trustedSwingState,
   type PrepStep,
 } from "@/lib/replay/boardView";
-import { isStarred, peekDailyBars, peekOffsets, toggledStars } from "@/lib/replay/dayView";
+import { MAX_STARS, isStarred, peekDailyBars, peekOffsets, toggledStars, watchEmptyText } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingDatesHidden, swingHeaderLine } from "@/lib/replay/swing";
 import { continueSwingThread, endAnyDay, isSwingDayList, loadAnyDayList, patchAnyDayList, type BoardRow, type SwingDayList, type SwingPeek, type SwingPlan } from "@/lib/replay/swingApi";
@@ -62,6 +62,11 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const latestStar = useRef(0);
   const passButton = useRef<HTMLButtonElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
+  // Arriving, and after Pass has replaced the day's buttons, the keyboard starts at the page heading, not at the skip link (D-093).
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
   // Answers that land after she left the board move nothing; and when the wait for the next day's data began.
   const mounted = useRef(true);
   const prepSince = useRef<number | null>(null);
@@ -180,6 +185,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       setList(answer);
       setConfirmPass(false);
       thread.refresh();
+      requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }));
     }, PRACTICE_COPY.swingPassError);
 
   const proceed = () =>
@@ -204,7 +210,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
     <div className={dayStyles.screen}>
       <BackLink threadId={threadId} />
       <header className={dayStyles.header}>
-        <h1 className={dayStyles.title}>{swingHeaderLine(list, hidden)}</h1>
+        <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingHeaderLine(list, hidden)}</h1>
         <div className={dayStyles.actions}>
           {!ended && (
             <button
@@ -308,7 +314,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
             node: (
               <div className={dayStyles.rail}>
                 {list.watch.length === 0 ? (
-                  <p className={dayStyles.muted}>{PRACTICE_COPY.dayWatchEmpty}</p>
+                  <p className={dayStyles.muted}>{watchEmptyText(MAX_STARS)}</p>
                 ) : (
                   <ul className={dayStyles.watchList}>
                     {list.watch.map((entry) => (

@@ -6,7 +6,7 @@ import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/set
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread } from "./hub-helpers";
-import { replayRail } from "./swing-helpers";
+import { openNextDay, replayRail, send } from "./swing-helpers";
 
 // The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, B, T, S/X, end, the
 // journal, and a reloaded session follow. The landing no longer starts a single session, so those specs make one through the API.
@@ -418,7 +418,7 @@ test.describe("Practice", () => {
     await dayRow(page).getByRole("button", { name: /^Start Day 2$/ }).click(); // D-078: after an ended day the action starts the next one
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
-    await expect(page.getByText(PRACTICE_COPY.dayNoNames).first()).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle)).toBeVisible();
     // D-005: the banner names the cause (the stub holds no bars for this day), not "Only 0 names matched".
     await expect(page.getByRole("status").filter({ hasText: "No symbol could be scanned" })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Only 0");
@@ -817,5 +817,130 @@ test.describe("Practice day list · fix wave 5S", () => {
     expect(fits.inside, "the Practice action is inside the visible part of the table").toBe(true);
     await button.click();
     await page.waitForURL(SESSION_URL);
+  });
+
+  test("End day: the confirm takes focus without moving the table, Escape cancels and returns focus, and after it ends the review is in view and the keyboard lands on Next day (D-091, D-092, D-093, D-098, D-137)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const api = watchApi(page);
+    await openDayList(page, context);
+    await expect(page.getByRole("heading", { level: 1 }), "D-093: the keyboard arrives at the page heading").toBeFocused();
+    await page.getByRole("button", { name: "Star TSLA" }).click();
+    await expect(page.getByRole("button", { name: "Unstar TSLA" }).first()).toBeVisible();
+
+    const table = page.getByRole("table", { name: "Candidates" });
+    const top = (await table.boundingBox())!.y;
+    const trigger = page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true });
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await trigger.click();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const confirm = page.getByRole("group", { name: "Confirm ending the day" });
+    await expect(confirm.getByRole("button", { name: PRACTICE_COPY.dayEndYes }), "D-092: focus moves into the confirm").toBeFocused();
+    expect((await table.boundingBox())!.y, "D-137: the confirm does not push the table down").toBe(top);
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }), "one button is named End day").toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(confirm).toHaveCount(0);
+    await expect(trigger, "Escape returns focus to the trigger").toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await trigger.click();
+    await page.keyboard.press("Enter"); // Yes, end day
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayAfter }), "D-093: focus lands on the control that replaces End day").toBeFocused();
+    // D-091: the stale candidates table is gone, the review is on screen, and the universe paragraph is said once.
+    await expect(page.getByRole("table", { name: "Candidates" })).toHaveCount(0);
+    const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
+    await expect(review).toBeInViewport();
+    await expect(page.getByText(/Practice universe|^Universe: today's Desk set/)).toHaveCount(1);
+    // D-098: a finished day's names are inert: no button to peek, and no peek request from a click on a symbol.
+    await expect(page.getByRole("button", { name: "Peek at TSLA" })).toHaveCount(0);
+    api.clear();
+    await review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByText("TSLA", { exact: true }).click();
+    await page.getByRole("complementary", { name: "Practice side panel" }).getByText("TSLA", { exact: true }).first().click();
+    await page.waitForTimeout(400);
+    expect(api.paths().filter((path) => /[?&]peek=/.test(path)), "no peek request on an ended day").toEqual([]);
+  });
+
+  test("a day with no matching name says one plain sentence and offers Skip this day and Change plan; skipping it leaves one empty block (D-091, D-094)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+    await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click(); // Day 2 has no stored bars: its list is empty
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5");
+    await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle)).toBeVisible();
+    await expect(page.getByText(/\bof \d+ matched\b/), "one count model: the third count is gone").toHaveCount(0);
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan }), "the dead Re-scan is not offered").toHaveCount(0);
+    await expect(page.getByRole("link", { name: /widen a filter/ }), "the Screener cannot edit this thread's plan").toHaveCount(0);
+    await page.getByRole("button", { name: PRACTICE_COPY.dayChangePlan }).click();
+    await expect(page.getByRole("dialog", { name: /^New plan for / })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.getByRole("button", { name: PRACTICE_COPY.daySkip }).click();
+    const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
+    await expect(review).toBeVisible();
+    await expect(page.getByRole("table", { name: "Candidates" })).toHaveCount(0);
+    await expect(review.getByText(PRACTICE_COPY.reviewEmpty), "one empty block, not four").toHaveCount(1);
+    await expect(review.getByText(PRACTICE_COPY.reviewDayNone)).toHaveCount(0);
+    await expect(page.getByText(/Practice universe|^Universe: today's Desk set/), "the universe paragraph is said once").toHaveCount(1);
+  });
+
+  test("the plan's own cap reads the same in the header and the rail, and the last day ends on Finish plan, a summary and Start a new plan (D-095, D-096)", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    await fillNewPlan(dialog, {});
+    await dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols }).getByRole("button", { name: "3", exact: true }).click();
+    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
+    const threadId = Number(new URL(page.url()).searchParams.get("id"));
+    await expect(page.getByRole("heading", { level: 1 }), "D-093: New plan submit lands with the heading focused").toBeFocused();
+    await openFirstDay(page);
+    await expect(page.getByText("Starred 0 of 3").first()).toBeVisible();
+    const side = page.getByRole("complementary", { name: "Practice side panel" });
+    await expect(side).toContainText("Star up to 3 names to keep them in view"); // D-095: one rule, one number
+    await expect(side).not.toContainText("up to 5");
+
+    // Days 1 to 4 by API; Day 5 is the plan's last.
+    let list = Number(new URL(page.url()).searchParams.get("id"));
+    for (let day = 1; day <= 4; day++) {
+      await send(context, "POST", `/day-lists/${list}/end`);
+      list = await openNextDay(context, threadId);
+    }
+    await openDesk(page, `/practice/day?id=${list}`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 5 of 5");
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+    // D-096: no "Next day" that silently goes to /practice: the button says Finish plan and opens the thread's summary.
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayAfter })).toHaveCount(0);
+    await page.getByRole("link", { name: PRACTICE_COPY.dayFinishPlan }).click();
+    await page.waitForURL(`**/practice/thread?id=${threadId}`);
+    const step = page.getByRole("region", { name: "Practice day" });
+    await expect(step).toContainText(/Plan finished · 5 days · .* · win rate/);
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Finished");
+    await openDesk(page, "/practice");
+    const row = dayRow(page);
+    await expect(row).toContainText(PRACTICE_COPY.landingProgressFinished);
+    await expect(row).not.toContainText("Day 5 done");
+    await expect(row.getByRole("button", { name: "Start a new plan" })).toBeVisible();
+  });
+
+  test("the starred names sit above the block's days, which stay open for a short block (D-097)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    await fillNewPlan(dialog, { days: "10" }); // the stub day cannot start a 20-day block: it would run past the last finished day
+    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
+    await openFirstDay(page);
+    await page.getByRole("button", { name: "Star TSLA" }).click();
+    const side = page.getByRole("complementary", { name: "Practice side panel" });
+    const starred = side.getByRole("region", { name: PRACTICE_COPY.dayWatch });
+    await expect(starred).toContainText("TSLA");
+    const block = side.locator("details").filter({ hasText: "This block · 10 days" });
+    const [s, b] = [(await starred.boundingBox())!, (await block.boundingBox())!];
+    expect(s.y, "the starred names come first").toBeLessThan(b.y);
+    expect(s.y + s.height, "and they are on screen, above the footer").toBeLessThan(page.viewportSize()!.height - 40);
+    await expect(block, "ten days or fewer start open").toHaveAttribute("open", "");
   });
 });

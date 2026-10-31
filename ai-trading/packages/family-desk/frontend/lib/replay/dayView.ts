@@ -32,6 +32,9 @@ export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string
   return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
 }
 
+/** "Star up to 3 names to keep them in view": the empty rail, with the plan's own cap like the header (D-095). */
+export const watchEmptyText = (cap: number): string => practiceText("dayWatchEmpty", { max: cap, names: nameWord(cap) });
+
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
 
@@ -106,6 +109,9 @@ export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOn
   return parts.length === 0 ? PRACTICE_COPY.dayRiskNone : practiceText("dayRiskFrom", { plan: parts.join(", ") });
 }
 
+/** The block's days list starts open for a short block and collapsed for a long one, so the starred names stay on screen (D-097). */
+export const blockOpenByDefault = (days: number): boolean => days <= 10;
+
 export type LadderRow = { n: number; weekday: string | null; state: "ended" | "open" | "opens_after" | "locked"; detail: string };
 
 /** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked.
@@ -136,7 +142,8 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
 /** The label of a day thread's one action (D-078): a day in progress resumes, a listed day opens, and opening the next day starts it.
  *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
 export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
-  if (today !== null) return practiceText(today.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: today.day_no });
+  // `today.day_no` counts the plan's own days; the thread's number adds the days an earlier plan already ended (D-047).
+  if (today !== null) return practiceText(today.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: plan === null ? today.day_no : threadDayNo(plan, today.day_no) });
   if (plan === null) return null;
   const card = planCard(plan);
   if (card.action === "none" || card.action === "new") return null;
@@ -333,10 +340,6 @@ export function listWarning(list: Pick<DayList, "warnings">): string | null {
   return list.warnings[0] ?? null;
 }
 
-/** "0 of 131 matched": the empty state's headline; the line under it says what to do (P7). */
-export const noMatchText = (list: Pick<DayList, "universe">): string =>
-  practiceText("dayNoneMatched", { matched: list.universe.matches_total, size: list.universe.size });
-
 // ---- the review ----------------------------------------------------------------------------------------------
 
 const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];
@@ -367,7 +370,7 @@ export const moveText = (value: number | null): string => (value === null ? EMPT
 
 export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practiced" : row.picked === "starred" ? "Starred" : "");
 
-/** "Day finished · date shown below" when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
+/** "Day finished" (the date follows it on the same line) when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
 export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);
 
 /** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */

@@ -26,12 +26,13 @@ import {
   moveText,
   nameCap,
   namesTodayText,
-  noMatchText,
   ordinal,
   peekDailyBars,
   peekOffsets,
   planArmedText,
   dayActionLabel,
+  blockOpenByDefault,
+  watchEmptyText,
   planCard,
   rescanCounts,
   rescanLabel,
@@ -139,7 +140,6 @@ test("warnings: the server's reason is shown as it is; a list it had no reason f
   const why = "None of the 17 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
   assert.equal(listWarning({ warnings: [why] }), why);
   assert.equal(listWarning({ warnings: [] }), null);
-  assert.equal(noMatchText({ universe: { ...dayList.universe, matches_total: 0 } }), "0 of 131 matched");
   assert.equal(PRACTICE_COPY.dayNoNames, "No name passed your filters on this day · widen a filter, or end the day to open the next");
   assert.equal(why.includes("Only 0"), false);
 });
@@ -198,7 +198,7 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
 });
 
 test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
-  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished · date shown below");
+  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished");
   assert.equal(dayFinishedLine({ dates_hidden: false }), null);
   assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to window end, biggest gain first");
 });
@@ -452,10 +452,26 @@ test("a day thread's one action says what it does (D-078)", () => {
   const listed = { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 } as const;
   assert.equal(dayActionLabel(listed, plan), "Open Day 7", "a listed day that was never started opens");
   assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Resume Day 7", "only a day in progress resumes");
+  assert.equal(dayActionLabel({ ...listed, day_no: 1 }, { ...plan, day_offset: 1 }), "Open Day 2", "a plan that replaced another counts on from the days the thread already ended");
   // No open day: opening the next one starts it. The number is the thread's own (D-047).
   assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
   assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 10");
   assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Day 1");
   assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, prep: { state: "running", done: 1, total: 9, failed: 0 } }), null, "while the data prepares there is nothing to press");
   assert.equal(dayActionLabel(null, null), null);
+});
+
+// D-095: the candidates header said "Starred 0 of 3" while the rail said "Star up to 5 names": one rule, one number.
+test("the empty rail names the plan's own cap, like the header (D-095)", () => {
+  assert.equal(watchEmptyText(3), "Star up to 3 names to keep them in view");
+  assert.equal(watchEmptyText(1), "Star up to 1 name to keep them in view");
+  assert.equal(watchEmptyText(5), "Star up to 5 names to keep them in view");
+});
+
+// D-097: on a 20-day block the day list pushed the starred names below the fold.
+test("a long block's days start collapsed, a short block's open (D-097)", () => {
+  assert.equal(blockOpenByDefault(5), true);
+  assert.equal(blockOpenByDefault(10), true);
+  assert.equal(blockOpenByDefault(20), false);
+  assert.equal(blockOpenByDefault(30), false);
 });

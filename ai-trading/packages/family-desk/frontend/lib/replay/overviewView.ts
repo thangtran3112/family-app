@@ -3,7 +3,7 @@ import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { swingCardView } from "./swing.ts";
 import type { WeekRow } from "./swingApi.ts";
 import type { PracticeThread, SwingState, ThreadDay, ThreadSummary } from "./threads.ts";
-import { dayResultTone, formatBalance, formatDayResult } from "./threadView.ts";
+import { dayResultTone, formatBalance, formatDayResult, winRateText } from "./threadView.ts";
 import { dayBoardHref } from "./weekScreen.ts";
 import { weekReviewable, weekRowView } from "./weekView.ts";
 
@@ -25,7 +25,7 @@ export type ThreadProgress = {
 const daysEnded = (summary: Pick<ThreadSummary, "thread">): number => summary.thread.stats.daysPracticed + summary.thread.stats.daysSkipped;
 
 /** Where a thread is, in one place: the number of the day it is on, and what the days so far add up to. */
-export function threadProgress(summary: Pick<ThreadSummary, "thread" | "swing" | "today" | "last_day">): ThreadProgress {
+export function threadProgress(summary: Pick<ThreadSummary, "thread" | "swing" | "today" | "last_day">, planFinished = false): ThreadProgress {
   const { thread, swing, today, last_day: lastDay } = summary;
   const { stats } = thread;
   const ended = daysEnded(summary);
@@ -38,8 +38,20 @@ export function threadProgress(summary: Pick<ThreadSummary, "thread" | "swing" |
   }
   if (thread.status === "closed") return { main: ended === 0 ? PRACTICE_COPY.landingProgressNone : practiceText("landingProgressClosed", { n: ended }), sub, gate: null };
   if (today !== null) return { main: practiceText("landingProgressDay", { n: today.day_no }), sub, gate: null };
+  // The plan's last day has ended: "Day 5 done" would sit beside "New plan needed" (D-096).
+  if (planFinished) return { main: PRACTICE_COPY.landingProgressFinished, sub, gate: null };
   if (lastDay !== null) return { main: practiceText("landingProgressDone", { n: lastDay.n }), sub, gate: null };
   return { main: PRACTICE_COPY.landingProgressNone, sub, gate: null };
+}
+
+/** "Plan finished · 5 days · +$123.00 · win rate 64%": the summary a finished day plan ends on (days, P/L and win rate, from the thread's own stats). */
+export function planFinishedLine(thread: Pick<PracticeThread, "startingBalance" | "stats">): string {
+  const days = thread.stats.daysPracticed + thread.stats.daysSkipped;
+  return practiceText("planFinishedSummary", {
+    days: `${days} ${days === 1 ? "day" : "days"}`,
+    change: formatDayResult(thread.stats.balance - thread.startingBalance),
+    rate: winRateText(thread.stats.winRate),
+  });
 }
 
 // -- adherence -----------------------------------------------------------------------------------------------------------

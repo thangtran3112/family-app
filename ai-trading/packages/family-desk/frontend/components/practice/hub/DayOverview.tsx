@@ -27,7 +27,7 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: 
   return (
     <div className={o.grid}>
       <div className={o.main}>
-        <PlaceStrip summary={summary} />
+        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} />
         <div className={o.topRow}>
           <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (

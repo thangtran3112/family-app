@@ -120,11 +120,12 @@ function ThreadRow({
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
   const view = todayView(today, lastDay);
-  const progress = threadProgress(summary);
   // An active day thread's own plan (the card says Resume or "New plan needed" from it); other threads need none.
   const dayActive = !closed && thread.mode === "day";
   const daily = useDeskQuery(`replay-daily:${thread.id}`, (signal) => loadDaily({ threadId: thread.id, signal }), { enabled: dayActive, revision });
   const plan = daily.data?.plan ?? null;
+  // The plan's last day has ended: the row says Finished, and its one action starts a new plan (D-096).
+  const progress = threadProgress(summary, dayActive && plan !== null && plan.thread_id === thread.id && plan.finished);
   const preparing = plan?.prep.state === "running";
   const { refresh } = daily;
   useEffect(() => {

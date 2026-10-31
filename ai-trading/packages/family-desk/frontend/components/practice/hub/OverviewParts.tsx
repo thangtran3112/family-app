@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -13,13 +13,13 @@ import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
 /** The page frame of the thread overview: the shared header (back link, name, mode and status chips) over the content. */
-export function OverviewShell({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+export function OverviewShell({ title, titleRef, aside, children }: { title: string; titleRef?: Ref<HTMLHeadingElement>; aside?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.page}>
       <header className={`${hub.header} ${styles.headerSplit}`}>
         <div className={styles.titleBlock}>
           <Link href="/practice" className={styles.back}>{`← ${PRACTICE_COPY.threadPageBack}`}</Link>
-          <h1 className={hub.title}>{title}</h1>
+          <h1 ref={titleRef} tabIndex={-1} className={hub.title}>{title}</h1>
         </div>
         {aside && <div className={hub.inline}>{aside}</div>}
       </header>
@@ -40,9 +40,9 @@ export function OverviewChips({ thread }: { thread: ThreadSummary["thread"] }) {
 }
 
 /** Where the thread is: the balance with SIMULATED, what it started with, the place line and the days so far. `children` adds the swing facts. */
-export function PlaceStrip({ summary, children }: { summary: ThreadSummary; children?: ReactNode }) {
+export function PlaceStrip({ summary, planFinished = false, children }: { summary: ThreadSummary; planFinished?: boolean; children?: ReactNode }) {
   const { thread } = summary;
-  const progress = threadProgress(summary);
+  const progress = threadProgress(summary, planFinished);
   return (
     <section className={`${styles.panel} ${o.place}`} aria-label="Thread balance">
       <span className={hub.cap}>{PRACTICE_COPY.threadBalance}</span>

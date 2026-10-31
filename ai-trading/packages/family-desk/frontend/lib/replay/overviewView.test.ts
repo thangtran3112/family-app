@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
-import { adherenceStat, overviewDayRows, overviewWeekRows, swingGate, threadProgress } from "./overviewView.ts";
+import { adherenceStat, overviewDayRows, overviewWeekRows, planFinishedLine, swingGate, threadProgress } from "./overviewView.ts";
 import { swingThreadFinished, swingThreadReviewReady, swingThreadSummary, weekRows } from "./swingFixtures.ts";
 import { activeThread, closedThread, freshThread, threadDays } from "./threadFixtures.ts";
 
@@ -104,4 +104,14 @@ test("a week row carries the equity change beside the realized figure (D-081)", 
   assert.equal(list[0]!.equityChange, "+$870.00");
   assert.equal(list[0]!.equityChangeTone, "up");
   assert.equal(list[3]!.equityChange, "—", "a week with no ended day has none");
+});
+
+// D-096: on the last day "Next day" went silently to /practice, where the row read "Active · Day 5 done" with a status on a button.
+test("a day thread whose plan is finished reads Finished and has a summary line (D-096)", () => {
+  assert.equal(threadProgress(activeThread).main, "Day 8");
+  assert.equal(threadProgress({ ...activeThread, today: null, last_day: threadDays.at(-1)! }, true).main, "Finished");
+  assert.equal(threadProgress({ ...activeThread, today: null, last_day: threadDays.at(-1)! }, true).sub, "6 practiced · 2 passed");
+  // days, P/L and win rate, from the thread's own stats
+  assert.equal(planFinishedLine(activeThread.thread), "Plan finished · 8 days · +$123.00 · win rate 64%");
+  assert.equal(planFinishedLine(freshThread.thread), "Plan finished · 0 days · $0.00 · win rate —");
 });

@@ -55,7 +55,7 @@ export function ThreadAction({
     return action.kind === "start" || action.kind === "continue" ? <SwingContinue threadId={thread.id} label={action.label} locked={busy} onBusy={onBusy} onChanged={onChanged} /> : null;
   }
 
-  if (today !== null) return <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink} {...lockLink(busy)}>{dayActionLabel(today, plan)}</Link>;
+  if (today !== null) return <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink} {...lockLink(busy)}>{dayActionLabel(today, plan?.thread_id === thread.id ? plan : null)}</Link>;
   if (!planOpensIn(plan, thread)) {
     return onNewPlan ? (
       <button type="button" className={styles.button} disabled={busy} aria-busy={busy || undefined} onClick={onNewPlan}>{PRACTICE_COPY.landingNeedsPlan}</button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
@@ -44,50 +45,61 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
   const selection = selectionText(review);
   const finished = dayFinishedLine(review);
   const balance = journal === null ? null : dayBalanceText(journal);
+  // The review is what the page is about once the day ended: bring it into view (D-091).
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: "start" });
+  }, []);
+  // A day with no list and no trade has nothing to tabulate: one block says so, not four empty messages (D-091).
+  const empty = review.rows.length === 0 && (journal === null || journal.trades === 0);
   return (
-    <section className={styles.section} aria-label="How the list moved">
+    <section ref={ref} className={styles.section} aria-label="How the list moved">
       <h2 className={styles.sectionTitle}>{PRACTICE_COPY.reviewTitle}</h2>
-      {finished && (
-        <div>
-          <p className={styles.muted}>{finished}</p>
-          <p className={styles.line}>{formatEtDay(review.day)}</p>
-        </div>
-      )}
-      <ul className={styles.tiles}>
-        <li className={styles.tile}>
-          <span className={styles.tileLabel}>Selection</span>
-          <span className={styles.tileValue} style={{ fontSize: "var(--text-row)" }}>{selection ?? PRACTICE_COPY.reviewNoPicks}</span>
+      {finished && <p className={styles.line}>{`${finished} · ${formatEtDay(review.day)}`}</p>}
+      {empty ? (
+        <>
+          <EmptyBlock title={PRACTICE_COPY.reviewEmpty} />
           <UniverseFootnote text={footnote} />
-        </li>
-        {journal && (
-          <li className={styles.tile}>
-            <span className={styles.tileLabel}>{PRACTICE_COPY.reviewDayTitle} <SimulatedBadge /></span>
-            <span className={styles.tileValue} style={{ fontSize: "var(--text-row)" }}>{journalLine(journal)}</span>
-            {journal.trades > 0 && <span className={styles.tileHint}>{dayRecordText(journal)}</span>}
-            {balance && <span className={styles.tileHint}>{balance}</span>}
-            <span className={styles.tileHint}>{PRACTICE_COPY.reviewDayHint}</span>
-          </li>
-        )}
-      </ul>
-      {journal && (
-        <DenseTable
-          caption="Your practice trades"
-          columns={TRADE_COLUMNS}
-          rows={tradeLineRows(journal)}
-          rowKey={(row) => row.key}
-          empty={<EmptyBlock title={PRACTICE_COPY.reviewDayNone} />}
-        />
+        </>
+      ) : (
+        <>
+          <ul className={styles.tiles}>
+            <li className={styles.tile}>
+              <span className={styles.tileLabel}>Selection</span>
+              <span className={styles.tileValue} style={{ fontSize: "var(--text-row)" }}>{selection ?? PRACTICE_COPY.reviewNoPicks}</span>
+              <UniverseFootnote text={footnote} />
+            </li>
+            {journal && (
+              <li className={styles.tile}>
+                <span className={styles.tileLabel}>{PRACTICE_COPY.reviewDayTitle} <SimulatedBadge /></span>
+                <span className={styles.tileValue} style={{ fontSize: "var(--text-row)" }}>{journalLine(journal)}</span>
+                {journal.trades > 0 && <span className={styles.tileHint}>{dayRecordText(journal)}</span>}
+                {balance && <span className={styles.tileHint}>{balance}</span>}
+                <span className={styles.tileHint}>{PRACTICE_COPY.reviewDayHint}</span>
+              </li>
+            )}
+          </ul>
+          {journal && (
+            <DenseTable
+              caption="Your practice trades"
+              columns={TRADE_COLUMNS}
+              rows={tradeLineRows(journal)}
+              rowKey={(row) => row.key}
+              empty={<EmptyBlock title={PRACTICE_COPY.reviewDayNone} />}
+            />
+          )}
+          <p className={styles.muted}>{PRACTICE_COPY.reviewRankNote}</p>
+          <p className={styles.muted}>{PRACTICE_COPY.reviewNote}</p>
+          <DenseTable
+            caption="How the list moved"
+            columns={withPriorities(COLUMNS, "practiceReview")}
+            rows={review.rows}
+            rowKey={(row) => row.symbol}
+            scrollX
+            empty={<EmptyBlock title={PRACTICE_COPY.reviewEmpty} />}
+          />
+        </>
       )}
-      <p className={styles.muted}>{PRACTICE_COPY.reviewRankNote}</p>
-      <p className={styles.muted}>{PRACTICE_COPY.reviewNote}</p>
-      <DenseTable
-        caption="How the list moved"
-        columns={withPriorities(COLUMNS, "practiceReview")}
-        rows={review.rows}
-        rowKey={(row) => row.symbol}
-        scrollX
-        empty={<EmptyBlock title={PRACTICE_COPY.reviewEmpty} />}
-      />
     </section>
   );
 }

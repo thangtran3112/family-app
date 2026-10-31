@@ -45,6 +45,9 @@
 .down { color: var(--color-down); }
 .flat { color: var(--color-muted); }
 
+/* The End day confirm opens under its button instead of pushing the table down (D-092, D-137). */
+.endWrap { position: relative; }
+.endConfirm { position: absolute; top: calc(100% + var(--space-1)); right: 0; z-index: 20; display: flex; width: min(340px, calc(100vw - 32px)); flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: var(--space-3); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 .confirm { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
 
 /* Peek */
@@ -59,6 +62,9 @@
 .side { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
 .sideSection { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3); }
 .sideHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.sideSummary { cursor: pointer; }
+.sideSummary .sideTitle { display: inline; }
+.watchName[data-inert="true"] { cursor: default; }
 .sideTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .sideHint { color: var(--color-muted); font-size: var(--text-micro); }
 .sideFacts { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); font-size: var(--text-label); }
