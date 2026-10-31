@@ -93,7 +93,7 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
   // marker lands, so they are left off the chart (D-028). Every overlay is still computed (the header reads VWAP from `series`);
   // only the visible ones go to the chart, and the legend keeps the hidden ones listed so a click turns them back on.
   const untagged = useMemo(() => visibleOverlays(series.overlays, prefs).map((overlay) => ({ ...overlay, label: "" })), [series.overlays, prefs]);
-  const hidden = new Set(series.overlays.filter((overlay) => !prefs.on[overlay.id as PrefId]).map((overlay) => overlay.id));
+  const hidden = new Set(series.overlays.filter((overlay) => prefs.on[overlay.id as PrefId] === false).map((overlay) => overlay.id));
   const legend = legendModel(symbol, view.interval, bars, series.overlays, crosshair, hidden);
 
   return (

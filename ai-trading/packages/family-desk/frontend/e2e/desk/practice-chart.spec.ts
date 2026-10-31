@@ -4,7 +4,7 @@ import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
 import { DAY, createStubSession } from "./hub-helpers";
-import { replayRail } from "./swing-helpers";
+import { createSwingThread, openNextDay, replayRail, send } from "./swing-helpers";
 
 // The replay chart's full screen and settings (design-replay-chart.md §(d), fix wave 5S stream 3). The stub day is TSLA on
 // Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
@@ -321,5 +321,37 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
     await confirm.getByRole("button", { name: "Keep practicing" }).click();
     await expect(confirm).toHaveCount(0);
+  });
+});
+
+test.describe("Practice replay chart in a swing session (the Daily view)", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the type applies to the Daily chart; the intraday groups are switched off and say why", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await createSwingThread(context);
+    const dayOne = await openNextDay(context, threadId);
+    await send(context, "PATCH", `/day-lists/${dayOne}`, { watch: ["S01"] });
+    const session = await send(context, "POST", `/day-lists/${dayOne}/sessions`, { symbol: "S01" });
+    await openDesk(page, `/practice/replay?id=${session.id}`);
+    await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
+
+    await chartSettings(page).click();
+    await expect(popover(page).getByRole("checkbox", { name: "VWAP" })).toBeEnabled();
+    await page.keyboard.press("Escape");
+    await page.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "Daily", exact: true }).click();
+    await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
+
+    await chartSettings(page).click();
+    await expect(popover(page).getByText("The daily view has no intraday lines.")).toBeVisible();
+    for (const name of ["VWAP", "EMA 9", "EMA 21", "Volume", "Prior close", "Session high and low", "Opening range (first 15 min)"]) {
+      await expect(popover(page).getByRole("checkbox", { name }), name).toBeDisabled();
+    }
+    await popover(page).getByRole("radio", { name: "Area" }).check();
+    await expect(popover(page).getByRole("radio", { name: "Area" })).toBeChecked();
+    await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
+    expect(await page.locator("section[aria-label='S01 1d market chart'] canvas").count()).toBeGreaterThan(0);
   });
 });
