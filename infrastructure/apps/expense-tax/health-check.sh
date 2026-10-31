@@ -62,7 +62,7 @@ done
 default_workers="workflow-worker"
 [[ "${DEPLOY_DARK:-0}" == "1" ]] && default_workers=""
 read -r -a required_workers <<<"${HEALTH_CHECK_REQUIRED_WORKERS-$default_workers}"
-for worker in "${required_workers[@]}"; do
+for worker in ${required_workers[@]+"${required_workers[@]}"}; do
   worker_ready=0
   for ((attempt = 1; attempt <= attempts; attempt += 1)); do
     container_id=$(compose ps -q "$worker" 2>/dev/null || true)

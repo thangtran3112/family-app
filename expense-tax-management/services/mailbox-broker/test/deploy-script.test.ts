@@ -75,7 +75,7 @@ case "\$1" in
         *) inspect_args+=("\$1"); shift ;;
       esac
     done
-    container_id="\${inspect_args[-1]}"
+    container_id="\${inspect_args[@]: -1}"
     svc="\${container_id#fake-container-}"
     if [[ "\$fmt" == *"Health.Status"* ]]; then
       printf 'healthy\\n'
@@ -271,7 +271,7 @@ case "\$1" in
         *) inspect_args+=("\$1"); shift ;;
       esac
     done
-    container_id="\${inspect_args[-1]}"
+    container_id="\${inspect_args[@]: -1}"
     svc="\${container_id#fake-container-}"
     if [[ "\$fmt" == *"Health.Status"* ]]; then
       printf 'healthy\\n'
