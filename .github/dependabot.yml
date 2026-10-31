@@ -19,3 +19,18 @@ updates:
       # Dependabot would move the pin to the fork's stale main and drop every patch.
       # Upstream updates go through the sync-vibe-trading skill instead.
       - dependency-name: "ai-trading/packages/vibe-trading"
+
+  # 02t market-data bridge (Go module, including the pinned protoc plugins). One grouped
+  # weekly pull request keeps the traffic small.
+  - package-ecosystem: gomod
+    directory: /ai-trading/market-data/bridge
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: dev
+    commit-message:
+      prefix: "chore(ai-trading)"
+    groups:
+      bridge-go:
+        patterns:
+          - "*"
