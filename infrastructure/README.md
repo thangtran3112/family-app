@@ -38,7 +38,7 @@ One VPS PostgreSQL cluster reduces memory and operations overhead. Each family a
 
 ## Shared Temporal Activation (operator-only)
 
-Source changes alone do not migrate the live Temporal server. Production activation needs a separately approved, coordinated cutover:
+Source changes alone do not migrate the live Temporal server. Production activation needs a separately approved, coordinated cutover. On a host bootstrapped with `host/bootstrap.sh --only temporal`, `host/steps/35-temporal.sh` performs the staging, env file, start and namespace steps (2 and 3 below, minus the downtime handling); the runbook remains the VPS procedure:
 
 1. Keep the existing `temporal` and `temporal_visibility` PostgreSQL databases and the `expense_temporal` role. `expense-tax-management/deploy/production/bootstrap-temporal-db.sh` remains an operator-only database creation step; do not run it during normal deployment. Record the last known-good image tag and preserve the existing Expense Compose file, deploy scripts, and root-only production environment file in a root-only recovery directory before replacing anything.
 2. Create `family_shared` once. Transfer `infrastructure/temporal/docker-compose.yml`, `dynamicconfig.yaml`, and `bootstrap-namespaces.sh` together into `/opt/family-app/temporal/` on the VPS. Provision `/etc/family-app/temporal.env` as root-owned mode `0600` with **only** `TEMPORAL_DB_PASSWORD` set to the existing `expense_temporal` role password. Keep that password in a separate shared-infrastructure secret bundle; do not generate a new password or take it from a new Expense bundle. The shared server also joins `postgres_default`.

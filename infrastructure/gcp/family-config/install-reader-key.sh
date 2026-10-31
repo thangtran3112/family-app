@@ -9,6 +9,7 @@
 #                      Default shared/vps; use shared/laptop for the laptop.
 #   --keep-existing    Delete no older key after the new one is verified. Use it to
 #                      add a second host's key without revoking the first host's.
+# shellcheck disable=SC2029 # the remote command strings expand on the client side on purpose
 set -Eeuo pipefail
 umask 077
 

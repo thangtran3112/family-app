@@ -21,6 +21,20 @@ mkdir -p "$stub_dir"
 secret='AGE-SECRET-LOOKING-WRITER-KEY-CONTENT-DO-NOT-LEAK-7f3a9c'
 echo "{\"type\":\"service_account\",\"private_key\":\"$secret\"}" > "$d/writer-key.json"
 
+# Fake Firestore CLI (bootstrap.sh reads the Postgres superuser password through it, from
+# shared/vps-postgres): prints a recognisable fake value and nothing else.
+pg_secret='FAKE-PG-SUPERUSER-PASSWORD-DO-NOT-LEAK-91bd2e'
+cat > "$d/fake-family-config" <<SH
+#!/usr/bin/env bash
+if [[ "\$1 \$2 \$3" == "get shared/vps-postgres POSTGRES_SUPERUSER_PASSWORD" ]]; then
+  echo '$pg_secret'
+  exit 0
+fi
+echo "fake family_config: unexpected invocation: \$*" >&2
+exit 1
+SH
+chmod +x "$d/fake-family-config"
+
 # Stub ssh: records argv (one invocation per line) and captures each
 # invocation's stdin to its own numbered file. Exits 0 unconditionally --
 # this proves the bootstrap.sh ORCHESTRATION/transport, not real SSH.
@@ -48,7 +62,7 @@ chmod +x "$stub_dir/scp"
 capture_dir="$d/capture"
 mkdir -p "$capture_dir"
 
-PATH="$stub_dir:$PATH" STUB_CAPTURE_DIR="$capture_dir" \
+PATH="$stub_dir:$PATH" STUB_CAPTURE_DIR="$capture_dir" FAMILY_CONFIG_CLI="$d/fake-family-config" \
   bash "$SCRIPT_DIR/bootstrap.sh" \
   --host 198.51.100.1 --ssh-user ubuntu --ssh-key /dev/null \
   --app "$SCRIPT_DIR/apps/expense-tax-management.conf" \
@@ -88,5 +102,31 @@ for f in "$capture_dir"/ssh-stdin-*.log; do
 done
 [[ "$secret_found_in_stdin" == 1 ]] || fail "the writer key's secret content was never found in any ssh invocation's stdin"
 ok "the writer key's secret content was transferred via ssh stdin, as intended"
+
+# --- Postgres superuser password: read from Firestore on this machine, installed via stdin ---
+if grep -qF "$pg_secret" "$capture_dir/ssh-argv.log"; then
+  fail "the Postgres superuser password appeared in an ssh command's argv"
+fi
+if [[ -s "$capture_dir/scp-argv.log" ]] && grep -qF "$pg_secret" "$capture_dir/scp-argv.log"; then
+  fail "the Postgres superuser password appeared in an scp command's argv"
+fi
+ok "the Postgres superuser password never appears in any ssh or scp argv"
+
+grep -qF "install -m 0400 /dev/stdin /etc/family-app/backup-pgpassword" "$capture_dir/ssh-argv.log" \
+  || fail "expected an ssh invocation running 'sudo install -m 0400 /dev/stdin .../backup-pgpassword'"
+pg_found_in_stdin=0
+for f in "$capture_dir"/ssh-stdin-*.log; do
+  [[ -f "$f" ]] || continue
+  # No trailing newline: the backup container reads the file verbatim.
+  if [[ "$(cat "$f")" == "$pg_secret" && "$(wc -l <"$f" | tr -d ' ')" == 0 ]]; then pg_found_in_stdin=1; fi
+done
+[[ "$pg_found_in_stdin" == 1 ]] || fail "the Postgres superuser password was not streamed (newline-free) over ssh stdin"
+ok "the Postgres superuser password is installed via ssh stdin into backup-pgpassword, newline-free"
+
+# `--only backup` runs no postgres step, so SHARED_PG_DIR can only be there if the backup step still passes it.
+if grep -q 'SHARED_PG_DIR' "$capture_dir/ssh-argv.log"; then
+  fail "40-backup.sh must no longer be handed SHARED_PG_DIR (it reads no .env)"
+fi
+ok "40-backup.sh is not handed SHARED_PG_DIR any more"
 
 printf '\n%d checks passed (bootstrap.sh writer-key transport)\n' "$PASS"

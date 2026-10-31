@@ -18,7 +18,7 @@ ok "scripts parse"
 # subshell's exit status is parse_args's.
 parse() {
   (
-    # shellcheck disable=SC1091 # path is computed; sourcing only defines functions
+    # shellcheck disable=SC1090 # path is computed; sourcing only defines functions
     source "$SCRIPT"
     # `|| exit`: inside the caller's `if parse ...`, errexit is off, so a failing parse_args would
     # otherwise fall through to the printf.

@@ -16,6 +16,10 @@ on:
       # 0001b-1: ai-trading's production compose/deploy/Caddyfile/health-check
       # scripts and their tests live under infrastructure/apps/ai-trading/.
       - "infrastructure/apps/ai-trading/**"
+      # 0001b-1: the shared host bootstrap steps and the reader-key installer
+      # have offline tests that run in the scripts job below.
+      - "infrastructure/host/**"
+      - "infrastructure/gcp/family-config/**"
   workflow_dispatch:
 
 concurrency:
@@ -292,7 +296,9 @@ jobs:
           files=(ai-trading/deploy/upstream/terminal/*.sh ai-trading/deploy/ci/*.sh
             infrastructure/apps/ai-trading/*.sh infrastructure/apps/ai-trading/tests/*.sh
             infrastructure/cloudflare/ai-trading/*.sh
-            infrastructure/host/app-controls/*.sh)
+            infrastructure/host/app-controls/*.sh
+            infrastructure/host/bootstrap.sh infrastructure/host/test-bootstrap.sh infrastructure/host/test-steps.sh
+            infrastructure/host/steps/*.sh infrastructure/gcp/family-config/*.sh)
           shellcheck "${files[@]}"
       - name: Upload-mirofish-static mock-gcloud test
         run: ai-trading/deploy/ci/upload-mirofish-static.test.sh
@@ -319,6 +325,12 @@ jobs:
         # mirofish-runtime.sh where test_runtime.py looks for them
         # (REPO_ROOT.parent / infrastructure/apps/ai-trading, REPO_ROOT=/app).
         run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -v "$PWD/infrastructure/apps/ai-trading:/infrastructure/apps/ai-trading:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
+      - name: Host bootstrap steps (offline, stubbed commands)
+        run: |
+          infrastructure/host/test-steps.sh
+          infrastructure/host/test-bootstrap.sh
+      - name: install-reader-key.sh argument parsing
+        run: infrastructure/gcp/family-config/test-install-reader-key.sh
       - name: render-env.sh test (A9a2)
         run: infrastructure/apps/ai-trading/tests/test-render-env.sh
       - name: Auth service tests
