@@ -141,8 +141,10 @@ docker run --rm -v "$PWD/infrastructure/backup:/mnt:ro" koalaman/shellcheck:stab
   vars). Cost if wrong: production deploys fail hard on a host that
   hasn't run `bootstrap.sh --only backup` yet, which is the default
   state of every host until an operator explicitly opts in.
-- **Paths are relative to the monorepo root `infrastructure/`, not
-  `expense-tax-management/infrastructure/`.** `infrastructure/README.md`
+- **Paths are relative to the monorepo root `infrastructure/`.** All app deploy
+  and infra assets now live under `infrastructure/` (`apps/`, `host/`, `gcp/`); the
+  old expense sub-tree was folded in by 0001b-2.
+  `infrastructure/README.md`
   already states shared Temporal and VPS bootstrap live at the monorepo
   root, and backup must cover every database in the one shared cluster
   (App, Foundry, Temporal, visibility, future projects) — a
