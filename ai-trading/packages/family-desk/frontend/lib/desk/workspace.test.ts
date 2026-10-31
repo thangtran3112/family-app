@@ -122,3 +122,12 @@ test("timeframes: labels, API values, fallbacks, intraday and days", () => {
   assert.equal(isIntraday("5m"), true);
   assert.equal(chartDays("15m") > chartDays("1m"), true);
 });
+
+test("legend: a hidden overlay stays listed with its value replaced by 'hidden', and each item reports its dash (R-01)", () => {
+  const { overlays } = buildChartSeries(bars.bars, defaultIndicators(), "15m");
+  const legend = legendModel("NVDA", "15m", bars.bars, overlays, null, new Set(["ema21"]));
+  assert.deepEqual(legend.items.map((item) => [item.id, item.hidden, item.style]), [["vwap", false, "solid"], ["ema9", false, "solid"], ["ema21", true, "dashed"]]);
+  assert.equal(legend.items[2]!.value, "hidden");
+  assert.notEqual(legend.items[0]!.value, "hidden");
+  assert.equal(legendModel("NVDA", "15m", bars.bars, overlays, null).items.every((item) => !item.hidden), true, "none hidden by default");
+});

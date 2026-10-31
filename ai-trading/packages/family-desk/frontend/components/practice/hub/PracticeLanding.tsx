@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { ErrorBlock } from "@/components/ui/StateBlocks";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { PracticeThread } from "@/lib/replay/threads";
@@ -24,6 +24,8 @@ export function PracticeLanding() {
   const [modal, setModal] = useState<{ thread: PracticeThread | null } | null>(null);
   // True while any row's action is opening a day: every row's action waits, so a second click cannot race the first.
   const [busy, setBusy] = useState(false);
+  // "Deleted October thread #12": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
+  const [deleted, setDeleted] = useState<string | null>(null);
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   // The server lists every active thread first (newest first), then the closed ones.
   const rows = threads.data ?? [];
@@ -35,15 +37,34 @@ export function PracticeLanding() {
           <h1 className={hub.title}>Practice</h1>
           <p className={hub.hint}>{PRACTICE_COPY.threadsHint}</p>
         </div>
-        <button type="button" className={hub.primary} disabled={threads.loading} onClick={() => setModal({ thread: null })}>{PRACTICE_COPY.planNew}</button>
+        <button type="button" className={hub.primary} disabled={threads.loading} onClick={() => {
+            setDeleted(null);
+            setModal({ thread: null });
+          }}
+        >
+          {PRACTICE_COPY.planNew}
+        </button>
       </header>
       <div className={hub.body}>
+        <p role="status" className={styles.notice}>{deleted === null ? "" : practiceText("threadDeleted", { name: deleted })}</p>
         {!threads.loading && threads.data === null ? (
           <ErrorBlock message={PRACTICE_COPY.threadsLoadError} onRetry={threads.refresh} />
         ) : !threads.loading && rows.length === 0 ? (
-          <EmptyBlock title={PRACTICE_COPY.threadNone}>{PRACTICE_COPY.landingNoneHint}</EmptyBlock>
+          <div className={styles.emptyCard}>
+            <p className={styles.emptyTitle}>{PRACTICE_COPY.threadNone}</p>
+            <button
+              type="button"
+              className={hub.primary}
+              onClick={() => {
+                setDeleted(null);
+                setModal({ thread: null });
+              }}
+            >
+              {PRACTICE_COPY.landingStartFirst}
+            </button>
+          </div>
         ) : (
-          <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onNewPlan={(thread) => setModal({ thread })} />
+          <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={(thread) => setModal({ thread })} />
         )}
       </div>
       {modal && (

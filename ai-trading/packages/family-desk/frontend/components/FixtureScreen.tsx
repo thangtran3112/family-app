@@ -4,7 +4,7 @@ import styles from "./FixtureScreen.module.css";
 
 export function FixtureScreen({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
   return (
-    <main className={styles.screen}>
+    <div className={styles.screen}>
       <header className={styles.header}>
         <div>
           <p className={styles.kicker}>FAMILY DESK</p>
@@ -16,6 +16,6 @@ export function FixtureScreen({ title, children }: Readonly<{ title: string; chi
         </p>
       </header>
       {children}
-    </main>
+    </div>
   );
 }

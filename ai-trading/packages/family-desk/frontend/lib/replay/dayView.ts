@@ -13,12 +13,13 @@ import {
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatUsd } from "./journalView.ts";
-import type { ThreadPlan } from "./threads.ts";
+import { etHhMm } from "./time.ts";
+import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
 
-export const MAX_STARS = 5;
+export const MAX_STARS = 20;
 
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
@@ -31,6 +32,9 @@ export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string
   const max = nameCap(list.plan);
   return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
 }
+
+/** "Star up to 3 names to keep them in view": the empty rail, with the plan's own cap like the header (D-095). */
+export const watchEmptyText = (cap: number): string => practiceText("dayWatchEmpty", { max: cap, names: nameWord(cap) });
 
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
@@ -106,6 +110,9 @@ export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOn
   return parts.length === 0 ? PRACTICE_COPY.dayRiskNone : practiceText("dayRiskFrom", { plan: parts.join(", ") });
 }
 
+/** The block's days list starts open for a short block and collapsed for a long one, so the starred names stay on screen (D-097). */
+export const blockOpenByDefault = (days: number): boolean => days <= 10;
+
 export type LadderRow = { n: number; weekday: string | null; state: "ended" | "open" | "opens_after" | "locked"; detail: string };
 
 /** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked.
@@ -131,6 +138,24 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   const alerts = armed.length - names.length;
   if (alerts > 0) names.push(`${alerts} alert ${alerts === 1 ? "strategy" : "strategies"}`);
   return practiceText("planArmed", { names: names.join(" · ") });
+}
+
+/** What a `/practice/day` URL says before any load (D-117): no id is not chosen, an id that is not a number is not found, a number has no problem yet (the server answers 404 for an unknown one). */
+export const dayRouteProblem = (raw: string | null): "none" | "missing" | null => (raw === null ? "none" : /^\d+$/.test(raw) ? null : "missing");
+
+/** The label of a day thread's one action (D-078): a day in progress resumes, a listed day opens, and opening the next day starts it.
+ *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
+export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
+  // `today.day_no` counts the plan's own days; the thread's number adds the days an earlier plan already ended (D-047).
+  if (today !== null) return practiceText(today.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: plan === null ? today.day_no : threadDayNo(plan, today.day_no) });
+  if (plan === null) return null;
+  const card = planCard(plan);
+  if (card.action === "none" || card.action === "new") return null;
+  const current = plan.current;
+  if (current !== null && current.status !== "ended") {
+    return practiceText(current.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: threadDayNo(plan, current.day_no) });
+  }
+  return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
 }
 
 export type PlanCardAction = "new" | "start" | "continue" | "none";
@@ -255,14 +280,14 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most five). */
+/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most 20). */
 export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
   const symbols = watch.map((star) => star.symbol);
   if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
   return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
 }
 
-/** The message for a refused star: the plain 5-name line, or the plan's own cap. */
+/** The message for a refused star: the plain 20-name line, or the plan's own cap. */
 export function starsFullText(cap: number): string {
   return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
 }
@@ -294,6 +319,15 @@ export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { sy
   return [...opened, ...rest];
 }
 
+/** A name's button on the day list: "Practice" opens a name at the day clock, "Switch" goes back to one she opened. Resume
+ *  belongs to the thread's day (one shared clock for every name), never to a single name. */
+export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Practice");
+
+/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Resume Day N" reopens the
+ *  day at the shared clock); only a standalone session, which has no day, opens on its own. */
+export const sessionResumeHref = (session: { id: number; day_list_id: number | null }): string =>
+  session.day_list_id === null ? `/practice/replay?id=${session.id}` : `/practice/day?id=${session.day_list_id}`;
+
 // ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
 
 /** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */
@@ -319,10 +353,6 @@ export function listWarning(list: Pick<DayList, "warnings">): string | null {
   return list.warnings[0] ?? null;
 }
 
-/** "0 of 131 matched": the empty state's headline; the line under it says what to do (P7). */
-export const noMatchText = (list: Pick<DayList, "universe">): string =>
-  practiceText("dayNoneMatched", { matched: list.universe.matches_total, size: list.universe.size });
-
 // ---- the review ----------------------------------------------------------------------------------------------
 
 const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];
@@ -342,8 +372,9 @@ export function selectionText(review: Pick<DayReview, "of" | "selection">): stri
   const { picks, median_move_pct: median } = review.selection;
   if (picks.length === 0) return null;
   return practiceText("reviewSelection", {
-    moves: joinAnd(picks.map((pick) => formatSignedPct(pick.move_pct, 1))),
-    median: formatSignedPct(median, 1),
+    // Two decimals, like the review table's Move columns: one precision on the page (D-142).
+    moves: joinAnd(picks.map((pick) => formatSignedPct(pick.move_pct, 2))),
+    median: formatSignedPct(median, 2),
     ranks: joinAnd(picks.map((pick) => ordinal(pick.rank))),
     of: review.of,
   });
@@ -353,7 +384,7 @@ export const moveText = (value: number | null): string => (value === null ? EMPT
 
 export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practiced" : row.picked === "starred" ? "Starred" : "");
 
-/** "Day finished · date shown below" when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
+/** "Day finished" (the date follows it on the same line) when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
 export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);
 
 /** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */
@@ -378,7 +409,28 @@ export function dayBalanceText(journal: Pick<DayJournal, "balance_before" | "bal
   return practiceText("reviewBalance", { before: money(before), after: money(after) });
 }
 
-export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; exit: string; pnl: string; tone: Tone };
+export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; entryTime: string; exit: string; exitTime: string; pnl: string; tone: Tone };
+
+/** The last row of the trade table: the day's total P/L (the trades' own rows carry the rest). */
+export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd">): TradeLineRow => ({
+  key: "total",
+  symbol: "Total",
+  side: "",
+  shares: "",
+  entry: "",
+  entryTime: "",
+  exit: "",
+  exitTime: "",
+  pnl: formatUsd(journal.pnl_usd),
+  tone: changeTone(journal.pnl_usd),
+});
+
+/** The practice window of a day: the plan's window, but not before the list time, so a re-list moves its start (D-144). Both are ET "HH:MM". */
+export function practiceWindow(list: { list_at: string; plan: { spec: { setup: { window: { from: string; to: string } } } } }): { from: string; to: string } {
+  const { from, to } = list.plan.spec.setup.window;
+  const listed = etHhMm(list.list_at);
+  return { from: listed > from ? listed : from, to };
+}
 
 /** One row per closed trade: the entry and exit price with the ET time, the shares, and the P/L to the cent. */
 export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[] {
@@ -387,8 +439,10 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     symbol: line.symbol,
     side: line.side === "long" ? "Long" : "Short",
     shares: line.shares.toLocaleString("en-US"),
-    entry: `${formatPrice(line.entry_price)} · ${formatEtTime(line.entry_at)}`,
-    exit: `${formatPrice(line.exit_price)} · ${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    entry: formatPrice(line.entry_price),
+    entryTime: formatEtTime(line.entry_at),
+    exit: formatPrice(line.exit_price),
+    exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
     pnl: formatUsd(line.pnl_usd),
     tone: changeTone(line.pnl_usd),
   }));

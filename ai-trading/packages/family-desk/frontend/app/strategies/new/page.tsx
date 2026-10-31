@@ -23,7 +23,7 @@ import styles from "@/components/strategies/strategies.module.css";
 type Watchlist = ReturnType<typeof WatchlistsResponseSchema.parse>[number];
 
 export default function NewStrategyPage() {
-  return <Suspense fallback={<main className={styles.page}><p role="status">Loading strategy context…</p></main>}><NewStrategyContent /></Suspense>;
+  return <Suspense fallback={<div className={styles.page}><p role="status">Loading strategy context…</p></div>}><NewStrategyContent /></Suspense>;
 }
 
 function NewStrategyContent() {
@@ -149,7 +149,7 @@ function NewStrategyContent() {
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <div className={styles.newHeader}>
         <div>
             <p className={styles.eyebrow}><Link href="/strategies">Strategies</Link> / New</p>
@@ -305,6 +305,6 @@ function NewStrategyContent() {
           </form>
         )}
       </div>
-    </main>
+    </div>
   );
 }

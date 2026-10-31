@@ -31,8 +31,8 @@ export const sideLabel = (side: "long" | "short"): string => (side === "long" ? 
 export const holdEntryLabel = (hold: Pick<Hold, "entry_day_no" | "entry_price">): string =>
   practiceText("swingEntryLabel", { day: hold.entry_day_no, price: formatPrice(hold.entry_price) });
 
-/** "2 days held" / "1 day held" (the entry day counts). */
-export const daysHeldText = (days: number): string => (days === 1 ? PRACTICE_COPY.swingDaysHeldOne : practiceText("swingDaysHeld", { n: days }));
+/** "Day 2 of hold": the entry day is Day 1. It is a count of the hold's days, not a length of time, so it never reads "1 day held" on the entry day and again on the next board (D-140). */
+export const daysHeldText = (days: number): string => practiceText("swingHoldDay", { n: days });
 
 /** "Stop 182.50", "Stop 182.50 crossed" once play paused on it, or "No stop". */
 export function holdStopText(hold: Pick<Hold, "stop_price" | "stop_hit">): string {
@@ -227,7 +227,9 @@ export function stripRowView(row: StripRow): StripRowView {
   const label = [row.symbol, row.source === "hold" ? "practice hold" : "focus name", `last ${last}`, change, sub, amber ? "stop crossed" : null]
     .filter((part) => part !== null)
     .join(", ");
-  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeTone(row.chg_pct), sub, amber, label };
+  // The colour follows the rounded text: -0.01% reads "0.0%" and is flat, not red (D-148).
+  const shown = row.chg_pct == null ? row.chg_pct : Number(row.chg_pct.toFixed(1));
+  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeTone(shown), sub, amber, label };
 }
 
 // -- header lines ---------------------------------------------------------------------------------------------
@@ -248,19 +250,9 @@ export function swingBriefLine(brief: Pick<ThreadBrief, "balance" | "equity_usd"
   return parts.join(" · ");
 }
 
-/**
- * The board's header: "Day 7 of 20 · Week 2 · Tue · as of the prior close · Balance $51,240 · Equity $52,010 · SIMULATED".
- * An ended day reads "Day over" in place of the as-of words (the board's data is the prior evening either way).
- */
-export function swingHeaderLine(
-  list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "weekday" | "day" | "status" | "thread">,
-  hidden: boolean,
-): string {
-  const status = list.status === "ended" ? PRACTICE_COPY.swingDayOver : PRACTICE_COPY.swingAsOfPriorClose;
-  const money = list.thread
-    ? [practiceText("swingBalance", { amount: formatBalance(list.thread.balance) }), ...(list.thread.equity_usd != null ? [practiceText("swingEquity", { amount: formatBalance(list.thread.equity_usd) })] : []), PRACTICE_COPY.swingSimulated]
-    : [];
-  return [swingDayTitle(list, hidden), status, ...money].join(" · ");
+/** "Day 7 of 20 · Tue": the board's h1. The week and the state are chips beside it and the money is in the strip below (D-139). */
+export function swingBoardTitle(list: Pick<SwingDayList, "day_no" | "of" | "weekday" | "day">, hidden: boolean): string {
+  return [practiceText("planDay", { day: list.day_no, of: list.of }), dayName(list.weekday, list.day, hidden)].join(" · ");
 }
 
 /** "2 holds open" / "1 hold open" / "No holds open". */
@@ -270,7 +262,7 @@ export type SwingCardAction = { kind: "start" | "continue" | "review" | "none"; 
 export type SwingCardView = {
   /** "Swing · 50 names" */
   title: string;
-  /** "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · Balance $51,240 · Equity $52,010 · 2 holds open" */
+  /** "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · 2 holds open" */
   line: string;
   /** "Week 1 review ready" once a week's last day has ended and the next day has not opened. */
   notice: string | null;
@@ -286,13 +278,8 @@ export function swingCardView(summary: Pick<ThreadSummary, "thread" | "swing" | 
   const place = finished
     ? [practiceText("swingFinished", { days: swing.days })]
     : [practiceText("swingCardWeek", { week: swing.week_no, weeks: swing.weeks }), practiceText("planDay", { day: swing.day_no, of: swing.days })];
-  const line = [
-    title,
-    ...place,
-    practiceText("swingBalance", { amount: formatBalance(thread.stats.balance) }),
-    practiceText("swingEquity", { amount: formatBalance(swing.equity_usd) }),
-    ...(finished ? [] : [holdsOpenText(swing.holds_open)]),
-  ].join(" · ");
+  // Week, day, names and holds only: the balance and the equity sit in their own cells (D-112).
+  const line = [title, ...place, ...(finished ? [] : [holdsOpenText(swing.holds_open)])].join(" · ");
   const reviewWeek = swing.week_no - 1;
   if (finished) return { title, line, notice: null, action: { kind: "none", label: null, weekNo: null } };
   if (swing.next === "week_review" && reviewWeek >= 1) {

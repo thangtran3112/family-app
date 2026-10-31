@@ -37,6 +37,7 @@ export function EquityPanes({ series }: { series: EquitySeries }) {
       <ul className={styles.legend} aria-label="Chart key">
         <li className={styles.legendItem}><span className={`${styles.swatch} ${styles.swatchBalance}`} aria-hidden="true" />{WEEK_TEXT.legendBalance}</li>
         <li className={styles.legendItem}><span className={`${styles.swatch} ${styles.swatchEquity}`} aria-hidden="true" />{WEEK_TEXT.legendEquity}</li>
+        <li className={styles.legendItem}><span className={`${styles.swatch} ${styles.swatchClose}`} aria-hidden="true" />{WEEK_TEXT.legendClose}</li>
         <li className={styles.legendItem}><span className={`${styles.swatch} ${styles.swatchWeek}`} aria-hidden="true" />{WEEK_TEXT.legendWeek}</li>
       </ul>
       <MarketChart

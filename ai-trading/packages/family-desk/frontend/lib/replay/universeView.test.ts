@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, practiceText } from "../desk/freshness.ts";
 import { UniversePreviewSchema } from "./swingApi.ts";
 import { swingSetup, universe, universePreview, universePreviewPreparing } from "./swingFixtures.ts";
 import {
   addSymbol,
   clampTarget,
-  excludedLines,
+  excludedRows,
   fillOrderRows,
   hasEdits,
   isPreparing,
@@ -22,6 +22,7 @@ import {
   startBlocker,
   toggleId,
   universeEntries,
+  universeNeedLine,
   universeRowView,
   universeSummary,
 } from "./universeView.ts";
@@ -70,10 +71,19 @@ test("a row shows its source chip, change with a real sign, dollar volume, ATR a
   assert.deepEqual([gap.chg20d, gap.chg20dTone, gap.dollarVolume, gap.atr, gap.matched], ["—", "flat", "—", "—", null]);
 });
 
-test("symbols left out are listed under the table with their neutral reason", () => {
-  assert.deepEqual(excludedLines(universePreview.excluded), ["2 symbols left out · Not enough price history for this whole range: NEWCO, FRSH"]);
-  assert.deepEqual(excludedLines([{ symbol: "A", reason: "r1" }, { symbol: "B", reason: "r2" }, { symbol: "C", reason: "r1" }]), ["2 symbols left out · r1: A, C", "1 symbol left out · r2: B"]);
-  assert.deepEqual(excludedLines([]), []);
+// M-04: a name left out for missing history is its own row with a Remove; one she removed leaves the list at once.
+test("each symbol left out is a row, and a removed one is gone", () => {
+  assert.deepEqual(excludedRows(universePreview.excluded, noEdits()).map((row) => row.symbol), ["NEWCO", "FRSH"]);
+  assert.equal(excludedRows(universePreview.excluded, noEdits())[0]!.reason, "Not enough price history for this whole range");
+  assert.deepEqual(excludedRows(universePreview.excluded, { add: [], remove: ["NEWCO"] }).map((row) => row.symbol), ["FRSH"]);
+  assert.deepEqual(excludedRows([], noEdits()), []);
+});
+
+// M-04: the minimum is in the Universe header, not only in the footer.
+test("the universe header states the size she needs and how many names she has", () => {
+  assert.equal(universeNeedLine(7), "Pick 10 to 50 names · you have 7");
+  assert.equal(universeNeedLine(12), "Pick 10 to 50 names · you have 12");
+  assert.equal(universeNeedLine(0), "Pick 10 to 50 names · you have 0");
 });
 
 test("prep progress, polling and why Start is off", () => {
@@ -134,7 +144,7 @@ test("every string the universe helpers build avoids the Practice banned words",
     startBlocker(null),
     startBlocker(universePreviewPreparing),
     startBlocker({ ...universePreview, rows: [] }),
-    ...excludedLines(universePreview.excluded),
+    ...excludedRows(universePreview.excluded, noEdits()).map((row) => practiceText("swingExcludedRow", row)),
     addSymbol(noEdits(), "123").problem,
     addSymbol(noEdits(), "").problem,
     addSymbol({ add: ["X"], remove: [] }, "X").problem,

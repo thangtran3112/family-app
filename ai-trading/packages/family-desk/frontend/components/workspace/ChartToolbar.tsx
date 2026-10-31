@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CHART_TIMEFRAMES } from "@/lib/desk/timeframes";
+import { useDismiss } from "@/lib/desk/useDismiss";
 import { INDICATOR_OPTIONS, type IndicatorId } from "@/lib/desk/workspace";
 import styles from "./workspaceHeader.module.css";
 
@@ -28,23 +29,10 @@ export function ChartToolbar({ timeframe, onTimeframe, session, onSession, indic
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: MouseEvent) => {
-      if (event.target instanceof Node && !wrapRef.current?.contains(event.target)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismiss(open, wrapRef, (via) => {
+    setOpen(false);
+    if (via === "escape") buttonRef.current?.focus();
+  });
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

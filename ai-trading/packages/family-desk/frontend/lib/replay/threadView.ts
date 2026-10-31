@@ -50,18 +50,23 @@ export const threadModeLabel = (mode: PracticeThread["mode"]): string => (mode =
 const monthName = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "long" });
 const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short", day: "numeric" });
 
-/** "October thread" for a day thread, "October swing thread" for a swing one: the month it was started, and the mode when
- *  it is not the default so two threads of one month never read the same (D-069). The thread has no name of its own. */
-export const threadName = (thread: Pick<PracticeThread, "createdAt" | "mode">): string =>
-  `${monthName.format(new Date(thread.createdAt))} ${thread.mode === "swing" ? "swing thread" : "thread"}`;
+/** "October thread #12" for a day thread, "October swing thread #13" for a swing one: the month it was started, the mode when
+ *  it is not the default, and the thread's own number, so two threads never read the same (D-069, D-077). The thread has no
+ *  name of its own: a typed name needs a column and a migration. */
+export const threadName = (thread: Pick<PracticeThread, "id" | "createdAt" | "mode">): string =>
+  `${monthName.format(new Date(thread.createdAt))} ${thread.mode === "swing" ? "swing thread" : "thread"} #${thread.id}`;
 
 /** "Started Oct 25": the day she started it (not a replayed day, so no date is spoiled). */
 export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;
 
-/** "Started with $50,000 · +$123 so far". */
-export function startedWithText(thread: Pick<PracticeThread, "startingBalance" | "stats">): string {
+/** "Started with $50,000 · +$123 so far". A swing thread with holds open counts them apart (D-080): its balance holds closed
+ *  holds only, so "no change yet" beside a higher Equity read as a flat thread. */
+export function startedWithText(thread: Pick<PracticeThread, "startingBalance" | "stats">, swing?: { holds_open: number; equity_usd: number } | null): string {
   const change = thread.stats.balance - thread.startingBalance;
   const start = formatWhole(thread.startingBalance);
+  if (swing && swing.holds_open > 0) {
+    return practiceText("threadStartedSwing", { start, realized: formatDayResult(change), open: formatDayResult(swing.equity_usd - thread.stats.balance) });
+  }
   return Math.round(change) === 0
     ? practiceText("threadStartedFlat", { start })
     : practiceText("threadStartedWith", { start, change: formatDayResult(change) });
@@ -94,15 +99,22 @@ export function lastDayLine(day: Pick<ThreadDay, "kind" | "pnl_usd" | "trades">)
  *  The practice day under way reads "so far" once practice has started or booked a trade. A day that is only listed has
  *  nothing realized, so the row shows the last ended day instead of a $0 beside a balance that already moved (D-030): the
  *  same ledger rows as the balance and the journal. */
-export function todayView(today: ThreadToday | null, lastDay: ThreadDay | null): { label: string; line: string; pnl: number | null } {
+export function todayView(today: ThreadToday | null, lastDay: ThreadDay | null): { label: string; line: string; pnl: number | null; short: string } {
   if (today !== null && (today.status === "practicing" || today.trades > 0 || lastDay === null)) {
-    return { label: PRACTICE_COPY.threadToday, line: todayLine(today), pnl: today.pnl_usd };
+    return { label: PRACTICE_COPY.threadToday, line: todayLine(today), pnl: today.pnl_usd, short: shortResult(today.pnl_usd, today.trades) };
   }
   if (lastDay !== null) {
-    return { label: PRACTICE_COPY.threadLastDay, line: lastDayLine(lastDay), pnl: lastDay.kind === "practiced" ? lastDay.pnl_usd : null };
+    const passed = lastDay.kind !== "practiced";
+    return { label: PRACTICE_COPY.threadLastDay, line: lastDayLine(lastDay), pnl: passed ? null : lastDay.pnl_usd, short: passed ? PRACTICE_COPY.overviewDaySkipped : shortResult(lastDay.pnl_usd, lastDay.trades) };
   }
-  return { label: PRACTICE_COPY.threadToday, line: todayLine(null), pnl: null };
+  return { label: PRACTICE_COPY.threadToday, line: todayLine(null), pnl: null, short: EMPTY_VALUE };
 }
+
+/** "+$112.00 · 2 trades": the landing's cell, one short line (D-113). */
+const shortResult = (pnl: number, trades: number): string => `${formatDayResult(pnl)} · ${trades} ${trades === 1 ? "trade" : "trades"}`;
+
+/** The caption over the summary tiles: it says "today's day is still open" only while a day is open (D-134). */
+export const summaryHintText = (dayOpen: boolean): string => (dayOpen ? PRACTICE_COPY.summaryHintOpen : PRACTICE_COPY.summaryHint);
 
 /** The header strip of a day screen or the workspace: "Thread balance $50,123 · today +$112". */
 export function briefLine(brief: Pick<ThreadBrief, "balance" | "today_pnl_usd">): string {
@@ -119,7 +131,7 @@ export type Week = {
   /** 1-based, in the order she practiced. */
   n: number;
   label: string;
-  /** "2 days practiced" or "1 day practiced · 1 skipped". */
+  /** "2 days practiced" or "1 day practiced · 1 passed". */
   detail: string;
   days: ThreadDay[];
   practiced: number;
@@ -161,7 +173,7 @@ export function weeksOf(daily: readonly ThreadDay[]): Week[] {
     return {
       n: index + 1,
       label: `Week ${index + 1}${latest && groups.length > 1 ? " · latest" : ""}`,
-      detail: [practicedDays.length > 0 ? `${plural(practicedDays.length, "day")} practiced` : "no day practiced", skipped > 0 ? `${skipped} skipped` : null].filter(Boolean).join(" · "),
+      detail: [practicedDays.length > 0 ? `${plural(practicedDays.length, "day")} practiced` : "no day practiced", skipped > 0 ? `${skipped} passed` : null].filter(Boolean).join(" · "),
       days,
       practiced: practicedDays.length,
       skipped,
@@ -248,7 +260,7 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
   const closedTrades = stats.wins + stats.losses;
   return [
     { id: "practiced", label: "Days practiced", value: String(stats.daysPracticed), sub: practiceText("threadTileOpened", { n: stats.daysPracticed + stats.daysSkipped }), tone: "flat" },
-    { id: "skipped", label: "Skipped", value: String(stats.daysSkipped), sub: PRACTICE_COPY.threadTileCarried, tone: "flat" },
+    { id: "skipped", label: PRACTICE_COPY.threadSkipped, value: String(stats.daysSkipped), sub: PRACTICE_COPY.threadTileCarried, tone: "flat" },
     { id: "wins", label: "Wins", value: String(stats.wins), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
     { id: "losses", label: "Losses", value: String(stats.losses), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
     { id: "win_rate", label: "Win rate", value: winRateText(stats.winRate), sub: closedTrades === 0 ? PRACTICE_COPY.threadTileNoTrades : practiceText("threadTileOfTrades", { wins: stats.wins, trades: closedTrades }), tone: "flat" },
@@ -263,13 +275,15 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
 /** True while the thread has no ended day: nothing to chart yet. */
 export const hasNoDays = (thread: Pick<Thread, "daily">): boolean => thread.daily.length === 0;
 
-/** The plan as plain rows for the recap: label and value. A limit left unset is "None". The thread plan holds no share count (she sizes each entry), so that row says so. */
-export function planRows(plan: PracticeThread["plan"]): Array<{ id: string; label: string; value: string }> {
+/** The plan as plain rows for the recap: label and value. A limit left unset is "None". The thread plan holds no share count (she sizes each entry), so that row says so.
+ *  A swing thread counts its two limits per week, as its modal and journal say (D-083). */
+export function planRows(plan: PracticeThread["plan"], mode: PracticeThread["mode"] = "day"): Array<{ id: string; label: string; value: string }> {
+  const per = mode === "swing" ? "a week" : "a day";
   return [
     { id: "shares", label: PRACTICE_COPY.threadShares, value: PRACTICE_COPY.threadSharesPerEntry },
     { id: "stop", label: "Stop on every entry", value: plan.stopNoteOnEntry === "yes" ? "Yes" : "No" },
     { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
-    { id: "max_loss", label: "Max loss, pretend dollars a day", value: plan.maxLossUsd === undefined ? "None" : formatWhole(plan.maxLossUsd) },
-    { id: "max_trades", label: "Max trades a day", value: plan.maxTrades === undefined ? "None" : String(plan.maxTrades) },
+    { id: "max_loss", label: `Max loss, pretend dollars ${per}`, value: plan.maxLossUsd === undefined ? "None" : formatWhole(plan.maxLossUsd) },
+    { id: "max_trades", label: `Max trades ${per}`, value: plan.maxTrades === undefined ? "None" : String(plan.maxTrades) },
   ];
 }

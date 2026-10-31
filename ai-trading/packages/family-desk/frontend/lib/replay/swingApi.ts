@@ -413,7 +413,7 @@ export const continueSwingThread = (threadId: number, options?: RequestOptions) 
 export const loadAnyDayList = (id: number, params: { peek?: string } = {}, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}`, { peek: params.peek }), AnyDayListSchema, readInit(options));
 
-/** Stars (at most five), notes and the 1 to 5 self-rating; a key left out is left alone. */
+/** Stars (at most 20), notes and the 1 to 5 self-rating; a key left out is left alone. */
 export const patchAnyDayList = (id: number, body: { watch?: string[]; notes?: string | null; rating?: number | null }, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}`), AnyDayListSchema, jsonInit("PATCH", body, options));
 

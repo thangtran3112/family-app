@@ -7,7 +7,7 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { loadWeek } from "@/lib/replay/swingApi";
-import { WEEK_TEXT, parseWeekParams, threadHref, weekLoadProblem } from "@/lib/replay/weekScreen";
+import { WEEK_TEXT, parseWeekParams, threadOverviewHref, weekLoadProblem, weekMissingText } from "@/lib/replay/weekScreen";
 import { WeekReview } from "./WeekReview";
 import styles from "./week.module.css";
 
@@ -37,10 +37,10 @@ export function WeekRoute() {
       <div className={styles.center}>
         {problem === null ? (
           <LoadingBlock label={WEEK_TEXT.loading} height={320} />
+        ) : problem.kind === "missing" && thread.data === null && thread.error === null ? (
+          <LoadingBlock label={WEEK_TEXT.loading} height={320} />
         ) : problem.kind === "missing" ? (
-          <EmptyBlock title={problem.message}>
-            <Link href={threadHref(threadId)} className={styles.link}>{WEEK_TEXT.backToThread}</Link>
-          </EmptyBlock>
+          <MissingWeek message={problem.message} mode={thread.data?.thread.mode ?? null} threadId={threadId} />
         ) : (
           <ErrorBlock message={PRACTICE_COPY.swingWeekLoadError} onRetry={week.refresh} />
         )}
@@ -56,4 +56,16 @@ export function WeekRoute() {
     );
   }
   return <WeekReview key={`${threadId}:${weekNo}`} threadId={threadId} week={week.data} thread={thread.data} />;
+}
+
+/** A week that cannot open: a heading, one full sentence, and the way back to the thread's page (D-089). */
+function MissingWeek({ message, mode, threadId }: { message: string; mode: "day" | "swing" | null; threadId: number }) {
+  const { title, text } = weekMissingText(message, mode);
+  return (
+    <div className={styles.missing}>
+      <h1 className={styles.title}>{title}</h1>
+      <p className={styles.muted}>{text}</p>
+      <Link href={threadOverviewHref(threadId)} className={styles.link}>{WEEK_TEXT.backToThread}</Link>
+    </div>
+  );
 }

@@ -36,6 +36,7 @@
 .button:hover:not(:disabled) { background: var(--color-raised); }
 .button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
 .primary { border-color: var(--color-amber); color: var(--color-amber); }
+.danger { border-color: var(--color-down); color: var(--color-down); }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
 .button:focus-visible, .link:focus-visible, .threadRow:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
@@ -77,17 +78,21 @@
 .dot { fill: var(--color-text); }
 .dotOpen { fill: var(--color-ground); stroke: var(--color-text); stroke-width: 1.5; }
 .dotNow { fill: var(--color-amber); }
-.nowLabel { fill: var(--color-text); font-size: var(--text-micro); font-weight: var(--weight-bold); }
-.lowLabel { fill: var(--color-down); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
+.nowLabel { fill: var(--color-text); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.lowLabel { fill: var(--color-down); font-size: var(--text-micro); font-weight: var(--weight-semibold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .skipBox { fill: none; stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 3; }
 .skipLabel { fill: var(--color-muted); font-size: var(--text-micro); paint-order: stroke; stroke: var(--color-ground); stroke-width: 4px; }
 .valueLabel { font-size: var(--text-micro); font-weight: var(--weight-semibold); }
 
 /* Summary tiles: a grid that wraps to fewer columns as the centre narrows. */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.tile { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
-.tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.tileValue { font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+/* The closed-thread banner: the sentence, then the link as its own item (D-121). */
+.bannerRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.tile { container-type: inline-size; position: relative; display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
+/* Two lines are reserved for the label, so the values of a row of tiles share one baseline (D-126). */
+.tileLabel { min-height: calc(2 * var(--line-micro)); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+/* The value takes the size its tile allows (up to the title size) and never wraps: "$25,000.00" stays one number on one line (D-086). */
+.tileValue { font-size: clamp(var(--text-body), 11cqi, var(--text-title)); line-height: var(--line-title); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tileValue[data-tone="up"] { color: var(--color-up); }
 .tileValue[data-tone="down"] { color: var(--color-down); }
 .tileSub { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
@@ -97,6 +102,7 @@
 .headRow { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .table { width: 100%; border-collapse: collapse; font-size: var(--text-label); }
 .table th, .table td { border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) var(--space-2); text-align: left; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .table thead th { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .table tbody th { font-weight: var(--weight-regular); }
 .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -118,7 +124,7 @@
 .equityValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
 .equityLine { fill: none; stroke: var(--color-amber); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 6 3; }
 .dotEquity { fill: var(--color-amber); }
-.equityLabel { fill: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-bold); }
+.equityLabel { fill: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .keyList { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
 .keyLine { display: inline-block; width: 20px; height: 0; flex-shrink: 0; border-top: 2px solid var(--color-text); }
 .keyBalance { border-top-color: var(--color-text); }

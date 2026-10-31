@@ -39,7 +39,7 @@ export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabe
 
   const trimmed = normalise(draft);
   const dirty = trimmed !== normalise(notes ?? "");
-  const status = saving ? PRACTICE_COPY.savingNotes : saved && !dirty ? PRACTICE_COPY.notesSaved : "";
+  const status = saving ? PRACTICE_COPY.savingNotes : saved && !dirty ? PRACTICE_COPY.notesSaved : dirty ? PRACTICE_COPY.notesUnsaved : "";
 
   return (
     <div className={styles.notes}>
