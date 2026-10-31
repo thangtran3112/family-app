@@ -1,5 +1,7 @@
+import { EMPTY_VALUE } from "../desk/format.ts";
+
 export function marginText(approx: number | null, asOf: string | null): string {
-  if (approx === null || asOf === null || !Number.isFinite(approx)) return "not available";
+  if (approx === null || asOf === null || !Number.isFinite(approx)) return EMPTY_VALUE;
   return `≈ ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(approx)} (as of ${asOf})`;
 }
 

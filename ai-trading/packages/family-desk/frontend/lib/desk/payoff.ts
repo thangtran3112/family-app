@@ -2,7 +2,6 @@
 // are the engine's own spot, strike and bid; this only draws them. Per-share values, so the axes are never masked.
 import { niceTicks } from "./ticks.ts";
 
-
 /** Maps `value` from the data domain onto the pixel range (the y axis passes a reversed range). */
 export const scaleLinear = (value: number, domain: readonly [number, number], range: readonly [number, number]): number =>
   domain[1] === domain[0] ? range[0] : range[0] + ((value - domain[0]) / (domain[1] - domain[0])) * (range[1] - range[0]);

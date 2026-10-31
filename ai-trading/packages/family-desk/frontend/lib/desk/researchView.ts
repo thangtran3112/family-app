@@ -217,7 +217,7 @@ export const inputLabel = (key: string): string => INPUT_LABELS[key] ?? key.repl
 
 function inputText(key: string, value: number | null): string {
   const label = inputLabel(key);
-  if (value === null) return `${label}: not available`;
+  if (value === null) return `${label}: ${EMPTY_VALUE}`;
   return key.endsWith("_pct") ? `${label} ${formatPct(value, 1)}` : `${label} ${value}`;
 }
 
