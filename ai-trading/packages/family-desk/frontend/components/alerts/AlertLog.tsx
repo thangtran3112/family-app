@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -18,7 +19,7 @@ const columns: DenseColumn<AlertLogRow>[] = [
   { key: "what", label: "Alert", render: (row) => logRowText(row).what },
   { key: "channel", label: "Channel", render: (row) => channelLabel(row.channel) },
   { key: "result", label: "Result", render: (row) => <span className={styles.chip} data-tone={deliveryTone(row.status)}>{deliveryLabel(row.status)}</span> },
-  { key: "detail", label: "Detail", render: (row) => <span className={styles.clip} title={row.detail}>{row.detail}</span> },
+  { key: "detail", label: "Detail", render: (row) => <span className={styles.wrap}>{row.detail}</span> },
 ];
 
 /** Log tab of D9: every delivery attempt, newest first (02m §a3.7). */
@@ -34,7 +35,11 @@ export function AlertLog() {
   if (log.data === null) {
     body = log.error === null ? <LoadingBlock label="Loading delivery log…" /> : <ErrorBlock subject="delivery log" onRetry={log.refresh} />;
   } else if (log.data.length === 0) {
-    body = <EmptyBlock title="Nothing delivered yet" />;
+    body = (
+      <EmptyBlock title="Nothing delivered yet">
+        <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>
+      </EmptyBlock>
+    );
   } else {
     body = <DenseTable caption="Alert delivery log" columns={columns} rows={log.data} rowKey={(row) => String(row.delivery_id)} />;
   }

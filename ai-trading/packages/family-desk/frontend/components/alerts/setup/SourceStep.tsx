@@ -4,6 +4,7 @@ import type { Problem } from "@/lib/api/schemas";
 import { nameFor, type AlertForm, type SourceKind } from "@/lib/desk/alertForm";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
+import { problemLine } from "@/lib/desk/problemCopy";
 
 const SOURCES: ReadonlyArray<readonly [SourceKind, string]> = [
   ["symbol", "Symbol"],
@@ -22,7 +23,7 @@ export function SourceStep({ form, onChange, problems, lists, filters }: {
     <section className={styles.card} aria-labelledby="alert-step-source">
       <h2 id="alert-step-source" className={styles.stepTitle}>Source</h2>
       <label className={editorStyles.field}>
-        <span>Name</span>
+        <span>Name <span className={editorStyles.note}>(optional)</span></span>
         <input type="text" maxLength={80} placeholder={nameFor(form)} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </label>
       <fieldset className={editorStyles.group}>
@@ -67,7 +68,7 @@ export function SourceStep({ form, onChange, problems, lists, filters }: {
           ))}
       </fieldset>
       {problems.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
       ))}
     </section>
   );

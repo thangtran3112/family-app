@@ -79,3 +79,6 @@
   font-size: 14px;
   line-height: 20px;
 }
+
+.problemLink { text-decoration: underline; text-underline-offset: 2px; }
+.problemLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }

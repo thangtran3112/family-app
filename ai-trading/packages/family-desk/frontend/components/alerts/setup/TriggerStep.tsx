@@ -6,6 +6,7 @@ import { type AlertForm } from "@/lib/desk/alertForm";
 import { FREQUENCY_LABEL, runOnLabel } from "@/lib/desk/labels";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
+import { problemLine } from "@/lib/desk/problemCopy";
 
 const RUN_ON: readonly AlertStrategySpecV1["watch"]["runOn"][] = [
   "bar_close_1m",
@@ -57,8 +58,8 @@ export function TriggerStep({ form, onChange, problems }: {
         </div>
       </fieldset>
       <label className={editorStyles.field}>
-        <span>Cooldown (minutes)</span>
-        <input type="number" min={0} step={1} value={form.cooldownMinutes} onChange={(event) => onChange({ ...form, cooldownMinutes: event.target.value })} />
+        <span>Cooldown (minutes) <span className={editorStyles.note}>(optional)</span></span>
+        <input type="number" min={0} step={1} placeholder="None" value={form.cooldownMinutes} onChange={(event) => onChange({ ...form, cooldownMinutes: event.target.value })} />
       </label>
       <label className={editorStyles.field}>
         <span>Expires on</span>
@@ -66,7 +67,7 @@ export function TriggerStep({ form, onChange, problems }: {
       </label>
       <p className={editorStyles.note}>Leave the date empty to never expire</p>
       {problems.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
       ))}
     </section>
   );

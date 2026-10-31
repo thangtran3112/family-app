@@ -19,11 +19,13 @@ import {
   isAlertFormDirty,
   parsePrefill,
   problemsBanner,
+  stepOf,
   turnOnState,
   type AlertForm,
   type SourcePrefill,
 } from "@/lib/desk/alertForm";
 import { createAlertStrategy, loadAlertStrategy, resumeAlertStrategy, updateAlertStrategy, validateAlertStrategy } from "@/lib/desk/alerts";
+import { problemLine } from "@/lib/desk/problemCopy";
 import { loadChannels } from "@/lib/desk/settings";
 import { loadFilters } from "@/lib/desk/screener";
 import { loadWatchlists } from "@/lib/desk/watchlists";
@@ -182,9 +184,13 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
       {banner && (
         <div className={editorStyles.banner} role="alert">
           <p className={editorStyles.bannerTitle}>{banner}</p>
-          {groups.other.map((problem, index) => (
-            <span key={index} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
-          ))}
+          {problems.map((problem, index) => {
+            const step = stepOf(problem.path);
+            // Each line jumps to the step it belongs to; a problem outside the four steps has nowhere to jump.
+            return step === "other"
+              ? <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
+              : <a key={index} href={`#alert-step-${step}`} className={`${editorStyles.problem} ${styles.problemLink}`}>{problemLine(problem)}</a>;
+          })}
         </div>
       )}
       {saved && (
