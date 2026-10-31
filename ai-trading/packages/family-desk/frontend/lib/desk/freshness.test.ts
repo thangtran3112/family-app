@@ -61,7 +61,7 @@ test("the as-of line is dated and names its source", () => {
 test("a closed market with no quotes yet reads as closed, never as a red retry", () => {
   const none = { ...stamp("unavailable", "unavailable", null), source: null };
   const view = resolveFreshness({ stamp: none, session: "closed", feed: true, now });
-  assert.deepEqual([view.state, view.label, view.tone, view.dim], ["closed", "Market closed · showing last close", "muted", false]);
+  assert.deepEqual([view.state, view.label, view.tone, view.dim], ["closed", "Market closed · showing last close", "neutral", false]);
   assert.equal(statusBarText({ stamp: none, session: "closed", feed: true, now }), "Market closed · showing last close");
   assert.equal(resolveFreshness({ stamp: none, session: "pre", feed: true, now }).state, "unavailable"); // an open session retries
   assert.equal(resolveFreshness({ stamp: none, session: "closed", now }).state, "unavailable"); // one symbol the Desk cannot read

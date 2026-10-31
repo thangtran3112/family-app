@@ -2,9 +2,10 @@
 
 import { useDeskFeedStamp, useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { formatEtTimeZone } from "@/lib/desk/format";
-import { COPY, marketPillView, resolveFreshness, statusBarText, type FreshnessInput, type FreshnessTone, type FreshnessView } from "@/lib/desk/freshness";
+import { COPY, marketPillView, resolveFreshness, statusBarText, type FreshnessInput, type FreshnessView } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import styles from "./Freshness.module.css";
+import type { Tone } from "./tone";
 
 /** The freshness of a page's data, read against the Desk feed: every badge, dim and stale mark on a screen goes through here, so they cannot disagree. */
 export function useFreshness(input: FreshnessInput): FreshnessView {
@@ -22,7 +23,7 @@ export type FreshnessProps =
   /** The status-bar phrasing: "Quotes live · IBKR" and the last-update time. Reads /status itself; renders spans for the bar's flex row. */
   | { variant: "statusBar" }
   /** A fixed message in the same chrome (the replay badge, "Status unavailable"). */
-  | (Layout & { variant: "note"; label: string; tone?: FreshnessTone });
+  | (Layout & { variant: "note"; label: string; tone?: Tone });
 
 /** The one freshness primitive. Wording comes from lib/desk/freshness.ts only. */
 export function Freshness(props: FreshnessProps) {
@@ -34,7 +35,7 @@ export function Freshness(props: FreshnessProps) {
   }
 }
 
-function Chip({ className, variant, tone, title, text, dot, state, open, stale }: { className?: string; variant: string; tone?: FreshnessTone; title?: string; text: string; dot?: boolean; state?: string; open?: boolean; stale?: boolean }) {
+function Chip({ className, variant, tone, title, text, dot, state, open, stale }: { className?: string; variant: string; tone?: Tone; title?: string; text: string; dot?: boolean; state?: string; open?: boolean; stale?: boolean }) {
   return (
     <span
       className={`${styles.root} ${className ?? ""}`}

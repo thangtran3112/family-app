@@ -40,7 +40,7 @@ export function TopBar({ band }: { band: ShellBand }) {
       {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs (and in Backtest always). */}
       {!replayBadge && shows(lane, "marketPill") && <Freshness variant="pill" band={band} />}
       {replayBadge ? (
-        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="amber" />
+        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="warn" />
       ) : !shows(lane, "freshness") ? null : failed ? (
         <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} />
       ) : (
