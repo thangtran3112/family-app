@@ -12,6 +12,7 @@ import type {
   WhitespaceData,
 } from "lightweight-charts";
 import { qualityLabel } from "@/lib/labels";
+import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
   candlestickData,
   chartTime,
@@ -53,6 +54,8 @@ export type MarketChartPane = {
 };
 
 export type MarketChartLevel = {
+  /** What a settings toggle filters by; the chart itself ignores it. */
+  id?: string;
   label: string;
   price: number | null;
   color?: string;
@@ -70,6 +73,8 @@ export type MarketChartProps = {
   panes?: MarketChartPane[];
   levels?: MarketChartLevel[];
   height?: number | "fill";
+  /** How the price series is drawn (replay chart settings). Candles by default; hollow only restyles the candles, the others swap the series. */
+  chartType?: ChartType;
   /** Pattern labels below the bar and fired-alert bells above it. */
   markers?: ChartMarkerInput[];
   /** Shade pre- and after-hours bars (`bars[].ext`). */
@@ -86,6 +91,8 @@ export type MarketChartProps = {
   dimmed?: boolean;
   /** Replay (02o §d): keep the newest bar in view after an update unless she scrolled back. The first draw shows the latest bars, not the whole history. */
   follow?: boolean;
+  /** Bars on the first draw of a followed chart (90 by default). */
+  firstDraw?: number;
   /** Replay of a hidden day: axis, crosshair and data table show the time of day only, never the date. */
   hideDates?: boolean;
   /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed and hidden-date charts. */
@@ -96,9 +103,16 @@ export type MarketChartProps = {
   focus?: { time: string; at: number } | null;
 };
 
-/** Bars shown on the first draw of a followed chart, and the room left of the right edge. */
+/** Bars shown on the first draw of a followed chart, and the room right of the newest bar: a marker label is centred on its bar and clipped at the price axis, so it needs about half a label of room. */
 const FOLLOW_VISIBLE_BARS = 90;
-const FOLLOW_RIGHT_PAD = 6;
+const FOLLOW_RIGHT_PAD = 10;
+
+// The up and down colours of the Desk; canvas cannot read the CSS variables. PRICE is the line and area colour: not white
+// (EMA 9), not green or red (those mean up and down).
+const UP = "#30D158";
+const DOWN = "#FF453A";
+const PRICE = "#64D2FF";
+const CLEAR = "rgba(0,0,0,0)";
 
 const DEFAULT_PANE_HEIGHT = 120;
 const MIN_PRICE_PANE = 160;
@@ -119,6 +133,29 @@ type PaneSeriesApi =
   | { kind: "line"; series: ISeriesApi<"Line", Time> }
   | { kind: "histogram"; series: ISeriesApi<"Histogram", Time> };
 type Library = typeof import("lightweight-charts");
+type MainKind = "Candlestick" | "Bar" | "Line" | "Area";
+type MainSeries = ISeriesApi<MainKind, Time>;
+
+const MAIN_KIND: Record<ChartType, MainKind> = { candles: "Candlestick", hollow: "Candlestick", bars: "Bar", line: "Line", area: "Area" };
+
+function addMainSeries(library: Library, chart: IChartApi, kind: MainKind): MainSeries {
+  switch (kind) {
+    case "Bar": return chart.addSeries(library.BarSeries, { upColor: UP, downColor: DOWN, openVisible: true, thinBars: false });
+    case "Line": return chart.addSeries(library.LineSeries, { color: PRICE, lineWidth: 2, crosshairMarkerVisible: true });
+    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: "rgba(100,210,255,0.24)", bottomColor: "rgba(100,210,255,0)", lineWidth: 2 });
+    case "Candlestick": return chart.addSeries(library.CandlestickSeries, { upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false });
+  }
+}
+
+/** Hollow is the candle series restyled: up bars empty and down bars filled, so direction reads from shape, not colour alone. */
+function candleStyle(type: ChartType) {
+  return type === "hollow"
+    ? { upColor: CLEAR, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: true }
+    : { upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false };
+}
+
+/** The lookup key of a bar's time, for the crosshair's OHLC (a line or area series reports only a value). */
+const timeId = (time: Time): string => (typeof time === "object" ? `${time.year}-${time.month}-${time.day}` : String(time));
 
 export function formatChartTime(time: Time): string {
   if (typeof time === "object") {
@@ -163,6 +200,7 @@ export function MarketChart({
   panes = [],
   levels = [],
   height = 440,
+  chartType = "candles",
   markers = [],
   sessionShading = false,
   volume = false,
@@ -171,6 +209,7 @@ export function MarketChart({
   chrome = "card",
   dimmed = false,
   follow = false,
+  firstDraw = FOLLOW_VISIBLE_BARS,
   hideDates = false,
   clockTicks = false,
   rowLabels,
@@ -179,7 +218,9 @@ export function MarketChart({
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const library = useRef<Library | null>(null);
-  const candles = useRef<ISeriesApi<"Candlestick", Time> | null>(null);
+  const main = useRef<MainSeries | null>(null);
+  const mainKind = useRef<MainKind>("Candlestick");
+  const barAt = useRef(new Map<string, ReturnType<typeof candlestickData>[number]>());
   const overlaySeries = useRef(new Map<string, ISeriesApi<"Line", Time>>());
   const paneSeries = useRef(new Map<string, PaneSeriesApi>());
   const priceLines = useRef<IPriceLine[]>([]);
@@ -243,17 +284,11 @@ export function MarketChart({
       chart.current = currentChart;
       resizeWatch = new ResizeObserver(() => layoutPanes(currentChart, paneLayout.current));
       resizeWatch.observe(container.current);
-      candles.current = currentChart.addSeries(module.CandlestickSeries, {
-        upColor: "#30D158",
-        downColor: "#FF453A",
-        wickUpColor: "#30D158",
-        wickDownColor: "#FF453A",
-        borderVisible: false,
-      });
+      mainKind.current = "Candlestick";
+      main.current = addMainSeries(module, currentChart, mainKind.current);
       currentChart.subscribeCrosshairMove((param) => {
         const callback = crosshairCallback.current;
-        const candleSeries = candles.current;
-        if (!callback || !candleSeries) return;
+        if (!callback || !main.current) return;
         if (!param.time || !param.point) {
           callback(null);
           return;
@@ -264,7 +299,7 @@ export function MarketChart({
         const volumeEntry = volumeSeries.current ? param.seriesData.get(volumeSeries.current) : undefined;
         callback(crosshairPoint(
           param.time,
-          param.seriesData.get(candleSeries) as Parameters<typeof crosshairPoint>[1],
+          barAt.current.get(timeId(param.time)) as Parameters<typeof crosshairPoint>[1],
           volumeEntry as Parameters<typeof crosshairPoint>[2],
           values,
         ));
@@ -276,7 +311,8 @@ export function MarketChart({
       resizeWatch?.disconnect();
       chart.current?.remove();
       chart.current = null;
-      candles.current = null;
+      main.current = null;
+      barAt.current.clear();
       volumeSeries.current = null;
       shadeSeries.current = null;
       markerPlugin.current = null;
@@ -294,8 +330,25 @@ export function MarketChart({
   useEffect(() => {
     const currentChart = chart.current;
     const chartLibrary = library.current;
-    const candleSeries = candles.current;
-    if (!ready || !currentChart || !chartLibrary || !candleSeries) return;
+    if (!ready || !currentChart || !chartLibrary || !main.current) return;
+
+    // A different series kind replaces the price series in one go (rapid changes just set the final state). The markers and
+    // price lines belong to the old series, so they are dropped here and re-created on the new one below; the visible range
+    // is put back after the data, so zoom and scroll survive the switch.
+    const wantKind = MAIN_KIND[chartType];
+    const keepRange = mainKind.current !== wantKind ? currentChart.timeScale().getVisibleLogicalRange() : null;
+    if (mainKind.current !== wantKind) {
+      markerPlugin.current?.detach();
+      markerPlugin.current = null;
+      priceLines.current = [];
+      currentChart.removeSeries(main.current);
+      mainKind.current = wantKind;
+      main.current = addMainSeries(chartLibrary, currentChart, wantKind);
+      // Behind the overlays, in front of the session shading.
+      main.current.setSeriesOrder(shadeSeries.current ? 1 : 0);
+    }
+    const mainSeries = main.current;
+    if (wantKind === "Candlestick") mainSeries.applyOptions(candleStyle(chartType));
 
     const timeLabel = hideDates ? formatChartClock : formatChartTime;
     currentChart.applyOptions({
@@ -317,7 +370,8 @@ export function MarketChart({
     overlays.forEach((overlay) => {
       let series = overlaySeries.current.get(overlay.id);
       if (!series) {
-        series = currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2 });
+        // No full-width dotted line at the last value: it sits within cents of the last-price line, where her marks land. The axis tag stays.
+        series = currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2, priceLineVisible: false });
         overlaySeries.current.set(overlay.id, series);
       }
       series.applyOptions({
@@ -396,10 +450,10 @@ export function MarketChart({
     });
     layoutPanes(currentChart, panes);
 
-    for (const line of priceLines.current) candleSeries.removePriceLine(line);
+    for (const line of priceLines.current) mainSeries.removePriceLine(line);
     priceLines.current = levels.flatMap(({ label, price, color, style }) => {
       if (price === null || !Number.isFinite(price)) return [];
-      return [candleSeries.createPriceLine({
+      return [mainSeries.createPriceLine({
         price,
         title: label,
         color: color ?? "#9B9BA1",
@@ -409,12 +463,14 @@ export function MarketChart({
       })];
     });
 
-    candleSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
+    mainSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
     // Before the data changes: was the view parked at the newest bar (within a bar or two)? Then it stays there.
-    const visible = currentChart.timeScale().getVisibleLogicalRange();
+    const visible = keepRange ?? currentChart.timeScale().getVisibleLogicalRange();
     const atNewest = visible === null || visible.to >= lastIndex.current - 1.5;
     const candleData = candlestickData(bars);
-    candleSeries.setData(candleData);
+    barAt.current = new Map(candleData.map((point) => [timeId(point.time), point]));
+    if (wantKind === "Line" || wantKind === "Area") (mainSeries as ISeriesApi<"Line", Time>).setData(lineData(bars, bars.map((bar) => bar.c)));
+    else (mainSeries as ISeriesApi<"Candlestick", Time>).setData(candleData);
 
     if (volume && !volumeSeries.current) {
       volumeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
@@ -445,26 +501,28 @@ export function MarketChart({
     }
     shadeSeries.current?.setData(shadingData(bars));
 
-    if (!markerPlugin.current) markerPlugin.current = chartLibrary.createSeriesMarkers(candleSeries, []);
+    if (!markerPlugin.current) markerPlugin.current = chartLibrary.createSeriesMarkers(mainSeries, []);
     markerPlugin.current.setMarkers(seriesMarkers(bars, markers));
 
     // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
     const key = `${symbol}:${interval}`;
     const count = candleData.length;
     if (bars.length && fitKey.current !== key) {
-      if (follow) currentChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, count - FOLLOW_VISIBLE_BARS), to: count - 1 + FOLLOW_RIGHT_PAD });
+      if (follow) currentChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
       else currentChart.timeScale().fitContent();
       fitKey.current = key;
+    } else if (keepRange) {
+      currentChart.timeScale().setVisibleLogicalRange(keepRange);
     } else if (follow && atNewest) {
       currentChart.timeScale().scrollToRealTime();
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, hideDates, clockTicks]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, hideDates, clockTicks, chartType]);
 
   // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
   useEffect(() => {
     const currentChart = chart.current;
-    const candleSeries = candles.current;
+    const candleSeries = main.current;
     if (!focus || !ready || !currentChart || !candleSeries) return;
     const index = bars.findIndex((bar) => bar.t === focus.time);
     const bar = bars[index];

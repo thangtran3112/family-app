@@ -13,8 +13,10 @@ import {
   parseWeekParams,
   startOutcome,
   threadHref,
+  threadOverviewHref,
   weekAction,
   weekLoadProblem,
+  weekMissingText,
   weekSubtitle,
   weekTitle,
 } from "./weekScreen.ts";
@@ -138,4 +140,16 @@ test("a 404 shows the server's sentence; any other failure is a plain failed loa
   assert.deepEqual(weekLoadProblem(new DeskApiError("malformed", 200)), { kind: "failed" });
   assert.deepEqual(weekLoadProblem(new Error("network")), { kind: "failed" });
   assert.deepEqual(weekLoadProblem(null), { kind: "failed" });
+});
+
+// D-089: a day thread's week page was "swing threads only" with no heading, and "Back to your thread" went to the journal.
+test("a week that cannot open has a heading and a full sentence, and the way back is the thread's page (D-089)", () => {
+  assert.equal(threadOverviewHref(7), "/practice/thread?id=7");
+  const day = weekMissingText("swing threads only", "day");
+  assert.equal(day.title, "Weekly review");
+  assert.match(day.text, /^Weekly reviews are for swing threads\. This is a day thread/);
+  const other = weekMissingText("this week has not started yet", "swing");
+  assert.deepEqual(other, { title: "Weekly review", text: "This week has not started yet." });
+  assert.equal(weekMissingText("Week 3 is not open yet.", null).text, "Week 3 is not open yet.", "a sentence stays as it is");
+  for (const text of [day.title, day.text, other.text]) assert.equal(containsPracticeBannedTerm(text), false, text);
 });

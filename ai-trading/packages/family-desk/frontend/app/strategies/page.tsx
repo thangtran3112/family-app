@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Strategies" };
 
 export default function StrategiesPage() {
   return (
-    <Suspense fallback={<main className={styles.workspace}><p>Loading strategies…</p></main>}>
+    <Suspense fallback={<div className={styles.workspace}><p>Loading strategies…</p></div>}>
       <StrategyRoute />
     </Suspense>
   );

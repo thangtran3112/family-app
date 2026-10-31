@@ -16,6 +16,13 @@ const AMBER = "#FFB020";
 const UP = "#30D158";
 const DOWN = "#FF453A";
 
+/** How the three replay overlays look (the chart and the settings swatches both read it): colour, and EMA 21 dashed. */
+export const OVERLAY_LOOK = {
+  vwap: { color: AMBER },
+  ema9: { color: TEXT },
+  ema21: { color: MUTED, style: "dashed" as const },
+};
+
 export type IndicatorId = "vwap" | "ema9" | "ema21" | "sma50" | "sma200" | "volume" | "rsi" | "macd";
 export type IndicatorOption = { id: IndicatorId; label: string; group: "Overlays" | "Panes"; defaultOn: boolean };
 
@@ -46,10 +53,10 @@ export function buildChartSeries(bars: Bars["bars"], indicators: ReadonlySet<Ind
   const closes = bars.map((bar) => bar.c);
   const overlays: MarketChartOverlay[] = [];
   if (indicators.has("vwap") && isIntraday(apiInterval)) {
-    overlays.push({ id: "vwap", label: "VWAP", color: AMBER, values: calcVWAPWithGaps(bars) });
+    overlays.push({ id: "vwap", label: "VWAP", ...OVERLAY_LOOK.vwap, values: calcVWAPWithGaps(bars) });
   }
-  if (indicators.has("ema9")) overlays.push({ id: "ema9", label: "EMA 9", color: TEXT, values: calcEMAWithGaps(closes, 9) });
-  if (indicators.has("ema21")) overlays.push({ id: "ema21", label: "EMA 21", color: MUTED, style: "dashed", values: calcEMAWithGaps(closes, 21) });
+  if (indicators.has("ema9")) overlays.push({ id: "ema9", label: "EMA 9", ...OVERLAY_LOOK.ema9, values: calcEMAWithGaps(closes, 9) });
+  if (indicators.has("ema21")) overlays.push({ id: "ema21", label: "EMA 21", ...OVERLAY_LOOK.ema21, values: calcEMAWithGaps(closes, 21) });
   if (indicators.has("sma50")) overlays.push({ id: "sma50", label: "SMA 50", color: TEXT, style: "dashed", values: calcMAWithGaps(closes, 50) });
   if (indicators.has("sma200")) overlays.push({ id: "sma200", label: "SMA 200", color: MUTED, values: calcMAWithGaps(closes, 200) });
 
@@ -155,16 +162,17 @@ export function keyLevelRows(technicals: Technicals | null): KeyLevel[] {
 
 export type LegendModel = {
   title: string;
-  items: Array<{ id: string; label: string; color: string; value: string }>;
+  items: Array<{ id: string; label: string; color: string; value: string; style: "solid" | "dashed"; hidden: boolean }>;
 };
 
-/** `NVDA · 15m · O … H … L … C …` plus one line per overlay, at the crosshair or at the last bar (02l §b5). */
+/** `NVDA · 15m · O … H … L … C …` plus one line per overlay, at the crosshair or at the last bar (02l §b5). An overlay in `hidden` stays listed with the value "hidden" (the replay legend turns it back on). */
 export function legendModel(
   symbol: string,
   timeframe: string,
   bars: Bars["bars"],
   overlays: readonly MarketChartOverlay[],
   point: CrosshairPoint | null,
+  hidden: ReadonlySet<string> = new Set(),
 ): LegendModel {
   const last = bars.at(-1);
   const o = point ? point.open : (last?.o ?? null);
@@ -177,7 +185,9 @@ export function legendModel(
       id: overlay.id,
       label: overlay.label,
       color: overlay.color,
-      value: formatPrice(point ? (point.values[overlay.id] ?? null) : currentValue(overlay.values)),
+      value: hidden.has(overlay.id) ? "hidden" : formatPrice(point ? (point.values[overlay.id] ?? null) : currentValue(overlay.values)),
+      style: overlay.style ?? "solid",
+      hidden: hidden.has(overlay.id),
     })),
   };
 }

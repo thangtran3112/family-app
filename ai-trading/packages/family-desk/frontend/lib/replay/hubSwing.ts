@@ -24,7 +24,6 @@ export const HUB_SWING_COPY = {
   noRows: "No names yet · pick a watchlist, add symbols, or add by liquidity",
   removeRow: "Remove {symbol}",
   addSymbol: "Add",
-  filterOrigin: { seed: "Preset", user: "Yours" },
   // The thread page
   weeksTitle: "Weeks",
   weeksHint: "Open a week for its review",
@@ -41,7 +40,7 @@ export const HUB_SWING_COPY = {
   dateHidden: "dates hidden",
 } as const;
 
-type HubSwingKey = keyof Omit<typeof HUB_SWING_COPY, "filterOrigin">;
+type HubSwingKey = keyof typeof HUB_SWING_COPY;
 export const hubSwingText = (key: HubSwingKey, values: Record<string, string | number> = {}): string =>
   HUB_SWING_COPY[key].replace(/\{(\w+)\}/g, (match, name: string) => (name in values ? String(values[name]) : match));
 

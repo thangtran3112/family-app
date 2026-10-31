@@ -34,6 +34,8 @@ export type TransportBarProps = {
   /** A swing session (02p): "+1 hour" and "To the close" in the Jump menu, and `chartToggle` in place of the 1m 5m 15m chips. */
   swing?: boolean;
   chartToggle?: ReactNode;
+  /** The view controls after the interval chips: Chart settings and Full screen (same slot inline and full screen, so focus stays put). */
+  view?: ReactNode;
 };
 
 /** Forward-only controls under the chart (02o §a3): play or pause, step, speed, jump, and the timeline. */
@@ -68,6 +70,7 @@ export function TransportBar(props: TransportBarProps) {
             ))}
           </div>
         )}
+        {props.view}
         <p className={styles.status} role="status" aria-live="polite">{statusLine(status, speed, revealedThrough, windowStart)}</p>
       </div>
       {error && (

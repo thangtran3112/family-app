@@ -62,7 +62,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
             <h1 className={styles.title}>{`Thread · ${name} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`}</h1>
             <span className={styles.chip}>{threadModeLabel(thread.thread.mode)}</span>
           </div>
-          <p className={styles.sub}>{`${startedWithText(thread.thread)} · ${where}${hidden ? ` · ${HUB_SWING_COPY.dateHidden}` : ""}`}</p>
+          <p className={styles.sub}>{`${startedWithText(thread.thread, state)} · ${where}${hidden ? ` · ${HUB_SWING_COPY.dateHidden}` : ""}`}</p>
         </div>
         <div className={styles.balanceStack}>
           <div className={styles.balance}>

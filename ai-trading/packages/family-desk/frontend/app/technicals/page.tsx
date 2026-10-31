@@ -8,7 +8,7 @@ import styles from "@/components/technicals/technicals.module.css";
 export const metadata: Metadata = { title: "Technicals" };
 
 export default function TechnicalsPage() {
-  const loading = <main className={styles.page}><p role="status">Loading technicals…</p></main>;
+  const loading = <div className={styles.page}><p role="status">Loading technicals…</p></div>;
   return (
     <Suspense fallback={loading}>
       <DeskResponsive desktop={<TechnicalsDesktop />} mobile={<TechnicalsScreen />} />

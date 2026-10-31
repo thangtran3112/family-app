@@ -24,7 +24,8 @@ const COLUMNS: DenseColumn<WeekHoldRowView>[] = [
   { key: "pnl", label: "P/L", align: "right", render: (row) => <span className={styles[row.pnlTone]}>{row.pnl}</span> },
   { key: "r", label: "R", align: "right", priority: 3, render: (row) => row.r },
   { key: "gap", label: "Gap P/L", align: "right", priority: 2, render: (row) => row.gap },
-  { key: "stop", label: "Stop", render: (row) => <span className={row.stopAway ? styles.amber : undefined}>{row.stop}</span> },
+  // A gutter before Stop: right-aligned "−$113.51" beside left-aligned "No stop" read as one string (D-127).
+  { key: "stop", label: "Stop", render: (row) => <span className={`${styles.stopGutter} ${row.stopAway ? styles.amber : ""}`}>{row.stop}</span> },
   { key: "rank", label: "Rank", align: "right", render: (row) => row.rank },
   { key: "selection", label: "Selection", align: "right", render: (row) => row.selection },
   { key: "timing", label: "Timing", align: "right", render: (row) => row.timing },

@@ -109,7 +109,7 @@ export const canPass = (list: Pick<SwingDayList, "status" | "sessions">): boolea
 // -- after the day --------------------------------------------------------------------------------------------
 
 export type EndedDayView = {
-  /** "Week 2 review ready" once that week's last day has ended and the review is the next step. */
+  /** "Week 2 is done. Review it to unlock Day 11." once that week's last day has ended and the review is the next step (D-085). */
   notice: string | null;
   /** The link to this day's week: "Open Week 2 review". */
   reviewLabel: string;
@@ -140,7 +140,7 @@ export function endedDayView(list: Pick<SwingDayList, "day_no" | "of" | "week_no
     // The state's week is the week of the next day to open, so the review waiting is the one before it. Any ended day says so.
     const weekNo = swing.week_no - 1;
     const waiting = weekNo === list.week_no ? null : { weekNo, label: practiceText("swingOpenReview", { n: weekNo }) };
-    return { ...base, notice: practiceText("swingReviewReady", { n: weekNo }), waiting, next: { kind: "review" } };
+    return { ...base, notice: practiceText("overviewDayLocked", { n: weekNo, day: swing.day_no }), waiting, next: { kind: "review" } };
   }
   return { ...base, next: { kind: "continue", label: practiceText("swingContinueDay", { n: swing.day_no }) } };
 }

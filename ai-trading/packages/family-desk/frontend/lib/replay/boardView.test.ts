@@ -97,7 +97,7 @@ test("an ended day links its week, says when the review is ready, and offers the
   assert.equal(next.notice, null);
 
   const lastOfWeek = endedDayView({ day_no: 5, of: 20, week_no: 1 }, { ...swingState, day_no: 6, days_ended: 5, week_no: 2, next: "week_review" });
-  assert.equal(lastOfWeek.notice, "Week 1 review ready");
+  assert.equal(lastOfWeek.notice, "Week 1 is done. Review it to unlock Day 6.", "D-085: says why the next day waits");
   assert.deepEqual(lastOfWeek.next, { kind: "review" }, "the review comes before the next day");
   assert.equal(lastOfWeek.reviewLabel, "Open Week 1 review");
 
@@ -105,7 +105,7 @@ test("an ended day links its week, says when the review is ready, and offers the
 
   // M6: an older ended day while the thread waits on Week 2's review still says so and links to it, beside its own week.
   const older = endedDayView({ day_no: 3, of: 20, week_no: 1 }, { ...swingState, day_no: 11, days_ended: 10, week_no: 3, next: "week_review" });
-  assert.equal(older.notice, "Week 2 review ready");
+  assert.equal(older.notice, "Week 2 is done. Review it to unlock Day 11.");
   assert.deepEqual(older.waiting, { weekNo: 2, label: "Open Week 2 review" });
   assert.deepEqual([older.reviewLabel, older.reviewWeekNo], ["Open Week 1 review", 1]);
   assert.equal(next.waiting, null, "nothing waits when the next step is a day");

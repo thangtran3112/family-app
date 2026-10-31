@@ -30,5 +30,5 @@ const COLUMNS: DenseColumn<LinkedDayRow>[] = [
 
 /** One row per day of the week; a day's name opens its board in its ended state. Money is SIMULATED (the section says so). */
 export function DaysTable({ rows }: { rows: LinkedDayRow[] }) {
-  return <DenseTable caption={WEEK_TEXT.daysCaption} columns={COLUMNS} rows={rows} rowKey={(row) => String(row.dayNo)} empty={PRACTICE_COPY.swingWeeksNone} />;
+  return <DenseTable caption={WEEK_TEXT.daysCaption} columns={COLUMNS} rows={rows} rowKey={(row) => String(row.dayNo)} density="compact" empty={PRACTICE_COPY.swingWeeksNone} />;
 }

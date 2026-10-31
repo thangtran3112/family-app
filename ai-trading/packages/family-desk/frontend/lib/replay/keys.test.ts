@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { actionForKey, isActivatable, isTextField, KEY_LEGEND, type OpenSide } from "./keys.ts";
+import { actionForKey, isActivatable, isTextField, KEY_LEGEND, layerToClose, SHORTCUT_GROUPS, type OpenSide } from "./keys.ts";
 
 const press = (key: string, side: OpenSide = "flat", extra: Record<string, unknown> = {}, overlay = false) => actionForKey({ key, ...extra }, side, overlay);
 
@@ -73,4 +73,50 @@ test("every single-letter key in the legend under the timeline drives an action 
   const letters = KEY_LEGEND.filter((item) => /^[A-Z]$/.test(item.keys));
   assert.deepEqual(letters.map((item) => item.keys), ["B", "S", "X", "T", "N"]);
   for (const item of letters) assert.notEqual(press(item.keys.toLowerCase(), "long"), null, item.keys);
+});
+
+// ---- R-01: full screen (F), Chart settings (C), and the layers Escape closes -------------------------------------
+
+test("F toggles full screen and C opens Chart settings, in every trade state", () => {
+  for (const side of ["flat", "long", "short"] as const) {
+    assert.deepEqual(press("f", side), { type: "toggle_full" });
+    assert.deepEqual(press("F", side), { type: "toggle_full" });
+    assert.deepEqual(press("c", side), { type: "chart_settings" });
+  }
+});
+
+test("F and C pass through with a modifier, in a text field, or while the shortcuts overlay is open", () => {
+  for (const extra of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }]) {
+    assert.equal(press("f", "flat", extra), null, JSON.stringify(extra));
+    assert.equal(press("c", "flat", extra), null, JSON.stringify(extra));
+  }
+  for (const target of [{ tagName: "INPUT", type: "text" }, { tagName: "INPUT", type: "number" }, { tagName: "TEXTAREA" }]) {
+    assert.equal(actionForKey({ key: "f", target }, "flat"), null);
+    assert.equal(actionForKey({ key: "c", target }, "flat"), null);
+  }
+  assert.equal(press("f", "flat", {}, true), null);
+  assert.equal(press("c", "flat", {}, true), null);
+});
+
+test("Escape closes the innermost layer first: settings, then the shortcuts, then the composer, then full screen", () => {
+  const all = { settings: true, help: true, composer: true, full: true };
+  assert.equal(layerToClose(all), "settings");
+  assert.equal(layerToClose({ ...all, settings: false }), "help");
+  assert.equal(layerToClose({ ...all, settings: false, help: false }), "composer");
+  assert.equal(layerToClose({ settings: false, help: false, composer: false, full: true }), "full");
+  assert.equal(layerToClose({ settings: false, help: false, composer: false, full: false }), null);
+});
+
+test("the ? overlay lists the View keys, and the one-line legend under the timeline is unchanged", () => {
+  const view = SHORTCUT_GROUPS.find((group) => group.title === "View");
+  assert.deepEqual(view?.rows.map((row) => row.keys), [["F"], ["C"], ["Esc"]]);
+  assert.deepEqual(KEY_LEGEND.map((item) => item.keys), ["Space", "B", "S", "X", "T", "N", "⌘Z", "?"]);
+});
+
+test("a checkbox or radio inside the settings popover is neither a text field nor activatable (why the popover keeps its keys)", () => {
+  for (const type of ["checkbox", "radio"]) {
+    assert.equal(isTextField({ tagName: "INPUT", type }), false);
+    assert.equal(isActivatable({ tagName: "INPUT", type }), false);
+    assert.deepEqual(actionForKey({ key: " ", target: { tagName: "INPUT", type } }, "flat"), { type: "toggle_play" }, "so the popover's own guard has to stop this key");
+  }
 });

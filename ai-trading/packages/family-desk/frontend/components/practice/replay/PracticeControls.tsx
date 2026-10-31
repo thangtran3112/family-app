@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import play from "@/components/practice/swing/play.module.css";
 import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -119,10 +119,15 @@ export function PracticeControls(props: PracticeControlsProps) {
   const entering = side === "flat";
   // D-060: with the plan asking for a stop on every entry, Long and Short wait until a stop price is typed.
   const waitsForStop = props.stopHint && entering;
+  // The inputs are named by a real `for` link, and the reason Long and Short wait is the stop field's and the buttons' description (D-101).
+  const sharesId = useId();
+  const stopId = useId();
+  const hintId = useId();
+  const hintShown = props.stopHint && entering;
   return (
     <div className={styles.controls}>
       {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <OpenTradeCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
-      {swing && <p className={play.cash}>{swing.cash}</p>}
+      {swing && <dl className={play.card} aria-label="Free cash"><div><dt>Free cash</dt><dd>{swing.cash.replace(/^Free cash\s+/, "")}</dd></div></dl>}
       {swing?.hint && entering && <p className={play.hint}>{swing.hint.text}</p>}
       {props.stopMissing && (
         <p className={styles.nudgeLine} role="status">
@@ -131,19 +136,20 @@ export function PracticeControls(props: PracticeControlsProps) {
         </p>
       )}
       <div className={styles.fields}>
-        <label className={styles.field}>
+        <label className={styles.field} htmlFor={sharesId}>
           Shares
-          <input className={styles.control} inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
+          <input id={sharesId} className={styles.control} inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
         </label>
-        <label className={styles.field}>
+        <label className={styles.field} htmlFor={stopId}>
           {entering ? (props.stopRequired ? "Stop price (required)" : "Stop price (optional)") : "Stop price"}
-          <input className={styles.control} inputMode="decimal" value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
+          <input id={stopId} className={styles.control} inputMode="decimal" aria-describedby={hintShown ? hintId : undefined} value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
         </label>
       </div>
-      {props.stopHint && entering && <p className={styles.hint} role="status">{PRACTICE_COPY.stopFirst}</p>}
+      {hintShown && <p id={hintId} className={styles.hint} role="status">{PRACTICE_COPY.stopFirst}</p>}
+      <p className={styles.footnote}>{swing ? PRACTICE_COPY.entryResetsSwing : PRACTICE_COPY.entryResets}</p>
       <div className={styles.buttonRow}>
-        <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled || waitsForStop} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice long (B)"} onClick={props.onLong}>Long (B)</button>
-        <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled || waitsForStop} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice short (S)"} onClick={props.onShort}>Short (S)</button>
+        <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice long (B)"} onClick={props.onLong}>Long (B)</button>
+        <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice short (S)"} onClick={props.onShort}>Short (S)</button>
         <button type="button" className={styles.button} disabled={disabled || entering} title="Exit the open practice trade (X)" onClick={props.onExit}>Exit (X)</button>
       </div>
       <div className={styles.buttonRow}>

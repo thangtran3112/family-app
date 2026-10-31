@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -27,6 +27,11 @@ export function ThreadOverview() {
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
   const [replacing, setReplacing] = useState(false);
+  // Arriving here (after a day ended, a day opened or New plan was submitted) the keyboard starts at the page heading, not at the skip link (D-093).
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
   const query = useDeskQuery(`practice-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null, revision });
   const daily = useDeskQuery(`replay-daily:${id}`, (signal) => loadDaily({ threadId: id ?? 0, signal }), { enabled: id !== null, revision });
   const plan = daily.data?.plan ?? null;
@@ -39,14 +44,14 @@ export function ThreadOverview() {
 
   if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return (
-      <OverviewShell title="Practice thread">
+      <OverviewShell title="Practice thread" titleRef={titleRef}>
         <EmptyBlock title={PRACTICE_COPY.threadPageNotFound} />
       </OverviewShell>
     );
   }
   if (query.data === null) {
     return (
-      <OverviewShell title="Practice thread">
+      <OverviewShell title="Practice thread" titleRef={titleRef}>
         {query.error === null ? <PageSkeleton /> : <ErrorBlock message={PRACTICE_COPY.threadPageLoadError} onRetry={query.refresh} />}
       </OverviewShell>
     );
@@ -56,7 +61,7 @@ export function ThreadOverview() {
   const { thread } = summary;
 
   return (
-    <OverviewShell title={threadName(thread)} aside={<OverviewChips thread={thread} />}>
+    <OverviewShell title={threadName(thread)} titleRef={titleRef} aside={<OverviewChips thread={thread} />}>
       {thread.mode === "swing" && summary.swing ? (
         <SwingOverview summary={summary} plan={plan} onChanged={changed} />
       ) : (

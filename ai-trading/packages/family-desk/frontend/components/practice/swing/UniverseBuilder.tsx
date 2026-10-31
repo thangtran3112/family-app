@@ -3,20 +3,22 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { SymbolField } from "@/components/practice/hub/SymbolField";
 import hub from "@/components/practice/hub/hub.module.css";
+import modal from "@/components/practice/hub/newplan.module.css";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { loadWatchlistItems, loadWatchlists } from "@/lib/desk/watchlists";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { HUB_SWING_COPY, hubSwingText } from "@/lib/replay/hubSwing";
 import { isDailyRunOn, toggleFillFilter, toggleWatchlist, targetProblem, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
 import {
   addSymbol,
-  excludedLines,
+  excludedRows,
   prepProgressText,
   previewSummary,
   removeSymbol,
+  universeNeedLine,
   universeRowView,
   type UniverseRowView,
 } from "@/lib/replay/universeView";
@@ -75,6 +77,8 @@ export function UniverseBuilder({
   const { preview } = state;
   // A removed name leaves the table at once; the new answer then fills the gap.
   const shown = useMemo(() => (preview?.rows ?? []).filter((row) => !draft.edits.remove.includes(row.symbol)).map(universeRowView), [preview, draft.edits.remove]);
+  // A name left out for missing history stays on the list she sends until she removes it (M-04).
+  const leftOut = useMemo(() => excludedRows(preview?.excluded ?? [], draft.edits), [preview, draft.edits]);
 
   function add() {
     const result = addSymbol(draft.edits, typed, shown.map((row) => row.symbol));
@@ -99,18 +103,19 @@ export function UniverseBuilder({
   const targetError = problems.target ?? targetProblem(draft.target);
 
   return (
-    <fieldset className={hub.group}>
-      <legend className={hub.legend}>{PRACTICE_COPY.swingUniverseSection}</legend>
-      <p className={hub.hint}>{PRACTICE_COPY.swingListOrder}</p>
+    <fieldset className={modal.section}>
+      <legend className={modal.legend}>{PRACTICE_COPY.swingUniverseSection}</legend>
+      <p className={modal.help}>{universeNeedLine(shown.length)}</p>
+      <p className={modal.help}>{PRACTICE_COPY.swingListOrder}</p>
       <div className={styles.sources}>
         <fieldset className={styles.source}>
-          <legend className={hub.legend}>{PRACTICE_COPY.swingWatchlists}</legend>
+          <legend className={modal.legend}>{PRACTICE_COPY.swingWatchlists}</legend>
           {lists.loading ? (
             <LoadingBlock label="Loading your watchlists…" height={48} />
           ) : lists.data === null ? (
             <ErrorBlock subject="watchlists" onRetry={lists.refresh} />
           ) : lists.data.length === 0 ? (
-            <p className={hub.hint}>{HUB_SWING_COPY.noWatchlists}</p>
+            <p className={modal.help}>{HUB_SWING_COPY.noWatchlists}</p>
           ) : (
             <ul className={styles.checkList}>
               {lists.data.map((list) => (
@@ -133,25 +138,25 @@ export function UniverseBuilder({
         </fieldset>
 
         <fieldset className={styles.source}>
-          <legend className={hub.legend}>{PRACTICE_COPY.swingAddSymbols}</legend>
+          <legend className={modal.legend}>{PRACTICE_COPY.swingAddSymbols}</legend>
           <div className={styles.addRow}>
             <div onKeyDown={onAddKey}>
               <SymbolField value={typed} onChange={(symbol) => { setTyped(symbol); setAddProblem(null); }} error={addProblem ?? undefined} />
             </div>
             <button type="button" className={hub.button} onClick={add}>{HUB_SWING_COPY.addSymbol}</button>
           </div>
-          <p className={hub.hint}>{PRACTICE_COPY.swingTypeSymbol}</p>
+          <p className={modal.help}>{PRACTICE_COPY.swingTypeSymbol}</p>
         </fieldset>
 
         <fieldset className={styles.source} aria-describedby="swing-filter-hint">
-          <legend className={hub.legend}>{PRACTICE_COPY.swingAddFromFilter}</legend>
-          <p id="swing-filter-hint" className={hub.hint}>{PRACTICE_COPY.swingAddFromFilterHint}</p>
+          <legend className={modal.legend}>{PRACTICE_COPY.swingAddFromFilter}</legend>
+          <p id="swing-filter-hint" className={modal.help}>{PRACTICE_COPY.swingAddFromFilterHint}</p>
           {filters.loading ? (
             <LoadingBlock label="Loading your filters…" height={48} />
           ) : filters.data === null ? (
             <ErrorBlock subject="filter list" onRetry={filters.refresh} />
           ) : daily.length === 0 ? (
-            <p className={hub.hint}>{HUB_SWING_COPY.noDailyFilters}</p>
+            <p className={modal.help}>{HUB_SWING_COPY.noDailyFilters}</p>
           ) : (
             <ul className={styles.checkList}>
               {daily.map((filter) => {
@@ -170,7 +175,6 @@ export function UniverseBuilder({
                       <span className={hub.armText}>
                         <span className={hub.armName}>{filter.name}</span>
                       </span>
-                      <span className={hub.chip}>{HUB_SWING_COPY.filterOrigin[filter.origin]}</span>
                     </label>
                   </li>
                 );
@@ -180,7 +184,7 @@ export function UniverseBuilder({
         </fieldset>
 
         <fieldset className={styles.source}>
-          <legend className={hub.legend}>{PRACTICE_COPY.swingAddByLiquidity}</legend>
+          <legend className={modal.legend}>{PRACTICE_COPY.swingAddByLiquidity}</legend>
           <label className={hub.switch}>
             <input
               type="checkbox"
@@ -190,7 +194,7 @@ export function UniverseBuilder({
             />
             {PRACTICE_COPY.swingAddByLiquidity}
           </label>
-          <p className={hub.hint}>{PRACTICE_COPY.swingAddByLiquidityHint}</p>
+          <p className={modal.help}>{PRACTICE_COPY.swingAddByLiquidityHint}</p>
           <div className={hub.field}>
             <label htmlFor="swing-target" className={hub.label}>{PRACTICE_COPY.swingTarget}</label>
             <input
@@ -206,26 +210,26 @@ export function UniverseBuilder({
               aria-describedby={targetError ? "swing-target-error" : undefined}
               onChange={(event) => onDraft({ ...draft, target: event.target.value })}
             />
-            {targetError && <p id="swing-target-error" role="alert" className={hub.fieldError}>{targetError}</p>}
+            {targetError && <p id="swing-target-error" role="alert" className={modal.fieldError}>{targetError}</p>}
           </div>
         </fieldset>
       </div>
 
       <div className={styles.tableBlock}>
         <div className={styles.tableHead}>
-          <p className={styles.progress} role="status">
+          <p className={modal.help} role="status">
             {preview ? prepProgressText(preview) : state.busy ? HUB_SWING_COPY.buildingList : PRACTICE_COPY.swingBuildFirst}
             {preview && state.busy && preview.state === "ready" && ` · ${HUB_SWING_COPY.updatingList}`}
           </p>
-          {state.expired && <p className={hub.fieldError} role="alert">{HUB_SWING_COPY.tooLong}</p>}
+          {state.expired && <p className={modal.fieldError} role="alert">{HUB_SWING_COPY.tooLong}</p>}
         </div>
         {state.failure && (
           <div className={hub.inline}>
-            <p role="alert" className={hub.fieldError}>{state.failure}</p>
+            <p role="alert" className={modal.fieldError}>{state.failure}</p>
             <button type="button" className={hub.button} onClick={state.retry}>Try again</button>
           </div>
         )}
-        {problems.universe && <p role="alert" className={hub.fieldError}>{problems.universe}</p>}
+        {problems.universe && <p role="alert" className={modal.fieldError}>{problems.universe}</p>}
         {preview === null ? null : (
           <>
             <p className={styles.summary}>{previewSummary(preview, pickedNames)}</p>
@@ -245,9 +249,16 @@ export function UniverseBuilder({
                 )}
               />
             </div>
-            {preview.excluded.length > 0 && (
-              <ul className={styles.excluded} aria-label="Left out">
-                {excludedLines(preview.excluded).map((line) => <li key={line}>{line}</li>)}
+            {leftOut.length > 0 && (
+              <ul className={modal.leftOut} aria-label="Left out">
+                {leftOut.map((item) => (
+                  <li key={item.symbol} className={modal.leftOutRow}>
+                    <span className={modal.help}>{practiceText("swingExcludedRow", { symbol: item.symbol, reason: item.reason })}</span>
+                    <button type="button" className={hub.small} aria-label={hubSwingText("removeRow", { symbol: item.symbol })} onClick={() => remove(item.symbol)}>
+                      Remove
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
             <p className={styles.survivorship}>{preview.label}</p>

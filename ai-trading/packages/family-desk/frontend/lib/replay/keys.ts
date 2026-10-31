@@ -17,6 +17,10 @@ export type ReplayAction =
   | { type: "undo" }
   | { type: "help" }
   | { type: "close" }
+  /** F: the chart fills the window (a view state, no navigation). */
+  | { type: "toggle_full" }
+  /** C: open or close the Chart settings popover. */
+  | { type: "chart_settings" }
   /** A key that is valid but not possible now: show the message, send nothing. */
   | { type: "blocked"; message: string };
 
@@ -88,7 +92,19 @@ export function actionForKey(input: KeyInput, side: OpenSide, overlayOpen = fals
   if (lower === "b" || lower === "s" || lower === "x") return markActionFor(lower, side);
   if (lower === "t") return side === "flat" ? { type: "blocked", message: PRACTICE_COPY.stopNeedsTrade } : { type: "stop_note" };
   if (lower === "n") return { type: "note" };
+  if (lower === "f") return { type: "toggle_full" };
+  if (lower === "c") return { type: "chart_settings" };
   return null;
+}
+
+export type OpenLayers = { settings: boolean; help: boolean; composer: boolean; full: boolean };
+
+/** What Escape closes: the innermost layer first, so the settings popover goes before the shortcuts, the composer, then full screen. */
+export function layerToClose(open: OpenLayers): keyof OpenLayers | null {
+  if (open.settings) return "settings";
+  if (open.help) return "help";
+  if (open.composer) return "composer";
+  return open.full ? "full" : null;
 }
 
 /** Rows of the `?` overlay, grouped (the Mercury overlay pattern). */
@@ -111,6 +127,14 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
       { keys: ["T"], label: "Stop note" },
       { keys: ["N"], label: "Note" },
       { keys: ["⌘", "Z"], label: "Undo the last mark (before the playhead moves)" },
+    ],
+  },
+  {
+    title: "View",
+    rows: [
+      { keys: ["F"], label: "Full screen on or off" },
+      { keys: ["C"], label: "Chart settings" },
+      { keys: ["Esc"], label: "Close the top layer, then leave full screen" },
     ],
   },
   { title: "Help", rows: [{ keys: ["?"], label: "Show or hide this list" }, { keys: ["Esc"], label: "Close" }] },

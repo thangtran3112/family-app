@@ -1,6 +1,8 @@
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { DeskApiProblem } from "../api/client.ts";
-import { MAX_ARMED, defaultDraft, draftToSpec, fieldOfPath, type ArmedRef, type SetupDraft, type SetupField } from "./setup.ts";
+import { formatEtDay } from "../desk/format.ts";
+import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, type SetupDraft, type SetupField } from "./setup.ts";
 
 // The hub's daily-list plan form (02o-b v1): the draft the form edits, its conversion to a `PracticeBlockV1`, and live
 // validation against the contract's own Zod schema (the D6 pattern). The setup half reuses the single-session draft.
@@ -8,8 +10,8 @@ import { MAX_ARMED, defaultDraft, draftToSpec, fieldOfPath, type ArmedRef, type 
 export const EARLIEST_LIST_DAY = "2017-01-03";
 export const MAX_FILTERS = 3;
 export const SESSION_CHOICES = [5, 10, 20, 30] as const;
-/** The names a day she can choose (the contract's `maxSymbols`, 1 to 5); a new plan starts at 3. */
-export const NAME_CHOICES = [1, 2, 3, 4, 5] as const;
+/** The names a day she can choose (the contract's `maxSymbols`, 1 to 20; the picker is sparse past 5 to fit one row); a new plan starts at 3. */
+export const NAME_CHOICES = [1, 2, 3, 4, 5, 10, 20] as const;
 export const DEFAULT_MAX_SYMBOLS = 3;
 
 /** The list times she is offered: the premarket gap list, the first 15 minutes, the first hour. */
@@ -131,19 +133,12 @@ export function listTimeFrom(need: string): string {
   return (LIST_TIMES.find((item) => item.value >= need) ?? LIST_TIMES[LIST_TIMES.length - 1]).value;
 }
 
-/** Picks or drops a filter. A picked filter is armed for the practice days (arming is what releases its would-fire
- *  signals while she replays), a dropped one is disarmed, and a list time too early for a cadence filter moves to the
- *  first offered time that works (10:00 for a 15-minute filter). */
+/** Picks or drops a filter. Nothing is armed (D-076: a new plan starts with none), and a list time too early for a cadence
+ *  filter moves to the first offered time that works (10:00 for a 15-minute filter). */
 export function withFilterToggled(draft: PlanDraft, id: number, timings: FilterTimings): PlanDraft {
   const filterIds = toggleFilter(draft.filterIds, id);
   if (filterIds.length === draft.filterIds.length && filterIds.every((item, index) => item === draft.filterIds[index])) return draft;
-  const ref: ArmedRef = { source: "filter", id };
-  const armed = filterIds.includes(id)
-    ? draft.setup.armed.some((item) => item.source === "filter" && item.id === id) || draft.setup.armed.length >= MAX_ARMED
-      ? draft.setup.armed
-      : [...draft.setup.armed, ref]
-    : draft.setup.armed.filter((item) => !(item.source === "filter" && item.id === id));
-  const next = { ...draft, filterIds, setup: { ...draft.setup, armed } };
+  const next = { ...draft, filterIds };
   const need = listTimeNeed(filterIds, timings).time;
   return next.listAt < need ? withListTime(next, listTimeFrom(need)) : next;
 }
@@ -179,7 +174,7 @@ const FIELD_MESSAGE: Record<PlanField, string> = {
   filters: "Pick one to three filters",
   listAt: "List time: between 4:30 AM and 3:30 PM",
   maxList: "List size: a whole number from 20 to 50",
-  maxSymbols: "Names a day: a whole number from 1 to 5",
+  maxSymbols: "Names a day: a whole number from 1 to 20",
 };
 
 /** Maps a contract or server path (`screen.listAt`, `setup.window.from`, `firstDay`) to the form field that shows it. */
@@ -211,11 +206,17 @@ const isWeekend = (day: string) => {
   return weekday === 0 || weekday === 6;
 };
 
-/** Live validation: the contract's Zod schema plus a local read of the first day. Holidays and unfinished days are the server's call. */
-export function validatePlanDraft(draft: PlanDraft): PlanValidation {
+/** Live validation: the contract's Zod schema plus a local read of the first day. With `now`, a run of sessions that ends after the
+ *  last finished day is a problem too. Holidays and one-off closures are the server's call. */
+export function validatePlanDraft(draft: PlanDraft, now?: Date): PlanValidation {
   const problems: PlanProblems = {};
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.firstDay) || Number.isNaN(Date.parse(`${draft.firstDay}T12:00:00Z`)) || draft.firstDay < EARLIEST_LIST_DAY || isWeekend(draft.firstDay)) {
     problems.firstDay = FIELD_MESSAGE.firstDay;
+  } else if (now !== undefined) {
+    const sessions = numberOrNaN(draft.sessions);
+    if (Number.isInteger(sessions) && sessions >= 5 && sessions <= 30 && lastWeekday(draft.firstDay, sessions) > latestReplayDay(now)) {
+      problems.firstDay = practiceText("swingRangeTooLate", { sessions, day: formatEtDay(draft.firstDay) });
+    }
   }
   const parsed = PracticeBlockV1Schema.safeParse(planDraftToSpec(draft));
   if (!parsed.success) {
@@ -226,4 +227,19 @@ export function validatePlanDraft(draft: PlanDraft): PlanValidation {
   }
   if (Object.keys(problems).length > 0) return { ok: false, problems };
   return parsed.success ? { ok: true, spec: parsed.data } : { ok: false, problems: { form: FIELD_MESSAGE.form } };
+}
+
+/** What the form shows while she edits: every problem except the missing filter (the footer already says it) and the catch-all. */
+export function livePlanProblems(draft: PlanDraft, now: Date): PlanProblems {
+  const result = validatePlanDraft(draft, now);
+  if (result.ok) return {};
+  const { filters: _filters, form: _form, ...rest } = result.problems;
+  return rest;
+}
+
+/** The one button of the modal: "Start 20-day practice", or "Start 20-day swing practice" for a swing thread. */
+export function startLabel(sessions: string, swing: boolean): string {
+  const days = Number(sessions);
+  const ready = sessions.trim() !== "" && Number.isInteger(days) && days > 0;
+  return practiceText(swing ? (ready ? "newPlanStartSwing" : "newPlanStartSwingBare") : ready ? "newPlanStart" : "newPlanStartBare", { days: sessions.trim() });
 }

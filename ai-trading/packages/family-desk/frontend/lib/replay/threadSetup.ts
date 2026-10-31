@@ -35,6 +35,12 @@ export const defaultThreadDraft = (): ThreadDraft => ({
   planNote: "",
 });
 
+/** The starting balance as shown once she leaves the box: "50000" reads "50,000". Anything that is not a whole number stays as typed, so its error can name it. */
+export function formatBalanceInput(text: string): string {
+  const bare = text.trim().replaceAll(",", "");
+  return /^\d+$/.test(bare) ? Number(bare).toLocaleString("en-US") : text;
+}
+
 const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text.replaceAll(",", "")));
 
 /** The plan half of the draft as the contract's JSON. Optional fields are left out when empty; nothing is null or boolean. */
