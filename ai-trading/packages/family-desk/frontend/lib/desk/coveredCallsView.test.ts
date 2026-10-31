@@ -5,7 +5,7 @@ import { loadFundamentalFixture } from "../fixtures/desk-fundamental/load.ts";
 import {
   accountLabel, assignmentNoteText, capText, chainState, costToCloseText, coverageReason, defaultCoverageRow, distinctFlags, flagsText, flagText, formatDelta, formatScore,
   formatYield, incomeChart, incomeView, ivRankLine, monthLabel, moneynessWords, NEEDS_TRADES_TEXT, NO_MATCH_TEXT, NO_RISKS, NO_INCOME_TEXT, opportunityText,
-  REASON_WORDS, topRisk,
+  mostUrgentCall, REASON_WORDS, topRisk,
 } from "./coveredCallsView.ts";
 import { containsBannedTerm } from "./freshness.ts";
 import { MASK } from "./mask.ts";
@@ -115,4 +115,14 @@ test("the assignment note says it is not tax advice once", () => {
   assert.equal(assignmentNoteText(roll.assignment_note), roll.assignment_note.text);
   assert.equal((assignmentNoteText(roll.assignment_note).match(/not tax advice/gi) ?? []).length, 1);
   assert.equal(assignmentNoteText({ text: "Taxable: assignment may be a taxable sale." }), "Taxable: assignment may be a taxable sale. Not tax advice");
+});
+
+test("the open call to detail first is the one with the most risks, then the nearest expiry, not just the first row", () => {
+  assert.equal(calls[0]!.risks.length, 0);
+  assert.ok(calls[1]!.risks.length > 1);
+  assert.equal(mostUrgentCall(calls)?.symbol, calls[1]!.symbol);
+  const risk = (kind: "delta_above_0_50" | "earnings_before_expiry") => ({ kind, text: kind });
+  assert.equal(mostUrgentCall([{ id: 1, dte: 9, risks: [] }, { id: 2, dte: 30, risks: [risk("delta_above_0_50")] }, { id: 3, dte: 7, risks: [risk("delta_above_0_50")] }])?.id, 3);
+  assert.equal(mostUrgentCall([{ id: 1, dte: 9, risks: [] }, { id: 2, dte: 4, risks: [] }])?.id, 2);
+  assert.equal(mostUrgentCall([]), null);
 });

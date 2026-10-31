@@ -119,6 +119,11 @@ export function useDeskUi(): DeskUiValue {
   return value;
 }
 
+/** The active lane, or Technical where there is no desktop shell (the mobile shell has no lanes). For shared pages that render in both. */
+export function useActiveLane(): Lane {
+  return useContext(UiContext)?.lane ?? "technical";
+}
+
 /** The element a page portals its right-rail content into (see RightRail). Null before mount. */
 export const RailSlotContext = createContext<HTMLElement | null>(null);
 

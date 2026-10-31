@@ -111,3 +111,19 @@ test("the real, empty world says why there are no holdings and shows no dollar f
   expect(gated(), "gated routes asked for").toEqual([]);
   await expectCleanScreen(page);
 });
+
+test("not connected: the setup step is a link to Settings in the rail, the status line and the centre", async ({ page }) => {
+  const notConnected = { source: "ibkr_flex", account_scope: "data", statement_date: null, imported_at: null, lots: 0, state: "not_configured" };
+  await startInFundamental(page);
+  await mockFundamental(page, { holdings: { ...fixture<object>("holdings"), import: notConnected, rows: [], option_lots: [] } });
+  await openDesk(page, "/holdings");
+  const setup = "set up the IBKR import in Settings";
+  await expect(page.getByTestId("import-line")).toHaveText(COPY.holdingsNotConnected);
+  await expect(page.getByTestId("fund-rail-holdings").getByRole("link", { name: setup })).toHaveAttribute("href", "/settings");
+  // The status line and the centre message both link; the rail's is the third.
+  const inMain = page.locator("#main-content").getByRole("link", { name: setup });
+  await expect(inMain).toHaveCount(2);
+  for (const link of await inMain.all()) await expect(link).toHaveAttribute("href", "/settings");
+  await page.locator("#main-content").getByRole("link", { name: setup }).last().click();
+  await expect(page).toHaveURL(/\/settings$/);
+});

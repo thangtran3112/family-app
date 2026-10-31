@@ -17,6 +17,8 @@
 .button:focus-visible, .link:focus-visible, .tab:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-text); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
+.inlineLink { color: var(--color-text); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: 2px; }
+.inlineLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 
 /* Signed text carries the meaning; the colour repeats it. */
 .tone { font-size: inherit; }
