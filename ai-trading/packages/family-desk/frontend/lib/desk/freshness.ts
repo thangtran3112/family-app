@@ -455,7 +455,7 @@ export const PRACTICE_COPY = {
   reviewBalance: "Balance {before} → {after}",
   reviewNoPicks: "You did not star or trade a name",
   reviewEmpty: "No moves to show for this day",
-  backToList: "Back to the list",
+  backToList: "Back to the day list",
   dayAfter: "Next day",
   dayAfterOpening: "Opening the next day…",
   dayFinished: "You have finished every day of this plan",
@@ -604,7 +604,7 @@ export const PRACTICE_COPY = {
   swingStopAt: "At your stop",
   swingPriorClose: "Prior close {price}",
   swingLastPrice: "Last {price}",
-  swingLastOneMinute: "Last {price} · one-minute close",
+  swingLastOneMinute: "Last {price} (1m close)",
   swingGap: "Gap {amount}",
   swingEarnings: "Earnings {when} · {timing}",
   swingExitHer: "Exit Day {day} · {price}",
@@ -815,6 +815,9 @@ export const PRACTICE_COPY = {
   overviewCurveTitle: "Balance over the days",
   overviewPlanTitle: "Plan and universe",
   overviewPlanCaption: "Thread plan",
+  // Fix wave 5S, stream 3 (the replay chart and its controls).
+  entryResets: "After an entry the stop price clears and Shares stay as typed",
+  entryResetsSwing: "After an entry the stop price clears and Shares go back to the suggested size",
 } as const;
 
 /** Words that must not appear in Practice copy: there is no order, position, fill or broker in this lane (02o §a5). */

@@ -61,7 +61,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing }
   if (!confirming) {
     return (
       <div className={styles.endBlock}>
-        <button type="button" className={`${styles.button} ${styles.quiet}`} disabled={busy} onClick={() => setConfirming(true)}>
+        <button type="button" className={styles.button} disabled={busy} onClick={() => setConfirming(true)}>
           {asDay ? "End day…" : "End session…"}
         </button>
         {hint && <span className={styles.muted}>{hint}</span>}
@@ -70,15 +70,17 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing }
   }
 
   return (
-    <div role="group" aria-label={asDay ? "Confirm ending the day" : "Confirm ending the session"} className={styles.confirm}>
-      <p className={styles.endText}>{warning}</p>
-      <div className={styles.confirmActions}>
-        <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
-          {endLabel}
-        </button>
-        <button type="button" className={styles.button} onClick={() => setConfirming(false)}>
-          Keep practicing
-        </button>
+    <div className={styles.endSlot}>
+      <div role="group" aria-label={asDay ? "Confirm ending the day" : "Confirm ending the session"} className={styles.confirm}>
+        <p className={styles.endText}>{warning}</p>
+        <div className={styles.confirmActions}>
+          <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
+            {endLabel}
+          </button>
+          <button type="button" className={styles.button} onClick={() => setConfirming(false)}>
+            Keep practicing
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -30,7 +30,7 @@ export function DesktopShell({ band, children }: { band: ShellBand; children: Re
 
 function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const { lane, leftCollapsed } = useDeskUi();
+  const { lane, leftCollapsed, chartFocus } = useDeskUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [leftSlot, setLeftSlot] = useState<HTMLElement | null>(null);
   // Practice pages (02o §a1) get the amber band; the replay, the day list and the journal swap the watchlists for their own left panel.
@@ -42,7 +42,7 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
   return (
     <RailSlotContext.Provider value={slot}>
       <LeftSlotContext.Provider value={ownLeft ? leftSlot : null}>
-      <div className="dk-shell" data-band={band} data-left={leftCollapsed && !ownLeft && !moreLeft ? "collapsed" : "open"} data-practice={practice ? "true" : undefined}>
+      <div className="dk-shell" data-band={band} data-left={leftCollapsed && !ownLeft && !moreLeft ? "collapsed" : "open"} data-practice={practice ? "true" : undefined} data-focus={practice && chartFocus ? "chart" : undefined}>
         <a className="skip-link" href="#main-content">Skip to content</a>
         <div className="dk-top"><TopBar band={band} /></div>
         {practice && <div className="dk-band"><PracticeBand /></div>}

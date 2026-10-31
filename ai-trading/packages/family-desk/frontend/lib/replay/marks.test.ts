@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { delta, mark, openTrade } from "./fixtures.ts";
-import { barStartFor, canUndoLast, entrySince, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
+import { defaultChartPrefs, togglePref } from "./chartPrefs.ts";
+import { barStartFor, canUndoLast, chartLevels, declutterMarkers, entrySince, firstDrawBars, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
 import { ReplaySignalSchema, type ReplayBar, type ReplayMark } from "./schemas.ts";
 import { ms } from "./time.ts";
 
@@ -113,4 +114,98 @@ test("the open trade's 'since' is the time of its entry mark", () => {
   assert.equal(entrySince([earlier, entry], { trade_no: 1 }), "2026-04-07T13:35:00Z");
   assert.equal(entrySince([earlier], { trade_no: 2 }), null, "no mark for that trade: no time is made up");
   assert.equal(entrySince([entry], null), null);
+});
+
+// ---- R-01..R-03: what the chart draws for her level toggles ---------------------------------------------------------
+
+const flatDay = { prior_close: 99.54, session_high: 90.26, session_low: 86, opening_range_high: 90.26, opening_range_low: 86 };
+const labels = (lines: Array<{ label: string }>) => lines.map((line) => line.label);
+
+test("each level line has an id the toggles filter by, not a label string", () => {
+  assert.deepEqual(levelLines(delta.levels).map((line) => line.id), ["prior_close", "session", "session", "opening_range", "opening_range"]);
+});
+
+test("with every level on and no two alike, the chart draws all five lines in the table's order", () => {
+  assert.deepEqual(labels(chartLevels(delta.levels, defaultChartPrefs())), ["Prior close", "Session high", "Session low", "OR high", "OR low"]);
+});
+
+test("coincident levels become one line with both names (D-099: eight tags at one price)", () => {
+  const lines = chartLevels(flatDay, defaultChartPrefs());
+  assert.deepEqual(labels(lines), ["Prior close", "OR high · Session high", "OR low · Session low"]);
+  assert.deepEqual(lines.map((line) => line.price), [99.54, 90.26, 86]);
+  assert.ok(lines.every((line) => line.color === "#9B9BA1" && line.style === "dotted"));
+});
+
+test("levels within one cent merge; two cents apart stay two lines", () => {
+  assert.deepEqual(labels(chartLevels({ session_high: 90.27, opening_range_high: 90.26 }, defaultChartPrefs())), ["OR high · Session high"]);
+  assert.deepEqual(labels(chartLevels({ session_high: 90.28, opening_range_high: 90.26 }, defaultChartPrefs())), ["Session high", "OR high"]);
+  assert.deepEqual(labels(chartLevels({ prior_close: 100, session_high: 100, opening_range_high: 100 }, defaultChartPrefs())), ["OR high · Session high · Prior close"]);
+});
+
+test("a level she turned off is gone before the merge, so the other keeps its own name", () => {
+  const noSession = togglePref(defaultChartPrefs(), "session");
+  assert.deepEqual(labels(chartLevels(flatDay, noSession)), ["Prior close", "OR high", "OR low"]);
+  const noOr = togglePref(defaultChartPrefs(), "opening_range");
+  assert.deepEqual(labels(chartLevels(flatDay, noOr)), ["Prior close", "Session high", "Session low"]);
+  const noPrior = togglePref(defaultChartPrefs(), "prior_close");
+  assert.deepEqual(labels(chartLevels(flatDay, noPrior)), ["OR high · Session high", "OR low · Session low"]);
+  let none = defaultChartPrefs();
+  for (const id of ["prior_close", "session", "opening_range"] as const) none = togglePref(none, id);
+  assert.deepEqual(chartLevels(flatDay, none), []);
+});
+
+test("the Levels list under the chart is not filtered or merged", () => {
+  assert.equal(levelRows(flatDay).length, 5);
+});
+
+test("a level that is not published yet is skipped, never drawn at zero", () => {
+  assert.deepEqual(labels(chartLevels({ prior_close: 99.54, session_high: 90.26, session_low: 89.9 }, defaultChartPrefs())), ["Prior close", "Session high", "Session low"]);
+});
+
+// ---- R-03: marker labels that print over each other ----------------------------------------------------------------
+
+const minute = (index: number) => `2026-04-07T${String(13 + Math.floor((30 + index) / 60)).padStart(2, "0")}:${String((30 + index) % 60).padStart(2, "0")}:00Z`;
+const run = Array.from({ length: 60 }, (_, index) => bar(minute(index)));
+const at = (index: number, kind: "practice_long" | "practice_short" | "practice_exit" | "would_fire", label: string) => ({ time: run[index]!.t, kind, label });
+
+test("three trades inside a few bars keep one label each side: the newest wins, the shape still shows", () => {
+  const out = declutterMarkers([at(10, "practice_long", "Practice long 100"), at(14, "practice_long", "Practice long 50"), at(18, "practice_long", "Practice long 25")], run);
+  assert.deepEqual(out.map((marker) => marker.label), ["", "", "Practice long 25"]);
+  assert.deepEqual(out.map((marker) => marker.time), [run[10]!.t, run[14]!.t, run[18]!.t], "no marker is removed");
+});
+
+test("labels far enough apart all stay", () => {
+  const input = [at(5, "practice_long", "Practice long 100"), at(30, "practice_exit", "Practice exit"), at(55, "practice_short", "Practice short 100")];
+  assert.deepEqual(declutterMarkers(input, run), input);
+});
+
+test("two labels on one side stay when they are a dozen bars apart", () => {
+  const input = [at(5, "practice_long", "Practice long 100"), at(30, "practice_long", "Practice long 50")];
+  assert.deepEqual(declutterMarkers(input, run), input);
+});
+
+test("markers on different sides of the bar do not hide each other", () => {
+  const input = [at(10, "practice_long", "Practice long 100"), at(12, "practice_short", "Practice short 100"), at(13, "practice_exit", "Practice exit")];
+  assert.deepEqual(declutterMarkers(input, run).map((marker) => marker.label), ["Practice long 100", "Practice short 100", "Practice exit"]);
+});
+
+test("a bell near a practice short is on the same side, so only the newest label stays", () => {
+  const out = declutterMarkers([at(20, "would_fire", "ORB long"), at(22, "practice_short", "Practice short 100")], run);
+  assert.deepEqual(out.map((marker) => marker.label), ["", "Practice short 100"]);
+});
+
+test("declutter does not reorder markers or change the input", () => {
+  const input = [at(18, "practice_long", "b"), at(10, "practice_long", "a")];
+  const copy = structuredClone(input);
+  assert.deepEqual(declutterMarkers(input, run).map((marker) => marker.time), [run[18]!.t, run[10]!.t]);
+  assert.deepEqual(input, copy);
+});
+
+// ---- R-03: the first draw spans one session at most ----------------------------------------------------------------
+
+test("the first draw shows 90 bars, or one regular session (6.5 hours) when that is fewer", () => {
+  assert.equal(firstDrawBars("1m"), 90);
+  assert.equal(firstDrawBars("5m"), 78);
+  assert.equal(firstDrawBars("15m"), 26, "a 15m axis no longer runs from the pre-market to the next morning (D-099)");
+  assert.equal(firstDrawBars("1d"), 90);
 });

@@ -227,7 +227,9 @@ export function stripRowView(row: StripRow): StripRowView {
   const label = [row.symbol, row.source === "hold" ? "practice hold" : "focus name", `last ${last}`, change, sub, amber ? "stop crossed" : null]
     .filter((part) => part !== null)
     .join(", ");
-  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeTone(row.chg_pct), sub, amber, label };
+  // The colour follows the rounded text: -0.01% reads "0.0%" and is flat, not red (D-148).
+  const shown = row.chg_pct == null ? row.chg_pct : Number(row.chg_pct.toFixed(1));
+  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeTone(shown), sub, amber, label };
 }
 
 // -- header lines ---------------------------------------------------------------------------------------------

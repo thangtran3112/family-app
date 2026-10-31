@@ -78,7 +78,7 @@ test("the API's split note is shown as it is, and a short is signed for its side
 test("a crossed stop and a gap read in plain words, with the price basis of the moment", () => {
   const row = holdRowView(gappedHold);
   assert.deepEqual([row.stop, row.stopCrossed, row.value, row.result, row.resultTone, row.gap], ["Stop 178.50 crossed", true, "Last 177.40", "−$680.00", "down", "Gap −$1,270.00"]);
-  assert.equal(holdRowView(gappedHold, "off").value, "Last 177.40 · one-minute close");
+  assert.equal(holdRowView(gappedHold, "off").value, "Last 177.40 (1m close)");
   assert.equal(holdStopText({ stop_price: null, stop_hit: "no" }), "No stop");
 });
 
@@ -92,7 +92,7 @@ test("a closed hold shows its exit and its final P/L; an automatic exit says so"
 test("the price label is the prior close until anything of the day is revealed, then the last price", () => {
   assert.equal(priceBasisLabel("prior_close", 187.4), "Prior close 187.40");
   assert.equal(priceBasisLabel("last", 182.1), "Last 182.10");
-  assert.equal(priceBasisLabel("last", 182.35, "off"), "Last 182.35 · one-minute close");
+  assert.equal(priceBasisLabel("last", 182.35, "off"), "Last 182.35 (1m close)");
   assert.equal(priceBasisLabel("prior_close", 187.4, "off"), "Prior close 187.40");
   assert.equal(priceBasisLabel(undefined, 188.05), "Last 188.05", "a day session names no basis");
   assert.equal(priceBasisLabel(null, null), "—");
@@ -168,6 +168,16 @@ test("a strip row shows the last price and change; a hold adds its P/L and stop 
   assert.deepEqual([coin!.last, coin!.change, coin!.sub, coin!.amber, coin!.source], ["305.10", "+1.2%", null, false, "focus"]);
   assert.deepEqual([uber!.last, uber!.change, uber!.changeTone], ["—", "—", "flat"], "no price before the day's first one");
   assert.match(amd!.label, /AMD, practice hold, last 168\.40, \+6\.3%, Short 50 · −\$320\.00 · 0\.2% past your stop, stop crossed/);
+});
+
+test("the strip's % colour follows the rounded text: -0.01% and +0.01% both read 0.0% and are flat (D-148, R-07)", () => {
+  const row = (chg_pct: number | null) => stripRowView({ symbol: "S03", source: "focus", last: 100, chg_pct, hold: null });
+  for (const tiny of [-0.01, 0.01, -0.04, 0.049]) {
+    assert.deepEqual([row(tiny).change, row(tiny).changeTone], ["0.0%", "flat"], String(tiny));
+  }
+  assert.deepEqual([row(-0.06).change, row(-0.06).changeTone], ["−0.1%", "down"], "a move that shows a digit keeps its colour");
+  assert.deepEqual([row(0.06).change, row(0.06).changeTone], ["+0.1%", "up"]);
+  assert.equal(row(null).changeTone, "flat");
 });
 
 test("dates stay hidden unless the setup says otherwise", () => {
