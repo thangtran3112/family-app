@@ -17,12 +17,12 @@ Paths are relative to the repository root.
 
 - All tailnet configuration is Terraform in `infrastructure/tailscale/`. The operator applies it; CI never does.
 - No console edits. No `tailscale` CLI change to the tailnet. No device enrollment from this package.
-- The one console action is the operator creating the Terraform OAuth credential, recorded in `infrastructure/tailscale/README.md`.
+- Console actions belong to the operator: creating the Terraform credential, and, once the policy is applied, the enrollment credential (scope `auth_keys`, tag `tag:family-host`). Both are recorded in `infrastructure/tailscale/README.md`.
 - To add a host, tag, port, or ACL flow: change the Terraform, run `infrastructure/tailscale/run-terraform.sh plan`, and hand `apply` to the operator.
 
 ## Credentials
 
-- They live only in Firestore `shared/tailscale` (`TAILSCALE_TAILNET`, `TAILSCALE_TF_OAUTH_CLIENT_ID`, `TAILSCALE_TF_OAUTH_CLIENT_SECRET`). Read them only through `common/config/family_config.py`, inside the repository scripts.
+- They live only in Firestore `shared/tailscale` (`TAILSCALE_TAILNET`, `TAILSCALE_TF_OAUTH_CLIENT_ID`, `TAILSCALE_TF_OAUTH_CLIENT_SECRET`, `TAILSCALE_ENROLL_OAUTH_CLIENT_ID`, `TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET`). Read them only through `common/config/family_config.py`, inside the repository scripts.
 - Never print, log, echo, or commit a value. Names are fine.
 - Never run `tailscale up` on your own initiative.
 - Never put an email address, tailnet name, MagicDNS suffix, device name, IP address, or client ID in the repository.
