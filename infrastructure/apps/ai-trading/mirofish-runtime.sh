@@ -18,7 +18,7 @@
 # that those two functions are defined by the *caller*, not here.
 #
 # No real Firestore, Docker, or VPS credential is used by this file itself;
-# it only defines functions. ai-trading/deploy/ci/test-deploy-firestore.sh
+# it only defines functions. infrastructure/apps/ai-trading/tests/test-deploy-firestore.sh
 # copies this file's content ahead of deploy.sh's own sourced functions for
 # its offline fixtures (see that file's source_lib()).
 

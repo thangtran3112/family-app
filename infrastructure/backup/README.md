@@ -19,7 +19,7 @@ Architecture context: [`ARCHITECTURE.md`](../../expense-tax-management/plans/ARC
 | `test-backup.sh` | **Fast, Docker-free.** Wired into `pnpm ci:test` via `check:vps-backup-infrastructure`. |
 | `test-backup-docker.sh` | **Slow, Docker.** Full dump→encrypt→upload→decrypt round trip against a disposable PostgreSQL 17 + fake-GCS. Not wired into CI. Run manually (below). |
 | `test-restore.sh` | **Slow, Docker.** End-to-end seeded-source → empty-destination restore proof (full backup + one ordered daily delta). Not wired into CI. Run manually (below). |
-| `family-app-backup.service` / `.timer` / `family-app-backup-retry.service` | Task 6 systemd units. Installed by `infrastructure/vps/steps/40-backup.sh` (opt-in `bootstrap.sh --only backup`). |
+| `family-app-backup.service` / `.timer` / `family-app-backup-retry.service` | Task 6 systemd units. Installed by `infrastructure/host/steps/40-backup.sh` (opt-in `bootstrap.sh --only backup`). |
 | `check-backup-freshness.sh` | Local health command: fails when the latest successful backup is ≥24h old. Fast, Docker-free; wired into CI via `check:vps-backup-infrastructure`. |
 | `test-systemd-units.sh` | Fast, Docker-free static checks on the three unit files above (timer cadence, runtime deadlines, retry bounds, read-only/tmpfs run contract, no literal secrets). Wired into CI. |
 | `test-check-backup-freshness.sh` | Fast, Docker-free checks for `check-backup-freshness.sh`. Wired into CI. |

@@ -9,8 +9,9 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HEALTH_SH="${HEALTH_SH_OVERRIDE:-$SCRIPT_DIR/../production/health-check.sh}"
-CONTROL_DIR="$SCRIPT_DIR/../../control"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+HEALTH_SH="${HEALTH_SH_OVERRIDE:-$SCRIPT_DIR/../health-check.sh}"
+CONTROL_DIR="$REPO_ROOT/ai-trading/control"
 ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 PASS=0

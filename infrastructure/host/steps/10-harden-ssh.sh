@@ -24,7 +24,7 @@ set -euo pipefail
 
 DROPIN=/etc/ssh/sshd_config.d/01-family-app-hardening.conf
 DESIRED=$(cat <<EOF
-# Managed by family-app/infrastructure/vps/steps/10-harden-ssh.sh
+# Managed by family-app/infrastructure/host/steps/10-harden-ssh.sh
 # Sorts before 50-cloud-init.conf so these values actually win
 # (sshd_config uses first-obtained-value-wins per directive).
 Port ${TARGET_SSH_PORT}

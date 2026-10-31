@@ -12,7 +12,10 @@ on:
       # Task 5 (app-controls): the Linux installer lives outside ai-trading/
       # entirely -- without this, an installer-only change would never
       # trigger this workflow's own scripts/shellcheck job at all.
-      - "infrastructure/vps/app-controls/**"
+      - "infrastructure/host/app-controls/**"
+      # 0001b-1: ai-trading's production compose/deploy/Caddyfile/health-check
+      # scripts and their tests live under infrastructure/apps/ai-trading/.
+      - "infrastructure/apps/ai-trading/**"
   workflow_dispatch:
 
 concurrency:
@@ -287,19 +290,20 @@ jobs:
         run: |
           shopt -s nullglob
           files=(ai-trading/deploy/upstream/terminal/*.sh ai-trading/deploy/ci/*.sh
-            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh
-            infrastructure/vps/app-controls/*.sh)
+            infrastructure/apps/ai-trading/*.sh infrastructure/apps/ai-trading/tests/*.sh
+            infrastructure/cloudflare/ai-trading/*.sh
+            infrastructure/host/app-controls/*.sh)
           shellcheck "${files[@]}"
       - name: Upload-mirofish-static mock-gcloud test
         run: ai-trading/deploy/ci/upload-mirofish-static.test.sh
       - name: Clerk publishable key validator test (F1 fix round 1)
         run: ai-trading/deploy/ci/check-clerk-publishable-key.test.sh
       - name: deploy.sh Firestore-render test (A9a1)
-        run: ai-trading/deploy/ci/test-deploy-firestore.sh
+        run: infrastructure/apps/ai-trading/tests/test-deploy-firestore.sh
       - name: app-controls deploy/installer test (Task 5)
-        run: ai-trading/deploy/ci/test-app-controls-deploy.sh
+        run: infrastructure/apps/ai-trading/tests/test-app-controls-deploy.sh
       - name: Health-check rollback mode (offline)
-        run: ai-trading/deploy/ci/test-health-rollback.sh
+        run: infrastructure/apps/ai-trading/tests/test-health-rollback.sh
       - name: Control helper tests (Task 5/7)
         # Must run as root on real Linux, matching the private helper's
         # actual production identity (control/state.py's owner_uid
@@ -311,9 +315,12 @@ jobs:
         # a disposable, network-disabled container run as its default
         # root user is required, not the host shell directly. Read-only
         # source mount only; no chmod/ownership change on the host.
-        run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
+        # The second mount puts the moved prepare-mirofish.sh /
+        # mirofish-runtime.sh where test_runtime.py looks for them
+        # (REPO_ROOT.parent / infrastructure/apps/ai-trading, REPO_ROOT=/app).
+        run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -v "$PWD/infrastructure/apps/ai-trading:/infrastructure/apps/ai-trading:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
       - name: render-env.sh test (A9a2)
-        run: ai-trading/deploy/ci/test-render-env.sh
+        run: infrastructure/apps/ai-trading/tests/test-render-env.sh
       - name: Auth service tests
         working-directory: ai-trading/auth
         run: |
@@ -322,7 +329,7 @@ jobs:
       - name: app-controls real-Caddy/auth/helper gateway test (Task 4/7)
         # Needs ai-trading/auth/node_modules (real @clerk/backend), so it
         # runs after "Auth service tests" installs them, never before.
-        run: ai-trading/deploy/ci/test-app-controls-gateway.sh
+        run: infrastructure/apps/ai-trading/tests/test-app-controls-gateway.sh
       - name: Vibe golden evaluation offline tests
         run: |
           python3 -m venv "$RUNNER_TEMP/vibe-eval-venv"
@@ -345,10 +352,10 @@ jobs:
           for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway vibe-consensus cloudflared auth market-data market-data-bridge desk; do : >"$secrets/$name.env"; done
           export AI_TRADING_SECRETS_DIR="$secrets"
           export AI_TRADING_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567
-          docker compose -f ai-trading/deploy/production/docker-compose.yml \
-            -f ai-trading/deploy/production/docker-compose.mirofish.yml config --quiet
-          docker compose -f ai-trading/deploy/production/docker-compose.yml \
-            -f ai-trading/deploy/production/docker-compose.mirofish.yml \
+          docker compose -f infrastructure/apps/ai-trading/docker-compose.yml \
+            -f infrastructure/apps/ai-trading/docker-compose.mirofish.yml config --quiet
+          docker compose -f infrastructure/apps/ai-trading/docker-compose.yml \
+            -f infrastructure/apps/ai-trading/docker-compose.mirofish.yml \
             -f ai-trading/deploy/local/docker-compose.override.yml config --quiet
 
   desk-caddy-acceptance:
@@ -359,7 +366,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Current production source stays Desk-dark
-        run: ai-trading/deploy/ci/test-l6-desk.sh
+        run: infrastructure/apps/ai-trading/tests/test-l6-desk.sh
 
   images:
     name: Images and smoke tests

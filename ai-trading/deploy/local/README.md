@@ -37,8 +37,8 @@ This stack's own `deploy/local/Caddyfile` (loaded by the `router` service in ste
 
    ```bash
    docker compose -p ai-trading-local --env-file ai-trading/deploy/local/local.env \
-     -f ai-trading/deploy/production/docker-compose.yml \
-     -f ai-trading/deploy/production/docker-compose.mirofish.yml \
+     -f infrastructure/apps/ai-trading/docker-compose.yml \
+     -f infrastructure/apps/ai-trading/docker-compose.mirofish.yml \
      -f ai-trading/deploy/local/docker-compose.override.yml up -d --wait
    ```
 

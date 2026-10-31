@@ -64,21 +64,22 @@
 # directory, or a malformed threshold fails the deploy before any secret,
 # container, or tag is touched; the 30 GiB default is checked at its boundary.
 #
-# Usage: ai-trading/deploy/ci/test-deploy-firestore.sh
+# Usage: infrastructure/apps/ai-trading/tests/test-deploy-firestore.sh
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEPLOY_SH="$SCRIPT_DIR/../production/deploy.sh"
-HEALTH_SH="$SCRIPT_DIR/../production/health-check.sh"
-MIROFISH_LIB_SH="$SCRIPT_DIR/../production/mirofish-runtime.sh"
-COMPOSE_FILE="$SCRIPT_DIR/../production/docker-compose.yml"
-MIROFISH_COMPOSE_FILE="$SCRIPT_DIR/../production/docker-compose.mirofish.yml"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+DEPLOY_SH="$SCRIPT_DIR/../deploy.sh"
+HEALTH_SH="$SCRIPT_DIR/../health-check.sh"
+MIROFISH_LIB_SH="$SCRIPT_DIR/../mirofish-runtime.sh"
+COMPOSE_FILE="$SCRIPT_DIR/../docker-compose.yml"
+MIROFISH_COMPOSE_FILE="$SCRIPT_DIR/../docker-compose.mirofish.yml"
 # Task 5 (app-controls): the real control/catalog.json + control/state.py
 # (never a fake) stand in for the staged control/* CONFIG_FILES entries --
 # stage_configs()'s own new validate_staged_control_content() imports
 # state.py to check catalog.json's schema, so a fixture copy must be the
 # genuine, importable module, not a hand-rolled stand-in.
-CONTROL_DIR_REAL="$SCRIPT_DIR/../../control"
+CONTROL_DIR_REAL="$REPO_ROOT/ai-trading/control"
 [[ -f "$DEPLOY_SH" ]] || { echo "test-deploy-firestore: missing $DEPLOY_SH" >&2; exit 1; }
 [[ -f "$HEALTH_SH" ]] || { echo "test-deploy-firestore: missing $HEALTH_SH" >&2; exit 1; }
 [[ -f "$MIROFISH_LIB_SH" ]] || { echo "test-deploy-firestore: missing $MIROFISH_LIB_SH" >&2; exit 1; }

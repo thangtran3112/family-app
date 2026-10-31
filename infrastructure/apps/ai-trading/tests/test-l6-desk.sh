@@ -7,25 +7,25 @@
 # test-deploy-firestore.sh's own real-Docker cases. No live Firestore, VPS,
 # or secret value is used anywhere in this file.
 #
-# Run from this repository's own ai-trading/deploy/ci/ directory (resolves
-# its sibling ai-trading/deploy/production/ files the same way the real
-# deploy/ci/*.sh scripts resolve the real production/ files).
+# Run from this repository's own infrastructure/apps/ai-trading/tests/ directory
+# (resolves its sibling infrastructure/apps/ai-trading/ files the same way the
+# real deploy scripts resolve them).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROD_DIR="$SCRIPT_DIR/../production"
+PROD_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEPLOY_SH="$PROD_DIR/deploy.sh"
 HEALTH_SH="$PROD_DIR/health-check.sh"
 COMPOSE_FILE="$PROD_DIR/docker-compose.yml"
 MIROFISH_COMPOSE_FILE="$PROD_DIR/docker-compose.mirofish.yml"
 CADDYFILE="$PROD_DIR/Caddyfile"
-BAKE_HCL="$SCRIPT_DIR/../docker-bake.hcl"
-AI_TRADING_ROOT="$SCRIPT_DIR/../.."
+AI_TRADING_ROOT="$(cd "$SCRIPT_DIR/../../../../ai-trading" && pwd)"
+BAKE_HCL="$AI_TRADING_ROOT/deploy/docker-bake.hcl"
 DOCKERFILE="$AI_TRADING_ROOT/packages/family-desk/backend/Dockerfile"
 
 # Task 3.6 only owns the Dockerfile/bake/compose/Caddyfile/deploy.sh (its own
 # Files list) -- Task 3.1's docker/postgres/zz-20-desk-roles.sh and
-# infrastructure/vps/apps/ai-trading-desk.conf are a different task and are
+# infrastructure/host/apps/ai-trading-desk.conf are a different task and are
 # not required to exist on this lane's own base.
 for f in "$DEPLOY_SH" "$HEALTH_SH" "$COMPOSE_FILE" "$MIROFISH_COMPOSE_FILE" "$CADDYFILE" "$BAKE_HCL" "$DOCKERFILE"; do
   [[ -f "$f" ]] || { echo "test-l6-desk: missing $f" >&2; exit 1; }
@@ -87,7 +87,7 @@ if grep -q 'desk-postgres-data' "$COMPOSE_FILE"; then
 else
   ok "no desk-postgres-data volume"
 fi
-if grep -rq 'ib-gateway' "$PROD_DIR" "$AI_TRADING_ROOT/packages/family-desk" 2>/dev/null; then
+if grep -rq --exclude-dir=tests 'ib-gateway' "$PROD_DIR" "$AI_TRADING_ROOT/packages/family-desk" 2>/dev/null; then
   fail "ib-gateway referenced somewhere in this lane (D-c: no IBKR in Phase 3)"
 else
   ok "no ib-gateway reference anywhere in this lane"
@@ -330,7 +330,7 @@ else
   run_case12
 fi
 
-# --- Case 13: SKIPPED. Walking up from this real deploy/ci/ directory to
+# --- Case 13: SKIPPED. Walking up from this real tests/ directory to
 # build the real Dockerfile against the real common/+packages/family-desk/
 # backend/ would need a real `uv lock`/network-reachable build, which no
 # offline CI case should depend on -- the equivalent check is a manual

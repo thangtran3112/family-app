@@ -51,7 +51,7 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
   | `common/config/family_config.py` | Shared Firestore `family-config` CLI (all apps; not ai-trading-specific) |
   | `infrastructure/gcp/family-config/` | Firestore bootstrap and VPS reader-key install/rotation (operator-applied) |
   | `infrastructure/gcp/bootstrap-state.sh` | Terraform state bucket bootstrap |
-  | `infrastructure/vps/bootstrap.sh` | Host bootstrap |
+  | `infrastructure/host/bootstrap.sh` | Host bootstrap |
 
 - Application deployment artifacts (compose file, deploy and health scripts) live in `ai-trading/deploy/`.
 - The VPS is shared with the expense stack. Touch only ai-trading's own containers, images, and volumes; never run a global `docker system prune` or remove images you did not build. `deploy.sh` prunes only commit-tagged `ai-trading-*` images, and refuses to deploy below 30 GiB free.

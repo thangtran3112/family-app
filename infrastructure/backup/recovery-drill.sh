@@ -38,7 +38,7 @@
 #   RECOVERY_SMOKE_TEST_CMD          Optional authenticated product smoke test.
 #   RECOVERY_DEADLINE_SECONDS        Default 7200 (2 hours, the plan's RTO).
 #   RECOVERY_POSTGRES_CONTAINER      Default "family-app-postgres" (the name
-#                                    infrastructure/vps/steps/30-postgres.sh
+#                                    infrastructure/host/steps/30-postgres.sh
 #                                    actually uses). Configurable here on
 #                                    purpose -- fix round 2: this used to be
 #                                    hardcoded into deploy/production/health-check.sh,

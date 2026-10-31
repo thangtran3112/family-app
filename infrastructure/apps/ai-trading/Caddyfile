@@ -1,4 +1,4 @@
-# ai-trading/deploy/production/Caddyfile
+# infrastructure/apps/ai-trading/Caddyfile
 # The "gateway" service. Every reverse-proxy and WebSocket-upgrade concern
 # lives here, declaratively -- there is no hand-written Node proxy anywhere
 # in this plan (see Global Constraints). "auth" (ai-trading/auth) is the only

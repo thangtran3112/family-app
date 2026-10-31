@@ -4,10 +4,10 @@
 # the ai-trading/cloudflare family-config profile). The three upstream env
 # files (tradingagents, ai-hedge-fund, vibe-trading) and the gateway/auth
 # profile are rendered on the VPS itself at deploy time
-# (ai-trading/deploy/production/deploy.sh), not here -- this script never
+# (infrastructure/apps/ai-trading/deploy.sh), not here -- this script never
 # calls infrastructure/secrets/env-bundle.py and never reads the old
 # ai-trading-env-bundle Secret Manager blob.
-# Usage: ai-trading/deploy/ci/render-env.sh OUT_DIR
+# Usage: infrastructure/apps/ai-trading/render-env.sh OUT_DIR
 set -Eeuo pipefail
 umask 077
 

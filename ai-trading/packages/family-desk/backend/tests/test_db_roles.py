@@ -1,6 +1,6 @@
 """Shared-cluster role split (owner decision 2026-10-12, D-e): `zz-20-desk-roles.sh` creates
 `desk_migrator` (owns the schema, runs Alembic) and `desk_runtime` (CRUD only, no CREATE/DROP) the
-same way `infrastructure/vps/steps/30-postgres.sh` applies it on the real shared cluster. This
+same way `infrastructure/host/steps/30-postgres.sh` applies it on the real shared cluster. This
 proves the migration and the runtime grants work under the cluster's real role split, not just the
 test superuser `db_engine` otherwise connects as. Needs a real Postgres (`scripts/test-db.sh`).
 

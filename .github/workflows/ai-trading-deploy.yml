@@ -12,7 +12,10 @@ on:
       - "common/config/**"
       # Task 5 (app-controls): the Linux installer lives outside ai-trading/
       # entirely -- without this, an installer-only fix would never deploy.
-      - "infrastructure/vps/app-controls/**"
+      - "infrastructure/host/app-controls/**"
+      # 0001b-1: production compose, Caddyfile, deploy.sh, health-check.sh,
+      # render-env.sh and the MiroFish scripts live here now.
+      - "infrastructure/apps/ai-trading/**"
   workflow_dispatch:
     inputs:
       deploy_app:
@@ -192,10 +195,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: |
-            ai-trading/deploy/production
-            ai-trading/deploy/ci
+            infrastructure/apps/ai-trading
             ai-trading/control
-            infrastructure/vps/app-controls
+            infrastructure/host/app-controls
             common/config
           persist-credentials: false
 
@@ -211,7 +213,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Render production env files
-        run: ai-trading/deploy/ci/render-env.sh "$RUNNER_TEMP/ai-trading-env"
+        run: infrastructure/apps/ai-trading/render-env.sh "$RUNNER_TEMP/ai-trading-env"
 
       - name: Fetch VPS deploy SSH key and known hosts
         run: |
@@ -255,15 +257,15 @@ jobs:
           # staged, never pre-installed as active config -- deploy.sh itself now
           # validates, backs up, and atomically installs them (A10a).
           scp "${scp_opts[@]}" \
-            ai-trading/deploy/production/deploy.sh \
+            infrastructure/apps/ai-trading/deploy.sh \
             common/config/family_config.py \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/"
           scp "${scp_opts[@]}" \
-            ai-trading/deploy/production/docker-compose.yml \
-            ai-trading/deploy/production/docker-compose.mirofish.yml \
-            ai-trading/deploy/production/Caddyfile \
-            ai-trading/deploy/production/health-check.sh \
-            infrastructure/vps/app-controls/ai-trading-control.service \
+            infrastructure/apps/ai-trading/docker-compose.yml \
+            infrastructure/apps/ai-trading/docker-compose.mirofish.yml \
+            infrastructure/apps/ai-trading/Caddyfile \
+            infrastructure/apps/ai-trading/health-check.sh \
+            infrastructure/host/app-controls/ai-trading-control.service \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/"
           # Task 5 (app-controls, fix round 1): the control helper's own
           # code/catalog and the standalone MiroFish preparer it depends on
@@ -284,16 +286,16 @@ jobs:
             ai-trading/control/server.py \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/control/"
           scp "${scp_opts[@]}" \
-            ai-trading/deploy/production/mirofish-runtime.sh \
-            ai-trading/deploy/production/prepare-mirofish.sh \
+            infrastructure/apps/ai-trading/mirofish-runtime.sh \
+            infrastructure/apps/ai-trading/prepare-mirofish.sh \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/config/deploy/production/"
-          # The Linux BOOTSTRAP (infrastructure/vps/app-controls/install.sh)
+          # The Linux BOOTSTRAP (infrastructure/host/app-controls/install.sh)
           # and the two files it actually runs (never installs) from its own
           # staged source -- no provider keys, pure code. It never touches
           # $APP_DIR/control or any unit file; deploy.sh's own transaction
           # above owns those end-to-end.
           scp "${scp_opts[@]}" \
-            infrastructure/vps/app-controls/install.sh \
+            infrastructure/host/app-controls/install.sh \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/bootstrap/"
           scp "${scp_opts[@]}" \
             ai-trading/control/catalog.json \

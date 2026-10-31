@@ -506,7 +506,7 @@ class RuntimeTest(unittest.TestCase):
 
 class PrepareMirofishScriptTest(unittest.TestCase):
     """Concern (4): durable automated regression coverage for the REAL
-    `production/prepare-mirofish.sh` entrypoint -- not `FakeDocker`, not a
+    `infrastructure/apps/ai-trading/prepare-mirofish.sh` entrypoint -- not `FakeDocker`, not a
     manual-only claim. Runs the actual script as a subprocess against a fake
     `docker` on PATH and a fake `family_config.py`, entirely under one
     `tempfile.TemporaryDirectory()` outside the repository. No real Docker
@@ -514,8 +514,11 @@ class PrepareMirofishScriptTest(unittest.TestCase):
     no real Firestore/provider call, no `.env`/key file inside `ai-trading/`.
     """
 
-    SCRIPT = REPO_ROOT / "deploy" / "production" / "prepare-mirofish.sh"
-    MIROFISH_LIB = REPO_ROOT / "deploy" / "production" / "mirofish-runtime.sh"
+    # Moved from ai-trading/deploy/production/ to infrastructure/apps/ai-trading/ (0001b-1); the
+    # host-side staged layout (deploy/production/) is unchanged and is rebuilt under tmp below.
+    _INFRA_APP_DIR = REPO_ROOT.parent / "infrastructure" / "apps" / "ai-trading"
+    SCRIPT = _INFRA_APP_DIR / "prepare-mirofish.sh"
+    MIROFISH_LIB = _INFRA_APP_DIR / "mirofish-runtime.sh"
     CONTROL_SRC_DIR = REPO_ROOT / "control"
     # The two fixed-constant lines a staged copy may substitute -- always
     # matched verbatim and asserted unique, so a future reformat/rename of
@@ -555,6 +558,13 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         )
         self.write_fake_docker()
         self.staged_script = self._stage_real_script_with_fake_docker()
+        # The script resolves control/ as ../../control from its OWN path (the deployed
+        # $APP_DIR/deploy/production/ layout), which the repo checkout no longer has after the
+        # 0001b-1 move to infrastructure/apps/ai-trading/. Run an unmodified staged copy instead
+        # of the in-repo file.
+        self.unpatched_script = self._stage_real_script(
+            self.DOCKER_BIN_TARGET, self.DOCKER_BIN_TARGET, "unpatched"
+        )
 
     def _stage_real_script(self, target, replacement, name):
         """Copies the REAL prepare-mirofish.sh into this test's own writable
@@ -703,7 +713,7 @@ class PrepareMirofishScriptTest(unittest.TestCase):
         if env_overrides:
             env.update(env_overrides)
         argv = [
-            self.BASH, str(script or self.SCRIPT),
+            self.BASH, str(script or self.unpatched_script),
             "--app-dir", str(self.app_dir),
             "--secrets-dir", str(self.secrets_dir),
             "--runtime-dir", str(self.runtime_dir),

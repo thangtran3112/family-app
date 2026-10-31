@@ -27,7 +27,7 @@
 # Its DNS record below is a proxied, publicly resolvable CNAME to the same
 # tunnel, so anyone who learns this hostname can reach it directly. The
 # actual authentication boundary is the Caddy "gateway" service
-# (ai-trading/deploy/production/Caddyfile's `handle /api/*` block): it
+# (infrastructure/apps/ai-trading/Caddyfile's `handle /api/*` block): it
 # forward_auths every request against `auth:8181`'s HMAC cookie check
 # before reverse-proxying to `mirofish:5001`, regardless of which hostname
 # the request arrived on. This mirrors hub-static.tf's own corrected

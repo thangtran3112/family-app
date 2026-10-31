@@ -140,7 +140,7 @@ Terraform state contains sensitive tunnel material and must stay in GCS.
 From repository root, with local token file mode `0600`:
 
 ```bash
-./infrastructure/vps/bootstrap-cloudflared.sh \
+./infrastructure/host/bootstrap-cloudflared.sh \
   --host $VPS_IPV4_ADDRESS \
   --user ubuntu \
   --key ~/.ssh/id_ed25519_personal \
@@ -158,7 +158,7 @@ for application ports; Tunnel traffic is outbound.
 
 ## Migration to a new VPS
 
-1. Provision reachable Ubuntu VPS and complete existing `infrastructure/vps/bootstrap.sh` SSH/Docker/Postgres steps.
+1. Provision reachable Ubuntu VPS and complete existing `infrastructure/host/bootstrap.sh` SSH/Docker/Postgres steps.
 2. Apply this Terraform module only if Tunnel hostnames or ingress need changes; the remotely managed Tunnel identity remains in Cloudflare state.
 3. Export sensitive `tunnel_token` directly to a local `0600` file without printing it.
 4. Provide a pinned known-hosts file with mode `0600`, run

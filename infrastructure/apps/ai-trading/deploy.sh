@@ -91,7 +91,7 @@ APP_CONFIG_STAGING_DIR="${APP_CONFIG_STAGING_DIR:-}"
 RUNTIME_ENV_DIR="${AI_TRADING_RUNTIME_ENV_DIR:-/run/family-app/ai-trading}"
 export APP_DIR SECRETS_DIR RUNTIME_ENV_DIR
 # Task 5 (app-controls): the shared lifecycle lock/state file a cooperating
-# control helper (control/server.py, installed by infrastructure/vps/
+# control helper (control/server.py, installed by infrastructure/host/
 # app-controls/install.sh) and every PUT/reconcile operation also use --
 # never a deploy-only copy. AI_TRADING_CONTROL_OWNER_UID is test-only (a
 # non-root test process cannot create a uid-0-owned lock/state file; never

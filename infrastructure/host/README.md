@@ -81,7 +81,7 @@ need to without the orchestrator.
 ## Usage
 
 ```bash
-cd infrastructure/vps
+cd infrastructure/host
 
 # Brand-new VPS, first-ever connection (see "manual bridge gap" above):
 ./bootstrap.sh --host 1.2.3.4 --ssh-user ubuntu --ssh-key ~/.ssh/id_ed25519 \

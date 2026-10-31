@@ -38,7 +38,7 @@ export RECOVERY_VERIFY_ATTEMPTS=1 RECOVERY_VERIFY_DELAY_SECONDS=0
 
 # ---------------------------------------------------------------------------
 # verify_postgres_reachable(): defaults to "family-app-postgres" (the name
-# infrastructure/vps/steps/30-postgres.sh actually uses), configurable via
+# infrastructure/host/steps/30-postgres.sh actually uses), configurable via
 # RECOVERY_POSTGRES_CONTAINER.
 # ---------------------------------------------------------------------------
 unset RECOVERY_POSTGRES_CONTAINER 2>/dev/null || true
