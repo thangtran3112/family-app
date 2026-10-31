@@ -14,6 +14,9 @@ import {
   type SpecBlockErrors,
   type StrategySpecForm,
 } from "@/lib/spec/form";
+import { plainProblem } from "@/lib/desk/problemCopy";
+import { describeSpec } from "@/lib/spec/describe";
+import { optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
 import { symbolsFromDraft, symbolsToDraft } from "@/lib/spec/symbols";
 import type { WatchlistsResponseSchema } from "@/lib/api/schemas";
 import styles from "./builder.module.css";
@@ -157,7 +160,10 @@ function BlockErrors({ block, errors }: { block: SpecBlock; errors: SpecBlockErr
   if (!entries?.length) return null;
   return (
     <ul className={styles.errors} aria-label={`${block} validation errors`}>
-      {entries.map(({ path, message }, index) => <li key={`${path}-${index}`}><code>{path}</code>: {message}</li>)}
+      {entries.map((entry, index) => {
+        const { field, text } = plainProblem(entry);
+        return <li key={`${entry.path}-${index}`}><strong>{field}</strong>: {text}</li>;
+      })}
     </ul>
   );
 }
@@ -191,7 +197,7 @@ function NumberField({
 }
 
 function SelectField({
-  label, value, options, onChange, disabled, placeholder,
+  label, value, options, onChange, disabled, placeholder, labelOf = optionLabel,
 }: {
   label: string;
   value: string;
@@ -199,13 +205,15 @@ function SelectField({
   onChange: (value: string) => void;
   disabled: boolean;
   placeholder?: string;
+  /** How an option reads; the default turns engine ids into trader words. Pass `String` for user-typed names. */
+  labelOf?: (option: string) => string;
 }) {
   return (
     <label className={styles.field}>
       <span>{label}</span>
       <select disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} value={value}>
         {placeholder && value === "" && <option value="">{placeholder}</option>}
-        {options.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+        {options.map((option) => <option key={option} value={option}>{labelOf(option)}</option>)}
       </select>
     </label>
   );
@@ -230,14 +238,14 @@ function OperandEditor({
 
   return (
     <div className={styles.operand}>
-      <SelectField label={`${label} type`} value={kind} options={["series", "level", "value"]} onChange={switchKind} disabled={disabled} />
+      <SelectField label={label} value={kind} options={["series", "level", "value"]} onChange={switchKind} disabled={disabled} />
       {kind === "value" && (
-        <NumberField label={`${label} value`} value={record.value} onChange={(value) => update("value", value)} disabled={disabled} step="any" />
+        <NumberField label={`${label} number`} value={record.value} onChange={(value) => update("value", value)} disabled={disabled} step="any" />
       )}
       {kind === "series" && (
         <>
           <SelectField
-            label={`${label} series`}
+            label={`${label} indicator`}
             value={String(record.series)}
             options={SERIES}
             onChange={(series) => onChange(seriesDefaults(series))}
@@ -246,7 +254,7 @@ function OperandEditor({
           {(SERIES_NUMBERS[String(record.series)] ?? []).map((field) => (
             <NumberField
               key={field}
-              label={`${label} ${field}`}
+              label={subLabel(label, field)}
               value={record[field]}
               onChange={(value) => update(field, value)}
               disabled={disabled}
@@ -256,24 +264,24 @@ function OperandEditor({
           ))}
           {Object.entries(SERIES_CHOICES[String(record.series)] ?? {}).flatMap(([field, options]) => {
             const current = String(record[field] ?? options[0]);
-            return [<SelectField key={field} label={`${label} ${field}`} value={current} options={options} onChange={(value) => update(field, value)} disabled={disabled} />];
+            return [<SelectField key={field} label={subLabel(label, field)} value={current} options={options} onChange={(value) => update(field, value)} disabled={disabled} />];
           })}
         </>
       )}
       {kind === "level" && (
         <>
           <SelectField
-            label={`${label} level`}
+            label={`${label} price level`}
             value={String(record.level)}
             options={LEVELS}
             onChange={(level) => onChange(levelDefaults(level))}
             disabled={disabled}
           />
           {(LEVEL_NUMBERS[String(record.level)] ?? []).map((field) => (
-            <NumberField key={field} label={`${label} ${field}`} value={record[field]} onChange={(value) => update(field, value)} disabled={disabled} min={1} max={260} />
+            <NumberField key={field} label={subLabel(label, field)} value={record[field]} onChange={(value) => update(field, value)} disabled={disabled} min={1} max={260} />
           ))}
           {Object.entries(LEVEL_CHOICES[String(record.level)] ?? {}).map(([field, options]) => (
-            <SelectField key={field} label={`${label} ${field}`} value={String(record[field])} options={options} onChange={(value) => update(field, value)} disabled={disabled} />
+            <SelectField key={field} label={subLabel(label, field)} value={String(record[field])} options={options} onChange={(value) => update(field, value)} disabled={disabled} />
           ))}
         </>
       )}
@@ -364,9 +372,9 @@ function ConditionEditor({
       <SelectField label="Condition" value={kind} options={["compare", "within_pct", "time_between", "all", "any", "not"]} onChange={(value) => onChange(changeConditionKind(condition, value))} disabled={disabled} />
       {kind !== "compare" && kind !== "within_pct" ? null : (
         <>
-          <OperandEditor label="Left" operand={comparison.left} onChange={(left) => onChange({ ...comparison, left } as Condition)} disabled={disabled} />
+          <OperandEditor label="Left side" operand={comparison.left} onChange={(left) => onChange({ ...comparison, left } as Condition)} disabled={disabled} />
           <SelectField label="Operator" value={operator} options={["gt", "gte", "lt", "lte", "crosses_above", "crosses_below", "within_pct"]} onChange={changeOperator} disabled={disabled} />
-          <OperandEditor label="Right" operand={comparison.right} onChange={(right) => onChange({ ...comparison, right } as Condition)} disabled={disabled} />
+          <OperandEditor label="Right side" operand={comparison.right} onChange={(right) => onChange({ ...comparison, right } as Condition)} disabled={disabled} />
           {comparison.op === "within_pct" && (
             <NumberField label="Within percent" value={(comparison as typeof comparison & { pct: number }).pct} onChange={(pct) => onChange({ ...comparison, pct } as Condition)} disabled={disabled} step="any" min={0} max={100} />
           )}
@@ -389,9 +397,9 @@ function LevelActionEditor({
   const update = (key: string, next: unknown) => onChange({ ...record, [key]: next } as unknown as LevelOperand);
   return (
     <div className={styles.operand}>
-      <SelectField label={`${label} level`} value={level} options={LEVELS} onChange={(next) => onChange(levelDefaults(next))} disabled={disabled} />
-      {(LEVEL_NUMBERS[level] ?? []).map((field) => <NumberField key={field} label={`${label} ${field}`} value={record[field]} onChange={(next) => update(field, next)} disabled={disabled} min={1} max={260} />)}
-      {Object.entries(LEVEL_CHOICES[level] ?? {}).map(([field, options]) => <SelectField key={field} label={`${label} ${field}`} value={String(record[field])} options={options} onChange={(next) => update(field, next)} disabled={disabled} />)}
+      <SelectField label={`${label} price level`} value={level} options={LEVELS} onChange={(next) => onChange(levelDefaults(next))} disabled={disabled} />
+      {(LEVEL_NUMBERS[level] ?? []).map((field) => <NumberField key={field} label={subLabel(label, field)} value={record[field]} onChange={(next) => update(field, next)} disabled={disabled} min={1} max={260} />)}
+      {Object.entries(LEVEL_CHOICES[level] ?? {}).map(([field, options]) => <SelectField key={field} label={subLabel(label, field)} value={String(record[field])} options={options} onChange={(next) => update(field, next)} disabled={disabled} />)}
     </div>
   );
 }
@@ -416,13 +424,13 @@ function PaperOrderEditor({
   return (
     <div className={styles.actionFields}>
       <SelectField label="Side" value={String(order.side)} options={["buy", "sell"]} onChange={(side) => update("side", side)} disabled={disabled} />
-      <SelectField label="Size type" value={sizeKind} options={["riskUsd", "shares", "pctOfBook", "contracts"]} onChange={(kind) => update("size", defaultSize(kind))} disabled={disabled} />
-      <NumberField label={sizeKind} value={size[sizeKind]} onChange={(amount) => update("size", { ...size, [sizeKind]: amount })} disabled={disabled} step={sizeKind === "shares" || sizeKind === "contracts" ? "1" : "any"} min={1} />
-      <SelectField label="Stop type" value={"atrMultiple" in stop ? "atrMultiple" : "level"} options={["atrMultiple", "level"]} onChange={(kind) => update("stop", kind === "atrMultiple" ? { atrMultiple: 2 } : levelDefaults("prior_day_low"))} disabled={disabled} />
+      <SelectField label="Size order by" value={sizeKind} options={["riskUsd", "shares", "pctOfBook", "contracts"]} onChange={(kind) => update("size", defaultSize(kind))} disabled={disabled} />
+      <NumberField label={paramLabel(sizeKind)} value={size[sizeKind]} onChange={(amount) => update("size", { ...size, [sizeKind]: amount })} disabled={disabled} step={sizeKind === "shares" || sizeKind === "contracts" ? "1" : "any"} min={1} />
+      <SelectField label="Stop by" value={"atrMultiple" in stop ? "atrMultiple" : "level"} options={["atrMultiple", "level"]} onChange={(kind) => update("stop", kind === "atrMultiple" ? { atrMultiple: 2 } : levelDefaults("prior_day_low"))} disabled={disabled} />
       {"atrMultiple" in stop
         ? <NumberField label="Stop ATR multiple" value={stop.atrMultiple} onChange={(amount) => update("stop", { atrMultiple: amount })} disabled={disabled} step="any" min={0} max={20} />
         : <LevelActionEditor label="Stop" value={order.stop as LevelOperand} onChange={(next) => update("stop", next)} disabled={disabled} />}
-      <SelectField label="Target type" value={"r" in target ? "r" : "level"} options={["r", "level"]} onChange={(kind) => update("target", kind === "r" ? { r: 2 } : levelDefaults("prior_day_high"))} disabled={disabled} />
+      <SelectField label="Target by" value={"r" in target ? "r" : "level"} options={["r", "level"]} onChange={(kind) => update("target", kind === "r" ? { r: 2 } : levelDefaults("prior_day_high"))} disabled={disabled} />
       {"r" in target
         ? <NumberField label="Target R multiple" value={target.r} onChange={(amount) => update("target", { r: amount })} disabled={disabled} step="any" min={0} max={20} />
         : <LevelActionEditor label="Target" value={order.target as LevelOperand} onChange={(next) => update("target", next)} disabled={disabled} />}
@@ -439,15 +447,18 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
   const limits = object(form.limits ?? {});
   const hasLimits = form.limits !== undefined;
   const paperOrder = form.then.paperOrder;
+  // The plain sentence the strategy says, so the form can be checked at a glance; it waits until the form is valid.
+  const parsed = StrategySpecV1Schema.safeParse(formToSpec(form));
 
   return (
     <div className={styles.specForm} aria-label="Strategy specification form">
+      {parsed.success && <p className={styles.sentence}>{describeSpec(parsed.data)}</p>}
       <section className={styles.block} aria-labelledby="watch-heading">
-        <div className={styles.blockHeading}><h3 id="watch-heading">Watch</h3><span>Schema v{form.schemaVersion}</span></div>
+        <div className={styles.blockHeading}><h3 id="watch-heading">Watch</h3><span>What to watch, and when to check</span></div>
         <div className={styles.fields}>
           <label className={styles.field}><span>Strategy name</span><input disabled={readOnly} maxLength={80} onChange={(event) => onChange({ ...form, name: event.currentTarget.value })} value={form.name} /></label>
           <SelectField
-            label="Universe type"
+            label="Watch"
             value={isWatchlist ? "watchlist" : "symbols"}
             options={["watchlist", "symbols"]}
             disabled={readOnly}
@@ -464,10 +475,11 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
                 onChange={(watchlist) => updateWatch({ universe: { watchlist } })}
                 disabled={readOnly || watchlistNames.length === 0}
                 placeholder={watchlists.length ? "Choose a watchlist" : "No watchlists available"}
+                labelOf={String}
               />
             : <label className={styles.field}><span>Symbols (comma-separated)</span><input disabled={readOnly} onChange={(event) => updateWatch({ universe: { symbols: symbolsFromDraft(event.currentTarget.value) } })} value={Array.isArray(universe.symbols) ? symbolsToDraft(universe.symbols) : ""} /></label>}
           <SelectField label="Session" value={form.watch.session} options={["regular", "extended"]} disabled={readOnly} onChange={(session) => updateWatch({ session: session as StrategySpecForm["watch"]["session"] })} />
-          <SelectField label="Run on" value={form.watch.runOn} options={["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]} disabled={readOnly} onChange={(runOn) => updateWatch({ runOn: runOn as StrategySpecForm["watch"]["runOn"] })} />
+          <SelectField label="Check on" value={form.watch.runOn} options={["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]} disabled={readOnly} onChange={(runOn) => updateWatch({ runOn: runOn as StrategySpecForm["watch"]["runOn"] })} />
         </div>
         <BlockErrors block="Watch" errors={errors} />
       </section>
@@ -502,7 +514,7 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
                   })}
                   type="checkbox"
                 />
-                <span>{channel}</span>
+                <span>{optionLabel(channel)}</span>
               </label>
             ))}
           </fieldset>
@@ -546,7 +558,7 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
             {(["maxTradesPerDay", "maxOpenPositions", "maxPositionUsd", "pauseAfterDailyLossUsd", "cooldownMinutes"] as const).map((field) => (
               <NumberField
                 key={field}
-                label={field}
+                label={paramLabel(field)}
                 value={limits[field]}
                 onChange={(value) => {
                   const next = { ...limits };
@@ -570,7 +582,7 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
         )}
         <BlockErrors block="Limits" errors={errors} />
       </section>
-      <p className={styles.schemaNote}>Saved against <code>StrategySpecV1Schema</code>. Nothing sends an order.</p>
+      <p className={styles.schemaNote}>Nothing here sends an order.</p>
       {readOnly && <p className={styles.help}>Selected history is immutable. Choose current version to edit a new version.</p>}
     </div>
   );

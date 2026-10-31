@@ -98,7 +98,9 @@ test.describe("alerts list, detail, actions, log and bell", () => {
     await expect(detail.getByRole("listitem")).toContainText("NVDA");
     await expect(detail.getByRole("listitem")).toContainText("Inbox · Delivered");
     await expect(detail.getByRole("listitem")).toContainText("Telegram · Held for quiet hours");
-    await expect(detail.locator("pre")).toContainText('"runOn": "bar_close_15m"'); // the JSON is open by default
+    await expect(detail.locator("details").filter({ hasText: "Developer view (JSON)" })).not.toHaveAttribute("open"); // the JSON is a collapsed developer view
+    await detail.getByText("Developer view (JSON)").click();
+    await expect(detail.locator("pre")).toContainText('"runOn": "bar_close_15m"');
     await expectCleanScreen(page);
   });
 
