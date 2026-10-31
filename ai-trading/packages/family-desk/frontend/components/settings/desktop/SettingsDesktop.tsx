@@ -28,7 +28,7 @@ import { BrokerRowsDisabled } from "./BrokerRowsDisabled";
 import { ChannelRows } from "./ChannelRows";
 import { DefaultView } from "./DefaultView";
 import { HoldingsImportCard } from "./HoldingsImportCard";
-import { MarketDataStatus } from "./MarketDataStatus";
+import { MarketDataCard } from "./MarketDataCard";
 import { MaskingCard } from "./MaskingCard";
 import { PauseAll } from "./PauseAll";
 import { QuietHours } from "./QuietHours";
@@ -205,10 +205,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
           <QuietHours value={quiet} disabled={disabled} validationError={!quietValid} onChange={changeQuiet} onCommit={commitQuiet} />
         </section>
 
-        <section className={styles.card} aria-labelledby="settings-market-data">
-          <h2 id="settings-market-data" className={styles.eyebrow}>Market data</h2>
-          <MarketDataStatus />
-        </section>
+        <MarketDataCard />
 
         <section className={styles.card} aria-labelledby="settings-trading">
           <h2 id="settings-trading" className={styles.eyebrow}>Trading</h2>

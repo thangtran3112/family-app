@@ -140,7 +140,8 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
   assert.deepEqual(FuturesSpecsSchema.parse(futures), futures);
   assert.deepEqual(StatusSchema.parse({
     gateway: "not_configured",
-    data_sources: "unknown",
+    gateway_reason: null,
+    data_sources: { quotes: "unknown", bars: "unknown", option_chain: "unknown", trades: "unknown", universe: "unknown" },
     streaming_slots: { used: 0, max: 70 },
     backups: null,
     reconciliation: null,
@@ -151,7 +152,8 @@ test("new read schemas accept representative live, warm-up, unavailable, and emp
     ...fundamentalStatus,
   }), {
     gateway: "not_configured",
-    data_sources: "unknown",
+    gateway_reason: null,
+    data_sources: { quotes: "unknown", bars: "unknown", option_chain: "unknown", trades: "unknown", universe: "unknown" },
     streaming_slots: { used: 0, max: 70 },
     backups: null,
     reconciliation: null,
@@ -244,7 +246,8 @@ test("numeric API response schemas reject non-finite values", () => {
   }]).success, false);
   assert.equal(StatusSchema.safeParse({
     gateway: "not_configured",
-    data_sources: "unknown",
+    gateway_reason: null,
+    data_sources: { quotes: "unknown", bars: "unknown", option_chain: "unknown", trades: "unknown", universe: "unknown" },
     streaming_slots: { used: Number.POSITIVE_INFINITY, max: 70 },
     backups: null,
     reconciliation: null,

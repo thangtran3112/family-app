@@ -3270,6 +3270,39 @@
         "title": "DashboardWatchlistRowOut",
         "type": "object"
       },
+      "DataSourcesOut": {
+        "properties": {
+          "bars": {
+            "title": "Bars",
+            "type": "string"
+          },
+          "option_chain": {
+            "title": "Option Chain",
+            "type": "string"
+          },
+          "quotes": {
+            "title": "Quotes",
+            "type": "string"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "string"
+          },
+          "universe": {
+            "title": "Universe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quotes",
+          "bars",
+          "option_chain",
+          "trades",
+          "universe"
+        ],
+        "title": "DataSourcesOut",
+        "type": "object"
+      },
       "DayFilterOut": {
         "properties": {
           "id": {
@@ -7641,6 +7674,188 @@
         "title": "MarkersOut",
         "type": "object"
       },
+      "MarketDataCardOut": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/MarketDataClassOut"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "desk_quality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "realtime",
+                  "delayed-15m",
+                  "eod",
+                  "fallback",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desk Quality"
+          },
+          "desk_serving": {
+            "title": "Desk Serving",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "routing_source": {
+            "title": "Routing Source",
+            "type": "string"
+          },
+          "shadow": {
+            "title": "Shadow",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "shadow",
+          "owner",
+          "available",
+          "reason",
+          "routing_source",
+          "version",
+          "desk_serving",
+          "desk_quality",
+          "classes"
+        ],
+        "title": "MarketDataCardOut",
+        "type": "object"
+      },
+      "MarketDataChoiceBody": {
+        "properties": {
+          "data_class": {
+            "enum": [
+              "equity_quotes",
+              "equity_bars",
+              "option_chain"
+            ],
+            "title": "Data Class",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data_class",
+          "provider"
+        ],
+        "title": "MarketDataChoiceBody",
+        "type": "object"
+      },
+      "MarketDataChoiceOut": {
+        "properties": {
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/MarketDataClassOut"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "routing_source": {
+            "title": "Routing Source",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "routing_source",
+          "version",
+          "classes",
+          "warning"
+        ],
+        "title": "MarketDataChoiceOut",
+        "type": "object"
+      },
+      "MarketDataClassOut": {
+        "properties": {
+          "data_class": {
+            "enum": [
+              "equity_quotes",
+              "equity_bars",
+              "option_chain"
+            ],
+            "title": "Data Class",
+            "type": "string"
+          },
+          "ladder": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ladder",
+            "type": "array"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOptionOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "preferred": {
+            "title": "Preferred",
+            "type": "string"
+          },
+          "serving": {
+            "title": "Serving",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data_class",
+          "preferred",
+          "serving",
+          "ladder",
+          "options"
+        ],
+        "title": "MarketDataClassOut",
+        "type": "object"
+      },
       "MarketStripTileOut": {
         "properties": {
           "change_pct": {
@@ -9426,6 +9641,66 @@
           "message"
         ],
         "title": "Problem",
+        "type": "object"
+      },
+      "ProviderOptionOut": {
+        "description": "One provider's standing in one class. `state` is the bridge's own health state; `detail` is its\nreason code (never rendered raw -- the card maps both to words, 02t \u00a76).",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "in_ladder": {
+            "title": "In Ladder",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "realtime",
+                  "delayed-15m",
+                  "eod",
+                  "fallback",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "configured",
+          "state",
+          "quality",
+          "in_ladder",
+          "detail"
+        ],
+        "title": "ProviderOptionOut",
         "type": "object"
       },
       "RatingCountsOut": {
@@ -12040,14 +12315,7 @@
             "type": "null"
           },
           "data_sources": {
-            "enum": [
-              "unknown",
-              "alpaca",
-              "ibkr",
-              "mixed"
-            ],
-            "title": "Data Sources",
-            "type": "string"
+            "$ref": "#/components/schemas/DataSourcesOut"
           },
           "gateway": {
             "enum": [
@@ -12058,6 +12326,17 @@
             ],
             "title": "Gateway",
             "type": "string"
+          },
+          "gateway_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Reason"
           },
           "holdings": {
             "$ref": "#/components/schemas/ImportStateOut"
@@ -12088,6 +12367,7 @@
           "scans",
           "alerts",
           "gateway",
+          "gateway_reason",
           "data_sources",
           "streaming_slots",
           "backups",
@@ -20836,6 +21116,66 @@
           }
         },
         "summary": "Test Channel",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/desk/settings/market-data": {
+      "get": {
+        "operationId": "get_market_data_api_desk_settings_market_data_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketDataCardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Market Data",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "put_market_data_api_desk_settings_market_data_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketDataChoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketDataChoiceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Market Data",
         "tags": [
           "settings"
         ]

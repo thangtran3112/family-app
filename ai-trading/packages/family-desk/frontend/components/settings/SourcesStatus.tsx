@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { deskFetch } from "../../lib/api/client.ts";
+import { gatewayLine } from "../../lib/desk/gateway.ts";
 import { StatusSchema } from "../../lib/api/schemas.ts";
 import styles from "./Settings.module.css";
 
@@ -47,11 +48,7 @@ export function SourcesStatus() {
         <dl className={styles.statusList}>
           <div className={styles.statusItem}>
             <dt>IBKR gateway</dt>
-            <dd>{status.gateway === "not_configured" ? "Not configured" : status.gateway}</dd>
-          </div>
-          <div className={styles.statusItem}>
-            <dt>Data source health</dt>
-            <dd>{status.data_sources === "unknown" ? "Unknown" : status.data_sources}</dd>
+            <dd>{gatewayLine(status.gateway)}</dd>
           </div>
           <div className={styles.statusItem}>
             <dt>Streaming slots</dt>

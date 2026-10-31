@@ -9,6 +9,8 @@ import (
 	"time"
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/xnys"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Errors mirror ai_trading_common.errors, so both languages fall through on
@@ -50,6 +52,44 @@ type BarsProvider interface {
 	Bars(ctx context.Context, r *pb.GetBarsRequest) ([]*pb.Bar, pb.Quality, error)
 }
 
+// CalendarTimeframe maps a wire timeframe onto the exchange calendar's vocabulary
+// (`xnys.Timeframe*`), which is also `ai_trading_common.bars.Timeframe`: the names
+// `ai_trading.data.bars.bar_close` uses.
+func CalendarTimeframe(tf pb.Timeframe) string {
+	switch tf {
+	case pb.Timeframe_MINUTE_1:
+		return xnys.TimeframeMin
+	case pb.Timeframe_HOUR_1:
+		return xnys.TimeframeHour
+	case pb.Timeframe_DAY_1:
+		return xnys.TimeframeDay
+	}
+	return ""
+}
+
+// BarsClosedBy keeps the bars that had closed by asOf -- the rule
+// `ai_trading.data.bars.read_bars` applies, so a replay or backtest at an earlier as_of never
+// sees a bar that had not closed then (02u §4, no look-ahead). A provider already withholds a
+// bar that has not ended by now; asOf can be earlier still. A bar with no close instant falls
+// back to the exchange calendar, so a provider that does not set it is filtered the same way.
+func BarsClosedBy(bars []*pb.Bar, tf pb.Timeframe, asOf time.Time) []*pb.Bar {
+	kept := make([]*pb.Bar, 0, len(bars))
+	for _, b := range bars {
+		closed, ok := b.CloseAt, b.CloseAt != nil
+		if !ok {
+			var at time.Time
+			if at, ok = xnys.Default().BarClose(CalendarTimeframe(tf), b.GetStart().AsTime()); ok {
+				closed = timestamppb.New(at)
+			}
+		}
+		if !ok || closed.AsTime().After(asOf) {
+			continue
+		}
+		kept = append(kept, b)
+	}
+	return kept
+}
+
 // Request errors the server maps onto Connect codes.
 var (
 	ErrInvalid = errors.New("invalid request")
@@ -60,9 +100,15 @@ var (
 type RouteError struct {
 	Kind     pb.ErrorKind // the most serious attempt error: an outage ranks ahead of NO_DATA
 	Attempts []*pb.Attempt
+	// Summary, when set, replaces the default message. A failure no provider caused (the server's
+	// as_of cut, for instance) must not read as "no provider answered".
+	Summary string
 }
 
 func (e *RouteError) Error() string {
+	if e.Summary != "" {
+		return e.Summary
+	}
 	msg := "no provider answered"
 	for _, a := range e.Attempts {
 		msg += "; " + a.Provider + ": " + a.Message

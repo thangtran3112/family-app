@@ -1,0 +1,9 @@
+{
+  "http_status": 401,
+  "request": {},
+  "response": {
+    "code": "unauthenticated",
+    "message": "missing or invalid bearer token"
+  },
+  "rpc": "ListProviders"
+}

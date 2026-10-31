@@ -148,6 +148,7 @@ def test_desk_migrator_migration_leaves_all_tables_reachable_by_desk_runtime(
         "symbol_fundamentals",
         "ai_verdicts",
         "ai_calls",
+        "market_data_routing",  # 0013, 02t §3.5
     }
 
 

@@ -234,12 +234,66 @@ class GatewayStatus:
     """Where a live-quote gateway stands, for a status surface. `not_configured`: switched off, or no
     credentials. `down`: switched on but never reached. `reconnecting`: reached once, dropped since.
     `quality` and `as_of` describe the newest tick and are None until one arrives. `lines_used` is how many
-    streaming market-data lines the session holds."""
+    streaming market-data lines the session holds. `reason` is the source's own vocabulary for why it is
+    not `connected` (`edge_unreachable`, `competing_session`, `gateway_down`, ...; 02t §5.4), None when
+    the source does not say. Additive: every existing caller keeps working."""
 
     state: GatewayState
     quality: Quality | None
     as_of: pd.Timestamp | None  # UTC
     lines_used: int = 0
+    reason: str | None = None
+
+
+#: A bridge provider's cached health, in its own words (02t §3.2 `ProviderHealth`): what it is
+#: registered for, whether its credentials are present (never their values), the state the bridge last
+#: observed, and the rolling counters. `state` is the proto's `HEALTH_STATE_*` name, lower-cased.
+ProviderState = Literal["ok", "degraded", "down", "off", "not_configured", "unspecified"]
+
+
+@dataclass(frozen=True)
+class ProviderHealth:
+    """One provider as the bridge reports it: `classes` in this package's kind names
+    (`equity_quotes`, `equity_bars`, `option_chain`); `reason` in the bridge's §5.4 vocabulary."""
+
+    provider: str
+    classes: tuple[str, ...]
+    configured: bool
+    state: ProviderState
+    reason: str | None = None
+    quality: Quality | None = None
+    last_ok: pd.Timestamp | None = None  # UTC
+    newest_tick: pd.Timestamp | None = None  # UTC
+    lines_used: int = 0
+    lines_max: int = 0
+    p95_ms: int = 0
+
+
+@dataclass(frozen=True)
+class ClassRouting:
+    """One data class's routing: the Desk's preference (empty = the ladder's first rung), the env ladder
+    (the allowlist, in order), and who would answer the class right now (02t §3.2 `ClassRouting`)."""
+
+    data_class: str  # "equity_quotes" | "equity_bars" | "option_chain"
+    preferred: str
+    ladder: tuple[str, ...]
+    serving: str
+
+
+RoutingSourceName = Literal["env_default", "desk", "unspecified"]
+
+
+@dataclass(frozen=True)
+class Routing:
+    """The bridge's cached routing and its version (`source` says whether the Desk has been synced to
+    it yet: `env_default` means the bridge is still on its own ladder)."""
+
+    classes: tuple[ClassRouting, ...]
+    version: int
+    source: RoutingSourceName
+
+    def for_class(self, data_class: str) -> ClassRouting | None:
+        return next((row for row in self.classes if row.data_class == data_class), None)
 
 
 def facts_as_of(facts: list[Fact], as_of: date) -> list[Fact]:
