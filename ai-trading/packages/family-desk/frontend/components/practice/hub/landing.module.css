@@ -67,7 +67,7 @@ button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); colo
 
 /* The thread page */
 .page { display: flex; min-width: 0; flex-direction: column; }
-.pageBody { display: flex; min-width: 0; max-width: 860px; flex-direction: column; gap: var(--space-4); padding: var(--space-4); }
+.pageBody { display: flex; min-width: 0; flex-direction: column; gap: var(--space-4); padding: var(--space-4); }
 .back { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-semibold); text-decoration: none; }
 .back:hover { text-decoration: underline; }
 .back:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }

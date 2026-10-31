@@ -158,6 +158,42 @@ export function swingCurveLayout(series: readonly SwingEquityPoint[], startingBa
   };
 }
 
+/** A label's anchor point in the curve's own SVG units: `end` anchored labels grow to the left of `x`, `start` ones to the right. */
+export type CurveLabel = { x: number; y: number; text: string; anchor: "start" | "end" };
+
+// ponytail: text width is estimated at 7 units a character (the curve prints 11 px labels); measure with getBBox if a font change ever shifts it.
+const CHAR_WIDTH = 7;
+const LABEL_ABOVE = 11;
+const LABEL_BELOW = 3;
+
+const overlaps = (a: CurveLabel, b: CurveLabel): boolean => {
+  const span = (label: CurveLabel) => {
+    const width = label.text.length * CHAR_WIDTH;
+    return label.anchor === "end" ? [label.x - width, label.x] : [label.x, label.x + width];
+  };
+  const [aLeft, aRight] = span(a) as [number, number];
+  const [bLeft, bRight] = span(b) as [number, number];
+  return aLeft < bRight && bLeft < aRight && a.y - LABEL_ABOVE < b.y + LABEL_BELOW && b.y - LABEL_ABOVE < a.y + LABEL_BELOW;
+};
+
+/**
+ * Where the "Starting balance" note sits on the curve. The note belongs on the start line, but the end labels ("Balance $25,000.00",
+ * "Equity ...") land on that line too whenever the balance is still near its start, so the note tries the left end above the line,
+ * the left end below it, then the right end, and takes the first spot that prints on none of `others`. With no free spot it keeps the first.
+ */
+export function startNoteSpot(layout: Pick<SwingCurve, "plot" | "startY">, text: string, others: readonly CurveLabel[]): CurveLabel {
+  const { plot, startY } = layout;
+  const left = plot.x + 6;
+  const right = plot.x + plot.width - 6;
+  const spots: CurveLabel[] = [
+    { x: left, y: startY - 6, text, anchor: "start" },
+    { x: left, y: startY + 14, text, anchor: "start" },
+    { x: right, y: startY - 6, text, anchor: "end" },
+    { x: right, y: startY + 14, text, anchor: "end" },
+  ];
+  return spots.find((spot) => others.every((other) => !overlaps(spot, other))) ?? spots[0]!;
+}
+
 /** The alt text of the curve for a screen reader. */
 export function swingCurveSummary(series: readonly SwingEquityPoint[], startingBalance: number, formatMoney: (value: number) => string): string {
   const last = series[series.length - 1];
