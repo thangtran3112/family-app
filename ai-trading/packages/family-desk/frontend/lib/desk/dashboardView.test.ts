@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DashboardSchema } from "../api/schemas.ts";
+import { DashboardSchema, type Dashboard } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
 import { eventRows, matchCards, stripTiles } from "./dashboardView.ts";
 
@@ -49,4 +49,18 @@ test("events sort by date then symbol with plain timing", () => {
   assert.deepEqual(rows.map((r) => r.symbol), ["GOOGL", "MSFT", "AAPL", "AMZN", "META"]);
   assert.equal(rows[0]!.day, "Wed 2026-10-28");
   assert.equal(rows[0]!.timing, "Earnings · After close");
+});
+
+test("a stale feed marks every live ETF tile with its age and leaves the other notes alone (V-Today-01)", () => {
+  const live = { as_of: "2026-10-23T19:25:00Z", source: "alpaca", quality: "delayed-15m", freshness: "paused" } as const;
+  const strip: Dashboard["market_strip"] = [
+    { symbol: "SPY", last: 678.12, change_pct: 0.31, stamp: live },
+    { symbol: "/ES", last: null, change_pct: null, stamp: { ...live, quality: "unavailable", freshness: "unavailable" } },
+  ];
+  const [spy, es] = stripTiles(strip, null, "Stale · 45 min ago");
+  assert.equal(spy!.note, "Stale · 45 min ago");
+  assert.equal(es!.note, "Futures deferred · not connected yet");
+  assert.equal(stripTiles(strip)[0]!.note, null);
+  const closed = { ...live, freshness: "closed", quality: "eod" } as const;
+  assert.equal(stripTiles([{ symbol: "SPY", last: 678.12, change_pct: 0.31, stamp: closed }], null, "Stale · 45 min ago")[0]!.note, "Last close · Fri 3:25 PM ET");
 });

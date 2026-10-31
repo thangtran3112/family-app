@@ -1,6 +1,6 @@
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
 import type { Stamp } from "@/lib/api/schemas";
-import { resolveFreshness, type Connection, type MarketSession } from "@/lib/desk/freshness";
+import type { Connection, MarketSession } from "@/lib/desk/freshness";
 import { changeTone, formatPrice } from "@/lib/desk/format";
 import { changeText, type PriceSummary } from "@/lib/desk/workspace";
 import styles from "./workspaceHeader.module.css";
@@ -17,7 +17,7 @@ export type SymbolHeaderProps = {
 
 /** Symbol, last price and change, freshness, and the Chart · Summary tabs (02l §b2). */
 export function SymbolHeader({ symbol, name, summary, stamp, session, connection, view }: SymbolHeaderProps) {
-  const dim = resolveFreshness({ stamp, session, connection }).dim;
+  const dim = useFreshness({ stamp, session, connection }).dim;
   return (
     <div className={styles.header}>
       <div className={styles.identity}>

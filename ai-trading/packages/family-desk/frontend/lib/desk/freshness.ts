@@ -9,6 +9,8 @@ export const COPY = {
   updating: "Updating quotes…",
   reconnecting: "Reconnecting… · last update {time}",
   paused: "Quotes paused · last update {ago}",
+  // The mark beside a price that is not current (V-Today-01): the age, in the same words the badge uses.
+  staleMark: "Stale · {ago}",
   backup: "Using backup quotes · may differ slightly from IBKR",
   closed: "Market closed · showing last close",
   pre_market: "Pre-market · {time}",
@@ -105,6 +107,8 @@ export type FreshnessInput = {
   connection?: Connection;
   /** The stamp covers the whole data feed (top bar, status bar, Today), not one symbol or one list. */
   feed?: boolean;
+  /** The Desk feed's own stamp (the top bar's). A paused feed sets the age on every page badge, so the screen states one age. */
+  feedStamp?: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null;
   now?: Date;
 };
 
@@ -116,6 +120,10 @@ export type FreshnessView = {
   dot: boolean;
   /** The last price stays visible but dimmed. */
   dim: boolean;
+  /** The price on screen is old but still shown (quotes paused or dropped): it needs a mark, not only a dim. */
+  stale: boolean;
+  /** "Stale · 45 min ago" for a stale price, else null. */
+  mark: string | null;
 };
 
 const TONE: Record<FreshnessState, FreshnessTone> = {
@@ -135,7 +143,16 @@ const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 export const fillCopy = fill;
 
-export function freshnessState({ stamp, session, connection = "ok", feed = false }: FreshnessInput): FreshnessState {
+/** The page's own stamp, except while the feed is paused: then the feed's age is the only age (V-Today-01, V-SCR-01). */
+function followFeed({ stamp, feedStamp }: Pick<FreshnessInput, "stamp" | "feedStamp">): FreshnessInput["stamp"] {
+  if (!stamp || feedStamp?.freshness !== "paused") return stamp;
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return stamp; // a symbol the Desk cannot read stays unreadable
+  return { ...stamp, freshness: "paused", as_of: feedStamp.as_of };
+}
+
+export function freshnessState(input: FreshnessInput): FreshnessState {
+  const { session, connection = "ok", feed = false } = input;
+  const stamp = followFeed(input);
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
   // A whole feed with nothing stored while the market is closed has nothing to retry: red "trying again" is for an
@@ -152,13 +169,23 @@ export function freshnessState({ stamp, session, connection = "ok", feed = false
 
 export function resolveFreshness(input: FreshnessInput): FreshnessView {
   const state = freshnessState(input);
-  const asOf = input.stamp?.as_of ?? null;
+  const asOf = followFeed(input)?.as_of ?? null;
   const now = input.now ?? new Date();
+  const ago = formatAgo(asOf, now);
   const label = fill(COPY[state], {
     time: state === "reconnecting" ? formatEtClock(asOf) : formatEtTimeZone(asOf),
-    ago: formatAgo(asOf, now),
+    ago,
   });
-  return { state, label, tone: TONE[state], dot: state === "live", dim: state === "reconnecting" || state === "unavailable" };
+  const stale = state === "paused" || state === "reconnecting";
+  return {
+    state,
+    label,
+    tone: TONE[state],
+    dot: state === "live",
+    dim: stale || state === "unavailable",
+    stale,
+    mark: stale ? fill(COPY.staleMark, { ago }) : null,
+  };
 }
 
 const SOURCE_LABELS: Record<string, string> = { alpaca: "Alpaca", ibkr: "IBKR", mixed: "Alpaca + IBKR" };
@@ -209,6 +236,11 @@ export function marketPillText(session: MarketSession, nextOpen: string | null):
   if (session === "pre") return COPY.marketPre;
   if (session === "after") return COPY.marketAfter;
   return nextOpen ? fill(COPY.marketClosedOpens, { time: formatEtWeekdayTime(nextOpen) }) : "Market closed";
+}
+
+/** The market pill's dot is green only while the session is open and the quotes are not stale: "Market open" beside "Quotes paused" must not look live. */
+export function marketPillOpen(session: MarketSession, quotes: Pick<FreshnessView, "stale">): boolean {
+  return session === "regular" && !quotes.stale;
 }
 
 /** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */

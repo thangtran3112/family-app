@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY, emptyScanText } from "@/lib/desk/freshness";
 import { loadFilterDetail, loadFilterResults, loadFilters, type ScreenerSession } from "@/lib/desk/screener";
@@ -36,6 +36,8 @@ export function ScreenerScreen() {
   });
   const data = results.data;
   const delayed = data !== null && scanIsDelayed(data.stamp);
+  // The scan's own age is on its rows; this badge is about quotes, so it reads the feed (V-SCR-01).
+  const fresh = useFreshness({ stamp: data?.stamp ?? null, connection: results.connection });
   const waiting = data !== null && neverScanned(data.stamp);
 
   const [picked, setPicked] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function ScreenerScreen() {
     else if (state === "empty") table = <EmptyBlock title={emptyScanText(status?.scans.next_run_at ?? null)} />;
     else if (data) {
       table = (
-        <ResultsTable results={data} selected={selectedSymbol} onSelect={(symbol) => setPicked(symbol)} dim={results.connection === "reconnecting"} />
+        <ResultsTable results={data} selected={selectedSymbol} onSelect={(symbol) => setPicked(symbol)} dim={fresh.stale} />
       );
     }
 
@@ -82,7 +84,7 @@ export function ScreenerScreen() {
         <div className={styles.meta}>
           <UniverseLine />
           {/* A delayed scan shows its pill by the title instead; the badge still shows if the connection is in trouble. */}
-          {data && !waiting && (!delayed || results.connection !== "ok") && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
+          {data && !waiting && (!delayed || results.connection !== "ok" || fresh.stale) && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
         </div>
         {table}
         <RightRail sections={[{ id: "preview", label: "Preview", node: <PreviewPane symbol={selectedSymbol} runOn={filter.run_on} /> }]} label="Chart preview" />

@@ -12,6 +12,7 @@ import {
   holdingsImportFailedText,
   loadErrorText,
   marketDataLine,
+  marketPillOpen,
   marketPillShort,
   marketPillText,
   notEnoughHistoryText,
@@ -73,7 +74,7 @@ test("precedence: a dropped connection beats everything, a missing stamp reads a
   assert.equal(resolveFreshness({ stamp: stamp("delayed", "fallback"), session: "after" }).state, "backup");
 });
 
-test("only live shows a dot and only dropped or unavailable quotes dim", () => {
+test("only live shows a dot and only paused, dropped or unavailable quotes dim", () => {
   assert.equal(resolveFreshness(rows[0][1]).dot, true);
   assert.equal(resolveFreshness(rows[1][1]).dot, false);
   assert.equal(resolveFreshness(rows[3][1]).dim, true);
@@ -150,4 +151,51 @@ test("the Fundamental copy rows match 02n §b4", () => {
   assert.equal(COPY.valuesHidden, "Values hidden · Show values");
   assert.equal(COPY.futuresReadingOnly, "Reading only · switch to the Technical view to trade futures or swing");
   assert.equal(COPY.tax, "Not tax advice");
+});
+
+// V-Today-01, V-Watchlists-03, V-Technicals-02, V-SCR-01: market open, quotes feed paused 45 min. The top bar reads the feed's own
+// stamp; a page badge used to read its page data's stamp (19 hr old, 1 min old, "just now"), so three ages stood on one screen.
+const feedPaused = stamp("paused", "delayed-15m", "2026-10-23T19:25:00Z"); // 45 min before `now`
+const topBar = resolveFreshness({ stamp: feedPaused, session: "regular", feed: true, now });
+
+test("a page badge says the feed's age when the feed is paused, whatever age its own data carries", () => {
+  assert.equal(topBar.label, "Quotes paused · last update 45 min ago");
+  const pages = [
+    stamp("paused", "delayed-15m", "2026-10-22T17:00:00Z"), // Today and Watchlists: data 19 hr old
+    stamp("delayed", "delayed-15m", "2026-10-23T20:09:30Z"), // Screener: the scan ran "just now"
+    stamp("delayed", "realtime", "2026-10-23T20:09:00Z"), // Technicals: the symbol's quote 1 min old
+  ];
+  for (const page of pages) {
+    const view = resolveFreshness({ stamp: page, feedStamp: feedPaused, session: "regular", now });
+    assert.equal(view.label, topBar.label);
+    assert.equal(view.state, "paused");
+  }
+});
+
+test("a healthy feed leaves a page badge on its own stamp; a symbol the Desk cannot read stays unavailable", () => {
+  const own = stamp("delayed", "delayed-15m", "2026-10-23T20:05:00Z");
+  assert.equal(resolveFreshness({ stamp: own, feedStamp: stamp("delayed"), session: "regular", now }).label, "Delayed 15 min");
+  assert.equal(resolveFreshness({ stamp: own, feedStamp: null, session: "regular", now }).label, "Delayed 15 min");
+  const gone = stamp("unavailable", "unavailable", null);
+  assert.equal(resolveFreshness({ stamp: gone, feedStamp: feedPaused, session: "regular", now }).state, "unavailable");
+  assert.equal(resolveFreshness({ stamp: null, feedStamp: feedPaused, session: "regular", now }).state, "updating");
+});
+
+test("paused quotes dim the price and carry a plain stale mark; live and closed do not", () => {
+  const paused = resolveFreshness({ stamp: feedPaused, session: "regular", feed: true, now });
+  assert.deepEqual([paused.dim, paused.stale, paused.mark], [true, true, "Stale · 45 min ago"]);
+  const dropped = resolveFreshness({ ...rows[3][1], now });
+  assert.deepEqual([dropped.stale, dropped.mark], [true, "Stale · 5 hr ago"]);
+  for (const index of [0, 1, 6]) {
+    const view = resolveFreshness(rows[index]![1]);
+    assert.deepEqual([view.stale, view.mark], [false, null]);
+  }
+  assert.deepEqual([resolveFreshness(rows[9][1]).stale, resolveFreshness(rows[9][1]).mark], [false, null]); // nothing to mark: there is no price
+});
+
+test("the market pill is green only while the session is open and the quotes are not stale", () => {
+  assert.equal(marketPillOpen("regular", resolveFreshness({ stamp: stamp("delayed"), session: "regular", feed: true, now })), true);
+  assert.equal(marketPillOpen("regular", topBar), false);
+  assert.equal(marketPillOpen("regular", resolveFreshness({ stamp: null, session: "regular", feed: true, now })), true); // still loading: no claim either way
+  assert.equal(marketPillOpen("closed", resolveFreshness({ stamp: stamp("closed"), session: "closed", feed: true, now })), false);
 });

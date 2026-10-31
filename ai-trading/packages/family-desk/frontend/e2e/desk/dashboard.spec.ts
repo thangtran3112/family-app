@@ -101,6 +101,10 @@ test.describe("technical seed", () => {
     await setScenario(context, { now: MIDDAY, feedAgeMinutes: 90 });
     await openDesk(page, "/", MIDDAY);
     await expect(main(page).getByText(/^Quotes paused · last update /)).toBeVisible();
+    // V-Today-01: the page badge states the age the top bar does, and the prices carry a stale mark.
+    const topBarAge = (await page.locator(".dk-top").getByRole("status").innerText()).trim();
+    await expect(main(page).getByText(topBarAge, { exact: true })).toBeVisible();
+    await expect(main(page).getByLabel("Market strip").getByText(/^Stale · /).first()).toBeVisible();
     await expectCleanScreen(page);
   });
 

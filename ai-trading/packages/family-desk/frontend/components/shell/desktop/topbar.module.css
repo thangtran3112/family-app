@@ -340,6 +340,11 @@
   background: var(--color-up);
 }
 
+/* The market is open but the quotes are not current: an amber dot, not the green that reads as live. */
+.pill[data-stale="true"] .pillDot {
+  background: var(--color-amber);
+}
+
 .badge {
   position: absolute;
   top: -4px;
