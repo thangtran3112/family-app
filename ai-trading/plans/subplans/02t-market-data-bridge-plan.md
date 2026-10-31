@@ -1,6 +1,6 @@
 # 02t: Market-Data Bridge (Go, gRPC): One Provider-Agnostic Data Service
 
-Status: **planned 2026-10-31 (docs only; nothing built, bought, or activated).** Written by Claude Code (planner) on `feature/market-data-bridge-plan`, stacked on `feature/market-data-providers` (row 5Q). Hermes reviews the decisions in §11 before any stage starts. STATUS row 5R.
+Status: **planned 2026-10-31 (docs only; nothing built, bought, or activated).** Written by Claude Code (planner) on `feature/market-data-bridge-plan`, stacked on `feature/market-data-providers` (row 5Q). Hermes reviews the decisions in §11 before any stage starts. STATUS row 5S.
 
 Related: [02b](02b-desk-market-data-options.md) §4d (the owner decisions this plan implements), [02j](02j-common-data-providers-design.md) (the Python provider registry the Desk keeps using), [02e](02e-ibkr-data-user-setup.md) (the IBKR data user), [01m](01m-market-data-adapter.md) (the service this replaces in part), [02q](02q-laptop-migration.md) (parked laptop migration, referenced, not planned here), [STATUS.md](../STATUS.md).
 
@@ -422,7 +422,7 @@ Every stage ends with its gates green plus the **dual-agent post-phase walkthrou
 | File / section | Change | Reason |
 |---|---|---|
 | `STATUS.md` row S0 | Dated "superseded in part" note | Gateway rejection reversed; Alpaca gate changed (02b §4d) |
-| `STATUS.md` row 5Q | Dated "Tradier dormant" note | Owner declined Tradier 2026-10-31 |
+| `STATUS.md` row 5R | Dated "Tradier dormant" note | Owner declined Tradier 2026-10-31 |
 | `STATUS.md` row 5+/P0 | Dated note: no probe result recorded; B1 re-runs it | "Next: probe Mon 2026-10-26" is stale |
 | `02b` §6 bench, marketdata.app row | Replace "Trader $30 … real-time stock quotes" with the verified facts | Wrong: stock quotes are delayed on every plan; Trader is $75 |
 | `02e` top | Dated note: the gateway runs on the Ubuntu laptop with a daily ritual (02t §5); Step 5's Mac install and "signed in all week" are superseded | Host and cadence changed |

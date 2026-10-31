@@ -12,6 +12,7 @@ import {
   linkHost,
   MAX_SCREENSHOTS,
   refOf,
+  reporterInitial,
   safeHref,
   severityText,
   STATUS_LABEL,
@@ -52,7 +53,7 @@ function ReportBody({ report, readAt }: { report: FeedbackDetail; readAt: Date }
       <h3 className={styles.railTitle}>{report.title}</h3>
       {line && <p className={styles.agentLine} data-tone={line.tone}>{line.text}</p>}
       <dl className={styles.meta}>
-        <div className={styles.metaRow}><dt>Reported by</dt><dd>{report.reported_by}</dd></div>
+        <div className={styles.metaRow}><dt>Reported by</dt><dd>{reporterInitial(report.reported_by)}</dd></div>
         <div className={styles.metaRow}><dt>Created</dt><dd>{formatEtDayTime(createdAt(report))}</dd></div>
         <div className={styles.metaRow}><dt>Route</dt><dd>{report.route}</dd></div>
         {report.kind === "bug" && <div className={styles.metaRow}><dt>Severity</dt><dd>{severityText(report.severity)}</dd></div>}

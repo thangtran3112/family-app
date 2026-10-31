@@ -37,6 +37,15 @@ async function fileReports(page: Page, reports: Report[]): Promise<number[]> {
   return ids;
 }
 
+/** What the API sends as the reporter: the account's email local part. The screen must show only its initial (D-071). */
+async function reporterOnApi(page: Page): Promise<string> {
+  const response = await page.request.get("/api/desk/feedback");
+  expect(response.ok()).toBeTruthy();
+  const reporter = ((await response.json()) as { items: { reported_by: string }[] }).items[0]!.reported_by;
+  expect(reporter.length, "a one-character reporter could not show the difference").toBeGreaterThan(1);
+  return reporter;
+}
+
 const FOUR: Report[] = [
   report(),
   report({ kind: "request", severity: null, title: "Add a 20-day volume average line", body: "A volume average on the chart would help.", screen: "Technicals", route: "/technicals?symbol=NVDA", context: { symbol: "NVDA" } }),
@@ -97,6 +106,9 @@ test.describe("the dashboard", () => {
     await expect(table(page).locator("tbody tr td:nth-child(1)")).toHaveText(["F-004", "F-003", "F-002", "F-001"]);
     await expect(table(page).locator("tbody tr td:nth-child(2)")).toHaveText(["Request", "Bug", "Request", "Bug"]);
     await expect(table(page).locator("tbody tr td:nth-child(8)")).toHaveText(["Open", "Open", "Open", "Open"]);
+    const reporter = await reporterOnApi(page);
+    await expect(table(page).locator("tbody tr td:nth-child(6)")).toHaveText(Array(4).fill(reporter[0]!.toUpperCase()));
+    await expect(page.locator("body")).not.toContainText(reporter);
     await expect(table(page).getByRole("row", { name: /F-001/ })).toContainText("/practice/day?id=5");
     await expect(table(page).getByRole("row", { name: /F-001/ })).toContainText("Practice");
     await expect(main).toContainText("Open 4 · In progress 0 · Fixed 0 · Won't fix 0 · Duplicate 0");
@@ -118,6 +130,9 @@ test.describe("the dashboard", () => {
     await expect(detail.getByText("F-001", { exact: true })).toBeVisible();
     await expect(detail.getByRole("heading", { name: "Day list marks Day 4 done too early" })).toBeVisible();
     await expect(detail).toContainText("Reported by");
+    const reporter = await reporterOnApi(page);
+    await expect(detail.getByText("Reported by", { exact: true }).locator("xpath=following-sibling::dd")).toHaveText(reporter[0]!.toUpperCase());
+    await expect(page.locator("body")).not.toContainText(reporter);
     await expect(detail).toContainText("/practice/day?id=5");
     await expect(detail).toContainText("P2 · wrong, with a workaround");
     await expect(detail).toContainText("desk-2026.10.16");

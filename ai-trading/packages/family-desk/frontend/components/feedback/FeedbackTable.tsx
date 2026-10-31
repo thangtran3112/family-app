@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { areaLabel, formatShortDay, KIND_LABEL, STATUS_LABEL, statusTone } from "@/lib/desk/feedbackView";
+import { areaLabel, formatShortDay, KIND_LABEL, reporterInitial, STATUS_LABEL, statusTone } from "@/lib/desk/feedbackView";
 import type { FeedbackItem } from "@/lib/feedback/schemas";
 import styles from "./feedback.module.css";
 
@@ -53,7 +53,7 @@ export function FeedbackTable({
     },
     { key: "where", label: "Where", render: (item) => <span className={styles.where} title={item.route}>{item.route}</span> },
     { key: "area", label: "Area", render: (item) => <span className={`${styles.cell} ${styles.cellArea}`}>{areaLabel(item.area)}</span> },
-    { key: "by", label: "Reported by", render: (item) => <span className={`${styles.cell} ${styles.cellBy}`}>{item.reported_by}</span> },
+    { key: "by", label: "Reported by", render: (item) => <span className={`${styles.cell} ${styles.cellBy}`}>{reporterInitial(item.reported_by)}</span> },
     { key: "updated", label: "Updated", render: (item) => <span className={styles.cellUpdated}>{formatShortDay(item.updated_at)}</span> },
     {
       key: "status",
