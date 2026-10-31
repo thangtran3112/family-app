@@ -737,7 +737,6 @@ export const PRACTICE_COPY = {
   swingFocusUntraded: "{symbol} would have ranked {rank} of {of} ({ret})",
   // Practice hub redesign (02r2): the landing table, the New plan modal and the thread page
   landingColThread: "Thread",
-  landingColDays: "Days",
   landingColProgress: "Progress",
   landingProgressDay: "Day {n}",
   landingProgressDone: "Day {n} done",
