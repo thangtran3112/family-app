@@ -59,6 +59,7 @@ export const PracticeBlockV1Schema = z
     firstDay: IsoDaySchema,
     sessions: z.int().min(5).max(30),
     hideDates: YesNoSchema,
+    // Accepted and ignored since the day name cap went away (a day opens any list name); old plans still carry it.
     maxSymbols: z.int().min(1).max(20).optional(),
     screen: PracticeScreenSchema,
     setup: PracticeSetupSchema,

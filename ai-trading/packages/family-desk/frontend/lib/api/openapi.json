@@ -3789,7 +3789,7 @@
         "type": "object"
       },
       "DaySessionOut": {
-        "description": "A name she has practised today: the day strip's row.",
+        "description": "A name she has opened today: a row of the day's portfolio. Flat unless `position` is set.",
         "properties": {
           "behind_clock": {
             "title": "Behind Clock",
@@ -3802,6 +3802,20 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "realized_usd": {
+            "title": "Realized Usd",
+            "type": "number"
           },
           "revealed_through": {
             "format": "date-time",
@@ -3819,6 +3833,10 @@
           "symbol": {
             "title": "Symbol",
             "type": "string"
+          },
+          "trades": {
+            "title": "Trades",
+            "type": "integer"
           }
         },
         "required": [
@@ -3827,7 +3845,10 @@
           "status",
           "revealed_through",
           "behind_clock",
-          "has_open_trade"
+          "has_open_trade",
+          "trades",
+          "realized_usd",
+          "position"
         ],
         "title": "DaySessionOut",
         "type": "object"
@@ -9081,10 +9102,6 @@
             "title": "Id",
             "type": "integer"
           },
-          "max_symbols": {
-            "title": "Max Symbols",
-            "type": "integer"
-          },
           "next_day": {
             "anyOf": [
               {
@@ -9153,7 +9170,6 @@
           "thread_id",
           "spec",
           "sessions",
-          "max_symbols",
           "days_opened",
           "day_offset",
           "filters",
@@ -19222,7 +19238,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
       "post": {
-        "description": "Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in\nv1: another name is a 409 until the day ends. A swing day allows several names on its shared clock.",
+        "description": "Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list\nname opens, one open trade at a time: a switch with a trade open is a 409 until it is closed.",
         "operationId": "start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post",
         "parameters": [
           {

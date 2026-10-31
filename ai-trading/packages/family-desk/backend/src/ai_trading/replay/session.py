@@ -223,16 +223,22 @@ def get_row(db: Session, user_id: int, session_id: int, *, lock: bool = False) -
     return row
 
 
+def day_books(db: Session, day_list_id: int) -> dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]]:
+    """`{session id: (closed trades, open trade)}` for every session of the day list, in the order she opened them: the
+    day's portfolio. One marks load per session."""
+    ids = db.execute(
+        select(ReplaySession.id).where(ReplaySession.day_list_id == day_list_id).order_by(ReplaySession.id)
+    ).scalars()
+    return {session_id: journal_mod.assemble(_marks_of(_load_marks(db, session_id))) for session_id in list(ids)}
+
+
 def open_trades(db: Session, day_list_id: int) -> list[tuple[int, str]]:
     """`(session id, symbol)` of every session of the day list that holds an open practice trade. A day thread keeps
     one open trade a day (02o-b2): she closes it before she moves to another name."""
-    out = []
-    for session_id, symbol in db.execute(
-        select(ReplaySession.id, ReplaySession.symbol).where(ReplaySession.day_list_id == day_list_id)
-    ).all():
-        if journal_mod.assemble(_marks_of(_load_marks(db, session_id)))[1] is not None:
-            out.append((session_id, symbol))
-    return out
+    symbols = dict(
+        db.execute(select(ReplaySession.id, ReplaySession.symbol).where(ReplaySession.day_list_id == day_list_id)).all()
+    )
+    return [(sid, symbols[sid]) for sid, (_, open_) in day_books(db, day_list_id).items() if open_ is not None]
 
 
 def _day_trades(db: Session, row: ReplaySession) -> list[journal_mod.Trade]:
