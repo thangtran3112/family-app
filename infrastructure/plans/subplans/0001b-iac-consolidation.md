@@ -211,3 +211,10 @@ amends `ai-trading/AGENTS.md` ("Application deployment artifacts ... live in
 Each PR is a plain revert. Host layouts never change, so a revert plus one redeploy restores the
 previous state. If a merged move breaks a parallel session's branch, that session re-applies its
 edits at the new path. Do not revert the move for one branch.
+
+## Delivered
+
+- **0001b-1 delivered 2026-11-01 (PR #225, merged `eaecd77e`).** All moves (`infrastructure/vps/**` → `infrastructure/host/**`; the ai-trading production/deploy/render-env/test set → `infrastructure/apps/ai-trading/`), path fixes, and behavior changes (#2 dark mode/#3 reader-key/#4 host steps/#5 postgres reconcile/#6 temporal/#7 backup/#8 defaults) landed with two transitional `infrastructure/vps/` shims for expense-owned references.
+- **Reconciled against #224** (merged `2180050c`) which removed `.github/workflows/ai-trading-ci.yml` (ADR-0013, CI is deployment-only) and added `infrastructure/tailscale/`. The #225 path fixes to the deleted CI file were dropped; `AGENTS.md`/`ai-trading/AGENTS.md`/`infrastructure/README.md` carry both sets. Local gates now replace the PR CI (test-deploy-firestore 81, health-rollback 9, render-env 14, host/test-steps 30, test-bootstrap 9, l6-desk 26; shellcheck + bash -n + compose config).
+- **Tailscale parts of behavior change #1 and #9 are superseded by #224** — `infrastructure/tailscale/` (ACL as code, mint-authkey, run-terraform) exists; the `target=laptop` deploy join remains 0001c's job.
+- **No-op VPS proof sequenced but not yet run:** `main` is ~866 commits behind `dev`, so the scoped release that proves the moved paths is batched with the next ai-trading release (to avoid carrying #222's unreleased 5S wave as a side effect). The Deploy workflow's `target` defaults to `vps`, so `gh workflow run ai-trading-deploy.yml --ref main -f deploy_app=true` after that release is the proof.
