@@ -361,7 +361,7 @@ printed.
 | GitHub variable `CLOUDFLARE_ACCOUNT_ID`; literal `tobytran.dev` | `shared/cloudflare` `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_NAME` |
 | GitHub variables `VPS_HOST`, `VPS_PORT`, `VPS_USER` | `shared/vps`, same names |
 | `.keys/ovh/.env` `IPV4_ADDRESS`, `IPV6_ADDRESS` | `shared/vps` `VPS_IPV4_ADDRESS`, `VPS_IPV6_ADDRESS` |
-| laptop `known_hosts` lines for `[158.69.202.250]:2222` | `shared/vps` `VPS_SSH_KNOWN_HOSTS` |
+| laptop `known_hosts` lines for the VPS host:port (values live in Firestore only) | `shared/vps` `VPS_SSH_KNOWN_HOSTS` |
 | `.keys/ovh/github-actions-expense-tax` and `.pub` | `shared/vps` `VPS_DEPLOY_SSH_PRIVATE_KEY`, `VPS_DEPLOY_SSH_PUBLIC_KEY` |
 | `.keys/ovh/id_ed25519_personal` and `.pub` | `shared/vps` `VPS_OPERATOR_SSH_PRIVATE_KEY`, `VPS_OPERATOR_SSH_PUBLIC_KEY` |
 | `.keys/ovh/postgres-vps.env` `POSTGRES_SUPERUSER_PASSWORD` | `shared/vps-postgres`, same name |
