@@ -203,7 +203,7 @@ def test_plan_rejections_are_plain_problems(daily, db_session) -> None:
     ]
     wrong = post({**good, "extra": 1})
     assert wrong.status_code == 422
-    missing = post({**good, "screen": {**good["screen"], "filters": [{"id": 999}]}})
+    missing = post({**good, "screen": {**good["screen"], "filters": [{"id": 999_999}]}})
     assert missing.json()["detail"]["problems"] == [{"path": "screen.filters.0.id", "message": "Filter not found"}]
     stray = client.post(f"{BASE}/daily/next", json={"plans": {}}, headers=auth_headers())
     assert stray.status_code == 422
@@ -415,7 +415,8 @@ def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> Non
 
     flat = row()
     assert (flat["position"], flat["trades"], flat["realized_usd"]) == (None, 0, 0.0)
-    assert client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("09:35")}, headers=auth_headers()).status_code == 200
+    start = client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("09:35")}, headers=auth_headers())
+    assert start.status_code == 200, start.text
     entered = client.post(
         f"{BASE}/sessions/{sid}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )
