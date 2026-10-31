@@ -3654,7 +3654,7 @@
         "type": "object"
       },
       "DayListPatch": {
-        "description": "PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left\nalone; `null` clears notes and rating.",
+        "description": "PATCH body: the stars (at most 20 names from the list), notes, and the self-rating. A key left out is left\nalone; `null` clears notes and rating.",
         "properties": {
           "notes": {
             "anyOf": [
@@ -3687,7 +3687,7 @@
                 "items": {
                   "type": "string"
                 },
-                "maxItems": 5,
+                "maxItems": 20,
                 "type": "array"
               },
               {
@@ -8655,7 +8655,7 @@
           "maxSymbols": {
             "anyOf": [
               {
-                "maximum": 5.0,
+                "maximum": 20.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -18708,7 +18708,7 @@
         ]
       },
       "patch": {
-        "description": "Stars (at most five names from the list, each stamped with the day clock), notes and the self-rating.",
+        "description": "Stars (at most 20 names from the list, each stamped with the day clock), notes and the self-rating.",
         "operationId": "patch_day_list_api_desk_replay_day_lists__day_list_id__patch",
         "parameters": [
           {

@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from ai_trading.api.app import app
 from ai_trading.api.replay import get_services
+from ai_trading.api.schemas.replay import DayListPatch
 from ai_trading.cli.seed_technical import seed_user
 from ai_trading.core.calendar import et
 from ai_trading.db.models import FilterStrategy, PracticePlan, ReplayDayList, User
@@ -121,9 +122,12 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
         client.patch(f"{BASE}/day-lists/{list_id}", json={"watch": ["FLAT"]}, headers=auth_headers()).status_code == 422
     )
     assert (
-        client.patch(f"{BASE}/day-lists/{list_id}", json={"watch": list("ABCDEF")}, headers=auth_headers()).status_code
+        client.patch(
+            f"{BASE}/day-lists/{list_id}", json={"watch": [f"S{i}" for i in range(21)]}, headers=auth_headers()
+        ).status_code
         == 422
     )
+    assert DayListPatch(watch=[f"S{i}" for i in range(20)]).watch  # 20 stars pass the schema; the 21st does not
 
     session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
     assert session.status_code == 200, session.text

@@ -46,7 +46,7 @@ const PREP_WAIT_MS = 3000;
 /**
  * `/practice/day?id=` for a swing thread (02p d1): the holds pinned at the top, the fixed universe as of the prior close
  * with its figures, her armed filters' matches and an earnings chip, Peek (daily bars only), and the day's buttons.
- * Stars are focus names (at most five). An ended day shows its summary instead of a review. The board keeps its own
+ * Stars are focus names (at most 20). An ended day shows its summary instead of a review. The board keeps its own
  * copy of the day: a star shows at once and rolls back if the server refuses it, and End and Pass answer the new day.
  */
 export function SwingBoard({ initial }: { initial: SwingDayList }) {

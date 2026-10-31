@@ -786,7 +786,7 @@ export interface paths {
         head?: never;
         /**
          * Patch Day List
-         * @description Stars (at most five names from the list, each stamped with the day clock), notes and the self-rating.
+         * @description Stars (at most 20 names from the list, each stamped with the day clock), notes and the self-rating.
          */
         patch: operations["patch_day_list_api_desk_replay_day_lists__day_list_id__patch"];
         trace?: never;
@@ -2935,7 +2935,7 @@ export interface components {
         };
         /**
          * DayListPatch
-         * @description PATCH body: the stars (at most five names from the list), notes, and the self-rating. A key left out is left
+         * @description PATCH body: the stars (at most 20 names from the list), notes, and the self-rating. A key left out is left
          *     alone; `null` clears notes and rating.
          */
         DayListPatch: {

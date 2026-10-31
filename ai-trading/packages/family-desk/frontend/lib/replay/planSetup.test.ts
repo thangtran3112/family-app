@@ -50,10 +50,10 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.equal(JSON.stringify(spec).includes("null"), false);
 });
 
-test("the names a day go in the block as a whole number from 1 to 5, and the contract refuses the rest", () => {
+test("the names a day go in the block as a whole number from 1 to 20, and the contract refuses the rest", () => {
   assert.equal((planDraftToSpec(ready()) as Record<string, unknown>).maxSymbols, 3);
-  assert.equal(validatePlanDraft(ready({ maxSymbols: "5" })).ok, true);
-  for (const bad of ["0", "6", "2.5", ""]) {
+  assert.equal(validatePlanDraft(ready({ maxSymbols: "20" })).ok, true);
+  for (const bad of ["0", "21", "2.5", ""]) {
     const result = validatePlanDraft(ready({ maxSymbols: bad }));
     assert.equal(result.ok, false, bad);
     assert.ok(!result.ok && result.problems.maxSymbols, bad);
