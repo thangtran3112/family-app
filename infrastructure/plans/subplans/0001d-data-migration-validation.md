@@ -147,3 +147,7 @@ connector flip. Time every step and fix the runbook where reality differs.
 
 Production is untouched. Laptop data from rehearsals is disposable: run `docker compose down`,
 delete the data dir, re-init.
+
+## Delivered
+
+- **Delivered 2026-11-01.** Data migrated to the laptop and validated; production now serves from it (see [0001e](0001e-cutover.md)).

@@ -150,3 +150,7 @@ steps in order. Do not overlap them.
 
 Go/no-go, the Clerk sign-ins and flow checks, the family announcement, any rollback decision, and
 the expense dispatch confirmation.
+
+## Delivered
+
+- **Delivered 2026-11-01.** Production serves from the laptop; the VPS stack is stopped and kept as the rollback reference (`shared/vps`). Deploy workflows default to `target=laptop` and fail closed until the `LAPTOP_*` / `TS_CI_OAUTH_*` GitHub values exist, so step 12's push-triggered CI deploy does not pass yet: it needs those values (see [0001g](0001g-post-cutover-hardening.md)). Laptop backups run as `family-laptop-1` (step 11 done).

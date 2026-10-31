@@ -15,12 +15,15 @@ on:
     inputs:
       target:
         description: >-
-          Host the deploy job targets. A push to main always deploys to vps.
+          Host the deploy job targets. A push to main deploys to laptop (prod
+          serves from the laptop since the 2026-11-01 cutover); vps is an
+          explicit workflow_dispatch opt-in only (stopped rollback reference).
           laptop joins the tailnet as tag:ci first and uses the LAPTOP_* host
-          variables and secrets (copies of Firestore shared/laptop).
+          variables and secrets (copies of Firestore shared/laptop). It fails
+          closed until those and TS_CI_OAUTH_* are set.
         type: choice
-        options: [vps, laptop]
-        default: vps
+        options: [laptop, vps]
+        default: laptop
       dark:
         description: >-
           Dark deploy (DEPLOY_DARK=1 to deploy.sh): start the stack without
@@ -118,16 +121,17 @@ jobs:
       contents: read
       packages: read
     env:
-      # Push to main is always the vps. The step env below keeps its VPS_* names
-      # for both targets: they hold whichever host this run targets.
-      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'vps' }}
+      # Push to main is always the laptop; vps only by explicit dispatch. The step
+      # env below keeps its VPS_* names for both targets: they hold whichever host
+      # this run targets.
+      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'laptop' }}
       # Already-pushed tag to deploy; empty means the commit this run built.
       IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
       # '1' only on a dispatch with dark=true; every push is '0'.
       DEPLOY_DARK: ${{ (github.event_name == 'workflow_dispatch' && inputs.dark == true) && '1' || '0' }}
-      VPS_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_HOST || vars.VPS_HOST }}
-      VPS_PORT: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_PORT || vars.VPS_PORT }}
-      VPS_USER: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && vars.LAPTOP_USER || vars.VPS_USER }}
+      VPS_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_HOST || vars.LAPTOP_HOST }}
+      VPS_PORT: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_PORT || vars.LAPTOP_PORT }}
+      VPS_USER: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_USER || vars.LAPTOP_USER }}
     steps:
       - name: Validate dispatch inputs
         env:
@@ -141,8 +145,8 @@ jobs:
         run: |
           set -euo pipefail
           case "$TARGET" in vps | laptop) ;; *) echo "target must be vps or laptop" >&2; exit 1 ;; esac
-          # An unset laptop value would otherwise fall back to the VPS value in the
-          # selection expressions: fail closed instead of deploying to the wrong host.
+          # Fail closed: an unset laptop value stops the deploy. The VPS is stopped,
+          # so never fall back to it.
           if [[ "$TARGET" == "laptop" ]]; then
             for name in LAPTOP_HOST LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS TS_CI_OAUTH_CLIENT_ID TS_CI_OAUTH_SECRET; do
               if [[ -z "${!name}" ]]; then
@@ -182,8 +186,8 @@ jobs:
         env:
           # LAPTOP_* secrets are GitHub copies of Firestore shared/laptop; the VPS_*
           # copies stay until the VPS is retired (0001f).
-          VPS_DEPLOY_SSH_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && secrets.LAPTOP_DEPLOY_SSH_KEY || secrets.VPS_DEPLOY_SSH_KEY }}
-          VPS_DEPLOY_KNOWN_HOSTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'laptop') && secrets.LAPTOP_DEPLOY_KNOWN_HOSTS || secrets.VPS_DEPLOY_KNOWN_HOSTS }}
+          VPS_DEPLOY_SSH_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && secrets.VPS_DEPLOY_SSH_KEY || secrets.LAPTOP_DEPLOY_SSH_KEY }}
+          VPS_DEPLOY_KNOWN_HOSTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && secrets.VPS_DEPLOY_KNOWN_HOSTS || secrets.LAPTOP_DEPLOY_KNOWN_HOSTS }}
           SSH_KEY_FILE: ${{ runner.temp }}/expense-tax-deploy-key
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |
