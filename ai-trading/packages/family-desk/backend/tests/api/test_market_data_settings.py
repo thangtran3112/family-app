@@ -15,9 +15,7 @@ from ai_trading.api.auth import get_data_sources
 from ai_trading.data import routing as routing_store
 from ai_trading.db.models import MarketDataRouting
 
-IBKR_OK = ProviderHealth(
-    provider="ibkr", classes=("equity_quotes",), configured=True, state="ok", quality="realtime"
-)
+IBKR_OK = ProviderHealth(provider="ibkr", classes=("equity_quotes",), configured=True, state="ok", quality="realtime")
 IBKR_OFF = ProviderHealth(
     provider="ibkr", classes=("equity_quotes",), configured=True, state="off", reason="off", quality="delayed-15m"
 )

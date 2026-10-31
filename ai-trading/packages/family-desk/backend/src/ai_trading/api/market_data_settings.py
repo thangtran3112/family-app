@@ -117,9 +117,7 @@ def _label(provider: str) -> str:
     return PROVIDER_LABELS.get(provider, provider)
 
 
-def _options(
-    data_class: str, ladder: list[str], health: dict[str, ProviderHealth]
-) -> list[ProviderOptionOut]:
+def _options(data_class: str, ladder: list[str], health: dict[str, ProviderHealth]) -> list[ProviderOptionOut]:
     out: list[ProviderOptionOut] = []
     for provider in OPTION_PROVIDERS:
         row = health.get(provider)
@@ -257,8 +255,7 @@ def put_market_data(
             raise _reject(f"{body.provider!r} is not a provider the Desk offers.")
         if provider not in row.ladder:
             raise _reject(
-                f"{_label(provider)} is not in the {class_label} ladder on the bridge "
-                f"({', '.join(row.ladder)})."
+                f"{_label(provider)} is not in the {class_label} ladder on the bridge ({', '.join(row.ladder)})."
             )
         if provider not in health or body.data_class not in health[provider].classes:
             raise _reject(f"The bridge has no {_label(provider)} adapter for {class_label}.")

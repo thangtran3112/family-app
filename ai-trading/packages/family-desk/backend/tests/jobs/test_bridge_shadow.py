@@ -24,6 +24,8 @@ def _logger_on(monkeypatch):
     # Alembic's `fileConfig` (run by the DB fixtures) disables every logger that already exists -- the same
     # workaround `test_scheduler.py` uses. These tests assert on the job's JSON lines.
     monkeypatch.setattr(bridge_shadow.logger, "disabled", False)
+
+
 AS_OF = pd.Timestamp("2026-10-30T13:45:00Z")
 
 
@@ -65,9 +67,7 @@ def sources(*, direct=None, bridge=None):
 
 def _lines(caplog) -> list[dict]:
     return [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "ai_trading.jobs.bridge_shadow"
+        json.loads(record.getMessage()) for record in caplog.records if record.name == "ai_trading.jobs.bridge_shadow"
     ]
 
 
@@ -140,9 +140,7 @@ def test_an_empty_watchlist_is_a_no_op(db_session, caplog):
 
 def test_a_provider_failure_is_logged_and_returned_not_raised(db_session, watchlist_with_items, caplog):
     caplog.set_level(logging.INFO)
-    result = bridge_shadow.run(
-        db_session, sources(bridge=FakeBridge(raises=Unavailable("bridge", "down"))), now=NOW
-    )
+    result = bridge_shadow.run(db_session, sources(bridge=FakeBridge(raises=Unavailable("bridge", "down"))), now=NOW)
     assert result.ok is False and "bridge" in (result.error or "")
     line = _lines(caplog)[-1]
     assert line["error"].startswith("bridge") and "Authorization" not in json.dumps(line)

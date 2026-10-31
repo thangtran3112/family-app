@@ -44,9 +44,7 @@ def read(session: Session) -> StoredRouting:
     )
 
 
-def record(
-    session: Session, *, data_class: str, provider: str, updated_by: str, now: datetime
-) -> StoredRouting:
+def record(session: Session, *, data_class: str, provider: str, updated_by: str, now: datetime) -> StoredRouting:
     """Stores one class's preference and returns the whole record with the bumped version. The caller
     commits: a `SetRouting` that fails afterwards rolls the row back with the request's transaction."""
 
