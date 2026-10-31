@@ -102,6 +102,14 @@ message GetBarsRequest {
   google.protobuf.Timestamp as_of = 7;
 }
 
+// H1. Where a bar came from. Set only when the archive is enabled (ARCHIVE_ENABLED=1); UNSPECIFIED
+// means the bridge was not asked to say, so a client from before H1 sees the answer it always saw.
+enum BarSource {
+  BAR_SOURCE_UNSPECIFIED = 0;
+  PROVIDER = 1;  // fetched from the vendor for this request
+  ARCHIVE = 2;   // read from the write-once RAW archive; no vendor call was made for it
+}
+
 message Bar {
   google.protobuf.Timestamp start = 1;
   double open = 2;
@@ -117,6 +125,7 @@ message Bar {
   // close; a minute bar one minute after its start). Named close_at because field 5 already is
   // `close`: protocol buffers forbid two fields with one name in a message.
   google.protobuf.Timestamp close_at = 8;
+  BarSource source = 9;  // H1
 }
 
 message GetBarsResponse {

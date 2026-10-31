@@ -292,6 +292,57 @@ func (Adjustment) EnumDescriptor() ([]byte, []int) {
 	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{4}
 }
 
+// H1. Where a bar came from. Set only when the archive is enabled (ARCHIVE_ENABLED=1); UNSPECIFIED
+// means the bridge was not asked to say, so a client from before H1 sees the answer it always saw.
+type BarSource int32
+
+const (
+	BarSource_BAR_SOURCE_UNSPECIFIED BarSource = 0
+	BarSource_PROVIDER               BarSource = 1 // fetched from the vendor for this request
+	BarSource_ARCHIVE                BarSource = 2 // read from the write-once RAW archive; no vendor call was made for it
+)
+
+// Enum value maps for BarSource.
+var (
+	BarSource_name = map[int32]string{
+		0: "BAR_SOURCE_UNSPECIFIED",
+		1: "PROVIDER",
+		2: "ARCHIVE",
+	}
+	BarSource_value = map[string]int32{
+		"BAR_SOURCE_UNSPECIFIED": 0,
+		"PROVIDER":               1,
+		"ARCHIVE":                2,
+	}
+)
+
+func (x BarSource) Enum() *BarSource {
+	p := new(BarSource)
+	*p = x
+	return p
+}
+
+func (x BarSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BarSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_marketdata_v1_marketdata_proto_enumTypes[5].Descriptor()
+}
+
+func (BarSource) Type() protoreflect.EnumType {
+	return &file_marketdata_v1_marketdata_proto_enumTypes[5]
+}
+
+func (x BarSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BarSource.Descriptor instead.
+func (BarSource) EnumDescriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
+}
+
 type Right int32
 
 const (
@@ -325,11 +376,11 @@ func (x Right) String() string {
 }
 
 func (Right) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[5].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[6].Descriptor()
 }
 
 func (Right) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[5]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[6]
 }
 
 func (x Right) Number() protoreflect.EnumNumber {
@@ -338,7 +389,7 @@ func (x Right) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Right.Descriptor instead.
 func (Right) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
 }
 
 // Values are prefixed (unlike the 02t sketch): proto3 enum values are scoped to
@@ -385,11 +436,11 @@ func (x HealthState) String() string {
 }
 
 func (HealthState) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[6].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[7].Descriptor()
 }
 
 func (HealthState) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[6]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[7]
 }
 
 func (x HealthState) Number() protoreflect.EnumNumber {
@@ -398,7 +449,7 @@ func (x HealthState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HealthState.Descriptor instead.
 func (HealthState) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
 }
 
 type RoutingSource int32
@@ -434,11 +485,11 @@ func (x RoutingSource) String() string {
 }
 
 func (RoutingSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[7].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[8].Descriptor()
 }
 
 func (RoutingSource) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[7]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[8]
 }
 
 func (x RoutingSource) Number() protoreflect.EnumNumber {
@@ -447,7 +498,7 @@ func (x RoutingSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RoutingSource.Descriptor instead.
 func (RoutingSource) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{8}
 }
 
 type Attempt struct {
@@ -901,6 +952,7 @@ type Bar struct {
 	// close; a minute bar one minute after its start). Named close_at because field 5 already is
 	// `close`: protocol buffers forbid two fields with one name in a message.
 	CloseAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=close_at,json=closeAt,proto3" json:"close_at,omitempty"`
+	Source        BarSource              `protobuf:"varint,9,opt,name=source,proto3,enum=familyapp.marketdata.v1.BarSource" json:"source,omitempty"` // H1
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -989,6 +1041,13 @@ func (x *Bar) GetCloseAt() *timestamppb.Timestamp {
 		return x.CloseAt
 	}
 	return nil
+}
+
+func (x *Bar) GetSource() BarSource {
+	if x != nil {
+		return x.Source
+	}
+	return BarSource_BAR_SOURCE_UNSPECIFIED
 }
 
 type GetBarsResponse struct {
@@ -2060,7 +2119,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"adjustment\x18\x05 \x01(\x0e2#.familyapp.marketdata.v1.AdjustmentR\n" +
 	"adjustment\x12!\n" +
 	"\fpin_provider\x18\x06 \x01(\tR\vpinProvider\x12/\n" +
-	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\"\xf9\x01\n" +
+	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\"\xb5\x02\n" +
 	"\x03Bar\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12\x12\n" +
 	"\x04open\x18\x02 \x01(\x01R\x04open\x12\x12\n" +
@@ -2069,7 +2128,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x05close\x18\x05 \x01(\x01R\x05close\x12\x16\n" +
 	"\x06volume\x18\x06 \x01(\x03R\x06volume\x12!\n" +
 	"\fsession_date\x18\a \x01(\tR\vsessionDate\x125\n" +
-	"\bclose_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\acloseAt\"\x94\x01\n" +
+	"\bclose_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\acloseAt\x12:\n" +
+	"\x06source\x18\t \x01(\x0e2\".familyapp.marketdata.v1.BarSourceR\x06source\"\x94\x01\n" +
 	"\x0fGetBarsResponse\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x120\n" +
 	"\x04bars\x18\x02 \x03(\v2\x1c.familyapp.marketdata.v1.BarR\x04bars\x127\n" +
@@ -2195,7 +2255,11 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x16ADJUSTMENT_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03ALL\x10\x01\x12\t\n" +
 	"\x05SPLIT\x10\x02\x12\a\n" +
-	"\x03RAW\x10\x03*1\n" +
+	"\x03RAW\x10\x03*B\n" +
+	"\tBarSource\x12\x1a\n" +
+	"\x16BAR_SOURCE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bPROVIDER\x10\x01\x12\v\n" +
+	"\aARCHIVE\x10\x02*1\n" +
 	"\x05Right\x12\x15\n" +
 	"\x11RIGHT_UNSPECIFIED\x10\x00\x12\b\n" +
 	"\x04CALL\x10\x01\x12\a\n" +
@@ -2235,7 +2299,7 @@ func file_marketdata_v1_marketdata_proto_rawDescGZIP() []byte {
 	return file_marketdata_v1_marketdata_proto_rawDescData
 }
 
-var file_marketdata_v1_marketdata_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_marketdata_v1_marketdata_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
 var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_marketdata_v1_marketdata_proto_goTypes = []any{
 	(DataClass)(0),                 // 0: familyapp.marketdata.v1.DataClass
@@ -2243,92 +2307,94 @@ var file_marketdata_v1_marketdata_proto_goTypes = []any{
 	(ErrorKind)(0),                 // 2: familyapp.marketdata.v1.ErrorKind
 	(Timeframe)(0),                 // 3: familyapp.marketdata.v1.Timeframe
 	(Adjustment)(0),                // 4: familyapp.marketdata.v1.Adjustment
-	(Right)(0),                     // 5: familyapp.marketdata.v1.Right
-	(HealthState)(0),               // 6: familyapp.marketdata.v1.HealthState
-	(RoutingSource)(0),             // 7: familyapp.marketdata.v1.RoutingSource
-	(*Attempt)(nil),                // 8: familyapp.marketdata.v1.Attempt
-	(*Served)(nil),                 // 9: familyapp.marketdata.v1.Served
-	(*GetQuotesRequest)(nil),       // 10: familyapp.marketdata.v1.GetQuotesRequest
-	(*Quote)(nil),                  // 11: familyapp.marketdata.v1.Quote
-	(*GetQuotesResponse)(nil),      // 12: familyapp.marketdata.v1.GetQuotesResponse
-	(*GetBarsRequest)(nil),         // 13: familyapp.marketdata.v1.GetBarsRequest
-	(*Bar)(nil),                    // 14: familyapp.marketdata.v1.Bar
-	(*GetBarsResponse)(nil),        // 15: familyapp.marketdata.v1.GetBarsResponse
-	(*GetOptionChainRequest)(nil),  // 16: familyapp.marketdata.v1.GetOptionChainRequest
-	(*OptionContract)(nil),         // 17: familyapp.marketdata.v1.OptionContract
-	(*GetOptionChainResponse)(nil), // 18: familyapp.marketdata.v1.GetOptionChainResponse
-	(*ProviderHealth)(nil),         // 19: familyapp.marketdata.v1.ProviderHealth
-	(*Counters)(nil),               // 20: familyapp.marketdata.v1.Counters
-	(*ListProvidersRequest)(nil),   // 21: familyapp.marketdata.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),  // 22: familyapp.marketdata.v1.ListProvidersResponse
-	(*ClassRouting)(nil),           // 23: familyapp.marketdata.v1.ClassRouting
-	(*Routing)(nil),                // 24: familyapp.marketdata.v1.Routing
-	(*ClassPreference)(nil),        // 25: familyapp.marketdata.v1.ClassPreference
-	(*SetRoutingRequest)(nil),      // 26: familyapp.marketdata.v1.SetRoutingRequest
-	(*GetStatusRequest)(nil),       // 27: familyapp.marketdata.v1.GetStatusRequest
-	(*WatchStatusRequest)(nil),     // 28: familyapp.marketdata.v1.WatchStatusRequest
-	(*BridgeStatus)(nil),           // 29: familyapp.marketdata.v1.BridgeStatus
-	(*timestamppb.Timestamp)(nil),  // 30: google.protobuf.Timestamp
+	(BarSource)(0),                 // 5: familyapp.marketdata.v1.BarSource
+	(Right)(0),                     // 6: familyapp.marketdata.v1.Right
+	(HealthState)(0),               // 7: familyapp.marketdata.v1.HealthState
+	(RoutingSource)(0),             // 8: familyapp.marketdata.v1.RoutingSource
+	(*Attempt)(nil),                // 9: familyapp.marketdata.v1.Attempt
+	(*Served)(nil),                 // 10: familyapp.marketdata.v1.Served
+	(*GetQuotesRequest)(nil),       // 11: familyapp.marketdata.v1.GetQuotesRequest
+	(*Quote)(nil),                  // 12: familyapp.marketdata.v1.Quote
+	(*GetQuotesResponse)(nil),      // 13: familyapp.marketdata.v1.GetQuotesResponse
+	(*GetBarsRequest)(nil),         // 14: familyapp.marketdata.v1.GetBarsRequest
+	(*Bar)(nil),                    // 15: familyapp.marketdata.v1.Bar
+	(*GetBarsResponse)(nil),        // 16: familyapp.marketdata.v1.GetBarsResponse
+	(*GetOptionChainRequest)(nil),  // 17: familyapp.marketdata.v1.GetOptionChainRequest
+	(*OptionContract)(nil),         // 18: familyapp.marketdata.v1.OptionContract
+	(*GetOptionChainResponse)(nil), // 19: familyapp.marketdata.v1.GetOptionChainResponse
+	(*ProviderHealth)(nil),         // 20: familyapp.marketdata.v1.ProviderHealth
+	(*Counters)(nil),               // 21: familyapp.marketdata.v1.Counters
+	(*ListProvidersRequest)(nil),   // 22: familyapp.marketdata.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),  // 23: familyapp.marketdata.v1.ListProvidersResponse
+	(*ClassRouting)(nil),           // 24: familyapp.marketdata.v1.ClassRouting
+	(*Routing)(nil),                // 25: familyapp.marketdata.v1.Routing
+	(*ClassPreference)(nil),        // 26: familyapp.marketdata.v1.ClassPreference
+	(*SetRoutingRequest)(nil),      // 27: familyapp.marketdata.v1.SetRoutingRequest
+	(*GetStatusRequest)(nil),       // 28: familyapp.marketdata.v1.GetStatusRequest
+	(*WatchStatusRequest)(nil),     // 29: familyapp.marketdata.v1.WatchStatusRequest
+	(*BridgeStatus)(nil),           // 30: familyapp.marketdata.v1.BridgeStatus
+	(*timestamppb.Timestamp)(nil),  // 31: google.protobuf.Timestamp
 }
 var file_marketdata_v1_marketdata_proto_depIdxs = []int32{
 	2,  // 0: familyapp.marketdata.v1.Attempt.error:type_name -> familyapp.marketdata.v1.ErrorKind
 	1,  // 1: familyapp.marketdata.v1.Served.quality:type_name -> familyapp.marketdata.v1.Quality
-	8,  // 2: familyapp.marketdata.v1.Served.attempts:type_name -> familyapp.marketdata.v1.Attempt
-	30, // 3: familyapp.marketdata.v1.Quote.as_of:type_name -> google.protobuf.Timestamp
+	9,  // 2: familyapp.marketdata.v1.Served.attempts:type_name -> familyapp.marketdata.v1.Attempt
+	31, // 3: familyapp.marketdata.v1.Quote.as_of:type_name -> google.protobuf.Timestamp
 	1,  // 4: familyapp.marketdata.v1.Quote.quality:type_name -> familyapp.marketdata.v1.Quality
-	11, // 5: familyapp.marketdata.v1.GetQuotesResponse.quotes:type_name -> familyapp.marketdata.v1.Quote
-	9,  // 6: familyapp.marketdata.v1.GetQuotesResponse.served:type_name -> familyapp.marketdata.v1.Served
+	12, // 5: familyapp.marketdata.v1.GetQuotesResponse.quotes:type_name -> familyapp.marketdata.v1.Quote
+	10, // 6: familyapp.marketdata.v1.GetQuotesResponse.served:type_name -> familyapp.marketdata.v1.Served
 	3,  // 7: familyapp.marketdata.v1.GetBarsRequest.timeframe:type_name -> familyapp.marketdata.v1.Timeframe
-	30, // 8: familyapp.marketdata.v1.GetBarsRequest.start:type_name -> google.protobuf.Timestamp
-	30, // 9: familyapp.marketdata.v1.GetBarsRequest.end:type_name -> google.protobuf.Timestamp
+	31, // 8: familyapp.marketdata.v1.GetBarsRequest.start:type_name -> google.protobuf.Timestamp
+	31, // 9: familyapp.marketdata.v1.GetBarsRequest.end:type_name -> google.protobuf.Timestamp
 	4,  // 10: familyapp.marketdata.v1.GetBarsRequest.adjustment:type_name -> familyapp.marketdata.v1.Adjustment
-	30, // 11: familyapp.marketdata.v1.GetBarsRequest.as_of:type_name -> google.protobuf.Timestamp
-	30, // 12: familyapp.marketdata.v1.Bar.start:type_name -> google.protobuf.Timestamp
-	30, // 13: familyapp.marketdata.v1.Bar.close_at:type_name -> google.protobuf.Timestamp
-	14, // 14: familyapp.marketdata.v1.GetBarsResponse.bars:type_name -> familyapp.marketdata.v1.Bar
-	9,  // 15: familyapp.marketdata.v1.GetBarsResponse.served:type_name -> familyapp.marketdata.v1.Served
-	5,  // 16: familyapp.marketdata.v1.GetOptionChainRequest.right:type_name -> familyapp.marketdata.v1.Right
-	30, // 17: familyapp.marketdata.v1.GetOptionChainRequest.now:type_name -> google.protobuf.Timestamp
-	5,  // 18: familyapp.marketdata.v1.OptionContract.right:type_name -> familyapp.marketdata.v1.Right
-	30, // 19: familyapp.marketdata.v1.OptionContract.as_of:type_name -> google.protobuf.Timestamp
-	30, // 20: familyapp.marketdata.v1.OptionContract.greeks_as_of:type_name -> google.protobuf.Timestamp
-	1,  // 21: familyapp.marketdata.v1.OptionContract.quality:type_name -> familyapp.marketdata.v1.Quality
-	17, // 22: familyapp.marketdata.v1.GetOptionChainResponse.contracts:type_name -> familyapp.marketdata.v1.OptionContract
-	9,  // 23: familyapp.marketdata.v1.GetOptionChainResponse.served:type_name -> familyapp.marketdata.v1.Served
-	0,  // 24: familyapp.marketdata.v1.ProviderHealth.classes:type_name -> familyapp.marketdata.v1.DataClass
-	6,  // 25: familyapp.marketdata.v1.ProviderHealth.state:type_name -> familyapp.marketdata.v1.HealthState
-	30, // 26: familyapp.marketdata.v1.ProviderHealth.last_ok:type_name -> google.protobuf.Timestamp
-	30, // 27: familyapp.marketdata.v1.ProviderHealth.newest_tick:type_name -> google.protobuf.Timestamp
-	1,  // 28: familyapp.marketdata.v1.ProviderHealth.quality:type_name -> familyapp.marketdata.v1.Quality
-	20, // 29: familyapp.marketdata.v1.ProviderHealth.counters:type_name -> familyapp.marketdata.v1.Counters
-	19, // 30: familyapp.marketdata.v1.ListProvidersResponse.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
-	0,  // 31: familyapp.marketdata.v1.ClassRouting.data_class:type_name -> familyapp.marketdata.v1.DataClass
-	23, // 32: familyapp.marketdata.v1.Routing.classes:type_name -> familyapp.marketdata.v1.ClassRouting
-	7,  // 33: familyapp.marketdata.v1.Routing.source:type_name -> familyapp.marketdata.v1.RoutingSource
-	0,  // 34: familyapp.marketdata.v1.ClassPreference.data_class:type_name -> familyapp.marketdata.v1.DataClass
-	25, // 35: familyapp.marketdata.v1.SetRoutingRequest.preferences:type_name -> familyapp.marketdata.v1.ClassPreference
-	30, // 36: familyapp.marketdata.v1.BridgeStatus.at:type_name -> google.protobuf.Timestamp
-	19, // 37: familyapp.marketdata.v1.BridgeStatus.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
-	24, // 38: familyapp.marketdata.v1.BridgeStatus.routing:type_name -> familyapp.marketdata.v1.Routing
-	10, // 39: familyapp.marketdata.v1.MarketData.GetQuotes:input_type -> familyapp.marketdata.v1.GetQuotesRequest
-	13, // 40: familyapp.marketdata.v1.MarketData.GetBars:input_type -> familyapp.marketdata.v1.GetBarsRequest
-	16, // 41: familyapp.marketdata.v1.MarketData.GetOptionChain:input_type -> familyapp.marketdata.v1.GetOptionChainRequest
-	21, // 42: familyapp.marketdata.v1.MarketData.ListProviders:input_type -> familyapp.marketdata.v1.ListProvidersRequest
-	27, // 43: familyapp.marketdata.v1.MarketData.GetStatus:input_type -> familyapp.marketdata.v1.GetStatusRequest
-	28, // 44: familyapp.marketdata.v1.MarketData.WatchStatus:input_type -> familyapp.marketdata.v1.WatchStatusRequest
-	26, // 45: familyapp.marketdata.v1.MarketData.SetRouting:input_type -> familyapp.marketdata.v1.SetRoutingRequest
-	12, // 46: familyapp.marketdata.v1.MarketData.GetQuotes:output_type -> familyapp.marketdata.v1.GetQuotesResponse
-	15, // 47: familyapp.marketdata.v1.MarketData.GetBars:output_type -> familyapp.marketdata.v1.GetBarsResponse
-	18, // 48: familyapp.marketdata.v1.MarketData.GetOptionChain:output_type -> familyapp.marketdata.v1.GetOptionChainResponse
-	22, // 49: familyapp.marketdata.v1.MarketData.ListProviders:output_type -> familyapp.marketdata.v1.ListProvidersResponse
-	29, // 50: familyapp.marketdata.v1.MarketData.GetStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
-	29, // 51: familyapp.marketdata.v1.MarketData.WatchStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
-	24, // 52: familyapp.marketdata.v1.MarketData.SetRouting:output_type -> familyapp.marketdata.v1.Routing
-	46, // [46:53] is the sub-list for method output_type
-	39, // [39:46] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	31, // 11: familyapp.marketdata.v1.GetBarsRequest.as_of:type_name -> google.protobuf.Timestamp
+	31, // 12: familyapp.marketdata.v1.Bar.start:type_name -> google.protobuf.Timestamp
+	31, // 13: familyapp.marketdata.v1.Bar.close_at:type_name -> google.protobuf.Timestamp
+	5,  // 14: familyapp.marketdata.v1.Bar.source:type_name -> familyapp.marketdata.v1.BarSource
+	15, // 15: familyapp.marketdata.v1.GetBarsResponse.bars:type_name -> familyapp.marketdata.v1.Bar
+	10, // 16: familyapp.marketdata.v1.GetBarsResponse.served:type_name -> familyapp.marketdata.v1.Served
+	6,  // 17: familyapp.marketdata.v1.GetOptionChainRequest.right:type_name -> familyapp.marketdata.v1.Right
+	31, // 18: familyapp.marketdata.v1.GetOptionChainRequest.now:type_name -> google.protobuf.Timestamp
+	6,  // 19: familyapp.marketdata.v1.OptionContract.right:type_name -> familyapp.marketdata.v1.Right
+	31, // 20: familyapp.marketdata.v1.OptionContract.as_of:type_name -> google.protobuf.Timestamp
+	31, // 21: familyapp.marketdata.v1.OptionContract.greeks_as_of:type_name -> google.protobuf.Timestamp
+	1,  // 22: familyapp.marketdata.v1.OptionContract.quality:type_name -> familyapp.marketdata.v1.Quality
+	18, // 23: familyapp.marketdata.v1.GetOptionChainResponse.contracts:type_name -> familyapp.marketdata.v1.OptionContract
+	10, // 24: familyapp.marketdata.v1.GetOptionChainResponse.served:type_name -> familyapp.marketdata.v1.Served
+	0,  // 25: familyapp.marketdata.v1.ProviderHealth.classes:type_name -> familyapp.marketdata.v1.DataClass
+	7,  // 26: familyapp.marketdata.v1.ProviderHealth.state:type_name -> familyapp.marketdata.v1.HealthState
+	31, // 27: familyapp.marketdata.v1.ProviderHealth.last_ok:type_name -> google.protobuf.Timestamp
+	31, // 28: familyapp.marketdata.v1.ProviderHealth.newest_tick:type_name -> google.protobuf.Timestamp
+	1,  // 29: familyapp.marketdata.v1.ProviderHealth.quality:type_name -> familyapp.marketdata.v1.Quality
+	21, // 30: familyapp.marketdata.v1.ProviderHealth.counters:type_name -> familyapp.marketdata.v1.Counters
+	20, // 31: familyapp.marketdata.v1.ListProvidersResponse.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
+	0,  // 32: familyapp.marketdata.v1.ClassRouting.data_class:type_name -> familyapp.marketdata.v1.DataClass
+	24, // 33: familyapp.marketdata.v1.Routing.classes:type_name -> familyapp.marketdata.v1.ClassRouting
+	8,  // 34: familyapp.marketdata.v1.Routing.source:type_name -> familyapp.marketdata.v1.RoutingSource
+	0,  // 35: familyapp.marketdata.v1.ClassPreference.data_class:type_name -> familyapp.marketdata.v1.DataClass
+	26, // 36: familyapp.marketdata.v1.SetRoutingRequest.preferences:type_name -> familyapp.marketdata.v1.ClassPreference
+	31, // 37: familyapp.marketdata.v1.BridgeStatus.at:type_name -> google.protobuf.Timestamp
+	20, // 38: familyapp.marketdata.v1.BridgeStatus.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
+	25, // 39: familyapp.marketdata.v1.BridgeStatus.routing:type_name -> familyapp.marketdata.v1.Routing
+	11, // 40: familyapp.marketdata.v1.MarketData.GetQuotes:input_type -> familyapp.marketdata.v1.GetQuotesRequest
+	14, // 41: familyapp.marketdata.v1.MarketData.GetBars:input_type -> familyapp.marketdata.v1.GetBarsRequest
+	17, // 42: familyapp.marketdata.v1.MarketData.GetOptionChain:input_type -> familyapp.marketdata.v1.GetOptionChainRequest
+	22, // 43: familyapp.marketdata.v1.MarketData.ListProviders:input_type -> familyapp.marketdata.v1.ListProvidersRequest
+	28, // 44: familyapp.marketdata.v1.MarketData.GetStatus:input_type -> familyapp.marketdata.v1.GetStatusRequest
+	29, // 45: familyapp.marketdata.v1.MarketData.WatchStatus:input_type -> familyapp.marketdata.v1.WatchStatusRequest
+	27, // 46: familyapp.marketdata.v1.MarketData.SetRouting:input_type -> familyapp.marketdata.v1.SetRoutingRequest
+	13, // 47: familyapp.marketdata.v1.MarketData.GetQuotes:output_type -> familyapp.marketdata.v1.GetQuotesResponse
+	16, // 48: familyapp.marketdata.v1.MarketData.GetBars:output_type -> familyapp.marketdata.v1.GetBarsResponse
+	19, // 49: familyapp.marketdata.v1.MarketData.GetOptionChain:output_type -> familyapp.marketdata.v1.GetOptionChainResponse
+	23, // 50: familyapp.marketdata.v1.MarketData.ListProviders:output_type -> familyapp.marketdata.v1.ListProvidersResponse
+	30, // 51: familyapp.marketdata.v1.MarketData.GetStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
+	30, // 52: familyapp.marketdata.v1.MarketData.WatchStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
+	25, // 53: familyapp.marketdata.v1.MarketData.SetRouting:output_type -> familyapp.marketdata.v1.Routing
+	47, // [47:54] is the sub-list for method output_type
+	40, // [40:47] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_marketdata_v1_marketdata_proto_init() }
@@ -2344,7 +2410,7 @@ func file_marketdata_v1_marketdata_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marketdata_v1_marketdata_proto_rawDesc), len(file_marketdata_v1_marketdata_proto_rawDesc)),
-			NumEnums:      8,
+			NumEnums:      9,
 			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
