@@ -3,6 +3,7 @@ import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { HUB_SWING_COPY } from "../../lib/replay/hubSwing.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { origin } from "../helpers";
 import { THREAD_URL, createThreadByApi, startThread, threadIdOf } from "./hub-helpers";
 import { DAY_ISO, createSwingThread, enterByApi, expectNoDates, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
 
@@ -316,6 +317,52 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await expect(step).not.toContainText("Your thread is ready");
     await expect(step).not.toContainText("Day 1 is next");
     await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();
+    // The card keeps its height when the preparation ends (it used to be 40 px shorter then).
+    const preparing = (await step.boundingBox())!.height;
+    await page.unroute(/\/api\/desk\/replay\/daily(\?|$)/);
+    await openDesk(page, overviewUrl(id));
+    await expect(step.getByRole("button", { name: /^Start Day \d+$/ })).toBeVisible();
+    expect((await step.boundingBox())!.height).toBe(preparing);
+  });
+});
+
+// Fix wave 5S, stream 1: the thread page's panels and links.
+test.describe("Practice thread page · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the plan panel is titled Plan and names the filters once; Balance is a heading; the journal link is one amber 32 px link (D-118, D-119, D-120)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await startThread(page, context);
+    const plan = page.getByRole("region", { name: "Daily list plan" });
+    await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 });
+    await expect(plan.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+    await expect(plan).not.toContainText("Armed on practice days");
+    await expect(plan.getByText("Any close"), "the filters line is said once").toHaveCount(1);
+    await expect(page.getByRole("heading", { level: 2, name: PRACTICE_COPY.threadBalance, exact: true })).toBeVisible();
+    const journal = page.getByRole("link", { name: PRACTICE_COPY.threadJournal });
+    const box = (await journal.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(32);
+    await expect(journal).toHaveCSS("color", "rgb(255, 176, 32)");
+  });
+
+  test("a closed thread's card finishes its sentence and offers the journal and a new thread (D-121)", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    expect((await context.request.post(`${origin}/api/desk/replay/threads/${id}/close`)).ok()).toBeTruthy();
+    await openDesk(page, overviewUrl(id));
+    const card = practiceDay(page);
+    await expect(card).toContainText("This thread is closed. Its journal and final balance stay here.");
+    await expect(card.getByRole("link", { name: PRACTICE_COPY.threadOpenJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
+    await expect(card.getByRole("link", { name: PRACTICE_COPY.threadStartNew })).toHaveAttribute("href", "/practice");
+  });
+
+  test("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, overviewUrl(threadId));
+    const link = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption }).getByRole("link", { name: "Week 1", exact: true });
+    expect(await link.evaluate((node) => getComputedStyle(node, "::after").position)).toBe("absolute");
   });
 });
 

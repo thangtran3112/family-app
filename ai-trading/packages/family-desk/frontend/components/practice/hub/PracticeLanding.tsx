@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
+import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -50,7 +50,19 @@ export function PracticeLanding() {
         {!threads.loading && threads.data === null ? (
           <ErrorBlock message={PRACTICE_COPY.threadsLoadError} onRetry={threads.refresh} />
         ) : !threads.loading && rows.length === 0 ? (
-          <EmptyBlock title={PRACTICE_COPY.threadNone}>{PRACTICE_COPY.landingNoneHint}</EmptyBlock>
+          <div className={styles.emptyCard}>
+            <p className={styles.emptyTitle}>{PRACTICE_COPY.threadNone}</p>
+            <button
+              type="button"
+              className={hub.primary}
+              onClick={() => {
+                setDeleted(null);
+                setModal({ thread: null });
+              }}
+            >
+              {PRACTICE_COPY.landingStartFirst}
+            </button>
+          </div>
         ) : (
           <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={(thread) => setModal({ thread })} />
         )}

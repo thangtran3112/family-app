@@ -4,10 +4,10 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { HUB_SWING_COPY, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
 import type { Box } from "@/lib/replay/threadChart";
 import type { SwingState } from "@/lib/replay/threads";
-import { formatBalance } from "@/lib/replay/threadView";
+import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import styles from "./threadJournal.module.css";
 
-const BOX: Box = { width: 760, height: 240, left: 64, right: 24, top: 16, bottom: 32 };
+const BOX: Box = { width: 760, height: 240, left: 76, right: 24, top: 16, bottom: 36 };
 
 /**
  * The balance and the equity at the close of each finished day (02p h): two lines over the whole calendar, so they grow to
@@ -38,7 +38,7 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
         {layout.ticks.map((tick) => (
           <g key={tick.value}>
             <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-            <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatBalance(tick.value)}</text>
+            <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value)}</text>
           </g>
         ))}
         <line x1={plot.x} x2={plot.x + plot.width} y1={layout.startY} y2={layout.startY} className={styles.startLine} />
@@ -56,7 +56,7 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
           </g>
         ))}
         {layout.days.map((point) =>
-          point.label ? <text key={point.dayNo} x={point.x} y={bottom + 16} textAnchor="middle" className={styles.axis}>{point.label}</text> : null,
+          point.label ? <text key={point.dayNo} x={point.x} y={bottom + 20} textAnchor={point.dayNo === layout.days[0]?.dayNo ? "start" : "middle"} className={styles.axis}>{point.label}</text> : null,
         )}
         {endLabels[0] && (
           <text x={endLabels[0].x} y={endLabels[0].y} textAnchor="end" className={styles.equityLabel}>{endLabels[0].text}</text>

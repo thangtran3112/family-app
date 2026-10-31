@@ -37,10 +37,16 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   const result = <ResultLine pnl={view.pnl} line={view.line} />;
 
   return (
-    <section className={styles.panel} aria-label="Practice day">
+    <section className={`${styles.panel} ${styles.nextStep}`} aria-label="Practice day">
       <h2 className={styles.panelTitle}>{title}</h2>
       {closed ? (
-        <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+        <>
+          <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+          <div className={styles.dayActions}>
+            <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink}>{PRACTICE_COPY.threadOpenJournal}</Link>
+            <Link href="/practice" className={styles.secondaryLink}>{PRACTICE_COPY.threadStartNew}</Link>
+          </div>
+        </>
       ) : (
         <>
           <div className={styles.dayActions}>

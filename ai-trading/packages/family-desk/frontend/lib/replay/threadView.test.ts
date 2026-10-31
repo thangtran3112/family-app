@@ -15,6 +15,7 @@ import {
   startedWithText,
   threadName,
   threadStartedText,
+  summaryHintText,
   threadTiles,
   todayLine,
   todayView,
@@ -140,19 +141,19 @@ test("the TODAY row agrees with the balance: a day with nothing realized yet def
   const ended = { n: 1, day_list_id: 2, day: "2026-07-01", weekday: "Wed", kind: "practiced", trades: 1, pnl_usd: 1564.5, adherence_pct: null, balance: 51564.5 } as const;
   const listed = { day_list_id: 3, day: "2026-07-01", weekday: "Wed", day_no: 1, status: "listed", trades: 0, pnl_usd: 0 } as const;
   // The day just ended, nothing open: its ledger result, not "no day open".
-  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5, short: "+$1,564.50 · 1 trade" });
   // A new day listed but not started: still the last ended day's result, never the new day's $0.
-  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5, short: "+$1,564.50 · 1 trade" });
   // The day under way: its own realized figure and count, "so far".
   const practicing = { ...listed, status: "practicing", trades: 2, pnl_usd: 112 } as const;
-  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112.00 realized so far · 2 practice trades", pnl: 112 });
+  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112.00 realized so far · 2 practice trades", pnl: 112, short: "+$112.00 · 2 trades" });
   assert.equal(todayView({ ...listed, status: "practicing" }, ended).label, "Today", "a practicing day with no exit yet is still today");
   // A skipped last day carries the balance; nothing is claimed.
   // D-082: one word for a day she passed, and no claim that the balance carried over (open holds can move equity).
-  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Passed · no practice trades", pnl: null });
+  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Passed · no practice trades", pnl: null, short: "Passed" });
   // First day of a fresh thread: nothing earlier to show, so the open day's own line stands.
-  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0.00 realized so far · 0 practice trades", pnl: 0 });
-  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null });
+  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0.00 realized so far · 0 practice trades", pnl: 0, short: "$0.00 · 0 trades" });
+  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null, short: "—" });
   // The shown figure is the ledger's: it matches the balance change of that day.
   assert.equal(Math.round(ended.balance - 50000), Math.round(ended.pnl_usd));
 });
@@ -172,4 +173,10 @@ test("the plan recap counts per week for a swing thread (D-083)", () => {
   const swing = planRows(activeThread.thread.plan, "swing");
   assert.deepEqual(swing.slice(3).map((row) => row.label), ["Max loss, pretend dollars a week", "Max trades a week"]);
   assert.deepEqual(planRows(activeThread.thread.plan).slice(3).map((row) => row.label), ["Max loss, pretend dollars a day", "Max trades a day"], "the default stays per day");
+});
+
+// D-134: "today's day is still open" was printed on every thread, also a closed one and one with no day open.
+test("the summary caption mentions an open day only when one is open (D-134)", () => {
+  assert.match(summaryHintText(true), /today's day is still open$/);
+  assert.equal(summaryHintText(false), "Wins and losses count practice trades");
 });

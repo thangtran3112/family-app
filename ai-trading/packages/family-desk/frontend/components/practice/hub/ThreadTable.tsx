@@ -59,10 +59,19 @@ export function ThreadTable({
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table} aria-label={loading ? PRACTICE_COPY.threadsLoading : PRACTICE_COPY.landingTableLabel} aria-busy={loading || undefined}>
+        {/* Fixed layout with set widths: the columns stay put when a row is deleted or a status changes (D-114). */}
+        <colgroup>
+          <col />
+          <col className={styles.colBalance} />
+          <col className={styles.colProgress} />
+          <col className={styles.colRate} />
+          {wide && <col className={styles.colLast} />}
+          <col className={styles.colAction} />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">{PRACTICE_COPY.landingColThread}</th>
-            <th scope="col">{PRACTICE_COPY.threadBalance}</th>
+            <th scope="col" className={styles.num}>{PRACTICE_COPY.threadBalance}</th>
             <th scope="col">{PRACTICE_COPY.landingColProgress}</th>
             <th scope="col" className={styles.num}>{PRACTICE_COPY.threadWinRate}</th>
             {wide && <th scope="col">{PRACTICE_COPY.landingColLastDay}</th>}
@@ -86,7 +95,7 @@ function SkeletonRow({ wide }: { wide: boolean }) {
   return (
     <tr className={styles.skelRow} aria-hidden="true">
       <td><span className={`${styles.skel} ${styles.skelName}`} /></td>
-      <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
+      <td className={styles.num}><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
       <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
       <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
       {wide && <td><span className={`${styles.skel} ${styles.skelName}`} /></td>}
@@ -151,7 +160,7 @@ function ThreadRow({
         <span className={styles.sub}>{threadStartedText(thread)}</span>
         {swing && <span className={styles.sub}>{swing.line}</span>}
       </th>
-      <td>
+      <td className={styles.num}>
         <span className={styles.balance}>
           <span className={styles.balanceValue}>{formatBalance(stats.balance)}</span>
           <SimulatedBadge />
@@ -165,9 +174,10 @@ function ThreadRow({
       </td>
       <td className={styles.num}>{winRateText(stats.winRate)}</td>
       {wide && (
-        <td>
-          <span className={styles.sub}>{view.label}</span>
-          <ResultLine pnl={view.pnl} line={view.line} />
+        <td className={styles.lastDay}>
+          {/* The column header already says "Last day": the label is only for a day that is not that (D-113). */}
+          {view.label !== PRACTICE_COPY.threadLastDay && <span className={styles.sub}>{view.label}</span>}
+          <ResultLine pnl={view.pnl} line={view.short} />
         </td>
       )}
       <td className={styles.actionCell}>

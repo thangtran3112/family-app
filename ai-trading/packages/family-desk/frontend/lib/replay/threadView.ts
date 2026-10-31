@@ -99,15 +99,22 @@ export function lastDayLine(day: Pick<ThreadDay, "kind" | "pnl_usd" | "trades">)
  *  The practice day under way reads "so far" once practice has started or booked a trade. A day that is only listed has
  *  nothing realized, so the row shows the last ended day instead of a $0 beside a balance that already moved (D-030): the
  *  same ledger rows as the balance and the journal. */
-export function todayView(today: ThreadToday | null, lastDay: ThreadDay | null): { label: string; line: string; pnl: number | null } {
+export function todayView(today: ThreadToday | null, lastDay: ThreadDay | null): { label: string; line: string; pnl: number | null; short: string } {
   if (today !== null && (today.status === "practicing" || today.trades > 0 || lastDay === null)) {
-    return { label: PRACTICE_COPY.threadToday, line: todayLine(today), pnl: today.pnl_usd };
+    return { label: PRACTICE_COPY.threadToday, line: todayLine(today), pnl: today.pnl_usd, short: shortResult(today.pnl_usd, today.trades) };
   }
   if (lastDay !== null) {
-    return { label: PRACTICE_COPY.threadLastDay, line: lastDayLine(lastDay), pnl: lastDay.kind === "practiced" ? lastDay.pnl_usd : null };
+    const passed = lastDay.kind !== "practiced";
+    return { label: PRACTICE_COPY.threadLastDay, line: lastDayLine(lastDay), pnl: passed ? null : lastDay.pnl_usd, short: passed ? PRACTICE_COPY.overviewDaySkipped : shortResult(lastDay.pnl_usd, lastDay.trades) };
   }
-  return { label: PRACTICE_COPY.threadToday, line: todayLine(null), pnl: null };
+  return { label: PRACTICE_COPY.threadToday, line: todayLine(null), pnl: null, short: EMPTY_VALUE };
 }
+
+/** "+$112.00 · 2 trades": the landing's cell, one short line (D-113). */
+const shortResult = (pnl: number, trades: number): string => `${formatDayResult(pnl)} · ${trades} ${trades === 1 ? "trade" : "trades"}`;
+
+/** The caption over the summary tiles: it says "today's day is still open" only while a day is open (D-134). */
+export const summaryHintText = (dayOpen: boolean): string => (dayOpen ? PRACTICE_COPY.summaryHintOpen : PRACTICE_COPY.summaryHint);
 
 /** The header strip of a day screen or the workspace: "Thread balance $50,123 · today +$112". */
 export function briefLine(brief: Pick<ThreadBrief, "balance" | "today_pnl_usd">): string {

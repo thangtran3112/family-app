@@ -148,6 +148,10 @@ test("filter, source and untraded lines", () => {
 
 test("the heading says Week to date while the week is open and Final once frozen", () => {
   assert.deepEqual(weekHeading(weekClosed), { title: "Week 1", badge: "Final", note: null });
+  // D-130: a week can be final while holds ride on; the chip says so.
+  assert.equal(weekHeading(weekClosed, 2).badge, "Final · 2 holds open");
+  assert.equal(weekHeading(weekClosed, 1).badge, "Final · 1 hold open");
+  assert.equal(weekHeading(weekToDate, 2).badge, "Week to date", "an open week keeps its own word");
   assert.deepEqual(weekHeading(weekToDate), { title: "Week 2 · 2 of 5 days", badge: "Week to date", note: "Through the last finished day's close · not final yet" });
   assert.equal(weekHeading({ label: "Week 3", to_date: "no", status: "open" }).badge, "Open");
 });
@@ -164,7 +168,7 @@ test("the thread's week rows: figures for a closed week, dashes for the open one
   const closed = weekRowView(weekRows[0]!);
   assert.deepEqual(
     [closed.label, closed.days, closed.status, closed.realized, closed.equityChange, closed.adherence, closed.selection, closed.timing],
-    ["Week 1", "5 days", "Closed", "+$612.00", "+$870.00", "88%", "+1.8 pts", "−0.6 pts"],
+    ["Week 1", "5 days", "Final", "+$612.00", "+$870.00", "88%", "+1.8 pts", "−0.6 pts"], // D-130: the same word as the week page's chip
   );
   const open = weekRowView(weekRows[1]!);
   assert.deepEqual([open.status, open.realized, open.equityChange, open.adherence, open.selection, open.timing], ["Week to date", "—", "—", "—", "—", "—"]);

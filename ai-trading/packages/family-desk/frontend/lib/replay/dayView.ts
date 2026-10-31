@@ -13,6 +13,7 @@ import {
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatUsd } from "./journalView.ts";
+import { etHhMm } from "./time.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
@@ -138,6 +139,9 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   if (alerts > 0) names.push(`${alerts} alert ${alerts === 1 ? "strategy" : "strategies"}`);
   return practiceText("planArmed", { names: names.join(" · ") });
 }
+
+/** What a `/practice/day` URL says before any load (D-117): no id is not chosen, an id that is not a number is not found, a number has no problem yet (the server answers 404 for an unknown one). */
+export const dayRouteProblem = (raw: string | null): "none" | "missing" | null => (raw === null ? "none" : /^\d+$/.test(raw) ? null : "missing");
 
 /** The label of a day thread's one action (D-078): a day in progress resumes, a listed day opens, and opening the next day starts it.
  *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
@@ -359,8 +363,9 @@ export function selectionText(review: Pick<DayReview, "of" | "selection">): stri
   const { picks, median_move_pct: median } = review.selection;
   if (picks.length === 0) return null;
   return practiceText("reviewSelection", {
-    moves: joinAnd(picks.map((pick) => formatSignedPct(pick.move_pct, 1))),
-    median: formatSignedPct(median, 1),
+    // Two decimals, like the review table's Move columns: one precision on the page (D-142).
+    moves: joinAnd(picks.map((pick) => formatSignedPct(pick.move_pct, 2))),
+    median: formatSignedPct(median, 2),
     ranks: joinAnd(picks.map((pick) => ordinal(pick.rank))),
     of: review.of,
   });
@@ -395,7 +400,28 @@ export function dayBalanceText(journal: Pick<DayJournal, "balance_before" | "bal
   return practiceText("reviewBalance", { before: money(before), after: money(after) });
 }
 
-export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; exit: string; pnl: string; tone: Tone };
+export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; entryTime: string; exit: string; exitTime: string; pnl: string; tone: Tone };
+
+/** The last row of the trade table: the day's total P/L (the trades' own rows carry the rest). */
+export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd">): TradeLineRow => ({
+  key: "total",
+  symbol: "Total",
+  side: "",
+  shares: "",
+  entry: "",
+  entryTime: "",
+  exit: "",
+  exitTime: "",
+  pnl: formatUsd(journal.pnl_usd),
+  tone: changeTone(journal.pnl_usd),
+});
+
+/** The practice window of a day: the plan's window, but not before the list time, so a re-list moves its start (D-144). Both are ET "HH:MM". */
+export function practiceWindow(list: { list_at: string; plan: { spec: { setup: { window: { from: string; to: string } } } } }): { from: string; to: string } {
+  const { from, to } = list.plan.spec.setup.window;
+  const listed = etHhMm(list.list_at);
+  return { from: listed > from ? listed : from, to };
+}
 
 /** One row per closed trade: the entry and exit price with the ET time, the shares, and the P/L to the cent. */
 export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[] {
@@ -404,8 +430,10 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     symbol: line.symbol,
     side: line.side === "long" ? "Long" : "Short",
     shares: line.shares.toLocaleString("en-US"),
-    entry: `${formatPrice(line.entry_price)} · ${formatEtTime(line.entry_at)}`,
-    exit: `${formatPrice(line.exit_price)} · ${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    entry: formatPrice(line.entry_price),
+    entryTime: formatEtTime(line.entry_at),
+    exit: formatPrice(line.exit_price),
+    exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
     pnl: formatUsd(line.pnl_usd),
     tone: changeTone(line.pnl_usd),
   }));

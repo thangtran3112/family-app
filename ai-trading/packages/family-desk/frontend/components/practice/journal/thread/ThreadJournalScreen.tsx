@@ -12,7 +12,7 @@ import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { journalStatusLine } from "@/lib/replay/statusLine";
-import { formatBalance, hasNoDays, startedWithText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
+import { formatBalance, hasNoDays, startedWithText, summaryHintText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import { BalanceCurve } from "./BalanceCurve";
 import { DayBars } from "./DayBars";
@@ -78,8 +78,9 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
       <div className={styles.body}>
         <div className={styles.center}>
           {closed && (
-            <p className={styles.banner} role="status">
-              {practiceText("journalThreadClosed", { balance })} <Link href="/practice#threads" className={styles.link}>{PRACTICE_COPY.threadStartNew}</Link>
+            <p className={`${styles.banner} ${styles.bannerRow}`} role="status">
+              <span>{practiceText("journalThreadClosed", { balance })}</span>
+              <Link href="/practice#threads" className={styles.link}>{PRACTICE_COPY.threadStartNew}</Link>
             </p>
           )}
           {empty ? (
@@ -113,7 +114,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
                   <h2 id="thread-summary-title" className={styles.sectionTitle}>{PRACTICE_COPY.summaryTitle}</h2>
                   <SimulatedBadge />
                 </div>
-                <p className={styles.hint}>{PRACTICE_COPY.summaryHint}</p>
+                <p className={styles.hint}>{summaryHintText(thread.today !== null)}</p>
                 <ThreadTiles tiles={threadTiles(thread)} />
               </section>
             </>

@@ -15,9 +15,13 @@
 
 /* A table inside a panel: its sticky header takes the panel's colour, not the page's. */
 .tablePanel table th { background: var(--color-panel); }
-.link { color: var(--color-amber); font-weight: var(--weight-semibold); text-decoration: none; }
-.link:hover { text-decoration: underline; }
-.link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+/* A day or week link in a table is stretched over its row (as on the landing): a big target and one ring round the row (D-122). */
+.tablePanel tbody tr { position: relative; }
+.rowLink { color: var(--color-amber); font-weight: var(--weight-semibold); text-decoration: none; }
+.rowLink:hover { text-decoration: underline; }
+.rowLink::after { content: ""; position: absolute; inset: 0; }
+.rowLink:focus-visible { outline: none; }
+.rowLink:focus-visible::after { outline: 2px solid var(--color-amber); outline-offset: -2px; }
 .up { color: var(--color-up); }
 .down { color: var(--color-down); }
 .flat { color: var(--color-muted); }

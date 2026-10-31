@@ -45,7 +45,7 @@ export function PlaceStrip({ summary, planFinished = false, children }: { summar
   const progress = threadProgress(summary, planFinished);
   return (
     <section className={`${styles.panel} ${o.place}`} aria-label="Thread balance">
-      <span className={hub.cap}>{PRACTICE_COPY.threadBalance}</span>
+      <h2 className={styles.panelTitle}>{PRACTICE_COPY.threadBalance}</h2>
       <p className={hub.balanceRow}>
         <span className={hub.balanceValue}>{formatBalance(thread.stats.balance)}</span>
         <SimulatedBadge />
@@ -86,7 +86,7 @@ export function StatsPanel({ thread }: { thread: ThreadSummary["thread"] & { id:
         </div>
       </dl>
       <p className={hub.hint}>{PRACTICE_COPY.threadAdherenceMeaning}</p>
-      <Link href={`/practice/journal?thread=${thread.id}`} className={styles.mutedLink}>{PRACTICE_COPY.threadJournal}</Link>
+      <Link href={`/practice/journal?thread=${thread.id}`} className={styles.textLink}>{PRACTICE_COPY.threadJournal}</Link>
     </section>
   );
 }
@@ -94,7 +94,7 @@ export function StatsPanel({ thread }: { thread: ThreadSummary["thread"] & { id:
 const tone = (value: OverviewDayRow["resultTone"]) => o[value];
 
 const DAY_COLUMNS: DenseColumn<OverviewDayRow>[] = [
-  { key: "day", label: "Day", render: (row) => <Link href={row.href} className={o.link}>{row.title}</Link> },
+  { key: "day", label: "Day", render: (row) => <Link href={row.href} className={o.rowLink}>{row.title}</Link> },
   { key: "status", label: "Status", render: (row) => row.status },
   { key: "trades", label: "Trades", align: "right", render: (row) => row.trades },
   { key: "result", label: "Result", align: "right", render: (row) => <span className={tone(row.resultTone)}>{row.result}</span> },

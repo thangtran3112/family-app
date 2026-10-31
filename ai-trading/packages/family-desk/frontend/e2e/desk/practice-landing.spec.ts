@@ -294,4 +294,38 @@ test.describe("Practice landing · fix wave 5S", () => {
     await expect(page.getByRole("status").filter({ hasText: /^Deleted .*thread #\d+$/ })).toHaveText(new RegExp(`thread #${first}$`));
     await expect(table.getByRole("link", { name: new RegExp(`thread #${first}$`) })).toHaveCount(0);
   });
+
+  test("with no thread the page is one card with one sentence and a primary button that opens New plan, and never says risk plan (D-115)", async ({ page }) => {
+    await openDesk(page, "/practice");
+    await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
+    await expect(page.locator("#main-content")).not.toContainText("risk plan");
+    await page.getByRole("button", { name: PRACTICE_COPY.landingStartFirst }).click();
+    await expect(page.getByRole("dialog", { name: PRACTICE_COPY.newPlanTitle })).toBeVisible();
+  });
+
+  test("the table has a fixed layout, Balance is right-aligned on one line, and its text lines up with the page title and New plan (D-110, D-111, D-113, D-114)", async ({ page, context }) => {
+    await createThreadByApi(context, { balance: 20_000 });
+    await createThreadByApi(context, { balance: 30_000 });
+    await openDesk(page, "/practice");
+    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+    await expect(table).toHaveCSS("table-layout", "fixed");
+    await expect(table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance })).toHaveCSS("text-align", "right");
+    const row = table.getByRole("row", { name: /Day trading/ }).first();
+    // The amount and its SIMULATED pill share one line (the column used to be narrower than the pair).
+    const [amount, pill] = [await row.getByText("$30,000.00").boundingBox(), await row.getByText(PRACTICE_COPY.threadSimulated, { exact: true }).first().boundingBox()];
+    expect(Math.abs(amount!.y + amount!.height / 2 - (pill!.y + pill!.height / 2)), "amount and pill on one line").toBeLessThan(8);
+    // D-111: the title and the first cell's text start at one x; the action ends where New plan ends.
+    const title = (await page.getByRole("heading", { name: "Practice", level: 1 }).boundingBox())!;
+    const name = (await row.getByRole("link").boundingBox())!;
+    expect(Math.abs(name.x - title.x), "one shared inset on the left").toBeLessThanOrEqual(1);
+    const newPlan = (await page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true }).boundingBox())!;
+    const del = (await row.getByRole("button", { name: /^Delete/ }).boundingBox())!;
+    expect(Math.abs(newPlan.x + newPlan.width - (del.x + del.width)), "and on the right").toBeLessThanOrEqual(1);
+    // D-114: a column stays where it is when the rows change.
+    const before = (await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x;
+    await row.getByRole("button", { name: /^Delete/ }).click();
+    await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
+    expect((await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x).toBe(before);
+  });
 });
