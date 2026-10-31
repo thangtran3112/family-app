@@ -22,6 +22,7 @@ import {
   listFootnote,
   READY_TEXT,
   refOf,
+  reporterInitial,
   removeFailureText,
   safeHref,
   sendError,
@@ -282,4 +283,12 @@ test("a refused Send says the API's own sentence, or a generic one", () => {
   assert.equal(sendError(new DeskApiError("http", 409, { detail: "A report holds at most 6 screenshots" })), "A report holds at most 6 screenshots");
   assert.equal(sendError(new DeskApiError("http", 500, {})), "Couldn't send the report · Try again");
   assert.equal(sendError(new TypeError("Failed to fetch")), "Couldn't send the report · Try again");
+});
+
+test("the reporter shows as one uppercase initial, whatever the API sends", () => {
+  assert.equal(reporterInitial("dashify.tt"), "D");
+  assert.equal(reporterInitial("W"), "W");
+  assert.equal(reporterInitial("  toby tran"), "T");
+  assert.equal(reporterInitial("\u{1D4D0}lice"), "\u{1D4D0}"); // a character outside the BMP is not cut in half
+  assert.equal(reporterInitial(""), "—");
 });

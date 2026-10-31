@@ -214,6 +214,9 @@ export function MarketChart({
       const currentChart = module.createChart(container.current, {
         autoSize: true,
         height: 300,
+        // The library draws the hovered series last by default. The session shading is a full-height opaque histogram, so
+        // hovering it painted it over the lines and candles (D-072): series stay in the order set below.
+        hoveredSeriesOnTop: false,
         layout: {
           background: { type: module.ColorType.Solid, color: "#000000" },
           textColor: "#9B9BA1",
