@@ -10,7 +10,9 @@ import {
   buildLevels,
   changeText,
   defaultIndicators,
+  headerSummary,
   keyLevelRows,
+  noMarketData,
   legendModel,
   priceSummary,
   signalKindLabel,
@@ -102,6 +104,34 @@ test("price summary: live quote wins, change is against the prior close, unknown
   assert.equal(changeText({ last: 110, change: 10, changePct: 10 }), "+10.00 (+10.00%)");
   assert.equal(changeText({ last: 90, change: -10, changePct: -10 }), "−10.00 (−10.00%)");
   assert.equal(changeText({ last: null, change: null, changePct: null }), "—");
+});
+
+test("the header change is always the day's change, whatever timeframe the chart shows (V-Technicals-01)", () => {
+  const daily = BarsSchema.parse(loadDeskFixture("bars_nvda_1d")).bars; // ends Thu 10-22 212.21, Fri 10-23 210.96
+  const weekly = [
+    { t: "2026-10-12", o: 230, h: 231, l: 200, c: 226.32, v: null, ext: false },
+    { t: "2026-10-19", o: 226, h: 227, l: 209, c: 210.96, v: null, ext: false },
+  ];
+  // A quote from the session after the last daily bar compares with that bar's close, not last week's.
+  assert.deepEqual(headerSummary({ close: 211.11, as_of: "2026-10-26T20:00:00Z" }, daily, weekly), {
+    last: 211.11,
+    change: 211.11 - 210.96,
+    changePct: ((211.11 - 210.96) / 210.96) * 100,
+  });
+  // A quote on the same ET day as the last daily bar (after hours) compares with the session before it.
+  assert.equal(headerSummary({ close: 211.11, as_of: "2026-10-23T23:30:00Z" }, daily, weekly).change, 211.11 - 212.21);
+  // No quote: the last daily close against the one before it; the chart's own bars never set the change.
+  assert.deepEqual(headerSummary(null, daily, weekly), { last: 210.96, change: 210.96 - 212.21, changePct: ((210.96 - 212.21) / 212.21) * 100 });
+  // No daily bars yet: the price still shows, the change stays a dash rather than a week's move.
+  assert.deepEqual(headerSummary(null, [], weekly), { last: 210.96, change: null, changePct: null });
+});
+
+test("a symbol with no quote, no daily bars and no chart bars has no market data (V-Technicals-03)", () => {
+  const daily = BarsSchema.parse(loadDeskFixture("bars_nvda_1d")).bars;
+  assert.equal(noMarketData(null, [], []), true);
+  assert.equal(noMarketData(null, daily, []), false, "a timeframe without bars is not an unknown symbol");
+  assert.equal(noMarketData(null, [], bars.bars), false);
+  assert.equal(noMarketData({ close: 1, as_of: "2026-10-26T20:00:00Z" }, [], []), false);
 });
 
 test("signal kinds and bias tones", () => {

@@ -1,6 +1,6 @@
-import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
+import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
 import type { Stamp } from "@/lib/api/schemas";
-import type { Connection, MarketSession } from "@/lib/desk/freshness";
+import { resolveFreshness, type Connection, type MarketSession } from "@/lib/desk/freshness";
 import { changeTone, formatPrice } from "@/lib/desk/format";
 import { changeText, type PriceSummary } from "@/lib/desk/workspace";
 import styles from "./workspaceHeader.module.css";
@@ -13,11 +13,13 @@ export type SymbolHeaderProps = {
   session?: MarketSession;
   connection: Connection;
   view: "chart" | "summary";
+  /** Replaces the freshness badge when there is no data to be fresh about (a symbol with nothing stored). */
+  notice?: string;
 };
 
 /** Symbol, last price and change, freshness, and the Chart · Summary tabs (02l §b2). */
-export function SymbolHeader({ symbol, name, summary, stamp, session, connection, view }: SymbolHeaderProps) {
-  const dim = useFreshness({ stamp, session, connection }).dim;
+export function SymbolHeader({ symbol, name, summary, stamp, session, connection, view, notice }: SymbolHeaderProps) {
+  const dim = resolveFreshness({ stamp, session, connection }).dim;
   return (
     <div className={styles.header}>
       <div className={styles.identity}>
@@ -27,7 +29,7 @@ export function SymbolHeader({ symbol, name, summary, stamp, session, connection
           <span className={styles.price}>{formatPrice(summary.last)}</span>
           <span className={styles.change} data-tone={changeTone(summary.change)}>{changeText(summary)}</span>
         </div>
-        <FreshnessBadge stamp={stamp} session={session} connection={connection} />
+        {notice ? <span className={styles.notice} role="status">{notice}</span> : <FreshnessBadge stamp={stamp} session={session} connection={connection} />}
       </div>
       <nav aria-label="Chart or summary" className={styles.tabs}>
         <a href="#chart" className={styles.tab} aria-current={view === "chart" ? "page" : undefined}>Chart</a>
