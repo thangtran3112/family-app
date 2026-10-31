@@ -1,7 +1,7 @@
 """Alpaca bars: daily (eod), hourly and 1-minute (delayed-15m) history; plus the screener universe
 (assets, most-actives, movers), latest quotes (02m §b4 items 1 and 2), and trade prints (`/trades`).
 
-Adapted from `ai-trading/market-data/alpaca.py` (ours; open-source lane) and
+Adapted from `ai-trading/packages/market-data/alpaca.py` (ours; open-source lane) and
 moved here per the Phase 2 reuse map (02a §11, "move"). No attribution notice
 needed: same author, not an upstream project. Changes: the throttled HTTP
 layer and bar hygiene guards from this package, the shared `Timeframe`s
