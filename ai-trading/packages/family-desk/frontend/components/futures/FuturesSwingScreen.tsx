@@ -121,7 +121,7 @@ export function FuturesSwingScreen() {
     : null;
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>FUTURES · SWING</p>
@@ -240,6 +240,6 @@ export function FuturesSwingScreen() {
       </section>
 
       <p className={styles.disclaimer}>CME session references are not broker availability. No order actions are available.</p>
-    </main>
+    </div>
   );
 }

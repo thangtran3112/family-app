@@ -41,6 +41,7 @@ export function ThreadTable({
   busy,
   onBusy,
   onChanged,
+  onDeleted,
   onNewPlan,
 }: {
   rows: readonly ThreadSummary[];
@@ -49,6 +50,8 @@ export function ThreadTable({
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
+  /** A thread was deleted: its name, for the page's status line (the row is gone by then). */
+  onDeleted?: (name: string) => void;
   onNewPlan: (thread: PracticeThread) => void;
 }) {
   // The last-day column is the first to go at the 1180 band (02l §b3 rule 4).
@@ -56,10 +59,19 @@ export function ThreadTable({
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table} aria-label={loading ? PRACTICE_COPY.threadsLoading : PRACTICE_COPY.landingTableLabel} aria-busy={loading || undefined}>
+        {/* Fixed layout with set widths: the columns stay put when a row is deleted or a status changes (D-114). */}
+        <colgroup>
+          <col />
+          <col className={styles.colBalance} />
+          <col className={styles.colProgress} />
+          <col className={styles.colRate} />
+          {wide && <col className={styles.colLast} />}
+          <col className={styles.colAction} />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">{PRACTICE_COPY.landingColThread}</th>
-            <th scope="col">{PRACTICE_COPY.threadBalance}</th>
+            <th scope="col" className={styles.num}>{PRACTICE_COPY.threadBalance}</th>
             <th scope="col">{PRACTICE_COPY.landingColProgress}</th>
             <th scope="col" className={styles.num}>{PRACTICE_COPY.threadWinRate}</th>
             {wide && <th scope="col">{PRACTICE_COPY.landingColLastDay}</th>}
@@ -70,7 +82,7 @@ export function ThreadTable({
           {loading
             ? [0, 1].map((n) => <SkeletonRow key={n} wide={wide} />)
             : rows.map((row) => (
-                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
+                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onDeleted={onDeleted} onNewPlan={onNewPlan} />
               ))}
         </tbody>
       </table>
@@ -83,7 +95,7 @@ function SkeletonRow({ wide }: { wide: boolean }) {
   return (
     <tr className={styles.skelRow} aria-hidden="true">
       <td><span className={`${styles.skel} ${styles.skelName}`} /></td>
-      <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
+      <td className={styles.num}><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
       <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
       <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
       {wide && <td><span className={`${styles.skel} ${styles.skelName}`} /></td>}
@@ -99,6 +111,7 @@ function ThreadRow({
   busy,
   onBusy,
   onChanged,
+  onDeleted,
   onNewPlan,
 }: {
   summary: ThreadSummary;
@@ -107,6 +120,7 @@ function ThreadRow({
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
+  onDeleted?: (name: string) => void;
   onNewPlan: (thread: PracticeThread) => void;
 }) {
   const { thread, last_day: lastDay, today } = summary;
@@ -115,11 +129,12 @@ function ThreadRow({
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
   const view = todayView(today, lastDay);
-  const progress = threadProgress(summary);
   // An active day thread's own plan (the card says Resume or "New plan needed" from it); other threads need none.
   const dayActive = !closed && thread.mode === "day";
   const daily = useDeskQuery(`replay-daily:${thread.id}`, (signal) => loadDaily({ threadId: thread.id, signal }), { enabled: dayActive, revision });
   const plan = daily.data?.plan ?? null;
+  // The plan's last day has ended: the row says Finished, and its one action starts a new plan (D-096).
+  const progress = threadProgress(summary, dayActive && plan !== null && plan.thread_id === thread.id && plan.finished);
   const preparing = plan?.prep.state === "running";
   const { refresh } = daily;
   useEffect(() => {
@@ -145,7 +160,7 @@ function ThreadRow({
         <span className={styles.sub}>{threadStartedText(thread)}</span>
         {swing && <span className={styles.sub}>{swing.line}</span>}
       </th>
-      <td>
+      <td className={styles.num}>
         <span className={styles.balance}>
           <span className={styles.balanceValue}>{formatBalance(stats.balance)}</span>
           <SimulatedBadge />
@@ -159,9 +174,10 @@ function ThreadRow({
       </td>
       <td className={styles.num}>{winRateText(stats.winRate)}</td>
       {wide && (
-        <td>
-          <span className={styles.sub}>{view.label}</span>
-          <ResultLine pnl={view.pnl} line={view.line} />
+        <td className={styles.lastDay}>
+          {/* The column header already says "Last day": the label is only for a day that is not that (D-113). */}
+          {view.label !== PRACTICE_COPY.threadLastDay && <span className={styles.sub}>{view.label}</span>}
+          <ResultLine pnl={view.pnl} line={view.short} />
         </td>
       )}
       <td className={styles.actionCell}>
@@ -173,7 +189,15 @@ function ThreadRow({
           ) : (
             <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={() => onNewPlan(thread)} />
           )}
-          <DeleteThread thread={thread} busy={busy} onBusy={onBusy} onDeleted={onChanged} />
+          <DeleteThread
+            thread={thread}
+            busy={busy}
+            onBusy={onBusy}
+            onDeleted={(name) => {
+              onChanged();
+              onDeleted?.(name);
+            }}
+          />
         </div>
       </td>
     </tr>

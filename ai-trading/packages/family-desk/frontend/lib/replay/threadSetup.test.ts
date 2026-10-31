@@ -5,6 +5,7 @@ import { containsPracticeBannedTerm } from "../desk/freshness.ts";
 import { activeThread } from "./threadFixtures.ts";
 import {
   defaultThreadDraft,
+  formatBalanceInput,
   planToDraft,
   threadDraftToSpec,
   threadFieldOfPath,
@@ -87,4 +88,16 @@ test("server problems map to the form's fields, and a 409 stays a plain sentence
 test("the form's own sentences pass the banned-term check", () => {
   const sentences = ["Max loss can't be more than your simulated starting balance ($1,000)", "Starting balance: whole dollars from 1,000 to 10,000,000"];
   for (const text of sentences) assert.equal(containsPracticeBannedTerm(text), false, text);
+});
+
+// M-07: the starting balance reads "50,000" once she leaves the box; what is not a whole number is left for the error to name.
+test("the balance box groups thousands on blur and leaves anything else as typed", () => {
+  assert.equal(formatBalanceInput("50000"), "50,000");
+  assert.equal(formatBalanceInput("1234567"), "1,234,567");
+  assert.equal(formatBalanceInput("50,000"), "50,000");
+  assert.equal(formatBalanceInput(" 2500 "), "2,500");
+  assert.equal(formatBalanceInput(""), "");
+  assert.equal(formatBalanceInput("12.5"), "12.5");
+  assert.equal(formatBalanceInput("abc"), "abc");
+  assert.equal(validateThreadDraft({ ...defaultThreadDraft(), startingBalance: "50,000" }).ok, true);
 });

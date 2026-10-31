@@ -37,6 +37,8 @@ Local values belong in `.env`; `.env.example` documents required keys.
 
 ## Verification
 
+These are local gates. GitHub Actions only deploys (`expense-tax-ci.yml` was removed 2026-10-31), so nothing else runs them.
+
 ```bash
 pnpm ci:lint
 pnpm ci:typecheck

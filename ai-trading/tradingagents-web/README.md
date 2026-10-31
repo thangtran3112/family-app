@@ -97,7 +97,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tradingagents-web \
 `application` builds its `Store`/service lock/`Runner` lazily inside the
 ASGI lifespan — importing `ta_web.app` alone never touches the filesystem or
 a database. The production image runs the same command (no `--reload`); see
-`ai-trading/deploy/production/README.md`'s "Research (06)" section and
+`infrastructure/apps/ai-trading/README.md`'s "Research (06)" section and
 `ai-trading/deploy/local/README.md` for the actual deployed/local routes
 (behind the gateway's identity/prefix headers — this module trusts, never
 re-derives, caller identity).

@@ -1,7 +1,7 @@
 # Infrastructure and Deployment Roadmap
 
 > **Status:** Private production deployment live. Backup/restore tooling is implemented and proven against disposable local Docker infrastructure (see "Backup and Restore -- Observed Results" below); it has not yet been applied to or run against the live VPS/GCP. Provider migration remains unimplemented.
-> **Last updated:** 2026-10-03
+> **Last updated:** 2026-10-31
 > **Companion:** See [PLAN.md](PLAN.md) for feature order and active implementation plans.
 
 ## Current Production Topology
@@ -37,7 +37,7 @@ GCP
 - Cloudflare Tunnel with explicit product host/path routing and no public VPS application ports.
 - Clerk DNS, SPF/DKIM, DMARC monitoring, signed webhook delivery, and authenticated smoke verification.
 - Application-origin body limits, bounded process-local rate limits, security headers, and fail-closed route policy.
-- Protected `dev` development branch; production deployment remains restricted to successful `main` CI.
+- Protected `dev` development branch; production deployment remains restricted to pushes to `main`.
 
 ## Current Sources of Truth
 
@@ -51,6 +51,10 @@ GCP
 | App-local development overlay | `expense-tax-management/docker-compose.yml` |
 
 `infrastructure/docker-compose.common.yml`, its Nginx gateway, `expense-service/`, and `frontend/web/` are local/transitional surfaces. They are not the current production edge or canonical application services.
+
+## CI Is Deployment-Only (2026-10-31)
+
+Owner decision 2026-10-31 (ADR-0013, `ai-trading/decisions/adr/`): the GitHub Actions pipeline only deploys, because Actions minutes are the cost. `expense-tax-ci.yml` (jobs `quality`, `integration`, `no-deploy`; pull requests to `dev` and pushes to `main`) is deleted. `expense-tax-deploy.yml` now triggers on `push` to `main` with the path filter the CI file used (its own path replaces the CI file's) and on `workflow_dispatch`; both jobs run only when `github.ref` is `refs/heads/main`, the checkout and image tags use `github.sha`, and the `build` to `deploy` dependency, the `production` environment and the concurrency group are unchanged. A push to `main` therefore deploys with no test gate in front of it. `pnpm ci:lint`, `ci:typecheck`, `ci:test`, `ci:build`, `contracts:check` and `verify:phase-0n` are local gates the delivering session runs and reports. The `dev` ruleset "Protect development" still requires the status check "Contracts, services, workers, frontends", which no workflow produces any more: the owner must drop it from the ruleset (a settings change, not made from the repository) before a pull request to `dev` can merge. The `feature/*` or `dependabot/*` source-branch guard went with the CI file and is now a convention only.
 
 ## Remaining Infrastructure Work
 

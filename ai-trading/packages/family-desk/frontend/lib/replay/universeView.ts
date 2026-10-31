@@ -108,14 +108,13 @@ export function universeRowView(row: UniverseRow): UniverseRowView {
   };
 }
 
-/** Lines under the table for the symbols left out, grouped by the API's neutral reason (it names no date). */
-export function excludedLines(excluded: readonly UniverseExcluded[]): string[] {
-  const byReason = new Map<string, string[]>();
-  for (const item of excluded) byReason.set(item.reason, [...(byReason.get(item.reason) ?? []), item.symbol]);
-  return [...byReason].map(([reason, symbols]) =>
-    practiceText("swingExcluded", { n: symbols.length, noun: symbols.length === 1 ? "symbol" : "symbols", reason, names: symbols.join(", ") }),
-  );
+/** The symbols left out as one row each, so each can carry a Remove; a name she removed leaves the list at once. */
+export function excludedRows(excluded: readonly UniverseExcluded[], edits: UniverseEdits): UniverseExcluded[] {
+  return excluded.filter((item) => !edits.remove.includes(item.symbol));
 }
+
+/** The header line of the universe: the size she needs and how many names she has. */
+export const universeNeedLine = (count: number): string => practiceText("swingUniverseNeed", { min: MIN_UNIVERSE, max: MAX_UNIVERSE, n: count });
 
 // -- prep ------------------------------------------------------------------------------------------------------
 

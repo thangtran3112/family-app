@@ -14,6 +14,11 @@
   outline-offset: 2px;
 }
 
+/* The nav links are as tall as the bar, so the default outline (offset 2 px) is cut at the viewport's top edge: draw it inside (D-108). */
+.bar .navLink:focus-visible {
+  outline-offset: -2px;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -179,6 +184,11 @@
   min-width: 64px;
 }
 
+/* At the 1440 band the box keeps room for its placeholder and the ⌘K chip even beside two pills (it used to shrink to 73 px, D-105). */
+.bar[data-band="1440"] .searchAnchor {
+  min-width: 160px;
+}
+
 .searchInput {
   width: 100%;
   min-width: 0;
@@ -332,8 +342,8 @@
 
 .badge {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: -4px;
+  right: -6px;
   display: grid;
   min-width: 16px;
   height: 16px;

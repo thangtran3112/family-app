@@ -88,6 +88,9 @@
 
 /* End prompt */
 .endBlock { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* The End confirm opens over the chart above its button instead of in the column, so the plot is not squeezed when it shows (D-146). */
+.endSlot { position: relative; min-height: 28px; }
+.endSlot > .confirm { position: absolute; bottom: calc(100% + var(--space-1)); left: var(--space-4); z-index: 12; width: min(520px, calc(100% - 2 * var(--space-4))); background: var(--color-panel); box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); }
 .endText { margin: 0; font-size: var(--text-label); line-height: var(--line-label); }
 .confirm { display: flex; width: 100%; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
 .confirmActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

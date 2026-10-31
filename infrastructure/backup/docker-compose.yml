@@ -11,7 +11,7 @@
 #
 # Usage (manual/ad hoc -- the family-app-backup systemd timer invokes the
 # pinned image directly via `docker run`, not through Compose; see
-# infrastructure/vps/steps/40-backup.sh):
+# infrastructure/host/steps/40-backup.sh):
 #
 #   cd infrastructure/backup
 #   docker compose --env-file /etc/family-app/backup.env \

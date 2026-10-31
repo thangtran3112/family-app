@@ -19,14 +19,14 @@ Architecture context: [`ARCHITECTURE.md`](../../expense-tax-management/plans/ARC
 | `test-backup.sh` | **Fast, Docker-free.** Wired into `pnpm ci:test` via `check:vps-backup-infrastructure`. |
 | `test-backup-docker.sh` | **Slow, Docker.** Full dump→encrypt→upload→decrypt round trip against a disposable PostgreSQL 17 + fake-GCS. Not wired into CI. Run manually (below). |
 | `test-restore.sh` | **Slow, Docker.** End-to-end seeded-source → empty-destination restore proof (full backup + one ordered daily delta). Not wired into CI. Run manually (below). |
-| `family-app-backup.service` / `.timer` / `family-app-backup-retry.service` | Task 6 systemd units. Installed by `infrastructure/vps/steps/40-backup.sh` (opt-in `bootstrap.sh --only backup`). |
+| `family-app-backup.service` / `.timer` / `family-app-backup-retry.service` | Task 6 systemd units. Installed by `infrastructure/host/steps/40-backup.sh` (opt-in `bootstrap.sh --only backup`). |
 | `check-backup-freshness.sh` | Local health command: fails when the latest successful backup is ≥24h old. Fast, Docker-free; wired into CI via `check:vps-backup-infrastructure`. |
 | `test-systemd-units.sh` | Fast, Docker-free static checks on the three unit files above (timer cadence, runtime deadlines, retry bounds, read-only/tmpfs run contract, no literal secrets). Wired into CI. |
 | `test-check-backup-freshness.sh` | Fast, Docker-free checks for `check-backup-freshness.sh`. Wired into CI. |
 | `recovery-drill.sh` | Task 8 orchestrator: restore.sh → compare restored-vs-supported schema migration versions → pluggable deploy/health-check/smoke-test commands → timestamped JSON report, failing if the whole thing exceeds the 2h RTO. Deploy/health-check/smoke-test are commands YOU supply; this script never talks to Cloudflare or deploys real images itself. |
 | `test-recovery-drill.sh` | **Slow, Docker.** Proves the orchestration (pass / failing health-check / RTO breach / migration-version mismatch) with fake deploy/health/smoke commands against a real backup+restore. Not wired into CI. Run manually (below). |
 
-See also [`../vps/README.md`](../vps/README.md) "Backup (opt-in)" for how
+See also [`../host/README.md`](../host/README.md) "Backup (opt-in)" for how
 `40-backup.sh` installs these units onto a real VPS, and
 [`../../.github/workflows/family-backup-freshness.yml`](../../.github/workflows/family-backup-freshness.yml)
 for the daily off-host staleness check (18h warn / 22h page / 24h RPO

@@ -1,7 +1,7 @@
 import { PracticeThreadCreateV1Schema } from "@ai-trading/contracts/practice-thread-v1";
 import { formatEtDay } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import { latestReplayDay, MAX_ARMED, type ArmedRef } from "./setup.ts";
+import { lastWeekday, latestReplayDay, MAX_ARMED, type ArmedRef } from "./setup.ts";
 import type { SwingPreviewRequest, UniverseRow } from "./swingApi.ts";
 import { threadDraftToSpec, threadFieldOfPath, validateThreadDraft, type ThreadDraft, type ThreadField } from "./threadSetup.ts";
 import { MAX_FILTERS, MAX_UNIVERSE, MIN_UNIVERSE, MAX_WATCHLISTS, noEdits, parseTarget, toggleId, universeEntries, type UniverseEdits } from "./universeView.ts";
@@ -173,17 +173,6 @@ export function swingProblems(problems: ReadonlyArray<{ path: string; message: s
 }
 
 const isoDay = /^\d{4}-\d{2}-\d{2}$/;
-
-/** The last of `count` weekday sessions starting at `first` (holidays not modeled). */
-function lastWeekday(first: string, count: number): string {
-  const date = noon(first);
-  let left = count - 1;
-  while (left > 0) {
-    date.setUTCDate(date.getUTCDate() + 1);
-    if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6) left -= 1;
-  }
-  return isoOf(date);
-}
 
 /** A quick local read of the first day and the range; holidays and missing data are the server's call (its 422 shows inline). */
 export function firstDayProblem(draft: Pick<SwingDraft, "firstDay" | "sessions">, now: Date): string | null {

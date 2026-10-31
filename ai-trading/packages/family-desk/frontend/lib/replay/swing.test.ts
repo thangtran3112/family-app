@@ -30,7 +30,7 @@ import {
   swingCardView,
   swingDatesHidden,
   swingDayTitle,
-  swingHeaderLine,
+  swingBoardTitle,
 } from "./swing.ts";
 import {
   amdHold,
@@ -60,11 +60,11 @@ test("a hold row reads like the board: entry day and price, days held, stop, the
   const row = holdRowView(nvdaHold);
   assert.deepEqual(
     [row.side, row.shares, row.entry, row.held, row.stop, row.value, row.result, row.resultTone, row.r, row.gap, row.earnings, row.splitNote, row.exit],
-    ["Long", "100", "Day 5 · 184.20", "2 days held", "Stop 178.50", "Prior close 190.10", "+$590.00", "up", "+1.04R", null, "Earnings in 3 sessions · after close", null, null],
+    ["Long", "100", "Day 5 · 184.20", "Day 2 of hold", "Stop 178.50", "Prior close 190.10", "+$590.00", "up", "+1.04R", null, "Earnings in 3 sessions · after close", null, null],
   );
   assert.equal(holdEntryLabel({ entry_day_no: 3, entry_price: 184.2 }), "Day 3 · 184.20");
-  assert.equal(daysHeldText(1), "1 day held");
-  assert.equal(daysHeldText(2), "2 days held");
+  assert.equal(daysHeldText(1), "Day 1 of hold", "D-140: a count of the hold's days, not a length of time");
+  assert.equal(daysHeldText(2), "Day 2 of hold");
   assert.equal(sideLabel("short"), "Short");
 });
 
@@ -78,7 +78,7 @@ test("the API's split note is shown as it is, and a short is signed for its side
 test("a crossed stop and a gap read in plain words, with the price basis of the moment", () => {
   const row = holdRowView(gappedHold);
   assert.deepEqual([row.stop, row.stopCrossed, row.value, row.result, row.resultTone, row.gap], ["Stop 178.50 crossed", true, "Last 177.40", "−$680.00", "down", "Gap −$1,270.00"]);
-  assert.equal(holdRowView(gappedHold, "off").value, "Last 177.40 · one-minute close");
+  assert.equal(holdRowView(gappedHold, "off").value, "Last 177.40 (1m close)");
   assert.equal(holdStopText({ stop_price: null, stop_hit: "no" }), "No stop");
 });
 
@@ -92,7 +92,7 @@ test("a closed hold shows its exit and its final P/L; an automatic exit says so"
 test("the price label is the prior close until anything of the day is revealed, then the last price", () => {
   assert.equal(priceBasisLabel("prior_close", 187.4), "Prior close 187.40");
   assert.equal(priceBasisLabel("last", 182.1), "Last 182.10");
-  assert.equal(priceBasisLabel("last", 182.35, "off"), "Last 182.35 · one-minute close");
+  assert.equal(priceBasisLabel("last", 182.35, "off"), "Last 182.35 (1m close)");
   assert.equal(priceBasisLabel("prior_close", 187.4, "off"), "Prior close 187.40");
   assert.equal(priceBasisLabel(undefined, 188.05), "Last 188.05", "a day session names no basis");
   assert.equal(priceBasisLabel(null, null), "—");
@@ -170,6 +170,16 @@ test("a strip row shows the last price and change; a hold adds its P/L and stop 
   assert.match(amd!.label, /AMD, practice hold, last 168\.40, \+6\.3%, Short 50 · −\$320\.00 · 0\.2% past your stop, stop crossed/);
 });
 
+test("the strip's % colour follows the rounded text: -0.01% and +0.01% both read 0.0% and are flat (D-148, R-07)", () => {
+  const row = (chg_pct: number | null) => stripRowView({ symbol: "S03", source: "focus", last: 100, chg_pct, hold: null });
+  for (const tiny of [-0.01, 0.01, -0.04, 0.049]) {
+    assert.deepEqual([row(tiny).change, row(tiny).changeTone], ["0.0%", "flat"], String(tiny));
+  }
+  assert.deepEqual([row(-0.06).change, row(-0.06).changeTone], ["−0.1%", "down"], "a move that shows a digit keeps its colour");
+  assert.deepEqual([row(0.06).change, row(0.06).changeTone], ["+0.1%", "up"]);
+  assert.equal(row(null).changeTone, "flat");
+});
+
 test("dates stay hidden unless the setup says otherwise", () => {
   assert.equal(swingDatesHidden({ hideDates: "yes" }), true);
   assert.equal(swingDatesHidden({ hideDates: "no" }), false);
@@ -179,17 +189,15 @@ test("dates stay hidden unless the setup says otherwise", () => {
 test("the board header: day, week, weekday, as of the prior close, balance, equity and SIMULATED", () => {
   assert.equal(swingDayTitle(swingDayList, true), "Day 7 of 20 · Week 2 · Tue");
   assert.equal(swingDayTitle(swingDayList, false), "Day 7 of 20 · Week 2 · Tue 2026-07-14");
-  assert.equal(swingHeaderLine(swingDayList, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close · Balance $51,240.00 · Equity $52,010.00 · SIMULATED");
-  assert.equal(swingHeaderLine(swingDayListEnded, true), "Day 7 of 20 · Week 2 · Tue · Day over · Balance $51,240.00 · Equity $52,010.00 · SIMULATED");
-  assert.equal(swingHeaderLine({ ...swingDayList, thread: null }, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close", "no money, no label to carry");
-  assert.equal(swingHeaderLine({ ...swingDayList, thread: { ...swingBrief, equity_usd: undefined } }, true), "Day 7 of 20 · Week 2 · Tue · as of the prior close · Balance $51,240.00 · SIMULATED");
+  assert.equal(swingBoardTitle(swingDayList, true), "Day 7 of 20 · Tue", "D-139: day and weekday; the week and the state are chips, the money is in the strip");
+  assert.equal(swingBoardTitle(swingDayList, false), "Day 7 of 20 · Tue 2026-07-14");
   assert.equal(swingBriefLine(swingBrief), "Balance $51,240.00 · Equity $52,010.00 · Free cash $24,720.00 · SIMULATED");
 });
 
 test("the hub card line, the review-ready notice and the action", () => {
   const card = swingCardView(swingThreadSummary)!;
   assert.equal(card.title, "Swing · 50 names");
-  assert.equal(card.line, "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · Balance $51,240.00 · Equity $52,010.00 · 2 holds open");
+  assert.equal(card.line, "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · 2 holds open", "D-112: week, day, names and holds; the money sits in its own cells");
   assert.deepEqual([card.notice, card.action], [null, { kind: "continue", label: "Continue Day 7", weekNo: null }]);
 
   const ready = swingCardView(swingThreadReviewReady)!;
@@ -198,7 +206,7 @@ test("the hub card line, the review-ready notice and the action", () => {
   assert.match(ready.line, /1 hold open$/);
 
   const finished = swingCardView(swingThreadFinished)!;
-  assert.equal(finished.line, "Swing · 50 names · Finished · Day 20 of 20 · Balance $51,240.00 · Equity $52,010.00");
+  assert.equal(finished.line, "Swing · 50 names · Finished · Day 20 of 20");
   assert.equal(finished.action.kind, "none");
 
   const fresh = swingCardView({ ...swingThreadSummary, today: null, swing: { ...swingThreadSummary.swing!, days_ended: 0, day_no: 1, week_no: 1, holds_open: 0, equity_series: [] } })!;
@@ -280,8 +288,8 @@ test("every string the helpers build avoids the Practice banned words", () => {
       const view = stripRowView(row);
       return [view.sub, view.label];
     }),
-    swingHeaderLine(swingDayList, true),
-    swingHeaderLine(swingDayListEnded, false),
+    swingBoardTitle(swingDayList, true),
+    swingBoardTitle(swingDayListEnded, false),
     swingBriefLine(swingBrief),
     ...[swingThreadSummary, swingThreadReviewReady, swingThreadFinished].flatMap((summary) => {
       const card = swingCardView(summary)!;

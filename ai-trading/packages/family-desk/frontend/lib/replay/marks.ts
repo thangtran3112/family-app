@@ -1,6 +1,7 @@
 import type { MarketChartLevel } from "../../components/charts/MarketChart.tsx";
 import type { ChartMarkerInput } from "../chart-data.ts";
 import { formatEtClock, formatPrice } from "../desk/format.ts";
+import type { ChartPrefs, LevelId } from "./chartPrefs.ts";
 import type { OpenTrade, ReplayBar, ReplayLevels, ReplayMark, ReplaySignal } from "./schemas.ts";
 import { ms } from "./time.ts";
 
@@ -53,16 +54,41 @@ export function stopLevel(trade: Pick<OpenTrade, "stop_price"> | null): MarketCh
   return trade?.stop_price != null ? [{ label: "Practice stop", price: trade.stop_price, color: AMBER, style: "dashed" }] : [];
 }
 
-/** Key levels as dotted muted lines (prior close, session high and low, opening range). */
-export function levelLines(levels: ReplayLevels): MarketChartLevel[] {
-  const rows: Array<[string, number | null | undefined]> = [
-    ["Prior close", levels.prior_close],
-    ["Session high", levels.session_high],
-    ["Session low", levels.session_low],
-    ["OR high", levels.opening_range_high],
-    ["OR low", levels.opening_range_low],
+/** Key levels as dotted muted lines (prior close, session high and low, opening range). `id` is what the chart settings filter by. */
+export function levelLines(levels: ReplayLevels): Array<MarketChartLevel & { id: LevelId; price: number }> {
+  const rows: Array<[LevelId, string, number | null | undefined]> = [
+    ["prior_close", "Prior close", levels.prior_close],
+    ["session", "Session high", levels.session_high],
+    ["session", "Session low", levels.session_low],
+    ["opening_range", "OR high", levels.opening_range_high],
+    ["opening_range", "OR low", levels.opening_range_low],
   ];
-  return rows.flatMap(([label, price]): MarketChartLevel[] => (price == null ? [] : [{ label, price, color: MUTED, style: "dotted" }]));
+  return rows.flatMap(([id, label, price]) => (price == null ? [] : [{ id, label, price, color: MUTED, style: "dotted" as const }]));
+}
+
+/** The order the names of one merged line read in: "OR high · Session high". */
+const NAME_ORDER = ["OR high", "OR low", "Session high", "Session low", "Prior close"];
+const cents = (price: number) => Math.round(price * 100);
+
+/**
+ * The levels the chart draws: the ones she left on, with levels within one cent of each other as one line that carries
+ * every name (D-099: on a flat day OR high and Session high are the same price and drew eight stacked tags). The Levels
+ * list under the chart keeps every row (`levelRows`); the toggles hide lines, not data.
+ */
+export function chartLevels(levels: ReplayLevels, prefs: Pick<ChartPrefs, "on">): MarketChartLevel[] {
+  const kept = levelLines(levels).flatMap((line, order) => (prefs.on[line.id] ? [{ ...line, order }] : []));
+  const groups: Array<typeof kept> = [];
+  for (const line of [...kept].sort((a, b) => a.price - b.price)) {
+    const group = groups.find((members) => cents(line.price) - cents(members[0]!.price) <= 1);
+    if (group) group.push(line);
+    else groups.push([line]);
+  }
+  return groups
+    .sort((a, b) => Math.min(...a.map((line) => line.order)) - Math.min(...b.map((line) => line.order)))
+    .map((members): MarketChartLevel => {
+      const named = [...members].sort((a, b) => NAME_ORDER.indexOf(a.label) - NAME_ORDER.indexOf(b.label));
+      return { label: named.map((line) => line.label).join(" · "), price: named[0]!.price, color: MUTED, style: "dotted" };
+    });
 }
 
 export type LevelRow = { label: string; price: number };
@@ -122,4 +148,44 @@ export function windowIndex(bars: readonly Pick<ReplayBar, "t">[], windowStart: 
   const start = ms(windowStart);
   const index = bars.findIndex((bar) => ms(bar.t) >= start);
   return index < 0 ? 0 : index;
+}
+
+/** Which side of its bar the library draws a marker's text on: only markers on one side can print over each other. */
+const MARKER_SIDE: Record<ChartMarkerInput["kind"], "above" | "below" | "in"> = {
+  pattern: "below",
+  fire: "above",
+  would_fire: "above",
+  practice_long: "below",
+  practice_short: "above",
+  practice_exit: "in",
+};
+
+/** Labels about this far apart (in bars) no longer touch at the replay's usual zoom. */
+const LABEL_GAP_BARS = 12;
+
+/**
+ * Marker labels that would print over each other (and over the VWAP line) lose their text, the newest one on each side
+ * keeping it; every marker keeps its shape and colour, and the Marks list names them all (D-099).
+ * ponytail: a fixed 12-bar gap, not measured from the zoom; widen or measure if labels still touch.
+ */
+export function declutterMarkers(markers: readonly ChartMarkerInput[], bars: readonly Pick<ReplayBar, "t">[]): ChartMarkerInput[] {
+  const index = new Map(bars.map((bar, position) => [bar.t, position]));
+  const hidden = new Set<number>();
+  for (const side of ["above", "below", "in"] as const) {
+    const newestFirst = markers
+      .flatMap((marker, position) => (MARKER_SIDE[marker.kind] === side && index.has(marker.time) ? [{ position, bar: index.get(marker.time)! }] : []))
+      .sort((a, b) => b.bar - a.bar || b.position - a.position);
+    let lastKept = Infinity;
+    for (const { position, bar } of newestFirst) {
+      if (lastKept - bar >= LABEL_GAP_BARS) lastKept = bar;
+      else hidden.add(position);
+    }
+  }
+  return markers.map((marker, position) => (hidden.has(position) ? { ...marker, label: "" } : marker));
+}
+
+/** Bars shown on the first draw of a followed chart: 90, or one regular session (6.5 hours) when that is fewer, so a 15m axis stops at the session (D-099). */
+export function firstDrawBars(interval: string): number {
+  const minutes = /^(\d+)m$/.exec(interval)?.[1];
+  return minutes ? Math.min(90, Math.ceil(390 / Number(minutes))) : 90;
 }
