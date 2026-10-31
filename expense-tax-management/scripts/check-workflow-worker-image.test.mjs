@@ -23,9 +23,9 @@ test("workflow-worker image builds pinned dependencies and runs without root", (
 
 test("worker joins immutable main-only image builds", () => {
   const deploy = YAML.parse(readRepo(".github/workflows/expense-tax-deploy.yml"));
-  assert.deepEqual(deploy.on.workflow_run.branches, ["main"]);
+  assert.deepEqual(deploy.on.push.branches, ["main"]);
   for (const job of [deploy.jobs.build, deploy.jobs.deploy]) {
-    assert.match(job.if, /workflow_run\.head_branch == 'main'/);
+    assert.equal(job.if, "github.ref == 'refs/heads/main'");
   }
   const images = deploy.jobs.build.strategy.matrix.include;
   assert.deepEqual(images.find(({ image }) => image === "expense-tax-workflow-worker"), {

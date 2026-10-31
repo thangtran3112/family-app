@@ -18,6 +18,6 @@ Index:
 | [ADR-0010](adr/ADR-0010-data-honesty.md) | Honest data states: no fabricated value, no fake label, every stamp says its source |
 | [ADR-0011](adr/ADR-0011-packages-layout.md) | `consensus/` and `market-data/` live under `packages/` |
 | [ADR-0012](adr/ADR-0012-plans-for-future.md) | `plans/` keeps future phases only; completed detail lives here |
-| [ADR-0013](adr/ADR-0013-ci-deployment-only.md) | CI is deployment-only: ai-trading tests are local gates; expense-tax CI removal blocked |
+| [ADR-0013](adr/ADR-0013-ci-deployment-only.md) | CI is deployment-only: ai-trading and expense-tax tests are local gates; `dev` ruleset check still to drop (owner) |
 
 Changelog: one line per shipped phase in [changelog/CHANGELOG.md](changelog/CHANGELOG.md); session handoffs moved in from `plans/handoffs/` stay there as the session-level log.

@@ -6,4 +6,4 @@ Decision: open a pull request **only when a phase is finished or a batch is mean
 
 Consequences: phase PRs are the unit of delivery; releases are mechanical and auditable; parallel lanes reconcile scope in `STATUS.md` by renumbering, never by editing each other's rows.
 
-Amended by [ADR-0013](ADR-0013-ci-deployment-only.md): ai-trading has no test CI any more, so "monitor CI and merge only when green" now means the remaining checks (infra validate) plus the local gates run before the PR.
+Amended by [ADR-0013](ADR-0013-ci-deployment-only.md): ai-trading has no test CI any more, so "monitor CI and merge only when green" now means the remaining checks (infra validate) plus the local gates run before the PR. Expense-tax lost its test CI too (follow-up in ADR-0013).
