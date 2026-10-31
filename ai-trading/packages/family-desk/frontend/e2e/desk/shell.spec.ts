@@ -216,3 +216,31 @@ test("the chart's right rail: open at 1440, a collapsed strip with a drawer at 1
   }
   await expectCleanScreen(page);
 });
+
+// Fix wave 5S, stream 1: the top bar and the 404.
+test("the search keeps its room beside two pills, the market pill drops the repeated prefix, and no top-bar control overflows (D-105, D-107)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const top = page.locator(".dk-top");
+  const bar = await top.evaluate((node) => ({ over: node.scrollWidth > node.clientWidth + 1 }));
+  expect(bar.over, "the bar does not overflow").toBe(false);
+  if (test.info().project.name === "desktop-1440") {
+    const search = (await top.getByRole("combobox", { name: "Search symbols" }).boundingBox())!;
+    expect(search.width, "the box keeps room for its placeholder").toBeGreaterThanOrEqual(160);
+    await expect(top.getByTitle(/^Market closed · opens /), "the pill keeps the whole text as its title").toBeVisible();
+    await expect(top.getByTitle(/^Market closed · opens /)).not.toContainText("Market closed");
+  }
+});
+
+test("a nav link's focus ring is drawn inside the bar, and the 404 links to Practice (D-108, D-135)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const link = page.locator(".dk-top").getByRole("navigation", { name: "Primary navigation" }).getByRole("link").first();
+  await link.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(link).toBeFocused();
+  await expect(link).toHaveCSS("outline-offset", "-2px");
+
+  await page.goto("/journal?thread=2");
+  await expect(page.getByRole("heading", { name: "This page does not exist", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Practice" })).toHaveAttribute("href", "/practice");
+});
