@@ -24,6 +24,7 @@ import (
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/xnys"
 )
 
 const (
@@ -143,9 +144,29 @@ var (
 	adjustments = map[pb.Adjustment]string{pb.Adjustment_ADJUSTMENT_UNSPECIFIED: "all", pb.Adjustment_ALL: "all", pb.Adjustment_SPLIT: "split", pb.Adjustment_RAW: "raw"}
 )
 
+// paddedStart is the request start a daily (`DAY_1`) call must send: midnight America/New_York
+// of the caller's start day, never later than the caller's own start.
+//
+// Alpaca stamps a `1Day` bar at midnight ET of its trading date, which is *earlier* than that
+// session's 04:00 ET extended open, and it filters bars by that stamp. Every caller asks for
+// whole sessions (`extended_open..extended_close`), so an unpadded request starts after the only
+// bar it wants: a one-session window came back empty (`NoData`) and a wider one silently lost its
+// first session. That was 5U in Python (`f6e8fdfc`); this is the same fix in Go. Intraday bars are
+// stamped at their own start, inside the window, so their range is left exactly as asked.
+func paddedStart(start time.Time) time.Time {
+	et := start.In(newYork)
+	midnight := time.Date(et.Year(), et.Month(), et.Day(), 0, 0, 0, 0, newYork).UTC()
+	if midnight.Before(start) {
+		return midnight
+	}
+	return start.UTC()
+}
+
 // Bars returns closed bars only: the end is capped to the SIP embargo, rows
 // that fail hygiene are dropped (one bad print must not blank a good history),
 // and a bar whose period has not ended is never returned (no repainting).
+// A `DAY_1` answer is re-sliced to the caller's New York trading dates, so the
+// padding above never leaks a session the caller did not ask for.
 func (c *Client) Bars(ctx context.Context, r *pb.GetBarsRequest) ([]*pb.Bar, pb.Quality, error) {
 	tf, ok := timeframes[r.Timeframe]
 	if !ok {
@@ -163,8 +184,12 @@ func (c *Client) Bars(ctx context.Context, r *pb.GetBarsRequest) ([]*pb.Bar, pb.
 	if end.Before(start) {
 		return nil, quality, nil
 	}
+	requestStart := start
+	if r.Timeframe == pb.Timeframe_DAY_1 {
+		requestStart = paddedStart(start)
+	}
 	q := url.Values{
-		"timeframe": {tf}, "start": {start.Format(time.RFC3339)}, "end": {end.Format(time.RFC3339)},
+		"timeframe": {tf}, "start": {requestStart.Format(time.RFC3339)}, "end": {end.Format(time.RFC3339)},
 		"adjustment": {adjustments[r.Adjustment]}, "feed": {"sip"}, "limit": {"10000"},
 	}
 	var rows []barJSON
@@ -182,15 +207,28 @@ func (c *Client) Bars(ctx context.Context, r *pb.GetBarsRequest) ([]*pb.Bar, pb.
 		}
 		q.Set("page_token", *page.NextPageToken)
 	}
-	return toBars(rows, r.Timeframe, now), quality, nil
+	return toBars(rows, r.Timeframe, now, start, end), quality, nil
 }
 
-func toBars(rows []barJSON, tf pb.Timeframe, now time.Time) []*pb.Bar {
+func toBars(rows []barJSON, tf pb.Timeframe, now, start, end time.Time) []*pb.Bar {
+	cal := xnys.Default()
+	first, last := "", ""
+	if tf == pb.Timeframe_DAY_1 {
+		// The same re-slice as Python's `_within_trading_dates`: compare New York dates, not the
+		// bar's midnight stamp, so a window opening at a session's extended open includes it.
+		first, last = cal.SessionDate(start), cal.SessionDate(end)
+	}
 	byStart := map[int64]barJSON{} // duplicates: keep the last
 	for _, b := range rows {
-		if valid(b) && closed(b.T, tf, now) {
-			byStart[b.T.UnixNano()] = b
+		if !valid(b) || !closed(b.T, tf, now) {
+			continue
 		}
+		if tf == pb.Timeframe_DAY_1 {
+			if day := cal.SessionDate(b.T); day < first || day > last {
+				continue
+			}
+		}
+		byStart[b.T.UnixNano()] = b
 	}
 	keys := make([]int64, 0, len(byStart))
 	for k := range byStart {
@@ -200,7 +238,14 @@ func toBars(rows []barJSON, tf pb.Timeframe, now time.Time) []*pb.Bar {
 	out := make([]*pb.Bar, 0, len(keys))
 	for _, k := range keys {
 		b := byStart[k]
-		out = append(out, &pb.Bar{Start: timestamppb.New(b.T), Open: b.O, High: b.H, Low: b.L, Close: b.C, Volume: int64(b.V)})
+		bar := &pb.Bar{
+			Start: timestamppb.New(b.T), Open: b.O, High: b.H, Low: b.L, Close: b.C, Volume: int64(b.V),
+			SessionDate: cal.SessionDate(b.T),
+		}
+		if close, ok := cal.BarClose(router.CalendarTimeframe(tf), b.T); ok {
+			bar.CloseAt = timestamppb.New(close)
+		}
+		out = append(out, bar)
 	}
 	return out
 }
@@ -209,18 +254,13 @@ func valid(b barJSON) bool {
 	return b.O > 0 && b.H > 0 && b.L > 0 && b.C > 0 && b.H >= b.L && b.V >= 0
 }
 
-// closed reports whether the bar's period has ended by now. A daily bar closes
-// at 16:00 ET of its date; half days close at 13:00, so this errs late, never
-// early. ponytail: no exchange calendar; add one if a half-day close is needed.
+// closed reports whether the bar's period has ended by now, from the embedded exchange calendar:
+// a session's regular close (13:00 ET on an early close), never an assumed 16:00. Before C0 this
+// assumed 16:00 every day, so a half day's bar was withheld for three hours. A day outside the
+// embedded range (before the 2016 history floor, or past a calendar nobody regenerated) has no
+// close at all, so its bar is dropped rather than guessed.
 func closed(start time.Time, tf pb.Timeframe, now time.Time) bool {
-	switch tf {
-	case pb.Timeframe_MINUTE_1:
-		return !start.Add(time.Minute).After(now)
-	case pb.Timeframe_HOUR_1:
-		return !start.Add(time.Hour).After(now)
-	}
-	et := start.In(newYork)
-	return !time.Date(et.Year(), et.Month(), et.Day(), 16, 0, 0, 0, newYork).After(now)
+	return xnys.Default().Closed(router.CalendarTimeframe(tf), start, now)
 }
 
 type barJSON struct {

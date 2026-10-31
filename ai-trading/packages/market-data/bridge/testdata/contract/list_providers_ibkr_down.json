@@ -11,7 +11,7 @@
         "configured": true,
         "counters": {
           "fallbacks": "1",
-          "requests": "2"
+          "requests": "6"
         },
         "lastOk": "2024-05-02T20:30:00Z",
         "newestTick": "2024-05-02T20:14:00Z",

@@ -1,0 +1,1247 @@
+{
+  "cases": [
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 765.37,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 767.73,
+          "low": 761.63,
+          "open": 762.25,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 31811570
+        },
+        {
+          "close": 769.66,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 771.14,
+          "low": 765.21,
+          "open": 767.34,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 28688329
+        },
+        {
+          "close": 772.31,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 773.36,
+          "low": 769.24,
+          "open": 771.43,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 30191094
+        },
+        {
+          "close": 769.36,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 770.76,
+          "low": 766.62,
+          "open": 768.79,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 40359980
+        },
+        {
+          "close": 755.72,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 761.46,
+          "low": 750.36,
+          "open": 761.38,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 77867645
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_spy.json",
+      "name": "spy_daily_five_sessions",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-26T08:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 755.72,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 761.46,
+          "low": 750.36,
+          "open": 761.38,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 77867645
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_spy.json",
+      "name": "spy_daily_one_session_5u",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-30T08:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 343.91,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 347.09,
+          "low": 341.03,
+          "open": 343.92,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 42914607
+        },
+        {
+          "close": 347.1,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 347.78,
+          "low": 342.39,
+          "open": 343.165,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 40126141
+        },
+        {
+          "close": 343.83,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 347.18,
+          "low": 343.52,
+          "open": 346.92,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 35858672
+        },
+        {
+          "close": 348.91,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 351.43,
+          "low": 347.3,
+          "open": 348.0,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 42736941
+        },
+        {
+          "close": 344.63,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 349.19,
+          "low": 334.35,
+          "open": 346.715,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 68057076
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_aapl.json",
+      "name": "aapl_daily_five_sessions",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-26T08:00:00Z",
+      "symbol": "AAPL",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 712.2,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 715.25,
+          "low": 705.58,
+          "open": 707.06,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 33336496
+        },
+        {
+          "close": 721.25,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 722.87,
+          "low": 713.59,
+          "open": 715.12,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 31133794
+        },
+        {
+          "close": 725.61,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 726.14,
+          "low": 720.3,
+          "open": 724.12,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 30698847
+        },
+        {
+          "close": 715.34,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 718.07,
+          "low": 711.62,
+          "open": 716.54,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 38446215
+        },
+        {
+          "close": 690.49,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 698.63,
+          "low": 683.45,
+          "open": 697.21,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 85886725
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_qqq.json",
+      "name": "qqq_daily_five_sessions",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-26T08:00:00Z",
+      "symbol": "QQQ",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 763.99,
+          "close_at": "2026-10-01T20:00:00Z",
+          "high": 765.65,
+          "low": 758.7901,
+          "open": 764.36,
+          "session_date": "2026-10-01",
+          "start": "2026-10-01T04:00:00Z",
+          "volume": 48524799
+        },
+        {
+          "close": 769.64,
+          "close_at": "2026-10-02T20:00:00Z",
+          "high": 772.65,
+          "low": 767.145,
+          "open": 770.58,
+          "session_date": "2026-10-02",
+          "start": "2026-10-02T04:00:00Z",
+          "volume": 46848733
+        },
+        {
+          "close": 774.83,
+          "close_at": "2026-10-05T20:00:00Z",
+          "high": 776.605,
+          "low": 769.63,
+          "open": 769.69,
+          "session_date": "2026-10-05",
+          "start": "2026-10-05T04:00:00Z",
+          "volume": 44929602
+        },
+        {
+          "close": 779.09,
+          "close_at": "2026-10-06T20:00:00Z",
+          "high": 781.62,
+          "low": 777.96,
+          "open": 778.15,
+          "session_date": "2026-10-06",
+          "start": "2026-10-06T04:00:00Z",
+          "volume": 36140884
+        },
+        {
+          "close": 777.22,
+          "close_at": "2026-10-07T20:00:00Z",
+          "high": 779.1021,
+          "low": 773.61,
+          "open": 775.77,
+          "session_date": "2026-10-07",
+          "start": "2026-10-07T04:00:00Z",
+          "volume": 31071421
+        },
+        {
+          "close": 773.93,
+          "close_at": "2026-10-08T20:00:00Z",
+          "high": 777.09,
+          "low": 770.435,
+          "open": 774.86,
+          "session_date": "2026-10-08",
+          "start": "2026-10-08T04:00:00Z",
+          "volume": 40507321
+        },
+        {
+          "close": 778.57,
+          "close_at": "2026-10-09T20:00:00Z",
+          "high": 779.42,
+          "low": 775.14,
+          "open": 776.24,
+          "session_date": "2026-10-09",
+          "start": "2026-10-09T04:00:00Z",
+          "volume": 22706632
+        },
+        {
+          "close": 778.1,
+          "close_at": "2026-10-12T20:00:00Z",
+          "high": 779.397,
+          "low": 777.05,
+          "open": 778.78,
+          "session_date": "2026-10-12",
+          "start": "2026-10-12T04:00:00Z",
+          "volume": 18774728
+        },
+        {
+          "close": 778.01,
+          "close_at": "2026-10-13T20:00:00Z",
+          "high": 778.75,
+          "low": 775.95,
+          "open": 777.34,
+          "session_date": "2026-10-13",
+          "start": "2026-10-13T04:00:00Z",
+          "volume": 25920577
+        },
+        {
+          "close": 769.6,
+          "close_at": "2026-10-14T20:00:00Z",
+          "high": 776.35,
+          "low": 766.71,
+          "open": 774.92,
+          "session_date": "2026-10-14",
+          "start": "2026-10-14T04:00:00Z",
+          "volume": 55789045
+        },
+        {
+          "close": 771.79,
+          "close_at": "2026-10-15T20:00:00Z",
+          "high": 772.87,
+          "low": 764.43,
+          "open": 766.25,
+          "session_date": "2026-10-15",
+          "start": "2026-10-15T04:00:00Z",
+          "volume": 43327603
+        },
+        {
+          "close": 763.25,
+          "close_at": "2026-10-16T20:00:00Z",
+          "high": 773.25,
+          "low": 760.64,
+          "open": 773.24,
+          "session_date": "2026-10-16",
+          "start": "2026-10-16T04:00:00Z",
+          "volume": 64456707
+        },
+        {
+          "close": 766.48,
+          "close_at": "2026-10-19T20:00:00Z",
+          "high": 770.46,
+          "low": 765.824,
+          "open": 767.23,
+          "session_date": "2026-10-19",
+          "start": "2026-10-19T04:00:00Z",
+          "volume": 38758918
+        },
+        {
+          "close": 769.05,
+          "close_at": "2026-10-20T20:00:00Z",
+          "high": 772.29,
+          "low": 764.25,
+          "open": 765.86,
+          "session_date": "2026-10-20",
+          "start": "2026-10-20T04:00:00Z",
+          "volume": 35110782
+        },
+        {
+          "close": 773.09,
+          "close_at": "2026-10-21T20:00:00Z",
+          "high": 774.44,
+          "low": 768.4,
+          "open": 771.17,
+          "session_date": "2026-10-21",
+          "start": "2026-10-21T04:00:00Z",
+          "volume": 32006759
+        },
+        {
+          "close": 763.96,
+          "close_at": "2026-10-22T20:00:00Z",
+          "high": 767.71,
+          "low": 761.165,
+          "open": 766.37,
+          "session_date": "2026-10-22",
+          "start": "2026-10-22T04:00:00Z",
+          "volume": 54184869
+        },
+        {
+          "close": 759.97,
+          "close_at": "2026-10-23T20:00:00Z",
+          "high": 763.47,
+          "low": 758.68,
+          "open": 759.896,
+          "session_date": "2026-10-23",
+          "start": "2026-10-23T04:00:00Z",
+          "volume": 33491058
+        },
+        {
+          "close": 765.37,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 767.73,
+          "low": 761.63,
+          "open": 762.25,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 31811570
+        },
+        {
+          "close": 769.66,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 771.14,
+          "low": 765.21,
+          "open": 767.34,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 28688329
+        },
+        {
+          "close": 772.31,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 773.36,
+          "low": 769.24,
+          "open": 771.43,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 30191094
+        },
+        {
+          "close": 769.36,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 770.76,
+          "low": 766.62,
+          "open": 768.79,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 40359980
+        },
+        {
+          "close": 755.72,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 761.46,
+          "low": 750.36,
+          "open": 761.38,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 77867645
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_spy.json",
+      "name": "spy_daily_october",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-01T08:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": "2026-10-30T19:00:00Z",
+      "bars": [
+        {
+          "close": 765.37,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 767.73,
+          "low": 761.63,
+          "open": 762.25,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 31811570
+        },
+        {
+          "close": 769.66,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 771.14,
+          "low": 765.21,
+          "open": 767.34,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 28688329
+        },
+        {
+          "close": 772.31,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 773.36,
+          "low": 769.24,
+          "open": 771.43,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 30191094
+        },
+        {
+          "close": 769.36,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 770.76,
+          "low": 766.62,
+          "open": 768.79,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 40359980
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_spy.json",
+      "name": "spy_daily_as_of_mid_session",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-26T08:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": "2026-10-30T20:00:00Z",
+      "bars": [
+        {
+          "close": 765.37,
+          "close_at": "2026-10-26T20:00:00Z",
+          "high": 767.73,
+          "low": 761.63,
+          "open": 762.25,
+          "session_date": "2026-10-26",
+          "start": "2026-10-26T04:00:00Z",
+          "volume": 31811570
+        },
+        {
+          "close": 769.66,
+          "close_at": "2026-10-27T20:00:00Z",
+          "high": 771.14,
+          "low": 765.21,
+          "open": 767.34,
+          "session_date": "2026-10-27",
+          "start": "2026-10-27T04:00:00Z",
+          "volume": 28688329
+        },
+        {
+          "close": 772.31,
+          "close_at": "2026-10-28T20:00:00Z",
+          "high": 773.36,
+          "low": 769.24,
+          "open": 771.43,
+          "session_date": "2026-10-28",
+          "start": "2026-10-28T04:00:00Z",
+          "volume": 30191094
+        },
+        {
+          "close": 769.36,
+          "close_at": "2026-10-29T20:00:00Z",
+          "high": 770.76,
+          "low": 766.62,
+          "open": 768.79,
+          "session_date": "2026-10-29",
+          "start": "2026-10-29T04:00:00Z",
+          "volume": 40359980
+        },
+        {
+          "close": 755.72,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 761.46,
+          "low": 750.36,
+          "open": 761.38,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T04:00:00Z",
+          "volume": 77867645
+        }
+      ],
+      "end": "2026-10-31T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/daily_spy.json",
+      "name": "spy_daily_as_of_close",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2026-10-26T08:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 755.72,
+          "close_at": "2026-10-30T19:51:00Z",
+          "high": 755.75,
+          "low": 754.29,
+          "open": 754.29,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:50:00Z",
+          "volume": 1165317
+        },
+        {
+          "close": 755.73,
+          "close_at": "2026-10-30T19:52:00Z",
+          "high": 756.21,
+          "low": 755.6,
+          "open": 755.7,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:51:00Z",
+          "volume": 1223211
+        },
+        {
+          "close": 755.83,
+          "close_at": "2026-10-30T19:53:00Z",
+          "high": 756.08,
+          "low": 755.44,
+          "open": 755.73,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:52:00Z",
+          "volume": 872018
+        },
+        {
+          "close": 756.28,
+          "close_at": "2026-10-30T19:54:00Z",
+          "high": 756.6,
+          "low": 755.75,
+          "open": 755.83,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:53:00Z",
+          "volume": 916299
+        },
+        {
+          "close": 756.0955,
+          "close_at": "2026-10-30T19:55:00Z",
+          "high": 756.38,
+          "low": 755.735,
+          "open": 756.295,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:54:00Z",
+          "volume": 989155
+        },
+        {
+          "close": 755.66,
+          "close_at": "2026-10-30T19:56:00Z",
+          "high": 756.12,
+          "low": 755.41,
+          "open": 756.1,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:55:00Z",
+          "volume": 839461
+        },
+        {
+          "close": 754.68,
+          "close_at": "2026-10-30T19:57:00Z",
+          "high": 755.73,
+          "low": 754.65,
+          "open": 755.64,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:56:00Z",
+          "volume": 705521
+        },
+        {
+          "close": 755.69,
+          "close_at": "2026-10-30T19:58:00Z",
+          "high": 755.76,
+          "low": 754.5601,
+          "open": 754.66,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:57:00Z",
+          "volume": 631290
+        },
+        {
+          "close": 755.4001,
+          "close_at": "2026-10-30T19:59:00Z",
+          "high": 755.81,
+          "low": 755.37,
+          "open": 755.7,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:58:00Z",
+          "volume": 1129498
+        },
+        {
+          "close": 755.69,
+          "close_at": "2026-10-30T20:00:00Z",
+          "high": 756.22,
+          "low": 755.1,
+          "open": 755.4,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T19:59:00Z",
+          "volume": 2401118
+        },
+        {
+          "close": 756.03,
+          "close_at": "2026-10-30T20:01:00Z",
+          "high": 756.2,
+          "low": 755.56,
+          "open": 755.71,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:00:00Z",
+          "volume": 3524815
+        },
+        {
+          "close": 756.33,
+          "close_at": "2026-10-30T20:02:00Z",
+          "high": 756.72,
+          "low": 755.98,
+          "open": 756.1,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:01:00Z",
+          "volume": 263806
+        },
+        {
+          "close": 756.08,
+          "close_at": "2026-10-30T20:03:00Z",
+          "high": 756.4148,
+          "low": 756.07,
+          "open": 756.37,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:02:00Z",
+          "volume": 573404
+        },
+        {
+          "close": 756.12,
+          "close_at": "2026-10-30T20:04:00Z",
+          "high": 756.3,
+          "low": 755.99,
+          "open": 756.11,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:03:00Z",
+          "volume": 194956
+        },
+        {
+          "close": 755.97,
+          "close_at": "2026-10-30T20:05:00Z",
+          "high": 756.2,
+          "low": 755.95,
+          "open": 756.12,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:04:00Z",
+          "volume": 88587
+        },
+        {
+          "close": 756.0,
+          "close_at": "2026-10-30T20:06:00Z",
+          "high": 756.14,
+          "low": 755.89,
+          "open": 755.99,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:05:00Z",
+          "volume": 77417
+        },
+        {
+          "close": 756.08,
+          "close_at": "2026-10-30T20:07:00Z",
+          "high": 756.11,
+          "low": 755.95,
+          "open": 755.99,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:06:00Z",
+          "volume": 43699
+        },
+        {
+          "close": 756.1,
+          "close_at": "2026-10-30T20:08:00Z",
+          "high": 756.13,
+          "low": 755.97,
+          "open": 756.06,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:07:00Z",
+          "volume": 82909
+        },
+        {
+          "close": 756.16,
+          "close_at": "2026-10-30T20:09:00Z",
+          "high": 756.209,
+          "low": 756.07,
+          "open": 756.13,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:08:00Z",
+          "volume": 19773
+        },
+        {
+          "close": 756.16,
+          "close_at": "2026-10-30T20:10:00Z",
+          "high": 756.16,
+          "low": 756.07,
+          "open": 756.16,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:09:00Z",
+          "volume": 40605
+        },
+        {
+          "close": 756.18,
+          "close_at": "2026-10-30T20:11:00Z",
+          "high": 756.18,
+          "low": 756.0,
+          "open": 756.16,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T20:10:00Z",
+          "volume": 166677
+        }
+      ],
+      "end": "2026-10-30T20:10:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/minute_spy_2026-10-30.json",
+      "name": "spy_minute_close_window",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "delayed-15m",
+      "start": "2026-10-30T19:50:00Z",
+      "symbol": "SPY",
+      "timeframe": "1m"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 344.88,
+          "close_at": "2026-10-30T13:26:00Z",
+          "high": 345.3,
+          "low": 344.26,
+          "open": 344.64,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:25:00Z",
+          "volume": 16454
+        },
+        {
+          "close": 345.02,
+          "close_at": "2026-10-30T13:27:00Z",
+          "high": 345.05,
+          "low": 344.8,
+          "open": 344.925,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:26:00Z",
+          "volume": 11726
+        },
+        {
+          "close": 345.45,
+          "close_at": "2026-10-30T13:28:00Z",
+          "high": 345.8,
+          "low": 345.07,
+          "open": 345.07,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:27:00Z",
+          "volume": 13226
+        },
+        {
+          "close": 346.0,
+          "close_at": "2026-10-30T13:29:00Z",
+          "high": 346.075,
+          "low": 345.45,
+          "open": 345.45,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:28:00Z",
+          "volume": 12586
+        },
+        {
+          "close": 346.77,
+          "close_at": "2026-10-30T13:30:00Z",
+          "high": 346.87,
+          "low": 346.01,
+          "open": 346.01,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:29:00Z",
+          "volume": 23853
+        },
+        {
+          "close": 348.26,
+          "close_at": "2026-10-30T13:31:00Z",
+          "high": 348.51,
+          "low": 346.62,
+          "open": 346.63,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:30:00Z",
+          "volume": 1196559
+        },
+        {
+          "close": 347.49,
+          "close_at": "2026-10-30T13:32:00Z",
+          "high": 348.7696,
+          "low": 347.01,
+          "open": 348.22,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:31:00Z",
+          "volume": 374752
+        },
+        {
+          "close": 346.775,
+          "close_at": "2026-10-30T13:33:00Z",
+          "high": 347.54,
+          "low": 346.35,
+          "open": 347.47,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:32:00Z",
+          "volume": 205618
+        },
+        {
+          "close": 346.03,
+          "close_at": "2026-10-30T13:34:00Z",
+          "high": 347.12,
+          "low": 345.8,
+          "open": 346.78,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:33:00Z",
+          "volume": 230145
+        },
+        {
+          "close": 345.805,
+          "close_at": "2026-10-30T13:35:00Z",
+          "high": 346.14,
+          "low": 345.02,
+          "open": 346.03,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:34:00Z",
+          "volume": 341960
+        },
+        {
+          "close": 345.33,
+          "close_at": "2026-10-30T13:36:00Z",
+          "high": 346.29,
+          "low": 345.18,
+          "open": 345.78,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:35:00Z",
+          "volume": 235684
+        },
+        {
+          "close": 345.405,
+          "close_at": "2026-10-30T13:37:00Z",
+          "high": 345.78,
+          "low": 345.14,
+          "open": 345.355,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:36:00Z",
+          "volume": 255291
+        },
+        {
+          "close": 346.515,
+          "close_at": "2026-10-30T13:38:00Z",
+          "high": 346.58,
+          "low": 345.36,
+          "open": 345.39,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:37:00Z",
+          "volume": 211917
+        },
+        {
+          "close": 345.84,
+          "close_at": "2026-10-30T13:39:00Z",
+          "high": 346.74,
+          "low": 345.54,
+          "open": 346.51,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:38:00Z",
+          "volume": 231960
+        },
+        {
+          "close": 345.02,
+          "close_at": "2026-10-30T13:40:00Z",
+          "high": 345.84,
+          "low": 344.42,
+          "open": 345.84,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:39:00Z",
+          "volume": 241589
+        },
+        {
+          "close": 345.39,
+          "close_at": "2026-10-30T13:41:00Z",
+          "high": 345.73,
+          "low": 344.97,
+          "open": 345.02,
+          "session_date": "2026-10-30",
+          "start": "2026-10-30T13:40:00Z",
+          "volume": 163895
+        }
+      ],
+      "end": "2026-10-30T13:40:00Z",
+      "fixture": "testdata/vendor/alpaca/2026-10/minute_aapl_2026-10-30.json",
+      "name": "aapl_minute_mid_session",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "delayed-15m",
+      "start": "2026-10-30T13:25:00Z",
+      "symbol": "AAPL",
+      "timeframe": "1m"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 677.84,
+          "close_at": "2026-01-02T21:00:00Z",
+          "high": 681.52,
+          "low": 674.52,
+          "open": 680.36,
+          "session_date": "2026-01-02",
+          "start": "2026-01-02T05:00:00Z",
+          "volume": 89377203
+        }
+      ],
+      "end": "2026-01-03T01:00:00Z",
+      "fixture": "../../../common/tests/fixtures/alpaca/daily_range_spy.json",
+      "name": "spy_daily_est_one_session",
+      "now": "2026-01-15T12:00:00Z",
+      "quality": "eod",
+      "start": "2026-01-02T09:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "all",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 677.84,
+          "close_at": "2026-01-02T21:00:00Z",
+          "high": 681.52,
+          "low": 674.52,
+          "open": 680.36,
+          "session_date": "2026-01-02",
+          "start": "2026-01-02T05:00:00Z",
+          "volume": 89377203
+        },
+        {
+          "close": 682.36,
+          "close_at": "2026-01-05T21:00:00Z",
+          "high": 684.06,
+          "low": 681.02,
+          "open": 681.19,
+          "session_date": "2026-01-05",
+          "start": "2026-01-05T05:00:00Z",
+          "volume": 71753091
+        },
+        {
+          "close": 686.42,
+          "close_at": "2026-01-06T21:00:00Z",
+          "high": 686.92,
+          "low": 682.42,
+          "open": 682.57,
+          "session_date": "2026-01-06",
+          "start": "2026-01-06T05:00:00Z",
+          "volume": 69273827
+        },
+        {
+          "close": 684.2,
+          "close_at": "2026-01-07T21:00:00Z",
+          "high": 688.55,
+          "low": 683.95,
+          "open": 686.79,
+          "session_date": "2026-01-07",
+          "start": "2026-01-07T05:00:00Z",
+          "volume": 75588337
+        },
+        {
+          "close": 684.13,
+          "close_at": "2026-01-08T21:00:00Z",
+          "high": 685.23,
+          "low": 682.13,
+          "open": 683.45,
+          "session_date": "2026-01-08",
+          "start": "2026-01-08T05:00:00Z",
+          "volume": 64019200
+        },
+        {
+          "close": 688.66,
+          "close_at": "2026-01-09T21:00:00Z",
+          "high": 689.89,
+          "low": 683.81,
+          "open": 685.25,
+          "session_date": "2026-01-09",
+          "start": "2026-01-09T05:00:00Z",
+          "volume": 80125467
+        },
+        {
+          "close": 689.74,
+          "close_at": "2026-01-12T21:00:00Z",
+          "high": 690.66,
+          "low": 685.25,
+          "open": 685.3,
+          "session_date": "2026-01-12",
+          "start": "2026-01-12T05:00:00Z",
+          "volume": 63976002
+        },
+        {
+          "close": 688.36,
+          "close_at": "2026-01-13T21:00:00Z",
+          "high": 690.66,
+          "low": 685.96,
+          "open": 690.07,
+          "session_date": "2026-01-13",
+          "start": "2026-01-13T05:00:00Z",
+          "volume": 78309726
+        },
+        {
+          "close": 684.98,
+          "close_at": "2026-01-14T21:00:00Z",
+          "high": 686.33,
+          "low": 680.69,
+          "open": 685.61,
+          "session_date": "2026-01-14",
+          "start": "2026-01-14T05:00:00Z",
+          "volume": 94676684
+        }
+      ],
+      "end": "2026-01-15T00:00:00Z",
+      "fixture": "../../../common/tests/fixtures/alpaca/daily_range_spy.json",
+      "name": "spy_daily_est_january",
+      "now": "2026-01-15T12:00:00Z",
+      "quality": "eod",
+      "start": "2026-01-02T09:00:00Z",
+      "symbol": "SPY",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "raw",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 1224.4,
+          "close_at": "2024-06-05T20:00:00Z",
+          "high": 1224.495,
+          "low": 1174.68,
+          "open": 1183.71,
+          "session_date": "2024-06-05",
+          "start": "2024-06-05T04:00:00Z",
+          "volume": 52840178
+        },
+        {
+          "close": 1209.98,
+          "close_at": "2024-06-06T20:00:00Z",
+          "high": 1255.87,
+          "low": 1183.2,
+          "open": 1240.48,
+          "session_date": "2024-06-06",
+          "start": "2024-06-06T04:00:00Z",
+          "volume": 66469619
+        },
+        {
+          "close": 1208.88,
+          "close_at": "2024-06-07T20:00:00Z",
+          "high": 1216.9171,
+          "low": 1180.22,
+          "open": 1197.7,
+          "session_date": "2024-06-07",
+          "start": "2024-06-07T04:00:00Z",
+          "volume": 41238580
+        },
+        {
+          "close": 121.79,
+          "close_at": "2024-06-10T20:00:00Z",
+          "high": 195.95,
+          "low": 117.01,
+          "open": 120.37,
+          "session_date": "2024-06-10",
+          "start": "2024-06-10T04:00:00Z",
+          "volume": 314162666
+        },
+        {
+          "close": 120.91,
+          "close_at": "2024-06-11T20:00:00Z",
+          "high": 122.87,
+          "low": 118.74,
+          "open": 121.77,
+          "session_date": "2024-06-11",
+          "start": "2024-06-11T04:00:00Z",
+          "volume": 222551158
+        },
+        {
+          "close": 125.2,
+          "close_at": "2024-06-12T20:00:00Z",
+          "high": 126.88,
+          "low": 122.57,
+          "open": 123.06,
+          "session_date": "2024-06-12",
+          "start": "2024-06-12T04:00:00Z",
+          "volume": 299595001
+        }
+      ],
+      "end": "2024-06-13T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2024-06/daily_nvda_raw.json",
+      "name": "nvda_daily_raw_around_split",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2024-06-05T08:00:00Z",
+      "symbol": "NVDA",
+      "timeframe": "1d"
+    },
+    {
+      "adjustment": "split",
+      "as_of": null,
+      "bars": [
+        {
+          "close": 122.44,
+          "close_at": "2024-06-05T20:00:00Z",
+          "high": 122.45,
+          "low": 117.47,
+          "open": 118.37,
+          "session_date": "2024-06-05",
+          "start": "2024-06-05T04:00:00Z",
+          "volume": 528401780
+        },
+        {
+          "close": 121.0,
+          "close_at": "2024-06-06T20:00:00Z",
+          "high": 125.59,
+          "low": 118.32,
+          "open": 124.05,
+          "session_date": "2024-06-06",
+          "start": "2024-06-06T04:00:00Z",
+          "volume": 664696190
+        },
+        {
+          "close": 120.89,
+          "close_at": "2024-06-07T20:00:00Z",
+          "high": 121.69,
+          "low": 118.02,
+          "open": 119.77,
+          "session_date": "2024-06-07",
+          "start": "2024-06-07T04:00:00Z",
+          "volume": 412385800
+        },
+        {
+          "close": 121.79,
+          "close_at": "2024-06-10T20:00:00Z",
+          "high": 195.95,
+          "low": 117.01,
+          "open": 120.37,
+          "session_date": "2024-06-10",
+          "start": "2024-06-10T04:00:00Z",
+          "volume": 314162666
+        },
+        {
+          "close": 120.91,
+          "close_at": "2024-06-11T20:00:00Z",
+          "high": 122.87,
+          "low": 118.74,
+          "open": 121.77,
+          "session_date": "2024-06-11",
+          "start": "2024-06-11T04:00:00Z",
+          "volume": 222551158
+        },
+        {
+          "close": 125.2,
+          "close_at": "2024-06-12T20:00:00Z",
+          "high": 126.88,
+          "low": 122.57,
+          "open": 123.06,
+          "session_date": "2024-06-12",
+          "start": "2024-06-12T04:00:00Z",
+          "volume": 299595001
+        }
+      ],
+      "end": "2024-06-13T00:00:00Z",
+      "fixture": "testdata/vendor/alpaca/2024-06/daily_nvda_split.json",
+      "name": "nvda_daily_split_around_split",
+      "now": "2026-10-31T15:00:00Z",
+      "quality": "eod",
+      "start": "2024-06-05T08:00:00Z",
+      "symbol": "NVDA",
+      "timeframe": "1d"
+    }
+  ],
+  "note": "Generated by ai-trading/packages/market-data/bridge/tools/gen_parity_golden.py: the ai_trading_common Alpaca adapter's normalized answer for each recorded fixture, so the Go adapter can be proven identical (02u \u00a76.2 T1). Do not hand-edit."
+}

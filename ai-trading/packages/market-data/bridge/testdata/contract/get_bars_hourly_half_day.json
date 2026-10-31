@@ -1,0 +1,39 @@
+{
+  "http_status": 200,
+  "request": {
+    "end": "2023-11-24T21:00:00Z",
+    "start": "2023-11-24T15:00:00Z",
+    "symbol": "SPY",
+    "timeframe": "HOUR_1"
+  },
+  "response": {
+    "bars": [
+      {
+        "close": 455.2,
+        "closeAt": "2023-11-24T18:00:00Z",
+        "high": 456,
+        "low": 454.5,
+        "open": 455,
+        "sessionDate": "2023-11-24",
+        "start": "2023-11-24T17:30:00Z",
+        "volume": "900"
+      },
+      {
+        "close": 455.4,
+        "closeAt": "2023-11-24T20:00:00Z",
+        "high": 455.6,
+        "low": 454.8,
+        "open": 455.2,
+        "sessionDate": "2023-11-24",
+        "start": "2023-11-24T19:00:00Z",
+        "volume": "300"
+      }
+    ],
+    "served": {
+      "provider": "alpaca",
+      "quality": "DELAYED_15M"
+    },
+    "symbol": "SPY"
+  },
+  "rpc": "GetBars"
+}

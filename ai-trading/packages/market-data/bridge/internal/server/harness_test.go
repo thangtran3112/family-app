@@ -63,7 +63,7 @@ func (f *fakeIBKR) Quotes(_ context.Context, syms []string) ([]*pb.Quote, error)
 }
 
 func fakeAlpacaHandler(alpacaDown *bool, mu *sync.Mutex) http.HandlerFunc {
-	prices := map[string]string{"AAPL": "187.5", "MSFT": "410.25"}
+	prices := map[string]string{"AAPL": "187.5", "MSFT": "410.25", "SPY": "455.2"}
 	return func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		down := *alpacaDown
@@ -78,10 +78,19 @@ func fakeAlpacaHandler(alpacaDown *bool, mu *sync.Mutex) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		if r.URL.Query().Get("timeframe") == "1Day" {
+		switch tf := r.URL.Query().Get("timeframe"); tf {
+		case "1Day":
 			_, _ = fmt.Fprintf(w, `{"bars":[
 				{"t":"2024-04-30T04:00:00Z","o":180,"h":185,"l":179,"c":184,"v":1000},
 				{"t":"2024-05-01T04:00:00Z","o":184,"h":190,"l":183,"c":%s,"v":1200}],"next_page_token":null}`, price)
+			return
+		case "1Hour":
+			// 2023-11-24 (the Friday after Thanksgiving) is an early close: 13:00 ET. The 12:30 ET
+			// bar closes at the regular close, not at 13:30, and the 14:00 ET post-market bar keeps
+			// its full hour.
+			_, _ = w.Write([]byte(`{"bars":[
+				{"t":"2023-11-24T17:30:00Z","o":455,"h":456,"l":454.5,"c":455.2,"v":900},
+				{"t":"2023-11-24T19:00:00Z","o":455.2,"h":455.6,"l":454.8,"c":455.4,"v":300}],"next_page_token":null}`))
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"bars":[{"t":"2024-05-02T20:14:00Z","o":1,"h":2,"l":1,"c":%s,"v":900}],"next_page_token":null}`, price)

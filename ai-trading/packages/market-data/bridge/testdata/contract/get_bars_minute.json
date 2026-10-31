@@ -1,0 +1,29 @@
+{
+  "http_status": 200,
+  "request": {
+    "end": "2024-05-02T20:30:00Z",
+    "start": "2024-05-02T20:00:00Z",
+    "symbol": "AAPL",
+    "timeframe": "MINUTE_1"
+  },
+  "response": {
+    "bars": [
+      {
+        "close": 187.5,
+        "closeAt": "2024-05-02T20:15:00Z",
+        "high": 2,
+        "low": 1,
+        "open": 1,
+        "sessionDate": "2024-05-02",
+        "start": "2024-05-02T20:14:00Z",
+        "volume": "900"
+      }
+    ],
+    "served": {
+      "provider": "alpaca",
+      "quality": "DELAYED_15M"
+    },
+    "symbol": "AAPL"
+  },
+  "rpc": "GetBars"
+}
