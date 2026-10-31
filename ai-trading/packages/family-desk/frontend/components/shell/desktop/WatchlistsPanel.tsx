@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { useFreshness } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { WatchlistTableRow } from "@/lib/api/schemas";
 import { changeTone, formatPrice, formatSignedPct } from "@/lib/desk/format";
@@ -28,6 +29,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
     (signal) => loadWatchlistTable(activeId ?? 0, { signal }),
     { intervalMs: 60_000, enabled: activeId !== null, revision: revisions.watchlists },
   );
+  const stale = useFreshness({ stamp: table.data?.stamp ?? null, connection: table.connection }).stale;
 
   const empty = (
     <EmptyBlock title="Add symbols to start watching">
@@ -91,7 +93,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
           rowKey={(row) => row.symbol}
           band={band}
           density="compact"
-          dim={table.connection === "reconnecting"}
+          dim={stale}
           empty={empty}
         />
       </>

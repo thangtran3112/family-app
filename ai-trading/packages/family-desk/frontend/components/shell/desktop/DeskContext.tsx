@@ -41,6 +41,11 @@ export function useDeskStatus(): DeskStatusValue {
   return value;
 }
 
+/** The Desk feed's own stamp (the one the top bar shows), or null before /status answers or outside the desktop shell. Page badges read it so a paused feed states one age. */
+export function useDeskFeedStamp(): DeskStatus["quotes"] | null {
+  return useContext(StatusContext)?.status?.quotes ?? null;
+}
+
 export type DeskUiValue = {
   lane: Lane;
   setLane: (lane: Lane) => void;
