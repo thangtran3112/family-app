@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import editorStyles from "@/components/screener/editor/editor.module.css";
+import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, SettingsChannel } from "@/lib/api/schemas";
@@ -18,14 +19,13 @@ import {
   groupProblems,
   isAlertFormDirty,
   parsePrefill,
-  problemsBanner,
   stepOf,
   turnOnState,
   type AlertForm,
   type SourcePrefill,
 } from "@/lib/desk/alertForm";
 import { createAlertStrategy, loadAlertStrategy, resumeAlertStrategy, updateAlertStrategy, validateAlertStrategy } from "@/lib/desk/alerts";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { formProblems } from "@/lib/desk/problems";
 import { loadChannels } from "@/lib/desk/settings";
 import { loadFilters } from "@/lib/desk/screener";
 import { loadWatchlists } from "@/lib/desk/watchlists";
@@ -122,7 +122,6 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   // A save's 422 replaces the live check's problems until the next change.
   const problems = saveProblems.length > 0 ? saveProblems : (validate.data?.problems ?? []);
   const groups = groupProblems(problems);
-  const banner = problemsBanner(problems.length);
   const resolved = validate.data?.resolved_symbols ?? [];
   const dirty = isAlertFormDirty(original, form);
   const listsFailed = lists.data === null && lists.error !== null;
@@ -181,18 +180,14 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
 
   return (
     <>
-      {banner && (
-        <div className={editorStyles.banner} role="alert">
-          <p className={editorStyles.bannerTitle}>{banner}</p>
-          {problems.map((problem, index) => {
-            const step = stepOf(problem.path);
-            // Each line jumps to the step it belongs to; a problem outside the four steps has nowhere to jump.
-            return step === "other"
-              ? <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
-              : <a key={index} href={`#alert-step-${step}`} className={`${editorStyles.problem} ${styles.problemLink}`}>{problemLine(problem)}</a>;
-          })}
-        </div>
-      )}
+      <ErrorSummary
+        problems={formProblems(problems)}
+        // Each line jumps to the step it belongs to; a problem outside the four steps has nowhere to jump.
+        hrefFor={(problem) => {
+          const step = stepOf(problem.path);
+          return step === "other" ? null : `#alert-step-${step}`;
+        }}
+      />
       {saved && (
         <div className={styles.saved} role="status">
           <p>{saved}</p>

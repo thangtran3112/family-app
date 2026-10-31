@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { StrategySpecV1Schema } from "@ai-trading/contracts";
-import { fieldLabel, plainMessage, plainProblem, problemLine } from "./problemCopy.ts";
+import { fieldLabel, formProblems, plainMessage, plainProblem, problemLine, problemsByField, problemsTitle } from "./problems.ts";
 
 test("V-ALERTS-01: the empty-symbols error reads as an instruction, with no schema words or JSON path", () => {
   const server = { path: "watch.universe.symbols", message: "List should have at least 1 item after validation, not 0" };
@@ -76,4 +76,37 @@ test("every real spec error stays free of camelCase identifiers and dotted paths
       assert.equal(/Too small|Too big|expected/.test(line), false, line);
     }
   }
+});
+
+test("formProblems: one model of field label, plain sentence, severity; the path and validator text never show", () => {
+  const list = formProblems([
+    { path: "watch.universe.symbols", message: "List should have at least 1 item after validation, not 0" },
+    { path: "maxResults", message: "Input should be greater than or equal to 1" },
+  ]);
+  assert.deepEqual(list.map(({ field, text, severity }) => [field, text, severity]), [["Symbols", "Add at least 1 symbol.", "error"], ["Max results", "Must be 1 or more.", "error"]]);
+  assert.equal(formProblems([{ path: "name", message: "Field required" }], "warning")[0]!.severity, "warning");
+  // A label table beats the derived label (the strategy builder's raw identifiers).
+  assert.equal(formProblems([{ path: "limits.riskUsd", message: "Field required" }], "error", { "limits.riskUsd": "Risk per trade ($)" })[0]!.field, "Risk per trade ($)");
+});
+
+test("formProblems falls back to 'Check this field.' when the server text would show jargon or nothing", () => {
+  for (const message of ["", "   ", "Request failed with HTTP 400", "value is null", "Traceback: undefined"]) {
+    assert.equal(formProblems([{ path: "name", message }])[0]!.text, "Check this field.", JSON.stringify(message));
+  }
+  assert.equal(formProblems([{ path: "name", message: "the first alert channel must be inbox" }])[0]!.text, "the first alert channel must be inbox");
+});
+
+test("problemsTitle counts the problems; problemsByField groups them under the path they belong to", () => {
+  assert.equal(problemsTitle(0), null);
+  assert.equal(problemsTitle(1), "1 problem to fix");
+  assert.equal(problemsTitle(3), "3 problems to fix");
+  const list = formProblems([
+    { path: "watch.universe.symbols", message: "Field required" },
+    { path: "watch.universe.symbols", message: "Input should be a valid number" },
+    { path: "name", message: "Field required" },
+  ]);
+  const { byPath, count, title } = problemsByField(list);
+  assert.deepEqual([count, title], [3, "3 problems to fix"]);
+  assert.deepEqual(byPath["watch.universe.symbols"]!.map((problem) => problem.text), ["Fill this in.", "Enter a number."]);
+  assert.deepEqual(Object.keys(byPath), ["watch.universe.symbols", "name"]);
 });

@@ -5,6 +5,7 @@ import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG } from "@/lib/desk/operands";
 import { OperandPicker } from "./ConditionRows";
 import styles from "./editor.module.css";
+import { problemText } from "@/lib/desk/problems";
 
 // Ranking takes a series, so the level operands (prior day high, N-day high, …) are left out.
 const SERIES = OPERAND_CATALOG.filter((def) => def.group !== "Levels");
@@ -33,7 +34,7 @@ export function RankFields({ form, onChange, problems }: { form: FilterForm; onC
         </>
       )}
       {problemsFor(problems, "rank").map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
     </fieldset>
   );

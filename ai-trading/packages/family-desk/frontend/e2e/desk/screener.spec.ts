@@ -235,7 +235,7 @@ test("editing a threshold moves the live matches and shows the unsaved bar; Disc
   await expectCleanScreen(page);
 });
 
-test("an invalid value shows its problem with the field path; Discard restores; a fixed Save draft stores a new version", async ({ page }) => {
+test("an invalid value shows its problem in plain words, never the field path; Discard restores; a fixed Save draft stores a new version", async ({ page }) => {
   const id = await copyOf(page, 8);
   const api = watchApi(page);
   await openDesk(page, `/screener/filters?id=${id}`);
@@ -243,8 +243,9 @@ test("an invalid value shows its problem with the field path; Discard restores; 
   const unsaved = page.getByRole("region", { name: "Unsaved changes" });
   await maxResults.fill("0");
   await expect(page.getByRole("alert").filter({ hasText: "1 problem to fix" })).toBeVisible();
-  // the message sits by its field, with the field path in muted text
-  await expect(page.getByText("maxResults", { exact: true })).toBeVisible();
+  // the summary names the field and says what to do; the schema path (maxResults) never shows (DS-2: lib/desk/problems.ts)
+  await expect(page.getByRole("alert").filter({ hasText: "1 problem to fix" })).toContainText("Max results:");
+  await expect(page.getByText("maxResults", { exact: true })).toHaveCount(0);
   await expectCleanScreen(page);
   await unsaved.getByRole("button", { name: "Discard changes" }).click();
   await expect(maxResults).toHaveValue("50");

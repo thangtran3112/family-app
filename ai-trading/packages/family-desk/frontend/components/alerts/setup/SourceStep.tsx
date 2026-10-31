@@ -4,7 +4,7 @@ import type { Problem } from "@/lib/api/schemas";
 import { nameFor, type AlertForm, type SourceKind } from "@/lib/desk/alertForm";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { problemLine } from "@/lib/desk/problems";
 
 const SOURCES: ReadonlyArray<readonly [SourceKind, string]> = [
   ["symbol", "Symbol"],

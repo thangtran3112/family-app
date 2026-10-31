@@ -9,7 +9,7 @@ import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { problemLine } from "@/lib/desk/problems";
 
 type CompareCondition = Extract<Condition, { left: Operand; right: Operand }>;
 type PatternCondition = Extract<Condition, { op: "pattern" }>;

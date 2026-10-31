@@ -1,6 +1,7 @@
 import { paramLabel, subLabel } from "../spec/labels.ts";
+import { containsBannedTerm } from "./freshness.ts";
 
-/** Plain-language copy for server and schema validation problems. A trader sees a field name and an instruction, never a JSON path. */
+/** The one model of a form problem: the field it belongs to, a plain sentence, a severity. A trader sees a field name and an instruction, never a JSON path or validator text. */
 
 const NOUNS: Record<string, string> = { "watch.universe.symbols": "symbol", "then.alert.channels": "channel" };
 const noun = (path: string) => NOUNS[path] ?? "item";
@@ -60,4 +61,39 @@ export const plainProblem = (problem: { path: string; message: string }): PlainP
 export function problemLine(problem: { path: string; message: string }): string {
   const { field, text } = plainProblem(problem);
   return `${field}: ${text}`;
+}
+
+export type ProblemSeverity = "error" | "warning";
+/** A problem ready to show: `path` stays for placing it (never printed), `field` and `text` are the words. */
+export type FormProblem = { path: string; field: string; text: string; severity: ProblemSeverity };
+
+export const FALLBACK_TEXT = "Check this field.";
+
+/**
+ * Server or schema problems as `FormProblem`s. `labels` names a field by its path where the derived label is not enough
+ * (the strategy builder's identifiers). Text that is empty or would show jargon (`BANNED_TERMS`) becomes "Check this field."
+ */
+export function formProblems(problems: readonly { path: string; message: string }[], severity: ProblemSeverity = "error", labels: Readonly<Record<string, string>> = {}): FormProblem[] {
+  return problems.map((problem) => {
+    const text = plainMessage(problem.message, problem.path);
+    return {
+      path: problem.path,
+      field: labels[problem.path] ?? fieldLabel(problem.path),
+      text: text === "" || containsBannedTerm(text) ? FALLBACK_TEXT : text,
+      severity,
+    };
+  });
+}
+
+/** The sentence that goes under its own field (no field name, the field is right above it). */
+export const problemText = (problem: { path: string; message: string }): string => formProblems([problem])[0]!.text;
+
+/** "1 problem to fix" / "3 problems to fix"; null with none. */
+export const problemsTitle = (count: number): string | null => (count === 0 ? null : count === 1 ? "1 problem to fix" : `${count} problems to fix`);
+
+/** The problems grouped by the path they belong to (for the message under each field), with the count and title for the summary. */
+export function problemsByField(problems: readonly FormProblem[]): { byPath: Record<string, FormProblem[]>; count: number; title: string | null } {
+  const byPath: Record<string, FormProblem[]> = {};
+  for (const problem of problems) (byPath[problem.path] ??= []).push(problem);
+  return { byPath, count: problems.length, title: problemsTitle(problems.length) };
 }

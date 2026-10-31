@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import type { Problem } from "@/lib/api/schemas";
 import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
 import styles from "./editor.module.css";
+import { problemText } from "@/lib/desk/problems";
 
 const FIELDS = [
   { key: "minPrice", label: "Minimum price ($)" },
@@ -22,12 +23,12 @@ export function LiquidityFields({ form, onChange, problems }: { form: FilterForm
             <input type="number" step="any" value={form[key]} onChange={(event) => onChange({ ...form, [key]: event.target.value })} />
           </label>
           {problemsFor(problems, `liquidity.${key}`).map((problem, index) => (
-            <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+            <span key={index} className={styles.problem}>{problemText(problem)}</span>
           ))}
         </Fragment>
       ))}
       {problems.filter((problem) => problem.path === "liquidity").map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
     </fieldset>
   );

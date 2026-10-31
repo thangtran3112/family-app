@@ -14,7 +14,7 @@ import {
   type SpecBlockErrors,
   type StrategySpecForm,
 } from "@/lib/spec/form";
-import { plainProblem } from "@/lib/desk/problemCopy";
+import { plainProblem } from "@/lib/desk/problems";
 import { describeSpec } from "@/lib/spec/describe";
 import { optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
 import { symbolsFromDraft, symbolsToDraft } from "@/lib/spec/symbols";
