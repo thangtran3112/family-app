@@ -2,6 +2,9 @@
   "http_status": 200,
   "request": {},
   "response": {
+    "archive": {
+      "backend": "none"
+    },
     "providers": [
       {
         "classes": [

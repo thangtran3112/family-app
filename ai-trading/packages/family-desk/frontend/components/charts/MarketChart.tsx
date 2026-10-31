@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { chartPalette } from "@/lib/desk/chartPalette";
 import type {
   HistogramData,
   IChartApi,
@@ -111,12 +112,9 @@ export type MarketChartProps = {
 const FOLLOW_VISIBLE_BARS = 90;
 const FOLLOW_RIGHT_PAD = 10;
 
-// The up and down colours of the Desk; canvas cannot read the CSS variables. PRICE is the line and area colour: not white
+// The Desk colours come from chartPalette (canvas cannot read the CSS variables). PRICE is the line and area colour: not white
 // (EMA 9), not green or red (those mean up and down).
-const UP = "#30D158";
-const DOWN = "#FF453A";
-const PRICE = "#64D2FF";
-const CLEAR = "rgba(0,0,0,0)";
+const { up: UP, down: DOWN, price: PRICE, clear: CLEAR } = chartPalette;
 
 const DEFAULT_PANE_HEIGHT = 120;
 
@@ -148,7 +146,7 @@ function addMainSeries(library: Library, chart: IChartApi, kind: MainKind): Main
   switch (kind) {
     case "Bar": return chart.addSeries(library.BarSeries, { upColor: UP, downColor: DOWN, openVisible: true, thinBars: false });
     case "Line": return chart.addSeries(library.LineSeries, { color: PRICE, lineWidth: 2, crosshairMarkerVisible: true });
-    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: "rgba(100,210,255,0.24)", bottomColor: "rgba(100,210,255,0)", lineWidth: 2 });
+    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: chartPalette.priceFillTop, bottomColor: chartPalette.priceFillBottom, lineWidth: 2 });
     case "Candlestick": return chart.addSeries(library.CandlestickSeries, { upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false });
   }
 }
@@ -266,22 +264,22 @@ export function MarketChart({
         // hovering it painted it over the lines and candles (D-072): series stay in the order set below.
         hoveredSeriesOnTop: false,
         layout: {
-          background: { type: module.ColorType.Solid, color: "#000000" },
-          textColor: "#9B9BA1",
+          background: { type: module.ColorType.Solid, color: chartPalette.ground },
+          textColor: chartPalette.muted,
           fontFamily: "Inter, system-ui, sans-serif",
         },
         grid: {
-          vertLines: { color: "#2C2C30" },
-          horzLines: { color: "#2C2C30" },
+          vertLines: { color: chartPalette.hairline },
+          horzLines: { color: chartPalette.hairline },
         },
         crosshair: {
           mode: module.CrosshairMode.Normal,
-          vertLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
-          horzLine: { color: "#9B9BA1", style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: "#FFB020" },
+          vertLine: { color: chartPalette.muted, style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: chartPalette.amber },
+          horzLine: { color: chartPalette.muted, style: module.LineStyle.Dashed, width: 1, labelBackgroundColor: chartPalette.amber },
         },
-        rightPriceScale: { borderColor: "#2C2C30" },
+        rightPriceScale: { borderColor: chartPalette.hairline },
         timeScale: {
-          borderColor: "#2C2C30",
+          borderColor: chartPalette.hairline,
           timeVisible: true,
           secondsVisible: false,
           tickMarkFormatter: (time: Time) => formatChartTime(time),
@@ -432,7 +430,7 @@ export function MarketChart({
         }
         if (!entry) continue;
         if (item.kind === "histogram" && entry.kind === "histogram") {
-          entry.series.setData(histogramData(bars, item.values, item.color, item.negativeColor ?? "#FF453A"));
+          entry.series.setData(histogramData(bars, item.values, item.color, item.negativeColor ?? chartPalette.down));
           entry.series.applyOptions({ title: item.label, color: item.color });
         } else if (item.kind === "line" && entry.kind === "line") {
           entry.series.setData(lineData(bars, item.values));
@@ -447,7 +445,7 @@ export function MarketChart({
           const line = first?.createPriceLine({
             price: reference.value,
             title: reference.label,
-            color: "#9B9BA166",
+            color: chartPalette.mutedFaint,
             lineStyle: chartLibrary.LineStyle.Dashed,
             lineWidth: 1,
             axisLabelVisible: false,
@@ -467,7 +465,7 @@ export function MarketChart({
       return [mainSeries.createPriceLine({
         price,
         title: label,
-        color: color ?? "#9B9BA1",
+        color: color ?? chartPalette.muted,
         lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
         lineWidth: 1,
         axisLabelVisible: true,

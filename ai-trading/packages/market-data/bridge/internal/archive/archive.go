@@ -67,13 +67,10 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 		return a.passthrough(ctx, req, fetch)
 	}
 
-	var covered []Session
-	if fin := finishedOf(dates, now); len(fin) > 0 {
-		var err error
-		if covered, err = a.store.Read(ctx, req.Symbol, tf, fin[0], fin[len(fin)-1]); err != nil {
-			a.log.Warn("archive read failed; serving from the provider", "symbol", req.Symbol, "error", err.Error())
-			return a.passthrough(ctx, req, fetch)
-		}
+	covered, err := a.covered(ctx, req.Symbol, tf, dates, now)
+	if err != nil {
+		a.log.Warn("archive read failed; serving from the provider", "symbol", req.Symbol, "error", err.Error())
+		return a.passthrough(ctx, req, fetch)
 	}
 	have := map[string]bool{}
 	for _, s := range covered {
@@ -100,7 +97,9 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 		switch {
 		case err == nil:
 			fetched, served = resp.Bars, resp.Served
-			a.record(ctx, req.Symbol, tf, toStore, resp)
+			if err := a.record(ctx, req.Symbol, tf, toStore, resp); err != nil {
+				a.log.Warn("archive write failed; the answer is unaffected", "symbol", req.Symbol, "error", err.Error())
+			}
 		case errors.As(err, &re) && re.Kind == pb.ErrorKind_NO_DATA && len(covered) > 0:
 			served = &pb.Served{Attempts: re.Attempts} // nothing new to add; the archive answers
 		default:
@@ -119,6 +118,15 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 		served = &pb.Served{Provider: covered[0].Provider, Quality: pb.Quality_EOD, Attempts: attempts}
 	}
 	return &pb.GetBarsResponse{Symbol: req.Symbol, Bars: bars, Served: served}, nil
+}
+
+// covered reads the archived sessions among dates (only finished ones can be archived).
+func (a *Archive) covered(ctx context.Context, symbol, tf string, dates []string, now time.Time) ([]Session, error) {
+	fin := finishedOf(dates, now)
+	if len(fin) == 0 {
+		return nil, nil
+	}
+	return a.store.Read(ctx, symbol, tf, fin[0], fin[len(fin)-1])
 }
 
 func (a *Archive) passthrough(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch) (*pb.GetBarsResponse, error) {
@@ -174,9 +182,9 @@ func (a *Archive) fetchRequest(req *pb.GetBarsRequest, from, to string, now time
 
 // record writes the fetched finished sessions. A date the provider returned nothing for is a
 // quiet session (bar_count 0) and is recorded as complete (02u §3.2).
-func (a *Archive) record(ctx context.Context, symbol, tf string, dates []string, resp *pb.GetBarsResponse) {
+func (a *Archive) record(ctx context.Context, symbol, tf string, dates []string, resp *pb.GetBarsResponse) error {
 	if len(dates) == 0 {
-		return
+		return nil
 	}
 	sessions := make([]Session, len(dates))
 	idx := map[string]int{}
@@ -189,9 +197,7 @@ func (a *Archive) record(ctx context.Context, symbol, tf string, dates []string,
 			sessions[i].Bars = append(sessions[i].Bars, b)
 		}
 	}
-	if err := a.store.Write(ctx, symbol, tf, sessions); err != nil {
-		a.log.Warn("archive write failed; the answer is unaffected", "symbol", symbol, "error", err.Error())
-	}
+	return a.store.Write(ctx, symbol, tf, sessions)
 }
 
 // merge is the archive's bars for the covered sessions plus the provider's for every other date,
