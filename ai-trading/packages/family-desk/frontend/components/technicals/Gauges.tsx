@@ -1,5 +1,6 @@
 import type { TechnicalsSchema } from "@/lib/api/schemas";
 import { countsLine, formatScore, gaugeAriaLabel, needleGeometry } from "@/lib/desk/summary";
+import { chartPalette } from "@/lib/desk/chartPalette";
 import { formatAsOfText } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
 import { qualityLabel } from "@/lib/labels";
@@ -50,13 +51,13 @@ export function BiasGauge({
         role="img"
         aria-label={desktop ? gaugeAriaLabel(title, label, unavailable ? null : gauge.score, unavailable ? null : counts) : `${title}: ${label}, score ${unavailable ? "unavailable" : formatScore(gauge.score)}`}
       >
-        <path d="M 12 90 A 78 78 0 0 1 26.9 44.15" fill="none" stroke="#FF453A" strokeWidth="14" />
-        <path d="M 26.9 44.15 A 78 78 0 0 1 65.9 15.82" fill="none" stroke="#FF453A80" strokeWidth="14" />
-        <path d="M 65.9 15.82 A 78 78 0 0 1 114.1 15.82" fill="none" stroke="#9B9BA166" strokeWidth="14" />
-        <path d="M 114.1 15.82 A 78 78 0 0 1 153.1 44.15" fill="none" stroke="#30D15880" strokeWidth="14" />
-        <path d="M 153.1 44.15 A 78 78 0 0 1 168 90" fill="none" stroke="#30D158" strokeWidth="14" />
-        {needle && <line x1="90" y1="90" x2={needle.x2} y2={needle.y2} stroke="#F2F2F4" strokeWidth="3" strokeLinecap="round" />}
-        <circle cx="90" cy="90" r="5" fill="#F2F2F4" />
+        <path d="M 12 90 A 78 78 0 0 1 26.9 44.15" fill="none" stroke={chartPalette.down} strokeWidth="14" />
+        <path d="M 26.9 44.15 A 78 78 0 0 1 65.9 15.82" fill="none" stroke={chartPalette.downHalf} strokeWidth="14" />
+        <path d="M 65.9 15.82 A 78 78 0 0 1 114.1 15.82" fill="none" stroke={chartPalette.mutedFaint} strokeWidth="14" />
+        <path d="M 114.1 15.82 A 78 78 0 0 1 153.1 44.15" fill="none" stroke={chartPalette.upHalf} strokeWidth="14" />
+        <path d="M 153.1 44.15 A 78 78 0 0 1 168 90" fill="none" stroke={chartPalette.up} strokeWidth="14" />
+        {needle && <line x1="90" y1="90" x2={needle.x2} y2={needle.y2} stroke={chartPalette.text} strokeWidth="3" strokeLinecap="round" />}
+        <circle cx="90" cy="90" r="5" fill={chartPalette.text} />
       </svg>
       <div className={`${styles.gaugeLabel} ${toneForLabel[label] ?? styles.toneNeutral}`}>{label}</div>
       <div className={styles.gaugeScore}>{unavailable ? "—" : formatScore(gauge.score)}</div>
