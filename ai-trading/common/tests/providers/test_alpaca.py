@@ -2,12 +2,42 @@ import pandas as pd
 import pytest
 
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
+from ai_trading_common.http import ThrottledClient
 from ai_trading_common.providers.alpaca import AlpacaBars
-from ai_trading_common.testing import FakeResponse, make_client
+from ai_trading_common.testing import FakeClock, FakeResponse, make_client
 
 
 def bar(t, c, v=100):
     return {"t": t, "o": c - 1, "h": c + 1, "l": c - 2, "c": c, "v": v}
+
+
+class WindowedSession:
+    """Alpaca's server-side window, for `1Day` bars.
+
+    Recorded from the live API: a daily bar is stamped at **midnight America/New_York** of its
+    trading date (`04:00Z` in EDT, `05:00Z` in EST), i.e. *before* that session's 04:00 ET
+    extended open, and both `start` and `end` bounds are inclusive. This fake applies exactly
+    that filter to the stored rows, so a request window too narrow to contain a bar's timestamp
+    comes back empty the way the real endpoint answers.
+    """
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, dict, dict]] = []
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        query = dict(params or {})
+        self.calls.append((url, query, dict(headers or {})))
+        start = pd.Timestamp(query["start"])
+        end = pd.Timestamp(query["end"])
+        return FakeResponse(200, {"bars": [r for r in self.rows if start <= pd.Timestamp(r["t"]) <= end]})
+
+
+def windowed(rows: list[dict]) -> tuple[AlpacaBars, WindowedSession]:
+    clock = FakeClock()
+    session = WindowedSession(rows)
+    client = ThrottledClient(clock=clock.now, sleep=clock.sleep, jitter=lambda a, b: 0.0, session=session)
+    return AlpacaBars("kid", "sec", http=client), session
 
 
 NOW = pd.Timestamp("2026-01-10 12:00", tz="UTC")
@@ -99,6 +129,79 @@ class TestIntradayBars:
         got = alpaca.bars("AAPL", "1m", start, now, now=now)
         assert got.frame.empty
         assert session.calls == []
+
+
+class TestDailyWindowWidth:
+    """Regression (D-076): a one-session daily window used to come back empty.
+
+    Alpaca stamps a `1Day` bar at midnight America/New_York of its trading date, which is
+    *earlier* than that session's 04:00 ET extended open. Every caller (backfill, refresher,
+    replay) requests `session.extended_open .. session.extended_close`, so a single-session
+    range asked for a window that started after the only bar it wanted and Alpaca answered
+    `{"bars": []}` -> `NoData`, aborting that symbol's whole backfill. A wider range was only
+    ever partially right: it silently lost its first session the same way.
+    """
+
+    @staticmethod
+    def _session(day: str) -> tuple[pd.Timestamp, pd.Timestamp]:
+        """One session's extended hours: 04:00 ET open to 20:00 ET close."""
+        return (
+            pd.Timestamp(f"{day} 04:00", tz="America/New_York"),
+            pd.Timestamp(f"{day} 20:00", tz="America/New_York"),
+        )
+
+    def test_a_one_session_window_returns_that_sessions_bar(self):
+        alpaca, session = windowed([bar("2026-10-26T04:00:00Z", 765.37)])  # live shape, EDT
+        start, end = self._session("2026-10-26")
+        got = alpaca.bars("SPY", "1d", start, end, now=pd.Timestamp("2026-10-31 12:00", tz="UTC"))
+        assert list(got.frame.index) == [pd.Timestamp("2026-10-26").date()]
+        assert got.frame["close"].iloc[0] == 765.37
+        # The request is padded back to the bar's own stamp (midnight ET), never forward.
+        assert session.calls[0][1]["start"] == pd.Timestamp("2026-10-26T04:00:00Z").isoformat()
+        assert session.calls[0][1]["end"] == pd.Timestamp("2026-10-27T00:00:00Z").isoformat()
+
+    def test_a_one_session_window_works_in_standard_time_too(self):
+        alpaca, _ = windowed([bar("2026-01-06T05:00:00Z", 600.0)])  # EST: midnight ET is 05:00Z
+        got = alpaca.bars("SPY", "1d", *self._session("2026-01-06"), now=pd.Timestamp("2026-01-10 12:00", tz="UTC"))
+        assert list(got.frame.index) == [pd.Timestamp("2026-01-06").date()]
+
+    def test_a_multi_session_window_keeps_its_first_session(self):
+        rows = [
+            bar("2026-10-28T04:00:00Z", 772.31),
+            bar("2026-10-29T04:00:00Z", 769.36),
+            bar("2026-10-30T04:00:00Z", 755.72),
+        ]
+        alpaca, _ = windowed(rows)
+        got = alpaca.bars(
+            "SPY",
+            "1d",
+            self._session("2026-10-28")[0],
+            self._session("2026-10-30")[1],
+            now=pd.Timestamp("2026-10-31 12:00", tz="UTC"),
+        )
+        assert [day.isoformat() for day in got.frame.index] == ["2026-10-28", "2026-10-29", "2026-10-30"]
+        assert got.frame["close"].tolist() == [772.31, 769.36, 755.72]
+
+    def test_bars_outside_the_callers_trading_dates_are_sliced_away(self):
+        body = {
+            "bars": [
+                bar("2026-10-23T04:00:00Z", 770.0),  # the session before the window
+                bar("2026-10-26T04:00:00Z", 765.37),
+                bar("2026-10-27T04:00:00Z", 766.0),  # the session after it
+            ]
+        }
+        client, _, _ = make_client([FakeResponse(200, body)])
+        alpaca = AlpacaBars("kid", "sec", http=client)
+        got = alpaca.bars("SPY", "1d", *self._session("2026-10-26"), now=pd.Timestamp("2026-10-31 12:00", tz="UTC"))
+        assert list(got.frame.index) == [pd.Timestamp("2026-10-26").date()]
+
+    def test_intraday_requests_are_not_padded(self):
+        for timeframe in ("1h", "1m"):
+            client, session, _ = make_client([FakeResponse(200, {"bars": [bar("2026-01-09T15:00:00Z", 10)]})])
+            alpaca = AlpacaBars("kid", "sec", http=client)
+            start, end = pd.Timestamp("2026-01-09T14:30:00Z"), pd.Timestamp("2026-01-09T16:00:00Z")
+            alpaca.bars("AAPL", timeframe, start, end, now=pd.Timestamp("2026-01-10 12:00", tz="UTC"))
+            assert session.calls[0][1]["start"] == start.isoformat()
 
 
 class TestUniverse:
