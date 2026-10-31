@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LANES, type Lane } from "../lanes.ts";
 
 const hhmm = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 
@@ -75,10 +76,10 @@ export function mergeOwnedSettings(
   };
 }
 
-// Desktop settings (02m §a3.9): `default_view` and `pause_all` live beside the quiet hours and channels.
-export type DefaultView = "technical" | "fundamental";
+// Desktop settings (02m §a3.9): `default_view` (the default mode, ADR-0014) and `pause_all` live beside the quiet hours and channels.
+export type DefaultView = Lane;
 
-export const readDefaultView = (settings: SettingsRecord): DefaultView => (settings.default_view === "fundamental" ? "fundamental" : "technical");
+export const readDefaultView = (settings: SettingsRecord): DefaultView => LANES.find((lane) => lane === settings.default_view) ?? "technical";
 export const readPauseAll = (settings: SettingsRecord): boolean => settings.pause_all === true;
 
 export const withDefaultView = (settings: SettingsRecord, view: DefaultView): SettingsRecord => ({ ...settings, default_view: view });

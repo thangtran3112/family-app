@@ -1,5 +1,5 @@
 import { COPY } from "@/lib/desk/freshness";
-import styles from "./interstitial.module.css";
+import styles from "./OrdersOffNotice.module.css";
 
 /** Stands where an order control would be: the Desk never places orders (02m §e). */
 export function OrdersOffNotice() {

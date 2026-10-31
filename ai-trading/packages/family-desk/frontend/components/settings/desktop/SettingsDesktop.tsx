@@ -7,7 +7,7 @@ import { DeskApiError, type DeskApiProblem } from "@/lib/api/client";
 import { withMaskValues } from "@/lib/desk/mask";
 import { loadChannels, loadSettings, saveSettings } from "@/lib/desk/settings";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import type { Lane } from "@/lib/lanes";
+import { shows, type Lane } from "@/lib/lanes";
 import { createSingleFlightSettingsSave, settingsControlsDisabled } from "@/lib/settings/persistence";
 import { readCoveredCallSettings } from "@/lib/settings/fundamental";
 import {
@@ -108,7 +108,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
     edit((base) => withDefaultView(base, view));
   }
 
-  const fundamental = lane === "fundamental";
+  const fundamental = shows(lane, "fundamentalSettings");
 
   function changeQuiet(boundary: keyof QuietRange, value: string) {
     const draft = { ...quiet, [boundary]: value };
@@ -162,7 +162,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
         )}
 
         <section className={styles.card} aria-labelledby="settings-default-view">
-          <h2 id="settings-default-view" className={styles.eyebrow}>Default view</h2>
+          <h2 id="settings-default-view" className={styles.eyebrow}>Default mode</h2>
           <DefaultView value={readDefaultView(settings)} disabled={disabled} onChange={changeView} />
         </section>
 
