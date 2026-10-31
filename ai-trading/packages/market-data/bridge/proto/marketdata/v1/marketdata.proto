@@ -14,6 +14,7 @@ service MarketData {
   rpc GetStatus(GetStatusRequest) returns (BridgeStatus);
   rpc WatchStatus(WatchStatusRequest) returns (stream BridgeStatus);  // on change, and a heartbeat every 5 s
   rpc SetRouting(SetRoutingRequest) returns (Routing);                // admin token only
+  rpc EnsureHistory(EnsureHistoryRequest) returns (EnsureHistoryResponse);  // H1; UNIMPLEMENTED while the archive is off
 }
 
 enum DataClass {
@@ -211,6 +212,54 @@ message ListProvidersRequest {}
 
 message ListProvidersResponse {
   repeated ProviderHealth providers = 1;
+  ArchiveInfo archive = 2;  // H1. Always set by a bridge that has it; absent from an older bridge.
+}
+
+// H1. The RAW history archive's state. The archive is bridge-wide, not per provider: each archived
+// session records the provider that filled it.
+message ArchiveInfo {
+  bool enabled = 1;  // ARCHIVE_ENABLED=1
+  string backend = 2;  // "none" | "postgres"
+  // Empty when healthy. Otherwise why the archive cannot be read, in words (bars then pass through
+  // from the provider, 02u §3.2), e.g. "database_unreachable".
+  string reason = 3;
+  repeated ArchiveRange ranges = 4;  // one per archived timeframe that holds a session
+}
+
+message ArchiveRange {
+  Timeframe timeframe = 1;  // MINUTE_1 or DAY_1
+  string earliest_session = 2;  // YYYY-MM-DD, XNYS
+  string latest_session = 3;
+}
+
+// H1. Fill the RAW archive for every finished session in [first_session, last_session] that is not
+// archived yet, without returning bars. Same fill path as GetBars (filled on read, written once).
+message EnsureHistoryRequest {
+  repeated string symbols = 1;  // 1..100
+  Timeframe timeframe = 2;  // MINUTE_1 or DAY_1
+  string first_session = 3;  // YYYY-MM-DD
+  string last_session = 4;  // YYYY-MM-DD; must be a finished session (else INVALID_ARGUMENT)
+}
+
+message SessionGap {
+  string session_date = 1;
+  ErrorKind error = 2;
+  string message = 3;  // never a secret
+}
+
+// Per symbol, so one symbol's failure never fails the others (a failed fill is data, not a
+// transport error): archived + fetched_now + len(missing) = the finished sessions in the range.
+message Coverage {
+  string symbol = 1;
+  int32 archived = 2;  // already in the archive before this call
+  int32 fetched_now = 3;  // filled by this call
+  repeated SessionGap missing = 4;  // finished sessions that could not be filled, with why
+  repeated string uncovered = 5;  // weekdays before the calendar's history floor: never fabricated
+  string error = 6;  // set when the symbol could not be checked at all (archive read failed)
+}
+
+message EnsureHistoryResponse {
+  repeated Coverage coverage = 1;  // in request order, deduped
 }
 
 enum RoutingSource {
