@@ -79,13 +79,13 @@ target "ahf-terminal" {
 }
 
 target "market-data" {
-  context = "ai-trading/market-data"
+  context = "ai-trading/packages/market-data"
   tags    = ["${REGISTRY}/ai-trading-market-data:${TAG}"]
 }
 
 # 02t B0: the Go gRPC market-data bridge (static binary on distroless).
 target "market-data-bridge" {
-  context = "ai-trading/market-data/bridge"
+  context = "ai-trading/packages/market-data/bridge"
   args    = { BUILD_REVISION = TAG }
   tags    = ["${REGISTRY}/ai-trading-market-data-bridge:${TAG}"]
 }
@@ -100,7 +100,7 @@ target "vibe-trading" {
 
 target "vibe-consensus" {
   context    = "ai-trading"
-  dockerfile = "consensus/Dockerfile"
+  dockerfile = "packages/consensus/Dockerfile"
   tags       = ["${REGISTRY}/ai-trading-vibe-consensus:${TAG}"]
 }
 
