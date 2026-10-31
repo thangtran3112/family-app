@@ -1,5 +1,5 @@
 import { formatNumber } from "../desk/format.ts";
-import { formatUsd } from "./journalView.ts";
+import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade, ReplayJournal, ReplaySession, TapeFeed } from "./schemas.ts";
 
 // Live read of the plan against the session so far (02o §a3 plan checklist): ticks, never blocks.
@@ -68,9 +68,9 @@ export function planChecklist(plan: Plan, journal: Pick<ReplayJournal, "trades">
     plan.maxLossUsd !== undefined
       ? {
           id: "max_loss",
-          label: `Max loss ${formatUsd(-plan.maxLossUsd).replace("−", "")}`,
+          label: `Max loss ${formatSignedUsd(-plan.maxLossUsd, { cents: true }).replace("−", "")}`,
           state: maxLossReached(pnl, plan) ? "warn" : "ok",
-          detail: `${formatUsd(pnl)} so far`,
+          detail: `${formatSignedUsd(pnl, { cents: true })} so far`,
         }
       : { id: "max_loss", label: "Max loss", state: "off", detail: "None" };
 

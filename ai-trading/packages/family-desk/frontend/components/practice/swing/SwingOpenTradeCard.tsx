@@ -1,5 +1,6 @@
 import { changeTone, formatPrice } from "@/lib/desk/format";
-import { formatR, formatUsd } from "@/lib/replay/journalView";
+import { formatSignedUsd } from "@/lib/desk/mask";
+import { formatR } from "@/lib/replay/journalView";
 import { SWING_PLAY_COPY } from "@/lib/replay/playView";
 import type { OpenTrade } from "@/lib/replay/schemas";
 import { daysHeldText, gapText, holdEntryLabel, priceBasisLabel, sideLabel } from "@/lib/replay/swing";
@@ -25,7 +26,7 @@ export function SwingOpenTradeCard({ trade, tape }: { trade: OpenTrade | null; t
       {gap !== null && <div><dt className={styles.srOnly}>Overnight move</dt><dd data-tone={dayResultTone(trade.gap_usd)}>{gap}</dd></div>}
       <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
       <div><dt>Price</dt><dd>{priceBasisLabel(trade.price_basis, trade.last_price, tape)}</dd></div>
-      <div><dt>Unrealized</dt><dd data-tone={changeTone(trade.unrealized_usd)}>{formatUsd(trade.unrealized_usd)}</dd></div>
+      <div><dt>Unrealized</dt><dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}</dd></div>
       {trade.r != null && <div><dt>R</dt><dd data-tone={changeTone(trade.r)}>{formatR(trade.r)}</dd></div>}
     </dl>
   );

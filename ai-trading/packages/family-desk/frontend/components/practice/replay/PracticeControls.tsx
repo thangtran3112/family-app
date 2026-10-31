@@ -7,7 +7,8 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
-import { formatR, formatUsd } from "@/lib/replay/journalView";
+import { formatSignedUsd } from "@/lib/desk/mask";
+import { formatR } from "@/lib/replay/journalView";
 import type { MarkDraft } from "@/lib/replay/markInput";
 import type { OpenTrade } from "@/lib/replay/schemas";
 import type { SizingHint } from "@/lib/replay/swing";
@@ -74,10 +75,10 @@ function OpenTradeCard({ trade, since, realized, pnl }: { trade: OpenTrade | nul
         <div><dt>Last</dt><dd>{formatPrice(trade.last_price)}</dd></div>
         <div>
           <dt>Unrealized</dt>
-          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatUsd(trade.unrealized_usd)}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
+          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
         </div>
       </dl>
-      <p className={styles.muted}>{`Realized so far ${formatUsd(realized)} · practice P/L ${formatUsd(pnl)}`}</p>
+      <p className={styles.muted}>{`Realized so far ${formatSignedUsd(realized, { cents: true })} · practice P/L ${formatSignedUsd(pnl, { cents: true })}`}</p>
     </div>
   );
 }
