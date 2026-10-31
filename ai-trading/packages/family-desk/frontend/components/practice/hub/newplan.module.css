@@ -8,5 +8,32 @@
 .dialogBody { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-3); overflow-y: auto; padding: var(--space-4); }
 .dialogFoot { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
 .footNotes { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.submit { min-width: 160px; gap: var(--space-2); }
+.submit { min-width: 200px; gap: var(--space-2); }
+.submit[aria-disabled="true"] { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
+.submit[aria-disabled="true"]:hover { background: transparent; }
 .filterList { max-height: none; overflow-y: visible; }
+
+/* The footer: one status line (the reason Start is off, or what it will do) and one button. The line keeps two lines of room so a long reason never resizes the footer. */
+.status { margin: 0; min-height: calc(2 * var(--line-label)); color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.discard { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+/* The form: sections (a fieldset with a sentence-case legend) around one two-column grid. Labels, notes and the sections' text are 13 px (M-07). */
+.section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); margin: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); }
+.legend { padding: 0 var(--space-1); color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-bold); }
+.help { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.grid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3) var(--space-4); }
+.cell { display: flex; min-width: 0; flex-direction: column; gap: var(--space-1); }
+.span { grid-column: 1 / -1; }
+.label { color: var(--color-muted); font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); }
+.note { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.note[data-error="true"] { color: var(--color-down); }
+.reserve { min-height: calc(2 * var(--line-label)); }
+.fieldError { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
+
+/* The top row: the pretend balance and the mode. The balance box carries its own "$"; SIMULATED sits on the label line, not inside the input. */
+.topRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3) var(--space-4); }
+.labelRow { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* Names left out of a swing universe: one row each, with its own Remove. */
+.leftOut { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); padding: 0; list-style: none; }
+.leftOutRow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }

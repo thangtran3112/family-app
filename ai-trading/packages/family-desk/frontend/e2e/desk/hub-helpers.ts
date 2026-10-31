@@ -9,6 +9,8 @@ import { expect, openDesk } from "./helpers";
 
 /** The stub replay day (`replay/fixture.py`): TSLA on Fri 2026-09-25, its first ten minutes after the open. */
 export const DAY = "2026-09-25";
+/** The modal's one button: "Start 5-day practice", "Start 20-day swing practice" (M-07, D-076). */
+export const START_BUTTON = /^Start (\d+-day )?(swing )?practice$/;
 export const THREAD_URL = /\/practice\/thread\?id=\d+/;
 export const DAY_URL = /\/practice\/day\?id=\d+/;
 
@@ -29,10 +31,11 @@ export async function saveFilter(context: BrowserContext, spec: Record<string, u
 
 export type NewPlan = {
   balance?: string;
+  /** The risk plan is not asked in the modal any more (D-076): `startThread` sets these on the thread through the API. */
   maxLoss?: string;
   maxTrades?: string;
   note?: string;
-  /** The plan asks for a stop on every entry by default and refuses an entry without one (D-060); No unless a spec is about stops. */
+  /** A new thread asks for a stop on every entry by default and refuses an entry without one (D-060); `startThread` sets No unless a spec is about stops. */
   stop?: boolean;
   /** The saved filter to tick; defaults to "Any close", which `startThread` saves first. */
   filter?: string;
@@ -57,20 +60,37 @@ export async function clickNewPlan(page: Page): Promise<Locator> {
   return dialog;
 }
 
-/** Fills the day-trading half of the modal: the stub day, `days` days, the window to `to` on `interval`, one filter, the risk plan. */
+/** Fills the day-trading half of the modal: the balance, one filter, the stub day, `days` days, the window to `to` on `interval`. */
 export async function fillNewPlan(dialog: Locator, plan: NewPlan = {}) {
-  if (!plan.replace) {
-    if (plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
-    if (plan.maxLoss) await dialog.getByLabel("Max loss ($)").fill(plan.maxLoss);
-    if (plan.maxTrades) await dialog.getByLabel("Max trades").fill(plan.maxTrades);
-    if (plan.note) await dialog.getByLabel(/^Plan note/).fill(plan.note);
-    if (!plan.stop) await dialog.getByRole("group", { name: PRACTICE_COPY.threadStopOnEntry }).getByRole("button", { name: "No", exact: true }).click();
-  }
+  if (!plan.replace && plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
   await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: plan.filter ?? "Any close" }).check();
   await dialog.locator('input[type="date"]').fill(DAY);
   await dialog.getByRole("group", { name: "Days" }).getByRole("button", { name: plan.days ?? "5", exact: true }).click();
-  await dialog.getByLabel("To", { exact: true }).fill(plan.to ?? "09:40");
+  await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).fill(plan.to ?? "09:40");
   await dialog.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: plan.interval ?? "1m", exact: true }).click();
+}
+
+/** Sets the thread's risk plan through the API: the modal no longer asks for it (D-076). Stops are No unless `stop` is set (D-060). */
+export async function setRiskPlan(context: BrowserContext, threadId: number, plan: Pick<NewPlan, "maxLoss" | "maxTrades" | "note" | "stop"> = {}) {
+  const body = {
+    schemaVersion: 1,
+    plan: {
+      stopNoteOnEntry: plan.stop ? "yes" : "no",
+      tradeOnlyOnSignal: "no",
+      ...(plan.maxLoss === undefined ? {} : { maxLossUsd: Number(plan.maxLoss) }),
+      ...(plan.maxTrades === undefined ? {} : { maxTrades: Number(plan.maxTrades) }),
+      ...(plan.note === undefined ? {} : { planNote: plan.note }),
+    },
+  };
+  const patched = await context.request.patch(`${origin}/api/desk/replay/threads/${threadId}`, { data: body });
+  expect(patched.ok(), await patched.text()).toBeTruthy();
+}
+
+/** Closes an edited modal with Escape: it asks first (M-05), so this discards. */
+export async function discardNewPlan(page: Page) {
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: PRACTICE_COPY.newPlanDiscard, exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 /** The thread id in the thread page's URL. */
@@ -81,10 +101,14 @@ export async function startThread(page: Page, context: BrowserContext, plan: New
   if (plan.filter === undefined) await saveFilter(context);
   const dialog = await openNewPlan(page);
   await fillNewPlan(dialog, plan);
-  await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+  await dialog.getByRole("button", { name: START_BUTTON }).click();
   await page.waitForURL(THREAD_URL, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  return threadIdOf(page);
+  const id = threadIdOf(page);
+  await setRiskPlan(context, id, plan); // no session has started: the plan applies from the first one
+  await openDesk(page, `/practice/thread?id=${id}`);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  return id;
 }
 
 /** A landing row is one click target (its name link is stretched over the whole row): a click on the row's top-left corner, clear of the action and Delete, opens the thread page. */

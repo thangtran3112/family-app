@@ -2,7 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
-import { THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter } from "./hub-helpers";
+import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
 // replay TSLA's day at a fraction of its prices (`replay/fixture.py`), so one daily list holds four names. Every session
@@ -46,13 +46,14 @@ async function startTwoNamePlan(page: Page, context: BrowserContext) {
   };
   await saveFilter(context, all);
   const dialog = await openNewPlan(page);
-  await fillNewPlan(dialog, { filter: "Every name" }); // this spec is not about stops (D-060): Stop on every entry is No
+  await fillNewPlan(dialog, { filter: "Every name" });
   // The plan's own limit on names: three is the default, this plan allows two.
   const names = dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols });
   await expect(names.getByRole("button", { name: "3", exact: true })).toHaveAttribute("aria-pressed", "true");
   await names.getByRole("button", { name: "2", exact: true }).click();
-  await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+  await dialog.getByRole("button", { name: START_BUTTON }).click();
   await page.waitForURL(THREAD_URL, { timeout: 90_000 });
+  await setRiskPlan(context, threadIdOf(page)); // this spec is not about stops (D-060): Stop on every entry is No
   await openFirstDay(page);
 }
 

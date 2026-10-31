@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
-import { clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
+import { START_BUTTON, clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
 import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
@@ -37,7 +37,7 @@ test.describe("Swing practice", () => {
     await expect(dialog.getByText("is already active")).toHaveCount(0);
     await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingStartThread })).toBeDisabled(); // no universe yet
+    await expect(dialog.getByRole("button", { name: START_BUTTON })).toBeDisabled(); // no universe yet
     await expectCleanScreen(page);
 
     // Swing: the first day, 15 sessions, the twelve names by hand (liquidity off, so only her adds).
@@ -60,7 +60,7 @@ test.describe("Swing practice", () => {
     await expectCleanScreen(page);
 
     // Start swing thread lands on the thread page: the swing line with SIMULATED, and the day thread still has its row.
-    await dialog.getByRole("button", { name: PRACTICE_COPY.swingStartThread }).click();
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL);
     const balance = page.getByRole("region", { name: "Thread balance" });
     await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");

@@ -5,7 +5,7 @@ import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/fr
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
-import { DAY, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread } from "./hub-helpers";
+import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { replayRail } from "./swing-helpers";
 
 // The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, B, T, S/X, end, the
@@ -267,20 +267,21 @@ test.describe("Practice", () => {
     const api = watchApi(page);
     await saveFilter(context); // her own always-matching daily filter; TSLA only: the fixture's stand-in names trade below $200
 
-    // The landing's New plan modal starts the thread (its risk plan: a $600 daily loss, at most 3 trades) and its plan in one go.
+    // The landing's New plan modal starts the thread and its plan in one go; its risk plan (a $600 daily loss, at most 3 trades) is set on the thread (D-076).
     const dialog = await openNewPlan(page);
-    await fillNewPlan(dialog, { maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks.", stop: true });
+    await fillNewPlan(dialog);
     await expectCleanScreen(page);
-    await expect(dialog.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible(); // D-002: the picked filter is armed for her
     await expect(dialog.getByRole("button", { name: "Save plan" })).toHaveCount(0); // D-003: the button says what it does
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
 
     // The thread page: prep runs once in the background; Day 1 opens when the data is ready.
     await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     const threadId = Number(new URL(page.url()).searchParams.get("id"));
+    await setRiskPlan(context, threadId, { maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks.", stop: true });
+    await openDesk(page, `/practice/thread?id=${threadId}`);
     const planCard = page.getByRole("region", { name: "Daily list plan" });
     await expect(planCard).toContainText("Day 1 of 5 · next: Fri", { timeout: 60_000 });
-    await expect(planCard).toContainText("Armed on practice days: Any close"); // D-002: the card says what the modal armed
+    await expect(planCard).toContainText(PRACTICE_COPY.planArmedNone); // D-076: a new plan starts with nothing armed
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(50_000));
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
@@ -542,11 +543,15 @@ test.describe("Practice", () => {
     await saveFilter(context);
     const dialog = await openNewPlan(page);
     await fillNewPlan(dialog, { balance: "500" });
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
-    const bounds = dialog.getByRole("alert").filter({ hasText: "1,000" });
+    const bounds = dialog.getByRole("alert").filter({ hasText: "1,000" }); // read as she types (M-03): no click needed
     await expect(bounds).toContainText("10,000,000");
+    await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAttribute("aria-disabled", "true");
+    await dialog.getByRole("button", { name: START_BUTTON }).click({ force: true });
     await expect(dialog).toBeVisible(); // nothing was created
-    await page.keyboard.press("Escape");
+    await dialog.getByLabel("Starting balance").fill("25000"); // a typed value keeps its digits until she leaves the box
+    await dialog.getByLabel("Starting balance").blur();
+    await expect(dialog.getByLabel("Starting balance")).toHaveValue("25,000");
+    await discardNewPlan(page);
 
     await startThread(page, context, { balance: "25000", filter: "Any close" });
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Started with $25,000");
@@ -560,7 +565,7 @@ test.describe("Practice", () => {
     await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
     await expect(again.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
     await expect(again).not.toContainText("is already active");
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toBeVisible();
+    await expect(again.getByRole("button", { name: START_BUTTON })).toBeVisible();
     await expectCleanScreen(page);
     await page.keyboard.press("Escape");
     await openRow(page, dayRow(page));
@@ -596,7 +601,7 @@ test.describe("Practice", () => {
     await page.getByRole("button", { name: PRACTICE_COPY.threadPageReplace }).click();
     const replace = page.getByRole("dialog", { name: /^New plan for/ });
     await fillNewPlan(replace, { replace: true });
-    await replace.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await replace.getByRole("button", { name: START_BUTTON }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
     await openFirstDay(page);
     const fresh = page.url();
@@ -657,8 +662,8 @@ test.describe("Practice", () => {
   test("Next day cut short by the gateway asks again and opens the day, saying it is still working", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
-    // The plan arms its filter (D-002, D-049): the thread page says what it armed.
-    await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText("Armed on practice days: Any close", { timeout: 60_000 });
+    // A new plan starts with nothing armed (D-076): the thread page says so.
+    await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText(PRACTICE_COPY.planArmedNone, { timeout: 60_000 });
     await openFirstDay(page);
     const dayOne = page.url();
 
@@ -681,7 +686,7 @@ test.describe("Practice", () => {
 
   // D-058 on the modal: the save of a new plan is not safe to send twice, so when the gateway cuts it short (the server went on and
   // saved it) the modal waits until the new plan shows, continues it with a plain open, says it is still working, and lands on the thread page.
-  test("Populate data cut short by the gateway waits for the plan, says it is still working, and lands on the thread page", async ({ page, context }) => {
+  test("Start cut short by the gateway waits for the plan, says it is still working, and lands on the thread page", async ({ page, context }) => {
     test.setTimeout(180_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
@@ -694,7 +699,7 @@ test.describe("Practice", () => {
         await route.fulfill({ status: 524, contentType: "text/html", body: "<html>A timeout occurred</html>" });
       } else await route.continue();
     });
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
     await expect(dialog.getByText(PRACTICE_COPY.planStillWorking)).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.newPlanError)).toHaveCount(0);
     await page.waitForURL(THREAD_URL, { timeout: 60_000 });
@@ -713,25 +718,22 @@ test.describe("Practice", () => {
 
     await filters.getByRole("checkbox", { name: "Gap up" }).check();
     await expect(premarket).toHaveAttribute("aria-pressed", "true"); // a premarket filter lists at 8:30
-    await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible();
 
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
     await expect(tenOclock).toHaveAttribute("aria-pressed", "true"); // the default suggestion for an intraday filter
     await expect(premarket).toBeDisabled();
-    // D-017: 10:00 satisfies the filter, so no line says otherwise; the reason sits on the disabled earlier time, and Populate data is ready.
-    await expect(daily.getByText(/needs a list time of/)).toHaveCount(0);
+    // D-017, M-02: 10:00 satisfies the filter, so the time she has is not called wrong; the reason for the disabled earlier time is in view, not in a tooltip, and Start is ready.
     await expect(daily.getByRole("alert")).toHaveCount(0);
-    await expect(premarket).toHaveAttribute("title", "Abnormal volume needs a list time of 10:00 AM or later · before then none of its bars of the day has closed");
-    await expect(daily.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toBeEnabled();
-    await expect(daily.getByText("Arm up to 5 strategies · 2 armed")).toBeVisible();
-    await expect(daily.getByLabel("From", { exact: true })).toHaveValue("10:00"); // the window starts at the list
+    await expect(daily.getByText("Abnormal volume needs a list time of 10:00 AM or later · before then none of its bars of the day has closed")).toBeVisible();
+    await expect(daily.getByRole("button", { name: START_BUTTON })).not.toHaveAttribute("aria-disabled", "true");
+    await expect(daily.getByLabel(PRACTICE_COPY.planWindowFrom, { exact: true })).toHaveValue("10:00"); // the window starts at the list
 
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).uncheck();
-    await expect(premarket).toBeEnabled();
-    await expect(daily.getByText("Arm up to 5 strategies · 1 armed")).toBeVisible(); // dropping a filter disarms it
+    await expect(premarket).not.toHaveAttribute("aria-disabled", "true");
+    await expect(daily.getByText(/needs a list time of/)).toHaveCount(0);
     await tenOclock.click(); // Gap up needs 8:30: 10:00 holds, and nothing says it needs 8:30
     await expect(daily.getByText(/needs a list time of/)).toHaveCount(0);
-    await expect(daily.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true })).toBeEnabled();
+    await expect(daily.getByRole("button", { name: START_BUTTON })).not.toHaveAttribute("aria-disabled", "true");
     await expectCleanScreen(page);
   });
 
