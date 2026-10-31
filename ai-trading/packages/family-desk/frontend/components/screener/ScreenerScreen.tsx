@@ -2,17 +2,28 @@
 
 import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY, emptyScanText } from "@/lib/desk/freshness";
-import { loadFilterDetail, loadFilterResults, loadFilters, type ScreenerSession } from "@/lib/desk/screener";
-import { filterIdFromParam, neverScanned, pickFilter, resultsState, scanIsDelayed } from "@/lib/desk/screenerView";
+import { loadFilterDetail, loadFilterResults, loadFilters } from "@/lib/desk/screener";
+import {
+  applyQuickFilters,
+  filterIdFromParam,
+  missingFilterNote,
+  neverScanned,
+  pickFilter,
+  quickFiltersActive,
+  resultsState,
+  scanIsDelayed,
+  type QuickPicks,
+} from "@/lib/desk/screenerView";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { FilterChips } from "./FilterChips";
 import { FilterHeader } from "./FilterHeader";
 import { PreviewPane } from "./PreviewPane";
+import { QuickFilters } from "./QuickFilters";
 import { ResultsTable } from "./ResultsTable";
 import { UniverseLine } from "./UniverseLine";
 import styles from "./screener.module.css";
@@ -20,17 +31,16 @@ import styles from "./screener.module.css";
 /** D5 (02l): filter header, universe line and results table in the centre; the chart preview in the right rail. */
 export function ScreenerScreen() {
   const { status } = useDeskStatus();
+  const { revisions } = useDeskUi();
   const requested = filterIdFromParam(useSearchParams().get("filter"));
-  const filters = useDeskQuery("screener-filters", (signal) => loadFilters({ signal }));
+  // Keyed on the filters revision like the rail, so a delete or a save shows here without a reload (A-SCR-08).
+  const filters = useDeskQuery("screener-filters", (signal) => loadFilters({ signal }), { revision: revisions.filters });
   const filter = filters.data ? pickFilter(filters.data, requested) : null;
+  const missing = filters.data ? missingFilterNote(filters.data, requested) : null;
   const id = filter?.id ?? null;
 
-  // A Regular/Extended override belongs to one filter; another filter falls back to its own session.
-  const [sessionPick, setSessionPick] = useState<{ id: number; session: ScreenerSession } | null>(null);
-  const session = sessionPick && sessionPick.id === id ? sessionPick.session : (filter?.session ?? "regular");
-
   const detail = useDeskQuery(`filter-detail:${id}`, (signal) => loadFilterDetail(id!, { signal }), { enabled: id !== null });
-  const results = useDeskQuery(`filter-results:${id}:${session}`, (signal) => loadFilterResults(id!, session, { signal }), {
+  const results = useDeskQuery(`filter-results:${id}`, (signal) => loadFilterResults(id!, { signal }), {
     intervalMs: 60_000,
     enabled: id !== null,
   });
@@ -38,9 +48,14 @@ export function ScreenerScreen() {
   const delayed = data !== null && scanIsDelayed(data.stamp);
   const waiting = data !== null && neverScanned(data.stamp);
 
+  // Quick filters stay set across filters: a price band is hers, not one filter's.
+  const [picks, setPicks] = useState<QuickPicks>({});
+  const quick = quickFiltersActive(picks);
+  const rows = data ? applyQuickFilters(data.matches, picks) : [];
+
   const [picked, setPicked] = useState<string | null>(null);
-  const firstSymbol = data?.matches[0]?.symbol ?? null;
-  const selectedSymbol = data?.matches.some((match) => match.symbol === picked) ? picked : firstSymbol;
+  const firstSymbol = rows[0]?.symbol ?? null;
+  const selectedSymbol = rows.some((match) => match.symbol === picked) ? picked : firstSymbol;
   const state = resultsState({
     loading: results.loading,
     hasResults: data !== null,
@@ -60,30 +75,40 @@ export function ScreenerScreen() {
   } else {
     let table: ReactNode;
     if (waiting) table = <EmptyBlock title={COPY.firstScan} />;
-    else if (state === "scanning") table = <LoadingBlock label={COPY.scanning} height={240} />;
+    // It reads the newest stored run; no scan runs because the page opened (V-SCR-14).
+    else if (state === "scanning") table = <LoadingBlock label="Loading the latest scan…" height={240} />;
     else if (state === "error") table = <ErrorBlock subject="scan table" onRetry={results.refresh} />;
     else if (state === "empty") table = <EmptyBlock title={emptyScanText(status?.scans.next_run_at ?? null)} />;
-    else if (data) {
+    else if (data && rows.length === 0) {
       table = (
-        <ResultsTable results={data} selected={selectedSymbol} onSelect={(symbol) => setPicked(symbol)} dim={results.connection === "reconnecting"} />
+        <EmptyBlock title={`None of the ${data.matches_returned} rows pass your quick filters`}>
+          <button type="button" className={styles.link} onClick={() => setPicks({})}>Clear quick filters</button>
+        </EmptyBlock>
+      );
+    } else if (data) {
+      table = (
+        <ResultsTable
+          results={data}
+          rows={rows}
+          quick={quick}
+          selected={selectedSymbol}
+          onSelect={(symbol) => setPicked(symbol)}
+          dim={results.connection === "reconnecting"}
+        />
       );
     }
 
     body = (
       <>
         <FilterChips filters={filters.data} activeId={filter.id} />
-        <FilterHeader key={filter.id}
-          filter={filter}
-          detail={detail.data}
-          session={session}
-          onSession={(next) => setSessionPick({ id: filter.id, session: next })}
-          delayed={delayed}
-        />
+        {missing && <p role="status" className={styles.notice}>{missing}</p>}
+        <FilterHeader key={filter.id} filter={filter} detail={detail.data} delayed={delayed} />
         <div className={styles.meta}>
-          <UniverseLine />
+          <UniverseLine run={data && !waiting ? data : null} />
           {/* A delayed scan shows its pill by the title instead; the badge still shows if the connection is in trouble. */}
           {data && !waiting && (!delayed || results.connection !== "ok") && <FreshnessBadge stamp={data.stamp} connection={results.connection} />}
         </div>
+        {data && data.matches.length > 0 && <QuickFilters picks={picks} onChange={setPicks} />}
         {table}
         <RightRail sections={[{ id: "preview", label: "Preview", node: <PreviewPane symbol={selectedSymbol} runOn={filter.run_on} /> }]} label="Chart preview" />
       </>
