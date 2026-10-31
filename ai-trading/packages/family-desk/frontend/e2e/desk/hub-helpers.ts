@@ -87,9 +87,9 @@ export async function startThread(page: Page, context: BrowserContext, plan: New
   return threadIdOf(page);
 }
 
-/** A landing row is one click target: a click on its balance cell (not on the name link or the action) opens the thread page. */
+/** A landing row is one click target (its name link is stretched over the whole row): a click on the row's top-left corner, clear of the action and Delete, opens the thread page. */
 export async function openRow(page: Page, row: Locator) {
-  await row.getByRole("cell").first().click();
+  await row.click({ position: { x: 8, y: 8 } });
   await page.waitForURL(THREAD_URL);
 }
 
