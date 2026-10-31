@@ -31,7 +31,7 @@ export async function setScenario(
 }
 
 /** Open a screen with the browser clock on the server's clock (default: `SEED_NOW`) and wait for the shell's
- * content region (`#main-content`; the desktop shell has no `main` landmark, the screens inside it come and go). */
+ * content region (`#main-content`; both shells render it as the one `main` landmark, the screens inside it come and go). */
 export async function openDesk(page: Page, path: string, now: string = SEED_NOW) {
   await page.clock.setFixedTime(new Date(now));
   await page.goto(path);

@@ -892,7 +892,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     const dialog = await openNewPlan(page);
     await fillNewPlan(dialog, {});
     await dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols }).getByRole("button", { name: "3", exact: true }).click();
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     const threadId = Number(new URL(page.url()).searchParams.get("id"));
     await expect(page.getByRole("heading", { level: 1 }), "D-093: New plan submit lands with the heading focused").toBeFocused();
@@ -932,7 +932,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await saveFilter(context);
     const dialog = await openNewPlan(page);
     await fillNewPlan(dialog, { days: "10" }); // the stub day cannot start a 20-day block: it would run past the last finished day
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     await openFirstDay(page);
     await page.getByRole("button", { name: "Star TSLA" }).click();

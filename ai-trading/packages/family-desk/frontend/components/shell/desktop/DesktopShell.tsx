@@ -55,9 +55,9 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
             <LeftRail band={band} />
           )}
         </div>
-        <div className="dk-center" id="main-content" tabIndex={-1}>
+        <main className="dk-center" id="main-content" tabIndex={-1}>
           {isWrongLane(lane, pathname) ? <WrongLaneInterstitial pathname={pathname} /> : children}
-        </div>
+        </main>
         <aside className="dk-right" ref={setSlot} aria-label="Context" />
         <div className="dk-status"><StatusBar /></div>
       </div>

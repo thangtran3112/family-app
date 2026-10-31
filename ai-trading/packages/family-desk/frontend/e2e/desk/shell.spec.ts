@@ -25,6 +25,15 @@ test("the View chips list Technical first, carry a caption and say where each on
   await expect(chips.nth(1)).toBeFocused();
 });
 
+// D-109 / S-06: the shell owns the page's one `main` landmark; a screen inside it is a plain div.
+test("every route has exactly one main landmark, and it is the shell's content region", async ({ page }) => {
+  for (const path of ["/", "/practice", "/screener", "/strategies", "/technicals", "/settings"]) {
+    await openDesk(page, path);
+    await expect(page.locator("main"), path).toHaveCount(1);
+    await expect(page.locator("main#main-content"), path).toHaveCount(1);
+  }
+});
+
 test("the top bar, left rail and status bar show the Technical chrome at the seed clock", async ({ page }) => {
   const compact = test.info().project.name === "desktop-1180";
   await openDesk(page, "/");

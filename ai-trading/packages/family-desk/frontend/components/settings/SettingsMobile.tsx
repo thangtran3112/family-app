@@ -126,7 +126,7 @@ export function SettingsMobile() {
   const controlsDisabled = settingsControlsDisabled({ loading, saving, hasSettings: settings !== null });
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <div className={styles.main}>
         <header className={styles.header}>
           <h1>Settings</h1>
@@ -177,6 +177,6 @@ export function SettingsMobile() {
         <Fixtures />
       </div>
       <SourcesStatus />
-    </main>
+    </div>
   );
 }
