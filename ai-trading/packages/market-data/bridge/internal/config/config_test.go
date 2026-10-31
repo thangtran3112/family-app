@@ -55,3 +55,27 @@ func TestMissingKeysAreNotAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// H1: the archive is off unless ARCHIVE_ENABLED=1, and the URL falls back to the Desk's database.
+func TestArchiveFlag(t *testing.T) {
+	c, err := FromEnv(env(map[string]string{"ARCHIVE_DATABASE_URL": "postgres://x"}))
+	if err != nil || c.ArchiveEnabled {
+		t.Fatalf("a URL alone must not enable the archive: %+v %v", c, err)
+	}
+	c, err = FromEnv(env(map[string]string{"ARCHIVE_ENABLED": "1", "DESK_RUNTIME_DATABASE_URL": "postgres://desk"}))
+	if err != nil || !c.ArchiveEnabled || c.ArchiveURL != "postgres://desk" {
+		t.Fatalf("fallback: %+v %v", c, err)
+	}
+	c, _ = FromEnv(env(map[string]string{"ARCHIVE_ENABLED": "1", "ARCHIVE_DATABASE_URL": "postgres://a", "DESK_RUNTIME_DATABASE_URL": "postgres://desk"}))
+	if c.ArchiveURL != "postgres://a" {
+		t.Fatalf("ARCHIVE_DATABASE_URL must win: %s", c.ArchiveURL)
+	}
+	for name, e := range map[string]map[string]string{
+		"no url":  {"ARCHIVE_ENABLED": "1"},
+		"garbage": {"ARCHIVE_ENABLED": "yes"},
+	} {
+		if _, err := FromEnv(env(e)); err == nil || !strings.Contains(err.Error(), "ARCHIVE_") {
+			t.Errorf("%s: want an error naming the variable, got %v", name, err)
+		}
+	}
+}

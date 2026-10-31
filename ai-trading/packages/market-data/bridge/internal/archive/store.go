@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 )
 
@@ -39,7 +41,7 @@ func (m *MemStore) Read(_ context.Context, symbol, tf, from, to string) ([]Sessi
 	var out []Session
 	for k, s := range m.data {
 		if k[0] == symbol && k[1] == tf && k[2] >= from && k[2] <= to {
-			out = append(out, s)
+			out = append(out, clone(s))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
@@ -52,8 +54,20 @@ func (m *MemStore) Write(_ context.Context, symbol, tf string, sessions []Sessio
 	for _, s := range sessions {
 		k := [3]string{symbol, tf, s.Date}
 		if _, ok := m.data[k]; !ok {
-			m.data[k] = s
+			m.data[k] = clone(s)
 		}
 	}
 	return nil
+}
+
+// clone keeps callers from sharing bars with the store (the Archive stamps source on what it
+// returns), and orders them as Postgres does.
+func clone(s Session) Session {
+	bars := make([]*pb.Bar, len(s.Bars))
+	for i, b := range s.Bars {
+		bars[i] = proto.Clone(b).(*pb.Bar)
+	}
+	sort.Slice(bars, func(i, j int) bool { return bars[i].Start.AsTime().Before(bars[j].Start.AsTime()) })
+	s.Bars = bars
+	return s
 }
