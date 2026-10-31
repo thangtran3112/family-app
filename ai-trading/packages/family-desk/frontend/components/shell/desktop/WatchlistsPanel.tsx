@@ -11,13 +11,14 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { loadWatchlists, loadWatchlistTable } from "@/lib/desk/watchlists";
 import { pickDefaultWatchlist } from "@/lib/desk/watchlistRail";
+import { SYMBOL_HREF } from "@/lib/lanes";
 import { useDeskUi } from "./DeskContext";
 import { useSymbolPicker } from "./PracticeChrome";
 import { ListSwitcher } from "./ListSwitcher";
 import styles from "./leftrail.module.css";
 
 export function WatchlistsPanel({ band }: { band: ShellBand }) {
-  const { selectedListId, setSelectedListId, revisions } = useDeskUi();
+  const { lane, selectedListId, setSelectedListId, revisions } = useDeskUi();
   // On the Practice hub a symbol click fills the session setup instead of opening the chart.
   const pickSymbol = useSymbolPicker();
   const lists = useDeskQuery("rail-watchlists", (signal) => loadWatchlists({ signal }), { revision: revisions.watchlists });
@@ -47,16 +48,26 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
       key: "symbol",
       label: "Symbol",
       fill: true,
-      render: (row) => (
-        <a
-          href={`/technicals?symbol=${encodeURIComponent(row.symbol)}#chart`}
-          className={styles.symbol}
-          onClick={pickSymbol ? (event) => { event.preventDefault(); pickSymbol(row.symbol); } : undefined}
-        >
-          {row.symbol}
-          {band === "1440" && <span className={styles.name}>{row.name}</span>}
-        </a>
-      ),
+      render: (row) => {
+        // A symbol opens the mode's own symbol page (ADR-0014). Backtest has none: the row is plain text unless a picker is registered.
+        const href = SYMBOL_HREF[lane]?.(row.symbol);
+        const text = (
+          <>
+            {row.symbol}
+            {band === "1440" && <span className={styles.name}>{row.name}</span>}
+          </>
+        );
+        if (!href && !pickSymbol) return <span className={styles.symbol}>{text}</span>;
+        return (
+          <a
+            href={href ?? "#"}
+            className={styles.symbol}
+            onClick={pickSymbol ? (event) => { event.preventDefault(); pickSymbol(row.symbol); } : undefined}
+          >
+            {text}
+          </a>
+        );
+      },
     },
     { key: "last", label: "Last", align: "right", render: (row) => formatPrice(row.last) },
     {

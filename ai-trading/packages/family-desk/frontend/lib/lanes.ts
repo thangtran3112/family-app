@@ -1,73 +1,90 @@
-// Route-to-lane map for the desktop shell (02m §c1, 02n §b1). A route that belongs to the other lane shows the
-// wrong-lane interstitial instead of its screen; a "shared" route renders the active lane's variant.
-export type Lane = "technical" | "fundamental";
-export type RouteLane = Lane | "shared";
-export const LANES: readonly Lane[] = ["technical", "fundamental"];
-export const LANE_LABEL: Record<Lane, string> = { technical: "Technical", fundamental: "Fundamental" };
-/** One line per lane for the View chips' tooltips: what clicking the chip switches the app to (5R). */
+// The global-modes seam (ADR-0014, design-modes-cutover §3): four declarative tables decide what each mode shows. Routes
+// (ROUTE_LANES), primary tabs (PRIMARY_NAV), shell sections (SECTION_LANES) and left-rail tabs (LEFT_RAIL_TABS). Moving a
+// segment between modes is one edit to one row; `lanes.test.ts` fails when a page has no row or a tab leads out of its mode.
+// The internal name stays `Lane`; people see "mode".
+export type Lane = "technical" | "fundamental" | "backtest";
+export const LANES: readonly Lane[] = ["technical", "fundamental", "backtest"];
+export const LANE_LABEL: Record<Lane, string> = { technical: "Technical", fundamental: "Fundamental", backtest: "Backtest" };
+/** One line per mode for the mode menu: what the mode holds. */
 export const LANE_SUMMARY: Record<Lane, string> = {
-  technical: "Day and swing practice, screener, alerts",
+  technical: "Screener, watchlists, alerts, strategies",
   fundamental: "Holdings, covered calls, research",
+  backtest: "Day and swing practice on past days, journal",
 };
 
-/** Where "Back" goes from the shared futures specs page: the active lane's own futures screen (the other lane's would show the wrong-lane interstitial). */
+/** Where "Back" goes from the shared futures specs page: the active mode's own futures screen (a link to the other mode's would land there and switch the mode). */
 export const FUTURES_HOME: Record<Lane, { href: string; label: string }> = {
   technical: { href: "/futures", label: "Back to futures swing" },
   fundamental: { href: "/futures/read", label: "Back to futures" },
+  backtest: { href: "/futures", label: "Back to futures swing" }, // unreachable: /futures/specs lists only Technical and Fundamental; the Record needs every mode
 };
 
-// Longest matching prefix wins, so "/strategies/library" can differ from "/strategies" if it ever must.
-const ROUTE_LANES: ReadonlyArray<readonly [string, RouteLane]> = [
-  ["/", "shared"],
-  ["/today", "shared"],
-  ["/screener", "technical"],
-  ["/watchlists", "shared"],
-  ["/alerts", "technical"],
-  ["/strategies", "technical"],
-  ["/practice", "technical"],
-  ["/technicals", "technical"],
-  ["/futures", "technical"],
-  ["/futures/specs", "shared"],
-  ["/futures/read", "fundamental"],
-  ["/settings", "shared"],
-  ["/more", "shared"],
-  ["/feedback", "technical"],
-  ["/holdings", "fundamental"],
-  ["/covered-calls", "fundamental"],
-  ["/stocks", "fundamental"],
-  // Not in the MVP: they sit behind the same interstitial until their own views exist.
-  ["/paper", "fundamental"],
-  ["/backtests", "fundamental"],
-  ["/ask", "fundamental"],
+const T: Lane = "technical";
+const F: Lane = "fundamental";
+const B: Lane = "backtest";
+const ALL = LANES;
+
+// Route → the modes that show it. Longest matching prefix wins. A route renders in the current mode when the mode is listed,
+// else in the FIRST listed mode (where a link from another mode lands).
+const ROUTE_LANES: ReadonlyArray<readonly [string, readonly Lane[]]> = [
+  ["/", ALL], // Backtest has no Today: LaneVariant sends it to /practice.
+  ["/today", ALL],
+  ["/screener", [T]],
+  ["/watchlists", [T, F]],
+  ["/alerts", [T]],
+  ["/strategies", [T]],
+  ["/technicals", [T]],
+  ["/futures", [T]],
+  ["/futures/specs", [T, F]],
+  ["/futures/read", [F]],
+  ["/holdings", [F]],
+  ["/covered-calls", [F]],
+  ["/stocks", [F]],
+  ["/ask", [F, T]], // a fixture with no tab; never Backtest (no live advice on a practice surface)
+  ["/practice", [B]],
+  ["/backtests", [B]], // fixtures until backtesting is real
+  ["/paper", [B]],
+  ["/settings", ALL],
+  ["/more", ALL],
+  ["/feedback", ALL],
 ];
 
 const normalize = (pathname: string) => (pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname) || "/";
 
-export function laneForPath(pathname: string): RouteLane {
+function routeRow(pathname: string): readonly Lane[] | null {
   const path = normalize(pathname);
-  let best: RouteLane = "technical";
+  let best: readonly Lane[] | null = null;
   let bestLength = -1;
-  for (const [prefix, lane] of ROUTE_LANES) {
+  for (const [prefix, lanes] of ROUTE_LANES) {
     const matches = prefix === "/" ? path === "/" : path === prefix || path.startsWith(`${prefix}/`);
     if (matches && prefix.length > bestLength) {
-      best = lane;
+      best = lanes;
       bestLength = prefix.length;
     }
   }
   return best;
 }
 
-/** True when the route belongs to the other lane (so the shell shows the interstitial); a shared route never does. */
-export function isWrongLane(activeLane: Lane, pathname: string): boolean {
-  const owner = laneForPath(pathname);
-  return owner !== "shared" && owner !== activeLane;
+/** The modes that show a route, landing mode first. An unknown path (a 404) lists every mode, so it never switches the mode. */
+export const lanesForPath = (pathname: string): readonly Lane[] => routeRow(pathname) ?? ALL;
+
+/** True when the route has its own row (the completeness test walks `app/` with it). */
+export const isRegisteredPath = (pathname: string): boolean => routeRow(pathname) !== null;
+
+/** The mode a page renders in: a listed `?mode=`, else the stored mode when the route lists it, else the route's landing mode. */
+export function modeFor(pathname: string, param: string | null, stored: Lane): Lane {
+  const modes = lanesForPath(pathname);
+  const asked = modes.find((mode) => mode === param);
+  if (asked) return asked;
+  return modes.includes(stored) ? stored : modes[0]!;
 }
 
-export const otherLane = (lane: Lane): Lane => (lane === "technical" ? "fundamental" : "technical");
+/** Where the mode menu and the wordmark send each mode. `?mode=` picks the mode on the shared Today route. */
+export const LANE_HOME: Record<Lane, string> = { technical: "/?mode=technical", fundamental: "/?mode=fundamental", backtest: "/practice" };
 
 /** `match` is the path prefix that keeps the tab highlighted when it differs from `href`. */
 export type NavItem = { label: string; href: string; match?: string };
-/** Primary nav per lane. Settings and More live under the avatar menu (02l §b2). */
+/** Primary nav per mode. Settings and More live under the avatar menu (02l §b2). */
 export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
   technical: [
     { label: "Today", href: "/" },
@@ -75,7 +92,6 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Watchlists", href: "/watchlists" },
     { label: "Alerts", href: "/alerts" },
     { label: "Strategies", href: "/strategies/library", match: "/strategies" },
-    { label: "Practice", href: "/practice" },
   ],
   fundamental: [
     { label: "Today", href: "/" },
@@ -84,6 +100,40 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Stocks", href: "/stocks" },
     { label: "Futures", href: "/futures/read", match: "/futures/read" },
   ],
+  // Backtests joins when "Run backtest" stops being a fixture.
+  backtest: [
+    { label: "Practice", href: "/practice" },
+    { label: "Journal", href: "/practice/journal" },
+  ],
+};
+
+/** Shell sections per mode. A shell part asks `shows(lane, "marketPill")`; it never compares mode strings itself. */
+const SECTION_LANES = {
+  search: [T, F],
+  marketPill: [T, F],
+  freshness: [T, F],
+  alertsBell: [T, F],
+  mask: [F],
+  statusQuotes: [T, F],
+  statusAlerts: [T, F],
+  fundamentalSettings: [F],
+} as const satisfies Record<string, readonly Lane[]>;
+export type ShellSection = keyof typeof SECTION_LANES;
+export const shows = (lane: Lane, section: ShellSection): boolean => (SECTION_LANES[section] as readonly Lane[]).includes(lane);
+
+export type LeftRailTab = "holdings" | "watchlists" | "filters";
+/** Left-rail tabs per mode, first one open. On the Backtest hub the watchlists are the setup picker. */
+export const LEFT_RAIL_TABS: Record<Lane, readonly LeftRailTab[]> = {
+  technical: ["watchlists", "filters"],
+  fundamental: ["holdings", "watchlists"],
+  backtest: ["watchlists"],
+};
+
+/** Where a symbol opens from a shared surface (search, rail, watchlists, bell). Backtest has no live symbol link. */
+export const SYMBOL_HREF: Record<Lane, ((symbol: string) => string) | null> = {
+  technical: (symbol) => `/technicals?symbol=${encodeURIComponent(symbol)}#chart`,
+  fundamental: (symbol) => `/stocks?symbol=${encodeURIComponent(symbol)}#overview`,
+  backtest: null,
 };
 
 export const AVATAR_MENU: readonly NavItem[] = [
@@ -98,13 +148,23 @@ export function isNavActive(href: string, pathname: string, match: string = href
   return path === match || path.startsWith(`${match}/`);
 }
 
+/** The one tab to mark current: the longest matching one, so /practice/journal lights Journal and not Practice too. */
+export function activeNavItem(items: readonly NavItem[], pathname: string): NavItem | undefined {
+  let best: NavItem | undefined;
+  for (const item of items) {
+    const match = item.match ?? item.href;
+    if (isNavActive(item.href, pathname, item.match) && match.length > (best?.match ?? best?.href ?? "").length) best = item;
+  }
+  return best;
+}
+
 export const LANE_STORAGE_KEY = "desk.lane";
 type LaneStorage = Pick<Storage, "getItem" | "setItem">;
 
 export function readLanePreference(storage: LaneStorage | null): Lane {
   try {
     const value = storage?.getItem(LANE_STORAGE_KEY);
-    return value === "fundamental" ? "fundamental" : "technical";
+    return LANES.find((lane) => lane === value) ?? "technical";
   } catch {
     return "technical";
   }

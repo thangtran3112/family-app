@@ -21,12 +21,12 @@ export const COPY = {
   alertsNotStarted: "Alerts start when live quotes are connected",
   alertsRunning: "Alerts on",
   statusUnavailable: "Status unavailable right now",
+  /** The status bar in Backtest mode, where no route brings its own line (ADR-0014). */
+  backtestStatus: "Practice · past market data",
   emptyScan: "No matches right now · next scan {time}",
   emptyScanNoTime: "No matches right now",
   loadError: "Couldn't load this {subject} · Try again",
   ordersOff: "Trading is off in the Desk · place orders in IBKR",
-  wrongLane: "This screen belongs to the {lane} view",
-  switchView: "Switch view",
   advice: "Signals, not advice · you place every trade yourself in IBKR",
   marketClosedOpens: "Market closed · opens {time}",
   marketOpen: "Market open",
@@ -284,10 +284,6 @@ export function holdingsImportFailedText(statementDate: string | null): string {
 /** "Desk AI view from Thu · today's update didn't finish" */
 export function deskAiStaleText(day: string): string {
   return fill(COPY.deskAiStale, { day });
-}
-
-export function wrongLaneText(lane: string): string {
-  return fill(COPY.wrongLane, { lane });
 }
 
 export function notEnoughHistoryText(timeframe: string): string {

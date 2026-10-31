@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
-import { symbolHref } from "@/lib/desk/listNav";
+import { SYMBOL_HREF } from "@/lib/lanes";
 import { loadAlertInbox, markAlertRead, markAllAlertsRead } from "@/lib/desk/status";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "./topbar.module.css";
@@ -15,7 +15,7 @@ type Alert = Awaited<ReturnType<typeof loadAlertInbox>>[number];
 export function AlertsBell() {
   const router = useRouter();
   const { status, refresh: refreshStatus } = useDeskStatus();
-  const { confirmLeave } = useDeskUi();
+  const { lane, confirmLeave } = useDeskUi();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -43,9 +43,11 @@ export function AlertsBell() {
   async function openAlert(alert: Alert) {
     await markAlertRead(alert.id).catch(() => undefined);
     refreshStatus();
-    if (alert.symbol) {
+    // The bell shows in Technical and Fundamental; an alert opens that mode's symbol page (ADR-0014).
+    const href = alert.symbol ? SYMBOL_HREF[lane]?.(alert.symbol) : undefined;
+    if (href) {
       setOpen(false);
-      if (confirmLeave()) router.push(symbolHref(alert.symbol));
+      if (confirmLeave()) router.push(href);
     } else {
       alerts.refresh();
     }

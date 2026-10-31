@@ -60,63 +60,79 @@
   color: var(--color-on-pill);
 }
 
-/* The "View" caption sets the chips apart from the nav links (5R). The bar is full at 1440, so no divider or extra gap. */
-.laneGroup {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.laneCaption {
-  color: var(--color-muted);
-  font-size: 11px;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.lane {
+/* The mode button (ADR-0014): a 1 px divider, then the mode's full word and a chevron. No chip border and no pill: beside the
+   wordmark it reads as "where am I", not as more tabs (the 5R complaint). */
+.modeButton {
   display: inline-flex;
   flex-shrink: 0;
   height: 32px;
-  gap: 2px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-}
-
-.laneSegment {
-  height: 100%;
+  align-items: center;
+  gap: 6px;
   border: 0;
-  border-radius: 4px;
+  border-left: 1px solid var(--color-hairline);
+  border-radius: 0;
   background: transparent;
-  padding: 0 10px;
-  color: var(--color-muted);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: var(--weight-semibold);
+  line-height: 20px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-/* At 1180 the bar has no slack left: the chips and the caption give up a few pixels. */
-.bar[data-band="1180"] .laneSegment {
-  padding: 0 6px;
+.modeButton:hover {
+  opacity: 0.8;
 }
 
-.bar[data-band="1180"] .laneCaption {
-  letter-spacing: 0;
+.chevron {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--color-muted);
+  stroke-width: 1.6;
 }
 
-.laneSegment:hover {
-  background: var(--color-panel);
+.modeMenu {
+  left: 0;
+  right: auto;
+  width: 300px;
+  padding: 4px;
+}
+
+.modeItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-3);
+  border-radius: var(--radius-sm);
+  padding: 6px var(--space-2);
   color: var(--color-text);
 }
 
-.laneSegment[aria-checked="true"] {
+.modeItem:hover,
+.modeItem:focus-visible {
   background: var(--color-raised);
-  box-shadow: inset 0 -2px 0 var(--color-amber);
-  color: var(--color-text);
+}
+
+.modeItem[aria-checked="true"] {
+  box-shadow: inset 2px 0 0 var(--color-amber);
+}
+
+.modeName {
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+}
+
+.modeKey {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.modeSummary {
+  grid-column: 1 / -1;
+  color: var(--color-muted);
+  font-size: 12px;
 }
 
 .nav {

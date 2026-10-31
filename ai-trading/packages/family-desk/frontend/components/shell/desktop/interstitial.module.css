@@ -1,10 +1,4 @@
 .panel { display: flex; max-width: 560px; flex-direction: column; gap: var(--space-4); margin: var(--space-12) auto; padding: var(--space-6); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); }
 .title { margin: 0; font-size: 20px; line-height: 26px; font-weight: var(--weight-semibold); }
 .body { margin: 0; color: var(--color-muted); font-size: 13px; }
-.actions { display: flex; gap: var(--space-3); }
-.primary, .secondary { display: inline-flex; min-height: 32px; align-items: center; border-radius: var(--radius-sm); padding: 0 var(--space-4); font: inherit; font-size: 13px; font-weight: var(--weight-semibold); cursor: pointer; }
-.primary { border: 1px solid var(--color-amber); background: var(--color-amber); color: var(--color-on-pill); }
-.secondary { border: 1px solid var(--color-hairline); background: transparent; color: var(--color-text); }
-.primary:hover, .secondary:hover { filter: brightness(1.1); }
-.primary:focus-visible, .secondary:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 .ordersOff { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--color-muted); font-size: 12px; line-height: 16px; }
