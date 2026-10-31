@@ -24,7 +24,7 @@ export function ErrorBlock({ subject, message, onRetry }: { subject?: string; me
   );
 }
 
-export function EmptyBlock({ title, children }: { title: string; children?: ReactNode }) {
+export function EmptyBlock({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
     <div className={styles.empty}>
       <p className={styles.emptyTitle}>{title}</p>

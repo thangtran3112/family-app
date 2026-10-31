@@ -5,15 +5,10 @@ import { useState } from "react";
 import type { ScreenerFilter, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { COPY } from "@/lib/desk/freshness";
-import { createFilter, deleteFilter, type ScreenerSession } from "@/lib/desk/screener";
+import { createFilter, deleteFilter } from "@/lib/desk/screener";
 import { describeSpec } from "@/lib/spec/describe";
 import { parseFilterSpec } from "@/lib/spec/parse";
 import styles from "./screener.module.css";
-
-const SESSIONS: { value: ScreenerSession; label: string }[] = [
-  { value: "regular", label: "Regular" },
-  { value: "extended", label: "Extended" },
-];
 
 type Action = "save" | "delete";
 
@@ -26,17 +21,15 @@ function LockGlyph() {
   );
 }
 
+/** The filter's session is part of its rule ("during regular hours"): there is no toggle, because the API runs the
+ * filter's own session and nothing else (V-SCR-04). Changing it is an edit of her own copy. */
 export function FilterHeader({
   filter,
   detail,
-  session,
-  onSession,
   delayed,
 }: {
   filter: ScreenerFilter;
   detail: ScreenerFilterDetail | null;
-  session: ScreenerSession;
-  onSession: (session: ScreenerSession) => void;
   /** The scan is delayed 15 min: shown as a pill next to the title. */
   delayed: boolean;
 }) {
@@ -76,7 +69,7 @@ export function FilterHeader({
     <header className={styles.head}>
       <div className={styles.titleBlock}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>
+          <h1 className={styles.title} title={filter.name}>
             {filter.read_only && <LockGlyph />}
             {filter.name}
             {filter.read_only && <span className={styles.srOnly}> Read-only</span>}
@@ -86,20 +79,8 @@ export function FilterHeader({
         {rule && <p className={styles.rule}>{describeSpec(rule)}</p>}
       </div>
       <div className={styles.controls}>
-        <div role="group" aria-label="Session" className={styles.segmented}>
-          {SESSIONS.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={styles.segment}
-              aria-pressed={session === item.value}
-              onClick={() => onSession(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <a href={`/screener/filters?id=${filter.id}`} className={styles.button}>Edit</a>
+        {/* A default opens read-only, so it is a view, not an edit (A-SCR-15). */}
+        <a href={`/screener/filters?id=${filter.id}`} className={styles.button}>{filter.read_only ? "View rule" : "Edit"}</a>
         {filter.read_only ? (
           <>
             <button type="button" className={`${styles.button} ${styles.accent}`} disabled={pending !== null} onClick={saveCopy}>

@@ -8,13 +8,12 @@ import {
 import { z } from "zod";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
 
-export type ScreenerSession = "regular" | "extended";
-
 export const loadFilters = (options?: RequestOptions) => clientOf(options)(deskPath("/screener/filters"), ScreenerFiltersSchema, readInit(options));
 export const loadFilterDetail = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/screener/filters/${id}`), ScreenerFilterDetailSchema, readInit(options));
-export const loadFilterResults = (id: number, session?: ScreenerSession, options?: RequestOptions) =>
-  clientOf(options)(deskPath(`/screener/filters/${id}/results`, { session }), ScreenerResultsSchema, readInit(options));
+/** The filter's newest stored run. Its own session (regular or extended) is what ran; the API ignores any other. */
+export const loadFilterResults = (id: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/screener/filters/${id}/results`), ScreenerResultsSchema, readInit(options));
 export const loadUniverse = (options?: RequestOptions) => clientOf(options)(deskPath("/screener/universe"), ScreenerUniverseSchema, readInit(options));
 
 /** Unsaved spec in, live match count out. 422 problems come back as 200 with `problems` (02m §a1). */

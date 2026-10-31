@@ -62,12 +62,13 @@ test("the rail lists the ten seed filters; the header, universe line and stamp r
   // header: name with the read-only mark, the rule in plain English, and the controls
   await expect(page.getByRole("heading", { level: 1, name: "Abnormal volume Read-only" })).toBeVisible();
   await expect(page.getByText("At each 15-minute close during regular hours")).toBeVisible();
-  await expect(page.getByRole("group", { name: "Session" }).getByRole("button", { name: "Regular" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/screener/filters?id=1");
+  // no Regular|Extended toggle: the API runs the filter's own session, which the rule sentence already states (V-SCR-04)
+  await expect(page.getByRole("group", { name: "Session" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View rule" })).toHaveAttribute("href", "/screener/filters?id=1");
   await expect(page.getByRole("button", { name: "Save as my filter" })).toBeEnabled();
   await expect(page.getByRole("link", { name: "Alert on this filter" })).toBeVisible();
-  // universe line, its Details disclosure, and the closed-market stamp
-  await expect(page.getByText(/^Scanned \d+ US stocks and ETFs · as of last close Thu 2026-10-15$/)).toBeVisible();
+  // the run's own count and time (never the universe's), its Details disclosure, and the closed-market stamp
+  await expect(page.getByText(/^Scanned 131 symbols at 3:45 PM ET Thu 2026-10-15$/)).toBeVisible();
   await page.locator("#main-content").getByText("Details", { exact: true }).click();
   await expect(page.getByText(/^Scan basis: /)).toBeVisible();
   await expect(page.locator("#main-content").getByText(COPY.closed, { exact: true })).toBeVisible();
@@ -103,7 +104,7 @@ test("the results table lists matches in rank order with the filter's columns; 1
   await openDesk(page, "/screener?filter=1");
   await expectCleanScreen(page);
   const table = page.getByRole("table", { name: "Screener matches" });
-  await expect(page.getByText("8 of 9 matches")).toBeVisible();
+  await expect(page.getByText("Showing the top 8 of 9 matches")).toBeVisible();
   await expect(table.getByRole("row").nth(1)).toHaveText(/^BOLT/);
   await expect(table.getByRole("row").nth(2)).toHaveText(/^LKQ/);
   await expect(table.getByRole("row").nth(3)).toHaveText(/^SPTI/);
@@ -114,6 +115,26 @@ test("the results table lists matches in rank order with the filter's columns; 1
     if (narrow()) await expect(header).toHaveCount(0);
     else await expect(header).toBeVisible();
   }
+});
+
+test("quick filters narrow the rows in place and say so; Clear brings them back (A-SCR-02)", async ({ page }) => {
+  await openDesk(page, "/screener?filter=1");
+  const quick = page.getByRole("group", { name: "Quick filters" });
+  const table = page.getByRole("table", { name: "Screener matches" });
+  for (const label of ["Price", "Change %", "Gap %", "Avg volume", "Rel volume", "RSI (14)", "52-week high"]) {
+    await expect(quick.getByRole("combobox", { name: label })).toHaveValue("");
+  }
+  await quick.getByRole("combobox", { name: "RSI (14)" }).selectOption({ label: "Overbought (70+)" });
+  await expect(page.getByText(/^\d of 8 rows pass your quick filters · 9 matched the scan$/)).toBeVisible();
+  await expect(table.getByRole("row").nth(1)).toHaveText(/^BOLT/); // RSI 79.7
+  // a band nothing passes leaves a plain empty state with its own way out
+  await quick.getByRole("combobox", { name: "Price" }).selectOption({ label: "$50 and over" });
+  await quick.getByRole("combobox", { name: "Change %" }).selectOption({ label: "Down 10% or more" });
+  await expect(page.getByText("None of the 8 rows pass your quick filters")).toBeVisible();
+  await quick.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByText("Showing the top 8 of 9 matches")).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(9);
+  await expectCleanScreen(page);
 });
 
 test("selecting a row loads its preview; a symbol without stored bars gets a friendly empty chart", async ({ page }) => {
@@ -179,7 +200,10 @@ test("a default filter opens read-only in the editor: Copy to edit, disabled fie
   await expect(page.getByRole("spinbutton", { name: "Value" })).toBeDisabled();
   // the live check runs on a seed too: wait for it to finish before the page closes
   await openRailSection(page, "Live matches");
-  await expect(liveRegion(page).getByText(/matches of \d+ scanned/)).toBeVisible();
+  await expect(liveRegion(page).getByText(/^matches of \d+ symbols?, checked now on stored bars$/)).toBeVisible();
+  // the preview names the scheduled run the screener shows, and says why the two counts differ (V-SCR-03)
+  await expect(liveRegion(page).getByText("Last scan: 9 of 131 at 3:45 PM ET Thu 2026-10-15")).toBeVisible();
+  await expect(liveRegion(page).getByText("The preview and the last scan checked different symbols, so their counts differ.")).toBeVisible();
   // the JSON panel of the spec is closed until opened
   await openRailSection(page, "JSON");
   await expect(page.locator("details", { hasText: "View JSON" })).not.toHaveAttribute("open");
@@ -196,7 +220,7 @@ test("editing a threshold moves the live matches and shows the unsaved bar; Disc
   await openDesk(page, `/screener/filters?id=${id}`);
   await openRailSection(page, "Live matches");
   const live = liveRegion(page);
-  await expect(live.getByText(`matches of ${saved.scanned} scanned`)).toBeVisible();
+  await expect(live.getByText(new RegExp(`^matches of ${saved.scanned} symbols?, checked now on stored bars$`))).toBeVisible();
   await page.getByRole("spinbutton", { name: "Value" }).fill("0");
   await expect(page.getByRole("region", { name: "Unsaved changes" })).toBeVisible();
   // the check follows the edit (500 ms debounce): new count and the top five

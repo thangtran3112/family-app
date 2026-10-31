@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { COPY } from "../../lib/desk/freshness.ts";
 import { fixture, mockFundamental, startInFundamental, watchGated } from "./fundamental-helpers";
 import { test, expect, prepareDesk, openDesk, expectCleanScreen } from "./helpers";
@@ -12,6 +12,9 @@ test.beforeEach(async ({ context, page }) => {
 });
 
 const main = (page: Page) => page.locator("#main-content");
+/** No text-overflow ellipsis: the element shows all it holds. */
+const expectNotClipped = async (cell: Locator) =>
+  expect(await cell.evaluate((el) => ({ wide: el.scrollWidth - el.clientWidth, tall: el.scrollHeight - el.clientHeight }))).toEqual({ wide: 0, tall: 0 });
 const candidatesTable = (page: Page) => page.getByRole("table", { name: "Covered-call candidates" });
 const MASK = "•••••";
 
@@ -38,6 +41,8 @@ test("the scan lists coverage with counts hidden, then shows them; the top calls
   await expect(page.getByTestId("fund-cc-ivrank")).toHaveText("IV rank 62");
   await expect(page.getByTestId("fund-cc-opportunity")).toHaveCount(0);
   await expect(page.getByText("Cover the IRA first").first()).toBeVisible();
+  // The Flags cell wraps; it is never cut with an ellipsis ("Cove…").
+  await expectNotClipped(candidatesTable(page).locator("tbody tr").first().locator("td span[title]").last());
   await expect(page.getByTestId("fund-cc-payoff")).toBeVisible();
 
   // Showing values reveals the counts and the API's own sentence.
@@ -108,12 +113,17 @@ test("open calls and income: risks in words, the selected call's roll pane, prem
   // A missing delta is a dash, never the word null.
   await expect(calls.getByRole("row", { name: /^JNJ/ })).toContainText("—");
 
-  // The first call is open by default; the roll pane carries the assignment note and "Not tax advice".
+  // The riskiest call (most risks) is open by default, not the first row; the roll pane carries the assignment note and "Not tax advice".
   const pane = page.getByTestId("fund-cc-roll");
+  await expect(pane).toContainText("KO $72.5 call · 2026-10-30");
+  await expect(page.getByTestId("fund-cc-risks").getByRole("listitem")).toHaveCount(3);
+  // Nothing is cut with an ellipsis: the top risk and the "+N more" both show in the table.
+  await expect(calls.getByRole("row", { name: /^KO/ })).toContainText("+2 more");
+  await expectNotClipped(calls.getByRole("row", { name: /^KO/ }).locator("td span[title]"));
+  await calls.getByRole("row", { name: /^AAPL/ }).click();
   await expect(pane).toContainText("AAPL $245 call · 2026-11-20");
   await calls.getByRole("row", { name: /^KO/ }).click();
   await expect(pane).toContainText("KO $72.5 call · 2026-10-30");
-  await expect(page.getByTestId("fund-cc-risks").getByRole("listitem")).toHaveCount(3);
   await expect(pane).toContainText("Not tax advice");
   await expect(pane).toContainText("Cost to close $0.95 a share");
   await expect(page.getByRole("table", { name: "Roll choices" }).locator("tbody tr")).toHaveCount(2);
