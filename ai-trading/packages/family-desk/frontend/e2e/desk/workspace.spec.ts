@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { COPY, notEnoughHistoryText } from "../../lib/desk/freshness.ts";
+import { COPY, fillCopy, notEnoughHistoryText } from "../../lib/desk/freshness.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 
 // D3 chart workspace and D4 technical summary on one route (`/technicals`, `#chart` or `#summary`), plus the
@@ -162,20 +162,43 @@ test("the four alert fires show in the alerts list, the signals tab and the char
   await expectCleanScreen(page);
 });
 
-test("a symbol with no stored bars shows empty states, not errors", async ({ page }) => {
-  // AMD has stored metrics on the watchlist but no bars: the chart says so, the quote line says unavailable.
-  await openDesk(page, "/technicals?symbol=AMD#chart");
-  await expectCleanScreen(page);
-  await expect(page.getByRole("heading", { level: 1, name: "AMD" })).toBeVisible();
-  await expect(page.locator("#main-content").getByRole("status").filter({ hasText: COPY.unavailable })).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "No closed bars available for this symbol and timeframe." })).toBeVisible();
-  await expect(page.getByText("Couldn't load this chart")).toHaveCount(0);
+test("a symbol the Desk has nothing stored for says so once, without 'trying again' or 'warming up' (V-Technicals-03)", async ({ page }) => {
+  // ZZZZQ does not exist; AMD is on the watchlist but has no quote and no bars in the seed. Neither will get data by
+  // waiting, so neither may promise it.
+  for (const symbol of ["ZZZZQ", "AMD"]) {
+    await openDesk(page, `/technicals?symbol=${symbol}#chart`);
+    await expect(page.getByRole("heading", { level: 1, name: symbol })).toBeVisible();
+    const main = page.locator("#main-content");
+    await expect(main.getByRole("status").filter({ hasText: new RegExp(`^${COPY.noMarketDataBadge}$`) })).toBeVisible();
+    await expect(main.getByText(fillCopy(COPY.noMarketData, { symbol }))).toBeVisible();
+    await expect(main.getByText(COPY.noMarketDataHint)).toBeVisible();
+    await expect(page.getByText(COPY.unavailable)).toHaveCount(0);
+    await expect(page.getByText(/Warming up|Not enough history|Levels are not available|Couldn't load/)).toHaveCount(0);
+    await expectCleanScreen(page);
 
-  // The summary of the same symbol reads unavailable, with no error block.
-  await openDesk(page, "/technicals?symbol=AMD#summary");
-  await expect(page.getByRole("img", { name: "Summary: Unavailable, score —. Vote counts unavailable" })).toBeVisible();
-  await expect(page.getByText("Couldn't load this summary")).toHaveCount(0);
-  await expectCleanScreen(page);
+    await openDesk(page, `/technicals?symbol=${symbol}#summary`);
+    await expect(page.locator("#main-content").getByText(fillCopy(COPY.noMarketData, { symbol }))).toBeVisible();
+    await expect(page.getByText(/trying again|Couldn't load/)).toHaveCount(0);
+    await expectCleanScreen(page);
+  }
+});
+
+test("the header change is the day's change on every timeframe (V-Technicals-01)", async ({ page }) => {
+  await openDesk(page, "/technicals?symbol=NVDA#chart");
+  const change = page.locator("#main-content").locator("[data-tone]").filter({ hasText: /\(.*%\)/ }).first();
+  // The last daily close stands in until the live quote arrives, then the quote's price: read it once it has settled.
+  const reads: string[] = [];
+  await expect.poll(async () => {
+    reads.push((await change.textContent()) ?? "");
+    const recent = reads.slice(-3);
+    return recent.length === 3 && /%\)$/.test(recent[0]!) && recent.every((text) => text === recent[0]);
+  }, { intervals: [700] }).toBe(true);
+  const intraday = reads.at(-1)!;
+  for (const label of ["1D", "1W"]) {
+    await page.getByRole("group", { name: "Timeframe" }).getByRole("button", { name: label, exact: true }).click();
+    await expect(page.locator("#main-content").getByText(new RegExp(`^NVDA · ${label} · O `))).toBeVisible();
+    await expect(change).toHaveText(intraday);
+  }
 });
 
 /** lightweight-charts lays a chart out as table rows: price pane, each indicator pane, then the time axis. */

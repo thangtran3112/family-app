@@ -66,6 +66,10 @@ export const COPY = {
   alertTemplatesNotStarted: "Fundamental alerts start once their data sources are connected",
   maskShow: "Show values",
   maskHide: "Hide values",
+  // A symbol with no quote and no bars at all (V-Technicals-03): nothing will arrive, so no "trying again".
+  noMarketData: "No market data for {symbol}",
+  noMarketDataHint: "Check the symbol, or pick one from a watchlist",
+  noMarketDataBadge: "No market data",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
