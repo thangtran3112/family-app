@@ -3,6 +3,7 @@
 //
 //	bridge [--role=bridge]   serve gRPC, gRPC-Web, and Connect on one port
 //	bridge healthcheck       exit 0 when this process answers /healthz (container HEALTHCHECK)
+//	bridge migrate           create or update the H1 archive schema (idempotent), then exit
 package main
 
 import (
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/config"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/alpaca"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
@@ -31,6 +33,13 @@ var build = ""
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck())
+	}
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		if err := migrate(); err != nil {
+			fmt.Fprintln(os.Stderr, "bridge migrate:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	role := flag.String("role", "bridge", "bridge | edge")
 	flag.Parse()
@@ -88,6 +97,27 @@ func run() error {
 	if err := srv.Shutdown(sctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	return nil
+}
+
+// migrate applies the archive schema. It runs with ARCHIVE_ENABLED still off: the deploy order is
+// migrate, then enable.
+func migrate() error {
+	url := config.ArchiveURL(os.Getenv)
+	if url == "" {
+		return errors.New("set ARCHIVE_DATABASE_URL (or DESK_RUNTIME_DATABASE_URL)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pg, err := archive.OpenPostgres(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer pg.Close()
+	if err := pg.Migrate(ctx); err != nil {
+		return err
+	}
+	fmt.Println("archive schema market_archive is up to date")
 	return nil
 }
 
