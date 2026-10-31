@@ -24,6 +24,7 @@ import {
   listHeaderText,
   listWarning,
   moveText,
+  nameActionLabel,
   nameCap,
   namesTodayText,
   noMatchText,
@@ -37,6 +38,7 @@ import {
   rescanStaleText,
   riskPlanText,
   selectionText,
+  sessionResumeHref,
   sourceNote,
   starsFullText,
   stripRows,
@@ -444,4 +446,10 @@ test("a scan older than the day clock says so, and a current one does not", () =
   const stale = rescanStaleText({ clock: "2026-03-10T14:30:00Z", rescan: scan });
   assert.equal(stale, "The day clock is now 10:30 AM ET · this scan is older. Re-scan to update it.");
   assert.equal(containsPracticeBannedTerm(stale ?? ""), false);
+});
+
+test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {
+  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Practice", "Switch"]);
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
 });

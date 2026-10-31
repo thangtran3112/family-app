@@ -294,6 +294,15 @@ export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { sy
   return [...opened, ...rest];
 }
 
+/** A name's button on the day list: "Practice" opens a name at the day clock, "Switch" goes back to one she opened. Resume
+ *  belongs to the thread's day (one shared clock for every name), never to a single name. */
+export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Practice");
+
+/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Resume Day N" reopens the
+ *  day at the shared clock); only a standalone session, which has no day, opens on its own. */
+export const sessionResumeHref = (session: { id: number; day_list_id: number | null }): string =>
+  session.day_list_id === null ? `/practice/replay?id=${session.id}` : `/practice/day?id=${session.day_list_id}`;
+
 // ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
 
 /** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */

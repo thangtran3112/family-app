@@ -5,7 +5,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { DayList } from "@/lib/replay/daily";
-import { blockLadder, nameCap, riskPlanText, stripRows } from "@/lib/replay/dayView";
+import { blockLadder, nameActionLabel, nameCap, riskPlanText, stripRows } from "@/lib/replay/dayView";
 import { dayResultTone, formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./day.module.css";
@@ -19,7 +19,7 @@ export type DayLeftPanelProps = {
   onPractice: (symbol: string) => void;
   onUnstar: (symbol: string) => void;
   busy: boolean;
-  /** The names she has opened today: each shows Resume (the day switches names on one clock, 02o-b2). */
+  /** The names she has opened today: each shows Switch (the day switches names on one clock, 02o-b2). */
   opened: ReadonlySet<string>;
   ended: boolean;
 };
@@ -78,7 +78,7 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
                   {!ended && (
                     <span className={styles.actions}>
                       <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayPractice", { symbol: entry.symbol })} onClick={() => onPractice(entry.symbol)}>
-                        {opened.has(entry.symbol) ? "Resume" : "Practice"}
+                        {nameActionLabel(opened.has(entry.symbol))}
                       </button>
                       <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => onUnstar(entry.symbol)}>Unstar</button>
                     </span>

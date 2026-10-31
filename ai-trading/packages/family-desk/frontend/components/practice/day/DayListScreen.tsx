@@ -32,6 +32,7 @@ import {
   listCountsText,
   listWarning,
   nameCap,
+  nameActionLabel,
   namesTodayText,
   noMatchText,
   rescanCounts,
@@ -42,6 +43,7 @@ import {
   toggledStars,
   universeNote,
 } from "@/lib/replay/dayView";
+import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -224,7 +226,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         </div>
         <div className={styles.actions}>
           {practicing && !ended && (
-            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practicing.symbol}</Link>
+            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>{resumeDayLabel(list.day_no)}</Link>
           )}
           {ended ? (
             <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</button>
@@ -301,7 +303,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 aria-label={practiceText("dayPractice", { symbol: row.symbol })}
                 onClick={() => void practice(row.symbol)}
               >
-                {opened.has(row.symbol) ? "Resume" : "Practice"}
+                {nameActionLabel(opened.has(row.symbol))}
               </button>
             )}
           />
