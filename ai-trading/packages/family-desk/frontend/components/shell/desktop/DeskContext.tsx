@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import type { Holdings } from "@/lib/api/fundamentalSchemas";
 import type { DeskStatus } from "@/lib/api/schemas";
 import { loadHoldings } from "@/lib/desk/holdings";
@@ -9,7 +10,7 @@ import { loadSettings } from "@/lib/desk/settings";
 import { loadStatus } from "@/lib/desk/status";
 import type { Connection } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { LANE_STORAGE_KEY, readLanePreference, writeLanePreference, type Lane } from "@/lib/lanes";
+import { LANE_STORAGE_KEY, modeFor, readLanePreference, writeLanePreference, type Lane } from "@/lib/lanes";
 import { readDefaultView } from "@/lib/settings/schema";
 
 // Shell-level state shared by the top bar, rails, status bar and every desktop screen (02m §a3.1):
@@ -47,9 +48,9 @@ export function useDeskFeedStamp(): DeskStatus["quotes"] | null {
 }
 
 export type DeskUiValue = {
+  /** The mode this page renders in, derived from the route (ADR-0014). A switch is a navigation, never a state change. */
   lane: Lane;
-  setLane: (lane: Lane) => void;
-  /** Remember the lane for the next visit without switching this screen (Settings > Default view). */
+  /** Remember the mode for the next visit without switching this screen (Settings > Default mode). */
   rememberLane: (lane: Lane) => void;
   /** The watchlist the left rail and the dashboard are showing; null until the lists load. */
   selectedListId: number | null;
@@ -76,22 +77,35 @@ export type DeskUiValue = {
 const UiContext = createContext<DeskUiValue | null>(null);
 
 export function DeskUiProvider({ children }: { children: ReactNode }) {
-  // The desktop shell only mounts on the client (after the viewport check), so localStorage is safe here.
-  const [lane, setLaneState] = useState<Lane>(() => readLanePreference(window.localStorage));
+  // The desktop shell only mounts on the client (after the viewport check), so window and localStorage are safe here.
+  const pathname = usePathname() ?? "/";
+  const [param] = useState(() => new URLSearchParams(window.location.search).get("mode"));
+  // This browser's own mode, or null when it has none yet (then the saved Settings default decides, as the shell always did).
+  const [stored, setStored] = useState<Lane | null>(() => (window.localStorage.getItem(LANE_STORAGE_KEY) === null ? null : readLanePreference(window.localStorage)));
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [maskValues, setMaskValuesState] = useState(DEFAULT_MASK_VALUES);
-  // The saved settings set two starting points once: the default view (only when this browser has no lane of its own yet)
-  // and the masking default. A toggle in the top bar after that wins until the next load.
+  // The saved settings set two starting points: the default mode (only while this browser has no mode of its own) and,
+  // once, the masking default. A toggle in the top bar after that wins until the next load.
   const settingsQuery = useDeskQuery("shell-settings", (signal) => loadSettings({ signal }));
-  const touched = useRef({ lane: false, mask: false });
+  const touched = useRef({ mask: false });
   const loadedSettings = settingsQuery.data?.settings ?? null;
   useEffect(() => {
-    if (!loadedSettings) return;
-    if (!touched.current.mask) setMaskValuesState(readMaskValues(loadedSettings));
-    const hasOwnLane = window.localStorage.getItem(LANE_STORAGE_KEY) !== null;
-    if (!touched.current.lane && !hasOwnLane) setLaneState(readDefaultView(loadedSettings));
+    if (loadedSettings && !touched.current.mask) setMaskValuesState(readMaskValues(loadedSettings));
   }, [loadedSettings]);
+  const preferred = stored ?? (loadedSettings ? readDefaultView(loadedSettings) : "technical");
+  // The route decides the mode (ADR-0014): a mode the route does not list never renders it, so there is no wrong-lane screen.
+  const lane = modeFor(pathname, param, preferred);
+  // Remember the mode a route or ?mode= chose, so the next shared route keeps it (React's adjust-state-while-rendering pattern).
+  if (lane !== preferred) setStored(lane);
+  useEffect(() => {
+    if (stored !== null) writeLanePreference(window.localStorage, stored);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("mode")) {
+      url.searchParams.delete("mode");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [stored]);
   const setMaskValues = useCallback((masked: boolean) => {
     touched.current.mask = true;
     setMaskValuesState(masked);
@@ -100,11 +114,6 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   const [chartFocus, setChartFocus] = useState(false);
   const [revisions, setRevisions] = useState({ watchlists: 0, filters: 0 });
   const invalidate = useCallback((kind: "watchlists" | "filters") => setRevisions((current) => ({ ...current, [kind]: current[kind] + 1 })), []);
-  const setLane = useCallback((next: Lane) => {
-    touched.current.lane = true;
-    writeLanePreference(window.localStorage, next);
-    setLaneState(next);
-  }, []);
   const dirty = useRef(false);
   const setDirty = useCallback((flag: boolean) => {
     dirty.current = flag;
@@ -112,8 +121,8 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   const confirmLeave = useCallback(() => !dirty.current || window.confirm("You have unsaved changes. Leave this page?"), []);
   const rememberLane = useCallback((next: Lane) => writeLanePreference(window.localStorage, next), []);
   const value = useMemo<DeskUiValue>(
-    () => ({ lane, setLane, rememberLane, selectedListId, setSelectedListId, selectedSymbol, setSelectedSymbol, maskValues, setMaskValues, leftCollapsed, setLeftCollapsed, chartFocus, setChartFocus, revisions, invalidate, setDirty, confirmLeave }),
-    [lane, setLane, rememberLane, selectedListId, selectedSymbol, maskValues, setMaskValues, leftCollapsed, chartFocus, revisions, invalidate, setDirty, confirmLeave],
+    () => ({ lane, rememberLane, selectedListId, setSelectedListId, selectedSymbol, setSelectedSymbol, maskValues, setMaskValues, leftCollapsed, setLeftCollapsed, chartFocus, setChartFocus, revisions, invalidate, setDirty, confirmLeave }),
+    [lane, rememberLane, selectedListId, selectedSymbol, maskValues, setMaskValues, leftCollapsed, chartFocus, revisions, invalidate, setDirty, confirmLeave],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

@@ -13,6 +13,7 @@ import {
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
+import type { OpenTrade } from "./schemas.ts";
 import { etHhMm } from "./time.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
@@ -22,11 +23,6 @@ import type { ThreadPlan, ThreadToday } from "./threads.ts";
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
-/** "2 names practiced today". A day has no cap on names. */
-export function namesTodayText(list: Pick<DayList, "sessions">): string {
-  const used = list.sessions.length;
-  return practiceText("dayNamesToday", { used, names: nameWord(used) });
-}
 
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
@@ -278,36 +274,69 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
   return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
-export type StripRow = {
+export type PortfolioRow = {
   symbol: string;
-  /** The session to resume; null for a starred name she has not opened yet. */
-  sessionId: number | null;
-  starred: boolean;
-  behind: boolean;
+  sessionId: number;
+  /** The open trade, or null when flat. */
+  position: OpenTrade | null;
   holding: boolean;
+  trades: number;
+  realized: number;
+  /** The open trade's P/L at its playhead; null when flat. */
+  unrealized: number | null;
+  /** Realized plus unrealized: the name's P/L for the day. */
+  dayPnl: number;
+  behind: boolean;
+  /** The name she is on in the replay. */
+  current: boolean;
+  /** The held name that blocks switching to this one (one open trade a day), or null. */
+  blockedBy: string | null;
 };
 
-/** The day's names: every one she has opened, then the starred ones she has not. `from` is the name she is on and its
- *  playhead: another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
-export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { symbol: string; playhead: string }): StripRow[] {
-  const starred = new Set(list.watch.map((star) => star.symbol));
-  const opened = list.sessions.map((session): StripRow => ({
-    symbol: session.symbol,
-    sessionId: session.id,
-    starred: starred.has(session.symbol),
-    behind:
-      session.behind_clock ||
-      (from !== undefined && session.symbol !== from.symbol && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
-    holding: session.has_open_trade,
-  }));
-  const open = new Set(opened.map((row) => row.symbol));
-  const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
-  return [...opened, ...rest];
+/** The day's portfolio: a row for every name she opened, the held one first, then in the order she opened them. `from` is
+ *  the name she is on in the replay with its playhead and live open trade (null when she just exited, undefined on the day
+ *  page): another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+export function portfolioRows(
+  list: Pick<DayList, "sessions">,
+  from?: { symbol: string; playhead: string; openTrade?: OpenTrade | null },
+): PortfolioRow[] {
+  const rows = list.sessions.map((session): PortfolioRow => {
+    const current = from !== undefined && session.symbol === from.symbol;
+    const position = current && from.openTrade !== undefined ? from.openTrade : session.position;
+    return {
+      symbol: session.symbol,
+      sessionId: session.id,
+      position,
+      holding: position !== null,
+      trades: session.trades,
+      realized: session.realized_usd,
+      unrealized: position?.unrealized_usd ?? null,
+      dayPnl: session.realized_usd + (position?.unrealized_usd ?? 0),
+      behind:
+        session.behind_clock ||
+        (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
+      current,
+      blockedBy: null,
+    };
+  });
+  const held = rows.find((row) => row.holding)?.symbol ?? null;
+  return [...rows.filter((row) => row.holding), ...rows.filter((row) => !row.holding)].map((row) => ({ ...row, blockedBy: row.holding ? null : held }));
 }
 
-/** A name's button on the day list: "Practice" opens a name at the day clock, "Switch" goes back to one she opened. Resume
+/** The footer: the day's P/L, split into what is booked and what is still open. */
+export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: number; open: number; total: number } {
+  const realized = rows.reduce((sum, row) => sum + row.realized, 0);
+  const open = rows.reduce((sum, row) => sum + (row.unrealized ?? 0), 0);
+  return { realized, open, total: realized + open };
+}
+
+/** "Long 100 @ $812.40" for a held name, "Flat" for one with no open trade. */
+export const positionText = (row: Pick<PortfolioRow, "position">): string =>
+  row.position === null ? "Flat" : `${row.position.side === "long" ? "Long" : "Short"} ${row.position.shares} @ $${formatPrice(row.position.entry_price)}`;
+
+/** A name's button on the day list: "Open" opens a name at the day clock, "Switch" goes back to one she opened. Resume
  *  belongs to the thread's day (one shared clock for every name), never to a single name. */
-export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Practice");
+export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Open");
 
 /** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Resume Day N" reopens the
  *  day at the shared clock); only a standalone session, which has no day, opens on its own. */

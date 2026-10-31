@@ -59,6 +59,18 @@ func table(tf string) (string, error) {
 	return "", fmt.Errorf("archive: timeframe %q is not archived", tf)
 }
 
+func (p *Postgres) Backend() string { return "postgres" }
+
+func (p *Postgres) Bounds(ctx context.Context, tf string) (lo, hi string, err error) {
+	var l, h *string
+	err = p.pool.QueryRow(ctx, `SELECT min(session_date)::text, max(session_date)::text
+		FROM market_archive.archive_sessions WHERE timeframe = $1`, tf).Scan(&l, &h)
+	if l != nil && h != nil {
+		lo, hi = *l, *h
+	}
+	return lo, hi, err
+}
+
 func (p *Postgres) Read(ctx context.Context, symbol, tf, from, to string) ([]Session, error) {
 	tbl, err := table(tf)
 	if err != nil {

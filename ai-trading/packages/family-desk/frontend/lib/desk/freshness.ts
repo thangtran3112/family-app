@@ -22,12 +22,12 @@ export const COPY = {
   alertsNotStarted: "Alerts start when live quotes are connected",
   alertsRunning: "Alerts on",
   statusUnavailable: "Status unavailable right now",
+  /** The status bar in Backtest mode, where no route brings its own line (ADR-0014). */
+  backtestStatus: "Practice · past market data",
   emptyScan: "No matches right now · next scan {time}",
   emptyScanNoTime: "No matches right now",
   loadError: "Couldn't load this {subject} · Try again",
   ordersOff: "Trading is off in the Desk · place orders in IBKR",
-  wrongLane: "This screen belongs to the {lane} view",
-  switchView: "Switch view",
   advice: "Signals, not advice · you place every trade yourself in IBKR",
   marketClosedOpens: "Market closed · opens {time}",
   marketOpen: "Market open",
@@ -308,10 +308,6 @@ export function deskAiStaleText(day: string): string {
   return fill(COPY.deskAiStale, { day });
 }
 
-export function wrongLaneText(lane: string): string {
-  return fill(COPY.wrongLane, { lane });
-}
-
 export function notEnoughHistoryText(timeframe: string): string {
   return fill(COPY.notEnoughHistory, { timeframe });
 }
@@ -432,7 +428,6 @@ export const PRACTICE_COPY = {
   dayDateHidden: "Date hidden",
   dayFiltersNote: "Chosen at setup · a name that passes either one is listed",
   dayFiltersNoteOne: "Chosen at setup",
-  dayStarred: "Starred {n}",
   dayUniverse: "Universe: today's Desk set, up to {max} names by today's dollar volume ({size} names here). It can differ from the names that traded on that day.",
   daySource: "Source: Alpaca SIP bars up to {through} · nothing after the list time is shown",
   dayNoNames: "No name passed your filters on this day · widen a filter, or end the day to open the next",
@@ -450,15 +445,23 @@ export const PRACTICE_COPY = {
   dayWatch: "Your names",
   dayWatchEmpty: "Star names to keep them in view",
   dayPractice: "Practice {symbol}",
-  dayPracticeHint: "Switch names any time · close an open trade first · End day scores the day",
-  dayNamesToday: "{used} {names} practiced today",
-  dayNamesTitle: "Day names",
   daySwitch: "Switch to {symbol}",
   dayOnNow: "On now",
   dayBehind: "Behind the clock",
   dayHolding: "Open trade",
   daySwitchHint: "A name opens at the day clock, {time}. What it did earlier is on its chart and is not scored.",
-  dayStripNone: "Star a name on the list, or pick one from the table, to start practicing",
+  dayPortfolio: "Portfolio",
+  dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio",
+  dayPortfolioTotal: "Day P/L",
+  dayPortfolioSplit: "realized {realized} · open {open}",
+  dayOpenHint: "Click a name to open its chart and practice it · your first name starts the day",
+  dayOpenRelistHint: "Click a name to open its chart and practice it · your first name starts the day · re-list first if you want a later list time",
+  dayOpen: "Open {symbol}",
+  dayOpening: "Opening {symbol}…",
+  dayPeekAt: "Peek at {symbol}",
+  dayCloseFirst: "Close {symbol} first",
+  dayGoTo: "Go to {symbol}",
+  dayStripNone: "Click a name in Candidates to open its chart",
   replayBehind: "{symbol} is behind the day clock, {clock} · catch up to practice it. What happened meanwhile is on the chart and is not scored.",
   replayCatchUp: "Catch up",
   replayCatchUpError: "Couldn't catch up · Try again",
@@ -471,7 +474,7 @@ export const PRACTICE_COPY = {
   dayRescanCounts: "{shown} of {matched} matched · {fresh} new since your list",
   dayRescanStale: "The day clock is now {clock} · this scan is older. Re-scan to update it.",
   dayRescanNew: "New since your list",
-  dayRescanReadOnly: "Names new since your list are for reading: you star and practice names from the list above.",
+  dayRescanReadOnly: "Names new since your list are for reading: you open names from the list above.",
   dayRescanError: "Couldn't re-scan · Try again",
   dayRescanning: "Re-scanning…",
   dayRescanStillWorking: "Still scanning · this can take a minute or two",
@@ -503,7 +506,7 @@ export const PRACTICE_COPY = {
   reviewDayNone: "No practice trades this day",
   reviewDayHint: "Practice prices to the cent · no spread, slippage, or fees",
   reviewBalance: "Balance {before} → {after}",
-  reviewNoPicks: "You did not star or trade a name",
+  reviewNoPicks: "You did not open a name",
   reviewEmpty: "No moves to show for this day",
   backToList: "Back to the day list",
   dayAfter: "Next day",

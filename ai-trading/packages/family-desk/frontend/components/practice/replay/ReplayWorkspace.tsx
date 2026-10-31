@@ -56,7 +56,7 @@ import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplayS
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
-import { DayNames } from "./DayNames";
+import { Portfolio } from "./Portfolio";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
@@ -349,7 +349,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       }}
     />;
 
-  const dayNames = dayListId !== null && !swing ? <DayNames dayListId={dayListId} current={spec.symbol} playhead={view.revealedThrough} revision={session.marks.length * 2 + (behind ? 1 : 0)} /> : null;
+  const portfolio =
+    dayListId !== null && !swing ? (
+      <Portfolio
+        dayListId={dayListId}
+        from={{ symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade }}
+        revision={session.marks.length * 2 + (behind ? 1 : 0)}
+      />
+    ) : null;
 
   const sections: RailSection[] = [
     {
@@ -368,8 +375,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     },
     { id: "practice", label: "Practice", node: controls },
     ...(band === "1180" ? [{ id: "signals", label: "Signals", node: signalsRail }] : []),
-    // At 1440 the day's names sit in the left rail; at 1180 that rail is a strip, so they open from the right drawer.
-    ...(band === "1180" && dayNames !== null ? [{ id: "names", label: "Names", node: dayNames }] : []),
+    // At 1440 the day's portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from the right drawer.
+    ...(band === "1180" && portfolio !== null ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: portfolio }] : []),
   ];
   const fires = armed.reduce((sum, item) => sum + item.fires, 0);
 
@@ -555,10 +562,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
                   onAddStop={() => openComposer("stop")}
                 />
               </section>
-              {band === "1440" && dayNames && (
-                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayNamesTitle}>
-                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayNamesTitle}</h2>
-                  {dayNames}
+              {band === "1440" && portfolio && (
+                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayPortfolio}>
+                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
+                  {portfolio}
                 </section>
               )}
             </>

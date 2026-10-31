@@ -19,7 +19,6 @@ import {
   notEnoughHistoryText,
   resolveFreshness,
   statusBarText,
-  wrongLaneText,
   type FreshnessInput,
   type FreshnessState,
 } from "./freshness.ts";
@@ -113,7 +112,6 @@ test("alerts banner, empty scan, load error and wrong lane copy", () => {
   assert.equal(emptyScanText("2026-10-26T14:15:00Z"), "No matches right now · next scan 10:15 AM");
   assert.equal(emptyScanText(null), "No matches right now");
   assert.equal(loadErrorText("chart"), "Couldn't load this chart · Try again");
-  assert.equal(wrongLaneText("Fundamental"), "This screen belongs to the Fundamental view");
   assert.equal(notEnoughHistoryText("1W"), "Not enough history for 1W yet");
   assert.equal(COPY.ordersOff, "Trading is off in the Desk · place orders in IBKR");
   assert.equal(COPY.noSignalsToday, "No signals yet today · your strategies are watching");
@@ -220,4 +218,9 @@ test("marketPillView: one place decides the pill's text, short form, dot and sta
   // Before /status answers, and when it failed.
   assert.deepEqual(marketPillView({ ...base, market: null, quotes: null }), { full: "Checking the market…", shown: "Checking the market…", open: false, stale: false });
   assert.equal(marketPillView({ ...base, market: null, quotes: null, failed: true }).full, "Market status unavailable");
+});
+
+test("the wrong-lane interstitial copy is gone: a route from another mode opens in its own mode (ADR-0014)", () => {
+  assert.equal("wrongLane" in COPY, false);
+  assert.equal("switchView" in COPY, false);
 });

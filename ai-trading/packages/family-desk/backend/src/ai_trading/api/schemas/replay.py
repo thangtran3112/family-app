@@ -630,7 +630,7 @@ class StarOut(BaseModel):
 
 
 class DaySessionOut(BaseModel):
-    """A name she has practised today: the day strip's row."""
+    """A name she has opened today: a row of the day's portfolio. Flat unless `position` is set."""
 
     id: int
     symbol: str
@@ -638,6 +638,9 @@ class DaySessionOut(BaseModel):
     revealed_through: datetime
     behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
     has_open_trade: bool  # the day holds one open trade at a time: close it before moving to another name
+    trades: int  # closed trades on this name today
+    realized_usd: FiniteFloat  # the closed trades' P/L (swing sessions report none here: their holds are scored weekly)
+    position: OpenTradeOut | None  # the open trade marked at the name's own playhead; null when flat
 
 
 class PeekDailyBarOut(BaseModel):

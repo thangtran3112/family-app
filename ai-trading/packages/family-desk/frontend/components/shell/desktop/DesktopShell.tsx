@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { hasMoreLeftRail, hasPracticeLeftRail, isPracticePath, isWrongLane } from "@/lib/lanes";
+import { hasMoreLeftRail, hasPracticeLeftRail, isPracticePath } from "@/lib/lanes";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { DeskHoldingsProvider, DeskStatusProvider, DeskUiProvider, LeftSlotContext, RailSlotContext, useDeskUi } from "./DeskContext";
 import { LeftRail } from "./LeftRail";
@@ -10,7 +10,6 @@ import { MoreRail } from "./MoreRail";
 import { PracticeBand, PracticeChromeProvider } from "./PracticeChrome";
 import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
-import { WrongLaneInterstitial } from "./WrongLaneInterstitial";
 import leftStyles from "./leftrail.module.css";
 
 /** The desktop shell (>= 1100 px, 02m §c1): 48 px top bar, left rail, center, right rail slot, 24 px status bar. */
@@ -30,7 +29,7 @@ export function DesktopShell({ band, children }: { band: ShellBand; children: Re
 
 function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const { lane, leftCollapsed, chartFocus } = useDeskUi();
+  const { leftCollapsed, chartFocus } = useDeskUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [leftSlot, setLeftSlot] = useState<HTMLElement | null>(null);
   // Practice pages (02o §a1) get the amber band; the replay, the day list and the journal swap the watchlists for their own left panel.
@@ -56,7 +55,7 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
           )}
         </div>
         <main className="dk-center" id="main-content" tabIndex={-1}>
-          {isWrongLane(lane, pathname) ? <WrongLaneInterstitial pathname={pathname} /> : children}
+          {children}
         </main>
         <aside className="dk-right" ref={setSlot} aria-label="Context" />
         <div className="dk-status"><StatusBar /></div>

@@ -53,6 +53,17 @@
 	}
 }
 
+# Hub login origin for the signed-out redirects below, chosen from the request
+# host so a laptop staging host (`staging.` or `staging-*.`) sends the browser
+# to the staging hub, never the production one. Production hosts keep the
+# production hub. The staging tunnel passes the public Host through unchanged.
+(hub_origin) {
+	map {host} {hub_origin} {hub_origin_enc} {
+		~^staging[.-] https://staging.tobytran.dev https%3A%2F%2Fstaging.tobytran.dev
+		default https://trading-hub.tobytran.dev https%3A%2F%2Ftrading-hub.tobytran.dev
+	}
+}
+
 # Vibe's own hostname is not allowed around the Clerk gateway. Use a
 # host-specific HTTP site before the catch-all routes so /api/* also reaches
 # Vibe rather than the separate MiroFish backend.
@@ -93,7 +104,8 @@ http://vibe-trading.tobytran.dev:8080 {
 # location.pathname), so the terminal opens at the hostname root. A signed-out
 # top-level navigation is sent to the hub login with a fixed returnTo; every
 # other unauthenticated request (token, ws) keeps the plain 401.
-http://tradingagents.tobytran.dev:8080 {
+http://tradingagents.tobytran.dev:8080, http://staging-tradingagents.tobytran.dev:8080 {
+	import hub_origin
 	# Research (06) is reached unprefixed at this dedicated host -- exact
 	# root + slash-descendant matchers, same anti-sibling-wildcard reasoning
 	# as @tradingagents/@aihedgefund below -- handled ahead of the terminal's
@@ -123,7 +135,7 @@ http://tradingagents.tobytran.dev:8080 {
 						# (ta_web/store.py's _validate_run_id).
 						path_regexp research_return ^/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
 					}
-					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2Fresearch{re.research_return.1} 302
+					redir @research_return {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2Fresearch{re.research_return.1} 302
 					respond 401
 				}
 			}
@@ -144,7 +156,7 @@ http://tradingagents.tobytran.dev:8080 {
 				@denied status 401
 				handle_response @denied {
 					@navigate header Sec-Fetch-Mode navigate
-					redir @navigate https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftradingagents.tobytran.dev%2F 302
+					redir @navigate {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2F 302
 					respond 401
 				}
 			}
@@ -156,7 +168,8 @@ http://tradingagents.tobytran.dev:8080 {
 	import availability_errors
 }
 
-http://ai-hedge-fund.tobytran.dev:8080 {
+http://ai-hedge-fund.tobytran.dev:8080, http://staging-ai-hedge-fund.tobytran.dev:8080 {
+	import hub_origin
 	route {
 		request_header -Cf-Access-Authenticated-User-Email
 		forward_auth auth:8181 {
@@ -165,7 +178,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 			@denied status 401
 			handle_response @denied {
 				@navigate header Sec-Fetch-Mode navigate
-				redir @navigate https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Fai-hedge-fund.tobytran.dev%2F 302
+				redir @navigate {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2F 302
 				respond 401
 			}
 		}
@@ -177,6 +190,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 }
 
 :8080 {
+	import hub_origin
 	# Exact root + slash-descendant matchers, not a bare `/u/tradingagents*`
 	# prefix wildcard: a prefix wildcard also matches an unrelated sibling
 	# path like `/u/tradingagents-evil` (no `/` boundary required), which
@@ -238,7 +252,7 @@ http://ai-hedge-fund.tobytran.dev:8080 {
 						# copy on the old, broader class.
 						path_regexp research_return ^/u/tradingagents/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
 					}
-					redir @research_return https://trading-hub.tobytran.dev/login?returnTo=https%3A%2F%2Ftrading-hub.tobytran.dev%2Fu%2Ftradingagents%2Fresearch{re.research_return.1} 302
+					redir @research_return {hub_origin}/login?returnTo={hub_origin_enc}%2Fu%2Ftradingagents%2Fresearch{re.research_return.1} 302
 					respond 401
 				}
 			}

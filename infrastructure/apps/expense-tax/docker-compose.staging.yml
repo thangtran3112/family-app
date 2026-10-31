@@ -1,0 +1,12 @@
+# Laptop staging overlay (never installed on the VPS). Capture and Office bake
+# NEXT_PUBLIC_APP_API_URL at build time, so the production GHCR images call the
+# production App API. staging-web.sh builds these two locally with the staging
+# API origin; the name `family-app-staging/...` is deliberately not a GHCR path,
+# so it can never shadow or overwrite a production image tag.
+services:
+  capture-web:
+    image: family-app-staging/expense-tax-capture-web:${IMAGE_TAG}
+    pull_policy: never
+  office-web:
+    image: family-app-staging/expense-tax-office-web:${IMAGE_TAG}
+    pull_policy: never

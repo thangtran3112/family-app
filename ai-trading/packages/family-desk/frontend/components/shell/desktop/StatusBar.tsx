@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { reportUrl } from "@/lib/desk/feedbackContext";
 import { Freshness } from "@/components/ui/Freshness";
 import { alertsBanner, COPY } from "@/lib/desk/freshness";
-import { useDeskStatus } from "./DeskContext";
+import { shows } from "@/lib/lanes";
+import { useDeskStatus, useDeskUi } from "./DeskContext";
 import { usePracticeChrome, useReplayBadge } from "./PracticeChrome";
 import styles from "./statusbar.module.css";
 
@@ -24,13 +25,15 @@ function ReportProblem({ pathname }: { pathname: string }) {
   );
 }
 
-/** 24 px bar: quote source and state, last update in ET, alert delivery state (02l §b2). A Practice route may bring its own line (D-043). */
+/** 24 px bar: quote source and state, last update in ET, alert delivery state (02l §b2). A Practice route may bring its own line (D-043).
+ * Backtest has no live quote line or alerts state (ADR-0014): it says the data is past. */
 export function StatusBar() {
   const { status } = useDeskStatus();
+  const { lane } = useDeskUi();
   const pathname = usePathname() ?? "/";
   const replaying = useReplayBadge() !== null;
   const own = usePracticeChrome()?.status ?? null;
-  const alertsText = status ? (alertsBanner(status.alerts.state) ?? COPY.alertsRunning) : null;
+  const alertsText = status && shows(lane, "statusAlerts") ? (alertsBanner(status.alerts.state) ?? COPY.alertsRunning) : null;
   const onFeedback = pathname === "/feedback" || pathname.startsWith("/feedback/");
 
   if (own) {
@@ -49,6 +52,8 @@ export function StatusBar() {
     <footer className={styles.bar} aria-label="Status">
       {replaying ? (
         <span>Replay · past market data · no live quotes on this screen</span>
+      ) : !shows(lane, "statusQuotes") ? (
+        <span>{COPY.backtestStatus}</span>
       ) : (
         <Freshness variant="statusBar" />
       )}

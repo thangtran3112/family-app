@@ -52,6 +52,9 @@ const (
 	MarketDataWatchStatusProcedure = "/familyapp.marketdata.v1.MarketData/WatchStatus"
 	// MarketDataSetRoutingProcedure is the fully-qualified name of the MarketData's SetRouting RPC.
 	MarketDataSetRoutingProcedure = "/familyapp.marketdata.v1.MarketData/SetRouting"
+	// MarketDataEnsureHistoryProcedure is the fully-qualified name of the MarketData's EnsureHistory
+	// RPC.
+	MarketDataEnsureHistoryProcedure = "/familyapp.marketdata.v1.MarketData/EnsureHistory"
 )
 
 // MarketDataClient is a client for the familyapp.marketdata.v1.MarketData service.
@@ -63,6 +66,7 @@ type MarketDataClient interface {
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.BridgeStatus], error)
 	WatchStatus(context.Context, *connect.Request[v1.WatchStatusRequest]) (*connect.ServerStreamForClient[v1.BridgeStatus], error)
 	SetRouting(context.Context, *connect.Request[v1.SetRoutingRequest]) (*connect.Response[v1.Routing], error)
+	EnsureHistory(context.Context, *connect.Request[v1.EnsureHistoryRequest]) (*connect.Response[v1.EnsureHistoryResponse], error)
 }
 
 // NewMarketDataClient constructs a client for the familyapp.marketdata.v1.MarketData service. By
@@ -118,6 +122,12 @@ func NewMarketDataClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(marketDataMethods.ByName("SetRouting")),
 			connect.WithClientOptions(opts...),
 		),
+		ensureHistory: connect.NewClient[v1.EnsureHistoryRequest, v1.EnsureHistoryResponse](
+			httpClient,
+			baseURL+MarketDataEnsureHistoryProcedure,
+			connect.WithSchema(marketDataMethods.ByName("EnsureHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -130,6 +140,7 @@ type marketDataClient struct {
 	getStatus      *connect.Client[v1.GetStatusRequest, v1.BridgeStatus]
 	watchStatus    *connect.Client[v1.WatchStatusRequest, v1.BridgeStatus]
 	setRouting     *connect.Client[v1.SetRoutingRequest, v1.Routing]
+	ensureHistory  *connect.Client[v1.EnsureHistoryRequest, v1.EnsureHistoryResponse]
 }
 
 // GetQuotes calls familyapp.marketdata.v1.MarketData.GetQuotes.
@@ -167,6 +178,11 @@ func (c *marketDataClient) SetRouting(ctx context.Context, req *connect.Request[
 	return c.setRouting.CallUnary(ctx, req)
 }
 
+// EnsureHistory calls familyapp.marketdata.v1.MarketData.EnsureHistory.
+func (c *marketDataClient) EnsureHistory(ctx context.Context, req *connect.Request[v1.EnsureHistoryRequest]) (*connect.Response[v1.EnsureHistoryResponse], error) {
+	return c.ensureHistory.CallUnary(ctx, req)
+}
+
 // MarketDataHandler is an implementation of the familyapp.marketdata.v1.MarketData service.
 type MarketDataHandler interface {
 	GetQuotes(context.Context, *connect.Request[v1.GetQuotesRequest]) (*connect.Response[v1.GetQuotesResponse], error)
@@ -176,6 +192,7 @@ type MarketDataHandler interface {
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.BridgeStatus], error)
 	WatchStatus(context.Context, *connect.Request[v1.WatchStatusRequest], *connect.ServerStream[v1.BridgeStatus]) error
 	SetRouting(context.Context, *connect.Request[v1.SetRoutingRequest]) (*connect.Response[v1.Routing], error)
+	EnsureHistory(context.Context, *connect.Request[v1.EnsureHistoryRequest]) (*connect.Response[v1.EnsureHistoryResponse], error)
 }
 
 // NewMarketDataHandler builds an HTTP handler from the service implementation. It returns the path
@@ -227,6 +244,12 @@ func NewMarketDataHandler(svc MarketDataHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(marketDataMethods.ByName("SetRouting")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataEnsureHistoryHandler := connect.NewUnaryHandler(
+		MarketDataEnsureHistoryProcedure,
+		svc.EnsureHistory,
+		connect.WithSchema(marketDataMethods.ByName("EnsureHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/familyapp.marketdata.v1.MarketData/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataGetQuotesProcedure:
@@ -243,6 +266,8 @@ func NewMarketDataHandler(svc MarketDataHandler, opts ...connect.HandlerOption) 
 			marketDataWatchStatusHandler.ServeHTTP(w, r)
 		case MarketDataSetRoutingProcedure:
 			marketDataSetRoutingHandler.ServeHTTP(w, r)
+		case MarketDataEnsureHistoryProcedure:
+			marketDataEnsureHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -278,4 +303,8 @@ func (UnimplementedMarketDataHandler) WatchStatus(context.Context, *connect.Requ
 
 func (UnimplementedMarketDataHandler) SetRouting(context.Context, *connect.Request[v1.SetRoutingRequest]) (*connect.Response[v1.Routing], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("familyapp.marketdata.v1.MarketData.SetRouting is not implemented"))
+}
+
+func (UnimplementedMarketDataHandler) EnsureHistory(context.Context, *connect.Request[v1.EnsureHistoryRequest]) (*connect.Response[v1.EnsureHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("familyapp.marketdata.v1.MarketData.EnsureHistory is not implemented"))
 }

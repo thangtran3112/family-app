@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { components } from "../api/openapi.js";
-import { ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
+import { OpenTradeSchema, ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
 import { ThreadBriefSchema, ThreadSummarySchema } from "./threads.ts";
 
 // Response shapes of the daily-list practice endpoints (02o-b v1), checked against the generated OpenAPI the way
@@ -140,7 +140,7 @@ const RescanSchema = z.object({
 
 export const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
 
-/** A name she has practiced today: the day strip's row (02o-b2). */
+/** A name she has opened today: a row of the day's portfolio (02o-b2). Flat unless `position` is set. */
 export const DaySessionSchema = z.object({
   id: finite.int(),
   symbol: z.string(),
@@ -150,6 +150,11 @@ export const DaySessionSchema = z.object({
   behind_clock: z.boolean(),
   /** The day holds one open trade at a time: close it before moving to another name. */
   has_open_trade: z.boolean(),
+  /** Closed trades on this name today, and their P/L. */
+  trades: finite.int(),
+  realized_usd: finite,
+  /** The open trade marked at the name's own playhead; null when flat. */
+  position: OpenTradeSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
 
 // -- peek -----------------------------------------------------------------------------------------------------

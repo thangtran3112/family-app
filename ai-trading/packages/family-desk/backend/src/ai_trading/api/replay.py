@@ -537,8 +537,8 @@ def start_day_session(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Practise one name from the list, built from the plan's setup, starting at the day clock. One name a day in
-    v1: another name is a 409 until the day ends. A swing day allows several names on its shared clock."""
+    """Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list
+    name opens, one open trade at a time: a switch with a trade open is a 409 until it is closed."""
     row = _call(plan_mod.start_session, db, user.id, day_list_id, body.symbol, services)
     return _with_thread(
         db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
