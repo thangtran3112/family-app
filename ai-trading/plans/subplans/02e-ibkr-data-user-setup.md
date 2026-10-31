@@ -2,6 +2,8 @@
 
 Owner guide for [phase-0-spike.md](02c-desk-v1-tasks/phase-0-spike.md) Task 0.4. It creates the one IBKR login that the Family Desk (and later the other ai-trading apps) uses for live market data and paper orders. Decision: [02b §4](02b-desk-market-data-options.md); checks it feeds: [02d](02d-desk-spike-results.md).
 
+> **Update 2026-10-31 (owner):** the gateway runs on the spare Ubuntu laptop with a daily on/off ritual ([02t](02t-market-data-bridge-plan.md) §5), not on the Mac and not signed in all week. Step 5's Mac install and the "signed in all week" line in "One session per login" are superseded. The data-user setup in the other steps still holds.
+
 Time: about 30 minutes, plus up to a day if IBKR has to create a paper account or approve a permission.
 
 > Never paste a username, password, token, query ID, or account number into chat, a commit, or a screenshot you share. Keep them in your password manager. The only place they go is Firestore, through the commands in Step 4.

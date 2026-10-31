@@ -1,6 +1,6 @@
 # ai-hedge-fund Without a Financial Datasets Key: Options
 
-Status: proposal for owner review (researched 2026-10-09, reconciled with the Desk plan 2026-10-10). Nothing is implemented. No sign-up, subscription, or live data call is authorized.
+Status: **superseded by [01m](01m-market-data-adapter.md) (implemented and live 2026-10-10)**. Kept as the options record (researched 2026-10-09, reconciled with the Desk plan 2026-10-10). The text below, "Nothing is implemented. No sign-up, subscription, or live data call is authorized", describes the proposal stage only.
 
 Related: the Desk lane's `02a-desk-v1-strategies-design.md` §7 and `02b-desk-market-data-options.md` (the Desk's data layer; they land with the Desk design), [STATUS.md](../STATUS.md).
 

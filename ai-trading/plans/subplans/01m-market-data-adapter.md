@@ -1,6 +1,6 @@
 # Market Data Adapter for ai-hedge-fund (Alpaca + SEC EDGAR): Design
 
-**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** draft for owner review
+**Date:** 2026-10-10 · **Lane:** open-source (Trading Hub) · **Status:** implemented and live 2026-10-10 (successor for provider independence: [02t](02t-market-data-bridge-plan.md)); the text below is the original design
 
 Related: [01k](01k-ai-hedge-fund-data-options.md) (options; this design replaces its "wait for the Desk" ordering), Desk [02a §7](02a-desk-v1-strategies-design.md) and [02b](02b-desk-market-data-options.md) (the Desk's own data plans), [STATUS.md](../STATUS.md).
 

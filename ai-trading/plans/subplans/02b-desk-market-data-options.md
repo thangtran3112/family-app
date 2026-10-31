@@ -138,7 +138,7 @@ Size:
 | Source | Cost | When we would use it |
 |---|---|---|
 | Massive Options Starter | $29/month | IBKR option snapshots turn out too slow for scans. It gives 15-minute-delayed full option chains with greeks. |
-| marketdata.app Trader | $30 monthly or $12/month billed yearly | Same case, with real-time stock quotes for self-certified non-professionals |
+| marketdata.app (paid plans) | $30 monthly (non-professional) | Options fallback only (§4d). **Corrected 2026-10-31:** its stock quotes are 15 minutes delayed on every plan, so it is never a stocks source; real-time options need the top plan plus an OPRA entitlement (§4c) |
 | Databento | $125 free signup credit | One-time deep futures history backfill, if backtesting arrives |
 | EODHD | $19.99/month | News with sentiment scores |
 
