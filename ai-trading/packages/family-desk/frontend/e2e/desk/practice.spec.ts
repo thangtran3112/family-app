@@ -411,7 +411,7 @@ test.describe("Practice", () => {
     await expect(lastDay).toContainText(`${formatDayResult(afterDayOne.daily[0]!.pnl_usd)} realized · 1 practice trade`);
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(afterDayOne.thread.stats.balance));
     // The thread page charts the win/loss of her days, and the journal is a link of its own.
-    await expect(page.getByRole("region", { name: "Thread balance" }).getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewCurveTitle }).getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
     // Resume: the landing's row opens Day 2, which has no stored TSLA bars, so its list is empty and says so.
     await openDesk(page, "/practice");

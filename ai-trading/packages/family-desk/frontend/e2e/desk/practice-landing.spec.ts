@@ -29,10 +29,15 @@ test.describe("Practice landing", () => {
     const id = await createThreadByApi(context, { balance: 25_000 });
     await openDesk(page, "/practice");
     const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    for (const name of [PRACTICE_COPY.landingColThread, PRACTICE_COPY.threadBalance, PRACTICE_COPY.landingColDays, PRACTICE_COPY.threadSkipped, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.landingColAction]) {
+    for (const name of [PRACTICE_COPY.landingColThread, PRACTICE_COPY.threadBalance, PRACTICE_COPY.landingColProgress, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.landingColAction]) {
       await expect(table.getByRole("columnheader", { name })).toBeVisible();
     }
+    // 5R: one Progress column replaces Days and Skipped (4 practiced beside Day 6 of 20 read as a contradiction).
+    for (const gone of ["Days", PRACTICE_COPY.threadSkipped]) await expect(table.getByRole("columnheader", { name: gone, exact: true })).toHaveCount(0);
     const row = table.getByRole("row", { name: /Day trading/ });
+    await expect(row).toContainText(PRACTICE_COPY.landingProgressNone);
+    await expect(row).toContainText(PRACTICE_COPY.landingProgressNoDays);
+    await expect(row).toContainText(/Started [A-Z][a-z]{2} \d{1,2}/); // the start date under the name (setup metadata, never a replayed day)
     await expect(row).toContainText(formatBalance(25_000));
     await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(row).toContainText(PRACTICE_COPY.threadActive);
@@ -154,9 +159,13 @@ test.describe("Practice landing", () => {
     const balance = page.getByRole("region", { name: "Thread balance" });
     await expect(balance).toContainText(formatBalance(25_000));
     await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
+    // The stats are their own card now (5R); adherence says which day it is and what it measures.
+    const stats = page.getByRole("region", { name: "Thread stats" });
     for (const label of [PRACTICE_COPY.threadDaysPracticed, PRACTICE_COPY.threadSkipped, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.threadAdherence]) {
-      await expect(balance.getByText(label, { exact: true })).toBeVisible();
+      await expect(stats.getByText(label, { exact: true })).toBeVisible();
     }
+    await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceNone);
+    await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
     // The daily plan of this thread, with its armed filter; the dates stay hidden.
     const plan = page.getByRole("region", { name: "Daily list plan" });
     await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 }); // the data is prepared in the background first
