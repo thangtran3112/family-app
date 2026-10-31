@@ -10,9 +10,6 @@ import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, t
 export const EARLIEST_LIST_DAY = "2017-01-03";
 export const MAX_FILTERS = 3;
 export const SESSION_CHOICES = [5, 10, 20, 30] as const;
-/** The names a day she can choose (the contract's `maxSymbols`, 1 to 20; the picker is sparse past 5 to fit one row); a new plan starts at 3. */
-export const NAME_CHOICES = [1, 2, 3, 4, 5, 10, 20] as const;
-export const DEFAULT_MAX_SYMBOLS = 3;
 
 /** The list times she is offered: the premarket gap list, the first 15 minutes, the first hour. */
 export const LIST_TIMES = [
@@ -71,7 +68,6 @@ export type PlanDraft = {
   sessions: string;
   hideDates: boolean;
   /** The most names she may star and practise in a day. */
-  maxSymbols: string;
   filterIds: number[];
   listAt: string;
   maxList: string;
@@ -109,7 +105,6 @@ export function defaultPlanDraft(now: Date): PlanDraft {
     firstDay: defaultFirstDay(now),
     sessions: "20",
     hideDates: true,
-    maxSymbols: String(DEFAULT_MAX_SYMBOLS),
     filterIds: [],
     listAt,
     maxList: "30",
@@ -153,13 +148,12 @@ export function planDraftToSpec(draft: PlanDraft): unknown {
     firstDay: draft.firstDay,
     sessions: numberOrNaN(draft.sessions),
     hideDates: draft.hideDates ? "yes" : "no",
-    maxSymbols: numberOrNaN(draft.maxSymbols),
     screen: { filters: draft.filterIds.map((id) => ({ id })), listAt: draft.listAt, maxList: numberOrNaN(draft.maxList) },
     setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: setup.armed },
   };
 }
 
-export type PlanField = SetupField | "firstDay" | "sessions" | "filters" | "listAt" | "maxList" | "maxSymbols";
+export type PlanField = SetupField | "firstDay" | "sessions" | "filters" | "listAt" | "maxList";
 export type PlanProblems = Partial<Record<PlanField, string>>;
 
 const FIELD_MESSAGE: Record<PlanField, string> = {
@@ -174,14 +168,13 @@ const FIELD_MESSAGE: Record<PlanField, string> = {
   filters: "Pick one to three filters",
   listAt: "List time: between 4:30 AM and 3:30 PM",
   maxList: "List size: a whole number from 20 to 50",
-  maxSymbols: "Names a day: a whole number from 1 to 20",
 };
 
 /** Maps a contract or server path (`screen.listAt`, `setup.window.from`, `firstDay`) to the form field that shows it. */
 export function planFieldOfPath(path: string): PlanField {
   const [first, second] = path.split(".");
   switch (first) {
-    case "firstDay": case "sessions": case "maxSymbols": return first;
+    case "firstDay": case "sessions": return first;
     case "screen": return second === "filters" ? "filters" : second === "listAt" ? "listAt" : second === "maxList" ? "maxList" : "form";
     case "setup": return fieldOfPath(path.split(".").slice(1).join("."));
     case "window": return "window";

@@ -9,6 +9,7 @@ import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
+import { problemLine } from "@/lib/desk/problemCopy";
 
 type CompareCondition = Extract<Condition, { left: Operand; right: Operand }>;
 type PatternCondition = Extract<Condition, { op: "pattern" }>;
@@ -60,12 +61,12 @@ export function ConditionStep({ form, onChange, problems }: {
             </button>
           </div>
           {rowProblems[index]!.map((problem, position) => (
-            <span key={position} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
+            <span key={position} className={editorStyles.problem}>{problemLine(problem)}</span>
           ))}
         </div>
       ))}
       {loose.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
       ))}
       <div className={editorStyles.controls}>
         <button type="button" className={editorStyles.button} onClick={() => onChange({ ...form, rows: [...form.rows, BLANK_ROW] })}>Add condition</button>

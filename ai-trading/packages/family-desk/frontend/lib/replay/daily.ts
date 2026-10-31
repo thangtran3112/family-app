@@ -38,8 +38,6 @@ export const PracticePlanSchema = z.object({
   thread_id: finite.int().nullable(),
   spec: PracticeBlockV1Schema,
   sessions: finite.int(),
-  /** The most names she can star and practice in a day (the plan's `maxSymbols`, else 20). */
-  max_symbols: finite.int(),
   days_opened: finite.int(),
   /** Ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset` (D-047). */
   day_offset: finite.int(),

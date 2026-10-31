@@ -266,12 +266,12 @@ def test_the_hub_session_rows_say_which_day_list_they_belong_to(daily, db_sessio
     assert isinstance(date.fromisoformat(rows[0]["day"]), date)
 
 
-def test_switching_names_over_the_routes_and_the_plans_cap(daily, db_session) -> None:
+def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) -> None:
     client, services, user_id = daily
     body = _plan_body(db_session, user_id)
-    started = client.post(f"{BASE}/daily/next", json={"plan": {**body, "maxSymbols": 2}}, headers=auth_headers())
+    started = client.post(f"{BASE}/daily/next", json={"plan": body}, headers=auth_headers())
     assert started.status_code == 200, started.text
-    assert started.json()["plan"]["max_symbols"] == 2 and started.json()["plan"]["spec"]["maxSymbols"] == 2
+    assert "max_symbols" not in started.json()["plan"]
     plan = db_session.execute(select(PracticePlan).where(PracticePlan.owner_user_id == user_id)).scalar_one()
     plan.universe = {**plan.universe, "symbols": SYMBOLS}
     db_session.commit()
@@ -297,9 +297,6 @@ def test_switching_names_over_the_routes_and_the_plans_cap(daily, db_session) ->
     flat = start("FLAT")
     assert flat.status_code == 200, flat.text
     assert flat.json()["revealed_through"] == at("10:00") and flat.json()["day_clock"] == at("10:00")
-    third = start("SPLITTER")
-    assert third.status_code == 409
-    assert third.json()["detail"]["problems"][0]["message"].startswith("Your plan allows 2 names a day")
     assert start("GAPPER").json()["id"] == gapper["id"]  # a name in hand resumes
 
     client.post(f"{BASE}/sessions/{flat.json()['id']}/advance", json={"to": at("10:30")}, headers=auth_headers())
@@ -330,10 +327,8 @@ def test_switching_names_over_the_routes_and_the_plans_cap(daily, db_session) ->
     stars = client.patch(
         f"{BASE}/day-lists/{list_id}", json={"watch": ["GAPPER", "FLAT", "SPLITTER"]}, headers=auth_headers()
     )
-    assert stars.status_code == 422
-    assert (
-        stars.json()["detail"]["problems"][0]["message"] == "Star at most 2 names · your plan limits a day to 2 names"
-    )
+    assert stars.status_code == 200, stars.text
+    assert [w["symbol"] for w in stars.json()["watch"]] == ["GAPPER", "FLAT", "SPLITTER"]
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.status_code == 200 and ended.json()["journal"]["trades"] == 1
 

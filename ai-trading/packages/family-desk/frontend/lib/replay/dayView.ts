@@ -19,22 +19,14 @@ import type { ThreadPlan, ThreadToday } from "./threads.ts";
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
 
-export const MAX_STARS = 20;
-
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
-/** The most names the plan lets her star and practise in a day (`maxSymbols`; the server sends the effective cap). */
-export const nameCap = (plan: Pick<PracticePlan, "max_symbols">): number => plan.max_symbols;
-
-/** "2 of 3 names practiced today". */
-export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string {
-  const max = nameCap(list.plan);
-  return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
+/** "2 names practiced today". A day has no cap on names. */
+export function namesTodayText(list: Pick<DayList, "sessions">): string {
+  const used = list.sessions.length;
+  return practiceText("dayNamesToday", { used, names: nameWord(used) });
 }
-
-/** "Star up to 3 names to keep them in view": the empty rail, with the plan's own cap like the header (D-095). */
-export const watchEmptyText = (cap: number): string => practiceText("dayWatchEmpty", { max: cap, names: nameWord(cap) });
 
 /** The plan hides dates (the weekday stays). */
 export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
@@ -280,16 +272,10 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most 20). */
-export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
+/** The next stars after a click: a starred name comes off, any other goes on the end. A practice day has no cap on stars. */
+export function toggledStars(watch: readonly { symbol: string }[], symbol: string): string[] {
   const symbols = watch.map((star) => star.symbol);
-  if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
-  return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
-}
-
-/** The message for a refused star: the plain 20-name line, or the plan's own cap. */
-export function starsFullText(cap: number): string {
-  return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
+  return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
 export type StripRow = {

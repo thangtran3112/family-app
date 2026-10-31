@@ -9,7 +9,6 @@ import {
   EARLIEST_LIST_DAY,
   LIST_TIMES,
   MAX_FILTERS,
-  NAME_CHOICES,
   SESSION_CHOICES,
   clock12,
   listTimeHeld,
@@ -28,7 +27,7 @@ import modal from "./newplan.module.css";
 
 /**
  * The daily-list half of the New plan modal (02r2, D-075, D-076): her filters as one vertical column of checkboxes, then the
- * settings in one two-column grid (first day, days, names a day, hide dates, list time, list size, interval, window). The
+ * settings in one two-column grid (first day, days, hide dates, list time, list size, interval, window). The
  * parent owns the draft and the first day (the recorded default only applies until she picks one). Nothing is armed (D-076),
  * and the list time moves up for a cadence filter.
  */
@@ -121,15 +120,6 @@ export function DayPlanFields({
               value={draft.sessions}
               options={SESSION_CHOICES.map((count) => ({ value: String(count), label: String(count) }))}
               onChange={(sessions) => onDraft({ ...draft, sessions })}
-            />
-          </Cell>
-          <Cell id="plan-names" label={PRACTICE_COPY.planMaxSymbols} group note={PRACTICE_COPY.planMaxSymbolsHint} error={problems.maxSymbols}>
-            <Segments
-              id="plan-names"
-              value={draft.maxSymbols}
-              options={NAME_CHOICES.map((count) => ({ value: String(count), label: String(count) }))}
-              onChange={(maxSymbols) => onDraft({ ...draft, maxSymbols })}
-              describedBy={noteId("plan-names")}
             />
           </Cell>
           <Cell id="plan-hide" label={PRACTICE_COPY.planHideDates} group note={PRACTICE_COPY.planHideDatesHint}>
