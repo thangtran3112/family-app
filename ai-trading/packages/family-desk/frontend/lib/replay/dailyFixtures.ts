@@ -24,7 +24,6 @@ export const plan: PracticePlan = {
   thread_id: 1,
   spec: planSpec as unknown as PracticePlan["spec"],
   sessions: 20,
-  max_symbols: 20,
   days_opened: 6,
   day_offset: 0,
   filters: [{ id: 4, name: "Gap up" }, { id: 9, name: "Abnormal volume" }],

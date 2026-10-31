@@ -25,7 +25,6 @@ import {
   listWarning,
   moveText,
   nameActionLabel,
-  nameCap,
   namesTodayText,
   ordinal,
   peekDailyBars,
@@ -36,7 +35,6 @@ import {
   dayRouteProblem,
   practiceWindow,
   tradeTotalRow,
-  watchEmptyText,
   planCard,
   rescanCounts,
   rescanLabel,
@@ -45,7 +43,6 @@ import {
   selectionText,
   sessionResumeHref,
   sourceNote,
-  starsFullText,
   stripRows,
   syntheticDays,
   threadDayNo,
@@ -134,12 +131,14 @@ test("cells use the column's format and never print null; the since column is a 
   assert.equal(filtersText(smci), "Gap up · Abnormal volume");
 });
 
-test("stars toggle, keep order, and refuse a 21st name", () => {
+test("stars toggle, keep order, and never refuse a name (a practice day has no cap)", () => {
   assert.deepEqual(toggledStars([{ symbol: "A" }], "B"), ["A", "B"]);
   assert.deepEqual(toggledStars([{ symbol: "A" }, { symbol: "B" }], "A"), ["B"]);
   const twenty = Array.from({ length: 20 }, (_, i) => ({ symbol: `S${i}` }));
-  assert.equal(toggledStars(twenty, "NEW"), null);
-  assert.equal(toggledStars(twenty.slice(0, 19), "NEW")?.length, 20);
+  assert.equal(toggledStars(twenty, "NEW").length, 21);
+  const many = Array.from({ length: 60 }, (_, i) => ({ symbol: `M${i}` }));
+  assert.deepEqual(toggledStars(many, "NEW"), [...many.map((star) => star.symbol), "NEW"]);
+  assert.equal(toggledStars(many, "M0").length, 59);
 });
 
 test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
@@ -348,16 +347,10 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
   ...changes,
 });
 
-test("the cap on stars is the plan's, never above 20, and the refusal says which cap it was", () => {
-  const stars = ["SMCI", "ANET"].map((symbol) => ({ symbol, starred_clock: "2026-03-10T12:30:00Z" }));
-  assert.equal(nameCap({ max_symbols: 2 }), 2);
-  assert.equal(toggledStars(stars, "NVDA", 2), null);
-  assert.deepEqual(toggledStars(stars, "NVDA", 3), ["SMCI", "ANET", "NVDA"]);
-  assert.deepEqual(toggledStars(stars, "SMCI", 2), ["ANET"]);
-  assert.deepEqual(toggledStars(stars, "NVDA", 99), toggledStars(stars, "NVDA")); // past 20 is 20
-  assert.equal(starsFullText(20), "You can star at most 20 names · 20/20 watched");
-  assert.equal(starsFullText(2), "Your plan limits a day to 2 names · unstar one first");
-  assert.equal(starsFullText(1), "Your plan limits a day to 1 name · unstar one first");
+test("no copy says a day is limited to N names or asks her to unstar one first", () => {
+  for (const [key, text] of Object.entries(PRACTICE_COPY)) {
+    assert.doesNotMatch(String(text), /limits a day|unstar one first|star at most|names a day/i, key);
+  }
 });
 
 test("the day strip lists the names she opened, then the starred ones she has not", () => {
@@ -378,11 +371,11 @@ test("the day strip lists the names she opened, then the starred ones she has no
   assert.deepEqual(behindOf(stripRows(lagging, { symbol: "SMCI", playhead: "2026-03-10T14:00:00Z" })), [["SMCI", false], ["ANET", false]]);
 });
 
-test("the names line counts the names opened against the plan's cap", () => {
-  const two = { plan: { ...dayList.plan, max_symbols: 3 }, sessions: [opened("SMCI", 12), opened("ANET", 13)] };
-  assert.equal(namesTodayText(two), "2 of 3 names practiced today");
-  assert.equal(namesTodayText({ plan: { ...dayList.plan, max_symbols: 1 }, sessions: [opened("SMCI", 12)] }), "1 of 1 name practiced today");
-  for (const text of [namesTodayText(two), starsFullText(2), practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
+test("the names line counts the names opened, with no cap to count against", () => {
+  const two = { sessions: [opened("SMCI", 12), opened("ANET", 13)] };
+  assert.equal(namesTodayText(two), "2 names practiced today");
+  assert.equal(namesTodayText({ sessions: [opened("SMCI", 12)] }), "1 name practiced today");
+  for (const text of [namesTodayText(two), practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
     assert.equal(containsPracticeBannedTerm(text), false, text);
   }
 });
@@ -468,11 +461,10 @@ test("a day thread's one action says what it does (D-078)", () => {
   assert.equal(dayActionLabel(null, null), null);
 });
 
-// D-095: the candidates header said "Starred 0 of 3" while the rail said "Star up to 5 names": one rule, one number.
-test("the empty rail names the plan's own cap, like the header (D-095)", () => {
-  assert.equal(watchEmptyText(3), "Star up to 3 names to keep them in view");
-  assert.equal(watchEmptyText(1), "Star up to 1 name to keep them in view");
-  assert.equal(watchEmptyText(5), "Star up to 5 names to keep them in view");
+// D-095 once said "Star up to N names" next to "Starred 0 of N". There is no N now: the header counts stars and the rail asks for none.
+test("the starred header and the empty rail name no cap", () => {
+  assert.equal(practiceText("dayStarred", { n: 4 }), "Starred 4");
+  assert.equal(PRACTICE_COPY.dayWatchEmpty, "Star names to keep them in view");
 });
 
 // D-097: on a 20-day block the day list pushed the starred names below the fold.
