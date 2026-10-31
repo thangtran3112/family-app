@@ -10,7 +10,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { formToSpec, isDirty, problemsFor, specToForm, unplacedProblems, type FilterForm } from "@/lib/desk/filterForm";
-import { createFilter, loadFilterDetail, previewFilter, updateFilter } from "@/lib/desk/screener";
+import { createFilter, loadFilterDetail, loadFilters, previewFilter, updateFilter } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { COPY } from "@/lib/desk/freshness";
 import { NEW_FILTER_SPEC } from "@/lib/desk/screenerView";
@@ -90,6 +90,9 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   const [copying, setCopying] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const preview = useDeskQuery(`filter-preview:${previewSpecJson}`, (signal) => previewFilter(JSON.parse(previewSpecJson), { signal }));
+  // The scheduled run the screener shows, for the Live matches comparison. A save remounts this form (keyed by version).
+  const listed = useDeskQuery(`filter-last-run:${filter?.id}`, (signal) => loadFilters({ signal }), { enabled: filter !== null });
+  const lastRun = listed.data?.find((row) => row.id === filter?.id)?.last_run ?? null;
 
   const dirty = isDirty(original, form);
   const readOnly = filter?.read_only ?? false;
@@ -220,7 +223,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
       <RightRail
         label="Filter preview"
         sections={[
-          { id: "live", label: "Live matches", node: <LiveMatches preview={preview.data} loading={preview.loading} failed={preview.error !== null} /> },
+          { id: "live", label: "Live matches", node: <LiveMatches preview={preview.data} lastRun={lastRun} loading={preview.loading} failed={preview.error !== null} /> },
           { id: "json", label: "JSON", node: <JsonPanel spec={formToSpec(form)} /> },
         ]}
       />

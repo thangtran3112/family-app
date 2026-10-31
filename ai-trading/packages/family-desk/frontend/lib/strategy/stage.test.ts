@@ -41,3 +41,14 @@ test("Desk API and app source contain no order endpoint or client", async () => 
     assert.equal((await readFile(file, "utf8")).includes("/orders"), false, file);
   }
 });
+
+test("V-Strategies-02: moving a stage says what happens next and that it cannot be undone", async () => {
+  const { stageConfirmCopy } = await import("./stage.ts");
+  const alertOnly = stageConfirmCopy("alert_only");
+  assert.match(alertOnly, /alert only/i);
+  assert.match(alertOnly, /alerts start/i);
+  assert.match(alertOnly, /cannot move back to draft/i);
+  assert.equal(alertOnly.includes("alert_only"), false);
+  assert.match(stageConfirmCopy("paper"), /paper/i);
+  assert.match(stageConfirmCopy("draft"), /draft/i);
+});

@@ -31,7 +31,7 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
   ]);
 });
 
-import { crosshairPoint, formatChartClock, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData } from "./chart-data.ts";
+import { crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -138,11 +138,23 @@ test("replay axes read as time of day, with the date only on day ticks and never
   assert.equal(replayTickLabel({ year: 2026, month: 10, day: 23 }, 2, false), "");
 });
 
-test("the data table's source time: the bar's own time, the caller's label while dates are hidden, else the clock (M4)", () => {
+test("the data table's source time: the bar's ET day and time, the caller's label while dates are hidden, else the clock (M4, V-Technicals-05)", () => {
   const stamp = "2001-01-02"; // a stand-in date: its clock time reads "07:00 PM" and says nothing
-  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false), "2026-10-23T14:07:00Z", "dates shown: unchanged");
-  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false, ["D-1"]), "2026-10-23T14:07:00Z", "labels are for hidden dates only");
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false), "Fri 2026-10-23 10:07 AM", "dates shown: New York day and time, never a raw UTC string");
+  assert.equal(sourceTimeLabel("2026-10-23", 0, false), "Fri 2026-10-23", "a daily bar has no clock");
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false, ["D-1"]), "Fri 2026-10-23 10:07 AM", "labels are for hidden dates only");
   assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, true), "10:07 AM", "hidden, no labels: the time of day, as intraday charts keep it");
   assert.equal(sourceTimeLabel(stamp, 1, true, ["D-2", "D-1"]), "D-1");
   assert.equal(sourceTimeLabel(stamp, 2, true, ["D-2", "D-1"]), formatChartClock(chartTime(`${stamp}T00:00:00Z`)), "a row without a label falls back");
+});
+
+test("the price pane keeps at least 60% of the chart; indicator panes shrink to fit, never past their own height (V-Technicals-04)", () => {
+  // 1440x900 workspace: about 406 px for price + RSI + MACD. Two 120 px panes would leave the price pane 166 px.
+  const [price, rsi, macd] = paneHeights(406, [120, 120]);
+  assert.ok(price! >= 406 * 0.6, `price pane ${price} px`);
+  assert.equal(Math.round(price! + rsi! + macd!), 406);
+  assert.equal(rsi, macd, "panes shrink in proportion");
+  // Room to spare: indicator panes keep their own height and the price pane takes the rest.
+  assert.deepEqual(paneHeights(800, [120, 100]), [580, 120, 100]);
+  assert.deepEqual(paneHeights(300, []), [300]);
 });

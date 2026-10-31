@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, origin, prepareDesk, test, watchApi } from "./helpers";
 
 // D7 Watchlists (02m §c2, §a3.5) against the real backend. Seed list ids: Day movers 1, Swing 2.
@@ -7,6 +7,20 @@ const DAY_MOVERS = 1;
 const SWING = 2;
 const DAY_MOVERS_SYMBOLS = ["NVDA", "AMD", "TSLA", "PLTR", "META", "AAPL", "AVGO", "COIN"];
 const SWING_SYMBOLS = ["MSFT", "AMZN", "GOOGL", "CRWD", "SHOP", "UBER"];
+
+/** Where a DenseTable's cells sit against its clipping wrapper (`overflow-x: hidden`): nothing may hang past the right edge. */
+const tableFit = (table: Locator) =>
+  table.evaluate((node) => {
+    const wrap = node.parentElement!;
+    const edge = wrap.getBoundingClientRect().right;
+    const past = (el: Element) => Math.round(el.getBoundingClientRect().right - edge);
+    return {
+      overflow: wrap.scrollWidth - wrap.clientWidth,
+      cellsPast: [...node.querySelectorAll("th, td")].map(past).filter((px) => px > 0),
+      // A cell whose own content is wider than the cell (a header or figure cut by a squeezed column).
+      cellsCut: [...node.querySelectorAll<HTMLElement>("th, td")].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent),
+    };
+  });
 
 const listSwitch = (page: Page) => page.getByRole("combobox", { name: "Watchlist", exact: true });
 const symbolTable = (page: Page) => page.getByRole("table", { name: "Watchlist", exact: true });
@@ -42,6 +56,18 @@ test.describe("technical seed", () => {
     await expectRowSymbols(page, DAY_MOVERS_SYMBOLS);
     await expectCleanScreen(page);
   });
+
+  // V-Today-02 / V-Watchlists-02: the left rail table was 316 px wide inside a 255 px scroller, so Chg % read "-0.5" for -0.59%.
+  for (const path of ["/", "/watchlists"]) {
+    test(`the left rail's table fits its rail at ${path}: Chg % is whole and nothing hangs past the edge`, async ({ page }) => {
+      await openDesk(page, path);
+      const rail = page.getByRole("table", { name: "Watchlist symbols", exact: true });
+      await expect(rail.getByRole("columnheader", { name: "Chg %", exact: true })).toBeVisible();
+      await expect(rail.locator("tbody tr")).not.toHaveCount(0);
+      expect(await tableFit(rail)).toEqual({ overflow: 0, cellsPast: [], cellsCut: [] });
+      await expectCleanScreen(page);
+    });
+  }
 
   test("switching the list to Swing shows its six symbols", async ({ page }) => {
     await openDesk(page, "/watchlists");
@@ -188,6 +214,17 @@ test.describe("technical-alerts seed", () => {
     await openDesk(page, "/watchlists");
     await expect(symbolTable(page).getByRole("row", { name: /^NVDA/ }).getByText("Hammer 15m near S1 · 3:15 PM", { exact: true })).toBeVisible();
     await expect(symbolTable(page).getByRole("row", { name: /^AMD/ }).getByText("ORB 15m armed", { exact: true })).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  // V-Watchlists-01: three armed chips pushed the table to 982 px inside 808, so "+ Alert" never appeared.
+  test("a row with several strategies keeps every column, and its + Alert action, inside the table", async ({ page }) => {
+    await openDesk(page, "/watchlists");
+    const table = symbolTable(page);
+    expect(await tableFit(table)).toEqual({ overflow: 0, cellsPast: [], cellsCut: [] });
+    const amd = table.getByRole("row", { name: /^AMD/ });
+    await amd.hover();
+    await expect(amd.getByRole("link", { name: "+ Alert" })).toBeInViewport({ ratio: 1 });
     await expectCleanScreen(page);
   });
 });

@@ -5,12 +5,12 @@ import { MarketChart } from "@/components/charts/MarketChart";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { AsOfLine } from "@/components/ui/AsOfLine";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { ChartMarkerInput, CrosshairPoint } from "@/lib/chart-data";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { loadBars, loadMarkers, loadTechnicals, type ChartSession } from "@/lib/desk/charts";
-import type { Connection } from "@/lib/desk/freshness";
-import { chartDays, timeframeLabel } from "@/lib/desk/timeframes";
+import { COPY, fillCopy, type Connection } from "@/lib/desk/freshness";
+import { chartDays, HEADER_DAYS, isIntraday, timeframeLabel } from "@/lib/desk/timeframes";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useLiveQuote } from "@/lib/desk/useLiveQuote";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -19,8 +19,9 @@ import {
   buildChartSeries,
   buildLevels,
   defaultIndicators,
+  headerSummary,
   legendModel,
-  priceSummary,
+  noMarketData,
   toggleIndicator,
   type IndicatorId,
 } from "@/lib/desk/workspace";
@@ -35,7 +36,6 @@ import { SymbolHeader } from "./SymbolHeader";
 import styles from "./workspace.module.css";
 
 const humanize = (pattern: string) => pattern.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
-const PANE_HEIGHT = 120;
 
 /** D3: symbol header, toolbar, chart with legend/markers/levels, bottom panel; summary, alerts and levels in the right rail. */
 export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: string; timeframe: string; onTimeframe: (api: string) => void }) {
@@ -57,6 +57,8 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
   const technicals = useDeskQuery(`technicals:${symbol}:${technicalsTimeframe}`, (signal) => loadTechnicals(symbol, technicalsTimeframe, 3650, { signal }), { intervalMs: refresh });
   const markers = useDeskQuery(`markers:${symbol}:${timeframe}`, (signal) => loadMarkers(symbol, timeframe, {}, { signal }), { intervalMs: refresh });
   const strategies = useDeskQuery(`alert-strategies:${symbol}`, (signal) => loadAlertStrategies({ symbol }, { signal }));
+  // The header's day change reads daily bars on every timeframe (V-Technicals-01).
+  const daily = useDeskQuery(`daily:${symbol}`, (signal) => loadBars(symbol, "1d", { days: HEADER_DAYS }, { signal }), { intervalMs: refresh });
   const live = useLiveQuote(symbol);
 
   const barRows = useMemo(() => bars.data?.bars ?? [], [bars.data]);
@@ -71,19 +73,17 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
   );
 
   const connection: Connection = bars.connection === "reconnecting" || live.connection === "reconnecting" ? "reconnecting" : bars.updating ? "updating" : "ok";
-  const summary = priceSummary(live.quote?.close ?? null, barRows, technicals.data?.levels?.prior_close);
+  const dailyRows = daily.data?.bars ?? [];
+  const summary = headerSummary(live.quote, dailyRows, barRows);
+  // Nothing stored for the symbol at all (a typo, a symbol the Desk does not carry): one plain empty state instead of
+  // "trying again" and "warming up", which promised data that never comes (V-Technicals-03).
+  const noData = bars.data !== null && daily.data !== null && noMarketData(live.quote, dailyRows, barRows);
   const sessionState = live.quote?.session ?? status?.market.session;
   const stamp = live.quote ? { as_of: live.quote.as_of, source: live.quote.source ?? bars.data?.stamp.source ?? null, quality: live.quote.quality, freshness: live.quote.freshness ?? bars.data?.stamp.freshness ?? "delayed" } : (bars.data?.stamp ?? null);
   const label = timeframeLabel(timeframe);
   const legend = legendModel(symbol, label, barRows, series.overlays, crosshair);
 
-  // Pane legends sit over their own pane: counted from the bottom of the chart.
-  const paneLegends = series.panes.map((pane, index) => {
-    const below = series.panes.slice(index).reduce((sum, item) => sum + (item.height ?? PANE_HEIGHT), 0);
-    return { pane, bottomOffset: below };
-  });
-
-  const railSections: RailSection[] = [
+  const allRailSections: RailSection[] = [
     {
       id: "summary",
       label: "Summary",
@@ -105,11 +105,18 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
       node: technicals.data ? <KeyLevels technicals={technicals.data} /> : railState(technicals.error !== null, "levels", "level list", technicals.refresh),
     },
   ];
+  const railSections = noData ? allRailSections.filter((section) => section.id === "alerts") : allRailSections;
 
   let chartArea;
   if (bars.loading) chartArea = <LoadingBlock label="Loading chart…" height={420} />;
   else if (bars.data === null) chartArea = <ErrorBlock subject="chart" onRetry={bars.refresh} />;
-  else {
+  else if (noData) {
+    chartArea = (
+      <div role="status">
+        <EmptyBlock title={fillCopy(COPY.noMarketData, { symbol })}>{COPY.noMarketDataHint}</EmptyBlock>
+      </div>
+    );
+  } else {
     chartArea = (
       <div className={styles.chartArea}>
         <MarketChart
@@ -128,25 +135,25 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
           onCrosshair={setCrosshair}
           chrome="bare"
           height="fill"
+          clockTicks={isIntraday(timeframe)}
           dimmed={connection === "reconnecting"}
-        />
-        <div className={styles.legend}><ChartLegend model={legend} /></div>
-        {paneLegends.map(({ pane, bottomOffset }) => (
-          <div key={pane.id} className={styles.paneLegend} style={{ bottom: bottomOffset - 4 }}>
+          paneLegends={series.panes.map((pane) => (
             <PaneLegend
+              key={pane.id}
               label={pane.label}
               items={pane.series.map((item) => ({ label: item.label, color: item.color, value: legendValue(item.id, pane.id, item.values, crosshair) }))}
               onClose={() => setIndicators((current) => toggleIndicator(current, pane.id as IndicatorId))}
             />
-          </div>
-        ))}
+          ))}
+        />
+        <div className={styles.legend}><ChartLegend model={legend} /></div>
       </div>
     );
   }
 
   return (
     <div className={styles.workspace}>
-      <SymbolHeader symbol={symbol} name={null} summary={summary} stamp={stamp} session={sessionState} connection={connection} view="chart" />
+      <SymbolHeader symbol={symbol} name={null} summary={summary} stamp={stamp} session={sessionState} connection={connection} view="chart" notice={noData ? COPY.noMarketDataBadge : undefined} />
       <ChartToolbar
         timeframe={timeframe}
         onTimeframe={onTimeframe}
@@ -157,8 +164,8 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
         alertHref={`/alerts/new?source=symbol:${encodeURIComponent(symbol)}`}
       />
       <div className={styles.chartSlot}>{chartArea}</div>
-      {bars.data && <div className={styles.asOf}><AsOfLine stamp={bars.data.stamp} /></div>}
-      <BottomPanel symbol={symbol} timeframeLabel={timeframeLabel(technicalsTimeframe)} technicals={technicals.data} collapsed={bottomCollapsed} onToggle={() => setBottomOverride(!bottomCollapsed)} />
+      {bars.data && !noData && <div className={styles.asOf}><AsOfLine stamp={bars.data.stamp} /></div>}
+      {!noData && <BottomPanel symbol={symbol} timeframeLabel={timeframeLabel(technicalsTimeframe)} technicals={technicals.data} collapsed={bottomCollapsed} onToggle={() => setBottomOverride(!bottomCollapsed)} />}
       <RightRail sections={railSections} label="Symbol context" />
     </div>
   );

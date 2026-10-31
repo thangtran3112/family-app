@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AVATAR_MENU,
+  FUTURES_HOME,
   hasMoreLeftRail,
   hasPracticeLeftRail,
   isNavActive,
   isPracticePath,
   isReplayWorkspacePath,
   isWrongLane,
+  LANES,
   laneForPath,
   LANE_STORAGE_KEY,
   MORE_SECTIONS,
@@ -114,4 +116,12 @@ test("the More rail lists the Settings sections and Feedback, and selects the on
 test("the replay, the day list and the journal own the left rail", () => {
   for (const path of ["/practice/replay", "/practice/day", "/practice/journal", "/practice/day/"]) assert.equal(hasPracticeLeftRail(path), true, path);
   for (const path of ["/practice", "/", "/watchlists", "/practice/other"]) assert.equal(hasPracticeLeftRail(path), false, path);
+});
+
+test("the futures specs page is shared, so its way back is the active lane's own futures screen, never the other lane's interstitial", () => {
+  for (const lane of LANES) {
+    assert.equal(isWrongLane(lane, FUTURES_HOME[lane].href), false, `${lane} -> ${FUTURES_HOME[lane].href}`);
+  }
+  assert.deepEqual(FUTURES_HOME.technical, { href: "/futures", label: "Back to futures swing" });
+  assert.deepEqual(FUTURES_HOME.fundamental, { href: "/futures/read", label: "Back to futures" });
 });

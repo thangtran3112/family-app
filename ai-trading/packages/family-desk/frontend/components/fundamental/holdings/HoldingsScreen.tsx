@@ -16,6 +16,7 @@ import { DEFAULT_COLUMNS, readFundamentalColumns, withFundamentalColumns, type M
 import type { SettingsRecord } from "@/lib/settings/schema";
 import { FundamentalRightRail } from "../rail/FundamentalRightRail";
 import { ImportLine } from "../shared/ImportLine";
+import { ImportText } from "../shared/ImportText";
 import { ColumnsMenu, type ColumnsSaveStatus } from "./ColumnsMenu";
 import { FundamentalsTable, PositionsTable } from "./HoldingsTables";
 import { LotsPane } from "./LotsPane";
@@ -126,7 +127,7 @@ export function HoldingsScreen() {
       ) : data === null ? (
         <LoadingBlock label="Loading holdings…" height={240} />
       ) : emptyText ? (
-        <EmptyBlock title={emptyText} />
+        <EmptyBlock title={<ImportText text={emptyText} />} />
       ) : (
         <>
           {maskValues && (

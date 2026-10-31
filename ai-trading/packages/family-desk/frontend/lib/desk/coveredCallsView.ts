@@ -56,6 +56,15 @@ export const NO_RISKS = "No risks flagged";
 /** The first risk in words, for the table; the detail pane lists them all. */
 export const topRisk = (risks: ShortCall["risks"]): string => risks[0]?.text ?? NO_RISKS;
 
+/** The open call to detail first: the one with the most risks, then the nearest expiry. A first row with no risks must not hide the urgent call below it. */
+export function mostUrgentCall<R extends Pick<ShortCall, "risks" | "dte">>(rows: readonly R[]): R | null {
+  let best: R | null = null;
+  for (const row of rows) {
+    if (best === null || row.risks.length > best.risks.length || (row.risks.length === best.risks.length && row.dte < best.dte)) best = row;
+  }
+  return best;
+}
+
 /** "5.6% below the strike" / "2.0% above the strike": the spot against the strike, in words. */
 export function moneynessWords(moneynessPct: number | null): string {
   if (!isNumber(moneynessPct)) return EMPTY_VALUE;

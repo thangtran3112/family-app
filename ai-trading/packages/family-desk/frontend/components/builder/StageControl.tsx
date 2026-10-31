@@ -1,6 +1,6 @@
 "use client";
 
-import { nextStage, stageOptions, type StrategyStage } from "@/lib/strategy/stage";
+import { nextStage, stageConfirmCopy, stageOptions, type StrategyStage } from "@/lib/strategy/stage";
 import styles from "./builder.module.css";
 
 export function StageControl({
@@ -21,7 +21,7 @@ export function StageControl({
   const next = validStage ? nextStage(stage as StrategyStage) : null;
 
   function choose(target: StrategyStage) {
-    if (!window.confirm(`Move this strategy to ${target.replaceAll("_", " ")}?`)) return;
+    if (!window.confirm(stageConfirmCopy(target))) return;
     onChange(target);
   }
 
@@ -30,7 +30,7 @@ export function StageControl({
       <div className={styles.stageOptions}>
         {options.map((option) => {
           if (!("stage" in option)) {
-            return <span className={styles.liveNotice} key="live">Live · {option.reason}</span>;
+            return <span className={styles.liveNotice} key="live">Live trading isn&apos;t available yet</span>;
           }
           const current = option.stage === stage;
           const canMove = option.stage === next && option.enabled && hasVersion && !pending;

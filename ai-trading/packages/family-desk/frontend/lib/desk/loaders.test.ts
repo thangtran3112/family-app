@@ -85,8 +85,9 @@ test("screener loaders read, preview, copy, save and archive", async () => {
   await loadFilterDetail(1, { client: d.client });
   assert.equal(d.calls[0].path, "/api/desk/screener/filters/1");
   d = fakeDesk("screener_filter_1_results");
-  await loadFilterResults(1, "extended", { client: d.client });
-  assert.equal(d.calls[0].path, "/api/desk/screener/filters/1/results?session=extended");
+  // the filter's own session is what runs (V-SCR-04): the screen never asks for another one
+  await loadFilterResults(1, { client: d.client });
+  assert.equal(d.calls[0].path, "/api/desk/screener/filters/1/results");
   d = fakeDesk("screener_universe");
   await loadUniverse({ client: d.client });
   d = fakeDesk("screener_preview");

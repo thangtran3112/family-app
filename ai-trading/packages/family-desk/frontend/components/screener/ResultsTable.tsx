@@ -4,19 +4,24 @@ import { useMemo } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import type { ScreenerResults } from "@/lib/api/schemas";
 import { changeTone } from "@/lib/desk/format";
-import { cellText, cellValue, resultColumns } from "@/lib/desk/screenerView";
+import { cellText, cellValue, matchCaption, resultColumns } from "@/lib/desk/screenerView";
 import styles from "./screener.module.css";
 
 type Match = ScreenerResults["matches"][number];
 
-/** D5 results: columns follow the filter's `table_columns`; the symbol column stays pinned while the table scrolls. */
+/** D5 results: columns follow the filter's `table_columns`; the symbol column stays pinned while the table scrolls.
+ * `rows` are the run's matches after any quick filters (`quick`). */
 export function ResultsTable({
   results,
+  rows,
+  quick,
   selected,
   onSelect,
   dim,
 }: {
   results: ScreenerResults;
+  rows: Match[];
+  quick: boolean;
   selected: string | null;
   onSelect: (symbol: string) => void;
   dim: boolean;
@@ -41,11 +46,11 @@ export function ResultsTable({
 
   return (
     <>
-      <p className={styles.caption}>{`${results.matches_returned} of ${results.matches_total} matches`}</p>
+      <p className={styles.caption} role="status">{matchCaption(results, rows.length, quick)}</p>
       <DenseTable
         caption="Screener matches"
         columns={columns}
-        rows={results.matches}
+        rows={rows}
         rowKey={(match) => match.symbol}
         scrollX
         selectedKey={selected}

@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useActiveLane } from "@/components/shell/desktop/DeskContext";
 import { FuturesSpecsSchema } from "@/lib/api/schemas";
 import { deskFetch } from "@/lib/api/client";
+import { FUTURES_HOME } from "@/lib/lanes";
 import { marginText, rollEvents } from "@/lib/futures/specs";
 import styles from "./futures.module.css";
 
@@ -35,6 +37,8 @@ export function FuturesSpecsScreen() {
   const [specs, setSpecs] = useState<FuturesSpec[] | null>(null);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  // Shared route: "back" goes to the active lane's own futures screen, not the other lane's interstitial.
+  const back = FUTURES_HOME[useActiveLane()];
 
   useEffect(() => {
     let active = true;
@@ -59,7 +63,7 @@ export function FuturesSpecsScreen() {
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · roll dates included · margin is not available</p></div>
-        <Link className={styles.secondaryLink} href="/futures">Back to futures swing</Link>
+        <Link className={styles.secondaryLink} href={back.href}>{back.label}</Link>
       </header>
       <p className={styles.sourceNote}>Contract multipliers, tick sizes, sessions, and roll dates are the Desk&apos;s own reference data. No broker is connected.</p>
       {!specs && !error && <p role="status" className={styles.muted}>Loading contract reference…</p>}

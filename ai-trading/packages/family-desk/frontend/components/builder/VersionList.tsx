@@ -1,5 +1,6 @@
 "use client";
 
+import { versionNote } from "@/lib/spec/labels";
 import type { StrategyVersion } from "./types";
 import styles from "./builder.module.css";
 
@@ -33,7 +34,7 @@ export function VersionList({
             type="button"
           >
             <span>v{version.version}{current ? " · current" : ""}</span>
-            <small>{version.change_note ?? "Saved version"}</small>
+            <small>{versionNote(version.change_note)}</small>
           </button>
         );
       })}

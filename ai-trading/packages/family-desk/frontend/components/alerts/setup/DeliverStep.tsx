@@ -7,6 +7,7 @@ import { type AlertForm } from "@/lib/desk/alertForm";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
+import { problemLine } from "@/lib/desk/problemCopy";
 
 export function DeliverStep({ form, onChange, problems, channels, channelsFailed, onRetryChannels }: {
   form: AlertForm;
@@ -63,17 +64,17 @@ export function DeliverStep({ form, onChange, problems, channels, channelsFailed
         </select>
       </label>
       <label className={editorStyles.field}>
-        <span>Message</span>
+        <span>Message <span className={editorStyles.note}>(optional)</span></span>
         <input type="text" maxLength={140} value={form.message} onChange={(event) => onChange({ ...form, message: event.target.value })} />
       </label>
-      <p className={editorStyles.note}>{"Use {symbol}, {close} and {time}"}</p>
+      <p className={editorStyles.note}>{"Type {symbol} for the ticker, {close} for the price and {time} for the time. They fill in when the alert fires."}</p>
       {message !== "" && (
         <p className={editorStyles.note}>
-          Preview: {message.replaceAll("{symbol}", "NVDA").replaceAll("{close}", "211.50").replaceAll("{time}", "3:45 PM")}
+          Example only, with a sample price: {message.replaceAll("{symbol}", "NVDA").replaceAll("{close}", "211.50").replaceAll("{time}", "3:45 PM")}
         </p>
       )}
       {problems.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problem.message}<span className={editorStyles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
       ))}
     </section>
   );

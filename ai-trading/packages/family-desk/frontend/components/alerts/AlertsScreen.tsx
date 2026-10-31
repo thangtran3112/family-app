@@ -40,7 +40,11 @@ export function AlertsScreen() {
     body = list.error === null ? <LoadingBlock label="Loading alert strategies…" /> : <ErrorBlock subject="alert list" onRetry={list.refresh} />;
   } else if (list.data.length === 0) {
     body = filtersActive
-      ? <EmptyBlock title="No alert strategies match these filters" />
+      ? (
+        <EmptyBlock title="No alert strategies match these filters">
+          <button type="button" className={styles.button} onClick={() => setFilters(defaultAlertFilters())}>Clear filters</button>
+        </EmptyBlock>
+      )
       : (
         <EmptyBlock title={COPY.noAlertStrategies}>
           <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>

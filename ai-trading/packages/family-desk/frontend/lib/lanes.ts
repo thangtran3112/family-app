@@ -10,6 +10,12 @@ export const LANE_SUMMARY: Record<Lane, string> = {
   fundamental: "Holdings, covered calls, research",
 };
 
+/** Where "Back" goes from the shared futures specs page: the active lane's own futures screen (the other lane's would show the wrong-lane interstitial). */
+export const FUTURES_HOME: Record<Lane, { href: string; label: string }> = {
+  technical: { href: "/futures", label: "Back to futures swing" },
+  fundamental: { href: "/futures/read", label: "Back to futures" },
+};
+
 // Longest matching prefix wins, so "/strategies/library" can differ from "/strategies" if it ever must.
 const ROUTE_LANES: ReadonlyArray<readonly [string, RouteLane]> = [
   ["/", "shared"],
