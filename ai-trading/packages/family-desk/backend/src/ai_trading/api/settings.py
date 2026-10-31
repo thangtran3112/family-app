@@ -26,7 +26,8 @@ from ai_trading.notify.dispatch import RETRY_DELAYS_SECONDS
 router = APIRouter(prefix="/api/desk/settings", tags=["settings"])
 
 _CHANNELS = {"inbox", "telegram", "slack"}
-_DEFAULT_VIEWS = ("technical", "fundamental", "backtest")  # the three modes (ADR-0014); a tuple: `in` never hashes an unhashable JSON value
+# The three modes (ADR-0014). A tuple: `in` never hashes an unhashable JSON value.
+_DEFAULT_VIEWS = ("technical", "fundamental", "backtest")
 _HHMM = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
 _TEST_TITLE = "Test from Family Desk"
 _TEST_BODY = "This is a test message from Family Desk. No action needed."
