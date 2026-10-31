@@ -9,10 +9,10 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
-import { formatClock, formatEtDay } from "@/lib/desk/format";
+import { formatClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
-import { endDay, loadDaily, loadDayList, loadThread, openNextDay, patchDayList, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
+import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -29,21 +29,16 @@ import {
   dayTitle,
   filtersNote,
   filtersText,
-  isStarred,
   listBuiltText,
   listCountsText,
   listWarning,
   nameActionLabel,
-  nameCap,
   practiceWindow,
-  namesTodayText,
   rescanCounts,
   rescanLabel,
   rescanStaleText,
   sourceNote,
-  starsFullText,
   threadDayNo,
-  toggledStars,
   universeNote,
 } from "@/lib/replay/dayView";
 import { resumeDayLabel } from "@/lib/replay/boardView";
@@ -51,6 +46,7 @@ import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { BackLink } from "@/components/practice/hub/BackLink";
+import { Portfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
@@ -132,6 +128,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const hidden = datesHidden(list.plan.spec) && !ended;
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The name a click is opening, and the name holding the open trade when that open was refused (D-020 style recovery link).
+  const [opening, setOpening] = useState<string | null>(null);
+  const [goTo, setGoTo] = useState<{ id: number; symbol: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
   const [still, setStill] = useState<"open" | "rescan" | null>(null);
@@ -181,12 +180,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
   const opened = new Set(list.sessions.map((session) => session.symbol));
-  const cap = nameCap(list.plan);
-  const columns = columnsOf(list, {
-    starred: (symbol) => isStarred(list.watch, symbol),
-    onStar: (symbol) => void star(symbol),
-    locked: ended,
-  });
+  const columns = columnsOf(list);
+  // The portfolio re-reads whenever the day page's own data moves (a name opened, the day ended).
+  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -203,23 +199,26 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     }
   }
 
-  async function star(symbol: string) {
-    const next = toggledStars(list.watch, symbol, cap);
-    if (next === null) {
-      setMessage(starsFullText(cap));
-      return;
-    }
-    await run(async () => {
-      await patchDayList(list.id, { watch: next });
-      onChanged();
-    }, PRACTICE_COPY.dayLoadError);
-  }
-
-  const practice = (symbol: string) =>
-    run(async () => {
-      const session = await startDaySession(list.id, symbol);
-      router.push(`/practice/replay?id=${session.id}`);
-    }, PRACTICE_COPY.dayStartError);
+  // A click on a candidate opens its practice chart at the day clock; a second click while one opens does nothing.
+  const practice = (symbol: string) => {
+    if (busy) return Promise.resolve();
+    setOpening(symbol);
+    setGoTo(null);
+    return run(async () => {
+      try {
+        const session = await startDaySession(list.id, symbol);
+        router.push(`/practice/replay?id=${session.id}`);
+      } catch (error) {
+        const held = list.sessions.find((item) => item.has_open_trade && item.symbol !== symbol);
+        if (held) setGoTo({ id: held.id, symbol: held.symbol });
+        throw error;
+      }
+    }, PRACTICE_COPY.dayStartError).finally(() => setOpening(null));
+  };
+  const peekAt = (symbol: string) => {
+    setSelected(symbol);
+    if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
+  };
 
   const finish = () =>
     run(async () => {
@@ -347,24 +346,23 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         )}
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
+        {goTo && <Link href={`/practice/replay?id=${goTo.id}`} className={styles.link}>{practiceText("dayGoTo", { symbol: goTo.symbol })}</Link>}
 
         {!ended && (
           <section className={styles.section} aria-label="Candidates">
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Candidates</h2>
-              <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: cap })}</span>
             </div>
-            <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>
+            <p className={styles.muted} data-testid="open-hint">
+              {list.clock === null ? (list.relist ? PRACTICE_COPY.dayOpenRelistHint : PRACTICE_COPY.dayOpenHint) : practiceText("daySwitchHint", { time: formatEtTimeZone(list.clock) })}
+            </p>
             <DenseTable
               caption="Candidates"
               columns={withPriorities(columns, "practiceList")}
               rows={list.candidates}
               rowKey={(row) => row.symbol}
               selectedKey={selected}
-              onSelect={(row) => {
-                setSelected(row.symbol);
-                if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
-              }}
+              onSelect={(row) => void practice(row.symbol)}
               scrollX
               empty={
                 <EmptyBlock title={PRACTICE_COPY.dayNoMatchTitle}>
@@ -378,17 +376,26 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 </EmptyBlock>
               }
               alwaysShowActions
-              rowActions={(row) => (
-                <button
-                  type="button"
-                  className={styles.small}
-                  disabled={busy}
-                  aria-label={practiceText("dayPractice", { symbol: row.symbol })}
-                  onClick={() => void practice(row.symbol)}
-                >
-                  {nameActionLabel(opened.has(row.symbol))}
-                </button>
-              )}
+              rowActions={(row) => {
+                const here = opening === row.symbol;
+                return (
+                  <span className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.small}
+                      disabled={busy}
+                      aria-busy={here ? "true" : undefined}
+                      aria-label={here ? undefined : practiceText(opened.has(row.symbol) ? "daySwitch" : "dayOpen", { symbol: row.symbol })}
+                      onClick={() => void practice(row.symbol)}
+                    >
+                      {here ? practiceText("dayOpening", { symbol: row.symbol }) : nameActionLabel(opened.has(row.symbol))}
+                    </button>
+                    <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
+                      {PRACTICE_COPY.dayPeek}
+                    </button>
+                  </span>
+                );
+              }}
             />
             <UniverseFootnote text={universeNote(list.universe)} />
             <UniverseFootnote text={sourceNote(list)} />
@@ -428,20 +435,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
-      <DayLeftPanel
-        list={list}
-        thread={thread.data}
-        selected={selected}
-        onPeek={(symbol) => {
-          setSelected(symbol);
-          if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
-        }}
-        onPractice={(symbol) => void practice(symbol)}
-        onUnstar={(symbol) => void star(symbol)}
-        busy={busy}
-        opened={opened}
-        ended={ended}
-      />
+      <DayLeftPanel list={list} thread={thread.data} revision={portfolioRevision} />
       {changing && thread.data !== null && (
         <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
       )}
@@ -470,6 +464,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   ),
                 },
               ]),
+          // At 1440 the portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from this drawer.
+          ...(band === "1180" ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: <Portfolio dayListId={list.id} revision={portfolioRevision} /> }] : []),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
@@ -497,7 +493,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   );
 }
 
-/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no star, no practice. */
+/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no open. */
 function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]>[] {
   return [
     {
@@ -524,34 +520,8 @@ function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]
   ];
 }
 
-function columnsOf(
-  list: DayList,
-  star: { starred: (symbol: string) => boolean; onStar: (symbol: string) => void; locked: boolean },
-): DenseColumn<Candidate>[] {
+function columnsOf(list: DayList): DenseColumn<Candidate>[] {
   return [
-    {
-      key: "star",
-      label: "Star",
-      align: "center",
-      render: (row) => {
-        const on = star.starred(row.symbol);
-        return (
-          <button
-            type="button"
-            className={styles.star}
-            aria-pressed={on}
-            aria-label={practiceText(on ? "dayUnstar" : "dayStar", { symbol: row.symbol })}
-            disabled={star.locked}
-            onClick={(event) => {
-              event.stopPropagation();
-              star.onStar(row.symbol);
-            }}
-          >
-            {on ? "★" : "☆"}
-          </button>
-        );
-      },
-    },
     { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
     { key: "filters", label: "Filters", render: (row) => filtersText(row) },
     ...dayColumns(list).map((column): DenseColumn<Candidate> => ({

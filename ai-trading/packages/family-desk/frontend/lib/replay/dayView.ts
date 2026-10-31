@@ -12,6 +12,7 @@ import {
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
+import type { OpenTrade } from "./schemas.ts";
 import { formatUsd } from "./journalView.ts";
 import { etHhMm } from "./time.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
@@ -24,16 +25,7 @@ export const MAX_STARS = 20;
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
-/** The most names the plan lets her star and practise in a day (`maxSymbols`; the server sends the effective cap). */
-export const nameCap = (plan: Pick<PracticePlan, "max_symbols">): number => plan.max_symbols;
-
-/** "2 of 3 names practiced today". */
-export function namesTodayText(list: Pick<DayList, "sessions" | "plan">): string {
-  const max = nameCap(list.plan);
-  return practiceText("dayNamesToday", { used: list.sessions.length, max, names: nameWord(max) });
-}
-
-/** "Star up to 3 names to keep them in view": the empty rail, with the plan's own cap like the header (D-095). */
+/** "Star up to 3 names to keep them in view": the swing board's empty focus rail (D-095). */
 export const watchEmptyText = (cap: number): string => practiceText("dayWatchEmpty", { max: cap, names: nameWord(cap) });
 
 /** The plan hides dates (the weekday stays). */
@@ -280,48 +272,76 @@ export const filtersText = (row: Pick<Candidate, "filters">): string => row.filt
 
 export const isStarred = (watch: readonly { symbol: string }[], symbol: string): boolean => watch.some((star) => star.symbol === symbol);
 
-/** The next stars after a click, or null when a name past the cap is refused (the plan's `maxSymbols`, at most 20). */
+/** The next stars after a click, or null when a name past the cap is refused (at most 20; the swing board's focus names). */
 export function toggledStars(watch: readonly { symbol: string }[], symbol: string, cap: number = MAX_STARS): string[] | null {
   const symbols = watch.map((star) => star.symbol);
   if (symbols.includes(symbol)) return symbols.filter((item) => item !== symbol);
   return symbols.length >= Math.min(cap, MAX_STARS) ? null : [...symbols, symbol];
 }
 
-/** The message for a refused star: the plain 20-name line, or the plan's own cap. */
-export function starsFullText(cap: number): string {
-  return cap >= MAX_STARS ? PRACTICE_COPY.dayStarsFull : practiceText("dayStarsFullAt", { max: cap, names: nameWord(cap) });
-}
-
-export type StripRow = {
+export type PortfolioRow = {
   symbol: string;
-  /** The session to resume; null for a starred name she has not opened yet. */
-  sessionId: number | null;
-  starred: boolean;
-  behind: boolean;
+  sessionId: number;
+  /** The open trade, or null when flat. */
+  position: OpenTrade | null;
   holding: boolean;
+  trades: number;
+  realized: number;
+  /** The open trade's P/L at its playhead; null when flat. */
+  unrealized: number | null;
+  /** Realized plus unrealized: the name's P/L for the day. */
+  dayPnl: number;
+  behind: boolean;
+  /** The name she is on in the replay. */
+  current: boolean;
+  /** The held name that blocks switching to this one (one open trade a day), or null. */
+  blockedBy: string | null;
 };
 
-/** The day's names: every one she has opened, then the starred ones she has not. `from` is the name she is on and its
- *  playhead: another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
-export function stripRows(list: Pick<DayList, "sessions" | "watch">, from?: { symbol: string; playhead: string }): StripRow[] {
-  const starred = new Set(list.watch.map((star) => star.symbol));
-  const opened = list.sessions.map((session): StripRow => ({
-    symbol: session.symbol,
-    sessionId: session.id,
-    starred: starred.has(session.symbol),
-    behind:
-      session.behind_clock ||
-      (from !== undefined && session.symbol !== from.symbol && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
-    holding: session.has_open_trade,
-  }));
-  const open = new Set(opened.map((row) => row.symbol));
-  const rest = list.watch.filter((star) => !open.has(star.symbol)).map((star): StripRow => ({ symbol: star.symbol, sessionId: null, starred: true, behind: false, holding: false }));
-  return [...opened, ...rest];
+/** The day's portfolio: a row for every name she opened, the held one first, then in the order she opened them. `from` is
+ *  the name she is on in the replay with its playhead and live open trade (null when she just exited, undefined on the day
+ *  page): another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+export function portfolioRows(
+  list: Pick<DayList, "sessions">,
+  from?: { symbol: string; playhead: string; openTrade?: OpenTrade | null },
+): PortfolioRow[] {
+  const rows = list.sessions.map((session): PortfolioRow => {
+    const current = from !== undefined && session.symbol === from.symbol;
+    const position = current && from.openTrade !== undefined ? from.openTrade : session.position;
+    return {
+      symbol: session.symbol,
+      sessionId: session.id,
+      position,
+      holding: position !== null,
+      trades: session.trades,
+      realized: session.realized_usd,
+      unrealized: position?.unrealized_usd ?? null,
+      dayPnl: session.realized_usd + (position?.unrealized_usd ?? 0),
+      behind:
+        session.behind_clock ||
+        (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
+      current,
+      blockedBy: null,
+    };
+  });
+  const held = rows.find((row) => row.holding)?.symbol ?? null;
+  return [...rows.filter((row) => row.holding), ...rows.filter((row) => !row.holding)].map((row) => ({ ...row, blockedBy: row.holding ? null : held }));
 }
 
-/** A name's button on the day list: "Practice" opens a name at the day clock, "Switch" goes back to one she opened. Resume
+/** The footer: the day's P/L, split into what is booked and what is still open. */
+export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: number; open: number; total: number } {
+  const realized = rows.reduce((sum, row) => sum + row.realized, 0);
+  const open = rows.reduce((sum, row) => sum + (row.unrealized ?? 0), 0);
+  return { realized, open, total: realized + open };
+}
+
+/** "Long 100 @ $812.40" for a held name, "Flat" for one with no open trade. */
+export const positionText = (row: Pick<PortfolioRow, "position">): string =>
+  row.position === null ? "Flat" : `${row.position.side === "long" ? "Long" : "Short"} ${row.position.shares} @ $${formatPrice(row.position.entry_price)}`;
+
+/** A name's button on the day list: "Open" opens a name at the day clock, "Switch" goes back to one she opened. Resume
  *  belongs to the thread's day (one shared clock for every name), never to a single name. */
-export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Practice");
+export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Open");
 
 /** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Resume Day N" reopens the
  *  day at the shared clock); only a standalone session, which has no day, opens on its own. */

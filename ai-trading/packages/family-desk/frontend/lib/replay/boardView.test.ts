@@ -67,7 +67,7 @@ test("a star is stamped with the day clock, else the open; only stars after the 
   assert.equal(lateStarsText([]), null);
 });
 
-const session = <S extends "active" | "ended">(id: number, symbol: string, status: S) => ({ id, symbol, status, revealed_through: "2026-07-14T14:00:00Z", behind_clock: false, has_open_trade: false });
+const session = <S extends "active" | "ended">(id: number, symbol: string, status: S) => ({ id, symbol, status, revealed_through: "2026-07-14T14:00:00Z", behind_clock: false, has_open_trade: false, trades: 0, realized_usd: 0, position: null });
 
 test("Start Day opens on a focus name or a hold; a day under way resumes its open session; nothing to open on disables Start", () => {
   assert.deepEqual(boardStart(swingDayList), { kind: "start", symbol: "NVDA" });

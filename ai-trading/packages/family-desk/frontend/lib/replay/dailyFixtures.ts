@@ -24,7 +24,6 @@ export const plan: PracticePlan = {
   thread_id: 1,
   spec: planSpec as unknown as PracticePlan["spec"],
   sessions: 20,
-  max_symbols: 20,
   days_opened: 6,
   day_offset: 0,
   filters: [{ id: 4, name: "Gap up" }, { id: 9, name: "Abnormal volume" }],
@@ -119,7 +118,7 @@ export const endedDayList: DayList = {
   ...dayList,
   status: "ended",
   clock: "2026-03-10T15:30:00Z",
-  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false }],
+  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false, trades: 1, realized_usd: 63, position: null }],
   journal: {
     sessions: [{ id: 12, symbol: "SMCI", trades: 1, pnl_usd: 63, adherence_pct: 100 }],
     trades: 1,

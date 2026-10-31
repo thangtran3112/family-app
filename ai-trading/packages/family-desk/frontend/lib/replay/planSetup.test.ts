@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import {
-  DEFAULT_MAX_SYMBOLS,
   LIST_TIMES,
-  NAME_CHOICES,
   clock12,
   defaultFirstDay,
   defaultPlanDraft,
@@ -54,21 +52,10 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.equal(JSON.stringify(spec).includes("null"), false);
 });
 
-test("the names a day go in the block as a whole number from 1 to 20, and the contract refuses the rest", () => {
-  assert.equal((planDraftToSpec(ready()) as Record<string, unknown>).maxSymbols, 3);
-  assert.equal(validatePlanDraft(ready({ maxSymbols: "20" })).ok, true);
-  for (const bad of ["0", "21", "2.5", ""]) {
-    const result = validatePlanDraft(ready({ maxSymbols: bad }));
-    assert.equal(result.ok, false, bad);
-    assert.ok(!result.ok && result.problems.maxSymbols, bad);
-  }
-  assert.equal(planFieldOfPath("maxSymbols"), "maxSymbols");
-});
-
-test("the names-a-day picker reaches the 20-name cap, every choice validates, and the default is one of them", () => {
-  assert.equal(Math.max(...NAME_CHOICES), 20);
-  assert.ok((NAME_CHOICES as readonly number[]).includes(DEFAULT_MAX_SYMBOLS));
-  for (const count of NAME_CHOICES) assert.equal(validatePlanDraft(ready({ maxSymbols: String(count) })).ok, true, String(count));
+test("a plan has no names-a-day: the draft and the block carry no cap (a day opens any list name)", () => {
+  assert.equal("maxSymbols" in defaultPlanDraft(NOW), false);
+  assert.equal("maxSymbols" in (planDraftToSpec(ready()) as Record<string, unknown>), false);
+  assert.equal(validatePlanDraft(ready()).ok, true);
 });
 
 test("a good draft validates; the window may not begin before the list time", () => {

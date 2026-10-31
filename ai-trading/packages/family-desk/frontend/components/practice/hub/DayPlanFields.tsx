@@ -9,7 +9,6 @@ import {
   EARLIEST_LIST_DAY,
   LIST_TIMES,
   MAX_FILTERS,
-  NAME_CHOICES,
   SESSION_CHOICES,
   clock12,
   listTimeHeld,
@@ -123,16 +122,7 @@ export function DayPlanFields({
               onChange={(sessions) => onDraft({ ...draft, sessions })}
             />
           </Cell>
-          <Cell id="plan-names" label={PRACTICE_COPY.planMaxSymbols} group note={PRACTICE_COPY.planMaxSymbolsHint} error={problems.maxSymbols}>
-            <Segments
-              id="plan-names"
-              value={draft.maxSymbols}
-              options={NAME_CHOICES.map((count) => ({ value: String(count), label: String(count) }))}
-              onChange={(maxSymbols) => onDraft({ ...draft, maxSymbols })}
-              describedBy={noteId("plan-names")}
-            />
-          </Cell>
-          <Cell id="plan-hide" label={PRACTICE_COPY.planHideDates} group note={PRACTICE_COPY.planHideDatesHint}>
+          <Cell id="plan-hide" label={PRACTICE_COPY.planHideDates} group span note={PRACTICE_COPY.planHideDatesHint}>
             <Segments
               id="plan-hide"
               value={draft.hideDates ? "yes" : "no"}
