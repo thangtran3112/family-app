@@ -139,7 +139,48 @@ def test_no_data_is_an_answer_not_a_failure():
 
     report = refresher._fetch_each(["AAA", "BBB"], fetch)
 
-    assert (report.fetched, report.failed, report.state) == (0, {}, "ok")
+    assert (report.fetched, report.failed) == (0, {})
+    assert report.state == "empty"  # an answer, not a failure, but not a healthy pass either
+
+
+def test_a_plain_exception_is_the_symbols_failure_and_the_pass_goes_on():
+    seen = []
+
+    def fetch(symbol):
+        seen.append(symbol)
+        if symbol == "BAD":
+            raise RuntimeError("statement is too big")
+
+    report = refresher._fetch_each(["AAA", "BAD", "CCC"], fetch)
+
+    assert seen == ["AAA", "BAD", "CCC"]
+    assert (report.fetched, report.failed, report.stopped_early) == (2, {"BAD": "RuntimeError"}, False)
+    assert report.state == "degraded"
+
+
+def test_plain_exceptions_count_toward_the_stop_streak():
+    def fetch(symbol):
+        raise RuntimeError("boom")
+
+    report = refresher._fetch_each([f"S{i}" for i in range(9)], fetch)
+
+    assert (len(report.failed), report.stopped_early, report.state) == (refresher.STOP_AFTER_FAILURES, True, "down")
+
+
+def test_pass_state_tells_fetched_partial_empty_and_nothing_asked_apart():
+    assert refresher._fetch_each(["AAA", "BBB"], lambda symbol: None).state == "ok"
+    assert refresher.PassReport(fetched=1, failed={"X": "RuntimeError"}, expected=2).state == "degraded"
+    assert refresher.PassReport(expected=3).state == "empty"
+    assert refresher._fetch_each([], lambda symbol: None).state == "ok"  # a genuinely empty universe
+
+
+def test_an_empty_pass_does_not_move_last_ok_at_and_says_why(db_session):
+    report = refresher.PassReport(expected=4)
+    refresher.record_health(db_session, "bars_delayed", "ok", now=TEN)
+    refresher.record_health(db_session, "bars_delayed", report.state, now=TEN_FIFTEEN, detail=refresher._detail(report))
+
+    row = health(db_session, "bars_delayed")
+    assert (row.state, row.last_ok_at, row.detail) == ("empty", TEN, "nothing fetched for 4 symbols")
 
 
 def test_five_failures_in_a_row_stop_the_pass_but_a_success_resets_the_run():
