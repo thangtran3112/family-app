@@ -31,6 +31,7 @@ import {
   peekDailyBars,
   peekOffsets,
   planArmedText,
+  dayActionLabel,
   planCard,
   rescanCounts,
   rescanLabel,
@@ -92,7 +93,7 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   const first = planCard({ ...plan, days_opened: 0, current: null, next_day_no: 1, next_weekday: "Mon", next_day: "2026-03-02", prep: { state: "done", done: 3, total: 3, failed: 0 } });
   assert.deepEqual([first.headline, first.action], ["Day 1 of 20 · next: Mon", "start"]);
   const preparing = planCard({ ...plan, days_opened: 0, current: null, prep: { state: "running", done: 12, total: 131, failed: 0 } });
-  assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131", "none"]);
+  assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131 names", "none"], "D-084: the count has a unit");
   const done = planCard({ ...plan, finished: true, next_day: null, next_weekday: null, next_day_no: null });
   assert.equal(done.headline, "All 20 days done");
 });
@@ -444,4 +445,17 @@ test("a scan older than the day clock says so, and a current one does not", () =
   const stale = rescanStaleText({ clock: "2026-03-10T14:30:00Z", rescan: scan });
   assert.equal(stale, "The day clock is now 10:30 AM ET · this scan is older. Re-scan to update it.");
   assert.equal(containsPracticeBannedTerm(stale ?? ""), false);
+});
+
+// D-078: "Resume" was the label of a day never started and of opening the next day after an ended one (a mutation).
+test("a day thread's one action says what it does (D-078)", () => {
+  const listed = { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 } as const;
+  assert.equal(dayActionLabel(listed, plan), "Open Day 7", "a listed day that was never started opens");
+  assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Resume Day 7", "only a day in progress resumes");
+  // No open day: opening the next one starts it. The number is the thread's own (D-047).
+  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
+  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 10");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Day 1");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, prep: { state: "running", done: 1, total: 9, failed: 0 } }), null, "while the data prepares there is nothing to press");
+  assert.equal(dayActionLabel(null, null), null);
 });

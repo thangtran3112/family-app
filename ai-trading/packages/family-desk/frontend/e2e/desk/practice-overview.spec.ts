@@ -49,7 +49,7 @@ test.describe("Practice thread overview", () => {
     await openDesk(page, "/practice");
     const row = swingRow(page);
     await expect(row).toContainText("Day 6 of 15");
-    await expect(row).toContainText(/\d+ practiced · \d+ skipped/);
+    await expect(row).toContainText(/\d+ practiced · \d+ passed/);
     await expect(row).toContainText("Week 1 review due");
     await expect(row.getByRole("link", { name: /review/i })).toHaveCount(0);
     await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
@@ -66,8 +66,8 @@ test.describe("Practice thread overview", () => {
     const next = practiceDay(page);
     await expect(next.getByRole("heading", { name: PRACTICE_COPY.overviewNext })).toBeVisible();
     await expect(next.getByRole("link", { name: "Week 1 review", exact: true })).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
-    await expect(next).toContainText("Day 6 unlocks after the Week 1 review");
-    await expect(next.getByRole("status")).toContainText("Week 1 review ready");
+    await expect(next).toContainText("Week 1 is done. Review it to unlock Day 6.");
+    await expect(next.getByRole("status")).toHaveCount(0); // D-085: the notice is not printed a second time under the button
     await expect(page.getByRole("button", { name: /^Continue Day|^Start Day/ })).toHaveCount(0);
 
     // Weeks: Week 1 owes its review (a link to it), Weeks 2 and 3 are still to come.
@@ -240,7 +240,7 @@ test.describe("Practice thread overview", () => {
       });
       if (here) order.push(`${here.tag} ${here.text}`.trim());
     }
-    expect(order).toEqual([expect.stringMatching(/^A .*thread$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
+    expect(order).toEqual([expect.stringMatching(/^A .*thread #\d+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
     await link.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");
@@ -259,5 +259,62 @@ test.describe("Practice thread overview", () => {
       await tab.close();
       await expect(page).toHaveURL(/\/practice$/);
     }
+  });
+});
+
+// Fix wave 5S, stream 1: the thread overview.
+test.describe("Practice thread overview · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("a swing thread with open holds: the week gate is said once, the weeks table has Equity change, the balance line counts the holds, and the plan reads per week (D-080..D-085)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, overviewUrl(threadId));
+    // D-085: one sentence says why Day 6 waits, and "review ready" is not printed a second time.
+    const gateLine = "Week 1 is done. Review it to unlock Day 6.";
+    await expect(page.getByText(gateLine)).toHaveCount(1);
+    await expect(page.getByText(/Week 1 review ready/)).toHaveCount(0);
+    // D-080: two holds are open, so the balance line says what is realized and what the holds add, not "no change yet".
+    const place = page.getByRole("region", { name: "Thread balance" });
+    await expect(place).toContainText(/Started with \$[\d,]+ · realized .* · open holds /);
+    await expect(place).not.toContainText("no change yet");
+    // D-081: the weeks table carries the equity change beside the realized figure.
+    const weeks = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption });
+    await expect(weeks.getByRole("columnheader", { name: PRACTICE_COPY.landingColEquityChange })).toBeVisible();
+    // D-083: a swing plan's limits count per week.
+    const plan = page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption });
+    await expect(plan).toContainText("Max loss, pretend dollars a week");
+    await expect(plan).toContainText("Max trades a week");
+    await expect(plan).not.toContainText("a day");
+    // D-082: a day she passed says "Passed" (the day page's word), never "Skipped".
+    const days = page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption });
+    await expect(rows(days).first()).toContainText("Passed");
+    await expect(days).not.toContainText("Skipped");
+
+    // D-085: the ended Day 5 says the same sentence, once, beside its review link.
+    await rows(days).first().getByRole("link").click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    await expect(page.getByText(gateLine)).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
+  });
+
+  test("while the plan's data prepares the step card says so once: one state, a unit on the count, Replace plan waits (D-084)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await startThread(page, context);
+    const id = threadIdOf(page);
+    await page.route(/\/api\/desk\/replay\/daily(\?|$)/, async (route) => {
+      const answer = await route.fetch();
+      const body = await answer.json();
+      if (body.plan) Object.assign(body.plan, { current: null, days_opened: 0, prep: { state: "running", done: 2, total: 18, failed: 0 } });
+      await route.fulfill({ response: answer, json: body });
+    });
+    await openDesk(page, overviewUrl(id));
+    const step = practiceDay(page);
+    await expect(step).toContainText("Preparing data · 2 of 18 names");
+    await expect(step).not.toContainText("Your thread is ready");
+    await expect(step).not.toContainText("Day 1 is next");
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();
   });
 });

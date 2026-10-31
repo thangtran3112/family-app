@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { planCard } from "@/lib/replay/dayView";
 import type { PracticePlan } from "@/lib/replay/daily";
 import { swingGate } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
@@ -24,8 +25,11 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   const gate = swingGate(summary);
   const view = todayView(today, lastDay);
   const canReplace = !closed && thread.mode === "day" && planOpensIn(plan, thread);
+  // The plan's data is still being prepared (D-084): the action slot says so, and the card says nothing else about Day 1.
+  const preparing = canReplace && planCard(plan).action === "none";
+  const preparingHint = preparing ? planCard(plan).detail : null;
   // A thread with a plan and no day yet: nothing to resume, so it says what comes next instead of "no day open".
-  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread);
+  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread) && !preparing;
   const finished = swing?.action.kind === "none";
   const title = closed ? PRACTICE_COPY.threadClosedTitle : swing ? PRACTICE_COPY.overviewNext : view.label;
   const result = <ResultLine pnl={view.pnl} line={view.line} />;
@@ -49,12 +53,14 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
                 </div>
               )
             )}
-            {canReplace && <button type="button" className={hub.button} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
+            {canReplace && <button type="button" className={hub.button} disabled={preparing} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
           </div>
           {gate && <p className={hub.muted}>{gate.locked}</p>}
           {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
           <p className={styles.dayLine}>
-            {fresh ? (
+            {preparing ? (
+              preparingHint
+            ) : fresh ? (
               PRACTICE_COPY.threadPageFresh
             ) : swing ? (
               <>
@@ -65,7 +71,6 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
               result
             )}
           </p>
-          {swing?.notice && <p className={hub.swingNotice} role="status">{swing.notice}</p>}
         </>
       )}
     </section>

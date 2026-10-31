@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
 import { origin } from "../helpers";
@@ -5,6 +6,9 @@ import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helper
 import { ANY_CLOSE, DAY_URL, THREAD_URL, clickNewPlan, createThreadByApi, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
 
 // The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
+
+/** The delete confirm names its thread (D-079): "Delete October thread #12?". */
+const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^Delete .*thread #\d+\?$/ });
 
 test.describe("Practice landing", () => {
   test.beforeEach(async ({ context }) => {
@@ -179,16 +183,16 @@ test.describe("Practice landing", () => {
     // The day screen has a way back to the thread's page.
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", `/practice/thread?id=${id}`);
 
-    // Back on the landing: the thread has a row whose Resume is today's open day.
+    // Back on the landing: the thread has a row whose action opens today's day.
     await openDesk(page, "/practice");
     const row = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel }).getByRole("row", { name: /Day trading/ });
     await expect(row).toContainText(formatBalance(25_000));
-    await row.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true }).click();
+    await row.getByRole("link", { name: /^Open Day 1$/ }).click();
     await page.waitForURL(DAY_URL);
 
     // The thread page is where she returns between days: today's day is a Resume link.
     await openDesk(page, `/practice/thread?id=${id}`);
-    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: PRACTICE_COPY.planResume, exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Open Day 1$/ })).toBeVisible();
   });
 
   test("with a day thread active the modal still offers Day and the thread page replaces its plan", async ({ page, context }) => {
@@ -232,7 +236,7 @@ test.describe("Practice landing", () => {
     // Delete asks first; Keep leaves the thread alone, a click on the dialog never opens the thread page.
     const row = table.getByRole("row", { name: /Day trading/ }).filter({ hasText: formatBalance(20_000) });
     await row.getByRole("button", { name: /^Delete/ }).click();
-    const confirm = page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle });
+    const confirm = deleteDialog(page);
     await expect(confirm).toContainText(PRACTICE_COPY.threadDeleteBody);
     await confirm.click({ position: { x: 4, y: 4 } });
     await expect(page).toHaveURL(/\/practice$/);
@@ -241,7 +245,7 @@ test.describe("Practice landing", () => {
     await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(3);
 
     await row.getByRole("button", { name: /^Delete/ }).click();
-    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(2);
     await expect(table).not.toContainText(formatBalance(20_000));
@@ -250,10 +254,10 @@ test.describe("Practice landing", () => {
 
     // A closed thread deletes too, and the last row going leaves the empty sentence.
     await table.getByRole("row", { name: /Day trading/ }).filter({ hasText: PRACTICE_COPY.threadClosedBadge }).getByRole("button", { name: /^Delete/ }).click();
-    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
     await table.getByRole("button", { name: /^Delete/ }).click();
-    await page.getByRole("dialog", { name: PRACTICE_COPY.threadDeleteTitle }).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
   });
 
@@ -262,5 +266,32 @@ test.describe("Practice landing", () => {
     await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toBeVisible();
     await openDesk(page, "/practice/thread");
     await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toBeVisible();
+  });
+});
+
+// Fix wave 5S, stream 1: the landing's names and its delete confirm.
+test.describe("Practice landing · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("two threads of one mode read apart by number, and the delete confirm names its thread, shows its whole warning and says Deleted (D-077, D-079)", async ({ page, context }) => {
+    const first = await createThreadByApi(context, { balance: 20_000 });
+    const second = await createThreadByApi(context, { balance: 30_000 });
+    await openDesk(page, "/practice");
+    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+    await expect(table.getByRole("link", { name: new RegExp(`thread #${first}$`) })).toBeVisible();
+    await expect(table.getByRole("link", { name: new RegExp(`thread #${second}$`) })).toBeVisible();
+
+    await table.getByRole("button", { name: new RegExp(`^Delete .*thread #${first}$`) }).click();
+    const confirm = page.getByRole("dialog", { name: new RegExp(`^Delete .*thread #${first}\\?$`) });
+    await expect(confirm).toBeVisible();
+    // The warning wraps inside the dialog: it sits in a nowrap table cell, where it used to clip to "This can't be undor".
+    await expect(confirm).toContainText("This can't be undone.");
+    const clipped = await confirm.locator("p").evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent));
+    expect(clipped, "no line of the dialog is cut off").toEqual([]);
+    await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
+    await expect(page.getByRole("status").filter({ hasText: /^Deleted .*thread #\d+$/ })).toHaveText(new RegExp(`thread #${first}$`));
+    await expect(table.getByRole("link", { name: new RegExp(`thread #${first}$`) })).toHaveCount(0);
   });
 });

@@ -13,7 +13,7 @@ import {
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatUsd } from "./journalView.ts";
-import type { ThreadPlan } from "./threads.ts";
+import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
 // node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
@@ -131,6 +131,20 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   const alerts = armed.length - names.length;
   if (alerts > 0) names.push(`${alerts} alert ${alerts === 1 ? "strategy" : "strategies"}`);
   return practiceText("planArmed", { names: names.join(" · ") });
+}
+
+/** The label of a day thread's one action (D-078): a day in progress resumes, a listed day opens, and opening the next day starts it.
+ *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
+export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
+  if (today !== null) return practiceText(today.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: today.day_no });
+  if (plan === null) return null;
+  const card = planCard(plan);
+  if (card.action === "none" || card.action === "new") return null;
+  const current = plan.current;
+  if (current !== null && current.status !== "ended") {
+    return practiceText(current.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: threadDayNo(plan, current.day_no) });
+  }
+  return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
 }
 
 export type PlanCardAction = "new" | "start" | "continue" | "none";

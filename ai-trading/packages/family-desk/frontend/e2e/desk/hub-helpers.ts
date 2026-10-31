@@ -11,6 +11,9 @@ import { expect, openDesk } from "./helpers";
 export const DAY = "2026-09-25";
 export const THREAD_URL = /\/practice\/thread\?id=\d+/;
 export const DAY_URL = /\/practice\/day\?id=\d+/;
+/** A day thread's one action says what it does (D-078): the button that opens the next day starts it, the link to a listed day opens it, and a day in progress resumes. */
+export const START_DAY = /^Start Day \d+$/;
+export const OPEN_DAY = /^(Open|Resume) Day \d+$/;
 
 /** A saved filter that lists the stub's TSLA only (the fixture's stand-in names trade below $200). */
 export const ANY_CLOSE = {
@@ -93,10 +96,10 @@ export async function openRow(page: Page, row: Locator) {
   await page.waitForURL(THREAD_URL);
 }
 
-/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start day`, or Resume when the modal already opened it). */
+/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start Day 1`, or Open Day 1 when the modal already opened it). */
 export async function openFirstDay(page: Page) {
-  const start = page.getByRole("button", { name: PRACTICE_COPY.planStart });
-  const resume = page.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true });
+  const start = page.getByRole("button", { name: START_DAY });
+  const resume = page.getByRole("link", { name: OPEN_DAY });
   await expect(start.or(resume)).toBeVisible({ timeout: 60_000 });
   if (await start.isVisible()) await start.click();
   else await resume.click();

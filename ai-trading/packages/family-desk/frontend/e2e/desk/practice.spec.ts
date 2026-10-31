@@ -415,7 +415,7 @@ test.describe("Practice", () => {
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
     // Resume: the landing's row opens Day 2, which has no stored TSLA bars, so its list is empty and says so.
     await openDesk(page, "/practice");
-    await dayRow(page).getByRole("button", { name: PRACTICE_COPY.planResume, exact: true }).click();
+    await dayRow(page).getByRole("button", { name: /^Start Day 2$/ }).click(); // D-078: after an ended day the action starts the next one
     await page.waitForURL(/\/practice\/day\?id=\d+/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
     await expect(page.getByText(PRACTICE_COPY.dayNoNames).first()).toBeVisible();
@@ -455,10 +455,10 @@ test.describe("Practice", () => {
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
     await expect(page.getByText(balance).first()).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
-    await expect(page.getByRole("img", { name: /^Result of each day.*1 skipped\.$/ })).toBeVisible();
+    await expect(page.getByRole("img", { name: /^Result of each day.*1 passed\.$/ })).toBeVisible();
     const tile = (label: string) => page.getByRole("listitem").filter({ hasText: new RegExp(`^${label}`) });
     await expect(tile("Days practiced")).toContainText("of 2 days opened");
-    await expect(tile("Skipped")).toContainText("balance carried over");
+    await expect(tile(PRACTICE_COPY.threadSkipped)).toContainText(PRACTICE_COPY.threadTileCarried);
     await expect(tile("Wins")).toContainText(String(read.thread.stats.wins));
     await expect(tile("Losses")).toContainText(String(read.thread.stats.losses));
     await expect(page.locator("body")).not.toContainText(/20\d\d-\d\d-\d\d/); // dates stay hidden on the journal
@@ -501,7 +501,7 @@ test.describe("Practice", () => {
     const closedRow = dayRow(page);
     await expect(closedRow).toContainText(PRACTICE_COPY.threadClosedBadge);
     await expect(closedRow).toContainText(balance);
-    await expect(closedRow.getByRole("button", { name: PRACTICE_COPY.planResume })).toHaveCount(0);
+    await expect(closedRow.getByRole("button", { name: /Day \d+$/ })).toHaveCount(0);
     await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.landingJournal, exact: true })).toBeVisible(); // a closed thread's one action
     const again = await clickNewPlan(page);
     await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
@@ -514,7 +514,7 @@ test.describe("Practice", () => {
     await openDesk(page, "/practice");
     const card = dayRow(page);
     await expect(card).toContainText(PRACTICE_COPY.landingNeedsPlan); // no daily plan yet: nothing to resume
-    await expect(card.getByRole("button", { name: PRACTICE_COPY.planResume })).toHaveCount(0);
+    await expect(card.getByRole("button", { name: /Day \d+$/ })).toHaveCount(0);
     await openDesk(page, `/practice/thread?id=${id}`);
     await expect(page.getByRole("region", { name: "Practice day" }).getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan })).toBeVisible();
     await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
@@ -620,7 +620,7 @@ test.describe("Practice", () => {
     await expect(plan).not.toContainText("in progress");
 
     // The thread page's Resume and the review's Next day open the same day.
-    await day.getByRole("link", { name: PRACTICE_COPY.planResume, exact: true }).click();
+    await day.getByRole("link", { name: /^Open Day 2$/ }).click();
     await page.waitForURL(fresh);
     await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
@@ -649,7 +649,7 @@ test.describe("Practice", () => {
     await page.getByRole("link", { name: "Practice", exact: true }).first().click();
     await page.waitForURL(/\/practice$/);
     // Day 2 is open: the row's Resume is its link.
-    await expect(dayRow(page).getByRole("link", { name: PRACTICE_COPY.planResume, exact: true })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
+    await expect(dayRow(page).getByRole("link", { name: /^Open Day 2$/ })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
   });
 
   // D-058: a slow open outlasts the gateway (524) while the server finishes it. The screen says it is still working, asks again,

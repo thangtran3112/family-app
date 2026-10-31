@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { adherenceStat, overviewDayRows, threadProgress, type OverviewDayRow } from "@/lib/replay/overviewView";
+import { adherenceStat, overviewDayRows, threadProgress, type EquityDays, type OverviewDayRow } from "@/lib/replay/overviewView";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
 import { formatBalance, startedWithText, threadModeLabel, winRateText } from "@/lib/replay/threadView";
 import hub from "./hub.module.css";
@@ -50,7 +50,7 @@ export function PlaceStrip({ summary, children }: { summary: ThreadSummary; chil
         <span className={hub.balanceValue}>{formatBalance(thread.stats.balance)}</span>
         <SimulatedBadge />
       </p>
-      <p className={hub.muted}>{startedWithText(thread)}</p>
+      <p className={hub.muted}>{startedWithText(thread, summary.swing)}</p>
       {children}
       <p className={o.placeLine}>{progress.sub === PRACTICE_COPY.landingProgressNoDays ? progress.main : `${progress.main} · ${progress.sub}`}</p>
     </section>
@@ -103,14 +103,14 @@ const DAY_COLUMNS: DenseColumn<OverviewDayRow>[] = [
 ];
 
 /** One row per ended day, the newest first: day number and weekday (never a date), practiced or skipped, trades, result, adherence and the balance. Each day opens its board. */
-export function DaysSection({ daily }: { daily: Thread["daily"] }) {
+export function DaysSection({ daily, equity }: { daily: Thread["daily"]; equity?: EquityDays }) {
   return (
     <section className={`${styles.panel} ${o.tablePanel}`} aria-label={PRACTICE_COPY.overviewDaysTitle}>
       <div className={o.sectionHead}>
         <h2 className={styles.panelTitle}>{PRACTICE_COPY.overviewDaysTitle}</h2>
         <SimulatedBadge />
       </div>
-      <DenseTable caption={PRACTICE_COPY.overviewDaysCaption} columns={DAY_COLUMNS} rows={overviewDayRows(daily)} rowKey={(row) => row.key} empty={PRACTICE_COPY.overviewDaysNone} />
+      <DenseTable caption={PRACTICE_COPY.overviewDaysCaption} columns={DAY_COLUMNS} rows={overviewDayRows(daily, equity)} rowKey={(row) => row.key} empty={PRACTICE_COPY.overviewDaysNone} />
     </section>
   );
 }

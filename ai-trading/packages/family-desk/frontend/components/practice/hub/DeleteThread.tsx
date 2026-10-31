@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { deleteThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
 import type { PracticeThread } from "@/lib/replay/threads";
@@ -24,7 +24,7 @@ export function DeleteThread({
   thread: PracticeThread;
   busy: boolean;
   onBusy: (busy: boolean) => void;
-  onDeleted: () => void;
+  onDeleted: (name: string) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [asking, setAsking] = useState(false);
@@ -52,7 +52,7 @@ export function DeleteThread({
     try {
       await deleteThread(thread.id);
       onBusy(false);
-      onDeleted();
+      onDeleted(threadName(thread));
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.threadDeleteError));
       setDeleting(false);
@@ -87,7 +87,7 @@ export function DeleteThread({
         >
           <div className={styles.dialogForm}>
             <div className={styles.dialogBody}>
-              <h2 id={`delete-thread-${thread.id}-title`} className={styles.dialogTitle}>{PRACTICE_COPY.threadDeleteTitle}</h2>
+              <h2 id={`delete-thread-${thread.id}-title`} className={styles.dialogTitle}>{practiceText("threadDeleteTitleNamed", { name: threadName(thread) })}</h2>
               <p className={hub.muted}>{PRACTICE_COPY.threadDeleteBody}</p>
               {message && <p role="alert" className={hub.fieldError}>{message}</p>}
             </div>

@@ -394,9 +394,8 @@ test.describe("Swing practice", () => {
     await expect(row.getByRole("link")).toHaveCount(1);
     await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0); // the row itself is the way to the thread page
     await openRow(page, row);
-    await expect(page.getByRole("status").filter({ hasText: "Week 1 review ready" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
-    await expect(page.getByText("Day 6 unlocks after the Week 1 review")).toBeVisible();
+    await expect(page.getByText("Week 1 is done. Review it to unlock Day 6.")).toHaveCount(1); // D-085: said once
     await shot(page, "swing-hub-review-ready");
     await page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: "Week 1 review", exact: true }).click();
     await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));

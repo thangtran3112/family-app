@@ -41,6 +41,7 @@ export function ThreadTable({
   busy,
   onBusy,
   onChanged,
+  onDeleted,
   onNewPlan,
 }: {
   rows: readonly ThreadSummary[];
@@ -49,6 +50,8 @@ export function ThreadTable({
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
+  /** A thread was deleted: its name, for the page's status line (the row is gone by then). */
+  onDeleted?: (name: string) => void;
   onNewPlan: (thread: PracticeThread) => void;
 }) {
   // The last-day column is the first to go at the 1180 band (02l §b3 rule 4).
@@ -70,7 +73,7 @@ export function ThreadTable({
           {loading
             ? [0, 1].map((n) => <SkeletonRow key={n} wide={wide} />)
             : rows.map((row) => (
-                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
+                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onDeleted={onDeleted} onNewPlan={onNewPlan} />
               ))}
         </tbody>
       </table>
@@ -99,6 +102,7 @@ function ThreadRow({
   busy,
   onBusy,
   onChanged,
+  onDeleted,
   onNewPlan,
 }: {
   summary: ThreadSummary;
@@ -107,6 +111,7 @@ function ThreadRow({
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
+  onDeleted?: (name: string) => void;
   onNewPlan: (thread: PracticeThread) => void;
 }) {
   const { thread, last_day: lastDay, today } = summary;
@@ -173,7 +178,15 @@ function ThreadRow({
           ) : (
             <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={() => onNewPlan(thread)} />
           )}
-          <DeleteThread thread={thread} busy={busy} onBusy={onBusy} onDeleted={onChanged} />
+          <DeleteThread
+            thread={thread}
+            busy={busy}
+            onBusy={onBusy}
+            onDeleted={(name) => {
+              onChanged();
+              onDeleted?.(name);
+            }}
+          />
         </div>
       </td>
     </tr>

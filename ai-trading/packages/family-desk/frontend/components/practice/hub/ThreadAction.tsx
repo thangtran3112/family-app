@@ -8,7 +8,7 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { openNextDay } from "@/lib/desk/replay";
 import type { PracticePlan } from "@/lib/replay/daily";
-import { planCard } from "@/lib/replay/dayView";
+import { dayActionLabel, planCard } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { swingCardView } from "@/lib/replay/swing";
 import type { ThreadSummary } from "@/lib/replay/threads";
@@ -24,8 +24,8 @@ export const lockLink = (locked: boolean) =>
   locked ? { "aria-disabled": true as const, tabIndex: -1, onClick: (event: MouseEvent) => event.preventDefault() } : {};
 
 /**
- * What a thread can do next, for the landing's rows and the thread page (02r2): a day thread resumes today's open day,
- * or opens the next day of its plan ("Start day" for the first), or says a new plan is needed; a swing thread continues
+ * What a thread can do next, for the landing's rows and the thread page (02r2): a day thread resumes the day in progress,
+ * opens a listed day, or starts the next day of its plan ("Start Day 3"; D-078), or says a new plan is needed; a swing thread continues
  * or starts its day (while its week review is owed it has no action here: the overview carries the review). A closed thread has none. The same logic as the old thread card
  * (D-046, D-048). `busy` is true while any thread's open runs, so no second open can race the first; `onBusy` reports
  * this action's own open.
@@ -55,7 +55,7 @@ export function ThreadAction({
     return action.kind === "start" || action.kind === "continue" ? <SwingContinue threadId={thread.id} label={action.label} locked={busy} onBusy={onBusy} onChanged={onChanged} /> : null;
   }
 
-  if (today !== null) return <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink} {...lockLink(busy)}>{PRACTICE_COPY.planResume}</Link>;
+  if (today !== null) return <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink} {...lockLink(busy)}>{dayActionLabel(today, plan)}</Link>;
   if (!planOpensIn(plan, thread)) {
     return onNewPlan ? (
       <button type="button" className={styles.button} disabled={busy} aria-busy={busy || undefined} onClick={onNewPlan}>{PRACTICE_COPY.landingNeedsPlan}</button>
@@ -65,8 +65,9 @@ export function ThreadAction({
   }
   // The plan's data is still being prepared: the first list opens when it is ready.
   const card = planCard(plan);
-  if (card.action === "none") return <p role="status" className={styles.muted}>{card.headline}</p>;
-  return <OpenNextDay threadId={thread.id} label={card.action === "start" ? PRACTICE_COPY.planStart : PRACTICE_COPY.planResume} locked={busy} onBusy={onBusy} onChanged={onChanged} />;
+  const label = dayActionLabel(null, plan);
+  if (card.action === "none" || label === null) return <p role="status" className={styles.muted}>{card.headline}</p>;
+  return <OpenNextDay threadId={thread.id} label={label} locked={busy} onBusy={onBusy} onChanged={onChanged} />;
 }
 
 /** Opens the thread's next day and goes to it; with the data not ready yet the answer has no day and the screen refetches.

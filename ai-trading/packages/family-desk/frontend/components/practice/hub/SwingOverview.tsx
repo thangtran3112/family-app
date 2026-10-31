@@ -27,6 +27,7 @@ const WEEK_COLUMNS = (): DenseColumn<OverviewWeekRow>[] => [
   { key: "status", label: "Status", render: (row) => <span className={row.status === "upcoming" ? o.pending : undefined}>{row.statusText}</span> },
   { key: "days", label: "Days", align: "right", render: (row) => row.days },
   { key: "realized", label: "Realized", align: "right", render: (row) => <span className={tone(row.realizedTone)}>{row.realized}</span> },
+  { key: "equityChange", label: PRACTICE_COPY.landingColEquityChange, align: "right", render: (row) => <span className={tone(row.equityChangeTone)}>{row.equityChange}</span> },
 ];
 
 type HoldRow = { id: string; view: HoldRowView };
@@ -80,7 +81,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           )}
         </section>
 
-        <DaysSection daily={summary.daily} />
+        <DaysSection daily={summary.daily} equity={{ startingBalance: thread.startingBalance, series: state.equity_series }} />
 
         <section className={`${styles.panel} ${o.tablePanel}`} aria-label={HUB_SWING_COPY.holdsTitle}>
           <div className={o.sectionHead}>
@@ -120,7 +121,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           <p className={styles.dayLine}>{card.title}</p>
           {setup && swingDatesHidden(setup) && <p className={hub.muted}>{HUB_SWING_COPY.dateHidden}</p>}
           <dl className={o.planList}>
-            {planRows(thread.plan).map((row) => (
+            {planRows(thread.plan, "swing").map((row) => (
               <div key={row.id} className={o.planItem}>
                 <dt>{row.label}</dt>
                 <dd>{row.value}</dd>

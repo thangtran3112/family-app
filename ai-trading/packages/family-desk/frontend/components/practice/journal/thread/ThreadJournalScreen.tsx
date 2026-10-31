@@ -64,7 +64,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
             <span className={styles.chip}>{threadModeLabel(mode)}</span>
           </div>
           <p className={styles.sub}>
-            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} skipped `}
+            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed `}
             <SimulatedBadge />
           </p>
         </div>
