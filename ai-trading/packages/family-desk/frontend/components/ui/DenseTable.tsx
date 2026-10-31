@@ -19,6 +19,8 @@ export type DenseColumn<R> = {
   priority?: number;
   /** First click direction for sortable headers; numbers default to descending. */
   firstSort?: "asc" | "desc";
+  /** The one column that gives way (its text ellipsizes) so the others stay whole in a table narrower than its content. */
+  fill?: boolean;
 };
 
 export type DenseTableProps<R> = {
@@ -92,7 +94,7 @@ export function DenseTable<R>({
               <th
                 key={column.key}
                 scope="col"
-                className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}
+                className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""} ${column.fill ? styles.fill : ""}`}
                 aria-sort={column.sortValue ? ariaSort(sort, column.key) : undefined}
               >
                 {column.sortValue ? (
@@ -120,7 +122,7 @@ export function DenseTable<R>({
                 onKeyDown={onSelect ? (event) => onKeyDown(event, row) : undefined}
               >
                 {visible.map((column, index) => (
-                  <td key={column.key} className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}>
+                  <td key={column.key} className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""} ${column.fill ? styles.fill : ""}`}>
                     {column.render(row)}
                   </td>
                 ))}

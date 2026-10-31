@@ -7,7 +7,7 @@ import { withPriorities } from "@/lib/desk/columns";
 import { changeTone, formatPrice, formatRatio, formatSignedPct } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
 import { biasTone } from "@/lib/desk/workspace";
-import { tagLine } from "@/lib/desk/watchlistView";
+import { strategyChips } from "@/lib/desk/watchlistView";
 import styles from "./watchlistDesktop.module.css";
 
 type Row = WatchlistTable["rows"][number];
@@ -18,6 +18,7 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
     {
       key: "symbol",
       label: "Symbol",
+      fill: true,
       render: (row) => (
         <span className={styles.symbol}>
           {row.symbol}
@@ -48,10 +49,23 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
     {
       key: "tags",
       label: "Strategy",
-      render: (row) =>
-        tagLine(row.tags).map((text, index) => (
-          <span key={index} className={row.tags[index]?.kind === "armed" ? styles.armedChip : styles.chip}>{text}</span>
-        )),
+      render: (row) => {
+        const { shown, hidden } = strategyChips(row.tags);
+        const rest = hidden.map((chip) => chip.text).join(", ");
+        return (
+          <>
+            {shown.map((chip, index) => (
+              <span key={index} className={chip.armed ? styles.armedChip : styles.chip} title={chip.text}>{chip.text}</span>
+            ))}
+            {hidden.length > 0 && (
+              <span className={styles.chip} title={rest}>
+                +{hidden.length}
+                <span className={styles.srOnly}> more: {rest}</span>
+              </span>
+            )}
+          </>
+        );
+      },
     },
   ],
   "watchlist",
