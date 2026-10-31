@@ -49,6 +49,9 @@ export const SORTS: readonly { id: FeedbackSort; label: string }[] = [
 
 export const refOf = (id: number): string => `F-${String(id).padStart(3, "0")}`;
 
+/** "Reported by" shows an initial, never the name behind it (D-071): the API's value is an email's local part when the account has no display name. */
+export const reporterInitial = (reportedBy: string): string => Array.from(reportedBy.trim())[0]?.toUpperCase() ?? EMPTY_VALUE;
+
 // ---- the dashboard's filters --------------------------------------------------------------------------------------------
 
 export type FeedbackFilters = { kind: "" | FeedbackKind; statuses: readonly FeedbackStatus[]; area: string; q: string; sort: FeedbackSort };
