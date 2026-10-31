@@ -326,3 +326,19 @@ a:focus-visible {
   .dk-shell:has(.dk-left > aside:empty) { grid-template-columns: 0 minmax(0, 1fr) 40px; }
   .dk-shell:has(.dk-left > aside:empty):has(.dk-right:empty) { grid-template-columns: 0 minmax(0, 1fr) 0; }
 }
+
+/* Replay chart full screen (design-replay-chart a.1): the top bar, the left rail and the status bar go, the amber practice band and
+   the right rail (the tape and the practice controls, or the 40 px strip at 1180) stay. `display: none` keeps the portaled left rail
+   mounted, so its plan, names and signals are back as they were on exit. The [data-band] part outranks the :has() rules above. */
+.dk-shell[data-practice="true"][data-focus="chart"][data-band] {
+  grid-template-rows: 0 28px minmax(0, 1fr) 0;
+  grid-template-columns: 0 minmax(0, 1fr) 320px;
+}
+
+.dk-shell[data-practice="true"][data-focus="chart"][data-band="1180"] {
+  grid-template-columns: 0 minmax(0, 1fr) 40px;
+}
+
+.dk-shell[data-focus="chart"] :is(.dk-top, .dk-left, .dk-status) {
+  display: none;
+}

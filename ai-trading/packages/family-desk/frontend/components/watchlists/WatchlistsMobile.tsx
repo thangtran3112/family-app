@@ -239,7 +239,7 @@ export function WatchlistsMobile() {
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>MARKET DATA · OWNER WATCHLISTS</p>
@@ -382,6 +382,6 @@ export function WatchlistsMobile() {
           </section>
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

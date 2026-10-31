@@ -298,6 +298,39 @@
   border-radius: 2px;
 }
 
+/* A dashed line's swatch: two dashes in the line's colour (--swatch), not a solid square. */
+.swatchDashed {
+  height: 3px;
+  background: linear-gradient(90deg, var(--swatch) 0 4px, transparent 4px 6px, var(--swatch) 6px 10px);
+}
+
+/* The replay legend's toggle: only the buttons take the pointer, so the rest of the legend still lets the crosshair through. */
+.legendButton {
+  min-height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.legendButton:hover {
+  color: var(--color-text);
+}
+
+.legendButton[data-hidden="true"] {
+  opacity: 0.55;
+}
+
+.legendButton:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
 .paneLegend {
   display: inline-flex;
   min-height: 24px;

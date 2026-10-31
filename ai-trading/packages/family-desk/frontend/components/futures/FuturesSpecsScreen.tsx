@@ -56,7 +56,7 @@ export function FuturesSpecsScreen() {
   const sessions = useMemo(() => [...new Map((specs ?? []).map(({ session }) => [`${session.open_time}-${session.close_time}`, session])).values()], [specs]);
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · roll dates included · margin is not available</p></div>
         <Link className={styles.secondaryLink} href="/futures">Back to futures swing</Link>
@@ -118,6 +118,6 @@ export function FuturesSpecsScreen() {
         </section>
       </>}
       <p className={styles.disclaimer}>Reference specifications only. Approximate broker margins remain unavailable; no margin or order value is inferred.</p>
-    </main>
+    </div>
   );
 }

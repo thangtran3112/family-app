@@ -46,7 +46,7 @@ function MobileShell({ children }: { children: ReactNode }) {
           </a>
         </div>
       </header>
-      <div className="desk-shell-content" id="main-content" tabIndex={-1}>{children}</div>
+      <main className="desk-shell-content" id="main-content" tabIndex={-1}>{children}</main>
       <MobileTabs pathname={pathname} />
     </div>
   );

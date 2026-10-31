@@ -10,6 +10,7 @@
 .chip { display: inline-flex; min-height: 24px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
 .chipOpen { border-color: var(--color-amber); color: var(--color-amber); }
 .sub { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.missing { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); }
 .center { display: flex; min-width: 0; flex-direction: column; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
 
 /* Text and sections */
@@ -17,6 +18,7 @@
 .hint { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
 .lead { margin: 0; font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
 .alert { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
+.alertBar { padding: var(--space-2) var(--space-4); }
 .section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
@@ -47,11 +49,14 @@
 .swatch { width: 14px; height: 2px; flex-shrink: 0; }
 .swatchBalance { background: #E5E5EA; }
 .swatchEquity { background: #FFB020; }
-.swatchWeek { width: 12px; height: 12px; border: 1px solid var(--color-hairline); background: var(--color-panel); }
-.details { font-size: var(--text-label); }
-.summary { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-muted); cursor: pointer; }
+/* The thin green ticks are each day's close (the chart draws a flat bar per day); this week is a filled block, not a box that looks ticked. */
+.swatchClose { width: 10px; background: var(--color-up); }
+.swatchWeek { width: 18px; height: 10px; border-radius: 2px; background: var(--color-raised); }
+.details { font-size: var(--text-micro); }
+.summary { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-muted); font-size: var(--text-micro); cursor: pointer; }
 
 /* Tables: the DenseTable cells; a day's link and a hold's symbol read as text with a role. */
+.stopGutter { display: inline-block; padding-left: var(--space-6); }
 .cellStrong { font-weight: var(--weight-semibold); }
 .cellMuted { color: var(--color-muted); }
 

@@ -22,9 +22,10 @@ export function ThreadPicker() {
   const rows = [...list.data].sort((a, b) => Number(b.thread.status === "active") - Number(a.thread.status === "active"));
   return (
     <div className={styles.center}>
-      <EmptyBlock title={PRACTICE_COPY.threadPickTitle}>
+      {/* With no thread there is one statement, not "no thread selected" over "no thread yet" (D-117). */}
+      <EmptyBlock title={rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickTitle}>
         <div className={styles.stack}>
-          <p className={styles.muted}>{rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickHint}</p>
+          {rows.length > 0 && <p className={styles.muted}>{PRACTICE_COPY.threadPickHint}</p>}
           {rows.length > 0 && (
             <ul role="list" className={styles.list} aria-label="Your threads">
               {rows.map((row) => (

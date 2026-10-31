@@ -10,7 +10,7 @@ const links = [
 
 export function MoreMobile() {
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.header}>
         <h1>More</h1>
         <p>Desk preferences and account views.</p>
@@ -31,6 +31,6 @@ export function MoreMobile() {
           </Link>
         ))}
       </nav>
-    </main>
+    </div>
   );
 }

@@ -24,19 +24,26 @@ import {
   listHeaderText,
   listWarning,
   moveText,
+  nameActionLabel,
   nameCap,
   namesTodayText,
-  noMatchText,
   ordinal,
   peekDailyBars,
   peekOffsets,
   planArmedText,
+  dayActionLabel,
+  blockOpenByDefault,
+  dayRouteProblem,
+  practiceWindow,
+  tradeTotalRow,
+  watchEmptyText,
   planCard,
   rescanCounts,
   rescanLabel,
   rescanStaleText,
   riskPlanText,
   selectionText,
+  sessionResumeHref,
   sourceNote,
   starsFullText,
   stripRows,
@@ -92,21 +99,21 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   const first = planCard({ ...plan, days_opened: 0, current: null, next_day_no: 1, next_weekday: "Mon", next_day: "2026-03-02", prep: { state: "done", done: 3, total: 3, failed: 0 } });
   assert.deepEqual([first.headline, first.action], ["Day 1 of 20 · next: Mon", "start"]);
   const preparing = planCard({ ...plan, days_opened: 0, current: null, prep: { state: "running", done: 12, total: 131, failed: 0 } });
-  assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131", "none"]);
+  assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131 names", "none"], "D-084: the count has a unit");
   const done = planCard({ ...plan, finished: true, next_day: null, next_weekday: null, next_day_no: null });
   assert.equal(done.headline, "All 20 days done");
 });
 
-test("D-047: a plan after another plan names each day by its place in the thread, and the plan's own count follows", () => {
+test("D-047, D-118: a plan after another plan names each day by its place in the thread, with one counter", () => {
   const after = { ...plan, day_offset: 2 };
   assert.equal(threadDayNo(after, 1), 3, "the plan's Day 1 is the thread's third day");
   assert.equal(dayNumberText(plan, 7), "Day 7 of 20", "with no earlier plan the two numbers agree and one is said");
-  assert.equal(dayNumberText(after, 1), "Day 3 · plan day 1 of 20");
-  assert.equal(dayTitle({ ...dayList, plan: after }, true), "Day 9 · plan day 7 of 20 · Tue");
-  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "practicing" } }).headline, "Day 9 · plan day 7 of 20 · in progress");
-  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "listed" } }).headline, "Day 9 · plan day 7 of 20 · list ready");
+  assert.equal(dayNumberText(after, 1), "Day 3", "one counter: the plan's own count is not said beside it (D-118)");
+  assert.equal(dayTitle({ ...dayList, plan: after }, true), "Day 9 · Tue");
+  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "practicing" } }).headline, "Day 9 · in progress");
+  assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "listed" } }).headline, "Day 9 · list ready");
   const between = planCard(after);
-  assert.equal(between.headline, "Day 9 · plan day 7 of 20 · next: Tue");
+  assert.equal(between.headline, "Day 9 · next: Tue");
   assert.equal(between.detail?.startsWith("Day 8 done"), true, "the day that ended is the thread's day too");
   const rows = blockLadder({ day_no: 2, of: 5, status: "listed", weekday: "Wed" }, 2);
   assert.deepEqual(rows.map((row) => row.detail), ["Ended · review", "Open now", "Opens after day 4", "Locked", "Locked"]);
@@ -127,10 +134,12 @@ test("cells use the column's format and never print null; the since column is a 
   assert.equal(filtersText(smci), "Gap up · Abnormal volume");
 });
 
-test("stars toggle, keep order, and refuse a sixth name", () => {
+test("stars toggle, keep order, and refuse a 21st name", () => {
   assert.deepEqual(toggledStars([{ symbol: "A" }], "B"), ["A", "B"]);
   assert.deepEqual(toggledStars([{ symbol: "A" }, { symbol: "B" }], "A"), ["B"]);
-  assert.equal(toggledStars(["A", "B", "C", "D", "E"].map((symbol) => ({ symbol })), "F"), null);
+  const twenty = Array.from({ length: 20 }, (_, i) => ({ symbol: `S${i}` }));
+  assert.equal(toggledStars(twenty, "NEW"), null);
+  assert.equal(toggledStars(twenty.slice(0, 19), "NEW")?.length, 20);
 });
 
 test("warnings: the server's reason is shown as it is; a list it had no reason for shows the empty state, not a second banner", () => {
@@ -138,7 +147,6 @@ test("warnings: the server's reason is shown as it is; a list it had no reason f
   const why = "None of the 17 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists";
   assert.equal(listWarning({ warnings: [why] }), why);
   assert.equal(listWarning({ warnings: [] }), null);
-  assert.equal(noMatchText({ universe: { ...dayList.universe, matches_total: 0 } }), "0 of 131 matched");
   assert.equal(PRACTICE_COPY.dayNoNames, "No name passed your filters on this day · widen a filter, or end the day to open the next");
   assert.equal(why.includes("Only 0"), false);
 });
@@ -159,11 +167,11 @@ test("the review reads the picks' moves, the list median and their ranks", () =>
   assert.equal(ordinal(12), "12th");
   assert.equal(ordinal(23), "23rd");
   const review = endedDayList.review!;
-  assert.equal(selectionText(review), "Your names moved +3.1% · list median +1.4% · ranked 1st of 2");
+  assert.equal(selectionText(review), "Your names moved +3.11% · list median +1.40% · ranked 1st of 2");
   const two = { ...review, of: 30, selection: { ...review.selection, picks: [{ symbol: "A", kind: "traded" as const, move_pct: 3.1, rank: 4 }, { symbol: "B", kind: "starred" as const, move_pct: -0.4, rank: 11 }] } };
-  assert.equal(selectionText(two), "Your names moved +3.1% and −0.4% · list median +1.4% · ranked 4th and 11th of 30");
+  assert.equal(selectionText(two), "Your names moved +3.10% and −0.40% · list median +1.40% · ranked 4th and 11th of 30");
   const down = { ...review, selection: { ...review.selection, median_move_pct: -0.4 } };
-  assert.equal(selectionText(down), "Your names moved +3.1% · list median −0.4% · ranked 1st of 2", "the median is signed: a losing list reads as one");
+  assert.equal(selectionText(down), "Your names moved +3.11% · list median −0.40% · ranked 1st of 2", "the median is signed: a losing list reads as one");
   assert.equal(selectionText({ ...review, selection: { ...review.selection, picks: [] } }), null);
   assert.equal(moveText(null), "—");
   assert.equal(moveText(-0.31), "−0.31%");
@@ -189,15 +197,15 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
   assert.equal(dayBalanceText(meta), "Balance $50,000.00 → $51,565.00");
   assert.equal(dayBalanceText({ balance_before: null, balance_after: null }), null);
   assert.deepEqual(tradeLineRows(meta), [
-    { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83 · 10:15 AM", exit: "626.48 · 11:10 AM", pnl: "+$1,565.00", tone: "up" },
+    { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83", entryTime: "10:15 AM", exit: "626.48", exitTime: "11:10 AM", pnl: "+$1,565.00", tone: "up" },
   ]);
   const auto = { ...meta, lines: [{ ...meta.lines[0]!, side: "short" as const, exit_source: "auto" as const, pnl_usd: -12.5 }] };
-  assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exit, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "626.48 · 11:10 AM (auto, window end)", "−$12.50", "down"]);
+  assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exitTime, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "11:10 AM (auto, window end)", "−$12.50", "down"]);
   assert.deepEqual(tradeLineRows({ lines: [] }), []);
 });
 
 test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
-  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished · date shown below");
+  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished");
   assert.equal(dayFinishedLine({ dates_hidden: false }), null);
   assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to window end, biggest gain first");
 });
@@ -340,14 +348,14 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
   ...changes,
 });
 
-test("the cap on stars is the plan's, never above five, and the refusal says which cap it was", () => {
+test("the cap on stars is the plan's, never above 20, and the refusal says which cap it was", () => {
   const stars = ["SMCI", "ANET"].map((symbol) => ({ symbol, starred_clock: "2026-03-10T12:30:00Z" }));
   assert.equal(nameCap({ max_symbols: 2 }), 2);
   assert.equal(toggledStars(stars, "NVDA", 2), null);
   assert.deepEqual(toggledStars(stars, "NVDA", 3), ["SMCI", "ANET", "NVDA"]);
   assert.deepEqual(toggledStars(stars, "SMCI", 2), ["ANET"]);
-  assert.deepEqual(toggledStars(stars, "NVDA", 9), toggledStars(stars, "NVDA")); // past five is five
-  assert.equal(starsFullText(5), "You can star at most 5 names");
+  assert.deepEqual(toggledStars(stars, "NVDA", 99), toggledStars(stars, "NVDA")); // past 20 is 20
+  assert.equal(starsFullText(20), "You can star at most 20 names · 20/20 watched");
   assert.equal(starsFullText(2), "Your plan limits a day to 2 names · unstar one first");
   assert.equal(starsFullText(1), "Your plan limits a day to 1 name · unstar one first");
 });
@@ -444,4 +452,61 @@ test("a scan older than the day clock says so, and a current one does not", () =
   const stale = rescanStaleText({ clock: "2026-03-10T14:30:00Z", rescan: scan });
   assert.equal(stale, "The day clock is now 10:30 AM ET · this scan is older. Re-scan to update it.");
   assert.equal(containsPracticeBannedTerm(stale ?? ""), false);
+});
+
+// D-078: "Resume" was the label of a day never started and of opening the next day after an ended one (a mutation).
+test("a day thread's one action says what it does (D-078)", () => {
+  const listed = { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 } as const;
+  assert.equal(dayActionLabel(listed, plan), "Open Day 7", "a listed day that was never started opens");
+  assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Resume Day 7", "only a day in progress resumes");
+  assert.equal(dayActionLabel({ ...listed, day_no: 1 }, { ...plan, day_offset: 1 }), "Open Day 2", "a plan that replaced another counts on from the days the thread already ended");
+  // No open day: opening the next one starts it. The number is the thread's own (D-047).
+  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
+  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 10");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Day 1");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, prep: { state: "running", done: 1, total: 9, failed: 0 } }), null, "while the data prepares there is nothing to press");
+  assert.equal(dayActionLabel(null, null), null);
+});
+
+// D-095: the candidates header said "Starred 0 of 3" while the rail said "Star up to 5 names": one rule, one number.
+test("the empty rail names the plan's own cap, like the header (D-095)", () => {
+  assert.equal(watchEmptyText(3), "Star up to 3 names to keep them in view");
+  assert.equal(watchEmptyText(1), "Star up to 1 name to keep them in view");
+  assert.equal(watchEmptyText(5), "Star up to 5 names to keep them in view");
+});
+
+// D-097: on a 20-day block the day list pushed the starred names below the fold.
+test("a long block's days start collapsed, a short block's open (D-097)", () => {
+  assert.equal(blockOpenByDefault(5), true);
+  assert.equal(blockOpenByDefault(10), true);
+  assert.equal(blockOpenByDefault(20), false);
+  assert.equal(blockOpenByDefault(30), false);
+});
+
+// D-117: a bad id said "No practice day selected", the same as no id at all.
+test("a day route with an id that is not a number is not found, and one with no id is not chosen (D-117)", () => {
+  assert.equal(dayRouteProblem(null), "none");
+  assert.equal(dayRouteProblem("abc"), "missing");
+  assert.equal(dayRouteProblem("12"), null, "a good id has no problem");
+});
+
+// D-144: the Thread plan said Window 09:30 to 11:30, the list was built at 8:30 and Re-list said the window then starts at 10:00.
+test("the practice window starts at the later of the plan's window and the list time, so a re-list moves it (D-144)", () => {
+  const window = { from: "09:30", to: "11:30" };
+  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T13:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 9:30 ET: the plan's own start");
+  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T12:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 8:30 ET, before the window");
+  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T15:00:00Z", plan: { spec: { setup: { window } } } }), { from: "11:00", to: "11:30" }, "re-listed at 11:00 ET: the window starts then");
+});
+
+// D-142: the total of the day's trades, and one precision for the selection's moves (the table shows two decimals).
+test("the trade table ends on a total row, and the selection quotes the table's precision (D-142)", () => {
+  const total = tradeTotalRow({ trades: 2, pnl_usd: 12.5 });
+  assert.deepEqual([total.key, total.symbol, total.pnl], ["total", "Total", "+$12.50"]);
+  assert.equal(selectionText(endedDayList.review!), "Your names moved +3.11% · list median +1.40% · ranked 1st of 2");
+});
+
+test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {
+  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Practice", "Switch"]);
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
 });

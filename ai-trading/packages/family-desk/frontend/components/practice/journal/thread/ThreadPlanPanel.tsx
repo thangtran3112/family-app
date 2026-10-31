@@ -62,7 +62,8 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
   return (
     <div className={styles.stack}>
       {!closed && draft === null && (
-        <div className={styles.actions}>
+        <div className={styles.headRow}>
+          <p className={styles.planNote}>{PRACTICE_COPY.threadPlanCaption}</p>
           <button type="button" className={styles.button} onClick={edit} disabled={busy}>{PRACTICE_COPY.threadEditPlan}</button>
         </div>
       )}
@@ -130,7 +131,7 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
 
   return (
     <div className={styles.stack}>
-      <button type="button" className={styles.button} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
+      <button type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
       {mode === "swing" && <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p>}
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>

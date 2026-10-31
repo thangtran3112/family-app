@@ -59,7 +59,7 @@ export const PracticeBlockV1Schema = z
     firstDay: IsoDaySchema,
     sessions: z.int().min(5).max(30),
     hideDates: YesNoSchema,
-    maxSymbols: z.int().min(1).max(5).optional(),
+    maxSymbols: z.int().min(1).max(20).optional(),
     screen: PracticeScreenSchema,
     setup: PracticeSetupSchema,
   })

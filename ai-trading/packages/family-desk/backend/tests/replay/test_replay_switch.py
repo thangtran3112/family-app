@@ -237,8 +237,8 @@ def test_a_plan_without_a_cap_allows_the_star_cap_and_a_second_name(db_session, 
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT", "SPLITTER")
     plan = db_session.get(PracticePlan, row.plan_id)
-    assert plan_mod.max_symbols(plan.spec) == 5 and "maxSymbols" not in plan.spec
-    assert plan_mod.plan_out(db_session, plan)["max_symbols"] == 5
+    assert plan_mod.max_symbols(plan.spec) == 20 and "maxSymbols" not in plan.spec
+    assert plan_mod.plan_out(db_session, plan)["max_symbols"] == 20
     for symbol in ("FLAT", "SPLITTER"):
         assert plan_mod.start_session(db_session, user_id, row.id, symbol, svc).day_list_id == row.id
     assert {s.symbol for s in db_session.query(ReplaySession).filter_by(day_list_id=row.id)} == {
