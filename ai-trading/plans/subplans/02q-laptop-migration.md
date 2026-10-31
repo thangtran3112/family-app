@@ -1,3 +1,10 @@
+# 02q — SUPERSEDED by the cross-app laptop-migration plan (infrastructure/plans/0001)
+
+Status: **SUPERSEDED (2026-11-01).** The owner gave the explicit instruction 02q waited for,
+and the plan now lives at `infrastructure/plans/0001-laptop-migration.md` (cross-app:
+ai-trading AND expense, IaC-first, everything consolidates under `infrastructure/`). This
+file stays as history; read 0001 for the real plan.
+
 # 02q — Parked: move family-app production (ai-trading + expense) from the shared VPS to the owner's Ubuntu laptop
 
 Status: **PARKED** (owner decision, 2026-10-25). No work scheduled. The **whole family-app
