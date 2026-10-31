@@ -41,8 +41,10 @@ TUNNELS = {
             {"hostname": f"staging.{ZONE}", "service": WEB},
             {"hostname": f"staging-origin.{ZONE}", "service": GATEWAY},
             {"hostname": f"staging-vibe.{ZONE}", **host_rewrite(GATEWAY, f"vibe-trading.{ZONE}")},
-            {"hostname": f"staging-tradingagents.{ZONE}", **host_rewrite(GATEWAY, f"tradingagents.{ZONE}")},
-            {"hostname": f"staging-ai-hedge-fund.{ZONE}", **host_rewrite(GATEWAY, f"ai-hedge-fund.{ZONE}")},
+            # Host passes through unchanged: the gateway Caddyfile has `staging-*` aliases for these two
+            # and derives the hub login origin from the host, so a signed-out redirect stays on staging.
+            {"hostname": f"staging-tradingagents.{ZONE}", "service": GATEWAY},
+            {"hostname": f"staging-ai-hedge-fund.{ZONE}", "service": GATEWAY},
         ],
     ),
     "expense": (
