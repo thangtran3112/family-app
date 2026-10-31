@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1/marketdatav1connect"
@@ -105,17 +107,43 @@ func (s *service) GetBars(ctx context.Context, req *connect.Request[pb.GetBarsRe
 	case m.Start == nil || m.End == nil || !m.Start.AsTime().Before(m.End.AsTime()):
 		return nil, invalid("start and end are required, and start must be before end")
 	}
-	clean := &pb.GetBarsRequest{Symbol: syms[0], Timeframe: m.Timeframe, Start: m.Start, End: m.End, Adjustment: m.Adjustment, PinProvider: m.PinProvider}
+	// C0: an unset as_of means now, so an old client keeps the old answer (02u §4.2).
+	asOf := m.AsOf
+	if asOf == nil {
+		asOf = timestamppb.New(start.UTC())
+	}
+	clean := &pb.GetBarsRequest{Symbol: syms[0], Timeframe: m.Timeframe, Start: m.Start, End: m.End,
+		Adjustment: m.Adjustment, PinProvider: m.PinProvider, AsOf: asOf}
 	resp, rerr := s.r.Bars(ctx, clean)
 	var served *pb.Served
 	if resp != nil {
 		served = resp.Served
+	}
+	if rerr == nil && resp != nil {
+		// No look-ahead: a bar that had not closed by as_of is not in the answer, the rule
+		// ai_trading.data.bars.read_bars applies (a replay or backtest at an earlier as_of must
+		// not see it even though the vendor already has it).
+		if resp.Bars = router.BarsClosedBy(resp.Bars, m.Timeframe, asOf.AsTime()); len(resp.Bars) == 0 {
+			attempts := append(append([]*pb.Attempt{}, attemptsOf(served)...), &pb.Attempt{
+				Provider: served.GetProvider(), Error: pb.ErrorKind_NO_DATA,
+				Message: "no bar had closed by as_of " + asOf.AsTime().UTC().Format(time.RFC3339)})
+			rerr = &router.RouteError{Kind: pb.ErrorKind_NO_DATA, Attempts: attempts,
+				Summary: fmt.Sprintf("no bar for %s had closed by as_of %s in this window",
+					clean.Symbol, asOf.AsTime().UTC().Format(time.RFC3339))}
+		}
 	}
 	s.logRequest("GetBars", pb.DataClass_EQUITY_BARS, served, rerr, start)
 	if rerr != nil {
 		return nil, toConnect(rerr)
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func attemptsOf(served *pb.Served) []*pb.Attempt {
+	if served == nil {
+		return nil
+	}
+	return served.Attempts
 }
 
 func (s *service) ListProviders(context.Context, *connect.Request[pb.ListProvidersRequest]) (*connect.Response[pb.ListProvidersResponse], error) {

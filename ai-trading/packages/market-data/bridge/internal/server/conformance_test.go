@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -37,14 +38,37 @@ type step struct {
 
 func steps() []step {
 	quotes := func() proto.Message { return &pb.GetQuotesResponse{} }
+	bars := func() proto.Message { return &pb.GetBarsResponse{} }
 	day := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1, Adjustment: pb.Adjustment_SPLIT,
 		Start: timestamppb.New(fixedNow.AddDate(0, 0, -5)), End: timestamppb.New(fixedNow)}
+	// The 5U request: one whole session (`extended_open`..`extended_close`). Before C0 the adapter
+	// sent this start unpadded and Alpaca answered nothing, because the daily bar is stamped at
+	// midnight ET, 04:00Z, an hour before this start.
+	singleSession := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1,
+		Start: timestamppb.New(time.Date(2024, 5, 1, 8, 0, 0, 0, time.UTC)), End: timestamppb.New(time.Date(2024, 5, 2, 0, 0, 0, 0, time.UTC))}
+	// as_of mid-session: 2024-05-01 15:00 ET. That day's daily bar (closes 20:00Z) must be absent;
+	// 04-30's is present. No look-ahead (02u §4, read_bars semantics).
+	midSession := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1,
+		Start: timestamppb.New(fixedNow.AddDate(0, 0, -5)), End: timestamppb.New(fixedNow),
+		AsOf: timestamppb.New(time.Date(2024, 5, 1, 19, 0, 0, 0, time.UTC))}
+	minute := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_MINUTE_1,
+		Start: timestamppb.New(time.Date(2024, 5, 2, 20, 0, 0, 0, time.UTC)), End: timestamppb.New(fixedNow)}
+	// 2023-11-24 is an early close (13:00 ET): the 12:30 ET hourly bar closes at 18:00Z, not 18:30Z.
+	halfDay := &pb.GetBarsRequest{Symbol: "SPY", Timeframe: pb.Timeframe_HOUR_1,
+		Start: timestamppb.New(time.Date(2023, 11, 24, 15, 0, 0, 0, time.UTC)), End: timestamppb.New(time.Date(2023, 11, 24, 21, 0, 0, 0, time.UTC))}
 	prefAlpaca := &pb.SetRoutingRequest{Version: 2, Preferences: []*pb.ClassPreference{{DataClass: pb.DataClass_EQUITY_QUOTES, Provider: "alpaca"}}}
 	return []step{
 		{golden: "get_quotes", rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"AAPL", "MSFT", "ZZZZ"}}, resp: quotes, auth: "read"},
 		{golden: "get_quotes_invalid", rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"not a ticker"}}, resp: quotes, auth: "read", wantErr: connect.CodeInvalidArgument},
-		{golden: "get_bars_daily", rpc: "GetBars", req: day, resp: func() proto.Message { return &pb.GetBarsResponse{} }, auth: "read"},
+		{golden: "get_bars_daily", rpc: "GetBars", req: day, resp: bars, auth: "read"},
+		{golden: "get_bars_daily_single_session", rpc: "GetBars", req: singleSession, resp: bars, auth: "read"},
+		{golden: "get_bars_as_of_mid_session", rpc: "GetBars", req: midSession, resp: bars, auth: "read"},
+		{golden: "get_bars_minute", rpc: "GetBars", req: minute, resp: bars, auth: "read"},
+		{golden: "get_bars_hourly_half_day", rpc: "GetBars", req: halfDay, resp: bars, auth: "read"},
+		{golden: "get_bars_invalid", rpc: "GetBars", req: &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1,
+			Start: timestamppb.New(fixedNow), End: timestamppb.New(fixedNow.AddDate(0, 0, -1))}, resp: bars, auth: "read", wantErr: connect.CodeInvalidArgument},
 		{golden: "list_providers", rpc: "ListProviders", req: &pb.ListProvidersRequest{}, resp: func() proto.Message { return &pb.ListProvidersResponse{} }, auth: "read"},
+		{golden: "list_providers_unauthenticated", rpc: "ListProviders", req: &pb.ListProvidersRequest{}, resp: func() proto.Message { return &pb.ListProvidersResponse{} }, auth: "none", wantErr: connect.CodeUnauthenticated},
 		{golden: "get_status", rpc: "GetStatus", req: &pb.GetStatusRequest{}, resp: func() proto.Message { return &pb.BridgeStatus{} }, auth: "read"},
 		{golden: "get_quotes_fallback", pre: func(h *harness) { h.IBKR.setDown(true) }, rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"AAPL"}}, resp: quotes, auth: "read"},
 		{golden: "list_providers_ibkr_down", rpc: "ListProviders", req: &pb.ListProvidersRequest{}, resp: func() proto.Message { return &pb.ListProvidersResponse{} }, auth: "read"},
@@ -54,6 +78,13 @@ func steps() []step {
 		{golden: "set_routing_denied", rpc: "SetRouting", req: prefAlpaca, resp: func() proto.Message { return &pb.Routing{} }, auth: "read", wantErr: connect.CodePermissionDenied},
 		{golden: "get_status_unauthenticated", rpc: "GetStatus", req: &pb.GetStatusRequest{}, resp: func() proto.Message { return &pb.BridgeStatus{} }, auth: "none", wantErr: connect.CodeUnauthenticated},
 		{rpc: "GetOptionChain", req: &pb.GetOptionChainRequest{Underlying: "AAPL", MaxDte: 30}, resp: func() proto.Message { return &pb.GetOptionChainResponse{} }, auth: "read", wantErr: connect.CodeUnimplemented},
+		{golden: "get_bars_daily_single_session", rpc: "GetBars", req: singleSession, resp: bars, auth: "read"},
+		{golden: "get_bars_as_of_mid_session", rpc: "GetBars", req: midSession, resp: bars, auth: "read"},
+		{golden: "get_bars_minute", rpc: "GetBars", req: minute, resp: bars, auth: "read"},
+		{golden: "get_bars_hourly_half_day", rpc: "GetBars", req: halfDay, resp: bars, auth: "read"},
+		{golden: "get_bars_invalid", rpc: "GetBars", req: &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1,
+			Start: timestamppb.New(fixedNow), End: timestamppb.New(fixedNow.AddDate(0, 0, -1))}, resp: bars, auth: "read", wantErr: connect.CodeInvalidArgument},
+		{golden: "list_providers_unauthenticated", rpc: "ListProviders", req: &pb.ListProvidersRequest{}, resp: func() proto.Message { return &pb.ListProvidersResponse{} }, auth: "none", wantErr: connect.CodeUnauthenticated},
 		{golden: "get_quotes_unavailable", pre: func(h *harness) { h.setAlpacaDown(true) }, rpc: "GetQuotes", req: &pb.GetQuotesRequest{Symbols: []string{"AAPL"}}, resp: quotes, auth: "read", wantErr: connect.CodeUnavailable},
 	}
 }

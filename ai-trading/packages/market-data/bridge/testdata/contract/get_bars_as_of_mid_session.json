@@ -1,0 +1,30 @@
+{
+  "http_status": 200,
+  "request": {
+    "asOf": "2024-05-01T19:00:00Z",
+    "end": "2024-05-02T20:30:00Z",
+    "start": "2024-04-27T20:30:00Z",
+    "symbol": "AAPL",
+    "timeframe": "DAY_1"
+  },
+  "response": {
+    "bars": [
+      {
+        "close": 184,
+        "closeAt": "2024-04-30T20:00:00Z",
+        "high": 185,
+        "low": 179,
+        "open": 180,
+        "sessionDate": "2024-04-30",
+        "start": "2024-04-30T04:00:00Z",
+        "volume": "1000"
+      }
+    ],
+    "served": {
+      "provider": "alpaca",
+      "quality": "EOD"
+    },
+    "symbol": "AAPL"
+  },
+  "rpc": "GetBars"
+}
