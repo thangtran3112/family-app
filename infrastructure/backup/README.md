@@ -11,7 +11,7 @@ Architecture context: [`ARCHITECTURE.md`](../../expense-tax-management/plans/ARC
 | File | Purpose |
 |---|---|
 | `Dockerfile` | Pinned (by digest) one-shot backup image: PostgreSQL 17 client tools, `age`, `gcloud`/`gsutil`, `jq`, `tar`, `sha256sum`, `flock`. |
-| `docker-compose.yml` | Standalone Compose contract for manual/ad hoc runs (`docker compose -f docker-compose.yml run --rm backup`). Deliberately **not** part of `deploy/production/docker-compose.yml` -- see Ruling below (fix round 1). |
+| `docker-compose.yml` | Standalone Compose contract for manual/ad hoc runs (`docker compose -f docker-compose.yml run --rm backup`). Deliberately **not** part of `apps/expense-tax/docker-compose.yml` -- see Ruling below (fix round 1). |
 | `lib.sh` | Shared validation/logging/status-JSON/locking helpers. Sourced only. |
 | `backup.sh` | Entrypoint: preflight → dump → receipt capture → manifest → encrypt → upload. |
 | `manifest.schema.json` | Documented contract for `manifest.json` (hand-checked by `backup.sh`/tests; see Ruling below). |
@@ -131,7 +131,7 @@ docker run --rm -v "$PWD/infrastructure/backup:/mnt:ro" koalaman/shellcheck:stab
 ## Rulings
 
 - **Backup gets its own `docker-compose.yml` here, not a profile inside
-  `deploy/production/docker-compose.yml`.** Compose interpolates every
+  `apps/expense-tax/docker-compose.yml`.** Compose interpolates every
   `${VAR:?}` in a file before any `--profile` filtering is applied, so a
   required backup var anywhere in the Expense production file broke
   *every* ordinary `docker compose up`/`config`/deploy the moment that

@@ -15,7 +15,7 @@ browser-facing routes (`GET /oauth/google/begin`, `GET
 
 This broker, its migration job, and the mailbox-only environment
 additions to `app-api`/`workflow-worker` live entirely in
-`deploy/production/docker-compose.mailbox.yml` — a Compose override, not
+`infrastructure/apps/expense-tax/docker-compose.mailbox.yml` — a Compose override, not
 the base `docker-compose.yml`. `deploy.sh` includes that override (and
 runs `mailbox-broker-migrate` before starting the broker) only when the
 validated production env file sets `MAILBOX_FEATURE_ENABLED=true`. An
@@ -28,7 +28,7 @@ To enable: an operator sets every mailbox env var, then
 `MAILBOX_FEATURE_ENABLED=true`, in the Firestore production profile
 (`common/config/family_config.py set expense-tax-management/production
 <NAME>`; `deploy.sh` refuses an enabled profile with missing mailbox keys),
-and separately runs `deploy/production/bootstrap-mailbox-vault-db.sh`
+and separately runs `infrastructure/apps/expense-tax/bootstrap-mailbox-vault-db.sh`
 (operator-only, never part of normal deploy) to create the
 `mailbox_vault` database and its two roles before the first enabled
 deploy.

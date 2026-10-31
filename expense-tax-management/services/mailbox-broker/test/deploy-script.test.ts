@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const productionRoot = path.join(repoRoot, "deploy", "production");
+const productionRoot = path.join(repoRoot, "..", "infrastructure", "apps", "expense-tax");
 const deployScript = readFileSync(path.join(productionRoot, "deploy.sh"), "utf8");
 
 function extractFunction(source: string, name: string): string {

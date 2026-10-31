@@ -4,19 +4,19 @@ on:
   pull_request:
     paths:
       - "infrastructure/cloudflare/**"
-      - "infrastructure/vps/bootstrap-cloudflared.sh"
+      - "infrastructure/host/bootstrap-cloudflared.sh"
       - ".github/workflows/expense-tax-cloudflare.yml"
-      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"
-      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
+      - "infrastructure/gcp/expense-tax/bootstrap.sh"
+      - "infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
   push:
     branches:
       - main
     paths:
       - "infrastructure/cloudflare/**"
-      - "infrastructure/vps/bootstrap-cloudflared.sh"
+      - "infrastructure/host/bootstrap-cloudflared.sh"
       - ".github/workflows/expense-tax-cloudflare.yml"
-      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap.sh"
-      - "expense-tax-management/infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
+      - "infrastructure/gcp/expense-tax/bootstrap.sh"
+      - "infrastructure/gcp/expense-tax/bootstrap-cloudflare.sh"
   workflow_dispatch:
     inputs:
       apply:

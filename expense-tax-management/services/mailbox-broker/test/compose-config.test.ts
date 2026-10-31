@@ -23,7 +23,7 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
 );
-const productionRoot = path.join(repoRoot, "deploy", "production");
+const productionRoot = path.join(repoRoot, "..", "infrastructure", "apps", "expense-tax");
 const basePath = path.join(productionRoot, "docker-compose.yml");
 const mailboxOverlayPath = path.join(productionRoot, "docker-compose.mailbox.yml");
 

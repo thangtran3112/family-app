@@ -2,7 +2,7 @@
 
 `bootstrap.sh` creates and validates the Expense Tax production GCP project
 (organization, billing, APIs) and the GitHub workload identity pool. It runs from
-`expense-tax-management` and reuses existing resources, so it is safe to re-run.
+the repository root and reuses existing resources, so it is safe to re-run.
 
 ## Fixed resources
 
@@ -22,7 +22,6 @@ longer authenticate to GCP; the VPS loads its env from Firestore `family-config`
 ## Bootstrap
 
 ```bash
-cd expense-tax-management
 ./infrastructure/gcp/expense-tax/bootstrap.sh
 ```
 

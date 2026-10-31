@@ -48,8 +48,8 @@ test("local developer scripts load env from family config", () => {
 test("no code path reads repository key files", () => {
   const roots = [
     "scripts",
-    "deploy",
-    "infrastructure/gcp/expense-tax",
+    "../infrastructure/apps/expense-tax",
+    "../infrastructure/gcp/expense-tax",
     ...readdirSync(join(appRoot, "services")).map((service) => `services/${service}/src`),
   ];
   const offenders = roots

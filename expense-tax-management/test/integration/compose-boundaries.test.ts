@@ -112,7 +112,7 @@ describe("Phase 0I Compose boundaries", () => {
       "FOUNDRY_MIGRATION_DATABASE_URL",
     ]);
     const productionCompose = readFileSync(
-      path.join(repoRoot, "deploy/production/docker-compose.yml"),
+      path.join(repoRoot, "../infrastructure/apps/expense-tax/docker-compose.yml"),
       "utf8",
     );
     // Two matches per service (key and interpolation) across app-api,
@@ -144,7 +144,7 @@ describe("Phase 0I Compose boundaries", () => {
   it("passes every Clerk startup variable to local and production workers", () => {
     const local = composeConfig(repoRoot).services["workflow-worker"]?.environment ?? {};
     const productionText = readFileSync(
-      path.join(repoRoot, "deploy/production/docker-compose.yml"),
+      path.join(repoRoot, "../infrastructure/apps/expense-tax/docker-compose.yml"),
       "utf8",
     );
     for (const key of [

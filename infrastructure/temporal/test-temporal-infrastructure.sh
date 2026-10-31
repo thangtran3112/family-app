@@ -12,7 +12,7 @@ const read = (path) => readFileSync(`${root}/${path}`, "utf8");
 const shared = YAML.parse(read("infrastructure/temporal/docker-compose.yml"));
 const local = YAML.parse(read("infrastructure/temporal/docker-compose.local.yml"));
 const common = YAML.parse(read("infrastructure/docker-compose.common.yml"));
-const expense = YAML.parse(read("expense-tax-management/deploy/production/docker-compose.yml"));
+const expense = YAML.parse(read("infrastructure/apps/expense-tax/docker-compose.yml"));
 const scripts = JSON.parse(read("expense-tax-management/package.json")).scripts;
 const temporal = shared.services.temporal;
 
@@ -60,11 +60,11 @@ assert.equal(expense.services["ai-worker"], undefined);
 assert.ok(expense.services["workflow-worker"]);
 assert.equal(expense.services["workflow-worker"].environment.TEMPORAL_NAMESPACE, "expense-tax");
 assert.equal(expense.services["workflow-worker"].environment.AI_WORKER_TASK_QUEUE, "expense-tax-processing");
-assert.equal(/compose up[^\n]*\btemporal\b/.test(read("expense-tax-management/deploy/production/deploy.sh")), false,
+assert.equal(/compose up[^\n]*\btemporal\b/.test(read("infrastructure/apps/expense-tax/deploy.sh")), false,
   "Expense deployment must not start the shared Temporal server");
 assert.equal(/bootstrap-temporal-db\.sh/.test(read(".github/workflows/expense-tax-deploy.yml")), false,
   "normal deployment must not bootstrap the Temporal database");
-assert.match(read("expense-tax-management/deploy/production/health-check.sh"), /docker exec[^\n]*family-temporal[^\n]*operator cluster health/);
+assert.match(read("infrastructure/apps/expense-tax/health-check.sh"), /docker exec[^\n]*family-temporal[^\n]*operator cluster health/);
 assert.match(scripts["ci:test"], /pnpm check:temporal-infrastructure/);
 console.log("PASS shared Temporal Compose and production boundaries");
 JS
