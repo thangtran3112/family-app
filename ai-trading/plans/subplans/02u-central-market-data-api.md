@@ -333,3 +333,18 @@ Every stage ends with its gates green plus the dual-agent post-phase walkthrough
 5. **Calendar drift** (NYSE ad-hoc closures). Mitigated by the drift test and a yearly regeneration.
 6. **Trades payloads over JSON** (§2.3). Mitigated by the page cap and the fact that chunks are fetched once; the fallback is the narrow protobuf exception in §2.3.
 7. **A parallel session editing B2** while C0 edits the proto (Q11). `buf breaking` plus an agreed merge order handle it.
+
+## 9. Hermes rulings (2026-11-01, review pass — all 12 accepted; do-not-reopen)
+
+1. **Ruling 10 of 02t §11 is REVERSED, staged:** `universe` moves at C1 and `trades` at P1 into the bridge. Reason: two adapters for one vendor already drifted (5U was fixed in Python only; the Go adapter still sends the unpadded start — `internal/providers/alpaca/alpaca.go` `Bars`). B7 deletes the Python `alpaca` adapter. ADR-0003 carries the superseding note.
+2. **Historical truth = the bridge archive** (write-once RAW bars of finished sessions, filled on read at H1); Desk Postgres stays the working set and every hot path keeps `read_bars`.
+3. **Archive = own database and role in the existing ai-trading Postgres service.** H1 confirms the backup job covers it and runs a restore drill.
+4. **RAW bars + split events derived from the RAW-to-SPLIT ratio**, stamped with first-seen dates; no dependence on corporate-actions endpoints.
+5. **Import existing `replay_blobs` bar blobs** into the archive; never re-fetch (a vendor-revised bar must not silently change a past journal).
+6. **Embedded generated XNYS calendar JSON (2016–2030)** with the drift test against the Desk calendar; regenerate yearly (sync-checklist item).
+7. **New `BatchGetBars` RPC** at B5; `GetBars` stays single-symbol.
+8. **`WatchQuotes` = gRPC server-streaming, server-side consumers only, W1.** No WebSocket, no browser route. If Connect streaming over `requests` is awkward at W1, `grpcio` is allowed for that one RPC only.
+9. **Dataset fingerprints stored** on practice sessions (P1) and backtest runs (K1); a mismatch is an honest "inputs changed" message, never a silent difference.
+10. **Live smoke runs post-deploy on the VPS, warn-only** (never rolls back, never fails CI); CI runs the skip path only.
+11. **C0 starts now, in parallel with B2** (bridge-only, additive proto edits; B2 is told the proto will change and merges first). **B5 hard-depends on C0.**
+12. **No TypeScript client** until a Node server consumer exists.
